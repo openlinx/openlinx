@@ -47,7 +47,7 @@ The repository holds only planning documents. Every later v0.1 change needs the 
   - `LICENSE` (Apache-2.0)
   - `README.md`
   - `CONTRIBUTING.md`, which covers the TDD loop (linked to docs/testing.md), the OpenSpec workflow `/opsx:propose` → `/opsx:apply` → `/opsx:archive` with `OPENSPEC_TELEMETRY=0`, and the checks
-  - `.gitattributes`, which keeps fixture files byte-exact on Windows
+  - `.gitattributes`, which checks out every text file with LF line endings on every OS and keeps fixture files byte-exact
   - additions to `.gitignore`
 
 **Commands and flags added:** `spider --version`, `spider --help`, `python -m spider`. No MCP tools.

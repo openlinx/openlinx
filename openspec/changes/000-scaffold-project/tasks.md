@@ -26,9 +26,22 @@ Tasks marked **guard** protect later changes and pass on their first run.
   - one docstring-only `__init__.py` for each sub-package in docs/architecture.md: `cli`, `mcp`, `services`, `workspace`, `output`, `store`, `crawl`, `extract`, `rules`, `query`, `report`, `skill`. Each docstring names the change that fills the sub-package.
 
   Verify: `uv run python -c "import spider.cli, spider.mcp, spider.services, spider.workspace, spider.output, spider.store, spider.crawl, spider.extract, spider.rules, spider.query, spider.report, spider.skill"` exits 0.
-- [ ] 1.3 Add `.gitattributes` with `* text=auto eol=lf` and `tests/fixture_site/sites/** -text`. Extend `.gitignore` with `.hypothesis/` and `.coverage.*`.
+- [ ] 1.3 Drive "Checked-out text files use LF on every OS" at seam 8 (design D16).
+  - **Red:** write `tests/test_line_endings.py`. It runs `git ls-files --eol` and fails on any tracked file that meets all three conditions:
+    - Git detects its index content as text (`i/lf`, `i/crlf` or `i/mixed`);
+    - its attributes do not include `-text`;
+    - its working-tree ending is not `w/lf`.
 
-  Verify: `git check-attr text -- tests/fixture_site/sites/basic/index.html` prints `text: unset`.
+    It selects files by content, not by the `text` attribute. Without `.gitattributes` the `attr/` column is empty, and a filter on it would pass without checking anything. On a Windows checkout with `core.autocrlf=true` and no `.gitattributes`, the test is red.
+  - **Green,** in this order:
+    1. Add `.gitattributes` with `* text=auto eol=lf` and `tests/fixture_site/sites/** -text` (fixture bytes stay exact).
+    2. Check out the tracked files again so that the working tree follows the new rule: `git rm --cached -r -q .`, then `git reset -q --hard`.
+       - Run it only when the tree has no changes except this task's new files. Untracked files are kept.
+       - `git add --renormalize .` is not enough: it rewrites only the index, and every blob is already LF.
+       - A fresh clone, such as CI's, needs no second checkout.
+    3. Extend `.gitignore` with `.hypothesis/` and `.coverage.*`. This comes after step 2, because `git reset --hard` would discard the edit.
+
+  Verify: the test is green locally and on the Windows CI runner, and `git check-attr text -- tests/fixture_site/sites/basic/index.html` prints `text: unset`.
 - [ ] 1.4 Review: run the code-review skill on group 1's commits. Refactor with `uv sync --locked` and `uv build` still passing.
 
 ## 2. Quality gates
@@ -184,7 +197,7 @@ Tasks marked **guard** protect later changes and pass on their first run.
   - Green: the request-log middleware.
 - [ ] 6.16 Guard: a separate process (`sys.executable -c` using `urllib.request`) fetches `/` from the in-test server and receives the page bytes.
 - [ ] 6.17 Docs: write `tests/fixture_site/README.md`, covering declaring a site, route kinds and options, the fixtures, and the extension rule (design D9). Add the fixture site to the "Helpers" section of `docs/testing.md`.
-- [ ] 6.18 Review: run the code-review skill on group 5's commits. Refactor with `uv run scripts/check.py` green.
+- [ ] 6.18 Review: run the code-review skill on group 6's commits. Refactor with `uv run scripts/check.py` green.
 
 ## 7. Continuous integration
 
@@ -208,7 +221,7 @@ Tasks marked **guard** protect later changes and pass on their first run.
 
   Verify: each one turns the run red.
 - [ ] 7.4 Docs: add a CI badge to `README.md` and a "What CI runs" section to `CONTRIBUTING.md`.
-- [ ] 7.5 Review: run the code-review skill on group 6's commits. Refactor with CI green.
+- [ ] 7.5 Review: run the code-review skill on group 7's commits. Refactor with CI green.
 
 ## 8. Contributor documents
 
@@ -229,4 +242,4 @@ Tasks marked **guard** protect later changes and pass on their first run.
   - the license
 
   Verify: task 8.1's test passes.
-- [ ] 8.4 Review: run the code-review skill on group 7's commits. Refactor with `uv run scripts/check.py` green.
+- [ ] 8.4 Review: run the code-review skill on group 8's commits. Refactor with `uv run scripts/check.py` green.

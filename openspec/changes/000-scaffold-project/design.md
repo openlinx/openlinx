@@ -243,6 +243,17 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
   - Nothing may use aiodns, which requires a selector loop on Windows.
 - **Why not policies:** event-loop policies are deprecated from Python 3.14, and ruff bans them (D4).
 
+### D16. LF line endings everywhere (`.gitattributes`)
+
+- **The rule:** `* text=auto eol=lf`, so every text file is checked out with LF on every OS, whatever the developer's `core.autocrlf` is. Windows GitHub runners set `core.autocrlf=true` by default.
+- **The exception:** fixture-site files are `-text` and keep their exact bytes, because some scenarios depend on them (e.g. CRLF inside HTML, or sizes in bytes).
+- **Why:**
+  - `install.sh` (`100`) fails on macOS and Linux if it has CRLF endings.
+  - The generated Skill (`080`) must be written with LF and compared byte for byte by the release gate.
+  - Hand-written expected JSON and HTML files must compare identically on every OS.
+- **Why not `eol=crlf` for `*.ps1`:** Windows PowerShell 5.1 runs LF scripts, and `install.ps1` is piped to `iex`, where line endings don't matter.
+- **Guard:** task 1.3's test fails whenever a text file is checked out with CRLF, so deleting `.gitattributes` turns the Windows CI job red.
+
 ## Test seams
 
 Seams (docs/testing.md) used by this change:
