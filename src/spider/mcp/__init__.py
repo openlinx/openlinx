@@ -1,4 +1,1 @@
-"""MCP server (stdio) whose tools mirror the Commands.
-
-Filled by ``090-add-mcp-server``.
-"""
+"""MCP server whose tools mirror the Commands: 090-add-mcp-server."""

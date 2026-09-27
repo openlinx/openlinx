@@ -1,4 +1,1 @@
-"""Workspace discovery and settings (``spider.toml``).
-
-Filled by ``010-add-workspace-and-cli-contract``.
-"""
+"""Workspace discovery and ``spider.toml`` settings: 010-add-workspace-and-cli-contract."""

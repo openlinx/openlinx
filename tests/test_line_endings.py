@@ -18,8 +18,8 @@ def text_files_not_checked_out_with_lf() -> list[str]:
     for entry in filter(None, listing.split("\0")):
         info, path = entry.split("\t", 1)
         index_eol, worktree_eol, attributes = info.split(maxsplit=2)
-        marked_binary = "-text" in attributes.removeprefix("attr/").split()
-        if index_eol in TEXT_IN_INDEX and not marked_binary and worktree_eol != "w/lf":
+        kept_byte_exact = "-text" in attributes.removeprefix("attr/").split()
+        if index_eol in TEXT_IN_INDEX and not kept_byte_exact and worktree_eol != "w/lf":
             offenders.append(path)
     return offenders
 

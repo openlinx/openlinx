@@ -1,4 +1,1 @@
-"""Command-line interface: the Typer app, one module per command group.
-
-Filled by ``000-scaffold-project`` (``--version``) and then by every change that adds a Command.
-"""
+"""Typer app, one module per command group: 000-scaffold-project, then each Command's change."""

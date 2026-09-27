@@ -1,4 +1,1 @@
-"""The ``--where`` language, paging and Segments.
-
-Filled by ``050-add-query-and-segments``.
-"""
+"""The ``--where`` language, paging and Segments: 050-add-query-and-segments."""
