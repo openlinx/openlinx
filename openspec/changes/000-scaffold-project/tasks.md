@@ -35,15 +35,15 @@ Tasks marked **guard** protect later changes and pass on their first run.
     It selects files by content, not by the `text` attribute. Without `.gitattributes` the `attr/` column is empty, and a filter on it would pass without checking anything. On a Windows checkout with `core.autocrlf=true` and no `.gitattributes`, the test is red.
   - **Green:**
     1. Add `.gitattributes` with `* text=auto eol=lf` and `tests/fixture_site/sites/** -text` (fixture bytes stay exact).
-    2. Rewrite the files that are still checked out with CRLF: delete each file that `git ls-files --eol` reports as `w/crlf`, then restore it with `git checkout -- <file>`.
-       - Other edits in the tree are kept.
+    2. Rewrite the files that are still checked out with CRLF: delete each file that `git ls-files --eol` reports as `w/crlf` or `w/mixed`, then restore it from the index with `git checkout -- <file>`.
+       - Stage any edits to those files first. The restored copy comes from the index, so an unstaged edit would be lost.
        - The files must be deleted first, because Git skips files whose stat data is unchanged.
        - `git add --renormalize .` is not enough: it rewrites only the index, and every blob is already LF.
        - A fresh clone, such as CI's, needs no second checkout.
     3. Extend `.gitignore` with `.hypothesis/` and `.coverage.*`.
 
   Verify: the test is green locally and on the Windows CI runner, and `git check-attr text -- tests/fixture_site/sites/basic/index.html` prints `text: unset`.
-- [ ] 1.4 Review: run the code-review skill on group 1's commits. Refactor with `uv sync --locked` and `uv build` still passing.
+- [x] 1.4 Review: run the code-review skill on group 1's commits. Refactor with `uv sync --locked` and `uv build` still passing.
 
 ## 2. Quality gates
 
@@ -212,7 +212,7 @@ Tasks marked **guard** protect later changes and pass on their first run.
   - Node set up, then `openspec validate --all --strict` with `OPENSPEC_TELEMETRY=0`, then `node --test tests/js/`
   - actions pinned to commit SHAs
 
-  Verify: a push runs 9 cells, and all of them pass.
+  Verify: a push runs 9 cells, and all of them pass. The Windows cells also finish task 1.3's check: `tests/test_line_endings.py` is green on a fresh checkout with `core.autocrlf=true`.
 - [ ] 7.3 Prove that the gates fail CI. On a throwaway branch, push each of the following in turn, then delete the branch:
   - a failing test
   - a change that drops coverage below 90%

@@ -263,6 +263,7 @@ Seams (docs/testing.md) used by this change:
   - the wheel's console script in CI
 - **HTTP (3):** the fixture site's own behaviour, observed with a plain `aiohttp.ClientSession`, and with `urllib` from a subprocess for the cross-process case.
 - **Pure-logic modules (4):** `SystemClock`, `FakeClock` and `loop_factory`.
+- **Install and packaging (8):** a repository artefact check. `tests/test_line_endings.py` runs `git ls-files --eol` and fails when a tracked text file is checked out without LF (D16).
 - **Report script (9):** only the wiring. CI runs `node --test tests/js/`, with a smoke test until `070` adds the real tests.
 
 Test doubles:
