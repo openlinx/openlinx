@@ -26,20 +26,21 @@ Tasks marked **guard** protect later changes and pass on their first run.
   - one docstring-only `__init__.py` for each sub-package in docs/architecture.md: `cli`, `mcp`, `services`, `workspace`, `output`, `store`, `crawl`, `extract`, `rules`, `query`, `report`, `skill`. Each docstring names the change that fills the sub-package.
 
   Verify: `uv run python -c "import spider.cli, spider.mcp, spider.services, spider.workspace, spider.output, spider.store, spider.crawl, spider.extract, spider.rules, spider.query, spider.report, spider.skill"` exits 0.
-- [ ] 1.3 Drive "Checked-out text files use LF on every OS" at seam 8 (design D16).
-  - **Red:** write `tests/test_line_endings.py`. It runs `git ls-files --eol` and fails on any tracked file that meets all three conditions:
+- [x] 1.3 Drive "Checked-out text files use LF on every OS" at seam 8 (design D16).
+  - **Red:** add `pytest` to the `dev` dependency group with `uv add --dev pytest` (task 2.3 configures the rest of the test stack). Then write `tests/test_line_endings.py`. It runs `git ls-files --eol` and fails on any tracked file that meets all three conditions:
     - Git detects its index content as text (`i/lf`, `i/crlf` or `i/mixed`);
     - its attributes do not include `-text`;
     - its working-tree ending is not `w/lf`.
 
     It selects files by content, not by the `text` attribute. Without `.gitattributes` the `attr/` column is empty, and a filter on it would pass without checking anything. On a Windows checkout with `core.autocrlf=true` and no `.gitattributes`, the test is red.
-  - **Green,** in this order:
+  - **Green:**
     1. Add `.gitattributes` with `* text=auto eol=lf` and `tests/fixture_site/sites/** -text` (fixture bytes stay exact).
-    2. Check out the tracked files again so that the working tree follows the new rule: `git rm --cached -r -q .`, then `git reset -q --hard`.
-       - Run it only when the tree has no changes except this task's new files. Untracked files are kept.
+    2. Rewrite the files that are still checked out with CRLF: delete each file that `git ls-files --eol` reports as `w/crlf`, then restore it with `git checkout -- <file>`.
+       - Other edits in the tree are kept.
+       - The files must be deleted first, because Git skips files whose stat data is unchanged.
        - `git add --renormalize .` is not enough: it rewrites only the index, and every blob is already LF.
        - A fresh clone, such as CI's, needs no second checkout.
-    3. Extend `.gitignore` with `.hypothesis/` and `.coverage.*`. This comes after step 2, because `git reset --hard` would discard the edit.
+    3. Extend `.gitignore` with `.hypothesis/` and `.coverage.*`.
 
   Verify: the test is green locally and on the Windows CI runner, and `git check-attr text -- tests/fixture_site/sites/basic/index.html` prints `text: unset`.
 - [ ] 1.4 Review: run the code-review skill on group 1's commits. Refactor with `uv sync --locked` and `uv build` still passing.
