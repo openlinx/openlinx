@@ -1,0 +1,18 @@
+[project]
+name = "spider"
+version = "0.1.0.dev0"
+description = "Agent-first SEO crawler: a CLI and a local MCP server driven by AI agents."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "typer>=0.27.2",
+]
+
+[project.scripts]
+spider = "spider.cli.app:main"
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"

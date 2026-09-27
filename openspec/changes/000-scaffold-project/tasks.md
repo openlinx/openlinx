@@ -8,7 +8,7 @@ Tasks marked **guard** protect later changes and pass on their first run.
 
 ## 1. Project skeleton and packaging
 
-- [ ] 1.1 Create the project files and lock:
+- [x] 1.1 Create the project files and lock:
   - `pyproject.toml`, per design D1/D2:
     - distribution `spider`, `version = "0.1.0.dev0"`
     - `requires-python = ">=3.12,<3.15"`, `license = "Apache-2.0"`, `license-files = ["LICENSE"]`, `readme = "README.md"`
