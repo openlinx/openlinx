@@ -21,7 +21,7 @@ Tasks marked **guard** protect later changes and pass on their first run.
   - then run `uv lock`
 
   Verify: on a clean clone `uv sync --locked` succeeds, and `uv build` writes an sdist and a wheel whose `.dist-info/licenses/` contains `LICENSE`.
-- [ ] 1.2 Create the package:
+- [x] 1.2 Create the package:
   - `src/spider/__init__.py`, with `__version__` from `importlib.metadata` and `APP_NAME = "spider"`
   - one docstring-only `__init__.py` for each sub-package in docs/architecture.md: `cli`, `mcp`, `services`, `workspace`, `output`, `store`, `crawl`, `extract`, `rules`, `query`, `report`, `skill`. Each docstring names the change that fills the sub-package.
 
