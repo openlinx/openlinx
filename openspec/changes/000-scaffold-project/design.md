@@ -82,7 +82,9 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
   | `TID251` | Bans event-loop policy APIs (below) |
 
 - **Banned APIs:** `asyncio.set_event_loop_policy`, `asyncio.get_event_loop_policy` and the `Windows*EventLoopPolicy` classes. Each is banned with a message pointing to `asyncio.run(..., loop_factory=spider.aio.loop_factory)`, which the architecture requires (D15).
-- **Per-file ignores:** `S101` (assert) and `T20` in `tests/`.
+- **Per-file ignores in `tests/`:**
+  - `S101` (assert) and `T20` (print).
+  - `S603` and `S607` (subprocess calls): tests start only fixed commands of their own, such as `git ls-files` and `sys.executable -m spider`. Replacing `"git"` with `shutil.which("git")` only trades `S607` for `S603`.
 
 ### D5. Test runner, coverage and property tests
 

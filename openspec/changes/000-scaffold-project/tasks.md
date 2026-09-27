@@ -27,7 +27,7 @@ Tasks marked **guard** protect later changes and pass on their first run.
 
   Verify: `uv run python -c "import spider.cli, spider.mcp, spider.services, spider.workspace, spider.output, spider.store, spider.crawl, spider.extract, spider.rules, spider.query, spider.report, spider.skill"` exits 0.
 - [x] 1.3 Drive "Checked-out text files use LF on every OS" at seam 8 (design D16).
-  - **Red:** add `pytest` to the `dev` dependency group with `uv add --dev pytest` (task 2.3 configures the rest of the test stack). Then write `tests/test_line_endings.py`. It runs `git ls-files --eol` and fails on any tracked file that meets all three conditions:
+  - **Red:** add `pytest` to the `dev` dependency group with `uv add --dev pytest` (task 3.3 configures the rest of the test stack). Then write `tests/test_line_endings.py`. It runs `git ls-files --eol` and fails on any tracked file that meets all three conditions:
     - Git detects its index content as text (`i/lf`, `i/crlf` or `i/mixed`);
     - its attributes do not include `-text`;
     - its working-tree ending is not `w/lf`.
@@ -45,49 +45,51 @@ Tasks marked **guard** protect later changes and pass on their first run.
   Verify: the test is green locally and on the Windows CI runner, and `git check-attr text -- tests/fixture_site/sites/basic/index.html` prints `text: unset`.
 - [x] 1.4 Review: run the code-review skill on group 1's commits. Refactor with `uv sync --locked` and `uv build` still passing.
 
-## 2. Quality gates
+## 2. CLI skeleton and CliRunner helper (CLI seam)
 
-- [ ] 2.1 Configure ruff in `pyproject.toml` per design D4: rule sets, the event-loop-policy bans, and per-file ignores for `tests/`.
+This group comes before the quality gates, so that the coverage gate of task 3.3 starts with tests that import `spider`.
+
+- [ ] 2.1 Drive `spider --version` in process.
+  - Red: in `tests/cli/test_version.py`, `run_cli("--version")` exits 0, and stdout is `b"spider "` + the `project.version` read from `pyproject.toml` with `tomllib` + `b"\n"`.
+  - Green: `run_cli` in `tests/support/cli.py` (Typer `CliRunner`, returning `CliResult(exit_code, stdout, stderr)` as raw bytes), and `src/spider/cli/app.py` (the Typer app per design D7, with an eager `--version` and `main()`).
+- [ ] 2.2 Drive `spider --version` as a real process.
+  - Red: `run_cli_process("--version")`, a real `python -m spider` process, returns the same stdout bytes and exit code 0 on every OS.
+  - Green: the `run_cli_process` helper and `src/spider/__main__.py`.
+- [ ] 2.3 Guard for lazy imports (design D6): importing `spider.cli.app` in a fresh interpreter leaves none of these in `sys.modules`: `aiohttp`, `sqlalchemy`, `alembic`, `numpy`, `selectolax`, `lxml`, `pydantic`.
+- [ ] 2.4 Docs: add "Status" and "Development quick start" (`uv sync`, `uv run spider --version`) to `README.md`.
+- [ ] 2.5 Review: run the code-review skill on group 2's commits. Refactor with `uv run pytest` green; the gates arrive in group 3.
+
+## 3. Quality gates
+
+- [ ] 3.1 Configure ruff in `pyproject.toml` per design D4: rule sets, the event-loop-policy bans, and per-file ignores for `tests/` (`S101`, `T20`, `S603`, `S607`).
 
   Verify:
   - `uv run ruff check .` and `uv run ruff format --check .` pass.
   - A scratch module calling `asyncio.set_event_loop_policy(None)` is reported as `TID251`. Delete the scratch module afterwards.
-- [ ] 2.2 Configure mypy in strict mode per design D3, over `src`, `tests` and `scripts`.
+- [ ] 3.2 Configure mypy in strict mode per design D3, over `src`, `tests` and `scripts`.
 
   Verify:
   - `uv run mypy` passes.
   - A scratch `def f(x): return x` in `src/spider/` is reported as untyped. Delete it afterwards.
-- [ ] 2.3 Configure the test stack per design D5:
+- [ ] 3.3 Configure the test stack per design D5:
   - pytest: strict markers and config, `xfail_strict`, `filterwarnings = ["error"]`, `asyncio_mode = "auto"`, `asyncio_default_fixture_loop_scope = "function"`, `timeout = 60`
   - coverage: pytest-cov + covdefaults, `source = ["spider"]`, branch, `fail_under = 90`, `patch = ["subprocess"]`
   - hypothesis profiles `dev` and `ci`, registered in `tests/conftest.py`
-  - the development dependency group
+  - the rest of the development dependency group (`pytest` is there since task 1.3)
 
   Verify with two throwaway tests, deleted afterwards:
   - `async def test_tmp(): await asyncio.sleep(0)` passes without a marker.
   - A test that calls `warnings.warn("x", DeprecationWarning)` fails.
-- [ ] 2.4 Add `scripts/check.py` per design D11.
+- [ ] 3.4 Add `scripts/check.py` per design D11.
 
   Verify:
   - With every gate green it exits 0.
   - After a deliberate formatting error it exits non-zero at the `ruff format --check` step and runs no later step.
   - It behaves the same from PowerShell 5.1 and from bash.
-- [ ] 2.5 Docs: write the first `CONTRIBUTING.md` with "Set up" (`uv sync`) and "Checks" (`uv run scripts/check.py`, plus each gate's own command).
+- [ ] 3.5 Docs: write the first `CONTRIBUTING.md` with "Set up" (`uv sync`) and "Checks" (`uv run scripts/check.py`, plus each gate's own command).
 
   Verify: every command listed runs as written on Windows and on one POSIX OS.
-- [ ] 2.6 Review: run the code-review skill on group 2's commits. Refactor with `uv run scripts/check.py` green.
-
-## 3. CLI skeleton and CliRunner helper (CLI seam)
-
-- [ ] 3.1 Drive `spider --version` in process.
-  - Red: in `tests/cli/test_version.py`, `run_cli("--version")` exits 0, and stdout is `b"spider "` + the `project.version` read from `pyproject.toml` with `tomllib` + `b"\n"`.
-  - Green: `run_cli` in `tests/support/cli.py` (Typer `CliRunner`, returning `CliResult(exit_code, stdout, stderr)` as raw bytes), and `src/spider/cli/app.py` (the Typer app per design D7, with an eager `--version` and `main()`).
-- [ ] 3.2 Drive `spider --version` as a real process.
-  - Red: `run_cli_process("--version")`, a real `python -m spider` process, returns the same stdout bytes and exit code 0 on every OS.
-  - Green: the `run_cli_process` helper and `src/spider/__main__.py`.
-- [ ] 3.3 Guard for lazy imports (design D6): importing `spider.cli.app` in a fresh interpreter leaves none of these in `sys.modules`: `aiohttp`, `sqlalchemy`, `alembic`, `numpy`, `selectolax`, `lxml`, `pydantic`.
-- [ ] 3.4 Docs: add "Status" and "Development quick start" (`uv sync`, `uv run spider --version`) to `README.md`.
-- [ ] 3.5 Review: run the code-review skill on group 3's commits. Refactor with `uv run scripts/check.py` green.
+- [ ] 3.6 Review: run the code-review skill on group 3's commits. Refactor with `uv run scripts/check.py` green.
 
 ## 4. Home isolation, temp Workspace and clock
 
