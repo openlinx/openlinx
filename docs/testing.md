@@ -54,6 +54,21 @@ Never replace our own modules or our own CLI with a double. Installer tests use 
 - **One logical assertion per test,** with a name that says *what* happens, not *how*.
 - **Cross-platform:** CI runs the whole suite on Windows, macOS and Linux × Python 3.12–3.14.
 
+## Helpers
+
+Shared test code lives in `tests/support/`. `tests/` is a package, so tests import helpers as `from tests.support.cli import run_cli`.
+
+- **`run_cli(*args, input=None)`** (`tests/support/cli.py`): runs the Typer app in process with Typer's `CliRunner`. It returns `CliResult(exit_code, stdout, stderr)`, where stdout and stderr are the bytes exactly as written.
+- **`run_cli_process(*args, env=None)`** (same module): runs `python -m spider` as a real process and returns the same `CliResult`. Use it for console encoding, line endings on pipes and process behaviour; use `run_cli` for everything else. Coverage counts these runs too.
+- **Home isolation** (autouse, `tests/conftest.py`): every test runs with `HOME` and `USERPROFILE` pointing at `tmp_path / "home"`, so `Path.home()` never reaches the real `~/.spider/`. Child processes inherit it. The fixture is `isolated_home` if a test needs the path.
+- **`temp_workspace`** (`tests/support/workspace.py`): creates `tmp_path / "home" / "work"`, makes it the current folder and returns `TempWorkspace(home, root)`. The root sits under the fake home, where the Workspace search stops.
+- **`FakeClock`** (`tests/support/clock.py`): implements `spider.clock.Clock`.
+  - `now()` starts at `2026-01-01T00:00:00+00:00`, and `monotonic()` starts at `0.0`.
+  - `advance(seconds)` moves both.
+  - `await sleep(seconds)` advances virtual time and yields once to the event loop, with no real wait.
+
+  Production code takes a `Clock`, which is `SystemClock` outside tests.
+
 ## Quality gates (CI)
 
 - Ruff (lint and format) and the type checker in strict mode.
