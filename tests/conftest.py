@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 from hypothesis import settings
 
+pytest_plugins = ["tests.support.workspace"]
+
 settings.register_profile("dev")
 settings.register_profile("ci", deadline=None, print_blob=True, max_examples=200)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
