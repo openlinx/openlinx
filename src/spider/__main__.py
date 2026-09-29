@@ -1,5 +1,6 @@
-"""`python -m spider` runs the same app as the `spider` console script (design D7)."""
+"""`python -m spider` runs the console script's app (design D7 of 000-scaffold-project)."""
 
 from spider.cli.app import main
 
-main()
+if __name__ == "__main__":
+    main()

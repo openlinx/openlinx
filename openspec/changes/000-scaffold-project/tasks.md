@@ -49,15 +49,15 @@ Tasks marked **guard** protect later changes and pass on their first run.
 
 This group comes before the quality gates, so that the coverage gate of task 3.3 starts with tests that import `spider`.
 
-- [ ] 2.1 Drive `spider --version` in process.
+- [x] 2.1 Drive `spider --version` in process.
   - Red: in `tests/cli/test_version.py`, `run_cli("--version")` exits 0, and stdout is `b"spider "` + the `project.version` read from `pyproject.toml` with `tomllib` + `b"\n"`.
   - Green: `run_cli` in `tests/support/cli.py` (Typer `CliRunner`, returning `CliResult(exit_code, stdout, stderr)` as raw bytes), and `src/spider/cli/app.py` (the Typer app per design D7, with an eager `--version` and `main()`).
-- [ ] 2.2 Drive `spider --version` as a real process.
+- [x] 2.2 Drive `spider --version` as a real process.
   - Red: `run_cli_process("--version")`, a real `python -m spider` process, returns the same stdout bytes and exit code 0 on every OS.
   - Green: the `run_cli_process` helper and `src/spider/__main__.py`.
-- [ ] 2.3 Guard for lazy imports (design D6): importing `spider.cli.app` in a fresh interpreter leaves none of these in `sys.modules`: `aiohttp`, `sqlalchemy`, `alembic`, `numpy`, `selectolax`, `lxml`, `pydantic`.
-- [ ] 2.4 Docs: add "Status" and "Development quick start" (`uv sync`, `uv run spider --version`) to `README.md`.
-- [ ] 2.5 Review: run the code-review skill on group 2's commits. Refactor with `uv run pytest` green; the gates arrive in group 3.
+- [x] 2.3 Guard for lazy imports (design D6): importing `spider.cli.app` in a fresh interpreter leaves none of these in `sys.modules`: `aiohttp`, `sqlalchemy`, `alembic`, `numpy`, `selectolax`, `lxml`, `pydantic`.
+- [x] 2.4 Docs: add "Status" and "Development quick start" (`uv sync`, `uv run spider --version`) to `README.md`.
+- [x] 2.5 Review: run the code-review skill on group 2's commits. Refactor with `uv run pytest` green; the gates arrive in group 3.
 
 ## 3. Quality gates
 

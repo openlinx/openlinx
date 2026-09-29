@@ -1,4 +1,4 @@
-"""The root Typer app and the `spider` console script (design D7)."""
+"""The root Typer app and the `spider` console script (design D7 of 000-scaffold-project)."""
 
 import sys
 from typing import Annotated
@@ -26,7 +26,9 @@ def _print_version(value: bool) -> None:
 def root(
     version: Annotated[
         bool,
-        typer.Option("--version", callback=_print_version, is_eager=True, help="Print the version and exit."),
+        typer.Option(
+            "--version", callback=_print_version, is_eager=True, help="Print the version and exit."
+        ),
     ] = False,
 ) -> None:
     """Agent-first SEO crawler."""

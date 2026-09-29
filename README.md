@@ -4,7 +4,7 @@
 
 ## Status
 
-Pre-release. The project scaffold is being built (change `000-scaffold-project`): so far the command only prints its version. The product name is still open; `spider` is a placeholder.
+Pre-release. The project scaffold is being built (change `000-scaffold-project`): so far `spider` only prints its version. The product name is still open; `spider` is a placeholder.
 
 ## Development quick start
 
