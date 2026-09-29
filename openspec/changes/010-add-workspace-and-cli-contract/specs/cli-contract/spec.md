@@ -453,11 +453,15 @@ The output SHALL be identical on every OS for the same version, and SHALL NOT ne
 
 ### Requirement: Help and version are plain text
 
-`--help`, on the tool or on any Command, SHALL print plain-text help to stdout and exit 0. `spider --version` SHALL print `spider <version>` followed by `\n`, and exit 0. These SHALL be the only outputs that are not JSON.
+`--help`, on the tool or on any Command, SHALL print plain-text help to stdout and exit 0. `spider` with no arguments SHALL do the same as `spider --help`. `spider --version` SHALL print `spider <version>` followed by `\n`, and exit 0. These SHALL be the only outputs that are not JSON.
 
 #### Scenario: Help
 - **WHEN** `spider init --help` runs
 - **THEN** the exit code is 0, and stdout contains `Usage:`
+
+#### Scenario: No arguments
+- **WHEN** `spider` runs with no arguments
+- **THEN** the exit code is 0, stdout is the same as for `spider --help`, and stderr is empty
 
 #### Scenario: Version
 - **WHEN** `spider --version` runs

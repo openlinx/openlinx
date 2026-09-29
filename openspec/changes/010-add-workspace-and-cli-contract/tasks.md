@@ -18,6 +18,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 1.1 Setup:
   - Add `pydantic-settings`, `orjson` and `rich` to the runtime dependencies, and to `tests/dependency_allowlist.txt` from 000.
   - Add ruff `banned-api` entries for `sys.stdout`, `sys.stderr`, `typer.echo` and `click.echo` outside `spider.output`.
+  - Move 000's `--version` write into `spider.output`. In 000 it writes to `sys.stdout.buffer` directly from `spider.cli.app`, and the new ban would flag it. `Output` takes the write over in task 1.2.
   - Add `build_app()` in `spider.cli.app`, with the entry point calling it.
 
   Verify: `uv run scripts/check.py` passes, including 000's `--version` tests.
@@ -42,8 +43,9 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - `formats` in `@command_meta`
   - `invalid_value`, with a hint listing the Command's formats
 - [ ] 1.9 **Guard:** "Help" and "Version" (cli-contract). Typer and 000 already provide both.
-- [ ] 1.10 Docs: write `docs/cli.md` with stdout versus stderr, the diagnostic shape and the exit code table.
-- [ ] 1.11 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [ ] 1.10 Drive "No arguments" (cli-contract). Typer's `no_args_is_help` exits 2 from Click 8.2 on. Green: bare `spider` prints the root help and exits 0.
+- [ ] 1.11 Docs: write `docs/cli.md` with stdout versus stderr, the diagnostic shape and the exit code table.
+- [ ] 1.12 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Workspace resolution (seam 2)
 
