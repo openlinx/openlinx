@@ -19,8 +19,13 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "covdefaults>=2.3.0",
+    "hypothesis>=6.168.3",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.16.9",
 ]
 
@@ -47,3 +52,21 @@ files = ["src", "tests"]
 strict = true
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool", "possibly-undefined"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--cov=spider"]
+xfail_strict = true
+filterwarnings = ["error"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+timeout = 60
+
+[tool.coverage.run]
+plugins = ["covdefaults"]
+source = ["spider"]
+branch = true
+patch = ["subprocess"]
+
+[tool.coverage.report]
+fail_under = 90
