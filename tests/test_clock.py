@@ -1,9 +1,9 @@
 """`FakeClock` and `SystemClock` (designs D6 and D8 of 000-scaffold-project)."""
 
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from spider.clock import Clock
+from spider.clock import Clock, SystemClock
 from tests.support.clock import FakeClock
 
 
@@ -26,3 +26,16 @@ async def test_sleep_advances_virtual_time_without_waiting() -> None:
     await clock.sleep(2)
 
     assert (time.perf_counter() - started < 0.1, clock.monotonic()) == (True, 2.0)
+
+
+def test_system_clock_now_is_in_utc() -> None:
+    assert SystemClock().now().utcoffset() == timedelta(0)
+
+
+def test_system_clock_monotonic_never_goes_back() -> None:
+    clock: Clock = SystemClock()
+
+    first = clock.monotonic()
+    second = clock.monotonic()
+
+    assert second >= first
