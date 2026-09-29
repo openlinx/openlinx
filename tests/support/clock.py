@@ -1,5 +1,6 @@
 """`FakeClock`, the test double for `spider.clock.Clock` (design D8 of 000-scaffold-project)."""
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 
@@ -17,3 +18,7 @@ class FakeClock:
     def advance(self, seconds: float) -> None:
         self._now += timedelta(seconds=seconds)
         self._monotonic += seconds
+
+    async def sleep(self, seconds: float) -> None:
+        self.advance(seconds)
+        await asyncio.sleep(0)
