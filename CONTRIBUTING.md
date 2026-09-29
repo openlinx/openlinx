@@ -10,7 +10,7 @@ uv sync
 
 ## Checks
 
-Run every gate in CI's order. The script stops at the first failure:
+Run CI's gates in CI's order. The script stops at the first failure. Only the wheel smoke test is left to CI:
 
 ```
 uv run scripts/check.py
@@ -32,4 +32,4 @@ Each gate on its own:
 ## Code style
 
 - Write a comment only for a non-obvious *why*. Don't add a docstring to a function or method whose name and types already say what it does, and don't add a comment that restates the code.
-- Each module starts with a one-line docstring that names the design decision it implements, such as "design D7 of 000-scaffold-project".
+- Each module starts with a one-line docstring that names the design decision it implements, such as "design D7 of 000-scaffold-project". An empty `__init__.py` that only marks a test package needs none.

@@ -1,7 +1,4 @@
-"""Run the CI gates locally in CI's order (design D11 of 000-scaffold-project).
-
-Usage: uv run scripts/check.py
-"""
+"""Run the CI gates locally in CI's order (design D11 of 000-scaffold-project)."""
 
 import os
 import shutil
@@ -12,11 +9,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-PYTHON_GATES: list[tuple[str, list[str]]] = [
-    ("ruff check", ["ruff", "check", "."]),
-    ("ruff format --check", ["ruff", "format", "--check", "."]),
-    ("mypy", ["mypy"]),
-    ("pytest", ["pytest"]),
+PYTHON_GATES: list[list[str]] = [
+    ["ruff", "check", "."],
+    ["ruff", "format", "--check", "."],
+    ["mypy"],
+    ["pytest"],
 ]
 
 
@@ -29,8 +26,8 @@ def run(name: str, command: Sequence[str], env: Mapping[str, str] | None = None)
 
 
 def main() -> None:
-    for name, args in PYTHON_GATES:
-        run(name, [sys.executable, "-m", *args])
+    for args in PYTHON_GATES:
+        run(" ".join(args), [sys.executable, "-m", *args])
 
     openspec = shutil.which("openspec")
     if openspec is None:

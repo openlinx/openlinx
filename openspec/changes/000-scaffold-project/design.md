@@ -82,9 +82,11 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
   | `TID251` | Bans event-loop policy APIs (below) |
 
 - **Banned APIs:** `asyncio.set_event_loop_policy`, `asyncio.get_event_loop_policy` and the `Windows*EventLoopPolicy` classes. Each is banned with a message pointing to `asyncio.run(..., loop_factory=spider.aio.loop_factory)`, which the architecture requires (D15).
+  - The same names are also banned where they are defined, `asyncio.events.*` and `asyncio.windows_events.*`. Otherwise an import from the submodule would get past the ban.
 - **Per-file ignores in `tests/`:**
   - `S101` (assert) and `T20` (print).
   - `S603` and `S607` (subprocess calls): tests start only fixed commands of their own, such as `git ls-files` and `sys.executable -m spider`. Replacing `"git"` with `shutil.which("git")` only trades `S607` for `S603`.
+- **Per-file ignores in `scripts/`:** `T20`, because the check script reports its progress with `print`, and `S603`, because it runs only its own fixed commands. It finds `openspec` with `shutil.which`, so it needs no `S607`.
 
 ### D5. Test runner, coverage and property tests
 
@@ -137,6 +139,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 - **CliRunner helper.**
   - `run_cli(*args, input=None)` runs the Typer app in-process with Typer's `CliRunner`. It returns `CliResult(exit_code, stdout: bytes, stderr: bytes)`, bytes exactly as written.
   - `run_cli_process(*args, env=None)` runs `sys.executable -m spider` as a real process, for console-encoding and process tests.
+    - `env` is laid over the test's own environment; it does not replace it. On Windows, a child process without `PATH` or `SYSTEMROOT` may not start. The merge is built test-first by the first test that passes `env`.
   - JSON parsing helpers are added by `010-add-workspace-and-cli-contract`, when the first JSON output exists.
 - **Home isolation and the temp-Workspace fixture.**
   - An autouse fixture points `HOME` and `USERPROFILE` (what `Path.home()` reads on Windows) at `tmp_path/home`. No test can ever touch the developer's real `~/.spider/`.
@@ -200,6 +203,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 ### D11. Local gate runner: `scripts/check.py`
 
 - `uv run scripts/check.py` runs the CI gates in the same order through `sys.executable -m <tool>`. It stops at the first failure with that step's exit code.
+- The wheel smoke test (D10, step 6) runs only in CI. It builds artefacts and installs them into a separate environment, which is too slow for every local run.
 - The OpenSpec step runs only when `openspec` is on `PATH`, and `node --test tests/js/` only when `node` is. Otherwise the script prints a notice and skips the step, as docs/testing.md allows for seam 9.
 - It works in PowerShell 5.1, which has no `&&`, and in POSIX shells.
 - It uses only the standard library.

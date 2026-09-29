@@ -1,3 +1,5 @@
+"""Hypothesis profiles `dev` and `ci` (design D5 of 000-scaffold-project)."""
+
 import os
 
 from hypothesis import settings

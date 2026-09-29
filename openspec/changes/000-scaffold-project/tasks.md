@@ -61,17 +61,17 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
 
 ## 3. Quality gates
 
-- [ ] 3.1 Configure ruff in `pyproject.toml` per design D4: rule sets, the event-loop-policy bans, and per-file ignores for `tests/` (`S101`, `T20`, `S603`, `S607`).
+- [x] 3.1 Configure ruff in `pyproject.toml` per design D4: rule sets, the event-loop-policy bans, and per-file ignores for `tests/` (`S101`, `T20`, `S603`, `S607`).
 
   Verify:
   - `uv run ruff check .` and `uv run ruff format --check .` pass.
   - A scratch module calling `asyncio.set_event_loop_policy(None)` is reported as `TID251`. Delete the scratch module afterwards.
-- [ ] 3.2 Configure mypy in strict mode per design D3, over `src`, `tests` and `scripts`.
+- [x] 3.2 Configure mypy in strict mode per design D3, over `src`, `tests` and `scripts`.
 
   Verify:
   - `uv run mypy` passes.
   - A scratch `def f(x): return x` in `src/spider/` is reported as untyped. Delete it afterwards.
-- [ ] 3.3 Configure the test stack per design D5:
+- [x] 3.3 Configure the test stack per design D5:
   - pytest: strict markers and config, `xfail_strict`, `filterwarnings = ["error"]`, `asyncio_mode = "auto"`, `asyncio_default_fixture_loop_scope = "function"`, `timeout = 60`
   - coverage: pytest-cov + covdefaults, `source = ["spider"]`, branch, `fail_under = 90`, `patch = ["subprocess"]`
   - hypothesis profiles `dev` and `ci`, registered in `tests/conftest.py`
@@ -80,16 +80,16 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
   Verify with two throwaway tests, deleted afterwards:
   - `async def test_tmp(): await asyncio.sleep(0)` passes without a marker.
   - A test that calls `warnings.warn("x", DeprecationWarning)` fails.
-- [ ] 3.4 Add `scripts/check.py` per design D11.
+- [x] 3.4 Add `scripts/check.py` per design D11.
 
   Verify:
   - With every gate green it exits 0.
   - After a deliberate formatting error it exits non-zero at the `ruff format --check` step and runs no later step.
   - It behaves the same from PowerShell 5.1 and from bash.
-- [ ] 3.5 Docs: write the first `CONTRIBUTING.md` with "Set up" (`uv sync`) and "Checks" (`uv run scripts/check.py`, plus each gate's own command).
+- [x] 3.5 Docs: write the first `CONTRIBUTING.md` with "Set up" (`uv sync`) and "Checks" (`uv run scripts/check.py`, plus each gate's own command).
 
   Verify: every command listed runs as written on Windows and on one POSIX OS.
-- [ ] 3.6 Review: run the code-review skill on group 3's commits. Refactor with `uv run scripts/check.py` green.
+- [x] 3.6 Review: run the code-review skill on group 3's commits. Refactor with `uv run scripts/check.py` green.
 
 ## 4. Home isolation, temp Workspace and clock
 
