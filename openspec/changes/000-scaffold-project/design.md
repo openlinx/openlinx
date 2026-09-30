@@ -195,7 +195,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
   6. `uv build`, then run `spider --version` from the built wheel in an isolated environment. This proves the packaging and entry point on each OS.
   7. `actions/setup-node` with the current LTS, then `npm install -g @fission-ai/openspec@1.13.0` (pinned).
   8. `openspec validate --all --strict`, with `OPENSPEC_TELEMETRY=0`.
-  9. `node --test tests/js/` for seam 9, the Report's table script. `070` adds the real tests there, and `tests/js/smoke.test.mjs` proves the wiring until then.
+  9. `node --test "tests/js/**/*.test.mjs"` for seam 9, the Report's table script. `070` adds the real tests there, and `tests/js/smoke.test.mjs` proves the wiring until then. Node expands the quoted glob itself, the same way in every shell; a bare folder (`node --test tests/js/`) is loaded as one module from Node 22 on and fails.
 - **Notes:**
   - The Node steps do not depend on Python, but the maintainer asked for every gate in every cell.
   - Third-party actions are pinned to full commit SHAs with a version comment.
@@ -204,7 +204,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 
 - `uv run scripts/check.py` runs the CI gates in the same order through `sys.executable -m <tool>`. It stops at the first failure with that step's exit code.
 - The wheel smoke test (D10, step 6) runs only in CI. It builds artefacts and installs them into a separate environment, which is too slow for every local run.
-- The OpenSpec step runs only when `openspec` is on `PATH`, and `node --test tests/js/` only when `node` is. Otherwise the script prints a notice and skips the step, as docs/testing.md allows for seam 9.
+- The OpenSpec step runs only when `openspec` is on `PATH`, and `node --test "tests/js/**/*.test.mjs"` only when `node` is. Otherwise the script prints a notice and skips the step, as docs/testing.md allows for seam 9.
 - It works in PowerShell 5.1, which has no `&&`, and in POSIX shells.
 - It uses only the standard library.
 
@@ -273,7 +273,7 @@ Seams (docs/testing.md) used by this change:
 - **HTTP (3):** the fixture site's own behaviour, observed with a plain `aiohttp.ClientSession`, and with `urllib` from a subprocess for the cross-process case.
 - **Pure-logic modules (4):** `SystemClock`, `FakeClock` and `loop_factory`.
 - **Install and packaging (8):** a repository artefact check. `tests/test_line_endings.py` runs `git ls-files --eol` and fails when a tracked text file is checked out without LF (D16).
-- **Report script (9):** only the wiring. CI runs `node --test tests/js/`, with a smoke test until `070` adds the real tests.
+- **Report script (9):** only the wiring. CI runs `node --test "tests/js/**/*.test.mjs"`, with a smoke test until `070` adds the real tests.
 
 Test doubles:
 - **The clock (`FakeClock`)** is the only one. It is in the list of allowed boundary doubles.

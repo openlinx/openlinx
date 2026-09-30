@@ -25,9 +25,11 @@ Each gate on its own:
 | Types | `uv run mypy` |
 | Tests and coverage | `uv run pytest` |
 | Specs | `openspec validate --all --strict` |
+| Report script (seam 9) | `node --test "tests/js/**/*.test.mjs"` |
 
 - **One test file:** add `--no-cov`, for example `uv run pytest tests/cli/test_version.py --no-cov`. The 90% coverage gate is meant for the whole suite, and a partial run can fall below it.
 - **Specs:** `openspec` is a Node tool. If it is not on `PATH`, the check script skips this step with a notice, and CI still runs it. Turn off its telemetry first: `export OPENSPEC_TELEMETRY=0` in bash, `$env:OPENSPEC_TELEMETRY = "0"` in PowerShell. The check script sets it by itself.
+- **Report script:** also needs Node, and is skipped with a notice without it. Keep the quotes around the glob: Node expands it itself.
 
 ## Adding a dependency
 

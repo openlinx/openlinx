@@ -205,14 +205,14 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
 
 ## 7. Continuous integration
 
-- [ ] 7.1 Add the seam 9 wiring: `tests/js/smoke.test.mjs`, a single `node:test` case, and a `node --test tests/js/` step in `scripts/check.py` that is skipped with a notice when `node` is missing (design D11).
+- [x] 7.1 Add the seam 9 wiring: `tests/js/smoke.test.mjs`, a single `node:test` case, and a `node --test "tests/js/**/*.test.mjs"` step in `scripts/check.py` that is skipped with a notice when `node` is missing (design D11).
 
-  Verify: `node --test tests/js/` passes locally, and the check script skips the step cleanly without Node.
+  Verify: `node --test "tests/js/**/*.test.mjs"` passes locally, and the check script skips the step cleanly without Node.
 - [ ] 7.2 Add `.github/workflows/ci.yml` per design D10:
   - the 3 OS × 3 Python matrix
   - ruff, strict mypy and pytest with the 90% coverage gate
   - the wheel smoke test
-  - Node set up, then `openspec validate --all --strict` with `OPENSPEC_TELEMETRY=0`, then `node --test tests/js/`
+  - Node set up, then `openspec validate --all --strict` with `OPENSPEC_TELEMETRY=0`, then `node --test "tests/js/**/*.test.mjs"`
   - actions pinned to commit SHAs
 
   Verify: a push runs 9 cells, and all of them pass. The Windows cells also finish task 1.3's check: `tests/test_line_endings.py` is green on a fresh checkout with `core.autocrlf=true`.

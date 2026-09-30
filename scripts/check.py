@@ -9,6 +9,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# Node expands the glob itself; since Node 22 a bare folder is loaded as one module and fails.
+JS_TESTS = "tests/js/**/*.test.mjs"
+
 PYTHON_GATES: list[list[str]] = [
     ["ruff", "check", "."],
     ["ruff", "format", "--check", "."],
@@ -38,6 +41,12 @@ def main() -> None:
             [openspec, "validate", "--all", "--strict"],
             env={**os.environ, "OPENSPEC_TELEMETRY": "0"},
         )
+
+    node = shutil.which("node")
+    if node is None:
+        print("SKIPPED: node --test (node is not on PATH; CI runs it)", flush=True)
+    else:
+        run(f"node --test {JS_TESTS}", [node, "--test", JS_TESTS])
 
     print("All checks passed.", flush=True)
 
