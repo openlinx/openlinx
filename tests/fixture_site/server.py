@@ -2,11 +2,14 @@
 
 import asyncio
 import threading
-from collections.abc import Callable, Coroutine, Iterator, Sequence
+import time
+from collections.abc import Awaitable, Callable, Coroutine, Iterator, Sequence
+from dataclasses import dataclass
 from typing import Any
 from xml.sax.saxutils import escape
 
 from aiohttp import web
+from multidict import CIMultiDict, CIMultiDictProxy
 
 from spider.aio import loop_factory
 from tests.fixture_site.routes import (
@@ -24,12 +27,45 @@ from tests.fixture_site.routes import (
 )
 
 
+@dataclass(frozen=True)
+class LoggedRequest:
+    method: str
+    path: str
+    headers: CIMultiDictProxy[str]
+    received_at: float
+
+
+class RequestLog:
+    def __init__(self) -> None:
+        self._entries: list[LoggedRequest] = []
+        self._lock = threading.Lock()
+
+    def add(self, request: web.Request) -> None:
+        entry = LoggedRequest(
+            method=request.method,
+            path=request.path_qs,
+            headers=CIMultiDictProxy(CIMultiDict(request.headers)),
+            received_at=time.monotonic(),
+        )
+        with self._lock:
+            self._entries.append(entry)
+
+    def snapshot(self) -> tuple[LoggedRequest, ...]:
+        with self._lock:
+            return tuple(self._entries)
+
+
 class ServerHandle:
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, log: RequestLog) -> None:
         self.base_url = base_url
+        self._log = log
 
     def url(self, path: str) -> str:
         return self.base_url + path
+
+    @property
+    def requests(self) -> tuple[LoggedRequest, ...]:
+        return self._log.snapshot()
 
 
 def _page_response(site: Site, page: Page, base_url: str) -> web.Response:
@@ -98,8 +134,15 @@ async def _hang(hanging: set[asyncio.Task[Any]]) -> None:
 
 
 def _build_app(
-    site: Site, base_url: Callable[[], str], hanging: set[asyncio.Task[Any]]
+    site: Site, base_url: Callable[[], str], hanging: set[asyncio.Task[Any]], log: RequestLog
 ) -> web.Application:
+    @web.middleware
+    async def log_request(
+        request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
+    ) -> web.StreamResponse:
+        log.add(request)
+        return await handler(request)
+
     async def handle(request: web.Request) -> web.StreamResponse:
         route = site.routes.get(request.path)
         if route is None:
@@ -120,7 +163,7 @@ def _build_app(
             await response.write_eof()
         return response
 
-    app = web.Application()
+    app = web.Application(middlewares=[log_request])
     app.router.add_route("*", "/{tail:.*}", handle)
     return app
 
@@ -131,12 +174,13 @@ class RunningServer:
         self._thread = threading.Thread(target=self._loop.run_forever, name="fixture-site")
         self._thread.start()
         self._hanging: set[asyncio.Task[Any]] = set()
-        app = _build_app(site, lambda: self.handle.base_url, self._hanging)
+        log = RequestLog()
+        app = _build_app(site, lambda: self.handle.base_url, self._hanging, log)
         self._runner = web.AppRunner(app)
         self._call(self._runner.setup())
         self._call(web.TCPSite(self._runner, "127.0.0.1", 0).start())
         host, port = self._runner.addresses[0][:2]
-        self.handle = ServerHandle(f"http://{host}:{port}")
+        self.handle = ServerHandle(f"http://{host}:{port}", log)
 
     def _call[T](self, coroutine: Coroutine[Any, Any, T]) -> T:
         return asyncio.run_coroutine_threadsafe(coroutine, self._loop).result()
