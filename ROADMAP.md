@@ -10,7 +10,7 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 
 | # | Change | Capabilities (specs) | Commands / MCP tools | Status |
 |---|---|---|---|---|
-| 000 | `000-scaffold-project` | none (tooling only) | `spider --version` | planned |
+| 000 | `000-scaffold-project` | none (tooling only) | `spider --version` | done |
 | 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | planned |
 | 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | planned |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | planned |

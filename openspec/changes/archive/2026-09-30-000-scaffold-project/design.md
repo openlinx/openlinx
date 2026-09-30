@@ -81,8 +81,12 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
   | `T20` | No `print` in `src/`: all output goes through the output layer that `010` adds |
   | `TID251` | Bans event-loop policy APIs (below) |
 
-- **Banned APIs:** `asyncio.set_event_loop_policy`, `asyncio.get_event_loop_policy` and the `Windows*EventLoopPolicy` classes. Each is banned with a message pointing to `asyncio.run(..., loop_factory=spider.aio.loop_factory)`, which the architecture requires (D15).
-- **Per-file ignores:** `S101` (assert) and `T20` in `tests/`.
+- **Banned APIs:** `asyncio.set_event_loop_policy`, `asyncio.get_event_loop_policy`, `asyncio.DefaultEventLoopPolicy`, `asyncio.AbstractEventLoopPolicy` and the `Windows*EventLoopPolicy` classes. Each is banned with a message pointing to `asyncio.run(..., loop_factory=spider.aio.loop_factory)`, which the architecture requires (D15).
+  - The same names are also banned where they are defined, `asyncio.events.*` and `asyncio.windows_events.*`. Otherwise an import from the submodule would get past the ban.
+- **Per-file ignores in `tests/`:**
+  - `S101` (assert) and `T20` (print).
+  - `S603` and `S607` (subprocess calls): tests start only fixed commands of their own, such as `git ls-files` and `sys.executable -m spider`. Replacing `"git"` with `shutil.which("git")` only trades `S607` for `S603`.
+- **Per-file ignores in `scripts/`:** `T20`, because the check script reports its progress with `print`, and `S603`, because it runs only its own fixed commands. It finds `openspec` with `shutil.which`, so it needs no `S607`.
 
 ### D5. Test runner, coverage and property tests
 
@@ -135,6 +139,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 - **CliRunner helper.**
   - `run_cli(*args, input=None)` runs the Typer app in-process with Typer's `CliRunner`. It returns `CliResult(exit_code, stdout: bytes, stderr: bytes)`, bytes exactly as written.
   - `run_cli_process(*args, env=None)` runs `sys.executable -m spider` as a real process, for console-encoding and process tests.
+    - `env` is laid over the test's own environment; it does not replace it. On Windows, a child process without `PATH` or `SYSTEMROOT` may not start. The merge is built test-first by the first test that passes `env`.
   - JSON parsing helpers are added by `010-add-workspace-and-cli-contract`, when the first JSON output exists.
 - **Home isolation and the temp-Workspace fixture.**
   - An autouse fixture points `HOME` and `USERPROFILE` (what `Path.home()` reads on Windows) at `tmp_path/home`. No test can ever touch the developer's real `~/.spider/`.
@@ -149,7 +154,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 
 - **Sites are Python modules**, one folder per site: `sites/<name>/site.py` plus its page files.
   - A site is declared as data with frozen dataclasses:
-    - `Site(routes={path: Route})`
+    - `Site(routes={path: Route}, root=None)`. `root` is the folder that `Page(file=…)` reads from, and a site with file pages must set it.
     - route kinds: `Page(file=… | body=…, template=False)`, `Status(code)`, `Redirect(location, status=301)`, `Robots(text)`, `Sitemap(paths)`, `SitemapIndex(paths)`, `LargeFile(size)`
     - a gzipped sitemap file for `024` is served as an ordinary `Page(file=…, content_type="application/gzip")`
     - common options on every route: `headers=[(name, value), …]` (repeats allowed), `content_type`, `delay` (seconds before the headers), `hang` (never respond)
@@ -179,18 +184,19 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 
 - **Triggers and settings:**
   - Push to `main`, pull requests and manual runs.
-  - `permissions: contents: read`, and a concurrency group that cancels superseded runs.
+  - `permissions: contents: read`, and a concurrency group per branch or pull request. A newer push cancels a superseded run only on pull requests (`cancel-in-progress: ${{ github.event_name == 'pull_request' }}`); every run on `main` finishes.
   - The matrix is `os: [ubuntu-latest, macos-latest, windows-latest]` × `python: ["3.12", "3.13", "3.14"]`, with `fail-fast: false` and `timeout-minutes: 30`.
 - **Steps in every cell:**
   1. `actions/checkout`, then `astral-sh/setup-uv` with `python-version: ${{ matrix.python }}` and caching.
   2. `uv sync --locked`, which fails if `uv.lock` is stale.
-  3. `ruff check .`, then `ruff format --check .`.
-  4. `mypy` (strict).
-  5. `pytest`, including the coverage gate.
-  6. `uv build`, then run `spider --version` from the built wheel in an isolated environment. This proves the packaging and entry point on each OS.
-  7. `actions/setup-node` with the current LTS, then `npm install -g @fission-ai/openspec@1.13.0` (pinned).
-  8. `openspec validate --all --strict`, with `OPENSPEC_TELEMETRY=0`.
-  9. `node --test tests/js/` for seam 9, the Report's table script. `070` adds the real tests there, and `tests/js/smoke.test.mjs` proves the wiring until then.
+  3. Check that the cell runs the matrix Python: `.python-version` pins 3.12, and without this check a cell could quietly test 3.12.
+  4. `ruff check .`, then `ruff format --check .`.
+  5. `mypy` (strict).
+  6. `pytest`, including the coverage gate.
+  7. `uv build`, then run `spider --version` from the built wheel in an isolated environment. This proves the packaging and entry point on each OS.
+  8. `actions/setup-node` with the current LTS, then `npm install -g @fission-ai/openspec@1.13.0` (pinned).
+  9. `openspec validate --all --strict`, with `OPENSPEC_TELEMETRY=0`.
+  10. `node --test "tests/js/**/*.test.mjs"` for seam 9, the Report's table script. `070` adds the real tests there, and `tests/js/smoke.test.mjs` proves the wiring until then. Node expands the quoted glob itself, the same way in every shell; a bare folder (`node --test tests/js/`) is loaded as one module from Node 22 on and fails.
 - **Notes:**
   - The Node steps do not depend on Python, but the maintainer asked for every gate in every cell.
   - Third-party actions are pinned to full commit SHAs with a version comment.
@@ -198,7 +204,8 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 ### D11. Local gate runner: `scripts/check.py`
 
 - `uv run scripts/check.py` runs the CI gates in the same order through `sys.executable -m <tool>`. It stops at the first failure with that step's exit code.
-- The OpenSpec step runs only when `openspec` is on `PATH`, and `node --test tests/js/` only when `node` is. Otherwise the script prints a notice and skips the step, as docs/testing.md allows for seam 9.
+- The wheel smoke test (D10, step 7) runs only in CI. It builds artefacts and installs them into a separate environment, which is too slow for every local run.
+- The OpenSpec step runs only when `openspec` is on `PATH`, and `node --test "tests/js/**/*.test.mjs"` only when `node` is. Otherwise the script prints a notice and skips the step, as docs/testing.md allows for seam 9.
 - It works in PowerShell 5.1, which has no `&&`, and in POSIX shells.
 - It uses only the standard library.
 
@@ -212,12 +219,14 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 
 - **What it does:** an autouse fixture in `tests/conftest.py` blocks every attempt of the test process to reach anything but loopback. It raises `NetworkAccessBlocked`, an `OSError` subclass, so client libraries report it as an ordinary connection failure.
 - **What it patches:**
-  - `socket.getaddrinfo`, which allows only `localhost` and literal loopback addresses (`127.0.0.0/8`, `::1`)
+  - `socket.getaddrinfo`, `gethostbyname` and `gethostbyname_ex`, which allow only `localhost` and literal loopback addresses (`127.0.0.0/8`, `::1`)
   - `socket.socket.connect` and `connect_ex`
   - `sock_connect` on the loops that `spider.aio.loop_factory` makes. The Windows Proactor loop connects through `ConnectEx` and never calls `socket.connect`.
 - **Why:** tests must never depend on the internet. Codex sandboxes run with the network off, and a test that reaches a real host is flaky and leaks requests.
 - **What still works:** the fixture site binds `127.0.0.1`. `022`'s virtual hosts resolve through the crawler's DNS resolver hook, a listed boundary double, to `127.0.0.1`. Both pass the guard.
-- **Limit:** child processes started by tests are not guarded. They are pointed at the fixture site by construction.
+- **Limits:**
+  - Child processes started by tests are not guarded. They are pointed at the fixture site by construction.
+  - Only the calls listed here are patched. UDP `sendto` still reaches the network; nothing in the tool uses it.
 - **Proxy isolation:** tests must not inherit a proxy from the developer's or CI's environment, because `022` honours the standard proxy variables.
   - An autouse fixture removes `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `ALL_PROXY`, in upper and lower case, before every test.
   - A test that needs a proxy sets the variables itself with `monkeypatch.setenv`.
@@ -230,6 +239,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 - **The test:**
   - It walks the requirements of the installed `spider` distribution through `importlib.metadata`, evaluating markers with `packaging.markers` for the current platform.
   - It fails when a dependency is missing from the allowlist, so every new dependency is reviewed in the commit that adds it.
+  - The walk does not follow extras. A third test fails on any runtime requirement with extras, such as `pkg[extra]`, until the walk learns them.
 - **A second test rejects known telemetry and LLM SDKs outright, even when they are allowlisted.** The denylist covers `openai`, `anthropic`, `google-generativeai`, `google-genai`, `langchain*`, `litellm`, `sentry-sdk`, `posthog`, `mixpanel`, `analytics-python`, `segment-analytics-python`, `amplitude-analytics`, `opentelemetry-*`, `datadog`, `ddtrace`, `newrelic`, `rollbar`, `bugsnag` and `logfire`.
 - **Why:** "no telemetry" and "the tool never calls an LLM" (ADR-0004) must be checked mechanically, including through transitive dependencies.
 
@@ -263,7 +273,8 @@ Seams (docs/testing.md) used by this change:
   - the wheel's console script in CI
 - **HTTP (3):** the fixture site's own behaviour, observed with a plain `aiohttp.ClientSession`, and with `urllib` from a subprocess for the cross-process case.
 - **Pure-logic modules (4):** `SystemClock`, `FakeClock` and `loop_factory`.
-- **Report script (9):** only the wiring. CI runs `node --test tests/js/`, with a smoke test until `070` adds the real tests.
+- **Install and packaging (8):** a repository artefact check. `tests/test_line_endings.py` runs `git ls-files --eol` and fails when a tracked text file is checked out without LF (D16).
+- **Report script (9):** only the wiring. CI runs `node --test "tests/js/**/*.test.mjs"`, with a smoke test until `070` adds the real tests.
 
 Test doubles:
 - **The clock (`FakeClock`)** is the only one. It is in the list of allowed boundary doubles.
@@ -287,7 +298,9 @@ None of these is a double of our code. No new seam is introduced.
 - **The upper bound in `requires-python` blocks installs on Python 3.15.**
   - The bound is deliberate until the dependencies ship 3.15 wheels, and `100-add-installers` owns raising it.
 - **The background server thread may leak resources on shutdown under Windows' Proactor loop.**
-  - Use an explicit shutdown sequence: runner cleanup, then stopping the loop, then join.
+  - Use an explicit shutdown sequence: cancel the handlers still running (hanging or delayed), then runner cleanup, then stop the loop, join the thread and close the loop.
+    - Cancelling comes first because `runner.cleanup()` waits up to aiohttp's 60 s `shutdown_timeout` for open handlers.
+    - A failed start or stop still stops the loop and joins the thread.
   - A test asserts clean shutdown with warnings as errors.
 - **Empty sub-packages could mislead readers.**
   - Each docstring names the change that fills it.

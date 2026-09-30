@@ -1,0 +1,10 @@
+# Every runtime dependency of spider, direct or transitive, with the reason it is here.
+# tests/test_dependencies.py fails when one is missing. Add a new one in the commit that adds it.
+typer  # the CLI framework (design D7 of 000-scaffold-project)
+annotated-doc  # typer: documentation for Annotated parameters
+colorama  # typer, on Windows only: console colours
+rich  # typer: help output
+markdown-it-py  # rich: Markdown rendering
+mdurl  # markdown-it-py: URL parsing
+pygments  # rich: syntax highlighting
+shellingham  # typer: detects the shell
