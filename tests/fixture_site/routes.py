@@ -43,6 +43,12 @@ class Redirect:
 Route = Page | Status | Redirect
 
 
+def redirect_chain(prefix: str, hops: int, to: str) -> dict[str, Route]:
+    """`<prefix>1` -> `<prefix>2` -> ... -> `<prefix><hops>` -> `to`."""
+    targets = [f"{prefix}{n}" for n in range(2, hops + 1)] + [to]
+    return {f"{prefix}{n}": Redirect(target) for n, target in enumerate(targets, start=1)}
+
+
 @dataclass(frozen=True)
 class Site:
     routes: dict[str, Route] = field(default_factory=dict)
