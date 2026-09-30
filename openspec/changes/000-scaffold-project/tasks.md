@@ -224,7 +224,7 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
   - a failing `node --test` case
 
   Verify: each one turns the run red.
-- [ ] 7.4 Docs: add a CI badge to `README.md` and a "What CI runs" section to `CONTRIBUTING.md`.
+- [x] 7.4 Docs: add a CI badge to `README.md` and a "What CI runs" section to `CONTRIBUTING.md`.
 - [ ] 7.5 Review: run the code-review skill on group 7's commits. Refactor with CI green.
 
 ## 8. Contributor documents
