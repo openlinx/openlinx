@@ -34,7 +34,13 @@ class Status:
     code: int
 
 
-Route = Page | Status
+@dataclass(frozen=True)
+class Redirect:
+    location: str
+    status: int = 301
+
+
+Route = Page | Status | Redirect
 
 
 @dataclass(frozen=True)
