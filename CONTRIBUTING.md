@@ -31,6 +31,31 @@ Each gate on its own:
 - **Specs:** `openspec` is a Node tool. If it is not on `PATH`, the check script skips this step with a notice, and CI still runs it. Turn off its telemetry first: `export OPENSPEC_TELEMETRY=0` in bash, `$env:OPENSPEC_TELEMETRY = "0"` in PowerShell. The check script sets it by itself.
 - **Report script:** also needs Node, and is skipped with a notice without it. Keep the quotes around the glob: Node expands it itself.
 
+## What CI runs
+
+`.github/workflows/ci.yml` runs on:
+- every push to `main`
+- every pull request
+- a manual run ("Run workflow" on the Actions page)
+
+A push to any other branch runs nothing until a pull request is open for it.
+
+Each run is a matrix of 9 cells: Ubuntu, macOS and Windows × Python 3.12, 3.13 and 3.14. No cell stops the others, and each has a 30-minute limit. A newer push to the same branch or PR cancels the run in progress.
+
+Every cell runs these steps in order, all in bash, including on Windows. It stops at the first failure:
+
+1. Check out the code, and install uv with the cell's Python.
+2. `uv sync --locked`, which fails if `uv.lock` is out of date.
+3. Check that the cell really runs its matrix Python, since `.python-version` pins 3.12.
+4. `ruff check .`, then `ruff format --check .`.
+5. `mypy` (strict).
+6. `pytest`, with the 90% coverage gate and the hypothesis `ci` profile.
+7. `uv build`, then `spider --version` from the built wheel in an isolated environment.
+8. Install Node (current LTS) and OpenSpec 1.13.0, then `openspec validate --all --strict` with telemetry off.
+9. `node --test "tests/js/**/*.test.mjs"`.
+
+Steps 4 to 9 are the gates `uv run scripts/check.py` runs locally, except the wheel check.
+
 ## Adding a dependency
 
 - **Runtime:** `uv add <name>`. In the same commit, add the new package and everything it pulls in to `tests/dependency_allowlist.txt`, one name per line with a short reason. `uv run pytest tests/test_dependencies.py --no-cov` names whatever is missing. Telemetry and LLM SDKs are refused even when allowlisted.
