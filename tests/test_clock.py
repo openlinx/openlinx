@@ -43,3 +43,13 @@ def test_system_clock_monotonic_never_goes_back() -> None:
     second = clock.monotonic()
 
     assert second >= first
+
+
+async def test_system_clock_sleep_waits_in_real_time() -> None:
+    clock: Clock = SystemClock()
+    before = clock.monotonic()
+
+    await clock.sleep(0.05)
+
+    # Loose bound: on Windows a timer can fire up to ~16 ms early.
+    assert clock.monotonic() - before >= 0.03

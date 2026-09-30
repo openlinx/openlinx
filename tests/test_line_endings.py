@@ -9,7 +9,8 @@ TEXT_IN_INDEX = {"i/lf", "i/crlf", "i/mixed"}
 
 def text_files_not_checked_out_with_lf() -> list[str]:
     listing = subprocess.run(
-        ["git", "ls-files", "--eol", "-z"],
+        # The fake home hides the global .gitconfig, and with it any safe.directory entry.
+        ["git", "-c", f"safe.directory={REPO_ROOT.as_posix()}", "ls-files", "--eol", "-z"],
         cwd=REPO_ROOT,
         capture_output=True,
         check=True,
