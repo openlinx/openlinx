@@ -8,6 +8,32 @@ You need [uv](https://docs.astral.sh/uv/). It installs the Python version from `
 uv sync
 ```
 
+## How a change is made
+
+### OpenSpec
+
+Every piece of work is an OpenSpec change under `openspec/changes/<id>/`. Each change has a proposal, a design, specs with scenarios and a task list. [ROADMAP.md](ROADMAP.md) lists the changes and what each one owns.
+
+1. `/opsx:propose`: create a change and its planning documents.
+2. `/opsx:apply`: implement it, one task group at a time, on a branch named after the change, such as `000-scaffold-project`.
+3. `/opsx:archive`: when every task is done, merge the change's specs into `openspec/specs/`. The branch then goes to `main` through a pull request, so CI runs on it.
+
+- Claude Code finds these skills in `.claude/skills/`. Codex uses the same skills from `.agents/skills/`.
+- Fixes to planning documents that are not part of the change in progress go straight to `main`.
+- The project sends no telemetry, so turn OpenSpec's off before running it:
+  - bash: `export OPENSPEC_TELEMETRY=0`
+  - PowerShell: `$env:OPENSPEC_TELEMETRY = "0"`
+
+### Test-driven development
+
+Code is written test-first, in vertical slices. [docs/testing.md](docs/testing.md) has the full rules and the agreed test seams.
+
+1. **Red:** write one failing test for one scenario, at an agreed seam, and watch it fail for the right reason.
+2. **Green:** write only enough code to pass it.
+3. Run `uv run scripts/check.py`, then commit. One green slice is one commit, and its message names the scenario or behaviour.
+
+Every task group ends with a review task: run the `code-review` skill on the group's commits, then refactor with the checks green. Refactoring happens only there, never inside the red → green loop.
+
 ## Checks
 
 Run CI's gates in CI's order. The script stops at the first failure. Only the wheel smoke test is left to CI:
@@ -62,7 +88,19 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 - **Runtime:** `uv add <name>`. In the same commit, add the new package and everything it pulls in to `tests/dependency_allowlist.txt`, one name per line with a short reason. `uv run pytest tests/test_dependencies.py --no-cov` names whatever is missing. Telemetry and LLM SDKs are refused even when allowlisted.
 - **Development only:** `uv add --dev <name>`. The allowlist covers runtime dependencies only.
 
+## Conventions
+
+- **Terms:** use the terms of [CONTEXT.md](CONTEXT.md) exactly, capitalised as defined there, such as Workspace, Crawl, Page, Issue and Command. This applies in code, tests, docs and commit messages. Test names use them too.
+- **Decisions:** a settled architectural decision is an ADR in [docs/adr/](docs/adr/). Don't reopen a decision that has one. Write a new ADR instead of quietly working around it.
+- **Placeholder name:** `spider` is a working name. It appears in `pyproject.toml` (the distribution and the console script), as the import package `spider`, and in the constant `APP_NAME` for anything users see. Use `APP_NAME` rather than typing the name in user-visible text, so a rename stays mechanical.
+
 ## Code style
 
 - Write a comment only for a non-obvious *why*. Don't add a docstring to a function or method whose name and types already say what it does, and don't add a comment that restates the code.
 - Each module starts with a one-line docstring that names the design decision it implements, such as "design D7 of 000-scaffold-project". An empty `__init__.py` that only marks a test package needs none.
+
+## Windows notes
+
+- **Checks:** run `uv run scripts/check.py`. It works the same in Windows PowerShell 5.1, which has no `&&`, as in bash.
+- **Tests:** use `127.0.0.1`, never `localhost`. On Windows, `localhost` tries `::1` first, and a refused connection there costs about 2 seconds. The fixture site binds `127.0.0.1` only.
+- **Line endings:** every text file is checked out with LF, whatever `core.autocrlf` says (`.gitattributes`). The fixture-site pages are the exception: they are served byte for byte.
