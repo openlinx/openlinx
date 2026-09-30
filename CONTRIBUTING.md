@@ -12,15 +12,15 @@ uv sync
 
 ### OpenSpec
 
-Every piece of work is an OpenSpec change under `openspec/changes/<id>/`. Each change has a proposal, a design, specs with scenarios and a task list. [ROADMAP.md](ROADMAP.md) lists the changes and what each one owns.
+Features and fixes are built as OpenSpec changes under `openspec/changes/<id>/`. Each change has a proposal, a design, specs with scenarios and a task list. [ROADMAP.md](ROADMAP.md) lists the changes and what each one owns.
 
 1. `/opsx:propose`: create a change and its planning documents.
-2. `/opsx:apply`: implement it, one task group at a time, on a branch named after the change, such as `000-scaffold-project`.
-3. `/opsx:archive`: when every task is done, merge the change's specs into `openspec/specs/`. The branch then goes to `main` through a pull request, so CI runs on it.
+2. `/opsx:apply`: implement it, one task group at a time, on a branch named after the change, such as `000-scaffold-project`. Open a draft pull request into `main` early: CI runs on pull requests, not on pushes to other branches.
+3. `/opsx:archive`: when every task is done, merge the change's specs into `openspec/specs/`. Then the pull request is merged into `main`.
 
-- Claude Code finds these skills in `.claude/skills/`. Codex uses the same skills from `.agents/skills/`.
-- Fixes to planning documents that are not part of the change in progress go straight to `main`.
-- The project sends no telemetry, so turn OpenSpec's off before running it:
+- Claude Code finds OpenSpec's agent skills in `.claude/skills/`. Codex uses the same agent skills from `.agents/skills/`.
+- The exception: fixes to the planning documents of a change that is not in progress go straight to `main`.
+- `spider` sends no telemetry, so turn OpenSpec's off before running it:
   - bash: `export OPENSPEC_TELEMETRY=0`
   - PowerShell: `$env:OPENSPEC_TELEMETRY = "0"`
 
@@ -30,9 +30,9 @@ Code is written test-first, in vertical slices. [docs/testing.md](docs/testing.m
 
 1. **Red:** write one failing test for one scenario, at an agreed seam, and watch it fail for the right reason.
 2. **Green:** write only enough code to pass it.
-3. Run `uv run scripts/check.py`, then commit. One green slice is one commit, and its message names the scenario or behaviour.
+3. Run `uv run scripts/check.py`, then commit. One green slice is one commit, and its message names the scenario.
 
-Every task group ends with a review task: run the `code-review` skill on the group's commits, then refactor with the checks green. Refactoring happens only there, never inside the red → green loop.
+Every task group ends with a review task: run the `code-review` agent skill on the group's commits, then refactor with the checks green. Refactoring happens only there, never inside the red → green loop.
 
 ## Checks
 
@@ -54,7 +54,7 @@ Each gate on its own:
 | Report script (seam 9) | `node --test "tests/js/**/*.test.mjs"` |
 
 - **One test file:** add `--no-cov`, for example `uv run pytest tests/cli/test_version.py --no-cov`. The 90% coverage gate is meant for the whole suite, and a partial run can fall below it.
-- **Specs:** `openspec` is a Node tool. If it is not on `PATH`, the check script skips this step with a notice, and CI still runs it. Turn off its telemetry first: `export OPENSPEC_TELEMETRY=0` in bash, `$env:OPENSPEC_TELEMETRY = "0"` in PowerShell. The check script sets it by itself.
+- **Specs:** `openspec` is a Node tool. If it is not on `PATH`, the check script skips this step with a notice, and CI still runs it. Run by hand, it needs its telemetry turned off first (see [OpenSpec](#openspec)); the check script does that by itself.
 - **Report script:** also needs Node, and is skipped with a notice without it. Keep the quotes around the glob: Node expands it itself.
 
 ## What CI runs
@@ -101,6 +101,6 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 
 ## Windows notes
 
-- **Checks:** run `uv run scripts/check.py`. It works the same in Windows PowerShell 5.1, which has no `&&`, as in bash.
+- **Checks:** `uv run scripts/check.py` works the same in bash and in Windows PowerShell 5.1 (which has no `&&`).
 - **Tests:** use `127.0.0.1`, never `localhost`. On Windows, `localhost` tries `::1` first, and a refused connection there costs about 2 seconds. The fixture site binds `127.0.0.1` only.
 - **Line endings:** every text file is checked out with LF, whatever `core.autocrlf` says (`.gitattributes`). The fixture-site pages are the exception: they are served byte for byte.

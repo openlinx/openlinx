@@ -6,7 +6,7 @@
 
 AI agents drive it through a command-line tool and a local MCP server:
 - They run a Crawl of a website.
-- They query what the Crawl recorded, and the Issues its Rules find.
+- They query what the Crawl recorded, including its Issues: the Rules that fired.
 - They turn the results into a Report for people.
 
 A Skill teaches the agent when and how to use each Command. The tool itself never calls an LLM ([ADR-0004](docs/adr/0004-tool-never-calls-an-llm.md)).
@@ -15,7 +15,7 @@ A Skill teaches the agent when and how to use each Command. The tool itself neve
 
 Pre-release: there is no release yet.
 - **Progress:** the project scaffold is being built (change `000-scaffold-project`), and so far `spider` only prints its version.
-- **Name:** the product name is still open. `spider` is a placeholder for the command, the Python package, `spider.toml` and the `.spider/` Workspace folder.
+- **Name:** the product name is still open. `spider` is a placeholder for the command, the Python package, `spider.toml` and the `.spider/` directory of each Workspace.
 
 ## Development quick start
 

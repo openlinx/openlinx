@@ -229,7 +229,7 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
 
 ## 8. Contributor documents
 
-- [ ] 8.1 Guard: add `tests/test_docs_links.py`. It checks that every relative link in `README.md`, `CONTRIBUTING.md` and `docs/**/*.md` points to an existing file.
+- [x] 8.1 Guard: add `tests/test_docs_links.py`. It checks that every relative link in `README.md`, `CONTRIBUTING.md` and `docs/**/*.md` points to an existing file.
 - [x] 8.2 Docs: complete `CONTRIBUTING.md` with:
   - the TDD loop, linked to `docs/testing.md`: red → green, one commit per green slice naming its scenario, and a review task at the end of every task group
   - the OpenSpec workflow: `/opsx:propose` → `/opsx:apply` → `/opsx:archive`
@@ -246,4 +246,4 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
   - the license
 
   Verify: task 8.1's test passes.
-- [ ] 8.4 Review: run the code-review skill on group 8's commits. Refactor with `uv run scripts/check.py` green.
+- [x] 8.4 Review: run the code-review skill on group 8's commits. Refactor with `uv run scripts/check.py` green.
