@@ -18,6 +18,7 @@ from tests.fixture_site.routes import (
     Route,
     Site,
     Sitemap,
+    SitemapIndex,
     Status,
 )
 
@@ -42,15 +43,19 @@ def _page_response(site: Site, page: Page) -> web.Response:
     return web.Response(body=body, headers={"Content-Type": content_type})
 
 
-def _sitemap_xml(base_url: str, paths: Sequence[str]) -> bytes:
+def _sitemap_xml(root: str, entry: str, base_url: str, paths: Sequence[str]) -> bytes:
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-        *(f"  <url><loc>{escape(base_url + path)}</loc></url>" for path in paths),
-        "</urlset>",
+        f'<{root} xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        *(f"  <{entry}><loc>{escape(base_url + path)}</loc></{entry}>" for path in paths),
+        f"</{root}>",
         "",
     ]
     return "\n".join(lines).encode()
+
+
+def _xml_response(body: bytes) -> web.Response:
+    return web.Response(body=body, headers={"Content-Type": CONTENT_TYPES[".xml"]})
 
 
 def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
@@ -64,9 +69,9 @@ def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
         case Robots(text=text):
             return web.Response(body=text.encode(), headers={"Content-Type": CONTENT_TYPES[".txt"]})
         case Sitemap(paths=paths):
-            return web.Response(
-                body=_sitemap_xml(base_url, paths), headers={"Content-Type": CONTENT_TYPES[".xml"]}
-            )
+            return _xml_response(_sitemap_xml("urlset", "url", base_url, paths))
+        case SitemapIndex(paths=paths):
+            return _xml_response(_sitemap_xml("sitemapindex", "sitemap", base_url, paths))
 
 
 def _build_app(site: Site, base_url: Callable[[], str]) -> web.Application:

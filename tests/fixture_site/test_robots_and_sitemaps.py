@@ -3,7 +3,7 @@
 import aiohttp
 
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Robots, Site, Sitemap
+from tests.fixture_site.routes import Robots, Site, Sitemap, SitemapIndex
 from tests.fixture_site.server import ServerHandle
 
 
@@ -36,5 +36,22 @@ async def test_a_sitemap_lists_absolute_urls_of_its_paths(fixture_site: StartSit
             f"  <url><loc>{base}/</loc></url>\n"
             f"  <url><loc>{base}/about</loc></url>\n"
             "</urlset>\n"
+        ).encode(),
+    )
+
+
+async def test_a_sitemap_index_lists_absolute_urls_of_its_sitemaps(
+    fixture_site: StartSite,
+) -> None:
+    server = fixture_site(Site(routes={"/sitemap.xml": SitemapIndex(paths=["/sitemap-1.xml"])}))
+
+    assert await fetch(server, "/sitemap.xml") == (
+        200,
+        "application/xml",
+        (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            f"  <sitemap><loc>{server.base_url}/sitemap-1.xml</loc></sitemap>\n"
+            "</sitemapindex>\n"
         ).encode(),
     )

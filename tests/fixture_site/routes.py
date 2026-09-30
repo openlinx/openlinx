@@ -51,7 +51,12 @@ class Sitemap:
     paths: Sequence[str]
 
 
-Route = Page | Status | Redirect | Robots | Sitemap
+@dataclass(frozen=True)
+class SitemapIndex:
+    paths: Sequence[str]
+
+
+Route = Page | Status | Redirect | Robots | Sitemap | SitemapIndex
 
 
 def redirect_chain(prefix: str, hops: int, to: str) -> dict[str, Route]:
