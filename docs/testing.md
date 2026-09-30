@@ -60,7 +60,16 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 
 - **`run_cli(*args, input=None)`** (`tests/support/cli.py`): runs the Typer app in process with Typer's `CliRunner`. It returns `CliResult(exit_code, stdout, stderr)`, where stdout and stderr are the bytes exactly as written.
 - **`run_cli_process(*args, env=None)`** (same module): runs `sys.executable -m spider` as a real process and returns the same `CliResult`. Use it for console encoding, line endings on pipes and process behaviour; use `run_cli` for everything else. Coverage counts these runs too.
-- **Home isolation** (autouse, `tests/conftest.py`): every test runs with `HOME` and `USERPROFILE` pointing at `tmp_path / "home"`, so `Path.home()` never reaches the real `~/.spider/`. Child processes that inherit the environment see the same home. Git sees it too and runs without the developer's global `.gitconfig`, so a test that runs git passes what it needs with `-c`, as `tests/test_line_endings.py` does for `safe.directory`. The fixture is `isolated_home` if a test needs the path.
+- **Isolation plugin** (`tests/support/isolation.py`, loaded by `tests/conftest.py`): three autouse fixtures that every test gets, listed below. A `pytester` run loads them with `-p tests.support.isolation`.
+- **Home isolation** (`isolated_home`): every test runs with `HOME` and `USERPROFILE` pointing at `tmp_path / "home"`, so `Path.home()` never reaches the real `~/.spider/`. Child processes that inherit the environment see the same home. Git sees it too and runs without the developer's global `.gitconfig`, so a test that runs git passes what it needs with `-c`, as `tests/test_line_endings.py` does for `safe.directory`. Request `isolated_home` if a test needs the path.
+- **Network guard** (`network_guard`, logic in `tests/support/network.py`): a test may reach only loopback.
+  - `socket.getaddrinfo` resolves only `localhost` and loopback literals.
+  - `socket.socket.connect` / `connect_ex` and `sock_connect` on the `loop_factory` loop refuse any other address. The Windows Proactor loop connects through `ConnectEx`, past `socket.connect`.
+  - Anything else raises `NetworkAccessBlocked`, an `OSError`, so clients report an ordinary connection failure.
+  - Use `127.0.0.1`, not a real host. Child processes are not guarded.
+- **Proxy isolation** (`no_proxy_from_the_environment`): `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `ALL_PROXY`, in both cases, are removed before every test. A test that needs a proxy sets them with `monkeypatch.setenv`.
+- **`loop_factory`** (`spider.aio`): every async test runs on the loop it makes (Proactor on Windows, Selector elsewhere), through the `pytest_asyncio_loop_factories` hook in `tests/conftest.py`. No test sets an event-loop policy; ruff bans them.
+- **Dependency allowlist** (`tests/dependency_allowlist.txt`, checked by `tests/test_dependencies.py`): every runtime dependency, transitive ones included, with a reason. A second test fails on any telemetry or LLM SDK, allowlisted or not.
 - **`temp_workspace`** (`tests/support/workspace.py`): creates `tmp_path / "home" / "work"`, makes it the current folder and returns `TempWorkspace(home, root)`. The root sits under the fake home, where the Workspace search stops.
 - **`FakeClock`** (`tests/support/clock.py`): implements `spider.clock.Clock`.
   - `now()` starts at `2026-01-01T00:00:00+00:00`, and `monotonic()` starts at `0.0`.
