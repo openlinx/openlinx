@@ -36,6 +36,7 @@ class RouteOptions:
 class Page(RouteOptions):
     file: str | None = None
     body: str | None = None
+    template: bool = False
 
 
 @dataclass(frozen=True)

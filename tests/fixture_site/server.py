@@ -32,7 +32,7 @@ class ServerHandle:
         return self.base_url + path
 
 
-def _page_response(site: Site, page: Page) -> web.Response:
+def _page_response(site: Site, page: Page, base_url: str) -> web.Response:
     if page.file is not None:
         assert site.root is not None, "a Page with a file needs Site(root=...)"
         path = site.root / page.file
@@ -41,6 +41,8 @@ def _page_response(site: Site, page: Page) -> web.Response:
     else:
         body = (page.body or "").encode()
         content_type = CONTENT_TYPES[".html"]
+    if page.template:
+        body = body.replace(b"{{base_url}}", base_url.encode())
     return web.Response(body=body, headers={"Content-Type": content_type})
 
 
@@ -62,7 +64,7 @@ def _xml_response(body: bytes) -> web.Response:
 def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
     match route:
         case Page():
-            return _page_response(site, route)
+            return _page_response(site, route, base_url)
         case Status(code=code):
             return web.Response(status=code)
         case Redirect(location=location, status=status):
