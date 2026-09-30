@@ -1,5 +1,7 @@
 """Pages served from files (design D9 of 000-scaffold-project)."""
 
+import subprocess
+import sys
 from pathlib import Path
 
 import aiohttp
@@ -49,3 +51,24 @@ async def test_a_page_without_template_is_served_unchanged(fixture_site: StartSi
     server = fixture_site(Site(routes={"/": Page(body='<a href="{{base_url}}/about">')}))
 
     assert await fetch_body(server, "/") == b'<a href="{{base_url}}/about">'
+
+
+# ProxyHandler({}): on Windows, urllib falls back to the registry's proxy settings.
+FETCH_IN_A_CHILD = (
+    "import sys, urllib.request\n"
+    "opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))\n"
+    "sys.stdout.buffer.write(opener.open(sys.argv[1], timeout=30).read())\n"
+)
+
+
+def test_a_child_process_can_fetch_a_page(fixture_site: StartSite) -> None:
+    server = fixture_site(basic.SITE)
+
+    fetched = subprocess.run(
+        [sys.executable, "-c", FETCH_IN_A_CHILD, server.url("/")],
+        capture_output=True,
+        check=True,
+        timeout=60,
+    ).stdout
+
+    assert fetched == Path(basic.__file__).with_name("index.html").read_bytes()
