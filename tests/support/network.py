@@ -4,6 +4,7 @@ import asyncio
 import ipaddress
 import socket
 from contextlib import closing
+from functools import cache
 from typing import Any
 
 import pytest
@@ -29,6 +30,12 @@ def _check_address(address: object) -> None:
         raise NetworkAccessBlocked(f"tests may connect only to loopback, not to {address!r}")
 
 
+@cache
+def _loop_type() -> type[asyncio.AbstractEventLoop]:
+    with closing(loop_factory()) as loop:
+        return type(loop)
+
+
 def block_remote_connections(monkeypatch: pytest.MonkeyPatch) -> None:
     getaddrinfo = socket.getaddrinfo
     connect = socket.socket.connect
@@ -49,8 +56,7 @@ def block_remote_connections(monkeypatch: pytest.MonkeyPatch) -> None:
         _check_address(address)
         return connect_ex(sock, address)
 
-    with closing(loop_factory()) as loop:
-        loop_type = type(loop)
+    loop_type = _loop_type()
     sock_connect = loop_type.sock_connect
 
     # The Windows Proactor loop connects through ConnectEx and never calls socket.connect.

@@ -113,33 +113,34 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
 
 ## 5. Event loop and guards
 
-- [ ] 5.1 Drive `loop_factory` at seam 4.
+- [x] 5.1 Drive `loop_factory` at seam 4.
   - Red: `spider.aio.loop_factory()` returns an `asyncio.ProactorEventLoop` on Windows and an `asyncio.SelectorEventLoop` elsewhere. There are two platform-specific tests, and each closes its loop.
   - Green: `src/spider/aio.py` (design D15).
-- [ ] 5.2 Setup: wire `pytest_asyncio_loop_factories` in `tests/conftest.py` so that it returns only `loop_factory` (design D5).
+- [x] 5.2 Setup: wire `pytest_asyncio_loop_factories` in `tests/conftest.py` so that it returns only `loop_factory` (design D5).
   - **Guard:** inside an async test, `type(asyncio.get_running_loop())` is the type `loop_factory` makes on this OS.
-- [ ] 5.3 Drive the network guard for sockets.
-  - Red: `socket.create_connection(("93.184.216.34", 80), timeout=1)` raises `NetworkAccessBlocked`.
-  - Green: the autouse guard in `tests/conftest.py`, patching `socket.socket.connect` and `connect_ex` (design D13).
-- [ ] 5.4 Drive the network guard for name resolution.
-  - Red: `urllib.request.urlopen("http://example.com/", timeout=1)` fails, and `NetworkAccessBlocked` is its cause.
+- [x] 5.3 Drive the network guard for sockets.
+  - Red: `sock.connect(("93.184.216.34", 80))` on a plain socket raises `NetworkAccessBlocked`, and so does `connect_ex`. (`create_connection` would stop at the name-resolution guard of 5.4 before it reaches `connect`.)
+  - Green: the autouse guard, patching `socket.socket.connect` and `connect_ex` (design D13). It sits in `tests/conftest.py` until 5.7 moves it into the isolation plugin.
+- [x] 5.4 Drive the network guard for name resolution.
+  - Red: `socket.getaddrinfo("example.com", 80)` raises `NetworkAccessBlocked`. After 5.3, `urlopen` already fails at connect, but only after a real DNS lookup.
+  - Also: `urllib.request.urlopen("http://example.com/", timeout=1)` fails with `NetworkAccessBlocked` as its `URLError.reason` (urllib sets no `__cause__`).
   - Green: a patch of `socket.getaddrinfo` that allows only `localhost` and loopback addresses.
-- [ ] 5.5 Drive the network guard for event-loop connections.
+- [x] 5.5 Drive the network guard for event-loop connections.
   - Red: in an async test, an aiohttp `GET http://93.184.216.34/` raises `aiohttp.ClientConnectorError` caused by `NetworkAccessBlocked`, on every OS.
   - Green: a patch of `sock_connect` on the loops that `loop_factory` makes. The Windows Proactor loop connects through `ConnectEx`.
-- [ ] 5.6 **Guard:** loopback stays reachable. A server socket bound to `127.0.0.1:0` accepts a connection from the test.
-- [ ] 5.7 Drive proxy isolation.
+- [x] 5.6 **Guard:** loopback stays reachable. A server socket bound to `127.0.0.1:0` accepts a connection from the test.
+- [x] 5.7 Drive proxy isolation.
   - Red: a `pytester` run is started with `HTTP_PROXY` and `https_proxy` set in its environment. It runs a test that asserts that none of the proxy variables of design D13 is in `os.environ`, and that test fails.
   - Green: the autouse fixture that removes them, in the plugin `tests/support/isolation.py` loaded by `tests/conftest.py`.
   - **Guard:** a test that sets `HTTP_PROXY` with `monkeypatch.setenv` sees that value.
-- [ ] 5.8 Drive the dependency allowlist.
+- [x] 5.8 Drive the dependency allowlist.
   - Red: with an empty `tests/dependency_allowlist.txt`, the test fails and names `typer` and every dependency it pulls in, with markers evaluated for the current platform.
   - Green: list them, each with a short reason, and add `packaging` to the development group (design D14).
-- [ ] 5.9 **Guard:** the telemetry and LLM denylist of design D14. The test fails if any listed package is a runtime dependency, even an allowlisted one.
-- [ ] 5.10 Docs:
+- [x] 5.9 **Guard:** the telemetry and LLM denylist of design D14. The test fails if any listed package is a runtime dependency, even an allowlisted one.
+- [x] 5.10 Docs:
   - Add the network guard, the dependency allowlist and `loop_factory` to the "Helpers" section of `docs/testing.md`.
   - Add "Adding a dependency" to `CONTRIBUTING.md`: the allowlist edit belongs in the same commit.
-- [ ] 5.11 Review: run the code-review skill on group 5's commits. Refactor with `uv run scripts/check.py` green.
+- [x] 5.11 Review: run the code-review skill on group 5's commits. Refactor with `uv run scripts/check.py` green.
 
 ## 6. Local fixture site (HTTP seam)
 

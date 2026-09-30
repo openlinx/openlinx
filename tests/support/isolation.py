@@ -1,4 +1,4 @@
-"""Home, proxy and network isolation for every test, as a pytest plugin (design D13 of 000)."""
+"""Home, proxy and network isolation as a pytest plugin (design D13 of 000-scaffold-project)."""
 
 from pathlib import Path
 

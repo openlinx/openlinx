@@ -223,7 +223,9 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
   - `sock_connect` on the loops that `spider.aio.loop_factory` makes. The Windows Proactor loop connects through `ConnectEx` and never calls `socket.connect`.
 - **Why:** tests must never depend on the internet. Codex sandboxes run with the network off, and a test that reaches a real host is flaky and leaks requests.
 - **What still works:** the fixture site binds `127.0.0.1`. `022`'s virtual hosts resolve through the crawler's DNS resolver hook, a listed boundary double, to `127.0.0.1`. Both pass the guard.
-- **Limit:** child processes started by tests are not guarded. They are pointed at the fixture site by construction.
+- **Limits:**
+  - Child processes started by tests are not guarded. They are pointed at the fixture site by construction.
+  - Only the calls listed above are patched. `socket.gethostbyname` and UDP `sendto` still reach the network; nothing in the tool uses them.
 - **Proxy isolation:** tests must not inherit a proxy from the developer's or CI's environment, because `022` honours the standard proxy variables.
   - An autouse fixture removes `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `ALL_PROXY`, in upper and lower case, before every test.
   - A test that needs a proxy sets the variables itself with `monkeypatch.setenv`.
@@ -236,6 +238,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 - **The test:**
   - It walks the requirements of the installed `spider` distribution through `importlib.metadata`, evaluating markers with `packaging.markers` for the current platform.
   - It fails when a dependency is missing from the allowlist, so every new dependency is reviewed in the commit that adds it.
+  - The walk does not follow extras. A third test fails on any runtime requirement with extras, such as `pkg[extra]`, until the walk learns them.
 - **A second test rejects known telemetry and LLM SDKs outright, even when they are allowlisted.** The denylist covers `openai`, `anthropic`, `google-generativeai`, `google-genai`, `langchain*`, `litellm`, `sentry-sdk`, `posthog`, `mixpanel`, `analytics-python`, `segment-analytics-python`, `amplitude-analytics`, `opentelemetry-*`, `datadog`, `ddtrace`, `newrelic`, `rollbar`, `bugsnag` and `logfire`.
 - **Why:** "no telemetry" and "the tool never calls an LLM" (ADR-0004) must be checked mechanically, including through transitive dependencies.
 

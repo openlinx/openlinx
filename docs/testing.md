@@ -66,7 +66,7 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
   - `socket.getaddrinfo` resolves only `localhost` and loopback literals.
   - `socket.socket.connect` / `connect_ex` and `sock_connect` on the `loop_factory` loop refuse any other address. The Windows Proactor loop connects through `ConnectEx`, past `socket.connect`.
   - Anything else raises `NetworkAccessBlocked`, an `OSError`, so clients report an ordinary connection failure.
-  - Use `127.0.0.1`, not a real host. Child processes are not guarded.
+  - Use `127.0.0.1`, not a real host. Child processes are not guarded, and neither are `socket.gethostbyname` and UDP `sendto`.
 - **Proxy isolation** (`no_proxy_from_the_environment`): `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `ALL_PROXY`, in both cases, are removed before every test. A test that needs a proxy sets them with `monkeypatch.setenv`.
 - **`loop_factory`** (`spider.aio`): every async test runs on the loop it makes (Proactor on Windows, Selector elsewhere), through the `pytest_asyncio_loop_factories` hook in `tests/conftest.py`. No test sets an event-loop policy; ruff bans them.
 - **Dependency allowlist** (`tests/dependency_allowlist.txt`, checked by `tests/test_dependencies.py`): every runtime dependency, transitive ones included, with a reason. A second test fails on any telemetry or LLM SDK, allowlisted or not.

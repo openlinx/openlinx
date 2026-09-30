@@ -43,3 +43,8 @@ def test_loopback_stays_reachable() -> None:
         accepted, peer = server.accept()
         with accepted:
             assert peer == client.getsockname()
+
+
+def test_connect_ex_to_a_remote_address_is_blocked_too() -> None:
+    with socket.socket() as sock, pytest.raises(NetworkAccessBlocked):
+        sock.connect_ex(("93.184.216.34", 80))
