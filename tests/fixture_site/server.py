@@ -80,6 +80,8 @@ def _build_app(site: Site, base_url: Callable[[], str]) -> web.Application:
         if route is None:
             raise web.HTTPNotFound
         response = _respond(site, route, base_url())
+        if route.content_type is not None:
+            response.headers["Content-Type"] = route.content_type
         for name, value in route.headers:
             response.headers.add(name, value)
         return response
