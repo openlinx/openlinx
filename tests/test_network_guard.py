@@ -4,6 +4,7 @@ import socket
 import urllib.error
 import urllib.request
 
+import aiohttp
 import pytest
 
 from tests.support.network import NetworkAccessBlocked
@@ -24,3 +25,11 @@ def test_urlopen_of_a_remote_url_fails_because_of_the_guard() -> None:
         urllib.request.urlopen("http://example.com/", timeout=1)
 
     assert isinstance(caught.value.reason, NetworkAccessBlocked)
+
+
+async def test_an_event_loop_connection_to_a_remote_address_is_blocked() -> None:
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+        with pytest.raises(aiohttp.ClientConnectorError) as caught:
+            await session.get("http://93.184.216.34/")
+
+    assert isinstance(caught.value.__cause__, NetworkAccessBlocked)
