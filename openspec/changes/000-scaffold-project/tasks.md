@@ -93,23 +93,23 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
 
 ## 4. Home isolation, temp Workspace and clock
 
-- [ ] 4.1 Drive home isolation (autouse fixture in `tests/conftest.py` that sets `HOME` and `USERPROFILE`).
+- [x] 4.1 Drive home isolation (autouse fixture in `tests/conftest.py` that sets `HOME` and `USERPROFILE`).
   - Red: a test that requests only `tmp_path` sees `Path.home() == tmp_path / "home"`.
   - Guard: a child process started with `sys.executable -c "import pathlib; print(pathlib.Path.home())"` prints the same folder.
-- [ ] 4.2 Drive `temp_workspace`.
+- [x] 4.2 Drive `temp_workspace`.
   - Red: inside the fixture, `Path.cwd() == temp_workspace.root` and `temp_workspace.root == tmp_path / "home" / "work"`.
   - Green: the `temp_workspace` fixture in `tests/support/workspace.py`.
-- [ ] 4.3 Drive `FakeClock` time.
+- [x] 4.3 Drive `FakeClock` time.
   - Red: `FakeClock().now()` equals `datetime(2026, 1, 1, tzinfo=UTC)`. After `advance(1.5)` it equals `datetime(2026, 1, 1, 0, 0, 1, 500000, tzinfo=UTC)`.
-  - Green: the `Clock` protocol in `src/spider/clock.py` and `FakeClock` in `tests/support/clock.py`.
-- [ ] 4.4 Drive `FakeClock.sleep`.
+  - Green: `FakeClock` in `tests/support/clock.py`.
+- [x] 4.4 Drive `FakeClock.sleep`.
   - Red: `await FakeClock().sleep(2)` returns in under 0.1 s of real time, and afterwards `monotonic()` reads `2.0`.
-  - Green: `FakeClock.sleep`.
-- [ ] 4.5 Drive `SystemClock` (pure-logic seam), with two tests.
+  - Green: `FakeClock.sleep`, and the `Clock` protocol in `src/spider/clock.py`. The test holds the fake as a `Clock`. The protocol waits for this task because it is the first time the fake implements it, and an unimported module would fail the coverage gate.
+- [x] 4.5 Drive `SystemClock` (pure-logic seam), with two tests.
   - Red: `SystemClock().now().utcoffset()` equals `timedelta(0)`, and two consecutive `SystemClock().monotonic()` readings never decrease.
   - Green: `SystemClock`.
-- [ ] 4.6 Docs: add a "Helpers" section to `docs/testing.md` covering `run_cli`, `run_cli_process`, home isolation, `temp_workspace` and `FakeClock`.
-- [ ] 4.7 Review: run the code-review skill on group 4's commits. Refactor with `uv run scripts/check.py` green.
+- [x] 4.6 Docs: add a "Helpers" section to `docs/testing.md` covering `run_cli`, `run_cli_process`, home isolation, `temp_workspace` and `FakeClock`.
+- [x] 4.7 Review: run the code-review skill on group 4's commits. Refactor with `uv run scripts/check.py` green.
 
 ## 5. Event loop and guards
 

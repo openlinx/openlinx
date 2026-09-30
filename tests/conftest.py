@@ -17,7 +17,6 @@ settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     home = tmp_path / "home"
     home.mkdir()
-    # Path.home() reads HOME on POSIX and USERPROFILE on Windows.
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     return home
