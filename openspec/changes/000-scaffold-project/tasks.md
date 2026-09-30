@@ -144,64 +144,64 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
 
 ## 6. Local fixture site (HTTP seam)
 
-- [ ] 6.1 Drive serving a page from a file.
+- [x] 6.1 Drive serving a page from a file.
   - Red: site `sites/basic/` declares `Page(file="index.html")` at `/`. `GET /` returns 200, `Content-Type: text/html; charset=utf-8`, and a body equal to the file's bytes.
   - Green:
     - the route dataclasses and the extension → content-type table
     - the aiohttp app, run in a background thread and bound to `127.0.0.1:0`
     - the `fixture_site` fixture and `ServerHandle.base_url` / `url()`
-- [ ] 6.2 Drive byte-exact files.
+- [x] 6.2 Drive byte-exact files.
   - Red: a site file whose bytes are exactly `b"a\r\nb\nc"` is served as exactly those bytes on every OS.
   - Green: binary reads, plus the `-text` rule from task 1.3 applied to that file.
-- [ ] 6.3 Drive `Status`.
+- [x] 6.3 Drive `Status`.
   - Red (hypothesis, module-scoped server): for any status code from 200 to 599, `Status(code)` at `/s/<code>` is served with exactly that status.
   - Green: the `Status` route and the module-scoped fixture variant.
-- [ ] 6.4 Drive `Redirect`.
+- [x] 6.4 Drive `Redirect`.
   - Red: `Redirect("/b", status=301)` at `/a` returns 301 with `Location: /b` exactly as declared, not made absolute.
   - Green: `Redirect`.
-- [ ] 6.5 Drive redirect chains and loops, with two tests.
+- [x] 6.5 Drive redirect chains and loops, with two tests.
   - Red:
     - For the chain `/r1` → `/r2` → `/r3` → `/final`, an aiohttp client records exactly 3 redirects and then status 200.
     - For the loop `/loop-a` ↔ `/loop-b`, a client with `max_redirects=10` raises `TooManyRedirects`.
   - Green: the `redirect_chain(prefix, hops, to)` helper.
-- [ ] 6.6 Drive `Robots`.
+- [x] 6.6 Drive `Robots`.
   - Red: `Robots("User-agent: *\nDisallow: /private/\n")` at `/robots.txt` returns 200, `Content-Type: text/plain; charset=utf-8`, and exactly those bytes.
   - Green: `Robots`.
-- [ ] 6.7 Drive `Sitemap`.
+- [x] 6.7 Drive `Sitemap`.
   - Red: `Sitemap(paths=["/", "/about"])` at `/sitemap.xml` returns `Content-Type: application/xml`, and a body equal to the literal `<urlset>` document whose `<loc>` values are `<base_url>/` and `<base_url>/about`.
   - Green: `Sitemap`.
-- [ ] 6.8 Drive `SitemapIndex`.
+- [x] 6.8 Drive `SitemapIndex`.
   - Red: `SitemapIndex(paths=["/sitemap-1.xml"])` returns `Content-Type: application/xml` and the literal `<sitemapindex>` document, whose `<loc>` is `<base_url>/sitemap-1.xml`.
   - Green: `SitemapIndex`. Gzipped sitemap files are ordinary `Page(file=…)` routes; `022` adds gzip transfer encoding.
-- [ ] 6.9 Drive custom and repeated headers.
+- [x] 6.9 Drive custom and repeated headers.
   - Red: a route with `headers=[("Set-Cookie", "a=1"), ("Set-Cookie", "b=2"), ("X-Robots-Tag", "noindex"), ("Link", '<https://example.com/>; rel="canonical"')]` answers with:
     - `Set-Cookie` values `["a=1", "b=2"]`, in that order
     - `X-Robots-Tag: noindex`
     - the literal `Link` value
   - Green: the `headers` option.
-- [ ] 6.10 Drive `content_type`.
+- [x] 6.10 Drive `content_type`.
   - Red: `Page(file="cp1251.html", content_type="text/html; charset=windows-1251")` is served with that exact `Content-Type`.
   - Green: the `content_type` option.
-- [ ] 6.11 Drive `delay`.
+- [x] 6.11 Drive `delay`.
   - Red: with `delay=0.5`, the response headers arrive no sooner than 0.5 s after the request, measured with `time.monotonic()`.
   - Green: the `delay` option.
-- [ ] 6.12 Drive `hang`.
+- [x] 6.12 Drive `hang`.
   - Red: with `hang=True`, a client with a 0.3 s total timeout raises `TimeoutError`. Stopping the server afterwards finishes within 2 s and raises no warning.
   - Green: the `hang` option and cancellation on shutdown.
-- [ ] 6.13 Drive `LargeFile`.
+- [x] 6.13 Drive `LargeFile`.
   - Red: `LargeFile(size=3_000_000)` answers with `Content-Length: 3000000`, a body of 3,000,000 bytes, and a SHA-256 equal to a literal. The literal is computed once, by hand, from the documented pattern (bytes 0–255 repeated).
   - Green: `LargeFile`, as a streamed response.
-- [ ] 6.14 Drive templating, with two tests.
+- [x] 6.14 Drive templating, with two tests.
   - Red:
     - `Page(body='<a href="{{base_url}}/about">', template=True)` is served with `{{base_url}}` replaced by `ServerHandle.base_url`.
     - The same body without `template=True` is served unchanged.
   - Green: the `template` option.
-- [ ] 6.15 Drive the request log.
+- [x] 6.15 Drive the request log.
   - Red: after `GET /` with `User-Agent: probe/1.0` and then `HEAD /about`, `ServerHandle.requests` lists `GET /` with user agent `probe/1.0` first and `HEAD /about` second.
   - Green: the request-log middleware.
-- [ ] 6.16 Guard: a separate process (`sys.executable -c` using `urllib.request`) fetches `/` from the in-test server and receives the page bytes.
-- [ ] 6.17 Docs: write `tests/fixture_site/README.md`, covering declaring a site, route kinds and options, the fixtures, and the extension rule (design D9). Add the fixture site to the "Helpers" section of `docs/testing.md`.
-- [ ] 6.18 Review: run the code-review skill on group 6's commits. Refactor with `uv run scripts/check.py` green.
+- [x] 6.16 Guard: a separate process (`sys.executable -c` using `urllib.request`) fetches `/` from the in-test server and receives the page bytes.
+- [x] 6.17 Docs: write `tests/fixture_site/README.md`, covering declaring a site, route kinds and options, the fixtures, and the extension rule (design D9). Add the fixture site to the "Helpers" section of `docs/testing.md`.
+- [x] 6.18 Review: run the code-review skill on group 6's commits. Refactor with `uv run scripts/check.py` green.
 
 ## 7. Continuous integration
 

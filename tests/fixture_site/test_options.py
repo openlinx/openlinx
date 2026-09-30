@@ -1,7 +1,6 @@
-"""Options every route takes: headers, content_type, delay, hang (design D9 of 000)."""
+"""Route options: headers, content_type, delay, hang (design D9 of 000-scaffold-project)."""
 
 import time
-from pathlib import Path
 
 import aiohttp
 import pytest
@@ -34,10 +33,9 @@ async def test_a_route_sends_its_headers_repeated_and_in_order(fixture_site: Sta
 
 
 async def test_content_type_overrides_the_extension(fixture_site: StartSite) -> None:
-    page = Page(file="cp1251.html", content_type="text/html; charset=windows-1251")
-    server = fixture_site(Site(root=Path(exact.__file__).parent, routes={"/": page}))
+    server = fixture_site(exact.SITE)
 
-    async with aiohttp.ClientSession() as session, session.get(server.url("/")) as response:
+    async with aiohttp.ClientSession() as session, session.get(server.url("/cp1251")) as response:
         content_type = response.headers["Content-Type"]
 
     assert content_type == "text/html; charset=windows-1251"

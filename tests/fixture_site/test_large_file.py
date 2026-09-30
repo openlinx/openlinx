@@ -7,7 +7,7 @@ import aiohttp
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import LargeFile, Site
 
-# sha256 of bytes 0..255 repeated, cut at 3,000,000 bytes; computed once outside the server.
+# Computed once outside the server, from the documented pattern, not from its generator.
 SHA256_OF_3_000_000_BYTES = "1913233a0a87fe912497ee543021c40adc5d414614fc76fdff3e0c08b6a1d981"
 
 

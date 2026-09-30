@@ -23,6 +23,7 @@ SITE = Site(
 
 - **A reusable site** is a folder `sites/<name>/` with an empty `__init__.py`, a `site.py` that defines `SITE`, and its page files. Everything under `sites/` is `-text` in `.gitattributes`, so the files keep their exact bytes, line endings included.
 - **A one-off site** is built inline in the test: `Site(routes={...})`.
+- A site is checked when it is declared: a `Page` takes exactly one of `file=` and `body=`, and a site with `Page(file=...)` routes needs `root=`.
 - A path that no route declares answers 404.
 
 ## Route kinds
@@ -37,16 +38,18 @@ SITE = Site(
 | `SitemapIndex(paths)` | 200, `application/xml` and a `<sitemapindex>` with one absolute `<loc>` per path. |
 | `LargeFile(size)` | 200, `Content-Length: size` and a stream of the bytes 0–255 repeated. |
 
-A gzipped sitemap is an ordinary `Page(file="sitemap.xml.gz")`, served as `application/gzip`.
+A gzipped sitemap is an ordinary `Page(file="sitemap.xml.gz", content_type="application/gzip")`. The extension table knows only `.html`, `.txt` and `.xml`; any other extension is `application/octet-stream` unless `content_type` says otherwise.
 
 ## Options on every route
 
 Every route takes these as keyword arguments:
 
-- `headers=[(name, value), ...]`: added to the response in order. A name may repeat, such as two `Set-Cookie`.
+- `headers=[(name, value), ...]`: added to the response in order. A name may repeat, such as two `Set-Cookie`. A `Content-Type` here is added next to the route's own, so use `content_type` to replace it.
 - `content_type="..."`: replaces the route's own `Content-Type`.
 - `delay=0.5`: seconds to wait before the response headers.
-- `hang=True`: never answer. The server cancels the handler when it stops.
+- `hang=True`: never answer.
+
+When the server stops, it cancels every handler still running (hanging or delayed) before aiohttp's cleanup, which would otherwise wait up to 60 s for them.
 
 ## Fixtures
 

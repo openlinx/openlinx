@@ -7,19 +7,8 @@ from pathlib import Path
 # Fixed, never `mimetypes`: on Windows that reads the registry and differs between machines.
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
-    ".htm": "text/html; charset=utf-8",
     ".txt": "text/plain; charset=utf-8",
     ".xml": "application/xml",
-    ".gz": "application/gzip",
-    ".css": "text/css; charset=utf-8",
-    ".js": "text/javascript; charset=utf-8",
-    ".json": "application/json",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".gif": "image/gif",
-    ".svg": "image/svg+xml",
-    ".ico": "image/x-icon",
-    ".pdf": "application/pdf",
 }
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
 
@@ -37,6 +26,10 @@ class Page(RouteOptions):
     file: str | None = None
     body: str | None = None
     template: bool = False
+
+    def __post_init__(self) -> None:
+        if (self.file is None) == (self.body is None):
+            raise ValueError("a Page takes exactly one of file= and body=")
 
 
 @dataclass(frozen=True)
@@ -85,3 +78,8 @@ def redirect_chain(prefix: str, hops: int, to: str) -> dict[str, Route]:
 class Site:
     routes: dict[str, Route] = field(default_factory=dict)
     root: Path | None = None
+
+    def __post_init__(self) -> None:
+        reads_files = any(isinstance(r, Page) and r.file is not None for r in self.routes.values())
+        if reads_files and self.root is None:
+            raise ValueError("a Site with Page(file=...) routes needs root=")

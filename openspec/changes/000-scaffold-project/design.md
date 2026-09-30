@@ -154,7 +154,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 
 - **Sites are Python modules**, one folder per site: `sites/<name>/site.py` plus its page files.
   - A site is declared as data with frozen dataclasses:
-    - `Site(routes={path: Route})`
+    - `Site(routes={path: Route}, root=None)`. `root` is the folder that `Page(file=…)` reads from, and a site with file pages must set it.
     - route kinds: `Page(file=… | body=…, template=False)`, `Status(code)`, `Redirect(location, status=301)`, `Robots(text)`, `Sitemap(paths)`, `SitemapIndex(paths)`, `LargeFile(size)`
     - a gzipped sitemap file for `024` is served as an ordinary `Page(file=…, content_type="application/gzip")`
     - common options on every route: `headers=[(name, value), …]` (repeats allowed), `content_type`, `delay` (seconds before the headers), `hang` (never respond)
@@ -297,7 +297,9 @@ None of these is a double of our code. No new seam is introduced.
 - **The upper bound in `requires-python` blocks installs on Python 3.15.**
   - The bound is deliberate until the dependencies ship 3.15 wheels, and `100-add-installers` owns raising it.
 - **The background server thread may leak resources on shutdown under Windows' Proactor loop.**
-  - Use an explicit shutdown sequence: runner cleanup, then stopping the loop, then join.
+  - Use an explicit shutdown sequence: cancel the handlers still running (hanging or delayed), then runner cleanup, then stop the loop, join the thread and close the loop.
+    - Cancelling comes first because `runner.cleanup()` waits up to aiohttp's 60 s `shutdown_timeout` for open handlers.
+    - A failed start or stop still stops the loop and joins the thread.
   - A test asserts clean shutdown with warnings as errors.
 - **Empty sub-packages could mislead readers.**
   - Each docstring names the change that fills it.

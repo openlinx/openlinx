@@ -1,4 +1,4 @@
-"""The fixture-site server: aiohttp on 127.0.0.1 in a background thread (design D9 of 000)."""
+"""The fixture-site server, aiohttp on 127.0.0.1 in a thread (design D9 of 000-scaffold-project)."""
 
 import asyncio
 import threading
@@ -70,7 +70,7 @@ class ServerHandle:
 
 def _page_response(site: Site, page: Page, base_url: str) -> web.Response:
     if page.file is not None:
-        assert site.root is not None, "a Page with a file needs Site(root=...)"
+        assert site.root is not None
         path = site.root / page.file
         body = path.read_bytes()
         content_type = CONTENT_TYPES.get(path.suffix.lower(), DEFAULT_CONTENT_TYPE)
@@ -123,25 +123,21 @@ def _pattern_chunks(size: int) -> Iterator[bytes]:
         yield block[: size - start]
 
 
-async def _hang(hanging: set[asyncio.Task[Any]]) -> None:
-    task = asyncio.current_task()
-    assert task is not None
-    hanging.add(task)
-    try:
-        await asyncio.Event().wait()
-    finally:
-        hanging.discard(task)
-
-
 def _build_app(
-    site: Site, base_url: Callable[[], str], hanging: set[asyncio.Task[Any]], log: RequestLog
+    site: Site, base_url: Callable[[], str], in_flight: set[asyncio.Task[Any]], log: RequestLog
 ) -> web.Application:
     @web.middleware
-    async def log_request(
+    async def log_and_track(
         request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
     ) -> web.StreamResponse:
         log.add(request)
-        return await handler(request)
+        task = asyncio.current_task()
+        assert task is not None
+        in_flight.add(task)
+        try:
+            return await handler(request)
+        finally:
+            in_flight.discard(task)
 
     async def handle(request: web.Request) -> web.StreamResponse:
         route = site.routes.get(request.path)
@@ -150,7 +146,7 @@ def _build_app(
         if route.delay:
             await asyncio.sleep(route.delay)
         if route.hang:
-            await _hang(hanging)
+            await asyncio.Event().wait()
         response = _respond(site, route, base_url())
         if route.content_type is not None:
             response.headers["Content-Type"] = route.content_type
@@ -163,7 +159,7 @@ def _build_app(
             await response.write_eof()
         return response
 
-    app = web.Application(middlewares=[log_request])
+    app = web.Application(middlewares=[log_and_track])
     app.router.add_route("*", "/{tail:.*}", handle)
     return app
 
@@ -173,26 +169,35 @@ class RunningServer:
         self._loop = loop_factory()
         self._thread = threading.Thread(target=self._loop.run_forever, name="fixture-site")
         self._thread.start()
-        self._hanging: set[asyncio.Task[Any]] = set()
+        self._in_flight: set[asyncio.Task[Any]] = set()
         log = RequestLog()
-        app = _build_app(site, lambda: self.handle.base_url, self._hanging, log)
+        app = _build_app(site, lambda: self.handle.base_url, self._in_flight, log)
         self._runner = web.AppRunner(app)
-        self._call(self._runner.setup())
-        self._call(web.TCPSite(self._runner, "127.0.0.1", 0).start())
+        try:
+            self._call(self._runner.setup())
+            self._call(web.TCPSite(self._runner, "127.0.0.1", 0).start())
+        except BaseException:
+            self._stop_loop()
+            raise
         host, port = self._runner.addresses[0][:2]
         self.handle = ServerHandle(f"http://{host}:{port}", log)
 
     def _call[T](self, coroutine: Coroutine[Any, Any, T]) -> T:
         return asyncio.run_coroutine_threadsafe(coroutine, self._loop).result()
 
-    async def _cancel_hanging(self) -> None:
-        for task in list(self._hanging):
+    async def _cancel_in_flight(self) -> None:
+        for task in list(self._in_flight):
             task.cancel()
 
-    def stop(self) -> None:
-        # Hanging handlers first: runner.cleanup() waits for open handlers up to 60 s.
-        self._call(self._cancel_hanging())
-        self._call(self._runner.cleanup())
+    def _stop_loop(self) -> None:
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._thread.join()
         self._loop.close()
+
+    def stop(self) -> None:
+        # Handlers first: runner.cleanup() waits up to 60 s for open ones (hang, delay).
+        try:
+            self._call(self._cancel_in_flight())
+            self._call(self._runner.cleanup())
+        finally:
+            self._stop_loop()
