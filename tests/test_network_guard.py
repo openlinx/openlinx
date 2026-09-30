@@ -33,3 +33,13 @@ async def test_an_event_loop_connection_to_a_remote_address_is_blocked() -> None
             await session.get("http://93.184.216.34/")
 
     assert isinstance(caught.value.__cause__, NetworkAccessBlocked)
+
+
+def test_loopback_stays_reachable() -> None:
+    with (
+        socket.create_server(("127.0.0.1", 0)) as server,
+        socket.create_connection(server.getsockname(), timeout=1) as client,
+    ):
+        accepted, peer = server.accept()
+        with accepted:
+            assert peer == client.getsockname()
