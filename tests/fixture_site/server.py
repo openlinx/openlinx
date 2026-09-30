@@ -2,8 +2,9 @@
 
 import asyncio
 import threading
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine, Sequence
 from typing import Any
+from xml.sax.saxutils import escape
 
 from aiohttp import web
 
@@ -16,6 +17,7 @@ from tests.fixture_site.routes import (
     Robots,
     Route,
     Site,
+    Sitemap,
     Status,
 )
 
@@ -40,7 +42,18 @@ def _page_response(site: Site, page: Page) -> web.Response:
     return web.Response(body=body, headers={"Content-Type": content_type})
 
 
-def _respond(site: Site, route: Route) -> web.StreamResponse:
+def _sitemap_xml(base_url: str, paths: Sequence[str]) -> bytes:
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        *(f"  <url><loc>{escape(base_url + path)}</loc></url>" for path in paths),
+        "</urlset>",
+        "",
+    ]
+    return "\n".join(lines).encode()
+
+
+def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
     match route:
         case Page():
             return _page_response(site, route)
@@ -50,14 +63,18 @@ def _respond(site: Site, route: Route) -> web.StreamResponse:
             return web.Response(status=status, headers={"Location": location})
         case Robots(text=text):
             return web.Response(body=text.encode(), headers={"Content-Type": CONTENT_TYPES[".txt"]})
+        case Sitemap(paths=paths):
+            return web.Response(
+                body=_sitemap_xml(base_url, paths), headers={"Content-Type": CONTENT_TYPES[".xml"]}
+            )
 
 
-def _build_app(site: Site) -> web.Application:
+def _build_app(site: Site, base_url: Callable[[], str]) -> web.Application:
     async def handle(request: web.Request) -> web.StreamResponse:
         route = site.routes.get(request.path)
         if route is None:
             raise web.HTTPNotFound
-        return _respond(site, route)
+        return _respond(site, route, base_url())
 
     app = web.Application()
     app.router.add_route("*", "/{tail:.*}", handle)
@@ -69,7 +86,7 @@ class RunningServer:
         self._loop = loop_factory()
         self._thread = threading.Thread(target=self._loop.run_forever, name="fixture-site")
         self._thread.start()
-        self._runner = web.AppRunner(_build_app(site))
+        self._runner = web.AppRunner(_build_app(site, lambda: self.handle.base_url))
         self._call(self._runner.setup())
         self._call(web.TCPSite(self._runner, "127.0.0.1", 0).start())
         host, port = self._runner.addresses[0][:2]

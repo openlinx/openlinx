@@ -1,5 +1,6 @@
 """Sites declared as data: a `Site` maps paths to routes (design D9 of 000-scaffold-project)."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -45,7 +46,12 @@ class Robots:
     text: str
 
 
-Route = Page | Status | Redirect | Robots
+@dataclass(frozen=True)
+class Sitemap:
+    paths: Sequence[str]
+
+
+Route = Page | Status | Redirect | Robots | Sitemap
 
 
 def redirect_chain(prefix: str, hops: int, to: str) -> dict[str, Route]:
