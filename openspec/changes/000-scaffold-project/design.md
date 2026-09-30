@@ -184,7 +184,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 
 - **Triggers and settings:**
   - Push to `main`, pull requests and manual runs.
-  - `permissions: contents: read`, and a concurrency group that cancels superseded runs.
+  - `permissions: contents: read`, and a concurrency group per branch or pull request. A newer push cancels a superseded run only on pull requests (`cancel-in-progress: ${{ github.event_name == 'pull_request' }}`); every run on `main` finishes.
   - The matrix is `os: [ubuntu-latest, macos-latest, windows-latest]` × `python: ["3.12", "3.13", "3.14"]`, with `fail-fast: false` and `timeout-minutes: 30`.
 - **Steps in every cell:**
   1. `actions/checkout`, then `astral-sh/setup-uv` with `python-version: ${{ matrix.python }}` and caching.

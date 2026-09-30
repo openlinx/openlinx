@@ -66,7 +66,7 @@ Each gate on its own:
 
 A push to any other branch runs nothing until a pull request is open for it.
 
-Each run is a matrix of 9 cells: Ubuntu, macOS and Windows × Python 3.12, 3.13 and 3.14. No cell stops the others, and each has a 30-minute limit. A newer push to the same branch or PR cancels the run in progress.
+Each run is a matrix of 9 cells: Ubuntu, macOS and Windows × Python 3.12, 3.13 and 3.14. No cell stops the others, and each has a 30-minute limit. On a pull request, a newer push cancels the run still in progress; every run on `main` finishes.
 
 Every cell runs these steps in order, all in bash, including on Windows. It stops at the first failure:
 
