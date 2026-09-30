@@ -218,14 +218,14 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 
 - **What it does:** an autouse fixture in `tests/conftest.py` blocks every attempt of the test process to reach anything but loopback. It raises `NetworkAccessBlocked`, an `OSError` subclass, so client libraries report it as an ordinary connection failure.
 - **What it patches:**
-  - `socket.getaddrinfo`, which allows only `localhost` and literal loopback addresses (`127.0.0.0/8`, `::1`)
+  - `socket.getaddrinfo`, `gethostbyname` and `gethostbyname_ex`, which allow only `localhost` and literal loopback addresses (`127.0.0.0/8`, `::1`)
   - `socket.socket.connect` and `connect_ex`
   - `sock_connect` on the loops that `spider.aio.loop_factory` makes. The Windows Proactor loop connects through `ConnectEx` and never calls `socket.connect`.
 - **Why:** tests must never depend on the internet. Codex sandboxes run with the network off, and a test that reaches a real host is flaky and leaks requests.
 - **What still works:** the fixture site binds `127.0.0.1`. `022`'s virtual hosts resolve through the crawler's DNS resolver hook, a listed boundary double, to `127.0.0.1`. Both pass the guard.
 - **Limits:**
   - Child processes started by tests are not guarded. They are pointed at the fixture site by construction.
-  - Only the calls listed above are patched. `socket.gethostbyname` and UDP `sendto` still reach the network; nothing in the tool uses them.
+  - Only the calls listed here are patched. UDP `sendto` still reaches the network; nothing in the tool uses it.
 - **Proxy isolation:** tests must not inherit a proxy from the developer's or CI's environment, because `022` honours the standard proxy variables.
   - An autouse fixture removes `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `ALL_PROXY`, in upper and lower case, before every test.
   - A test that needs a proxy sets the variables itself with `monkeypatch.setenv`.

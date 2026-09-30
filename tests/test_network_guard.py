@@ -48,3 +48,13 @@ def test_loopback_stays_reachable() -> None:
 def test_connect_ex_to_a_remote_address_is_blocked_too() -> None:
     with socket.socket() as sock, pytest.raises(NetworkAccessBlocked):
         sock.connect_ex(("93.184.216.34", 80))
+
+
+def test_gethostbyname_does_not_look_up_a_remote_name() -> None:
+    with pytest.raises(NetworkAccessBlocked):
+        socket.gethostbyname("example.com")
+
+
+def test_gethostbyname_ex_does_not_look_up_a_remote_name() -> None:
+    with pytest.raises(NetworkAccessBlocked):
+        socket.gethostbyname_ex("example.com")
