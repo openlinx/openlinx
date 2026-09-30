@@ -8,7 +8,7 @@ from typing import Any
 from aiohttp import web
 
 from spider.aio import loop_factory
-from tests.fixture_site.routes import CONTENT_TYPES, DEFAULT_CONTENT_TYPE, Page, Route, Site
+from tests.fixture_site.routes import CONTENT_TYPES, DEFAULT_CONTENT_TYPE, Page, Route, Site, Status
 
 
 class ServerHandle:
@@ -32,7 +32,11 @@ def _page_response(site: Site, page: Page) -> web.Response:
 
 
 def _respond(site: Site, route: Route) -> web.StreamResponse:
-    return _page_response(site, route)
+    match route:
+        case Page():
+            return _page_response(site, route)
+        case Status(code=code):
+            return web.Response(status=code)
 
 
 def _build_app(site: Site) -> web.Application:

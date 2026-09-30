@@ -29,7 +29,12 @@ class Page:
     body: str | None = None
 
 
-Route = Page
+@dataclass(frozen=True)
+class Status:
+    code: int
+
+
+Route = Page | Status
 
 
 @dataclass(frozen=True)
