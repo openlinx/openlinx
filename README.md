@@ -14,7 +14,7 @@ A Skill teaches the agent when and how to use each Command. The tool itself neve
 ## Status
 
 Pre-release: there is no release yet.
-- **Progress:** the project scaffold is being built (change `000-scaffold-project`), and so far `spider` only prints its version.
+- **Progress:** the scaffold is done (change `000-scaffold-project`, archived), and so far `spider` only prints its version. The next change is `010-add-workspace-and-cli-contract`.
 - **Name:** the product name is still open. `spider` is a placeholder for the command, the Python package, `spider.toml` and the `.spider/` directory of each Workspace.
 
 ## Development quick start
