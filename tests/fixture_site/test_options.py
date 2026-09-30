@@ -1,5 +1,6 @@
 """Options every route takes: headers, content_type, delay, hang (design D9 of 000)."""
 
+import time
 from pathlib import Path
 
 import aiohttp
@@ -38,3 +39,16 @@ async def test_content_type_overrides_the_extension(fixture_site: StartSite) -> 
         content_type = response.headers["Content-Type"]
 
     assert content_type == "text/html; charset=windows-1251"
+
+
+async def test_delay_holds_back_the_response_headers(fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/slow": Page(body="slow", delay=0.5)}))
+    timeout = aiohttp.ClientTimeout(total=30)
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        started = time.monotonic()
+        async with session.get(server.url("/slow")) as response:
+            waited = time.monotonic() - started
+            await response.read()
+
+    assert waited >= 0.5

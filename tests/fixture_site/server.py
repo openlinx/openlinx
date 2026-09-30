@@ -79,6 +79,8 @@ def _build_app(site: Site, base_url: Callable[[], str]) -> web.Application:
         route = site.routes.get(request.path)
         if route is None:
             raise web.HTTPNotFound
+        if route.delay:
+            await asyncio.sleep(route.delay)
         response = _respond(site, route, base_url())
         if route.content_type is not None:
             response.headers["Content-Type"] = route.content_type

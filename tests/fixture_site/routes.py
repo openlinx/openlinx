@@ -28,6 +28,7 @@ DEFAULT_CONTENT_TYPE = "application/octet-stream"
 class RouteOptions:
     headers: Sequence[tuple[str, str]] = ()
     content_type: str | None = None
+    delay: float = 0.0
 
 
 @dataclass(frozen=True)
