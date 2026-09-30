@@ -2,7 +2,7 @@
 
 import asyncio
 import threading
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Callable, Coroutine, Iterator, Sequence
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -12,6 +12,7 @@ from spider.aio import loop_factory
 from tests.fixture_site.routes import (
     CONTENT_TYPES,
     DEFAULT_CONTENT_TYPE,
+    LargeFile,
     Page,
     Redirect,
     Robots,
@@ -72,6 +73,16 @@ def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
             return _xml_response(_sitemap_xml("urlset", "url", base_url, paths))
         case SitemapIndex(paths=paths):
             return _xml_response(_sitemap_xml("sitemapindex", "sitemap", base_url, paths))
+        case LargeFile(size=size):
+            response = web.StreamResponse(headers={"Content-Type": DEFAULT_CONTENT_TYPE})
+            response.content_length = size
+            return response
+
+
+def _pattern_chunks(size: int) -> Iterator[bytes]:
+    block = bytes(range(256)) * 256
+    for start in range(0, size, len(block)):
+        yield block[: size - start]
 
 
 async def _hang(hanging: set[asyncio.Task[Any]]) -> None:
@@ -100,6 +111,11 @@ def _build_app(
             response.headers["Content-Type"] = route.content_type
         for name, value in route.headers:
             response.headers.add(name, value)
+        if isinstance(route, LargeFile):
+            await response.prepare(request)
+            for chunk in _pattern_chunks(route.size):
+                await response.write(chunk)
+            await response.write_eof()
         return response
 
     app = web.Application()

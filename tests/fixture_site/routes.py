@@ -64,7 +64,14 @@ class SitemapIndex(RouteOptions):
     paths: Sequence[str]
 
 
-Route = Page | Status | Redirect | Robots | Sitemap | SitemapIndex
+@dataclass(frozen=True)
+class LargeFile(RouteOptions):
+    """`size` bytes of the pattern 0, 1, ..., 255, 0, 1, ..., streamed."""
+
+    size: int
+
+
+Route = Page | Status | Redirect | Robots | Sitemap | SitemapIndex | LargeFile
 
 
 def redirect_chain(prefix: str, hops: int, to: str) -> dict[str, Route]:
