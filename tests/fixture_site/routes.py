@@ -24,35 +24,40 @@ CONTENT_TYPES = {
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
 
 
+@dataclass(frozen=True, kw_only=True)
+class RouteOptions:
+    headers: Sequence[tuple[str, str]] = ()
+
+
 @dataclass(frozen=True)
-class Page:
+class Page(RouteOptions):
     file: str | None = None
     body: str | None = None
 
 
 @dataclass(frozen=True)
-class Status:
+class Status(RouteOptions):
     code: int
 
 
 @dataclass(frozen=True)
-class Redirect:
+class Redirect(RouteOptions):
     location: str
     status: int = 301
 
 
 @dataclass(frozen=True)
-class Robots:
+class Robots(RouteOptions):
     text: str
 
 
 @dataclass(frozen=True)
-class Sitemap:
+class Sitemap(RouteOptions):
     paths: Sequence[str]
 
 
 @dataclass(frozen=True)
-class SitemapIndex:
+class SitemapIndex(RouteOptions):
     paths: Sequence[str]
 
 

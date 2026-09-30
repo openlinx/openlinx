@@ -79,7 +79,10 @@ def _build_app(site: Site, base_url: Callable[[], str]) -> web.Application:
         route = site.routes.get(request.path)
         if route is None:
             raise web.HTTPNotFound
-        return _respond(site, route, base_url())
+        response = _respond(site, route, base_url())
+        for name, value in route.headers:
+            response.headers.add(name, value)
+        return response
 
     app = web.Application()
     app.router.add_route("*", "/{tail:.*}", handle)
