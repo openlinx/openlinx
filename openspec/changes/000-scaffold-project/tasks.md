@@ -208,7 +208,7 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
 - [x] 7.1 Add the seam 9 wiring: `tests/js/smoke.test.mjs`, a single `node:test` case, and a `node --test "tests/js/**/*.test.mjs"` step in `scripts/check.py` that is skipped with a notice when `node` is missing (design D11).
 
   Verify: `node --test "tests/js/**/*.test.mjs"` passes locally, and the check script skips the step cleanly without Node.
-- [ ] 7.2 Add `.github/workflows/ci.yml` per design D10:
+- [x] 7.2 Add `.github/workflows/ci.yml` per design D10:
   - the 3 OS × 3 Python matrix
   - ruff, strict mypy and pytest with the 90% coverage gate
   - the wheel smoke test
