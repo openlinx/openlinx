@@ -239,7 +239,7 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
   - Windows notes: use `scripts/check.py` in PowerShell 5.1, and use `127.0.0.1`, not `localhost`, in tests
 
   Verify: task 8.1's test passes.
-- [ ] 8.3 Docs: complete `README.md`:
+- [x] 8.3 Docs: complete `README.md`:
   - what the tool is: an agent-first SEO crawler with no GUI
   - its status: pre-release, and the name is still open
   - links to ROADMAP.md, CONTEXT.md, docs/architecture.md, docs/adr/ and CONTRIBUTING.md
