@@ -19,3 +19,10 @@ def test_windows_gets_a_proactor_loop() -> None:
 def test_other_systems_get_a_selector_loop() -> None:
     with closing(loop_factory()) as loop:
         assert type(loop) is asyncio.SelectorEventLoop
+
+
+async def test_async_tests_run_on_the_loop_that_loop_factory_makes() -> None:
+    with closing(loop_factory()) as reference:
+        expected = type(reference)
+
+    assert type(asyncio.get_running_loop()) is expected
