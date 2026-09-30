@@ -69,6 +69,9 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
   - Use `127.0.0.1`, not a real host. Child processes are not guarded, and neither is UDP `sendto`.
 - **Proxy isolation** (`no_proxy_from_the_environment`): `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `ALL_PROXY`, in both cases, are removed before every test. A test that needs a proxy sets them with `monkeypatch.setenv`.
 - **`loop_factory`** (`spider.aio`): every async test runs on the loop it makes (Proactor on Windows, Selector elsewhere), through the `pytest_asyncio_loop_factories` hook in `tests/conftest.py`. No test sets an event-loop policy; ruff bans them.
+- **Fixture site** (`tests/fixture_site/`, see its [README](../tests/fixture_site/README.md)): the local HTTP server that tests crawl, at seam 3.
+  - A site is data: a `Site` maps request paths to routes, such as `Page`, `Redirect` and `Robots`.
+  - `server = fixture_site(site)` starts it on `127.0.0.1` and returns a `ServerHandle` with `base_url`, `url(path)` and the request log. `module_fixture_site` is the variant for hypothesis tests.
 - **Dependency allowlist** (`tests/dependency_allowlist.txt`, checked by `tests/test_dependencies.py`): every runtime dependency, transitive ones included, with a reason. A second test fails on any telemetry or LLM SDK, allowlisted or not.
 - **`temp_workspace`** (`tests/support/workspace.py`): creates `tmp_path / "home" / "work"`, makes it the current folder and returns `TempWorkspace(home, root)`. The root sits under the fake home, where the Workspace search stops.
 - **`FakeClock`** (`tests/support/clock.py`): implements `spider.clock.Clock`.
