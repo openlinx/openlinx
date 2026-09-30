@@ -189,13 +189,14 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 - **Steps in every cell:**
   1. `actions/checkout`, then `astral-sh/setup-uv` with `python-version: ${{ matrix.python }}` and caching.
   2. `uv sync --locked`, which fails if `uv.lock` is stale.
-  3. `ruff check .`, then `ruff format --check .`.
-  4. `mypy` (strict).
-  5. `pytest`, including the coverage gate.
-  6. `uv build`, then run `spider --version` from the built wheel in an isolated environment. This proves the packaging and entry point on each OS.
-  7. `actions/setup-node` with the current LTS, then `npm install -g @fission-ai/openspec@1.13.0` (pinned).
-  8. `openspec validate --all --strict`, with `OPENSPEC_TELEMETRY=0`.
-  9. `node --test "tests/js/**/*.test.mjs"` for seam 9, the Report's table script. `070` adds the real tests there, and `tests/js/smoke.test.mjs` proves the wiring until then. Node expands the quoted glob itself, the same way in every shell; a bare folder (`node --test tests/js/`) is loaded as one module from Node 22 on and fails.
+  3. Check that the cell runs the matrix Python: `.python-version` pins 3.12, and without this check a cell could quietly test 3.12.
+  4. `ruff check .`, then `ruff format --check .`.
+  5. `mypy` (strict).
+  6. `pytest`, including the coverage gate.
+  7. `uv build`, then run `spider --version` from the built wheel in an isolated environment. This proves the packaging and entry point on each OS.
+  8. `actions/setup-node` with the current LTS, then `npm install -g @fission-ai/openspec@1.13.0` (pinned).
+  9. `openspec validate --all --strict`, with `OPENSPEC_TELEMETRY=0`.
+  10. `node --test "tests/js/**/*.test.mjs"` for seam 9, the Report's table script. `070` adds the real tests there, and `tests/js/smoke.test.mjs` proves the wiring until then. Node expands the quoted glob itself, the same way in every shell; a bare folder (`node --test tests/js/`) is loaded as one module from Node 22 on and fails.
 - **Notes:**
   - The Node steps do not depend on Python, but the maintainer asked for every gate in every cell.
   - Third-party actions are pinned to full commit SHAs with a version comment.
@@ -203,7 +204,7 @@ This change decides the tooling. It builds no product behaviour beyond `spider -
 ### D11. Local gate runner: `scripts/check.py`
 
 - `uv run scripts/check.py` runs the CI gates in the same order through `sys.executable -m <tool>`. It stops at the first failure with that step's exit code.
-- The wheel smoke test (D10, step 6) runs only in CI. It builds artefacts and installs them into a separate environment, which is too slow for every local run.
+- The wheel smoke test (D10, step 7) runs only in CI. It builds artefacts and installs them into a separate environment, which is too slow for every local run.
 - The OpenSpec step runs only when `openspec` is on `PATH`, and `node --test "tests/js/**/*.test.mjs"` only when `node` is. Otherwise the script prints a notice and skips the step, as docs/testing.md allows for seam 9.
 - It works in PowerShell 5.1, which has no `&&`, and in POSIX shells.
 - It uses only the standard library.

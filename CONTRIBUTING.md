@@ -50,11 +50,12 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 4. `ruff check .`, then `ruff format --check .`.
 5. `mypy` (strict).
 6. `pytest`, with the 90% coverage gate and the hypothesis `ci` profile.
-7. `uv build`, then `spider --version` from the built wheel in an isolated environment.
-8. Install Node (current LTS) and OpenSpec 1.13.0, then `openspec validate --all --strict` with telemetry off.
-9. `node --test "tests/js/**/*.test.mjs"`.
+7. The wheel smoke test: `uv build`, then `spider --version` from the built wheel in an isolated environment.
+8. Install Node (current LTS) and OpenSpec 1.13.0.
+9. `openspec validate --all --strict`, with telemetry off.
+10. `node --test "tests/js/**/*.test.mjs"`.
 
-Steps 4 to 9 are the gates `uv run scripts/check.py` runs locally, except the wheel check.
+`uv run scripts/check.py` runs the gate commands of steps 4–6, 9 and 10 locally. Pytest runs with the `dev` hypothesis profile. Steps 9 and 10 are skipped when `openspec` or `node` is not on `PATH`.
 
 ## Adding a dependency
 

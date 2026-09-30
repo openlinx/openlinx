@@ -46,7 +46,7 @@ def main() -> None:
     if node is None:
         print("SKIPPED: node --test (node is not on PATH; CI runs it)", flush=True)
     else:
-        run(f"node --test {JS_TESTS}", [node, "--test", JS_TESTS])
+        run(f'node --test "{JS_TESTS}"', [node, "--test", JS_TESTS])
 
     print("All checks passed.", flush=True)
 
