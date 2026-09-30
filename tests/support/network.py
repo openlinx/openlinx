@@ -26,8 +26,16 @@ def _check_address(address: object) -> None:
 
 
 def block_remote_connections(monkeypatch: pytest.MonkeyPatch) -> None:
+    getaddrinfo = socket.getaddrinfo
     connect = socket.socket.connect
     connect_ex = socket.socket.connect_ex
+
+    def guarded_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
+        if isinstance(host, bytes):
+            host = host.decode("ascii")
+        if host is not None and not _is_loopback(host):
+            raise NetworkAccessBlocked(f"tests may resolve only loopback names, not {host!r}")
+        return getaddrinfo(host, *args, **kwargs)
 
     def guarded_connect(sock: socket.socket, address: Any) -> None:
         _check_address(address)
@@ -37,5 +45,6 @@ def block_remote_connections(monkeypatch: pytest.MonkeyPatch) -> None:
         _check_address(address)
         return connect_ex(sock, address)
 
+    monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
