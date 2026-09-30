@@ -216,7 +216,7 @@ This group comes before the quality gates, so that the coverage gate of task 3.3
   - actions pinned to commit SHAs
 
   Verify: a push runs 9 cells, and all of them pass. The Windows cells also finish task 1.3's check: `tests/test_line_endings.py` is green on a fresh checkout with `core.autocrlf=true`.
-- [ ] 7.3 Prove that the gates fail CI. On a throwaway branch, push each of the following in turn, then delete the branch:
+- [x] 7.3 Prove that the gates fail CI. On a throwaway branch, push each of the following in turn, then delete the branch:
   - a failing test
   - a change that drops coverage below 90%
   - a strict-typing error
