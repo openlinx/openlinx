@@ -4,9 +4,11 @@ import time
 from pathlib import Path
 
 import aiohttp
+import pytest
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.server import RunningServer
 from tests.fixture_site.sites.exact import site as exact
 
 CANONICAL_LINK = '<https://example.com/>; rel="canonical"'
@@ -52,3 +54,17 @@ async def test_delay_holds_back_the_response_headers(fixture_site: StartSite) ->
             await response.read()
 
     assert waited >= 0.5
+
+
+async def test_hang_never_answers_and_the_server_still_stops_quickly() -> None:
+    server = RunningServer(Site(routes={"/hang": Page(body="never", hang=True)}))
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.3)) as session:
+            with pytest.raises(TimeoutError):
+                await session.get(server.handle.url("/hang"))
+    finally:
+        started = time.monotonic()
+        server.stop()
+        stopped_in = time.monotonic() - started
+
+    assert stopped_in < 2

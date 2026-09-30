@@ -29,6 +29,7 @@ class RouteOptions:
     headers: Sequence[tuple[str, str]] = ()
     content_type: str | None = None
     delay: float = 0.0
+    hang: bool = False
 
 
 @dataclass(frozen=True)

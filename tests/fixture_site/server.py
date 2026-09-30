@@ -74,13 +74,27 @@ def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
             return _xml_response(_sitemap_xml("sitemapindex", "sitemap", base_url, paths))
 
 
-def _build_app(site: Site, base_url: Callable[[], str]) -> web.Application:
+async def _hang(hanging: set[asyncio.Task[Any]]) -> None:
+    task = asyncio.current_task()
+    assert task is not None
+    hanging.add(task)
+    try:
+        await asyncio.Event().wait()
+    finally:
+        hanging.discard(task)
+
+
+def _build_app(
+    site: Site, base_url: Callable[[], str], hanging: set[asyncio.Task[Any]]
+) -> web.Application:
     async def handle(request: web.Request) -> web.StreamResponse:
         route = site.routes.get(request.path)
         if route is None:
             raise web.HTTPNotFound
         if route.delay:
             await asyncio.sleep(route.delay)
+        if route.hang:
+            await _hang(hanging)
         response = _respond(site, route, base_url())
         if route.content_type is not None:
             response.headers["Content-Type"] = route.content_type
@@ -98,7 +112,9 @@ class RunningServer:
         self._loop = loop_factory()
         self._thread = threading.Thread(target=self._loop.run_forever, name="fixture-site")
         self._thread.start()
-        self._runner = web.AppRunner(_build_app(site, lambda: self.handle.base_url))
+        self._hanging: set[asyncio.Task[Any]] = set()
+        app = _build_app(site, lambda: self.handle.base_url, self._hanging)
+        self._runner = web.AppRunner(app)
         self._call(self._runner.setup())
         self._call(web.TCPSite(self._runner, "127.0.0.1", 0).start())
         host, port = self._runner.addresses[0][:2]
@@ -107,7 +123,13 @@ class RunningServer:
     def _call[T](self, coroutine: Coroutine[Any, Any, T]) -> T:
         return asyncio.run_coroutine_threadsafe(coroutine, self._loop).result()
 
+    async def _cancel_hanging(self) -> None:
+        for task in list(self._hanging):
+            task.cancel()
+
     def stop(self) -> None:
+        # Hanging handlers first: runner.cleanup() waits for open handlers up to 60 s.
+        self._call(self._cancel_hanging())
         self._call(self._runner.cleanup())
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._thread.join()
