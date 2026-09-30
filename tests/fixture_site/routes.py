@@ -40,7 +40,12 @@ class Redirect:
     status: int = 301
 
 
-Route = Page | Status | Redirect
+@dataclass(frozen=True)
+class Robots:
+    text: str
+
+
+Route = Page | Status | Redirect | Robots
 
 
 def redirect_chain(prefix: str, hops: int, to: str) -> dict[str, Route]:

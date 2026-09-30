@@ -13,6 +13,7 @@ from tests.fixture_site.routes import (
     DEFAULT_CONTENT_TYPE,
     Page,
     Redirect,
+    Robots,
     Route,
     Site,
     Status,
@@ -47,6 +48,8 @@ def _respond(site: Site, route: Route) -> web.StreamResponse:
             return web.Response(status=code)
         case Redirect(location=location, status=status):
             return web.Response(status=status, headers={"Location": location})
+        case Robots(text=text):
+            return web.Response(body=text.encode(), headers={"Content-Type": CONTENT_TYPES[".txt"]})
 
 
 def _build_app(site: Site) -> web.Application:
