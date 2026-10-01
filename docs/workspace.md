@@ -23,9 +23,9 @@ A Command that uses a Workspace takes the first of these that applies:
 2. **The nearest marked folder.** The search starts at the current folder and goes up one parent at a time. A folder is a Workspace when it contains `.spider/` or `spider.toml`. Either one alone is enough, so a fresh clone of a repository with a committed `spider.toml` is a Workspace before anyone runs `spider init` in it.
 3. **The global Workspace.**
 
-**The search stops at the home folder.** Reaching it selects the global Workspace, so a Workspace above the home folder is never found by searching; name it with `--workspace` instead.
+**The search stops at the home folder.** Reaching it selects the global Workspace, so a Workspace above the home folder is never found by searching; name it with `--workspace` instead. When the current folder is not inside the home folder, for example on another drive, the search goes up to the top of that drive.
 
-**The home folder is never a local Workspace.** Running from the home folder, or passing it with `--workspace`, selects the global Workspace. A file `~/spider.toml` is never read.
+**The home folder is never a local Workspace.** Running from the home folder, or passing it with `--workspace`, selects the global Workspace. That includes any spelling of it, such as `~/work/..` or a symlink, because paths are resolved before they are compared. A file `~/spider.toml` is never read.
 
 ```
 ~/work/shop/spider.toml        the Workspace of every folder below ~/work/shop

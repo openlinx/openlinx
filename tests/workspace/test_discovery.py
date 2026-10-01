@@ -149,3 +149,16 @@ def test_a_workspace_variable_is_ignored(
     workspace = resolve_workspace(cwd=work / "a", flag=None, home=temp_workspace.home)
 
     assert workspace.root == work / "a"
+
+
+def test_the_home_folder_given_with_dot_dot_is_the_global_workspace(
+    temp_workspace: TempWorkspace,
+) -> None:
+    home = temp_workspace.home
+
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=Path(".."), home=home)
+
+    assert (workspace.is_global, workspace.settings_file) == (
+        True,
+        home / ".spider" / "spider.toml",
+    )

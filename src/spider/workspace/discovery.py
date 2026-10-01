@@ -19,12 +19,14 @@ class Workspace:
 
 
 def resolve_workspace(*, cwd: Path, flag: Path | None, home: Path) -> Workspace:
+    # Resolved, so `..`, a symlink or a short name that means the home folder still matches it.
+    cwd, home = cwd.resolve(), home.resolve()
     if flag is not None:
-        root = cwd / flag
+        root = (cwd / flag).resolve()
         if not root.is_dir():
             raise NotFoundError(
                 "workspace_not_found",
-                f"The Workspace folder {root} does not exist.",
+                f"The Workspace folder {root} does not exist or is not a folder.",
                 hint=f"Create it with: {APP_NAME} init --workspace {root}",
             )
         return _global(home) if root == home else _local(root)
