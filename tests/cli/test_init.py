@@ -37,3 +37,11 @@ def test_first_run(shop: Path) -> None:
             ),
         ],
     )
+
+
+def test_files_of_a_new_local_workspace(shop: Path) -> None:
+    run_cli("init")
+
+    entries = sorted(path.relative_to(shop).as_posix() for path in shop.rglob("*"))
+
+    assert entries == [".spider", ".spider/.gitignore", ".spider/crawls", "spider.toml"]
