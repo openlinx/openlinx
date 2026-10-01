@@ -29,13 +29,17 @@ def resolve_workspace(*, cwd: Path, flag: Path | None, home: Path) -> Workspace:
                 f"The Workspace folder {root} does not exist or is not a folder.",
                 hint=f"Create it with: {APP_NAME} init --workspace {root}",
             )
-        return _global(home) if root == home else _local(root)
+        return workspace_at(root, home)
     for folder in (cwd, *cwd.parents):
         if folder == home:
             break
         if (folder / DATA_DIR_NAME).is_dir() or (folder / SETTINGS_FILE_NAME).is_file():
             return _local(folder)
     return _global(home)
+
+
+def workspace_at(root: Path, home: Path) -> Workspace:
+    return _global(home) if root == home else _local(root)
 
 
 def _global(home: Path) -> Workspace:

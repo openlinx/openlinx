@@ -6,6 +6,7 @@ import typer
 
 from spider import APP_NAME, __version__
 from spider.cli.commands import commands
+from spider.cli.init import init
 from spider.cli.runner import SpiderGroup
 from spider.output.writer import Output
 
@@ -37,6 +38,7 @@ def build_app() -> typer.Typer:
     )
     app.callback()(root)
     app.command()(commands)
+    app.command()(init)
     return app
 
 

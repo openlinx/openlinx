@@ -65,7 +65,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 3. `spider init` and encoding (seam 1)
 
-- [ ] 3.1 Drive "First run" (workspace). Green: `spider init`, creating the folders and writing a placeholder `spider.toml`.
+- [x] 3.1 Drive "First run" (workspace). Green: `spider init`, creating the folders and writing a placeholder `spider.toml`.
 - [ ] 3.2 Drive "Files of a new local Workspace" (workspace).
 - [ ] 3.3 Drive "Data folder ignores its own contents" (workspace). Green: the `.gitignore` content.
 - [ ] 3.4 Drive "Second run creates nothing" (workspace).
