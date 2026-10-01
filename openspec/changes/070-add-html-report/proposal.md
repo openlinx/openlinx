@@ -4,7 +4,7 @@ People read Reports, not JSON. The approved model is a hybrid Report: the tool b
 
 ## What Changes
 
-New Commands. They take the output flags `--format` and `-o` from `010-add-workspace-and-cli-contract`, the `--workspace` flag, and the `--crawl` option from `015-add-crawl-store`:
+New Commands. They take the `--format` and `--workspace` flags from `010-add-workspace-and-cli-contract`, the `--crawl` option from `015-add-crawl-store`, and `-o` from `050-add-query-and-segments`:
 
 | Command | Flags added by this change |
 |---|---|
@@ -19,7 +19,7 @@ New Commands. They take the output flags `--format` and `-o` from `010-add-works
 - **The Health Score** in the header, and per Segment in the `segments` Report Section. The Report's numbers come from the same summary model as `spider summary` (`050`).
 - **`report brief --section <id>`**: a compact Section Brief in JSON (counts, Issues with `affected_count`, sample Affected URLs, thresholds), 16 KiB at most by default. **`report brief --list`** lists the Report Sections, whether each applies, their Rule categories and their Issue counts.
 - **The Report Notes file contract:** `<dir>/summary.md` holds the executive summary, and `<dir>/<section-id>.md` holds one Report Section's analysis. Notes are rendered as CommonMark with tables, and raw HTML is shown as text. An unknown notes file produces a warning, and a Report Section without notes is rendered without analysis.
-- **CSV files** follow 010's CSV policy.
+- **CSV files** follow 050's CSV policy.
 - **Security:**
   - All crawled text is escaped.
   - A Content-Security-Policy allows only the Report's own inline script and style.
@@ -52,10 +52,10 @@ New Commands. They take the output flags `--format` and `-o` from `010-add-works
 ## Impact
 
 - **Depends on:**
-  - `050-add-query-and-segments`: the summary model, Segments and `--segment`, the Issue order and the Affected URL order.
+  - `050-add-query-and-segments`: the summary model, Segments and `--segment`, the Issue order and the Affected URL order, the CSV policy, and `-o` with `output_not_writable`.
   - `040-add-rules`: the per-Crawl `rules` table with categories, guidance and thresholds, `issues` with `affected_count`, `affected_urls`, and the Health Score.
   - `030-add-page-data`: the `pages` columns, including the structured-data counts.
-  - `010-add-workspace-and-cli-contract`: the output contract (receipt, `-o`, diagnostics, exit codes), the CSV policy and `spider commands`.
+  - `010-add-workspace-and-cli-contract`: the output contract (receipt, diagnostics, exit codes) and `spider commands`.
   - `015-add-crawl-store`: `--crawl`, crawl metadata (Crawl State, Section Crawl flag) and the Workspace's `.spider` directory.
   - `060-add-crawl-control`: `crawl --detach` and `status`, which the end-to-end test drives.
 - **Used by:**

@@ -586,7 +586,7 @@ In both cases the file SHALL NOT be changed.
 
 ### Requirement: Listing the schema with spider schema
 
-`spider schema [TABLE]` SHALL be a list Command that follows the paging and output rules of `010-add-workspace-and-cli-contract`, with the formats `json`, `jsonl`, `table` and `csv`.
+`spider schema [TABLE]` SHALL be a list Command that follows the paging and output rules of `010-add-workspace-and-cli-contract`, with the formats `json`, `jsonl` and `table`.
 - Its JSON result SHALL start with the key `schema_version`, the tool's schema version, before `total`.
 - Its items are the public tables. They are ordered by the number of the change that added them, and within a change in the order it added them. So `crawl` and `seeds` (from `015`) come first.
 - With TABLE, it SHALL list only that table.
@@ -631,11 +631,11 @@ An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists t
 
 #### Scenario: Self-description of schema
 - **WHEN** `spider commands` runs
-- **THEN** the `schema` entry has `"output":"list"`, `"formats":["json","jsonl","table","csv"]` and `"fields":{"available":["name","kind","description","columns"],"default":["name","kind","description","columns"]}`
+- **THEN** the `schema` entry has `"output":"list"`, `"formats":["json","jsonl","table"]` and `"fields":{"available":["name","kind","description","columns"],"default":["name","kind","description","columns"]}`
 
 #### Scenario: Global flags of schema
 - **WHEN** `spider commands` runs
-- **THEN** the options of the `schema` entry include `--format`, `--no-bom` and `--output`, and do not include `--workspace` or `--crawl`
+- **THEN** the options of the `schema` entry include `--format` and do not include `--workspace` or `--crawl`
 
 #### Scenario: Default limit of schema
 - **WHEN** `spider commands` runs

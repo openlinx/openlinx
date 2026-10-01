@@ -10,7 +10,7 @@ Turns a Crawl into a Report for people: one self-contained, offline HTML file wi
 - **Files:** an HTML file `report.html` and a folder `report-csv`. With `--segment <name>`, they are `report-<name>.html` and `report-<name>-csv`.
 - **Destination:** the folder is `--dest <dir>`, created if it is missing. Without `--dest`, it is `reports/<crawl id>/` inside the Workspace's `.spider` directory.
 - **The default folder** holds only what is written for that Crawl's Reports, and `060-add-crawl-control`'s `crawls rm` deletes it together with the Crawl.
-- **Replacement:** running `report` again with the same destination SHALL replace the HTML file and the whole CSV folder. If the files cannot be replaced, the command SHALL fail with `output_not_writable` (exit code 7, `010-add-workspace-and-cli-contract`), whose message names the path, and leave the previous Report unchanged.
+- **Replacement:** running `report` again with the same destination SHALL replace the HTML file and the whole CSV folder. If the files cannot be replaced, the command SHALL fail with `output_not_writable` (exit code 7, `050-add-query-and-segments`), whose message names the path, and leave the previous Report unchanged.
 
 #### Scenario: Default location
 - **WHEN** the Workspace's `.spider` directory is `<tmp>/site/.spider`, the latest Crawl has the id `<id>`, and `spider report` runs
@@ -44,7 +44,7 @@ Turns a Crawl into a Report for people: one self-contained, offline HTML file wi
 
 ### Requirement: Report receipt
 
-`spider report` SHALL print one JSON object on stdout, the receipt: `{path, csv_dir, crawl_id, segment, health_score, sections, notes, warnings, opened}`. `-o <file>` SHALL write the receipt to that file instead, following the rule of `010-add-workspace-and-cli-contract`.
+`spider report` SHALL print one JSON object on stdout, the receipt: `{path, csv_dir, crawl_id, segment, health_score, sections, notes, warnings, opened}`. `-o <file>` SHALL write the receipt to that file instead, following the rule of `050-add-query-and-segments`.
 - `path` and `csv_dir` are absolute paths in the operating system's native form.
 - `health_score` is the value of `health_score.score` in `spider summary` for the same Crawl and Segment.
 - `sections` lists the rendered Report Section ids in Report order.
@@ -92,9 +92,9 @@ The HTML file SHALL embed every style, script and chart it uses, and SHALL load 
 | `notes_dir_not_found` | 4 (not found) |
 
 They also use these codes from other changes:
-- `010-add-workspace-and-cli-contract`: `usage_error`, `invalid_value`, `settings_invalid` and `output_not_writable`
+- `010-add-workspace-and-cli-contract`: `usage_error`, `invalid_value` and `settings_invalid`
 - `015-add-crawl-store`: `crawl_not_found`
-- `050-add-query-and-segments`: `unknown_segment`
+- `050-add-query-and-segments`: `unknown_segment` and `output_not_writable`
 
 An error about a Report Section id SHALL list the ids in `details.accepted`, and `unknown_section` SHALL also give the closest ids in `details.suggestions`.
 
@@ -326,7 +326,7 @@ The CSV folder SHALL contain:
 - `issues.csv`, with one row per Issue and the columns `rule_id,category,issue_type,priority,affected_count,description`
 - `<rule-id>.csv` for each Issue, with one row per Affected URL and the columns `url,detail,status_code,indexability,unique_inlinks,segment`, ordered like the Issue's table
 
-The CSV files SHALL follow the CSV policy of `010-add-workspace-and-cli-contract`. Under `--segment`, the rows SHALL be limited to the Segment. Every link from the HTML file to a CSV file SHALL be a relative link into the CSV folder.
+The CSV files SHALL follow the CSV policy of `050-add-query-and-segments`. Under `--segment`, the rows SHALL be limited to the Segment. Every link from the HTML file to a CSV file SHALL be a relative link into the CSV folder.
 
 #### Scenario: One row per Affected URL
 - **WHEN** the Issue `title-missing` has 30 Affected URLs and `spider report` runs

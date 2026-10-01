@@ -5,7 +5,7 @@ See proposal.md (Why) for motivation. Everything the Report shows comes from the
 - Segment resolution
 - the Issue order and the order of Affected URLs (Unique Inlinks, descending)
 
-CSV files are written with the CSV serialiser of `010-add-workspace-and-cli-contract`, which applies its CSV policy. Rule texts, categories and thresholds come from the Crawl's `rules` table (`040-add-rules`), and the Crawl State and the Section Crawl flag from the crawl metadata (`015-add-crawl-store`, `020-add-crawl-core`).
+CSV files are written with the CSV serialiser of `050-add-query-and-segments`, which applies its CSV policy. Rule texts, categories and thresholds come from the Crawl's `rules` table (`040-add-rules`), and the Crawl State and the Section Crawl flag from the crawl metadata (`015-add-crawl-store`, `020-add-crawl-core`).
 
 The **Report Service** (`src/spider/services/report.py`) builds a ReportModel once per invocation. The HTML renderer and the Section Brief builder both read that model, so the Report and its briefs cannot disagree.
 
@@ -23,7 +23,7 @@ The **Report Service** (`src/spider/services/report.py`) builds a ReportModel on
 **Non-Goals:**
 - Client-side rendering, charting libraries and web fonts.
 - Analysis, prioritisation or wording chosen by the tool (ADR-0004).
-- Output mechanics that 010 owns: the CSV policy, `-o` and diagnostics.
+- Output mechanics that other changes own: diagnostics (010), and the CSV policy and `-o` (050).
 - PDF, translations and white-labelling (see proposal Non-goals).
 
 ## Decisions
@@ -105,9 +105,9 @@ The Report has one `<style>` and one `<script>`, both inline. The `<meta http-eq
 
 ### D8. The destination folder, the receipt, and how files are replaced
 - **Destination:** `--dest <dir>`, by default `<Workspace's .spider directory>/reports/<crawl id>/`. The folder holds `report[-<segment>].html` and `report[-<segment>]-csv/`. The Report stays next to the Crawl it describes, `crawls rm` (060) deletes the folder with the Crawl, and 090 stores inline notes inside it.
-- **Receipt:** a JSON document on stdout with the absolute paths. `-o` redirects it, as 010 defines for every Command, so `-o` never names the HTML file.
+- **Receipt:** a JSON document on stdout with the absolute paths. `-o` redirects it, as 050 defines for every Command, so `-o` never names the HTML file.
 - **Replacement:** everything is built in a sibling temporary folder. Then the old CSV folder is renamed aside, the new one is renamed into place, the old one is deleted, and finally the HTML is moved into place with `os.replace`. The HTML goes last, so an old HTML file never points to a missing CSV folder.
-- **Failure:** earlier steps are rolled back, the temporary folder is removed, and the command fails with 010's `output_not_writable`, naming the path. On Windows, an open file makes the folder rename fail with a sharing violation.
+- **Failure:** earlier steps are rolled back, the temporary folder is removed, and the command fails with 050's `output_not_writable`, naming the path. On Windows, an open file makes the folder rename fail with a sharing violation.
 - **Transient locks:** renames are retried up to 5 times within 1 second, for antivirus scanners and indexers.
 - *Alternatives:*
   - Using `-o` for the HTML path, which contradicts G4, where `-o` always carries the stdout bytes.
@@ -161,7 +161,7 @@ The desktop-session variables are set in the test environment as input, and file
 - **The CSP could be ignored by some viewer.** → Escaping is the primary defence and is tested with attack strings. The CSP is only a second layer.
 - **A third-party Markdown library renders untrusted notes.** → `html=False`, a link allowlist, an image override and attack-string tests at the Report seam. markdown-it-py is pinned to a major version.
 - **The category mapping can drift from 040.** → The scenarios "The category mapping" and "Every Rule category has a Report Section" fail as soon as 040 adds or renames a category.
-- **The CSV folder can be large for huge Crawls,** since the full lists go into it. → The rows are streamed through 010's CSV serialiser. The HTML stays bounded by `--top`.
+- **The CSV folder can be large for huge Crawls,** since the full lists go into it. → The rows are streamed through 050's CSV serialiser. The HTML stays bounded by `--top`.
 - **Windows locks from Excel, antivirus scanners or indexers.** → The swap with rollback, a short retry, and `output_not_writable` naming the file.
 - **The end-to-end test is slow and can be flaky** (process start, polling). → One fixture site with few Pages, a 120-second cap, and polling of `status` rather than fixed sleeps.
 

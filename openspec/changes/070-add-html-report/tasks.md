@@ -45,7 +45,7 @@ Every group ends with a docs task and a review task.
 - [ ] 3.1 Drive `Report files › Default location` (CLI): the Report Service, a minimal Jinja2 template with autoescaping, and the default destination `.spider/reports/<crawl id>/`. Verify: red → green; one commit.
 - [ ] 3.2 Drive `Report files › Default CSV folder` (CLI). Verify: red → green; one commit.
 - [ ] 3.3 Drive `Report receipt › Receipt without notes` (CLI). Verify: red → green; one commit.
-- [ ] 3.4 Drive `Report receipt › -o redirects the receipt` (CLI), relying on 010's `-o`. Verify: red → green; one commit.
+- [ ] 3.4 Drive `Report receipt › -o redirects the receipt` (CLI), relying on 050's `-o`. Verify: red → green; one commit.
 - [ ] 3.5 Drive `Report files › --dest names the folder` (CLI). Verify: red → green; one commit.
 - [ ] 3.6 Drive `Report language and header › Language and encoding` (Report). Verify: red → green; one commit.
 - [ ] 3.7 Drive `Report language and header › Header shows the Seed` (Report). Verify: red → green; one commit.
@@ -107,11 +107,11 @@ Every group ends with a docs task and a review task.
 
 ## 6. CSV files with the full lists (seams 1: CLI, 7: Report)
 
-- [ ] 6.1 Drive `CSV files with the full lists › One row per Affected URL` (CLI): 010's CSV serialiser, in 050's Affected URL order. Verify: red → green; one commit.
+- [ ] 6.1 Drive `CSV files with the full lists › One row per Affected URL` (CLI): 050's CSV serialiser, in its Affected URL order. Verify: red → green; one commit.
 - [ ] 6.2 Drive `CSV files with the full lists › Issue list` (CLI). Verify: red → green; one commit.
 - [ ] 6.3 Drive `CSV files with the full lists › Relative links` (Report). Verify: red → green; one commit.
 - [ ] 6.4 Drive `CSV files with the full lists › CSV of a Segment Report` (CLI). Verify: red → green; one commit.
-- [ ] 6.5 Docs: in `docs/report.md`, describe the CSV folder (file names and columns), with a pointer to 010's CSV policy for Excel on Windows. Verify: both CSV headers from the spec are quoted.
+- [ ] 6.5 Docs: in `docs/report.md`, describe the CSV folder (file names and columns), with a pointer to 050's CSV policy for Excel on Windows. Verify: both CSV headers from the spec are quoted.
 - [ ] 6.6 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 7. Report Notes (seams 7: Report, 1: CLI)
