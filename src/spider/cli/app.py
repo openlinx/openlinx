@@ -33,7 +33,6 @@ def build_app() -> typer.Typer:
         cls=SpiderGroup,
         pretty_exceptions_enable=False,
         add_completion=False,
-        no_args_is_help=True,
     )
     app.callback()(root)
     app.command()(commands)

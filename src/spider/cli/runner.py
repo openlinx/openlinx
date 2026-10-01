@@ -21,6 +21,9 @@ class SpiderGroup(TyperGroup):
         windows_expand_args: bool = True,
         **extra: Any,
     ) -> NoReturn:
+        # Not no_args_is_help: from Click 8.2 on it raises a usage error, which exits 2.
+        if not (sys.argv[1:] if args is None else args):
+            args = ["--help"]
         try:
             exit_code = super().main(
                 args,
