@@ -12,6 +12,7 @@ from spider.output.diagnostics import Diagnostic
 from spider.output.writer import Format
 from spider.workspace.creation import create_workspace
 from spider.workspace.discovery import enclosing_workspace, target_workspace
+from spider.workspace.template import settings_template
 
 
 @command_meta(formats=[Format.JSON, Format.TABLE])
@@ -26,7 +27,7 @@ def init(
     home = Path.home()
     workspace = target_workspace(cwd=Path.cwd(), flag=workspace_dir, home=home)
     load_settings(workspace, invocation.settings_tables)
-    created = create_workspace(workspace)
+    created = create_workspace(workspace, settings_template(invocation.settings_tables))
     parent = enclosing_workspace(workspace, home)
     if parent is not None:
         invocation.output.diagnostic(

@@ -5,15 +5,12 @@ from pathlib import Path
 
 from spider import APP_NAME
 from spider.output.diagnostics import FileSystemError
-from spider.workspace.discovery import SETTINGS_FILE_NAME, Workspace
+from spider.workspace.discovery import Workspace
 
 GITIGNORE = f"# Created by {APP_NAME}: crawl data is not committed.\n*\n"
-PLACEHOLDER_SETTINGS = (
-    f"# {APP_NAME} settings. Precedence: flag, then {SETTINGS_FILE_NAME}, then default.\n"
-)
 
 
-def create_workspace(workspace: Workspace) -> list[Path]:
+def create_workspace(workspace: Workspace, settings_text: str) -> list[Path]:
     folder, gitignore, crawls, settings = (
         workspace.data_dir,
         workspace.data_dir / ".gitignore",
@@ -26,7 +23,7 @@ def create_workspace(workspace: Workspace) -> list[Path]:
         created += _folder(folder)
         created += _file(gitignore, GITIGNORE)
         created += _folder(crawls)
-        created += _file(settings, PLACEHOLDER_SETTINGS)
+        created += _file(settings, settings_text)
     except OSError as error:
         raise FileSystemError(
             "workspace_not_writable",

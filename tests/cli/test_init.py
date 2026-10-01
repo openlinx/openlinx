@@ -162,3 +162,11 @@ def test_no_nested_warning_for_a_workspace_above_a_target_outside_home(
     result = run_cli("init", "--workspace", str(outer / "site"))
 
     assert (result.exit_code, result.stderr) == (0, b"")
+
+
+def test_a_setting_in_the_template(shop: Path) -> None:
+    run_cli("init", app=example_app())
+
+    lines = (shop / "spider.toml").read_text(encoding="utf-8").splitlines()
+
+    assert lines.index("[example]") < lines.index('# level = "low"')
