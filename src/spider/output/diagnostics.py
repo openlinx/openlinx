@@ -74,5 +74,5 @@ class NotFoundError(SpiderError):
     exit_code = ExitCode.NOT_FOUND
 
 
-class IoError(SpiderError):
+class FileSystemError(SpiderError):
     exit_code = ExitCode.IO
