@@ -1,5 +1,8 @@
 """Finding the Workspace (010-add-workspace-and-cli-contract, workspace)."""
 
+import sys
+from pathlib import Path
+
 import pytest
 
 from spider.output.diagnostics import SpiderError
@@ -110,3 +113,15 @@ def test_missing_workspace_folder_is_workspace_not_found(temp_workspace: TempWor
         resolve_workspace(cwd=temp_workspace.root, flag=home / "missing", home=home)
 
     assert (raised.value.code, raised.value.exit_code) == ("workspace_not_found", 4)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows paths only")
+def test_forward_slashes_on_windows(temp_workspace: TempWorkspace) -> None:
+    home = temp_workspace.home
+    (home / "work" / "b").mkdir()
+
+    workspace = resolve_workspace(
+        cwd=temp_workspace.root, flag=Path(home.as_posix() + "/work/b"), home=home
+    )
+
+    assert str(workspace.root) == str(home) + r"\work\b"
