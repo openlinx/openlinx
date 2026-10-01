@@ -49,3 +49,13 @@ def test_a_settings_file_in_the_home_folder_is_not_read(temp_workspace: TempWork
     settings = load_settings(workspace, example_tables())
 
     assert settings.table(ExampleSettings).level == "low"
+
+
+def test_flag_over_settings_file(temp_workspace: TempWorkspace) -> None:
+    shop = workspace_with_data_folder(temp_workspace)
+    (shop / "spider.toml").write_bytes(b'[example]\nlevel = "high"\n')
+    workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
+
+    settings = load_settings(workspace, example_tables(), flags={"example": {"level": "low"}})
+
+    assert settings.table(ExampleSettings).level == "low"

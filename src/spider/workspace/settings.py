@@ -1,5 +1,6 @@
 """Resolved settings: spider.toml and flags (design D2 of 010-add-workspace-and-cli-contract)."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,12 +20,17 @@ class Settings:
         return next(value for value in vars(self.root).values() if isinstance(value, model))
 
 
-def load_settings(workspace: Workspace, tables: SettingsTables) -> Settings:
+def load_settings(
+    workspace: Workspace,
+    tables: SettingsTables,
+    flags: Mapping[str, Mapping[str, Any]] | None = None,
+) -> Settings:
     fields: dict[str, Any] = {name: (model, model()) for name, model in tables.items()}
     root_model = create_model(
         "SpiderSettings", __base__=_sources(workspace.settings_file), **fields
     )
-    return Settings(root_model())
+    values: dict[str, Any] = dict(flags or {})
+    return Settings(root_model(**values))
 
 
 def _sources(settings_file: Path) -> type[BaseSettings]:
