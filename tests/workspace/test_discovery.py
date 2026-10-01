@@ -125,3 +125,13 @@ def test_forward_slashes_on_windows(temp_workspace: TempWorkspace) -> None:
     )
 
     assert str(workspace.root) == str(home) + r"\work\b"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows paths only")
+def test_home_folder_with_non_ascii_characters_on_windows(tmp_path: Path) -> None:
+    home = tmp_path / "Пользователь"
+    (home / "notes").mkdir(parents=True)
+
+    workspace = resolve_workspace(cwd=home / "notes", flag=None, home=home)
+
+    assert str(workspace.data_dir) == str(home) + r"\.spider"
