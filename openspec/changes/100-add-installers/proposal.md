@@ -6,7 +6,7 @@ Most people who ask an agent for an SEO audit have no Python set up, and the age
 - verify the install
 - offer the Skill to the agents they find
 
-Every release must also publish the same artifacts reproducibly: the PyPI package, the `.mcpb` bundle and the install scripts. The repository's Skill copy must match the release.
+Every release must also publish the same artifacts reproducibly: the PyPI package and the install scripts. The repository's Skill copy must match the release.
 
 ## What Changes
 
@@ -40,10 +40,10 @@ Every release must also publish the same artifacts reproducibly: the PyPI packag
      - `scripts/generate_skill.py` from `080-add-agent-skill`, run into a temporary folder, produces exactly the committed `skills/spider/`.
      - the plugin version matches.
   2. the test suite.
-  3. `uv build` (wheel and sdist), plus the `.mcpb` from `090-add-mcp-server`.
+  3. `uv build` (wheel and sdist).
   4. install-script smoke tests with the built wheel on Windows (PowerShell 5.1 and 7), macOS and Linux.
   5. PyPI trusted publishing.
-  6. a GitHub release with the wheel, the sdist, the `.mcpb`, both scripts and `SHA256SUMS`.
+  6. a GitHub release with the wheel, the sdist, both scripts and `SHA256SUMS`.
 - **Python pin.** The package declares `requires-python = ">=3.12,<3.15"`, and the installers pass `--python 3.14`. This is needed because `uv tool install` ignores `requires-python` when it picks an interpreter (uv issue #14110), and Python 3.15 has no wheels yet for aiohttp, selectolax, msgspec and zstandard. A consistency test guards the pin, and the docs explain it.
 - **Documentation.**
   - `docs/installation.md` covers:
@@ -69,6 +69,7 @@ Every release must also publish the same artifacts reproducibly: the PyPI packag
 - A short custom domain for the one-liners comes after the product name is chosen. Until then `OWNER/REPO` and `spider` are placeholders. Publishing is blocked until the name is free on PyPI and GitHub, but the specs are not.
 - An `--uninstall` mode is not part of v0.1. The uninstall steps are documented only, and the mode is an open question.
 - Offline or air-gapped installation is not planned.
+- The `.mcpb` bundle is not a v0.1 release asset. It comes with the MCP server in **v0.1.1** (`090-add-mcp-server`).
 
 ## Impact
 
@@ -81,7 +82,7 @@ Every release must also publish the same artifacts reproducibly: the PyPI packag
 - **Depends on:**
   - `000-scaffold-project`: pyproject, the CI workflow (which the release workflow reuses) and Node in CI
   - `080-add-agent-skill`: the one-liners the scripts must serve, `spider doctor`, `spider skill install`, `scripts/generate_skill.py`, `skills/spider/` and `.claude-plugin/plugin.json`
-  - `090-add-mcp-server`: `scripts/build_mcpb.py` and the bundle's `.python-version`
+- **Used by:** `090-add-mcp-server` in v0.1.1, which adds the `.mcpb` bundle to the `build` and `release` jobs and its `.python-version` to the pin test.
 - **External:**
   - Astral's installers at `astral.sh`
   - a PyPI trusted-publisher entry, which needs the final project name

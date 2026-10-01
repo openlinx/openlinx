@@ -67,8 +67,8 @@ Alternatives considered:
 - **Where it is not printed:**
   - `skill install`, which fixes it.
   - `doctor`, which reports the same thing as checks.
-  - `mcp`, whose stderr is a client log.
   - the background process of a detached Crawl, whose stderr is the Crawl's log file. The Crawl specs speak of the "first event line", so a notice from the foreground `crawl` Command cannot shift their events.
+  - `mcp`, whose stderr is a client log. `090-add-mcp-server` adds it to this list in v0.1.1.
 - **Cost:** at most four `open()` + `read(4096)` calls, with no network.
 - **Only an older Skill triggers it.** A newer Skill means the CLI is out of date. SKILL.md and `doctor` handle that case.
 - **No off switch.** Environment variables are not settings, and a flag on every Command would be noise. Updating or removing the outdated Skill ends the notice.
@@ -95,7 +95,7 @@ The plugin marketplace and `npx skills add` read the default branch. If the copy
 
 ### D8. Plugin manifests
 - `plugin.json` carries `version`. `marketplace.json` leaves `version` out of its entry, so it is maintained in one place.
-- `.mcp.json` comes from `090-add-mcp-server`.
+- The plugin ships without `.mcp.json` in v0.1. `090-add-mcp-server` adds it at the plugin root in v0.1.1.
 - *Alternative:* a `plugin/` subfolder as the source. It would hide `src/` from the plugin cache, but it moves the Skill away from the standard `skills/` path that `npx skills add` expects.
 
 ### D9. Naming: "guardrails", not "rules"

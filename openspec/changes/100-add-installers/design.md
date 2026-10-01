@@ -29,7 +29,7 @@ uv gives isolated tool environments, Python downloads, upgrades and PATH handlin
 - *Alternative:* a zipapp. It still needs a compatible interpreter.
 
 ### D2. `--python 3.14`, one constant per script, and a test that ties them together
-Each script declares `PYTHON_VERSION=3.14` (in PowerShell, `$PythonVersion = '3.14'`) once. A test checks that this value, the bundle's `.python-version` (`090-add-mcp-server`) and `requires-python` agree. When the dependencies ship 3.15 wheels, one pull request raises `requires-python`, both constants and `.python-version` together.
+Each script declares `PYTHON_VERSION=3.14` (in PowerShell, `$PythonVersion = '3.14'`) once. A test checks that this value and `requires-python` agree. When the dependencies ship 3.15 wheels, one pull request raises `requires-python` and both constants together. In v0.1.1, `090-add-mcp-server` adds the bundle's `.python-version` to the same test.
 
 ### D3. Install, upgrade and reinstall commands
 The script chooses its command by what `uv tool list` shows:
@@ -90,7 +90,7 @@ Its output and exit codes can be tested locally with literal expected values. Th
 verify ──► build ──► smoke (ubuntu sh · macos sh · windows powershell 5.1 · windows pwsh 7) ──► publish ──► release ──► post-release check
 ```
 - **`verify`** runs `release_check.py` and the full test suite, reusing the CI workflow of `000-scaffold-project`.
-- **`build`** runs `uv build` and `scripts/build_mcpb.py`, writes `SHA256SUMS`, and uploads the files as workflow artifacts.
+- **`build`** runs `uv build`, writes `SHA256SUMS`, and uploads the files as workflow artifacts. In v0.1.1, `090-add-mcp-server` adds `scripts/build_mcpb.py` to this job.
 - **`smoke`** installs the built wheel with `--package`, so a broken package never reaches PyPI.
 - **`publish`** uses `pypa/gh-action-pypi-publish` with trusted publishing. It needs `id-token: write` and the `pypi` environment, and it produces PEP 740 attestations.
   - *Alternative:* `uv publish`, which also supports trusted publishing. The official action is kept for its attestations and wide use.

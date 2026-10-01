@@ -379,7 +379,7 @@ When every target is `installed` or `updated`, the exit code SHALL be 0. Otherwi
 
 ### Requirement: Outdated Skill notice
 Before it runs, every Command SHALL check the Skill stamps in the four install locations: user level and project level, for `claude` and for `codex`. The project level is relative to the current folder. The check SHALL be skipped by:
-- the Commands `skill install`, `doctor` and `mcp`
+- the Commands `skill install` and `doctor`
 - the background process that runs a detached Crawl, whose output is the Crawl's log file (`060-add-crawl-control`)
 
 When at least one stamped Skill has a lower PEP 440 version than the CLI, the Command SHALL write exactly one diagnostic line to stderr, in the diagnostic shape of `010-add-workspace-and-cli-contract`, with:

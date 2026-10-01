@@ -8,7 +8,7 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 
 ## v0.1: first public pre-release
 
-| # | Change | Capabilities (specs) | Commands / MCP tools | Status |
+| # | Change | Capabilities (specs) | Commands | Status |
 |---|---|---|---|---|
 | 000 | `000-scaffold-project` | none (tooling only) | `spider --version` | done |
 | 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | planned |
@@ -23,19 +23,19 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 | 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach/--dry-run`, `status`, `stop`, `resume`, `crawls` | planned |
 | 070 | `070-add-html-report` | `reporting` | `report`, `report brief` | planned |
 | 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned |
-| 090 | `090-add-mcp-server` | `mcp-server` | `mcp` (+ MCP tools) | planned |
 | 100 | `100-add-installers` | `installation` | none (install scripts, release pipeline) | planned |
 
 ### Build order
 
 ```
 000 ─► 010 ─► 015 ─► 020 ─┬─► 022 ─┬─► 030 ─► 040 ─► 050 ─┬─► 070 ─┐
-                          ├─► 024 ─┤                      │        ├─► 080 ─► 090 ─► 100
+                          ├─► 024 ─┤                      │        ├─► 080 ─► 100
                           ├─► 026  │                      │        │
                           │        └──────► 060 ──────────┴────────┘
 ```
 
-- The critical path is mostly sequential: 000 → 010 → 015 → 020 → 022 → 030 → 040 → 050 → 070 → 080 → 090 → 100.
+- The critical path is mostly sequential: 000 → 010 → 015 → 020 → 022 → 030 → 040 → 050 → 070 → 080 → 100.
+- 090 comes after the v0.1 release, as v0.1.1.
 - Once 020 is in, 022, 024 and 026 can run in parallel.
 - 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). It can then run alongside 030–050.
 - 070 needs 050 (the summary model, CSV writing, test data) and 060 (for the end-to-end test).
@@ -145,13 +145,8 @@ If a change needs something another change owns, it depends on that change inste
   - **The Skill** (workflows, Hand-off rule, install instructions and one-liners), generated from `spider commands` by a developer script (`scripts/generate_skill.py`).
     - Hand-off rule: when the URL estimate is `null`, the Skill hands the command to the user.
   - `skill install`, and the outdated-Skill notice (never printed by a detached Crawl process).
-  - The plugin marketplace.
+  - The plugin marketplace. The plugin ships without an MCP config until 090.
   - `doctor`, whose TLS check uses 022's TLS setup.
-- **090-add-mcp-server**:
-  - `spider mcp --workspace <path>`.
-  - **Tools:** they mirror the Commands, plus `schema`, `rules` and `doctor`, and `report` accepts notes inline.
-  - Errors use 010's full diagnostic shape.
-  - The `.mcpb` bundle, the plugin `.mcp.json`, and config snippets.
 - **100-add-installers**:
   - `install.sh` and `install.ps1`: pin Python 3.14, run `doctor`, and ask before installing the Skill.
   - **Installer exit codes** are their own: 0 ok, 1 failed, 2 usage, 10 installed but `doctor` failed.
@@ -166,6 +161,21 @@ If a change needs something another change owns, it depends on that change inste
 | Closest Near-Duplicate, Near-Duplicate count | v0.3 |
 | Structured-data validation errors / warnings | v0.3 |
 | Unique JS Inlinks / Outlinks, cookies set by scripts | v1.1 |
+
+## v0.1.1: MCP server
+
+The first change after v0.1, as the maintainer decided on 2026-10-01. It builds on the released v0.1.
+
+| # | Change | Capabilities (specs) | Commands / MCP tools | Status |
+|---|---|---|---|---|
+| 090 | `090-add-mcp-server` | `mcp-server`; modifies `installation`, `agent-skill` | `mcp` (+ MCP tools) | planned |
+
+- **090-add-mcp-server**:
+  - `spider mcp --workspace <path>`.
+  - **Tools:** they mirror the Commands, plus `schema`, `rules` and `doctor`, and `report` accepts notes inline.
+  - Errors use 010's full diagnostic shape.
+  - The `.mcpb` bundle: `scripts/build_mcpb.py`, added to 100's release pipeline, so it is attached to every GitHub release from v0.1.1.
+  - The plugin `.mcp.json`, added to 080's plugin, and config snippets.
 
 ## v0.2: link graph
 

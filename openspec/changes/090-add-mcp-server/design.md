@@ -9,7 +9,7 @@ See proposal.md for the motivation. The facts that shape this design:
   - Cursor: `.cursor/mcp.json` `mcpServers`
   - VS Code: `.vscode/mcp.json` `servers`
   - Gemini CLI: `~/.gemini/settings.json` `mcpServers`
-- **Services already exist:** the CLI and the Query, Crawl and Report services exist from the changes before this one in the build order. The MCP server must stay as thin as the CLI (docs/architecture.md).
+- **v0.1 is already released:** this change is v0.1.1. The CLI, the Query, Crawl and Report services, the Skill and plugin of `080-add-agent-skill`, and the release pipeline of `100-add-installers` all exist. The MCP server must stay as thin as the CLI (docs/architecture.md).
 - **No environment variables are settings** (`010-add-workspace-and-cli-contract`). The server's only way to choose a Workspace is its `--workspace` argument.
 
 ## Goals / Non-Goals
@@ -94,6 +94,8 @@ icon.png
   2. runs `uv lock`
   3. zips the files into `dist/spider-<version>.mcpb`
 - CI validates the result with `npx @anthropic-ai/mcpb validate`.
+- This change adds the bundle to the release pipeline of `100-add-installers`: the `build` job runs `scripts/build_mcpb.py` before it writes `SHA256SUMS`, and the `release` job attaches `spider-<version>.mcpb`. The first release that carries it is v0.1.1.
+- The bundle's `.python-version` joins the pin test of `100-add-installers`, so the bundle, both install scripts and `requires-python` move together.
 - The exact `mcp_config` for the `uv` type follows the uv example in the MCPB repository. Implementation checks it with the validator and a manual install.
 - *Alternative:* server type `python` with vendored dependencies. It means a large archive and platform-specific wheels (aiohttp, selectolax, msgspec, zstandard) per OS, and it gets no uv-managed Python.
 
@@ -112,6 +114,7 @@ The plugin's Skill drives the installed CLI, so the MCP server should be the sam
 - **CLI (1), real subprocess runs:** these cover the stdio behaviour:
   - stdout purity
   - exit when stdin closes
+  - no outdated-Skill notice on stderr
   - UTF-8 with console code page 437 on Windows
   - Crawls outliving the server, on Windows, macOS and Linux
 - **HTTP fixture site (3):** every Crawl in these tests targets the local fixture site, using its `delay` option for the polling, stop and resume scenarios.
@@ -119,6 +122,7 @@ The plugin's Skill drives the installed CLI, so the MCP server should be the sam
 - **Install and packaging (8):** covers the `.mcpb` bundle, `.mcp.json` and the fenced snippets of `docs/mcp.md`.
   - Tests run `scripts/build_mcpb.py` and inspect the archive's `manifest.json`, `pyproject.toml` and `.python-version`.
   - The official validator runs as a CI step.
+  - The parsed `release.yml` and the pin test of `100-add-installers` cover the bundle's place in the release.
 - **No test doubles.** `open: true` is tested through 070's own headless behaviour on Linux, with no display. The result is `open_failed`, and no browser is started.
 
 ## Risks / Trade-offs

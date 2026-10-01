@@ -4,7 +4,7 @@
 
 `spider` is the working name of an open-source, agent-first SEO crawler, in the spirit of Screaming Frog SEO Spider but with no GUI.
 
-AI agents drive it through a command-line tool and a local MCP server:
+AI agents drive it through a command-line tool, and a local MCP server is coming in v0.1.1:
 - They run a Crawl of a website.
 - They query what the Crawl recorded, including its Issues: the Rules that fired.
 - They turn the results into a Report for people.
@@ -28,7 +28,7 @@ uv run spider --version
 
 ## Learn more
 
-- [ROADMAP.md](ROADMAP.md): the changes planned for v0.1 and their build order.
+- [ROADMAP.md](ROADMAP.md): the changes planned for v0.1 and v0.1.1, and their build order.
 - [CONTEXT.md](CONTEXT.md): the glossary. Every doc, test and piece of code uses its terms.
 - [docs/architecture.md](docs/architecture.md): how the pieces fit together.
 - [docs/adr/](docs/adr/): the decisions behind them.

@@ -27,13 +27,13 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
   - It writes the Skill to `~/.claude/skills/spider/` and `~/.agents/skills/spider/`. With `--project` it writes to `.claude/skills/spider/` and `.agents/skills/spider/` in the current folder.
   - It replaces older generated copies. It will not replace a newer or hand-made Skill unless `--force` is given.
   - It prints a JSON result that lists every path it wrote. A target that fails carries an error in the full diagnostic shape.
-- **Outdated-Skill notice.** When an installed Skill is older than the CLI, a Command writes one `skill_outdated` warning diagnostic to stderr. `skill install`, `doctor`, `mcp` and the background process of a detached Crawl never print it. There is no environment variable to turn it off.
+- **Outdated-Skill notice.** When an installed Skill is older than the CLI, a Command writes one `skill_outdated` warning diagnostic to stderr. `skill install`, `doctor` and the background process of a detached Crawl never print it. `090-add-mcp-server` adds `mcp` to that list in v0.1.1. There is no environment variable to turn it off.
 - **Repository copy and plugin marketplace.** The change adds:
   - a generated `skills/spider/` folder in the repository
   - `.claude-plugin/plugin.json`
   - `.claude-plugin/marketplace.json`, with one plugin whose source is `./`
 
-  With these, `claude plugin marketplace add`, `codex plugin marketplace add` and `npx skills add` all work from the GitHub repo. `090-add-mcp-server` adds the plugin's MCP config.
+  With these, `claude plugin marketplace add`, `codex plugin marketplace add` and `npx skills add` all work from the GitHub repo. The plugin ships without an MCP config in v0.1. `090-add-mcp-server` adds it in v0.1.1.
 - **New Command `spider doctor [--url <url>] [--proxy <url>]`.** It runs diagnostic checks. Each check reports a status (`ok`, `warn` or `fail`), a message and a hint.
   - It checks:
     - the Python version
@@ -64,7 +64,7 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
 - Workflows for Commands that don't exist yet are added in the releases that bring those Commands:
   - `links`, `redirects`, `sitemaps`: **v0.2**
   - `diff`, `duplicates`, `structured-data`: **v0.3**
-- The plugin's MCP server config (`.mcp.json`) belongs to `090-add-mcp-server`. The install scripts behind the one-liners, and the release pipeline, belong to `100-add-installers`.
+- The plugin's MCP server config (`.mcp.json`) belongs to `090-add-mcp-server`, in **v0.1.1**. The install scripts behind the one-liners, and the release pipeline, belong to `100-add-installers`.
 - No `spider skill generate` Command. Generation for the repository is a developer script, as the maintainer decided on 2026-09-27.
 - Local edits to an installed Skill are not preserved. Reinstalling replaces the whole folder. No release plans a merge.
 - There is no `spider skill uninstall` in v0.1. The uninstall steps are documented by `100-add-installers`.
@@ -88,6 +88,6 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
   - `060-add-crawl-control`: the dry-run `command` and `estimate`, `--detach`, and the background Crawl's log file
   - `070-add-html-report`: Report Section ids, `report brief` and the Report Notes file contract
 - **Used by:**
-  - `090-add-mcp-server`: `doctor` and the plugin manifests
+  - `090-add-mcp-server` (v0.1.1): `doctor`, the plugin manifests and the outdated-Skill notice
   - `100-add-installers`: the scripts behind the one-liners, and the release check, which uses `scripts/generate_skill.py`
 - **Dependencies:** Jinja2 for the Markdown templates, which it shares with the Report, and `packaging` for PEP 440 version comparison.

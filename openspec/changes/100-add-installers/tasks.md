@@ -74,7 +74,7 @@ Our CLI is never replaced, and no fake `claude` or `codex` program is used: agen
 
 ## 4. Python pin, developer install and hosting docs
 
-- [ ] 4.1 Drive "Pins agree" (install-and-packaging seam). Compare `requires-python`, which `000-scaffold-project` already sets, with both scripts' constants and `packaging/mcpb/.python-version`, and add the Python 3.12–3.14 classifiers to `pyproject.toml`.
+- [ ] 4.1 Drive "Pins agree" (install-and-packaging seam). Compare `requires-python`, which `000-scaffold-project` already sets, with both scripts' constants, and add the Python 3.12–3.14 classifiers to `pyproject.toml`.
 - [ ] 4.2 Drive "Wheel metadata" (install-and-packaging seam) by parsing `Requires-Python` from `<wheel>`.
 - [ ] 4.3 Drive "Pin explained" (install-and-packaging seam) by writing "Why Python 3.14" in `docs/installation.md`: uv #14110, the missing 3.15 wheels, and when the pin moves.
 - [ ] 4.4 Drive "Developer install documented" (install-and-packaging seam) by writing the `uv tool install` and `pipx` instructions.
@@ -88,7 +88,7 @@ Our CLI is never replaced, and no fake `claude` or `codex` program is used: agen
 - [ ] 5.3 Drive "Plugin version must match" (install-and-packaging seam).
 - [ ] 5.4 Drive "Pre-release detection" (install-and-packaging seam), with the JSON result on stdout.
 - [ ] 5.5 Drive "Tag trigger" (install-and-packaging seam) with a first `.github/workflows/release.yml`.
-- [ ] 5.6 Drive "Job order" (install-and-packaging seam). Add the `verify`, `build`, `smoke`, `publish` and `release` jobs. The `build` job runs `uv build`, `scripts/build_mcpb.py` and writes `SHA256SUMS`.
+- [ ] 5.6 Drive "Job order" (install-and-packaging seam). Add the `verify`, `build`, `smoke`, `publish` and `release` jobs. The `build` job runs `uv build` and writes `SHA256SUMS`.
 - [ ] 5.7 Drive "Trusted publishing only" (install-and-packaging seam), with `pypa/gh-action-pypi-publish`, environment `pypi` and `id-token: write`.
 - [ ] 5.8 Drive "Scripts are release assets" (install-and-packaging seam). The `release` job uses `gh release create`, adding `--prerelease` from the gate output.
 - [ ] 5.9 Docs: write `RELEASING.md`:
@@ -112,7 +112,7 @@ Our CLI is never replaced, and no fake `claude` or `codex` program is used: agen
 - [ ] 7.1 Add a `workflow_dispatch` input that points `publish` at TestPyPI. Rehearse from a fork with tag `v0.0.1rc1`, and record the run links in the PR:
   - `verify`, `build` and `smoke` pass.
   - The package appears on TestPyPI without a stored token.
-  - A GitHub pre-release carries the six assets.
+  - A GitHub pre-release carries the five assets.
 - [ ] 7.2 Add the non-blocking `post-release check` job, which runs the real `latest/download` one-liners with `--yes --no-skill` on the three OSes. Check it against the rehearsal release.
 - [ ] 7.3 Docs: add the rehearsal procedure and how to read the post-release check to `RELEASING.md`.
 - [ ] 7.4 Review: run the code-review skill on group 7's commits and on the whole change, then refactor with the whole suite green.

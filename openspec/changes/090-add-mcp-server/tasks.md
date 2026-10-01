@@ -9,8 +9,9 @@ MCP-seam tests use an in-process MCP client session. Crawls in tests always targ
 
 - [ ] 1.1 Drive "Server identity" (MCP seam). Add `mcp>=2.2,<3`, and a `spider mcp` Command that imports `mcp` lazily and starts an `MCPServer` named `spider` with the CLI version.
 - [ ] 1.2 Drive "Exit when the client disconnects" (CLI seam, with a real subprocess on Windows, macOS and Linux).
-- [ ] 1.3 Docs: create `docs/mcp.md` with what the server is and how to start it with `spider mcp [--workspace <path>]`.
-- [ ] 1.4 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [ ] 1.3 Drive "The MCP server does not print the notice" (CLI seam, with a real subprocess). Add `mcp` to the skip list of the outdated-Skill check of `080-add-agent-skill`.
+- [ ] 1.4 Docs: create `docs/mcp.md` with what the server is and how to start it with `spider mcp [--workspace <path>]`.
+- [ ] 1.5 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Registry, parity and error mapping
 
@@ -113,8 +114,11 @@ MCP-seam tests use an in-process MCP client session. Crawls in tests always targ
 - [ ] 9.4 Drive "Workspace setting" (install-and-packaging seam): `user_config.workspace` mapped to `--workspace`.
 - [ ] 9.5 Drive "Python and package pins" (install-and-packaging seam), with `pyproject.toml` pinned to `spider==<version>`, `.python-version` set to 3.14, and `uv lock`.
 - [ ] 9.6 Drive "Official validation" (install-and-packaging seam, as a CI step that runs `npx @anthropic-ai/mcpb validate` on the built manifest).
-- [ ] 9.7 Docs: add a "Claude Desktop" section to `docs/mcp.md`. Check it by hand on Windows and macOS: install the bundle, keep the default Workspace setting, then run `crawl_start` (a dry run and a small Crawl), `summary` and `report`. Record the results in the PR.
-- [ ] 9.8 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [ ] 9.7 Drive "Pins agree" (install-and-packaging seam). Add `packaging/mcpb/.python-version` to the pin test of `100-add-installers`.
+- [ ] 9.8 Drive "Bundle built in the release" (install-and-packaging seam). The `build` job of `.github/workflows/release.yml` runs `scripts/build_mcpb.py` before it writes `SHA256SUMS`.
+- [ ] 9.9 Drive "Bundle is a release asset" (install-and-packaging seam). The `release` job attaches `spider-<version>.mcpb`.
+- [ ] 9.10 Docs: add a "Claude Desktop" section to `docs/mcp.md`, and the `.mcpb` to the release assets in `RELEASING.md`. Check it by hand on Windows and macOS: install the bundle, keep the default Workspace setting, then run `crawl_start` (a dry run and a small Crawl), `summary` and `report`. Record the results in the PR.
+- [ ] 9.11 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
 
 ## 10. Plugin config and client snippets
 

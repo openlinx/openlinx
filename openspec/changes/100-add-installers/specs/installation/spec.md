@@ -296,10 +296,10 @@ Otherwise it SHALL exit 1 and name each failed gate. When it passes, it SHALL pr
 | Job | What it does |
 |---|---|
 | `verify` | `scripts/release_check.py` and the test suite |
-| `build` | `uv build` (wheel and sdist), `scripts/build_mcpb.py` from `090-add-mcp-server`, and a `SHA256SUMS` file |
+| `build` | `uv build` (wheel and sdist) and a `SHA256SUMS` file |
 | `smoke` | the installer smoke tests with the built wheel |
 | `publish` | PyPI trusted publishing, in the `pypi` environment with `id-token: write` and no stored API token |
-| `release` | a GitHub release with the wheel, the sdist, `spider-<version>.mcpb`, `install.sh`, `install.ps1` and `SHA256SUMS`, marked as a pre-release when `release_check.py` reports `prerelease: true` |
+| `release` | a GitHub release with the wheel, the sdist, `install.sh`, `install.ps1` and `SHA256SUMS`, marked as a pre-release when `release_check.py` reports `prerelease: true` |
 
 A failure before `publish` SHALL leave nothing published.
 
@@ -340,15 +340,15 @@ On each runner, uv SHALL be absent from PATH, and the home folder SHALL be a new
 - **THEN** the exit code is 0, and `<tmp>\Test User\.local\bin\spider.exe --version` prints the tag's version
 
 ### Requirement: Supported Python range
-The package SHALL declare `requires-python = ">=3.12,<3.15"` and classifiers for Python 3.12, 3.13 and 3.14. Both install scripts SHALL declare the Python version they pass to `--python` as `3.14`. That version SHALL satisfy `requires-python`, and SHALL equal the `.python-version` of the `090-add-mcp-server` bundle. `docs/installation.md` SHALL explain two reasons for the pin:
+The package SHALL declare `requires-python = ">=3.12,<3.15"` and classifiers for Python 3.12, 3.13 and 3.14. Both install scripts SHALL declare the Python version they pass to `--python` as `3.14`. That version SHALL satisfy `requires-python`. `docs/installation.md` SHALL explain two reasons for the pin:
 - uv issue #14110
 - the missing Python 3.15 wheels for aiohttp, selectolax, msgspec and zstandard
 
 It SHALL also say that the pin will be raised when those wheels ship.
 
 #### Scenario: Pins agree
-- **WHEN** `requires-python` from `pyproject.toml`, the Python version declared in both install scripts, and `packaging/mcpb/.python-version` are read
-- **THEN** `requires-python` is `>=3.12,<3.15`, both scripts and `.python-version` say `3.14`, and `3.14` satisfies `requires-python`
+- **WHEN** `requires-python` from `pyproject.toml` and the Python version declared in both install scripts are read
+- **THEN** `requires-python` is `>=3.12,<3.15`, both scripts say `3.14`, and `3.14` satisfies `requires-python`
 
 #### Scenario: Wheel metadata
 - **WHEN** the `Requires-Python` field in the `METADATA` of the wheel built by `uv build` is parsed as a specifier set
