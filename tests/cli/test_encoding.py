@@ -46,3 +46,10 @@ def test_utf8_on_stderr(temp_workspace: TempWorkspace) -> None:
     stderr = run_cli_process("init", "--workspace", str(site)).stderr
 
     assert CHECK_IN_UTF8 in stderr
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="text streams add CR only on Windows")
+def test_no_carriage_returns_on_windows() -> None:
+    stdout = run_cli_process("commands").stdout
+
+    assert (stdout.endswith(b"}\n"), b"\r" in stdout) == (True, False)
