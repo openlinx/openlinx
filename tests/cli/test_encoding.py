@@ -1,6 +1,10 @@
 """UTF-8 output on every OS (010-add-workspace-and-cli-contract, cli-contract)."""
 
-from tests.support.cli import run_cli
+import sys
+
+import pytest
+
+from tests.support.cli import run_cli, run_cli_process
 from tests.support.workspace import TempWorkspace
 
 # The UTF-8 bytes of "Проверка", as the spec writes them.
@@ -13,3 +17,12 @@ def test_non_ascii_characters_are_not_escaped(temp_workspace: TempWorkspace) -> 
     stdout = run_cli("init", "--workspace", str(folder)).stdout
 
     assert (CHECK_IN_UTF8 in stdout, b"\\u" in stdout) == (True, False)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the Windows console code page")
+def test_piped_output_on_windows(temp_workspace: TempWorkspace) -> None:
+    folder = temp_workspace.root / "Проверка"
+
+    stdout = run_cli_process("init", "--workspace", str(folder)).stdout
+
+    assert CHECK_IN_UTF8 in stdout
