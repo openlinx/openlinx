@@ -85,7 +85,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 4. Settings (seams 2 and 1, with the `example` table registered by tests)
 
-- [ ] 4.1 Drive "Default" (workspace). Green: the settings registry, `register_settings_table`, and resolved settings.
+- [x] 4.1 Drive "Default" (workspace). Green: the settings registry, `register_settings_table`, and resolved settings.
 - [ ] 4.2 Drive "Settings file over default" (workspace). Green: the TOML source.
 - [ ] 4.3 Drive "A settings file in the home folder is not read" (workspace), with the `example` table registered by the test. Moved here from group 2: it needs the settings of 4.1 and 4.2. Green: settings load only from the resolved Workspace's settings file.
 - [ ] 4.4 Drive "Flag over settings file" (workspace). Green: flag values passed as init kwargs.
