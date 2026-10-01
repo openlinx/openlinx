@@ -66,7 +66,7 @@ No moment exists in which a Crawl exists without a live writer, so a concurrent 
 
 ### D4. Windows process creation (approved)
 - **Flags:** `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB`, with `close_fds=True`.
-- **Why CREATE_NO_WINDOW rather than DETACHED_PROCESS:** a DETACHED_PROCESS has no console, so every `spawn` parse worker from `026` would get a visible console window. With CREATE_NO_WINDOW the background process owns a hidden console, which the workers inherit, and it is still detached from the caller's console. The maintainer approved this on 2026-09-27.
+- **Why CREATE_NO_WINDOW rather than DETACHED_PROCESS:** with CREATE_NO_WINDOW the background process owns a hidden console and is still detached from the caller's console. If `026` builds its parse pool (the gate of 026's task 1.5), this also matters for the workers: under DETACHED_PROCESS, which has no console, every `spawn` parse worker would get a visible console window, while under CREATE_NO_WINDOW they inherit the hidden one. The maintainer approved this on 2026-09-27.
 - **No breakaway allowed:** if `CreateProcess` fails with `ERROR_ACCESS_DENIED` because the job object forbids breakaway, the call is repeated without `CREATE_BREAKAWAY_FROM_JOB`. If the caller's job object has `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, the output gets `job_may_end_crawl`. The job object is queried through `ctypes`.
 
 ### D5. POSIX process creation
@@ -150,7 +150,7 @@ Boundary doubles, all from the approved list:
 - [A suspended but alive process looks stale] → Its claim is still held, so it stays `running` with `heartbeat_stale`.
 - [Post-crawl passes make `stop` wait longer than `--wait` on huge Crawls] → `stop` returns `state: running, stop_requested: true`. The request stays pending and is honoured.
 - [Antivirus or indexers hold files open on Windows] → `crawls rm` reports `file_in_use` and deletes nothing, so no Crawl is half deleted.
-- [Secrets in the child's environment are readable by the same user] → This is the same trust boundary as the user's shell. The variable is removed after it is read, so the parse workers do not inherit it.
+- [Secrets in the child's environment are readable by the same user] → This is the same trust boundary as the user's shell. The variable is removed after it is read, so any parse workers do not inherit it.
 - [A hand-over file is left behind when the child dies at start] → `detach_failed` names the log file, and `crawls rm <id>` deletes the files of a reserved id.
 
 ## Migration Plan

@@ -101,7 +101,7 @@ With `--list` (`024-add-list-and-sitemap-modes`) and `--detach`, the detaching C
 ### Requirement: Background Crawls outlive their terminal
 The background process SHALL survive the end of the process and terminal that started it:
 - **On Windows:**
-  - It SHALL be created in a new process group with CREATE_NO_WINDOW, so that neither it nor its parse worker processes (`026-add-parse-pool`) shows a console window.
+  - It SHALL be created in a new process group with CREATE_NO_WINDOW, so that it shows no console window. If `026-add-parse-pool` builds its parse pool (the gate of 026's task 1.5), its parse worker processes SHALL show none either.
   - It SHALL be created outside the caller's job object when that job allows breakaway.
   - When the caller's job object kills its processes on close and does not allow breakaway, the output SHALL hold a `job_may_end_crawl` warning whose hint suggests running the Command from a normal terminal.
 - **On macOS and Linux:** it SHALL run in a new session, with standard input from the null device.

@@ -19,7 +19,7 @@ Both need five things:
   - It validates like a foreground `crawl`, reserves the crawl id, and starts a separate background process that creates the Crawl.
   - Within 10 seconds it prints `{crawl_id, state, run, pid, crawl_file, log_file, warnings, hint}`.
   - The background process survives closing the terminal:
-    - Windows: CREATE_NO_WINDOW (approved) in a new process group, so the parse workers open no windows, breaking away from the caller's job object when the job allows it.
+    - Windows: CREATE_NO_WINDOW (approved) in a new process group, so it opens no window (nor do 026's parse workers, if that pool is built), breaking away from the caller's job object when the job allows it.
     - macOS and Linux: a new session.
   - Progress events and diagnostics go to `<crawl-id>.log`. Secrets are passed through the environment, never on the command line.
   - In List mode, the detaching Command reads and checks the list and stores the Seeds before the background process starts, so `--list -` works and list errors come back at once.
