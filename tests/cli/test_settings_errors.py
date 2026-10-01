@@ -77,3 +77,11 @@ def test_problems_are_listed_in_file_order(shop: Path) -> None:
     errors = run_cli("init", app=example_app()).stderr_json_lines()[-1]["details"]["errors"]
 
     assert [error["key"] for error in errors] == ["crawler", "example.level"]
+
+
+def test_nothing_is_created_when_the_settings_are_invalid(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[example\n")
+
+    run_cli("init", app=example_app())
+
+    assert (shop / ".spider").exists() is False
