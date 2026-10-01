@@ -5,6 +5,8 @@ from typing import Any
 
 import orjson
 
+from spider.output.diagnostics import SpiderError
+
 
 class Output:
     # Bytes, not text: a text stream on Windows would turn the LF into CR LF.
@@ -13,3 +15,6 @@ class Output:
 
     def document(self, result: Any) -> None:
         sys.stdout.buffer.write(orjson.dumps(result) + b"\n")
+
+    def error(self, error: SpiderError) -> None:
+        sys.stderr.buffer.write(orjson.dumps({"code": error.code}) + b"\n")

@@ -29,7 +29,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
     - `@command_meta`
     - a minimal `spider commands`
 - [x] 1.3 Drive "Tool version" (cli-contract). Green: the `tool` block.
-- [ ] 1.4 Drive "Unknown Command" (cli-contract).
+- [x] 1.4 Drive "Unknown Command" (cli-contract).
   - Red: add `CliResult.stderr_json_lines()` to the helper.
   - Green:
     - `SpiderError` and the diagnostic line writer

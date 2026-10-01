@@ -21,6 +21,9 @@ class CliResult:
     def json(self) -> Any:
         return json.loads(self.stdout)
 
+    def stderr_json_lines(self) -> list[Any]:
+        return [json.loads(line) for line in self.stderr.splitlines()]
+
 
 def run_cli(*args: str, input: str | bytes | None = None) -> CliResult:
     result = CliRunner().invoke(build_app(), list(args), input=input)

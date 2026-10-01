@@ -6,6 +6,7 @@ import typer
 
 from spider import APP_NAME, __version__
 from spider.cli.commands import commands
+from spider.cli.runner import SpiderGroup
 from spider.output.writer import Output
 
 
@@ -29,6 +30,7 @@ def root(
 def build_app() -> typer.Typer:
     app = typer.Typer(
         name=APP_NAME,
+        cls=SpiderGroup,
         pretty_exceptions_enable=False,
         add_completion=False,
         no_args_is_help=True,
