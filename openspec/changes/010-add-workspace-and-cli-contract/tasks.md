@@ -106,7 +106,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 5. Formats and JSON Lines (seam 1, fixture app)
 
-- [ ] 5.1 Drive "Compact document" (cli-contract). Green:
+- [x] 5.1 Drive "Compact document" (cli-contract). Green:
   - the fixture app with the example list Command
   - the `list` output kind, with a minimal envelope
 - [ ] 5.2 Drive "Table for people" (cli-contract). Green: the rich table rendered to text, then UTF-8 bytes.

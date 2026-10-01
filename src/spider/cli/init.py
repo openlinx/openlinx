@@ -15,7 +15,7 @@ from spider.workspace.discovery import enclosing_workspace, target_workspace
 from spider.workspace.template import settings_template
 
 
-@command_meta(formats=[Format.JSON, Format.TABLE])
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
 def init(
     ctx: typer.Context, workspace_dir: WorkspaceOpt = None, output_format: FormatOpt = Format.JSON
 ) -> dict[str, Any]:

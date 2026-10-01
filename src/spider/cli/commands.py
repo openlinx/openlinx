@@ -12,7 +12,7 @@ from spider.output.diagnostics import EXIT_CODE_DESCRIPTIONS
 from spider.output.writer import Format
 
 
-@command_meta(formats=[Format.JSON, Format.TABLE])
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
 def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict[str, Any]:
     """Describe every Command as JSON."""
     root = cast(TyperGroup, ctx.find_root().command)

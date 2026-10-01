@@ -1,8 +1,8 @@
 """The app factory and the console script (design D8 of 010-add-workspace-and-cli-contract)."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 
@@ -37,11 +37,13 @@ def root(
 @dataclass(frozen=True)
 class AppExtra:
     settings_tables: "Mapping[str, type[BaseModel]]" = field(default_factory=dict)
+    commands: Sequence[Callable[..., Any]] = ()
 
 
 def build_app(extra: AppExtra | None = None) -> typer.Typer:
+    extra = extra or AppExtra()
     tables = SettingsTables()
-    for name, model in (extra or AppExtra()).settings_tables.items():
+    for name, model in extra.settings_tables.items():
         tables.register(name, model)
 
     class AppGroup(SpiderGroup):
@@ -56,6 +58,8 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
     app.callback()(root)
     app.command()(commands)
     app.command()(init)
+    for command in extra.commands:
+        app.command()(command)
     return app
 
 
