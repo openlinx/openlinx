@@ -16,3 +16,7 @@ def test_error_object_has_exactly_the_diagnostic_keys() -> None:
         {"level", "code", "message", "hint", "details"},
         "error",
     )
+
+
+def test_nothing_on_stdout_when_a_command_fails() -> None:
+    assert run_cli("nosuchcommand").stdout == b""

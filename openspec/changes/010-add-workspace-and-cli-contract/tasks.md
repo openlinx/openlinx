@@ -36,7 +36,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
     - running the app with `standalone_mode=False`
     - `usage_error` with exit code 2
 - [x] 1.5 Drive "Error object" (cli-contract). Green: the exact diagnostic keys.
-- [ ] 1.6 Drive "Nothing on stdout when a Command fails" (cli-contract). Green: documents are written only when the Command ends.
+- [x] 1.6 Drive "Nothing on stdout when a Command fails" (cli-contract). Green: documents are written only when the Command ends.
 - [ ] 1.7 Drive "The table is self-described" (cli-contract). Green: the `ExitCode` enum and `exit_codes`.
 - [ ] 1.8 Drive "Unsupported format" (cli-contract). Green:
   - `FormatOpt`
