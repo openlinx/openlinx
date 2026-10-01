@@ -37,3 +37,9 @@ def test_errors_stay_json(temp_workspace: TempWorkspace) -> None:
     result = run_cli("init", "--format", "table", "--workspace", str(site))
 
     assert result.stderr_json_lines()[-1]["code"] == "workspace_not_writable"
+
+
+def test_documents_have_no_json_lines(shop: Path) -> None:
+    result = run_cli("init", "--format", "jsonl")
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_value")
