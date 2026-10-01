@@ -46,7 +46,7 @@ These slices run on 010's fixture app: `build_app(extra=…)` with the example l
 - [ ] 2.5 Drive `CSV policy › Nested value and null` (CLI). Verify: red → green; one commit.
 - [ ] 2.6 Drive `CSV policy › A document is one CSV row` (CLI): `csv` for document Commands, and for `spider init`. Verify: red → green; one commit.
 - [ ] 2.7 Drive `CSV format › Rows as CSV` (CLI): `csv` for rows Commands, written and flushed row by row. Verify: red → green; one commit.
-- [ ] 2.8 Drive `CSV format › More items notice` (CLI): the info line `more_items` for `csv` too. Verify: red → green; one commit.
+- [ ] 2.8 Drive `CSV format › More items notice in CSV` (CLI): the info line `more_items` for `csv` too. Verify: red → green; one commit.
 - [ ] 2.9 Pin `CSV format › spider commands refuses CSV` (CLI). The test passes on its first run, because `spider commands` keeps `json` and `table`, and it is kept to pin the contract. Verify: green; one commit.
 - [ ] 2.10 Drive `Writing output to a file with -o › Output goes to the file` (CLI): `OutputOpt`, written to a temporary file in the target folder and then moved into place with `os.replace`. Verify: red → green; one commit.
 - [ ] 2.11 Drive `Writing output to a file with -o › Nothing on stdout with -o` (CLI). Verify: red → green; one commit.
@@ -54,9 +54,9 @@ These slices run on 010's fixture app: `build_app(extra=…)` with the example l
 - [ ] 2.13 Drive `Writing output to a file with -o › Parent folders are created` (CLI). Verify: red → green; one commit.
 - [ ] 2.14 Drive the pair `Writing output to a file with -o › A failing Command keeps the old file` and `› A failing Command creates no file` (CLI). Verify: red → green; one commit.
 - [ ] 2.15 Drive `Writing output to a file with -o › Target held open on Windows` (CLI, real subprocess, Windows-only): a Windows-only helper process holds the file open without sharing. Green: `output_not_writable` with exit code 7, after up to 1 s of retries. Verify: red → green on the Windows CI job; one commit.
-- [ ] 2.16 Drive the pair `Global flags --no-bom and -o › After the Command name` and `› Before the Command name` (CLI): add `--no-bom` and `--output` to 010's `argv` check for global flags. Verify: red → green; one commit.
-- [ ] 2.17 Drive `Global flags --no-bom and -o › Global flags of init` (CLI): `global` in the option metadata of `NoBomOpt` and `OutputOpt`. Verify: red → green; one commit.
-- [ ] 2.18 Drive `Global flags --no-bom and -o › Output flags have no settings key` (CLI): `"setting":null` for `--no-bom` and `--output`, and no `spider.toml` key for them in 010's settings registry. Verify: red → green; one commit.
+- [ ] 2.16 Drive the pair `Global flags --no-bom and -o › -o after the Command name` and `› -o before the Command name` (CLI): add `--no-bom` and `--output` to 010's `argv` check for global flags. Verify: red → green; one commit.
+- [ ] 2.17 Drive `Global flags --no-bom and -o › Global output flags of init` (CLI): `global` in the option metadata of `NoBomOpt` and `OutputOpt`. Verify: red → green; one commit.
+- [ ] 2.18 Drive `Global flags --no-bom and -o › Output-file flags have no settings key` (CLI): `"setting":null` for `--no-bom` and `--output`, and no `spider.toml` key for them in 010's settings registry. Verify: red → green; one commit.
 - [ ] 2.19 Drive the pair `CSV format › Formats of a document Command` and `› Formats of a list Command` (CLI). Verify: red → green; one commit.
 - [ ] 2.20 Drive the pair `Diagnostic codes of output files › Error code of output files` and `› Info line of output files` (CLI): register `output_not_writable` (exit code 7) and `output_written`. Verify: red → green; one commit.
 - [ ] 2.21 Update the `init` entry of 010's hand-written contract JSON in `tests/contract/commands/`: `"formats":["json","table","csv"]`, and the options `--no-bom` and `--output` with `"global":true` and `"setting":null`. Edit it by hand, never by regenerating it. Verify: 010's `Self-description with spider commands › Same description on every OS` is green on Windows, macOS and Linux; one commit.
@@ -125,7 +125,7 @@ These slices run on 010's fixture app: `build_app(extra=…)` with the example l
 - [ ] 5.10 Drive `The --segment flag › A Page won by an earlier Segment is not in a later one` (Services). Verify: red → green; one commit.
 - [ ] 5.11 Drive `The --segment flag › --segment combines with --where` (Services). Verify: red → green; one commit.
 - [ ] 5.12 Drive the pair `The --segment flag › Unknown Segment name` and `Query error codes › Accepted values in details` (CLI). Verify: red → green; one commit.
-- [ ] 5.13 Drive `The --segment flag › No Segments defined` (CLI). Verify: red → green; one commit.
+- [ ] 5.13 Drive `The --segment flag › --segment without any Segments defined` (CLI). Verify: red → green; one commit.
 - [ ] 5.14 Drive `The segment field › Sorting by Segment` (Services). Verify: red → green; one commit.
 - [ ] 5.15 Drive `The segment field › segment in --where` (CLI). Verify: red → green; one commit.
 - [ ] 5.16 Drive `Cursors are bound to the query › A cursor is reused with another Segment` (CLI). Verify: red → green; one commit.
@@ -161,7 +161,7 @@ These slices run on 010's fixture app: `build_app(extra=…)` with the example l
 - [ ] 6.22 Drive `Per-Segment breakdown in summary › Entries add up to all Pages` (Services): TEMP-table membership, built once per call. Verify: red → green; one commit.
 - [ ] 6.23 Drive `Segment definitions in spider.toml › Segments in file order` (Services). Verify: red → green; one commit.
 - [ ] 6.24 Drive `Per-Segment breakdown in summary › Entry members` (Services). Verify: red → green; one commit.
-- [ ] 6.25 Drive `Per-Segment breakdown in summary › No Segments defined` (Services). Verify: red → green; one commit.
+- [ ] 6.25 Drive `Per-Segment breakdown in summary › Summary without any Segments defined` (Services). Verify: red → green; one commit.
 - [ ] 6.26 Drive `Per-Segment breakdown in summary › Issues per Segment` (Services). Verify: red → green; one commit.
 - [ ] 6.27 Drive `Health Score of a Segment › Empty Segment` (Services). Verify: red → green; one commit.
 - [ ] 6.28 Drive `Health Score of a Segment › Health Score of one Segment` (Services). Verify: red → green; one commit.

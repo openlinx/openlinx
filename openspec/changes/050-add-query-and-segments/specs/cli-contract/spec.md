@@ -20,7 +20,7 @@ Each Command SHALL support the formats that `spider commands` lists for it, and 
 
 With `csv`, as with `jsonl` and `table`, when more items exist than were printed, the Command SHALL write the info line `more_items` to stderr, with `details.total` and `details.next_cursor`.
 
-#### Scenario: More items notice
+#### Scenario: More items notice in CSV
 - **WHEN** the example list Command runs with `--format csv --limit 2`
 - **THEN** stderr has a line with `"level":"info"` and `"code":"more_items"`, whose `details.total` is `5` and whose `details.next_cursor` is a non-empty string
 
@@ -129,19 +129,19 @@ A target that cannot be written SHALL fail with `output_not_writable`, and the m
 
 `spider commands` SHALL list both in the `options` of every Command that accepts them, with `"global":true` and `"setting":null`.
 
-#### Scenario: After the Command name
+#### Scenario: -o after the Command name
 - **WHEN** `spider init --format csv --no-bom -o H/work/init.csv` runs in the empty folder `H/work/shop`
 - **THEN** the exit code is 0, and `H/work/init.csv` exists
 
-#### Scenario: Before the Command name
+#### Scenario: -o before the Command name
 - **WHEN** `spider -o out.json init` runs
 - **THEN** the exit code is 2, and the error has the code `usage_error` and a hint that contains `after the Command name`
 
-#### Scenario: Global flags of init
+#### Scenario: Global output flags of init
 - **WHEN** `spider commands` runs
 - **THEN** the options of the `init` entry include `--no-bom` and `--output`, each with `"global":true`
 
-#### Scenario: Output flags have no settings key
+#### Scenario: Output-file flags have no settings key
 - **WHEN** `spider commands` runs
 - **THEN** the `--no-bom` and `--output` options of the `init` entry each have `"setting":null`
 

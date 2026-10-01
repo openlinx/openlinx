@@ -106,7 +106,7 @@ Segment membership SHALL be computed from the current `spider.toml` every time a
 - **AND** `spider pages --segment blgo` runs
 - **THEN** the exit code is 2, and the error has the code `unknown_segment` and `details.accepted` `["blog", "shop"]`
 
-#### Scenario: No Segments defined
+#### Scenario: --segment without any Segments defined
 - **WHEN** `spider.toml` has no `[segments]` table
 - **AND** `spider summary --segment blog` runs
 - **THEN** the error has the code `unknown_segment` and a hint that contains `[segments]` and `spider.toml`
@@ -184,7 +184,7 @@ When no Segment is defined, `segments` SHALL be `[]` and `unsegmented` SHALL be 
 - **AND** `spider summary` runs
 - **THEN** the `affected_count` of `title-missing` in `issues.top` is `2` in the `blog` entry and `1` in the `shop` entry
 
-#### Scenario: No Segments defined
+#### Scenario: Summary without any Segments defined
 - **WHEN** `spider.toml` has no `[segments]` table and `spider summary` runs
 - **THEN** the output contains `"segments": []` and `"unsegmented": null`
 
