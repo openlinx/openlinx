@@ -51,3 +51,26 @@ def test_fallback_to_the_global_workspace(temp_workspace: TempWorkspace) -> None
     workspace = resolve_workspace(cwd=notes, flag=None, home=temp_workspace.home)
 
     assert (workspace.is_global, workspace.data_dir) == (True, temp_workspace.home / ".spider")
+
+
+def test_the_home_folder_is_the_global_workspace(temp_workspace: TempWorkspace) -> None:
+    home = temp_workspace.home
+    (home / ".spider").mkdir()
+
+    workspace = resolve_workspace(cwd=home, flag=None, home=home)
+
+    assert (workspace.is_global, workspace.settings_file) == (
+        True,
+        home / ".spider" / "spider.toml",
+    )
+
+
+def test_location_of_the_global_workspace(temp_workspace: TempWorkspace) -> None:
+    home = temp_workspace.home
+
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=home)
+
+    assert (workspace.data_dir, workspace.settings_file) == (
+        home / ".spider",
+        home / ".spider" / "spider.toml",
+    )
