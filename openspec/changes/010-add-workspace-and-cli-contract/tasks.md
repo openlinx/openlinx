@@ -78,7 +78,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 3.11 Drive "Non-ASCII characters are not escaped" (cli-contract).
 - [x] 3.12 Drive "Piped output on Windows" (cli-contract) with `run_cli_process`, as a Windows-only test.
 - [x] 3.13 Drive "PYTHONIOENCODING does not change the output" (cli-contract) with `run_cli_process`, on every OS.
-- [ ] 3.14 Drive "UTF-8 on stderr" (cli-contract) with `run_cli_process`.
+- [x] 3.14 Drive "UTF-8 on stderr" (cli-contract) with `run_cli_process`.
 - [ ] 3.15 Drive "No carriage returns on Windows" (cli-contract) with `run_cli_process`, as a Windows-only test.
 - [ ] 3.16 Docs: add `spider init` and its result to `docs/workspace.md`.
 - [ ] 3.17 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.

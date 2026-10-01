@@ -37,3 +37,12 @@ def test_pythonioencoding_does_not_change_the_output(temp_workspace: TempWorkspa
     ).stdout
 
     assert CHECK_IN_UTF8 in stdout
+
+
+def test_utf8_on_stderr(temp_workspace: TempWorkspace) -> None:
+    (temp_workspace.root / "Проверка.txt").write_bytes(b"")
+    site = temp_workspace.root / "Проверка.txt" / "site"
+
+    stderr = run_cli_process("init", "--workspace", str(site)).stderr
+
+    assert CHECK_IN_UTF8 in stderr
