@@ -85,3 +85,9 @@ def test_nothing_is_created_when_the_settings_are_invalid(shop: Path) -> None:
     run_cli("init", app=example_app())
 
     assert (shop / ".spider").exists() is False
+
+
+def test_commands_without_a_workspace_ignore_the_settings_file(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[example\n")
+
+    assert run_cli("commands", app=example_app()).exit_code == 0

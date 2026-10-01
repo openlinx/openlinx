@@ -98,7 +98,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.9 Drive "TOML syntax error" (workspace). Green: `line` from `TOMLDecodeError`.
 - [x] 4.10 Drive "Every problem is listed" (workspace).
 - [x] 4.11 Drive "Nothing is created when the settings are invalid" (workspace).
-- [ ] 4.12 Drive "Commands without a Workspace ignore the settings file" (workspace).
+- [x] 4.12 Drive "Commands without a Workspace ignore the settings file" (workspace).
 - [ ] 4.13 Drive "A setting in the template" (workspace). Green: generate the commented template from the registered tables, replacing the placeholder from task 3.1.
 - [ ] 4.14 Drive "Template loads as defaults" (workspace) at seam 2.
 - [ ] 4.15 Docs: add the `spider.toml` section to `docs/workspace.md`: registered tables, precedence, validation and errors, and the template.
