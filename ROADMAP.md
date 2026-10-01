@@ -16,10 +16,10 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | planned |
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned |
 | 024 | `024-add-list-and-sitemap-modes` | `crawl-modes` | `crawl --list`, `crawl --sitemap` | planned |
-| 026 | `026-add-parse-pool` | `crawl-performance` | none | planned |
+| 026 | `026-add-parse-pool` | `crawl-performance` (only if the pool goes ahead) | none | planned, conditional |
 | 030 | `030-add-page-data` | `page-data` | none (data only) | planned |
 | 040 | `040-add-rules` | `rules` | `rules` | planned |
-| 050 | `050-add-query-and-segments` | `querying`, `segments` | `summary`, `pages`, `page`, `issues`, `sql`, `export`; `--segment` | planned |
+| 050 | `050-add-query-and-segments` | `querying`, `segments`; adds to `cli-contract` | `summary`, `pages`, `page`, `issues`, `sql`, `export`; `--segment`, `--format csv`, `--no-bom`, `-o` | planned |
 | 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach/--dry-run`, `status`, `stop`, `resume`, `crawls` | planned |
 | 070 | `070-add-html-report` | `reporting` | `report`, `report brief` | planned |
 | 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned |
@@ -39,6 +39,7 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 - Once 020 is in, 022, 024 and 026 can run in parallel.
 - 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). It can then run alongside 030–050.
 - 070 needs 050 (the summary model, CSV writing, test data) and 060 (for the end-to-end test).
+- **After 020 lands:** re-plan 030/040/050 so that a thin end-to-end slice comes first (crawl → store → a minimal `issues` with 3–5 Rules), and deepen from there.
 
 ### What each change owns
 
@@ -62,8 +63,7 @@ If a change needs something another change owns, it depends on that change inste
     - **stdout** carries the Command's single JSON result, or NDJSON rows for data streams (`--format jsonl`).
     - **stderr** carries JSON lines: diagnostics `{level, code, message, hint, details}` and progress events `{event, ts, data}`.
     - **Partial results:** a Command whose result describes a failed outcome prints it and exits non-zero with exactly one error diagnostic.
-    - Formats are `json|jsonl|table|csv`. The single **CSV policy** is UTF-8 with BOM, CRLF and formula neutralisation, with `--no-bom` to turn the BOM off.
-    - `-o <file>` writes exactly the stdout bytes and leaves stdout empty.
+    - Formats are `json|jsonl|table`. The `csv` format, the CSV policy and `-o` belong to 050.
     - Also: the paging envelope, exit codes, `spider commands --format json` (including each Command's output kind), and the global flags.
 - **015-add-crawl-store**:
   - One SQLite file per Crawl and crawl ids, including ids chosen by the caller and reserved (needed by `--detach`).
@@ -103,9 +103,9 @@ If a change needs something another change owns, it depends on that change inste
 - **024-add-list-and-sitemap-modes**:
   - List mode (`--list <file|->`) and Sitemap mode (`--sitemap <url>`, repeatable, with index files and gzip).
   - `mode_conflict` when two Crawl Modes are given.
-- **026-add-parse-pool**:
-  - Parsing in a process pool, with bounded queues, clean shutdown of workers on interrupt, and no console windows on Windows.
-  - The ~500k-URL benchmark, run manually or nightly and not part of the CI gate.
+- **026-add-parse-pool** (conditional):
+  - First, the ~500k-URL benchmark against 020's in-process parsing, run manually or nightly and not part of the CI gate. Its numbers go in `docs/benchmarks.md`.
+  - The maintainer then decides. Only if parsing is the bottleneck: parsing in a process pool, with bounded queues, clean shutdown of workers on interrupt, and no console windows on Windows. Otherwise 026 is archived with the benchmark alone.
 - **030-add-page-data**:
   - Every Internal-tab column, added in the slice where it is first needed.
   - Indexability and Indexability Status.
@@ -127,8 +127,11 @@ If a change needs something another change owns, it depends on that change inste
   - `page <url>`: JSON, where `--html` adds an `html` field and `--headers` shows redacted headers.
   - `issues` and `issues <rule-id>`.
   - Read-only `sql`.
-  - `export <view>`: `jsonl` by default, or `csv` under 010's policy; the `resources` view is defined over `urls` and `links`.
+  - `export <view>`: `jsonl` by default, or `csv`; the `resources` view is defined over `urls` and `links`.
   - **Segments** and `--segment`.
+  - **The CSV policy and output files**, for every Command (moved from 010 on 2026-10-01):
+    - the `csv` format; the single **CSV policy** is UTF-8 with BOM, CRLF and formula neutralisation, with `--no-bom` to turn the BOM off
+    - `-o <file>` writes exactly the stdout bytes, atomically, and leaves stdout empty (`output_written`, `output_not_writable`)
 - **060-add-crawl-control**:
   - `crawl --detach`: on Windows it uses CREATE_NO_WINDOW. In List mode, the parent stores the Seeds before spawning the Crawl.
   - `status`, which detects a dead process.
