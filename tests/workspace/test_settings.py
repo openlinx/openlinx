@@ -4,9 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from spider.workspace.discovery import resolve_workspace
+from spider.workspace.creation import create_workspace
+from spider.workspace.discovery import resolve_workspace, target_workspace
 from spider.workspace.settings import load_settings
 from spider.workspace.tables import SettingsTables
+from spider.workspace.template import settings_template
 from tests.support.settings import ExampleSettings
 from tests.support.workspace import TempWorkspace
 
@@ -76,3 +78,15 @@ def test_setting_variables_are_ignored(
     settings = load_settings(workspace, example_tables())
 
     assert settings.table(ExampleSettings).level == "low"
+
+
+def test_template_loads_as_defaults(temp_workspace: TempWorkspace) -> None:
+    home, tables = temp_workspace.home, example_tables()
+    shop = target_workspace(cwd=temp_workspace.root, flag=Path("shop"), home=home)
+    create_workspace(shop, settings_template(tables))
+    (temp_workspace.root / "empty" / ".spider").mkdir(parents=True)
+    empty = resolve_workspace(cwd=temp_workspace.root / "empty", flag=None, home=home)
+
+    from_template = load_settings(shop, tables).root.model_dump()
+
+    assert from_template == load_settings(empty, tables).root.model_dump()
