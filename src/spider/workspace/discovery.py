@@ -38,6 +38,13 @@ def resolve_workspace(*, cwd: Path, flag: Path | None, home: Path) -> Workspace:
     return _global(home)
 
 
+def enclosing_workspace(workspace: Workspace, home: Path) -> Workspace | None:
+    if workspace.is_global:
+        return None
+    parent = resolve_workspace(cwd=workspace.root.parent, flag=None, home=home)
+    return None if parent.is_global else parent
+
+
 def workspace_at(root: Path, home: Path) -> Workspace:
     return _global(home) if root == home else _local(root)
 

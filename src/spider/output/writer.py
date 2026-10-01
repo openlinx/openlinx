@@ -7,7 +7,7 @@ from typing import Any
 
 import orjson
 
-from spider.output.diagnostics import SpiderError
+from spider.output.diagnostics import Diagnostic, SpiderError
 
 
 class Format(StrEnum):
@@ -31,12 +31,15 @@ class Output:
         sys.stdout.buffer.write(_json_line(document.value))
 
     def error(self, error: SpiderError) -> None:
+        self.diagnostic(error.diagnostic)
+
+    def diagnostic(self, diagnostic: Diagnostic) -> None:
         line = {
-            "level": "error",
-            "code": error.code,
-            "message": error.message,
-            "hint": error.hint,
-            "details": error.details,
+            "level": diagnostic.level,
+            "code": diagnostic.code,
+            "message": diagnostic.message,
+            "hint": diagnostic.hint,
+            "details": diagnostic.details,
         }
         sys.stderr.buffer.write(_json_line(line))
 

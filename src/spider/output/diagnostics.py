@@ -1,8 +1,9 @@
 """Exit codes, and errors bound to them (design D5 of 010-add-workspace-and-cli-contract)."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any
+from typing import Any, Literal
 
 from spider import APP_NAME
 
@@ -38,6 +39,15 @@ EXIT_CODE_DESCRIPTIONS: Mapping[ExitCode, str] = {
 }
 
 
+@dataclass(frozen=True)
+class Diagnostic:
+    level: Literal["error", "warning", "info"]
+    code: str
+    message: str
+    hint: str | None = None
+    details: Mapping[str, Any] = field(default_factory=dict)
+
+
 class SpiderError(Exception):
     exit_code: ExitCode
 
@@ -49,10 +59,11 @@ class SpiderError(Exception):
         details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
-        self.code = code
-        self.message = message
-        self.hint = hint
-        self.details = dict(details or {})
+        self.diagnostic = Diagnostic("error", code, message, hint, dict(details or {}))
+
+    @property
+    def code(self) -> str:
+        return self.diagnostic.code
 
 
 class UsageError(SpiderError):

@@ -101,3 +101,26 @@ def test_initialising_the_home_folder(
         True,
         str(home / ".spider" / "spider.toml"),
     )
+
+
+@pytest.fixture
+def blog_in_shop(shop: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    (shop / ".spider").mkdir()
+    blog = shop / "blog"
+    blog.mkdir()
+    monkeypatch.chdir(blog)
+    return blog
+
+
+def test_nested_workspace_warning(shop: Path, blog_in_shop: Path) -> None:
+    result = run_cli("init")
+    warnings = [line for line in result.stderr_json_lines() if line["level"] == "warning"]
+
+    assert (result.exit_code, [(w["code"], w["details"]) for w in warnings]) == (
+        0,
+        [("workspace_nested", {"parent": str(shop)})],
+    )
+
+
+def test_a_warning_keeps_exit_code_0(blog_in_shop: Path) -> None:
+    assert run_cli("init").exit_code == 0
