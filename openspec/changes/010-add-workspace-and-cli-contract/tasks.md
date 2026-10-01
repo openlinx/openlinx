@@ -112,7 +112,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.2 Drive "Table for people" (cli-contract). Green: the rich table rendered to text, then UTF-8 bytes.
 - [x] 5.3 Drive "Unknown format" (cli-contract).
 - [x] 5.4 Drive "Errors stay JSON" (cli-contract).
-- [ ] 5.5 Drive "Items as lines" (cli-contract). Green: `jsonl` for lists.
+- [x] 5.5 Drive "Items as lines" (cli-contract). Green: `jsonl` for lists.
 - [ ] 5.6 Drive "Rows by default" (cli-contract). Green: the `rows` output kind, written and flushed per row.
 - [ ] 5.7 Drive "Documents have no JSON Lines" (cli-contract).
 - [ ] 5.8 Docs: add the formats and JSON Lines to `docs/cli.md`.

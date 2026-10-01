@@ -33,7 +33,11 @@ class Output:
         sys.stdout.buffer.write(text.encode())
 
     def document(self, document: Document) -> None:
-        if document.format is Format.TABLE:
+        if document.format is Format.JSONL:
+            # Only list Commands offer jsonl, so the value is the paging envelope.
+            for item in document.value["items"]:
+                sys.stdout.buffer.write(_json_line(item))
+        elif document.format is Format.TABLE:
             width = shutil.get_terminal_size().columns if sys.stdout.isatty() else TABLE_WIDTH
             sys.stdout.buffer.write(render_table(document.value, width).encode())
         else:

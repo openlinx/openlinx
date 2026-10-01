@@ -10,3 +10,9 @@ def test_compact_document() -> None:
     assert result.stdout == (
         b'{"total":5,"items":[{"n":1},{"n":2},{"n":3},{"n":4},{"n":5}],"next_cursor":null}\n'
     )
+
+
+def test_items_as_lines() -> None:
+    result = run_cli("example-list", "--format", "jsonl", "--limit", "2", app=example_app())
+
+    assert result.stdout == b'{"n":1}\n{"n":2}\n'
