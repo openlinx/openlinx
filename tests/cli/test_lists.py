@@ -16,3 +16,9 @@ def test_items_as_lines() -> None:
     result = run_cli("example-list", "--format", "jsonl", "--limit", "2", app=example_app())
 
     assert result.stdout == b'{"n":1}\n{"n":2}\n'
+
+
+def test_a_list_table_shows_items_not_the_envelope() -> None:
+    stdout = run_cli("example-list", "--format", "table", app=example_app()).stdout
+
+    assert (b"next_cursor" in stdout, b"items" in stdout) == (False, False)

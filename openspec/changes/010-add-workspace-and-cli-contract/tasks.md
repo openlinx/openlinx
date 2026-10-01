@@ -116,7 +116,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.6 Drive "Rows by default" (cli-contract). Green: the `rows` output kind, written and flushed per row.
 - [x] 5.7 Drive "Documents have no JSON Lines" (cli-contract).
 - [x] 5.8 Docs: add the formats and JSON Lines to `docs/cli.md`.
-- [ ] 5.9 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [x] 5.9 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Paging, fields and cursors (seam 1, example list Command)
 

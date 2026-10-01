@@ -8,9 +8,11 @@ from typing import Any, NoReturn
 import typer
 
 # Typer 0.27 vendors Click and does not re-export its UsageError.
+from typer._click.exceptions import MissingParameter
 from typer._click.exceptions import UsageError as ClickUsageError
 from typer.core import TyperGroup
 
+from spider.cli.meta import formats_hint, meta_of
 from spider.output.diagnostics import ExitCode, SpiderError, UsageError
 from spider.output.writer import Document, Output, Rows
 from spider.workspace.tables import SettingsTables
@@ -57,8 +59,12 @@ class SpiderGroup(TyperGroup):
             elif isinstance(returned, Rows):
                 output.rows(returned)
                 returned = ExitCode.OK
+        except MissingParameter as error:
+            # A BadParameter subclass, but a missing argument is a usage error (cli-contract).
+            output.diagnostic(UsageError("usage_error", error.format_message()).diagnostic)
+            sys.exit(ExitCode.USAGE)
         except typer.BadParameter as error:
-            output.diagnostic(UsageError("invalid_value", error.format_message()).diagnostic)
+            output.diagnostic(_invalid_value(error).diagnostic)
             sys.exit(ExitCode.USAGE)
         except ClickUsageError as error:
             output.diagnostic(UsageError("usage_error", error.format_message()).diagnostic)
@@ -67,3 +73,12 @@ class SpiderGroup(TyperGroup):
             output.diagnostic(error.diagnostic)
             sys.exit(error.exit_code)
         sys.exit(returned)
+
+
+def _invalid_value(error: typer.BadParameter) -> UsageError:
+    hint = None
+    if error.param is not None and error.param.name == "output_format" and error.ctx is not None:
+        callback = error.ctx.command.callback
+        meta = meta_of(callback) if callback is not None else None
+        hint = formats_hint(meta) if meta is not None else None
+    return UsageError("invalid_value", error.format_message(), hint=hint)

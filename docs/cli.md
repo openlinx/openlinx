@@ -33,7 +33,7 @@ An unknown format, such as `--format xml`, is `invalid_value` too.
 
 ## Formats
 
-Every Command has an output kind, which `spider commands` lists as `output`. The kind decides the formats the Command offers:
+Every Command has an output kind, and the kind decides the formats the Command can offer:
 
 | Output kind | Result | Formats (default first) |
 |---|---|---|

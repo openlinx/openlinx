@@ -43,3 +43,9 @@ def test_documents_have_no_json_lines(shop: Path) -> None:
     result = run_cli("init", "--format", "jsonl")
 
     assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_value")
+
+
+def test_an_unknown_format_hint_lists_the_command_formats(shop: Path) -> None:
+    error = run_cli("init", "--format", "xml").stderr_json_lines()[-1]
+
+    assert error["hint"] == "Use --format with one of: json, table."

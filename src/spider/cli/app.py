@@ -9,6 +9,7 @@ import typer
 from spider import APP_NAME, __version__
 from spider.cli.commands import commands
 from spider.cli.init import init
+from spider.cli.meta import check_command
 from spider.cli.runner import Invocation, SpiderGroup
 from spider.workspace.tables import SettingsTables
 
@@ -56,9 +57,9 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         add_completion=False,
     )
     app.callback()(root)
-    app.command()(commands)
-    app.command()(init)
-    for command in extra.commands:
+    registered: list[Callable[..., Any]] = [commands, init, *extra.commands]
+    for command in registered:
+        check_command(command)
         app.command()(command)
     return app
 

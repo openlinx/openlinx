@@ -2,6 +2,7 @@
 
 import json
 
+from tests.support.app import example_app
 from tests.support.cli import run_cli
 from tests.support.workspace import TempWorkspace
 
@@ -32,3 +33,9 @@ def test_only_json_lines_on_stderr(temp_workspace: TempWorkspace) -> None:
     lines = run_cli("init", "--workspace", str(site)).stderr.splitlines()
 
     assert [type(json.loads(line)) for line in lines] == [dict]
+
+
+def test_a_missing_argument_is_a_usage_error() -> None:
+    result = run_cli("example-rows-waiting", app=example_app())
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "usage_error")

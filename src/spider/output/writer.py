@@ -5,12 +5,12 @@ import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 import orjson
 
 from spider.output.diagnostics import Diagnostic
-from spider.output.table import render_table
+from spider.output.table import render_items_table, render_table
 
 # Not a terminal: a fixed width, so the table is the same on every OS and in CI.
 TABLE_WIDTH = 120
@@ -26,6 +26,7 @@ class Format(StrEnum):
 class Document:
     value: Any
     format: Format
+    kind: Literal["document", "list"]
 
 
 @dataclass(frozen=True)
@@ -41,12 +42,15 @@ class Output:
 
     def document(self, document: Document) -> None:
         if document.format is Format.JSONL:
-            # Only list Commands offer jsonl, so the value is the paging envelope.
             for item in document.value["items"]:
                 sys.stdout.buffer.write(_json_line(item))
         elif document.format is Format.TABLE:
             width = shutil.get_terminal_size().columns if sys.stdout.isatty() else TABLE_WIDTH
-            sys.stdout.buffer.write(render_table(document.value, width).encode())
+            if document.kind == "list":
+                text = render_items_table(document.value["items"], width)
+            else:
+                text = render_table(document.value, width)
+            sys.stdout.buffer.write(text.encode())
         else:
             sys.stdout.buffer.write(_json_line(document.value))
 
