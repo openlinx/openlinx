@@ -61,3 +61,11 @@ def test_toml_syntax_error(shop: Path) -> None:
     first = run_cli("init", app=example_app()).stderr_json_lines()[-1]["details"]["errors"][0]
 
     assert (first["key"], first["line"]) == (None, 1)
+
+
+def test_every_problem_is_listed(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[example]\nlevel = 1\n[crawler]\n")
+
+    errors = run_cli("init", app=example_app()).stderr_json_lines()[-1]["details"]["errors"]
+
+    assert [error["key"] for error in errors] == ["example.level", "crawler"]
