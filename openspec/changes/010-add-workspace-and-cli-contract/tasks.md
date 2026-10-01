@@ -96,7 +96,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.7 Drive "Unknown key with a suggestion" (workspace). Green: `extra="forbid"` and the closest-match hint.
 - [x] 4.8 Drive "Output flags have no settings key" (workspace).
 - [x] 4.9 Drive "TOML syntax error" (workspace). Green: `line` from `TOMLDecodeError`.
-- [ ] 4.10 Drive "Every problem is listed" (workspace).
+- [x] 4.10 Drive "Every problem is listed" (workspace).
 - [ ] 4.11 Drive "Nothing is created when the settings are invalid" (workspace).
 - [ ] 4.12 Drive "Commands without a Workspace ignore the settings file" (workspace).
 - [ ] 4.13 Drive "A setting in the template" (workspace). Green: generate the commented template from the registered tables, replacing the placeholder from task 3.1.

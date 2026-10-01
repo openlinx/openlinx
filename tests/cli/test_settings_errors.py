@@ -69,3 +69,11 @@ def test_every_problem_is_listed(shop: Path) -> None:
     errors = run_cli("init", app=example_app()).stderr_json_lines()[-1]["details"]["errors"]
 
     assert [error["key"] for error in errors] == ["example.level", "crawler"]
+
+
+def test_problems_are_listed_in_file_order(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[crawler]\n[example]\nlevel = 1\n")
+
+    errors = run_cli("init", app=example_app()).stderr_json_lines()[-1]["details"]["errors"]
+
+    assert [error["key"] for error in errors] == ["crawler", "example.level"]

@@ -57,15 +57,45 @@ def load_settings(
             hint=_suggestion(error, root_model),
             details={
                 "file": str(workspace.settings_file),
-                "errors": [
-                    {
-                        "key": ".".join(str(part) for part in problem["loc"]),
-                        "message": problem["msg"],
-                    }
-                    for problem in error.errors()
-                ],
+                "errors": _in_file_order(
+                    [
+                        {
+                            "key": ".".join(str(part) for part in problem["loc"]),
+                            "message": problem["msg"],
+                        }
+                        for problem in error.errors()
+                    ],
+                    workspace.settings_file,
+                ),
             },
         ) from error
+
+
+def _in_file_order(errors: list[dict[str, Any]], settings_file: Path) -> list[dict[str, Any]]:
+    # tomllib keeps the file's order, so a key's index in the flattened document is its place.
+    order = {key: index for index, key in enumerate(_dotted_keys(_read_toml(settings_file)))}
+
+    def place(error: dict[str, Any]) -> int:
+        parts = str(error["key"]).split(".")
+        prefixes = (".".join(parts[:size]) for size in range(len(parts), 0, -1))
+        return next((order[prefix] for prefix in prefixes if prefix in order), len(order))
+
+    return sorted(errors, key=place)
+
+
+def _read_toml(settings_file: Path) -> dict[str, Any]:
+    return (
+        tomllib.loads(settings_file.read_text(encoding="utf-8")) if settings_file.is_file() else {}
+    )
+
+
+def _dotted_keys(table: Mapping[str, Any], prefix: str = "") -> list[str]:
+    keys: list[str] = []
+    for key, value in table.items():
+        keys.append(prefix + key)
+        if isinstance(value, Mapping):
+            keys += _dotted_keys(value, f"{prefix}{key}.")
+    return keys
 
 
 def _line(error: tomllib.TOMLDecodeError) -> int | None:
