@@ -45,3 +45,11 @@ def test_files_of_a_new_local_workspace(shop: Path) -> None:
     entries = sorted(path.relative_to(shop).as_posix() for path in shop.rglob("*"))
 
     assert entries == [".spider", ".spider/.gitignore", ".spider/crawls", "spider.toml"]
+
+
+def test_data_folder_ignores_its_own_contents(shop: Path) -> None:
+    run_cli("init")
+
+    assert (shop / ".spider" / ".gitignore").read_bytes() == (
+        b"# Created by spider: crawl data is not committed.\n*\n"
+    )
