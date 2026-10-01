@@ -42,3 +42,12 @@ def test_a_settings_file_alone_marks_a_workspace(temp_workspace: TempWorkspace) 
     workspace = resolve_workspace(cwd=shop / "blog", flag=None, home=temp_workspace.home)
 
     assert workspace.root == shop
+
+
+def test_fallback_to_the_global_workspace(temp_workspace: TempWorkspace) -> None:
+    notes = temp_workspace.home / "work" / "notes"
+    notes.mkdir(parents=True)
+
+    workspace = resolve_workspace(cwd=notes, flag=None, home=temp_workspace.home)
+
+    assert (workspace.is_global, workspace.data_dir) == (True, temp_workspace.home / ".spider")

@@ -12,6 +12,8 @@ SETTINGS_FILE_NAME = f"{APP_NAME}.toml"
 @dataclass(frozen=True)
 class Workspace:
     root: Path
+    data_dir: Path
+    is_global: bool
 
 
 def resolve_workspace(*, cwd: Path, flag: Path | None, home: Path) -> Workspace:
@@ -19,5 +21,5 @@ def resolve_workspace(*, cwd: Path, flag: Path | None, home: Path) -> Workspace:
         if folder == home:
             break
         if (folder / DATA_DIR_NAME).is_dir() or (folder / SETTINGS_FILE_NAME).is_file():
-            return Workspace(root=folder)
-    return Workspace(root=cwd)
+            return Workspace(root=folder, data_dir=folder / DATA_DIR_NAME, is_global=False)
+    return Workspace(root=home, data_dir=home / DATA_DIR_NAME, is_global=True)

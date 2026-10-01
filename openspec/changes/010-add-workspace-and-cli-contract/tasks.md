@@ -52,7 +52,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 2.1 Drive "Workspace in the current folder" (workspace). Green: `resolve_workspace(cwd, flag, home)`.
 - [x] 2.2 Drive "Workspace in a parent folder" and "The nearest Workspace wins" (workspace), a trivial pair. Green: walk up to the home folder.
 - [x] 2.3 Drive "A settings file alone marks a Workspace" (workspace).
-- [ ] 2.4 Drive "Fallback to the global Workspace" (workspace).
+- [x] 2.4 Drive "Fallback to the global Workspace" (workspace).
 - [ ] 2.5 Drive "The home folder is the global Workspace" and "Location of the global Workspace" (workspace), a trivial pair.
 - [ ] 2.6 Drive "The flag wins" (workspace).
 - [ ] 2.7 Drive "The home folder given with --workspace" (workspace). This is the `.mcpb` default for `spider mcp --workspace` (`090`).
