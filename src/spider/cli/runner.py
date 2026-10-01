@@ -32,6 +32,8 @@ class SpiderGroup(TyperGroup):
             )
         except ClickUsageError as error:
             exit_code = _fail(UsageError("usage_error", error.format_message()))
+        except SpiderError as error:
+            exit_code = _fail(error)
         sys.exit(exit_code or 0)
 
 

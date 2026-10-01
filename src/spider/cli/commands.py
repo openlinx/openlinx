@@ -7,11 +7,13 @@ from typer.core import TyperGroup
 
 from spider import APP_NAME, __version__
 from spider.cli.meta import command_meta
+from spider.cli.options import FormatOpt
 from spider.output.diagnostics import EXIT_CODE_DESCRIPTIONS
+from spider.output.writer import Format
 
 
-@command_meta(output="document")
-def commands(ctx: typer.Context) -> dict[str, Any]:
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict[str, Any]:
     """Describe every Command as JSON."""
     root = cast(TyperGroup, ctx.find_root().command)
     return {

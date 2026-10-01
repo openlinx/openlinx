@@ -38,7 +38,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.5 Drive "Error object" (cli-contract). Green: the exact diagnostic keys.
 - [x] 1.6 Drive "Nothing on stdout when a Command fails" (cli-contract). Green: documents are written only when the Command ends.
 - [x] 1.7 Drive "The table is self-described" (cli-contract). Green: the `ExitCode` enum and `exit_codes`.
-- [ ] 1.8 Drive "Unsupported format" (cli-contract). Green:
+- [x] 1.8 Drive "Unsupported format" (cli-contract). Green:
   - `FormatOpt`
   - `formats` in `@command_meta`
   - `invalid_value`, with a hint listing the Command's formats

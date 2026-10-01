@@ -1,11 +1,19 @@
 """The one Output object of an invocation (design D3 of 010-add-workspace-and-cli-contract)."""
 
 import sys
+from enum import StrEnum
 from typing import Any
 
 import orjson
 
 from spider.output.diagnostics import SpiderError
+
+
+class Format(StrEnum):
+    JSON = "json"
+    JSONL = "jsonl"
+    TABLE = "table"
+    CSV = "csv"
 
 
 class Output:
