@@ -5,12 +5,13 @@ from typing import Annotated
 import typer
 
 from spider import APP_NAME, __version__
-from spider.output.streams import write_stdout
+from spider.cli.commands import commands
+from spider.output.writer import Output
 
 
 def _print_version(value: bool) -> None:
     if value:
-        write_stdout(f"{APP_NAME} {__version__}\n".encode())
+        Output().text(f"{APP_NAME} {__version__}\n")
         raise typer.Exit
 
 
@@ -33,6 +34,7 @@ def build_app() -> typer.Typer:
         no_args_is_help=True,
     )
     app.callback()(root)
+    app.command()(commands)
     return app
 
 

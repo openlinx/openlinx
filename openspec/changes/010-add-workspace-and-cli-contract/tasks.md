@@ -22,7 +22,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - Add `build_app()` in `spider.cli.app`, with the entry point calling it.
 
   Verify: `uv run scripts/check.py` passes, including 000's `--version` tests.
-- [ ] 1.2 Drive "The Command lists itself" (cli-contract).
+- [x] 1.2 Drive "The Command lists itself" (cli-contract).
   - Red: add `CliResult.json()` to `tests/support/cli.py`.
   - Green:
     - the `Output` object writing orjson bytes to `sys.stdout.buffer`
