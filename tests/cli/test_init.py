@@ -1,5 +1,6 @@
 """`spider init` (010-add-workspace-and-cli-contract, workspace)."""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -69,3 +70,20 @@ def test_existing_settings_file_is_kept_byte_for_byte(shop: Path) -> None:
     run_cli("init")
 
     assert (shop / "spider.toml").read_bytes() == b'[example]\nlevel = "high"\n'
+
+
+def test_target_folder_is_created(temp_workspace: TempWorkspace) -> None:
+    site = temp_workspace.home / "work" / "new" / "site"
+
+    result = run_cli("init", "--workspace", str(site))
+
+    assert (result.exit_code, (site / ".spider" / "crawls").is_dir()) == (0, True)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows paths only")
+def test_workspace_written_with_forward_slashes_on_windows(temp_workspace: TempWorkspace) -> None:
+    home = temp_workspace.home
+
+    result = run_cli("init", "--workspace", home.as_posix() + "/work/b")
+
+    assert result.json()["workspace"] == str(home) + r"\work\b"

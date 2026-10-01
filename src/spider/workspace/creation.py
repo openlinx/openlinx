@@ -18,6 +18,7 @@ def create_workspace(workspace: Workspace) -> list[Path]:
         (workspace.data_dir / "crawls", None),
         (workspace.settings_file, PLACEHOLDER_SETTINGS),
     ]
+    workspace.root.mkdir(parents=True, exist_ok=True)
     created: list[Path] = []
     for path, content in entries:
         if path.exists():
