@@ -74,3 +74,13 @@ def test_location_of_the_global_workspace(temp_workspace: TempWorkspace) -> None
         home / ".spider",
         home / ".spider" / "spider.toml",
     )
+
+
+def test_the_flag_wins(temp_workspace: TempWorkspace) -> None:
+    work = temp_workspace.home / "work"
+    (work / "a" / ".spider").mkdir(parents=True)
+    (work / "b").mkdir()
+
+    workspace = resolve_workspace(cwd=work / "a", flag=work / "b", home=temp_workspace.home)
+
+    assert workspace.root == work / "b"
