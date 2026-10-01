@@ -7,3 +7,12 @@ def test_unknown_command_is_a_usage_error() -> None:
     result = run_cli("nosuchcommand")
 
     assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "usage_error")
+
+
+def test_error_object_has_exactly_the_diagnostic_keys() -> None:
+    error = run_cli("nosuchcommand").stderr_json_lines()[-1]
+
+    assert (set(error), error["level"]) == (
+        {"level", "code", "message", "hint", "details"},
+        "error",
+    )

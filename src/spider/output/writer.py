@@ -17,4 +17,11 @@ class Output:
         sys.stdout.buffer.write(orjson.dumps(result) + b"\n")
 
     def error(self, error: SpiderError) -> None:
-        sys.stderr.buffer.write(orjson.dumps({"code": error.code}) + b"\n")
+        line = {
+            "level": "error",
+            "code": error.code,
+            "message": error.message,
+            "hint": error.hint,
+            "details": error.details,
+        }
+        sys.stderr.buffer.write(orjson.dumps(line) + b"\n")
