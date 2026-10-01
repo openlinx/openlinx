@@ -28,3 +28,13 @@ def test_default(temp_workspace: TempWorkspace) -> None:
     settings = load_settings(workspace, example_tables())
 
     assert settings.table(ExampleSettings).level == "low"
+
+
+def test_settings_file_over_default(temp_workspace: TempWorkspace) -> None:
+    shop = workspace_with_data_folder(temp_workspace)
+    (shop / "spider.toml").write_bytes(b'[example]\nlevel = "high"\n')
+    workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
+
+    settings = load_settings(workspace, example_tables())
+
+    assert settings.table(ExampleSettings).level == "high"
