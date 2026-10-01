@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from enum import IntEnum
 from typing import Any
 
+from spider import APP_NAME
+
 
 class ExitCode(IntEnum):
     OK = 0
@@ -25,7 +27,7 @@ EXIT_CODE_DESCRIPTIONS: Mapping[ExitCode, str] = {
     ExitCode.USAGE: (
         "the command line is wrong: an unknown Command, flag or name, or a missing or invalid value"
     ),
-    ExitCode.CONFIG: "spider.toml or a setting is invalid",
+    ExitCode.CONFIG: f"{APP_NAME}.toml or a setting is invalid",
     ExitCode.NOT_FOUND: "a Workspace, Crawl or item named on the command line does not exist",
     ExitCode.BUSY: "another process holds the Crawl",
     ExitCode.INCOMPATIBLE: "the crawl file cannot be used by this version",

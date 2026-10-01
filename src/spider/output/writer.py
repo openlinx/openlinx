@@ -1,6 +1,7 @@
 """The one Output object of an invocation (design D3 of 010-add-workspace-and-cli-contract)."""
 
 import sys
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
@@ -16,13 +17,19 @@ class Format(StrEnum):
     CSV = "csv"
 
 
+@dataclass(frozen=True)
+class Document:
+    value: Any
+    format: Format
+
+
 class Output:
     # Bytes, not text: a text stream on Windows would turn the LF into CR LF.
     def text(self, text: str) -> None:
         sys.stdout.buffer.write(text.encode())
 
-    def document(self, result: Any) -> None:
-        sys.stdout.buffer.write(orjson.dumps(result) + b"\n")
+    def document(self, document: Document) -> None:
+        sys.stdout.buffer.write(_json_line(document.value))
 
     def error(self, error: SpiderError) -> None:
         line = {
@@ -32,4 +39,8 @@ class Output:
             "hint": error.hint,
             "details": error.details,
         }
-        sys.stderr.buffer.write(orjson.dumps(line) + b"\n")
+        sys.stderr.buffer.write(_json_line(line))
+
+
+def _json_line(value: Any) -> bytes:
+    return orjson.dumps(value) + b"\n"

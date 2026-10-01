@@ -61,11 +61,16 @@ select = [
 "sys.stderr".msg = "Write output through spider.output, which writes UTF-8 bytes."
 "typer.echo".msg = "Write output through spider.output, which writes UTF-8 bytes."
 "click.echo".msg = "Write output through spider.output, which writes UTF-8 bytes."
+"typer.secho".msg = "Write output through spider.output, which writes UTF-8 bytes."
+"typer._click.echo".msg = "Write output through spider.output, which writes UTF-8 bytes."
+"typer._click.secho".msg = "Write output through spider.output, which writes UTF-8 bytes."
+"typer._click.utils.echo".msg = "Write output through spider.output, which writes UTF-8 bytes."
+"typer._click.termui.secho".msg = "Write output through spider.output, which writes UTF-8 bytes."
 
 [tool.ruff.lint.per-file-ignores]
 "src/spider/output/**" = ["TID251"]
 "tests/**" = ["S101", "T20", "S603", "S607"]
-"scripts/**" = ["T20", "S603", "TID251"]
+"scripts/**" = ["T20", "S603"]
 
 [tool.mypy]
 files = ["src", "tests", "scripts"]

@@ -1,17 +1,11 @@
 """`spider --version` (000-scaffold-project, tasks 2.1 and 2.2)."""
 
-import tomllib
-from pathlib import Path
-
 from tests.support.cli import run_cli, run_cli_process
-
-PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
+from tests.support.project import project_version
 
 
 def expected_version_line() -> bytes:
-    with PYPROJECT.open("rb") as file:
-        version: str = tomllib.load(file)["project"]["version"]
-    return b"spider " + version.encode() + b"\n"
+    return b"spider " + project_version().encode() + b"\n"
 
 
 def test_version_prints_the_app_name_and_the_project_version() -> None:

@@ -58,7 +58,7 @@ Never replace our own modules or our own CLI with a double. Installer tests use 
 
 Shared test code lives in `tests/support/`. `tests/` is a package, so tests import helpers as `from tests.support.cli import run_cli`.
 
-- **`run_cli(*args, input=None)`** (`tests/support/cli.py`): runs the Typer app in process with Typer's `CliRunner`. It returns `CliResult(exit_code, stdout, stderr)`, where stdout and stderr are the bytes exactly as written.
+- **`run_cli(*args, input=None)`** (`tests/support/cli.py`): runs the Typer app in process with Typer's `CliRunner`. It returns `CliResult(exit_code, stdout, stderr)`, where stdout and stderr are the bytes exactly as written. `result.json()` parses stdout as one JSON document, and `result.stderr_json_lines()` parses each line of stderr as JSON.
 - **`run_cli_process(*args, env=None)`** (same module): runs `sys.executable -m spider` as a real process and returns the same `CliResult`. Use it for console encoding, line endings on pipes and process behaviour; use `run_cli` for everything else. Coverage counts these runs too.
 - **Isolation plugin** (`tests/support/isolation.py`, loaded by `tests/conftest.py`): three autouse fixtures that every test gets, listed below. A `pytester` run loads them with `-p tests.support.isolation`.
 - **Home isolation** (`isolated_home`): every test runs with `HOME` and `USERPROFILE` pointing at `tmp_path / "home"`, so `Path.home()` never reaches the real `~/.spider/`. Child processes that inherit the environment see the same home. Git sees it too and runs without the developer's global `.gitconfig`, so a test that runs git passes what it needs with `-c`, as `tests/test_line_endings.py` does for `safe.directory`. Request `isolated_home` if a test needs the path.

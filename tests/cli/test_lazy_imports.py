@@ -3,7 +3,16 @@
 import subprocess
 import sys
 
-HEAVY_LIBRARIES = {"aiohttp", "sqlalchemy", "alembic", "numpy", "selectolax", "lxml", "pydantic"}
+HEAVY_LIBRARIES = {
+    "aiohttp",
+    "sqlalchemy",
+    "alembic",
+    "numpy",
+    "selectolax",
+    "lxml",
+    "pydantic",
+    "rich",
+}
 LIST_MODULES_AFTER_IMPORT = "import sys, spider.cli.app; print('\\n'.join(sys.modules))"
 
 

@@ -10,9 +10,10 @@ from spider.cli.runner import SpiderGroup
 from spider.output.writer import Output
 
 
-def _print_version(value: bool) -> None:
+def _print_version(ctx: typer.Context, value: bool) -> None:
     if value:
-        Output().text(f"{APP_NAME} {__version__}\n")
+        output: Output = ctx.obj
+        output.text(f"{APP_NAME} {__version__}\n")
         raise typer.Exit
 
 

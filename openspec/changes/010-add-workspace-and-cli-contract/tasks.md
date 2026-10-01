@@ -45,7 +45,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.9 **Guard:** "Help" and "Version" (cli-contract). Typer and 000 already provide both.
 - [x] 1.10 Drive "No arguments" (cli-contract). Typer's `no_args_is_help` exits 2 from Click 8.2 on. Green: bare `spider` prints the root help and exits 0.
 - [x] 1.11 Docs: write `docs/cli.md` with stdout versus stderr, the diagnostic shape and the exit code table.
-- [ ] 1.12 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [x] 1.12 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Workspace resolution (seam 2)
 

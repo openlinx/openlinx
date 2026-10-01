@@ -4,11 +4,12 @@ import sys
 from collections.abc import Sequence
 from typing import Any, NoReturn
 
+# Typer 0.27 vendors Click and does not re-export its UsageError.
 from typer._click.exceptions import UsageError as ClickUsageError
 from typer.core import TyperGroup
 
-from spider.output.diagnostics import SpiderError, UsageError
-from spider.output.writer import Output
+from spider.output.diagnostics import ExitCode, SpiderError, UsageError
+from spider.output.writer import Document, Output
 
 
 class SpiderGroup(TyperGroup):
@@ -24,22 +25,25 @@ class SpiderGroup(TyperGroup):
         # Not no_args_is_help: from Click 8.2 on it raises a usage error, which exits 2.
         if not (sys.argv[1:] if args is None else args):
             args = ["--help"]
+        output = Output()
         try:
-            exit_code = super().main(
+            returned = super().main(
                 args,
                 prog_name,
                 complete_var,
                 standalone_mode=False,
                 windows_expand_args=windows_expand_args,
+                obj=output,
                 **extra,
             )
         except ClickUsageError as error:
-            exit_code = _fail(UsageError("usage_error", error.format_message()))
+            output.error(UsageError("usage_error", error.format_message()))
+            sys.exit(ExitCode.USAGE)
         except SpiderError as error:
-            exit_code = _fail(error)
-        sys.exit(exit_code or 0)
-
-
-def _fail(error: SpiderError) -> int:
-    Output().error(error)
-    return error.exit_code
+            output.error(error)
+            sys.exit(error.exit_code)
+        # A Command returns its Document; --help and --version end in an Exit, whose code returns.
+        if isinstance(returned, Document):
+            output.document(returned)
+            sys.exit(ExitCode.OK)
+        sys.exit(returned)
