@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from spider.workspace.discovery import resolve_workspace
 from spider.workspace.settings import load_settings
 from spider.workspace.tables import SettingsTables
@@ -57,5 +59,20 @@ def test_flag_over_settings_file(temp_workspace: TempWorkspace) -> None:
     workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
 
     settings = load_settings(workspace, example_tables(), flags={"example": {"level": "low"}})
+
+    assert settings.table(ExampleSettings).level == "low"
+
+
+def test_setting_variables_are_ignored(
+    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shop = workspace_with_data_folder(temp_workspace)
+    for name in ("SPIDER_EXAMPLE__LEVEL", "EXAMPLE__LEVEL", "LEVEL"):
+        monkeypatch.setenv(name, "high")
+    # pydantic-settings' own env source would read this one.
+    monkeypatch.setenv("EXAMPLE", '{"level": "high"}')
+    workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
+
+    settings = load_settings(workspace, example_tables())
 
     assert settings.table(ExampleSettings).level == "low"

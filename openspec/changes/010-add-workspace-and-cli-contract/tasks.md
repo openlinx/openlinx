@@ -89,7 +89,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.2 Drive "Settings file over default" (workspace). Green: the TOML source.
 - [x] 4.3 Drive "A settings file in the home folder is not read" (workspace), with the `example` table registered by the test. Moved here from group 2: it needs the settings of 4.1 and 4.2. Green: settings load only from the resolved Workspace's settings file.
 - [x] 4.4 Drive "Flag over settings file" (workspace). Green: flag values passed as init kwargs.
-- [ ] 4.5 Drive "Setting variables are ignored" (workspace). Green: drop the env, dotenv and secrets sources.
+- [x] 4.5 Drive "Setting variables are ignored" (workspace). Green: drop the env, dotenv and secrets sources.
 - [ ] 4.6 Drive "Invalid value" (workspace) at seam 1. Green:
   - `spider init` validates an existing `spider.toml`
   - `settings_invalid` with exit code 3, `details.file` and `details.errors`

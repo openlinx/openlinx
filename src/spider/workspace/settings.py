@@ -44,12 +44,7 @@ def _sources(settings_file: Path) -> type[BaseSettings]:
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
-            return (
-                init_settings,
-                env_settings,
-                dotenv_settings,
-                file_secret_settings,
-                TomlConfigSettingsSource(settings_cls, toml_file=settings_file),
-            )
+            # No env, .env or secrets source: settings come only from flags and spider.toml.
+            return (init_settings, TomlConfigSettingsSource(settings_cls, toml_file=settings_file))
 
     return Root
