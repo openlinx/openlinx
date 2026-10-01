@@ -42,9 +42,17 @@
 
 ### D2. The settings system
 
-- **A registry of tables:** each change registers one pydantic model per `spider.toml` table, for example `register_settings_table("store", StoreSettings)` in `015`. The root settings model is assembled from the registry when settings load.
+- **A registry of tables:** each change contributes one pydantic model per `spider.toml` table. The root settings model is assembled from the registry when settings load.
+  - **Registration** is `SettingsTables.register(name, model)` on a registry built per app, not a global one. `build_app` registers the tool's own tables first (none in this change), then those of `AppExtra(settings_tables=...)`. A later change registers its table in `build_app`, for example `("store", StoreSettings)` in `015`.
   - Code reads a table through a typed getter, `settings.table(StoreSettings)`, so static typing is kept.
-  - Tests assemble a registry that includes the `example` table used by the scenarios (D8).
+  - Tests build a fresh app whose registry includes the `example` table used by the scenarios (D8), so no test's table leaks into another.
+  - `SettingsTables` imports pydantic only for typing, and Commands import the settings module inside their body, so pydantic stays off the CLI's startup path.
+- **Table rules,** checked by `register()`, which raises `TypeError` for a table that breaks them. The template and the error hints depend on them.
+  - `extra="forbid"` on the model.
+  - Flat: every key is a setting, with no nested tables.
+  - A one-line description on every setting.
+  - A default that TOML can write: a string, a finite number, a boolean, or a list of those. A `None` default is refused, so there is no unset setting yet.
+  - The first change that needs an unset setting relaxes the rule and decides how the template shows it, for example by leaving out its `# key = ...` line. `050`'s `[segments]`, whose keys are Segment names chosen by the user, needs its own rule in the same way, and `050` adds it.
 - **Sources**, set by `settings_customise_sources`:
   1. init kwargs, which carry flag values
   2. a TOML source that reads the Workspace's settings file with `tomllib`
@@ -55,9 +63,11 @@
   - `extra="forbid"` on every model.
   - The whole file is validated at load, including tables such as `050`'s `[segments]`, which report through the same `settings_invalid`.
 - **Error mapping:**
-  - pydantic `loc` tuples become dotted keys.
+  - pydantic `loc` tuples become dotted keys, listed in the order the keys appear in the file.
   - `difflib.get_close_matches` supplies the hint.
-  - `tomllib.TOMLDecodeError` supplies `line`.
+  - `tomllib.TOMLDecodeError` supplies `line`: its `lineno` on Python 3.14, the message's "at line N" on 3.12 and 3.13.
+  - A settings file that is not UTF-8, or that is a folder, is `settings_invalid` too.
+  - **Flag values are not file problems.** When the first setting-mirroring flag is wired, a flag value that fails validation SHALL be reported as `invalid_value` (exit code 2), naming the flag. It must not become `settings_invalid` against `details.file`. `load_settings` today reports every validation error against the file, because no Command passes flags yet.
 - **The commented template** is generated from the registered models:
   - a header comment that states the precedence
   - then, for each table: the uncommented table header, the field's description as a comment, and `# key = <default as a TOML literal>`
@@ -204,7 +214,7 @@ Nothing to migrate: this change is greenfield.
   - Progress goes through `Output.event`.
   - A failed outcome is returned as `Outcome(result, error)`. `020`'s `seed_unreachable` (exit 8) and Ctrl+C (exit 130, which `020` maps) use it, and so do `080`'s failed checks (exit 1).
 - **Settings:**
-  - Register a table with `register_settings_table`.
+  - Register a table in `build_app`, where `SettingsTables.register` checks it against the table rules of D2.
   - A setting that mirrors a flag lives in `[<command>]` under the flag's name, with `_` for `-`. Mark it `secret` (`015` redacts it).
   - The first change that adds a path-valued setting also specifies that relative paths are taken from `spider.toml`'s folder.
 - **Paging:** list Commands use the codec from D6. SQL-backed lists (`050`) add the crawl id and their filters to the fingerprint, and use `unknown_field` for `--fields` and `unknown_column` for `--where` and `--sort`.
