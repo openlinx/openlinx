@@ -78,3 +78,46 @@ The result on stdout:
 Diagnostics on stderr:
 - **`workspace_nested`** (warning, exit code 0): a folder above the new Workspace, below the home folder, is already a Workspace. `details.parent` is its root. Commands run below the new Workspace now use it.
 - **`workspace_not_writable`** (error, exit code 7): the folder or its data folder cannot be created or written, for example because a path segment is a file, or `.spider/crawls` is a file. The message names the folder; `details.path` is the path that failed and `details.error` the operating system's error name, such as `EEXIST`.
+
+## Settings: `spider.toml`
+
+### Tables and precedence
+
+Settings are grouped in tables. Each change that adds settings registers its own table, for example `[store]` from `015-add-crawl-store`. A setting that mirrors a flag lives in the table named after its Command, under the flag's long name with `-` written as `_`.
+
+Each setting takes the first value it finds:
+1. its flag on the command line
+2. `spider.toml` of the Workspace
+3. its default
+
+Only the Workspace's own settings file is read: `<root>/spider.toml` for a local Workspace, `~/.spider/spider.toml` for the global one. No environment variable, `.env` file or secrets folder is a source. `--format`, `--fields`, `--limit`, `--cursor`, `--crawl` and `--workspace` have no `spider.toml` key.
+
+### The template
+
+`spider init` writes a `spider.toml` that sets no value. It starts with the precedence, then lists every setting the tool knows, commented out with its default:
+
+```toml
+# spider settings. Each setting takes the first value it finds:
+# its flag, then this file (spider.toml), then its default.
+# Every setting below is commented out, so its default applies.
+
+[<table>]
+# <what the setting does>
+# <key> = <default>
+```
+
+To change a setting, uncomment its line and edit the value. Loading the untouched template gives the same settings as having no file.
+
+### Validation and errors
+
+The whole file is checked whenever a Command loads settings, including the tables of every change. `spider init` checks an existing `spider.toml` before it creates anything. Commands that use no Workspace, such as `spider commands`, never read it.
+
+An invalid file fails with `settings_invalid`, exit code 3, and the Command does nothing else:
+
+```json
+{"level":"error","code":"settings_invalid","message":"The settings file /home/ana/work/shop/spider.toml is invalid.","hint":"Did you mean example.level?","details":{"file":"/home/ana/work/shop/spider.toml","errors":[{"key":"example.levl","message":"Extra inputs are not permitted"}]}}
+```
+
+- `details.errors` lists every problem as `{key, message}`, in file order. `key` is the dotted key.
+- Unknown tables and keys are problems. The hint names the closest known key when there is one.
+- A TOML syntax error has `"key": null` and the `line` it was found on.

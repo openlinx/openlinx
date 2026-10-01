@@ -101,7 +101,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.12 Drive "Commands without a Workspace ignore the settings file" (workspace).
 - [x] 4.13 Drive "A setting in the template" (workspace). Green: generate the commented template from the registered tables, replacing the placeholder from task 3.1.
 - [x] 4.14 Drive "Template loads as defaults" (workspace) at seam 2.
-- [ ] 4.15 Docs: add the `spider.toml` section to `docs/workspace.md`: registered tables, precedence, validation and errors, and the template.
+- [x] 4.15 Docs: add the `spider.toml` section to `docs/workspace.md`: registered tables, precedence, validation and errors, and the template.
 - [ ] 4.16 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Formats and JSON Lines (seam 1, fixture app)
