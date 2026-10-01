@@ -785,11 +785,11 @@ Options:
 
 ### Requirement: Export formats
 
-`export` SHALL support the formats `jsonl`, the default, and `csv`, as `010-add-workspace-and-cli-contract` defines them:
+`export` SHALL support the formats `jsonl`, the default, as `010-add-workspace-and-cli-contract` defines it, and `csv`, as the requirement "CSV format" of this change's `cli-contract` spec defines it:
 - `jsonl` writes one compact JSON object per row, with keys in column order.
-- `csv` follows the CSV policy of `010-add-workspace-and-cli-contract`, including its BOM, `--no-bom`, CRLF and formula neutralisation.
+- `csv` follows the requirement "CSV policy" of this change's `cli-contract` spec, including its BOM, `--no-bom`, CRLF and formula neutralisation.
 
-Any other format SHALL be rejected with that change's `invalid_value` error, whose hint lists `jsonl` and `csv`.
+Any other format SHALL be rejected with the `invalid_value` error of `010-add-workspace-and-cli-contract`, whose hint lists `jsonl` and `csv`.
 
 #### Scenario: JSONL keeps nulls
 - **WHEN** a Page at `https://example.com/` has no word count
@@ -807,7 +807,7 @@ Any other format SHALL be rejected with that change's `invalid_value` error, who
 
 ### Requirement: Export streams its rows
 
-`export` SHALL write each row as soon as it is read, to stdout or, with `-o`, to the file as `010-add-workspace-and-cli-contract` defines. Peak memory while exporting 200,000 Pages SHALL be no more than 50 MB above the peak while exporting 1,000 Pages.
+`export` SHALL write each row as soon as it is read, to stdout or, with `-o`, to the file as the requirement "Writing output to a file with -o" of this change's `cli-contract` spec defines. Peak memory while exporting 200,000 Pages SHALL be no more than 50 MB above the peak while exporting 1,000 Pages.
 
 #### Scenario: Rows go to the -o file
 - **WHEN** `spider export pages --fields address -o pages.jsonl` runs against a Crawl with 2 Pages
@@ -832,7 +832,8 @@ Query Commands SHALL report failures as the stderr diagnostics of `010-add-works
 | `sql_timeout` | 1 (failed) |
 
 They also use these codes from other changes:
-- `010-add-workspace-and-cli-contract`: `usage_error`, `invalid_value`, `invalid_cursor`, `unknown_field`, `settings_invalid` and `output_not_writable`
+- `010-add-workspace-and-cli-contract`: `usage_error`, `invalid_value`, `invalid_cursor`, `unknown_field` and `settings_invalid`
+- this change's `cli-contract` spec: `output_not_writable`
 - `015-add-crawl-store`: `crawl_not_found`
 - `040-add-rules`: `rule_not_found`
 

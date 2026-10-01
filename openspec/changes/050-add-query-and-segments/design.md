@@ -2,7 +2,9 @@
 
 See proposal.md (Why) for motivation. This change adds no tables. It reads what other changes write:
 
-- **`010-add-workspace-and-cli-contract`**: Workspace and `spider.toml` loading with its settings check, and the output contract. That contract covers the formats `json|jsonl|table|csv`, the CSV policy, `-o`, the paging envelope with `--fields` and opaque cursors, diagnostics, exit codes and `spider commands`.
+- **`010-add-workspace-and-cli-contract`**: Workspace and `spider.toml` loading with its settings check, and the output contract. That contract covers the formats `json|jsonl|table`, the output layer `spider.output`, the paging envelope with `--fields` and opaque cursors, the global flags, diagnostics, exit codes and `spider commands`. 010 is archived before this change starts.
+
+This change adds to that contract the `csv` format, the CSV policy, `--no-bom` and `-o` (D12, D13). They moved here from 010 by the maintainer's decision of 2026-10-01, and `specs/cli-contract/spec.md` holds their requirements.
 - **`015-add-crawl-store`**: the SQLAlchemy Core table objects, read-only connections, the `--crawl` option and crawl metadata.
 - **`020-add-crawl-core`**: the `urls` table and the Link types. **`022-add-fetch-policy`**: Redirect Chain hops, the `response_headers` table and Resource checks. **`030-add-page-data`**: `pages`, `links` and `page_sources`.
 - **`040-add-rules`**: the per-Crawl `rules` table, `issues`, `affected_urls` and the Health Score function.
@@ -21,7 +23,7 @@ The scenarios use the column names that 030 publishes (`address`, `status_code`,
 **Non-Goals:**
 - A general SQL dialect in `--where` (that is what `sql` is for), joins across views, and column-to-column comparisons (see Open Questions).
 - Storing Segment membership, or caching query results between invocations.
-- Output mechanics that 010 owns: the CSV policy, `-o` file replacement and diagnostics.
+- Output mechanics that 010 owns: the formats `json`, `jsonl` and `table`, the paging envelope and diagnostics.
 - MCP tool definitions (090) and HTML rendering (070).
 
 ## Decisions
@@ -74,20 +76,44 @@ The count, min, max and mean come from SQL aggregates, and the histogram from a 
 Rows are read with `fetchmany(limit + 1)` to set `truncated`, and BLOBs are mapped to `{"blob_bytes": n}`. For "no such column" and "no such table" errors, `details.suggestions` takes close matches from the schema metadata.
 - *Alternatives:* `mode=ro` alone still allows ATTACH and PRAGMA, which change connection state. Fully parsing SQL with sqlglot is heavy.
 
-### D10. Export streams rows through 010's serialisers
-One read transaction iterates the view's rows with `fetchmany(1000)` and hands each row to 010's row serialisers: NDJSON for `jsonl`, and the CSV policy for `csv`. Each row is written as soon as it is read, to `sys.stdout.buffer` or to 010's `-o` target. 010 owns `-o`: the file receives exactly the stdout bytes, it is replaced only on success, and a locked target is reported as `output_not_writable`.
+### D10. Export streams rows through the output layer's serialisers
+One read transaction iterates the view's rows with `fetchmany(1000)` and hands each row to the row serialisers of `spider.output`: 010's NDJSON for `jsonl`, and the CSV writer of D12 for `csv`. Each row is written as soon as it is read, to `sys.stdout.buffer` or to the `-o` target of D13: the file receives exactly the stdout bytes, it is replaced only on success, and a locked target is reported as `output_not_writable`.
 
 The `resources` view is one SQL query:
 - the `urls` rows that are targets of `image`, `css`, `javascript` or `media` Links and have no `pages` row
 - `type` from the first such Link, by source row and `ordinal`
 - `inlinks` from a count over `links`
-- *Alternatives:* pandas `to_csv` is a dependency and holds the data in memory. A CSV writer of our own here would duplicate 010's policy (G5).
+- *Alternatives:* pandas `to_csv` is a dependency and holds the data in memory. A second CSV writer for `export` would duplicate the policy of D12 (G5).
 
 ### D11. Output and error details local to query Commands
 - `page --html` adds `html` (the `page_sources` bytes decoded with their `encoding`) and `encoding` to the normal JSON, as G4 decided. `--headers` adds `headers` the same way, so agents get everything in one call and both flags combine.
 - The default `pages` fields are six compact columns, for token economy.
 - The default order of `issues <rule-id>` is by Unique Inlinks, descending, which matches the Report's top-N tables. The Report and the Command then show the same "most important first" Affected URLs.
-- The codes defined here, their exit-code classes, and `details.suggestions` / `details.accepted` are listed in the spec. The diagnostic shape, the exit-code table and the codes `usage_error`, `invalid_value`, `invalid_cursor`, `unknown_field`, `settings_invalid` and `output_not_writable` are 010's, and `rule_not_found` is 040's.
+- The codes defined here, their exit-code classes, and `details.suggestions` / `details.accepted` are listed in the spec. The diagnostic shape, the exit-code table and the codes `usage_error`, `invalid_value`, `invalid_cursor`, `unknown_field` and `settings_invalid` are 010's. `output_not_writable` and `output_written` belong to this change's `cli-contract` spec, and `rule_not_found` is 040's.
+
+### D12. The CSV policy
+
+Moved here from 010's D4, together with the `csv` format, by the maintainer's decision of 2026-10-01. The writer lives in 010's output layer `spider.output`, so 010's lint guard on `sys.stdout` still holds, and every CSV output goes through it.
+
+- **How rows are written:** `csv.writer` over `io.StringIO(newline="")` with `lineterminator="\r\n"`. The text is encoded as UTF-8, and `﻿` goes first unless `--no-bom` is given.
+  - The byte-order mark makes Excel read UTF-8 correctly, which matters to the people who read exports and Report CSV files.
+  - CSV parsers used by agents skip the mark or accept `--no-bom`.
+- **Cell rules:**
+  - Nested values become compact JSON, and null becomes an empty cell.
+  - Numbers are written unchanged, so negative numbers stay numbers.
+  - Text that starts with `=`, `+`, `-`, `@`, `\t` or `\r` gets a leading `'`. This is the OWASP guidance on CSV injection, and crawled text is untrusted.
+- **One implementation for everyone:** this change's `export` and `070`'s Report CSV files call the same writer, and neither redefines the policy (G5).
+- **Alternative:** no byte-order mark by default. Rejected by G5, because Excel users open these files directly.
+
+### D13. `-o` replaces the target atomically
+
+Moved from the `-o` bullet of 010's D3. 010's `Output` object holds the optional `-o` target, and `OutputOpt` and `NoBomOpt` are global flag types next to 010's `WorkspaceOpt` and `FormatOpt`.
+
+- **`-o`:**
+  - The output is written to a temporary file in the target folder, then moved into place with `os.replace`.
+  - On Windows, a `PermissionError` is retried for up to 1 s, because indexers and antivirus scanners briefly lock new files. After that it becomes `output_not_writable`.
+  - On success the runner writes the info line `output_written`.
+- *Alternative:* writing the target in place. A failing Command, or one stopped halfway, would leave a truncated file behind.
 
 ## Test seams
 
@@ -96,6 +122,8 @@ This change is tested at these seams from docs/testing.md:
 - **Pure-logic modules (4):** the `--where` tokenizer, parser and compiler. Table-driven tests evaluate compiled expressions against an in-memory SQLite table that the test defines, including a boolean column. Hypothesis property tests cover two things: any printable string either parses or fails as `invalid_where`, and `not not (e)` matches the same rows as `e`.
 - **Services and store API (2):** Query Service calls against real crawl stores in a temporary Workspace, with Segment definitions written to that Workspace's `spider.toml`.
 - **CLI (1):** Typer `CliRunner` checks JSON output, exit codes, the diagnostics on stderr and `-o`. Real subprocess runs on Windows check console UTF-8, non-ASCII arguments, `page --html` output and CSV line endings on pipes.
+  - The `csv` format, the CSV policy and `-o` are tested on 010's fixture app (`build_app(extra=…)` with the example list Command), before any query Command exists.
+  - On Windows, a locked `-o` target is held by a real helper process that opens the file without sharing. It is not a double.
 - **Store contract (6):** the `sql` refusals, limits and timeout. It is combined with the HTTP seam (**"3+6"**) where a scenario needs data that a real Crawl leaves behind: the cookie redaction seen through `page --headers`, and the summary contract on the fixture site.
 - **HTTP fixture site (3):** see "3+6" above.
 
@@ -107,7 +135,10 @@ This change introduces no new seam and uses no boundary doubles. It adds one tes
 - **A broken Segment stops every Command,** because Segments are checked when settings load. → This is intended (G6). `settings_invalid` names the key `segments.<name>` and the `--where` error, so the fix is obvious.
 - **Cost of query-time Segments.** At 500k Pages with regex-based Segments, a Python function runs per row per Segment, which takes seconds. → Membership is materialised once per `summary` call. `--segment` alone compiles to a single CASE, and simple comparisons stay native SQL.
 - **Catastrophic regex backtracking in `--where`.** Python `re` has no timeout. → The pattern is the user's own, on their own machine. This is documented, and `sql --timeout` does not apply here.
-- **A streamed export that fails midway** has already written some rows to stdout. → 010's rule for streams keeps the lines already written and ends with one error diagnostic and a non-zero exit, so consumers discard the partial output. With `-o`, 010 leaves the target untouched.
+- **A streamed export that fails midway** has already written some rows to stdout. → 010's rule for streams keeps the lines already written and ends with one error diagnostic and a non-zero exit, so consumers discard the partial output. With `-o`, D13 leaves the target untouched.
+- **The byte-order mark surprises Unix tools such as `cut` and `awk`.** → `--no-bom` turns it off, and `docs/cli.md` shows it next to every CSV example.
+- **Neutralisation changes text that starts with `-`,** such as `-webkit-` values, by adding `'`. → Accepted as the safe default for untrusted text. JSON and JSON Lines keep the raw value.
+- **Some network filesystems and indexers hold new files.** → `-o` retries its rename for up to 1 s before reporting `output_not_writable`.
 - **Column-name assumptions in the scenarios.** → The scenarios follow 030's published names, and are renamed if 030 changes them. The behaviour does not change.
 
 ## Migration Plan
