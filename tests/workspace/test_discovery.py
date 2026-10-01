@@ -32,3 +32,13 @@ def test_the_nearest_workspace_wins(temp_workspace: TempWorkspace) -> None:
     workspace = resolve_workspace(cwd=work / "shop" / "blog", flag=None, home=temp_workspace.home)
 
     assert workspace.root == work / "shop"
+
+
+def test_a_settings_file_alone_marks_a_workspace(temp_workspace: TempWorkspace) -> None:
+    shop = temp_workspace.home / "work" / "shop"
+    (shop / "blog").mkdir(parents=True)
+    (shop / "spider.toml").write_text("", encoding="utf-8")
+
+    workspace = resolve_workspace(cwd=shop / "blog", flag=None, home=temp_workspace.home)
+
+    assert workspace.root == shop
