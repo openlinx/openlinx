@@ -1,5 +1,6 @@
 """UTF-8 output on every OS (010-add-workspace-and-cli-contract, cli-contract)."""
 
+import os
 import sys
 
 import pytest
@@ -24,5 +25,15 @@ def test_piped_output_on_windows(temp_workspace: TempWorkspace) -> None:
     folder = temp_workspace.root / "Проверка"
 
     stdout = run_cli_process("init", "--workspace", str(folder)).stdout
+
+    assert CHECK_IN_UTF8 in stdout
+
+
+def test_pythonioencoding_does_not_change_the_output(temp_workspace: TempWorkspace) -> None:
+    folder = temp_workspace.root / "Проверка"
+
+    stdout = run_cli_process(
+        "init", "--workspace", str(folder), env={**os.environ, "PYTHONIOENCODING": "cp1252"}
+    ).stdout
 
     assert CHECK_IN_UTF8 in stdout
