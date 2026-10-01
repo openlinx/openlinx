@@ -1,10 +1,12 @@
 ## Purpose
 
 Defines how every Command talks to agents and people:
-- output formats and encoding, the single CSV policy, and writing output to a file
+- output formats and encoding
 - paging of lists
 - progress events and diagnostics on stderr, and partial results
 - exit codes, the global flags, and the `spider commands` self-description
+
+The `csv` format, the CSV policy, `--no-bom` and `-o/--output` are defined by `050-add-query-and-segments`.
 
 Conventions used in the scenarios:
 - `H` is the absolute path of the home folder.
@@ -34,19 +36,19 @@ Without `--format`, a Command SHALL write its result to stdout as one compact JS
 
 ### Requirement: Output formats
 
-`--format` SHALL accept `json`, `jsonl`, `table` and `csv`. Each Command SHALL support the formats that `spider commands` lists for it:
-- document Commands: `json` (the default), `table` and `csv`
-- list Commands: `json` (the default), `jsonl`, `table` and `csv`
-- rows Commands: `jsonl` (the default) and `csv`
+`--format` SHALL accept `json`, `jsonl` and `table`. Each Command SHALL support the formats that `spider commands` lists for it:
+- document Commands: `json` (the default) and `table`
+- list Commands: `json` (the default), `jsonl` and `table`
+- rows Commands: `jsonl` (the default)
 
 `table` is for people, and its layout is not a contract.
 
 A format that is unknown, or that the Command does not support, SHALL fail with `invalid_value`, and the hint SHALL list the Command's formats. Errors SHALL stay JSON, whatever `--format` says.
 
-With `jsonl`, `table` or `csv`, when more items exist than were printed, the Command SHALL write the info line `more_items` to stderr, with `details.total` and `details.next_cursor`.
+With `jsonl` or `table`, when more items exist than were printed, the Command SHALL write the info line `more_items` to stderr, with `details.total` and `details.next_cursor`.
 
 #### Scenario: Unsupported format
-- **WHEN** `spider commands --format csv` runs
+- **WHEN** `spider commands --format jsonl` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value` and a hint that contains `json` and `table`
 
 #### Scenario: Unknown format
@@ -62,7 +64,7 @@ With `jsonl`, `table` or `csv`, when more items exist than were printed, the Com
 - **THEN** the last line of stderr parses as a JSON object with `"code":"workspace_not_writable"`
 
 #### Scenario: More items notice
-- **WHEN** the example list Command runs with `--format csv --limit 2`
+- **WHEN** the example list Command runs with `--format jsonl --limit 2`
 - **THEN** stderr has a line with `"level":"info"` and `"code":"more_items"`, whose `details.total` is `5` and whose `details.next_cursor` is a non-empty string
 
 ### Requirement: JSON Lines
@@ -79,47 +81,6 @@ With `jsonl`, `table` or `csv`, when more items exist than were printed, the Com
 
 #### Scenario: Documents have no JSON Lines
 - **WHEN** `spider init --format jsonl` runs
-- **THEN** the exit code is 2, and the error has the code `invalid_value`
-
-### Requirement: CSV policy
-
-Every CSV output SHALL follow one policy:
-- **Encoding:** UTF-8, starting with a byte-order mark. `--no-bom` leaves the byte-order mark out.
-- **Layout:** RFC 4180, with a header row of field names. There is one row per item or row, or one row for a document, and `\r\n` after every row.
-- **Values:**
-  - Nested values are written as compact JSON.
-  - Null is written as an empty cell.
-  - Numbers are written unchanged.
-- **Formula neutralisation:** a text value that starts with `=`, `+`, `-`, `@`, a tab or a carriage return SHALL be written with a leading `'`.
-
-`--no-bom` given without `--format csv` SHALL fail with `invalid_value`.
-
-#### Scenario: Byte-order mark and CRLF
-- **WHEN** the example list Command runs with `--format csv`
-- **THEN** stdout is exactly the bytes `EF BB BF` followed by `n\r\n1\r\n2\r\n3\r\n4\r\n5\r\n`
-
-#### Scenario: Without the byte-order mark
-- **WHEN** the example list Command runs with `--format csv --no-bom`
-- **THEN** stdout is exactly `n\r\n1\r\n2\r\n3\r\n4\r\n5\r\n`
-
-#### Scenario: Formula-like text is neutralised
-- **WHEN** a list Command whose items are `{"v":"=1+1"}`, `{"v":"+1"}`, `{"v":"-1"}`, `{"v":"@a"}` and `{"v":"plain"}` runs with `--format csv --no-bom`
-- **THEN** stdout is exactly `v\r\n'=1+1\r\n'+1\r\n'-1\r\n'@a\r\nplain\r\n`
-
-#### Scenario: Numbers are unchanged
-- **WHEN** a list Command whose only item is `{"v":-5}` runs with `--format csv --no-bom`
-- **THEN** stdout is exactly `v\r\n-5\r\n`
-
-#### Scenario: Nested value and null
-- **WHEN** a list Command whose only item is `{"a":[1,2],"b":null}` runs with `--format csv --no-bom`
-- **THEN** stdout is exactly `a,b\r\n"[1,2]",\r\n`
-
-#### Scenario: A document is one CSV row
-- **WHEN** `spider init --format csv --no-bom` runs in the empty folder `H/work/shop`
-- **THEN** stdout has exactly two rows, and the first is `workspace,data_dir,settings_file,global,created`
-
-#### Scenario: The byte-order mark flag needs CSV
-- **WHEN** `spider init --no-bom` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value`
 
 ### Requirement: UTF-8 output on every OS
@@ -141,44 +102,6 @@ stdout and stderr SHALL carry UTF-8 bytes on every OS, whatever the console code
 #### Scenario: UTF-8 on stderr
 - **WHEN** `spider init --workspace H/work/Проверка.txt/site` runs as a real process, and `H/work/Проверка.txt` is a file
 - **THEN** stderr contains the bytes `D0 9F D1 80 D0 BE D0 B2 D0 B5 D1 80 D0 BA D0 B0`
-
-### Requirement: Writing output to a file with -o
-
-`-o/--output <file>` SHALL write into the file exactly the bytes the Command would write to stdout, and SHALL write nothing to stdout.
-- The Command SHALL report the file with the info line `output_written`, whose `details.path` is the file's absolute path.
-- A relative path is taken from the current folder.
-- Missing parent folders SHALL be created.
-- An existing file SHALL be replaced, but only when the Command succeeds. When the Command fails, an existing file SHALL keep its content and no new file SHALL appear.
-
-A target that cannot be written SHALL fail with `output_not_writable`, and the message SHALL name the path. This includes a file that another program holds open.
-
-#### Scenario: Output goes to the file
-- **WHEN** the example list Command runs with `--limit 5 -o out.json` in `H/work`, where `out.json` contains `old`
-- **THEN** `H/work/out.json` contains exactly `{"total":5,"items":[{"n":1},{"n":2},{"n":3},{"n":4},{"n":5}],"next_cursor":null}` followed by `\n`
-
-#### Scenario: Nothing on stdout with -o
-- **WHEN** the example list Command runs with `-o out.json` in `H/work`
-- **THEN** stdout is empty
-
-#### Scenario: The written file is reported
-- **WHEN** the example list Command runs with `-o out.json` in `H/work`
-- **THEN** stderr has a line with `"level":"info"`, `"code":"output_written"` and `"details":{"path":"H/work/out.json"}`
-
-#### Scenario: Parent folders are created
-- **WHEN** `spider init -o H/work/new/deeper/init.json` runs in the empty folder `H/work/shop`, and `H/work/new` does not exist
-- **THEN** `H/work/new/deeper/init.json` exists
-
-#### Scenario: A failing Command keeps the old file
-- **WHEN** `spider init --workspace H/work/notes.txt/site -o out.json` runs in `H/work`, where `notes.txt` is a file and `out.json` contains `old`
-- **THEN** `H/work/out.json` still contains exactly `old`
-
-#### Scenario: A failing Command creates no file
-- **WHEN** `spider init --workspace H/work/notes.txt/site -o fresh.json` runs in `H/work`, where `notes.txt` is a file
-- **THEN** `H/work/fresh.json` does not exist
-
-#### Scenario: Target held open on Windows
-- **WHEN** on Windows another process holds `H\work\out.json` open without sharing, as Excel does, and `spider commands -o H\work\out.json` runs
-- **THEN** the exit code is 7, and the error has the code `output_not_writable` and a message that contains `H\work\out.json`
 
 ### Requirement: Paging envelope for list Commands
 
@@ -369,7 +292,7 @@ Warnings and info lines SHALL NOT change the exit code.
 
 #### Scenario: Error codes of this change
 - **WHEN** `spider commands` runs
-- **THEN** its `diagnostics` give these exit codes: `usage_error` 2, `invalid_value` 2, `unknown_field` 2, `invalid_cursor` 2, `settings_invalid` 3, `workspace_not_found` 4, `workspace_not_writable` 7, `output_not_writable` 7 and `internal_error` 70
+- **THEN** its `diagnostics` give these exit codes: `usage_error` 2, `invalid_value` 2, `unknown_field` 2, `invalid_cursor` 2, `settings_invalid` 3, `workspace_not_found` 4, `workspace_not_writable` 7 and `internal_error` 70
 
 #### Scenario: Naming rule for input errors
 - **WHEN** `spider commands` runs
@@ -381,7 +304,7 @@ Warnings and info lines SHALL NOT change the exit code.
 
 ### Requirement: Global flags
 
-`--workspace <dir>`, `--crawl <ref>`, `--format <format>`, `--no-bom` and `-o/--output <file>` SHALL mean the same on every Command that accepts them. They SHALL be given after the Command name.
+`--workspace <dir>`, `--crawl <ref>` and `--format <format>` SHALL mean the same on every Command that accepts them. They SHALL be given after the Command name.
 - A Command SHALL reject a global flag it does not use with `usage_error`.
 - A global flag given before the Command name SHALL fail with `usage_error`, whose hint says to put it after the Command name.
 
@@ -401,7 +324,7 @@ Warnings and info lines SHALL NOT change the exit code.
 
 #### Scenario: Global flags of init
 - **WHEN** `spider commands` runs
-- **THEN** the options of the `init` entry include `--workspace`, `--format`, `--no-bom` and `--output`, each with `"global":true`
+- **THEN** the options of the `init` entry include `--workspace` and `--format`, each with `"global":true`
 
 ### Requirement: Self-description with spider commands
 
@@ -433,11 +356,11 @@ The output SHALL be identical on every OS for the same version, and SHALL NOT ne
 
 #### Scenario: Entry of a document Command
 - **WHEN** `spider commands` runs
-- **THEN** the `init` entry has `"output":"document"`, `"events":false`, `"formats":["json","table","csv"]` and `"fields":null`
+- **THEN** the `init` entry has `"output":"document"`, `"events":false`, `"formats":["json","table"]` and `"fields":null`
 
 #### Scenario: Entry of a list Command
 - **WHEN** `spider commands` runs in a tool that includes the example list Command
-- **THEN** its entry has `"output":"list"`, `"formats":["json","jsonl","table","csv"]` and `"fields":{"available":["n","sq"],"default":["n"]}`
+- **THEN** its entry has `"output":"list"`, `"formats":["json","jsonl","table"]` and `"fields":{"available":["n","sq"],"default":["n"]}`
 
 #### Scenario: Option details
 - **WHEN** `spider commands` runs

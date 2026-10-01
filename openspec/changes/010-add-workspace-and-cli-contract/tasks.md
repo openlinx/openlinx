@@ -104,7 +104,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 4.14 Docs: add the `spider.toml` section to `docs/workspace.md`: registered tables, precedence, validation and errors, and the template.
 - [ ] 4.15 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
-## 5. Formats, JSON Lines and the CSV policy (seam 1, fixture app)
+## 5. Formats and JSON Lines (seam 1, fixture app)
 
 - [ ] 5.1 Drive "Compact document" (cli-contract). Green:
   - the fixture app with the example list Command
@@ -115,14 +115,8 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 5.5 Drive "Items as lines" (cli-contract). Green: `jsonl` for lists.
 - [ ] 5.6 Drive "Rows by default" (cli-contract). Green: the `rows` output kind, written and flushed per row.
 - [ ] 5.7 Drive "Documents have no JSON Lines" (cli-contract).
-- [ ] 5.8 Drive "Byte-order mark and CRLF" (cli-contract). Green: the CSV writer of design D4.
-- [ ] 5.9 Drive "Without the byte-order mark" and "The byte-order mark flag needs CSV" (cli-contract), a trivial pair. Green: `NoBomOpt`.
-- [ ] 5.10 Drive "Formula-like text is neutralised" (cli-contract).
-- [ ] 5.11 Drive "Numbers are unchanged" (cli-contract).
-- [ ] 5.12 Drive "Nested value and null" (cli-contract).
-- [ ] 5.13 Drive "A document is one CSV row" (cli-contract).
-- [ ] 5.14 Docs: add the formats, JSON Lines and the CSV policy to `docs/cli.md`, with a `--no-bom` example.
-- [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [ ] 5.8 Docs: add the formats and JSON Lines to `docs/cli.md`.
+- [ ] 5.9 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Paging, fields and cursors (seam 1, example list Command)
 
@@ -139,7 +133,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 6.11 Drive "A different limit continues the list" (cli-contract).
 - [ ] 6.12 Drive "Cursor from a different request" (cli-contract). Green: the fingerprint and `invalid_cursor`.
 - [ ] 6.13 Drive "Garbage cursor" (cli-contract).
-- [ ] 6.14 Drive "More items notice" (cli-contract). Green: the info line `more_items` for `jsonl`, `table` and `csv`.
+- [ ] 6.14 Drive "More items notice" (cli-contract). Green: the info line `more_items` for `jsonl` and `table`.
 - [ ] 6.15 Docs: add paging, `--fields` and cursors to `docs/cli.md`.
 - [ ] 6.16 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
@@ -156,32 +150,19 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 7.9 Docs: add progress events, partial results and diagnostics inside results to `docs/cli.md`.
 - [ ] 7.10 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
-## 8. Output files (seam 1)
+## 8. Global flags and the complete self-description (seam 1)
 
-- [ ] 8.1 Drive "Output goes to the file" (cli-contract). Green: `OutputOpt`, written to a temporary file and then moved into place with `os.replace`.
-- [ ] 8.2 Drive "Nothing on stdout with -o" (cli-contract).
-- [ ] 8.3 Drive "The written file is reported" (cli-contract). Green: the info line `output_written`.
-- [ ] 8.4 Drive "Parent folders are created" (cli-contract).
-- [ ] 8.5 Drive "A failing Command keeps the old file" and "A failing Command creates no file" (cli-contract), a trivial pair.
-- [ ] 8.6 Drive "Target held open on Windows" (cli-contract) with a real process.
-  - A Windows-only helper process holds the file open without sharing.
-  - Green: `output_not_writable` with exit code 7, after up to 1 s of retries.
-- [ ] 8.7 Docs: add `-o` to `docs/cli.md`, with a PowerShell example.
-- [ ] 8.8 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
-
-## 9. Global flags and the complete self-description (seam 1)
-
-- [ ] 9.1 Drive "Before the Command name" (cli-contract). Green: the `argv` check with its hint.
-- [ ] 9.2 **Guard:** "After the Command name" and "A flag the Command does not use" (cli-contract).
-- [ ] 9.3 Drive "Global flags of init" (cli-contract). Green: `global` in the option metadata.
-- [ ] 9.4 Drive "Entry of a document Command" (cli-contract). Green: `output`, `events`, `formats` and `fields` in the entries.
-- [ ] 9.5 Drive "Entry of a list Command" (cli-contract), with the fixture app.
-- [ ] 9.6 Drive "Option details" (cli-contract).
-- [ ] 9.7 Drive "Error codes of this change" and "Naming rule for input errors" (cli-contract), a trivial pair. Green: register every code of this change.
-- [ ] 9.8 Drive "The proxy variables are the one exception" (workspace). Green: the `environment` key of `spider commands`, which lists the proxy family that `022` honours.
-- [ ] 9.9 **Guard:** "Detection signals change nothing" (workspace), with `CODEX_SANDBOX_NETWORK_DISABLED=1` set for one of the two runs.
-- [ ] 9.10 Drive "Same description on every OS" (cli-contract). Compare the `init` and `commands` entries with hand-written expected JSON in `tests/contract/commands/`, on every OS.
-- [ ] 9.11 Docs:
+- [ ] 8.1 Drive "Before the Command name" (cli-contract). Green: the `argv` check with its hint.
+- [ ] 8.2 **Guard:** "After the Command name" and "A flag the Command does not use" (cli-contract).
+- [ ] 8.3 Drive "Global flags of init" (cli-contract). Green: `global` in the option metadata.
+- [ ] 8.4 Drive "Entry of a document Command" (cli-contract). Green: `output`, `events`, `formats` and `fields` in the entries.
+- [ ] 8.5 Drive "Entry of a list Command" (cli-contract), with the fixture app.
+- [ ] 8.6 Drive "Option details" (cli-contract).
+- [ ] 8.7 Drive "Error codes of this change" and "Naming rule for input errors" (cli-contract), a trivial pair. Green: register every code of this change.
+- [ ] 8.8 Drive "The proxy variables are the one exception" (workspace). Green: the `environment` key of `spider commands`, which lists the proxy family that `022` honours.
+- [ ] 8.9 **Guard:** "Detection signals change nothing" (workspace), with `CODEX_SANDBOX_NETWORK_DISABLED=1` set for one of the two runs.
+- [ ] 8.10 Drive "Same description on every OS" (cli-contract). Compare the `init` and `commands` entries with hand-written expected JSON in `tests/contract/commands/`, on every OS.
+- [ ] 8.11 Docs:
   - Add "Using spider" (`init`, `commands`) to `README.md`.
   - Add the output layer and the settings registry to `docs/architecture.md`.
-- [ ] 9.12 Review: run the code-review skill on group 9's commits and on the whole change, then refactor with the whole suite green.
+- [ ] 8.12 Review: run the code-review skill on group 8's commits and on the whole change, then refactor with the whole suite green.

@@ -67,29 +67,24 @@
 
 ### D3. Output layer (`spider.output`)
 
-- **One `Output` object per invocation.** It holds the format, the optional `-o` target, and byte sinks: `sys.stdout.buffer` and `sys.stderr.buffer`. Nothing is written through the text layer. With PEP 528, the Windows console's raw layer accepts UTF-8 bytes, so the console display is correct too.
+- **One `Output` object per invocation.** It holds the format and the byte sinks: `sys.stdout.buffer` and `sys.stderr.buffer`. Nothing is written through the text layer. With PEP 528, the Windows console's raw layer accepts UTF-8 bytes, so the console display is correct too.
 - **Output kinds**, declared per Command in `@command_meta`:
 
   | Kind | Result |
   |---|---|
   | `document` | one object |
-  | `list` | the paging envelope, or items as rows with `jsonl`, `csv` and `table` |
+  | `list` | the paging envelope, or items as rows with `jsonl` and `table` |
   | `rows` | a data stream, `jsonl` by default |
 
   `events=True` marks a Command that reports progress.
 - **Rendering by format:**
   - **JSON and JSON Lines:** `orjson.dumps` (compact, UTF-8) plus `\n`.
-  - **CSV:** see D4.
   - **Table:** rich `Console(file=StringIO(), color_system=None, width=…)` rendered to text. The width is the terminal width on a TTY, otherwise 120.
 - **When bytes are written:**
   - Documents and lists are rendered fully and written only when the Command ends. That gives "nothing on stdout when a Command fails".
   - Rows are written and flushed row by row.
   - **Partial results (G2):** a Command returns `Outcome(result, error)`. The runner writes the result, then the error line, then exits with the error's exit code.
 - **Progress events (G1):** `Output.event(name, data)` writes `{"event","ts","data"}` to stderr and flushes. The time comes from the injected `Clock`, formatted `YYYY-MM-DDTHH:MM:SS.sssZ`. stdout never carries events.
-- **`-o`:**
-  - The output is written to a temporary file in the target folder, then moved into place with `os.replace`.
-  - On Windows, a `PermissionError` is retried for up to 1 s, because indexers and antivirus scanners briefly lock new files. After that it becomes `output_not_writable`.
-  - On success the runner writes the info line `output_written`.
 - **Lint guard:** ruff `banned-api` forbids `sys.stdout`, `sys.stderr`, `print`, `typer.echo` and `click.echo` outside `spider.output`.
 - **Alternatives:**
   - **`sys.stdout.reconfigure(encoding="utf-8")`.** It leaves `\r\n` translation and third-party writes as risks.
@@ -98,15 +93,7 @@
 
 ### D4. The CSV policy
 
-- **How rows are written:** `csv.writer` over `io.StringIO(newline="")` with `lineterminator="\r\n"`. The text is encoded as UTF-8, and `﻿` goes first unless `--no-bom` is given.
-  - The byte-order mark makes Excel read UTF-8 correctly, which matters to the people who read exports and Report CSV files.
-  - CSV parsers used by agents skip the mark or accept `--no-bom`.
-- **Cell rules:**
-  - Nested values become compact JSON, and null becomes an empty cell.
-  - Numbers are written unchanged, so negative numbers stay numbers.
-  - Text that starts with `=`, `+`, `-`, `@`, `\t` or `\r` gets a leading `'`. This is the OWASP guidance on CSV injection, and crawled text is untrusted.
-- **One implementation for everyone:** `050`'s `export` and `070`'s Report CSV files call the same writer, and neither redefines the policy (G5).
-- **Alternative:** no byte-order mark by default. Rejected by G5, because Excel users open these files directly.
+Moved to `050-add-query-and-segments`, together with the `csv` format, `--no-bom` and `-o`, as decided by the maintainer on 2026-10-01.
 
 ### D5. Errors, the diagnostic registry and exit codes
 
@@ -152,7 +139,7 @@
   - Options carry `global`, `setting` and `secret` in their Typer `metadata`.
 - **Defaults** are printed as JSON values. Defaults that depend on the OS are symbolic (for example `null` plus a description that says `~/.spider`), so the output is identical everywhere.
 - **Global flags** are defined once, as reusable annotated option types that each Command adds after its name:
-  - this change builds `WorkspaceOpt`, `FormatOpt`, `NoBomOpt` and `OutputOpt`
+  - this change builds `WorkspaceOpt` and `FormatOpt`
   - `015` adds `CrawlOpt`
 - **Alternative:** root-level Click options. They must come *before* the Command, while agents and examples write them after. Accepting both positions is a possible later relaxation (Open Questions).
 
@@ -163,7 +150,6 @@
 - **What tests add:** the tests build a fresh app with contract fixture Commands and the `example` settings table, and run it at the CLI seam through `run_cli(..., app=…)`:
   - the example list Command (items `n`/`sq`, with `--odd`)
   - a 60-item list
-  - lists with the CSV edge values
   - a rows Command
   - a progress-reporting Command
   - a partial-result Command
@@ -186,7 +172,6 @@ Seams from docs/testing.md used by this change:
     - UTF-8 bytes
     - `PYTHONIOENCODING`
     - no `\r`
-    - on Windows, a locked `-o` target held by a helper process that opens the file without sharing
 - **Services and store API (2):** the Workspace API: `resolve_workspace`, resolving settings with flag overrides, and the environment-variable scenarios.
 - **Pure-logic modules (4):** the event-line encoder with `FakeClock`.
 
@@ -202,13 +187,6 @@ No new seam is introduced.
 - **Fixture Commands could drift from how real Commands use the contract.**
   - They use the same `@command_meta` and `Output` API.
   - `015`'s `spider schema` and every later Command re-check the contract with real data.
-- **The byte-order mark surprises Unix tools such as `cut` and `awk`.**
-  - `--no-bom` turns it off.
-  - `docs/cli.md` shows it next to every CSV example.
-- **Neutralisation changes text that starts with `-`,** such as `-webkit-` values, by adding `'`.
-  - Accepted as the safe default for untrusted text. JSON and JSON Lines keep the raw value.
-- **Some network filesystems and indexers hold new files.**
-  - `-o` retries its rename for up to 1 s before reporting `output_not_writable`.
 - **The discovery search stops at the home folder, so a Workspace above home is never found.**
   - Accepted. `--workspace` covers that case.
 
@@ -230,7 +208,7 @@ Nothing to migrate: this change is greenfield.
   - A setting that mirrors a flag lives in `[<command>]` under the flag's name, with `_` for `-`. Mark it `secret` (`015` redacts it).
   - The first change that adds a path-valued setting also specifies that relative paths are taken from `spider.toml`'s folder.
 - **Paging:** list Commands use the codec from D6. SQL-backed lists (`050`) add the crawl id and their filters to the fingerprint, and use `unknown_field` for `--fields` and `unknown_column` for `--where` and `--sort`.
-- **CSV:** every CSV writer goes through D4. That includes `050`'s export and `070`'s Report files.
+- **CSV:** every CSV writer goes through `050`'s policy. That includes `050`'s export and `070`'s Report files.
 
 ## Open Questions
 
