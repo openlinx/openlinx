@@ -53,3 +53,11 @@ def test_output_flags_have_no_settings_key(shop: Path) -> None:
         "settings_invalid",
         "output",
     )
+
+
+def test_toml_syntax_error(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[example\n")
+
+    first = run_cli("init", app=example_app()).stderr_json_lines()[-1]["details"]["errors"][0]
+
+    assert (first["key"], first["line"]) == (None, 1)

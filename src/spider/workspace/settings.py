@@ -1,6 +1,8 @@
 """Resolved settings: spider.toml and flags (design D2 of 010-add-workspace-and-cli-contract)."""
 
 import difflib
+import re
+import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +41,15 @@ def load_settings(
     values: dict[str, Any] = dict(flags or {})
     try:
         return Settings(root_model(**values))
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigError(
+            "settings_invalid",
+            f"The settings file {workspace.settings_file} is not valid TOML.",
+            details={
+                "file": str(workspace.settings_file),
+                "errors": [{"key": None, "message": str(error), "line": _line(error)}],
+            },
+        ) from error
     except ValidationError as error:
         raise ConfigError(
             "settings_invalid",
@@ -55,6 +66,15 @@ def load_settings(
                 ],
             },
         ) from error
+
+
+def _line(error: tomllib.TOMLDecodeError) -> int | None:
+    # Python 3.14 added lineno; 3.12 and 3.13 only put it in the message.
+    lineno: int | None = getattr(error, "lineno", None)
+    if lineno is not None:
+        return lineno
+    match = re.search(r"at line (\d+)", str(error))
+    return int(match.group(1)) if match else None
 
 
 def _suggestion(error: ValidationError, root_model: type[BaseModel]) -> str | None:
