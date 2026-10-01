@@ -53,3 +53,11 @@ def test_data_folder_ignores_its_own_contents(shop: Path) -> None:
     assert (shop / ".spider" / ".gitignore").read_bytes() == (
         b"# Created by spider: crawl data is not committed.\n*\n"
     )
+
+
+def test_second_run_creates_nothing(shop: Path) -> None:
+    run_cli("init")
+
+    result = run_cli("init")
+
+    assert (result.exit_code, result.json()["created"]) == (0, [])

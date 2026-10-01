@@ -12,10 +12,20 @@ PLACEHOLDER_SETTINGS = (
 
 
 def create_workspace(workspace: Workspace) -> list[Path]:
-    gitignore = workspace.data_dir / ".gitignore"
-    crawls = workspace.data_dir / "crawls"
-    workspace.data_dir.mkdir()
-    gitignore.write_bytes(GITIGNORE.encode())
-    crawls.mkdir()
-    workspace.settings_file.write_bytes(PLACEHOLDER_SETTINGS.encode())
-    return [workspace.data_dir, gitignore, crawls, workspace.settings_file]
+    entries: list[tuple[Path, str | None]] = [
+        (workspace.data_dir, None),
+        (workspace.data_dir / ".gitignore", GITIGNORE),
+        (workspace.data_dir / "crawls", None),
+        (workspace.settings_file, PLACEHOLDER_SETTINGS),
+    ]
+    created: list[Path] = []
+    for path, content in entries:
+        if path.exists():
+            continue
+        if content is None:
+            path.mkdir()
+        else:
+            with path.open("xb") as file:
+                file.write(content.encode())
+        created.append(path)
+    return created
