@@ -38,37 +38,40 @@ def load_settings(
     root_model = create_model(
         "SpiderSettings", __base__=_sources(workspace.settings_file), **fields
     )
+    settings_file = workspace.settings_file
+    if settings_file.exists() and not settings_file.is_file():
+        raise _invalid(settings_file, "is not a file", [{"key": None, "message": "Not a file."}])
     values: dict[str, Any] = dict(flags or {})
     try:
         return Settings(root_model(**values))
+    except UnicodeDecodeError as error:
+        problem: dict[str, Any] = {"key": None, "message": "The file is not UTF-8.", "line": None}
+        raise _invalid(settings_file, "is not UTF-8", [problem]) from error
     except tomllib.TOMLDecodeError as error:
-        raise ConfigError(
-            "settings_invalid",
-            f"The settings file {workspace.settings_file} is not valid TOML.",
-            details={
-                "file": str(workspace.settings_file),
-                "errors": [{"key": None, "message": str(error), "line": _line(error)}],
-            },
-        ) from error
+        problem = {"key": None, "message": str(error), "line": _line(error)}
+        raise _invalid(settings_file, "is not valid TOML", [problem]) from error
     except ValidationError as error:
-        raise ConfigError(
-            "settings_invalid",
-            f"The settings file {workspace.settings_file} is invalid.",
+        problems: list[dict[str, Any]] = [
+            {"key": ".".join(str(part) for part in problem["loc"]), "message": problem["msg"]}
+            for problem in error.errors()
+        ]
+        raise _invalid(
+            settings_file,
+            "is invalid",
+            _in_file_order(problems, settings_file),
             hint=_suggestion(error, root_model),
-            details={
-                "file": str(workspace.settings_file),
-                "errors": _in_file_order(
-                    [
-                        {
-                            "key": ".".join(str(part) for part in problem["loc"]),
-                            "message": problem["msg"],
-                        }
-                        for problem in error.errors()
-                    ],
-                    workspace.settings_file,
-                ),
-            },
         ) from error
+
+
+def _invalid(
+    settings_file: Path, what: str, errors: list[dict[str, Any]], hint: str | None = None
+) -> ConfigError:
+    return ConfigError(
+        "settings_invalid",
+        f"The settings file {settings_file} {what}.",
+        hint=hint,
+        details={"file": str(settings_file), "errors": errors},
+    )
 
 
 def _in_file_order(errors: list[dict[str, Any]], settings_file: Path) -> list[dict[str, Any]]:

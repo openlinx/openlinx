@@ -26,6 +26,7 @@ def init(
     invocation: Invocation = ctx.obj
     home = Path.home()
     workspace = target_workspace(cwd=Path.cwd(), flag=workspace_dir, home=home)
+    # Loaded only to validate spider.toml, before anything is created.
     load_settings(workspace, invocation.settings_tables)
     created = create_workspace(workspace, settings_template(invocation.settings_tables))
     parent = enclosing_workspace(workspace, home)

@@ -83,7 +83,7 @@ Diagnostics on stderr:
 
 ### Tables and precedence
 
-Settings are grouped in tables. Each change that adds settings registers its own table, for example `[store]` from `015-add-crawl-store`. A setting that mirrors a flag lives in the table named after its Command, under the flag's long name with `-` written as `_`.
+Settings are grouped in tables. Each change that adds settings registers its own table, for example `[store]` from `015-add-crawl-store`. A table registers only if it forbids unknown keys and gives every setting a one-line description and a default that TOML can write: a string, number, boolean or list of those. The template and the error hints depend on that. A setting that mirrors a flag lives in the table named after its Command, under the flag's long name with `-` written as `_`.
 
 Each setting takes the first value it finds:
 1. its flag on the command line

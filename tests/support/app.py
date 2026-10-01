@@ -1,4 +1,4 @@
-"""The fixture app: the real app plus what the scenarios register (design D8 of 010)."""
+"""The fixture app the scenarios use (design D8 of 010-add-workspace-and-cli-contract)."""
 
 import typer
 

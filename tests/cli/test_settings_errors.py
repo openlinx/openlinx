@@ -2,19 +2,8 @@
 
 from pathlib import Path
 
-import pytest
-
 from tests.support.app import example_app
 from tests.support.cli import run_cli
-from tests.support.workspace import TempWorkspace
-
-
-@pytest.fixture
-def shop(temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch) -> Path:
-    folder = temp_workspace.root / "shop"
-    folder.mkdir()
-    monkeypatch.chdir(folder)
-    return folder
 
 
 def test_invalid_value(shop: Path) -> None:
@@ -91,3 +80,19 @@ def test_commands_without_a_workspace_ignore_the_settings_file(shop: Path) -> No
     (shop / "spider.toml").write_bytes(b"[example\n")
 
     assert run_cli("commands", app=example_app()).exit_code == 0
+
+
+def test_a_settings_file_that_is_not_utf8_is_invalid(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b'[example]\nlevel = "\xff"\n')
+
+    result = run_cli("init", app=example_app())
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (3, "settings_invalid")
+
+
+def test_a_settings_file_that_is_a_folder_is_invalid_and_nothing_is_created(shop: Path) -> None:
+    (shop / "spider.toml").mkdir()
+
+    result = run_cli("init", app=example_app())
+
+    assert (result.exit_code, (shop / ".spider").exists()) == (3, False)

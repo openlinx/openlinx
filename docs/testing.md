@@ -58,7 +58,7 @@ Never replace our own modules or our own CLI with a double. Installer tests use 
 
 Shared test code lives in `tests/support/`. `tests/` is a package, so tests import helpers as `from tests.support.cli import run_cli`.
 
-- **`run_cli(*args, input=None)`** (`tests/support/cli.py`): runs the Typer app in process with Typer's `CliRunner`. It returns `CliResult(exit_code, stdout, stderr)`, where stdout and stderr are the bytes exactly as written. `result.json()` parses stdout as one JSON document, and `result.stderr_json_lines()` parses each line of stderr as JSON.
+- **`run_cli(*args, input=None, app=None)`** (`tests/support/cli.py`): runs the Typer app in process with Typer's `CliRunner`: `build_app()`, or the `app` given. It returns `CliResult(exit_code, stdout, stderr)`, where stdout and stderr are the bytes exactly as written. `result.json()` parses stdout as one JSON document, and `result.stderr_json_lines()` parses each line of stderr as JSON.
 - **`run_cli_process(*args, env=None)`** (same module): runs `sys.executable -m spider` as a real process and returns the same `CliResult`. Use it for console encoding, line endings on pipes and process behaviour; use `run_cli` for everything else. Coverage counts these runs too.
 - **Isolation plugin** (`tests/support/isolation.py`, loaded by `tests/conftest.py`): three autouse fixtures that every test gets, listed below. A `pytester` run loads them with `-p tests.support.isolation`.
 - **Home isolation** (`isolated_home`): every test runs with `HOME` and `USERPROFILE` pointing at `tmp_path / "home"`, so `Path.home()` never reaches the real `~/.spider/`. Child processes that inherit the environment see the same home. Git sees it too and runs without the developer's global `.gitconfig`, so a test that runs git passes what it needs with `-c`, as `tests/test_line_endings.py` does for `safe.directory`. Request `isolated_home` if a test needs the path.
@@ -74,6 +74,7 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
   - `server = fixture_site(site)` starts it on `127.0.0.1` and returns a `ServerHandle` with `base_url`, `url(path)` and the request log. `module_fixture_site` is the variant for hypothesis tests.
 - **Dependency allowlist** (`tests/dependency_allowlist.txt`, checked by `tests/test_dependencies.py`): every runtime dependency, transitive ones included, with a reason. A second test fails on any telemetry or LLM SDK, allowlisted or not.
 - **`temp_workspace`** (`tests/support/workspace.py`): creates `tmp_path / "home" / "work"`, makes it the current folder and returns `TempWorkspace(home, root)`. The root sits under the fake home, where the Workspace search stops.
+- **The fixture app** (`tests/support/app.py`, design D8 of 010): `example_app()` is `build_app(extra=AppExtra(...))` with what the contract scenarios register, so far the `example` settings table (`ExampleSettings` in `tests/support/settings.py`). Each call builds a fresh app with its own registry, so nothing leaks between tests. Pass it as `run_cli(..., app=example_app())`.
 - **`FakeClock`** (`tests/support/clock.py`): implements `spider.clock.Clock`.
   - `now()` starts at `2026-01-01T00:00:00+00:00`, and `monotonic()` starts at `0.0`.
   - `advance(seconds)` moves both.

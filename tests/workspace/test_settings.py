@@ -44,7 +44,10 @@ def test_settings_file_over_default(temp_workspace: TempWorkspace) -> None:
     assert settings.table(ExampleSettings).level == "high"
 
 
-def test_a_settings_file_in_the_home_folder_is_not_read(temp_workspace: TempWorkspace) -> None:
+def test_a_settings_file_in_the_home_folder_is_not_read(
+    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(temp_workspace.home)
     notes = temp_workspace.root / "notes"
     notes.mkdir()
     (temp_workspace.home / "spider.toml").write_bytes(b'[example]\nlevel = "high"\n')
@@ -87,6 +90,6 @@ def test_template_loads_as_defaults(temp_workspace: TempWorkspace) -> None:
     (temp_workspace.root / "empty" / ".spider").mkdir(parents=True)
     empty = resolve_workspace(cwd=temp_workspace.root / "empty", flag=None, home=home)
 
-    from_template = load_settings(shop, tables).root.model_dump()
+    from_template = load_settings(shop, tables).table(ExampleSettings)
 
-    assert from_template == load_settings(empty, tables).root.model_dump()
+    assert from_template == load_settings(empty, tables).table(ExampleSettings)

@@ -10,14 +10,6 @@ from tests.support.cli import run_cli
 from tests.support.workspace import TempWorkspace
 
 
-@pytest.fixture
-def shop(temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch) -> Path:
-    folder = temp_workspace.root / "shop"
-    folder.mkdir()
-    monkeypatch.chdir(folder)
-    return folder
-
-
 def test_first_run(shop: Path) -> None:
     result = run_cli("init")
 
