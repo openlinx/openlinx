@@ -73,7 +73,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 3.6 Drive "Target folder is created" (workspace). Green: `WorkspaceOpt` on `init`.
 - [x] 3.7 Drive "Initialising the home folder" (workspace).
 - [x] 3.8 Drive "Nested Workspace warning" (workspace) and "A warning keeps exit code 0" (cli-contract), a trivial pair. Green: warning diagnostics, and the registered code `workspace_nested`.
-- [ ] 3.9 Drive "Unwritable target folder" (workspace), using a real path under a regular file. Green: `workspace_not_writable` with exit code 7, whose message names the folder.
+- [x] 3.9 Drive "Unwritable target folder" (workspace), using a real path under a regular file. Green: `workspace_not_writable` with exit code 7, whose message names the folder.
 - [ ] 3.10 Drive "Only JSON lines on stderr" (cli-contract).
 - [ ] 3.11 Drive "Non-ASCII characters are not escaped" (cli-contract).
 - [ ] 3.12 Drive "Piped output on Windows" (cli-contract) with `run_cli_process`, as a Windows-only test.

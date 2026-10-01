@@ -124,3 +124,17 @@ def test_nested_workspace_warning(shop: Path, blog_in_shop: Path) -> None:
 
 def test_a_warning_keeps_exit_code_0(blog_in_shop: Path) -> None:
     assert run_cli("init").exit_code == 0
+
+
+def test_unwritable_target_folder(temp_workspace: TempWorkspace) -> None:
+    (temp_workspace.root / "notes.txt").write_bytes(b"")
+    site = temp_workspace.root / "notes.txt" / "site"
+
+    result = run_cli("init", "--workspace", str(site))
+    error = result.stderr_json_lines()[-1]
+
+    assert (result.exit_code, error["code"], str(site) in error["message"]) == (
+        7,
+        "workspace_not_writable",
+        True,
+    )
