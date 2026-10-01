@@ -11,3 +11,24 @@ def test_workspace_in_the_current_folder(temp_workspace: TempWorkspace) -> None:
     workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
 
     assert workspace.root == shop
+
+
+def test_workspace_in_a_parent_folder(temp_workspace: TempWorkspace) -> None:
+    shop = temp_workspace.home / "work" / "shop"
+    (shop / ".spider").mkdir(parents=True)
+    (shop / "blog").mkdir()
+
+    workspace = resolve_workspace(cwd=shop / "blog", flag=None, home=temp_workspace.home)
+
+    assert workspace.root == shop
+
+
+def test_the_nearest_workspace_wins(temp_workspace: TempWorkspace) -> None:
+    work = temp_workspace.home / "work"
+    (work / ".spider").mkdir()
+    (work / "shop" / ".spider").mkdir(parents=True)
+    (work / "shop" / "blog").mkdir()
+
+    workspace = resolve_workspace(cwd=work / "shop" / "blog", flag=None, home=temp_workspace.home)
+
+    assert workspace.root == work / "shop"
