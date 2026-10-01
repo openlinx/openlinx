@@ -7,10 +7,12 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - Test extractors can be registered through the public registry.
 - **Platforms:** Windows only has `spawn`. Python 3.14 changes the default start method on Linux to `forkserver`. `fork` in a process with threads is unsafe on macOS.
 - **`060-add-crawl-control`** starts background Crawls with CREATE_NO_WINDOW, which is approved.
+- **The pool is conditional:** it is built only if the benchmark (D6) shows that parsing is the bottleneck. D1–D5 apply only if it goes ahead (D7).
 
 ## Goals / Non-Goals
 
 **Goals:**
+- Measure first: a baseline of in-process parsing at ~500k URLs, before any pool code.
 - The same extractor code runs in workers, unchanged, and behaves identically on every OS.
 - Bounded memory, crash containment, and a clean shutdown.
 
@@ -50,12 +52,22 @@ Each crash therefore costs one URL, plus a short serial phase.
 - `060` therefore uses CREATE_NO_WINDOW, whose hidden console the workers inherit.
 - This change pins that behaviour with a Windows scenario, whose test starts the crawler under CREATE_NO_WINDOW itself.
 
-### D6. The ~500k benchmark
-- **The benchmark:** `benchmarks/crawl_500k.py` generates a synthetic site of 500,000 linked pages (template HTML, about 30 Links each) served by the fixture harness. It crawls the site with `--max-urls 0`, and records URLs per second, peak memory of the crawl process and the workers, and the crawl file's size.
+### D6. The ~500k benchmark, first
+- **The benchmark:** `benchmarks/crawl_500k.py` generates a synthetic site of 500,000 linked pages (template HTML, about 30 Links each) served by the fixture harness. It crawls the site with `--max-urls 0`, and records URLs per second, peak memory of the crawl process and of any workers, the crawl file's size, and the share of the crawl process's CPU time spent parsing and extracting.
+- **The baseline:** its first run is against `020`'s in-process parsing, with no pool (task 1.1). If the pool goes ahead, it runs again with the pool (task 5.1).
 - **When it runs:** manually, and in a nightly CI workflow on Linux. It is never part of the pull-request gate.
 - **Results:** recorded in `docs/benchmarks.md`, with the machine type and the commit, so later changes (`030`'s Link rows) can compare.
 
+### D7. The benchmark gates the pool
+- **The gate:** after group 1, the maintainer reads the baseline in `docs/benchmarks.md` and decides whether the pool goes ahead (task 1.5). Implementation stops until they decide.
+- **Yes:** parsing is the bottleneck. Groups 2–4 implement D1–D5.
+- **No:** groups 2–4 are not implemented. The spec and the pool tasks are descoped, and the change is archived with only the benchmark.
+- **The decision** is recorded in `docs/benchmarks.md`, next to the numbers it rests on.
+- *Alternative:* building the pool on the design's estimate alone. It adds processes, pickling and crash handling that may buy nothing. Rejected.
+
 ## Test seams
+
+These apply to groups 2–4, if the pool goes ahead. The benchmark (group 1) is a script, not a test seam.
 
 - **HTTP (local fixture site) (3) and seam 3+6:** the Crawl, with test extractors registered through `020`'s public registry: one records its process id, one is slow, one ends its worker. The results are read from `urls`.
 - **CLI (1), subprocess runs on each OS:**

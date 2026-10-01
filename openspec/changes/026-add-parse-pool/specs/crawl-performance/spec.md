@@ -1,6 +1,6 @@
 ## Purpose
 
-Keep parsing off the crawl process, so a large Crawl uses several CPU cores while fetching goes on. It also keeps that safe: memory stays bounded, a crashing worker is contained, workers end with their Crawl, and no console windows appear on Windows.
+Keep parsing off the crawl process, so a large Crawl uses several CPU cores while fetching goes on. It also keeps that safe: memory stays bounded, a crashing worker is contained, workers end with their Crawl, and no console windows appear on Windows. It is implemented only if the ~500k benchmark shows that parsing is the bottleneck.
 
 Scenario conventions:
 - `{site}` is the origin of the local fixture site, for example `http://127.0.0.1:8765`.
