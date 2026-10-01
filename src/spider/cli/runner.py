@@ -12,7 +12,7 @@ from typer._click.exceptions import UsageError as ClickUsageError
 from typer.core import TyperGroup
 
 from spider.output.diagnostics import ExitCode, SpiderError, UsageError
-from spider.output.writer import Document, Output
+from spider.output.writer import Document, Output, Rows
 from spider.workspace.tables import SettingsTables
 
 
@@ -49,6 +49,14 @@ class SpiderGroup(TyperGroup):
                 obj=Invocation(output, self.settings_tables),
                 **extra,
             )
+            # A Command returns its result; --help and --version end in an Exit, whose code
+            # returns. Rows are made while they are written, so their errors land here too.
+            if isinstance(returned, Document):
+                output.document(returned)
+                returned = ExitCode.OK
+            elif isinstance(returned, Rows):
+                output.rows(returned)
+                returned = ExitCode.OK
         except typer.BadParameter as error:
             output.diagnostic(UsageError("invalid_value", error.format_message()).diagnostic)
             sys.exit(ExitCode.USAGE)
@@ -58,8 +66,4 @@ class SpiderGroup(TyperGroup):
         except SpiderError as error:
             output.diagnostic(error.diagnostic)
             sys.exit(error.exit_code)
-        # A Command returns its Document; --help and --version end in an Exit, whose code returns.
-        if isinstance(returned, Document):
-            output.document(returned)
-            sys.exit(ExitCode.OK)
         sys.exit(returned)

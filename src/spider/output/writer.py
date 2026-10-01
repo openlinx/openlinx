@@ -2,6 +2,7 @@
 
 import shutil
 import sys
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Any
@@ -27,6 +28,12 @@ class Document:
     format: Format
 
 
+@dataclass(frozen=True)
+class Rows:
+    rows: Iterable[Mapping[str, Any]]
+    format: Format
+
+
 class Output:
     # Bytes, not text: a text stream on Windows would turn the LF into CR LF.
     def text(self, text: str) -> None:
@@ -42,6 +49,12 @@ class Output:
             sys.stdout.buffer.write(render_table(document.value, width).encode())
         else:
             sys.stdout.buffer.write(_json_line(document.value))
+
+    def rows(self, rows: Rows) -> None:
+        for row in rows.rows:
+            sys.stdout.buffer.write(_json_line(row))
+            # Each row as it is made: a reader sees it before the next one exists.
+            sys.stdout.buffer.flush()
 
     def diagnostic(self, diagnostic: Diagnostic) -> None:
         sys.stderr.buffer.write(_json_line(asdict(diagnostic)))

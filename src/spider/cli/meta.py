@@ -2,14 +2,14 @@
 
 import functools
 import inspect
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from spider.output.diagnostics import UsageError
-from spider.output.writer import Document, Format
+from spider.output.writer import Document, Format, Rows
 
-type OutputKind = Literal["document", "list"]
+type OutputKind = Literal["document", "list", "rows"]
 
 
 @dataclass(frozen=True)
@@ -22,23 +22,24 @@ class Fields:
 REQUIRED_PARAMETERS: Mapping[OutputKind, tuple[str, ...]] = {
     "document": ("output_format",),
     "list": ("output_format", "limit"),
+    "rows": ("output_format",),
 }
 
 
 def command_meta[**P](
     *, output: OutputKind, formats: Sequence[Format], fields: Fields | None = None
-) -> Callable[[Callable[P, Any]], Callable[P, Document]]:
-    def decorate(command: Callable[P, Any]) -> Callable[P, Document]:
+) -> Callable[[Callable[P, Any]], Callable[P, Document | Rows]]:
+    def decorate(command: Callable[P, Any]) -> Callable[P, Document | Rows]:
         declared = inspect.signature(command).parameters
         missing = [name for name in REQUIRED_PARAMETERS[output] if name not in declared]
-        if missing or (output == "list") != (fields is not None):
+        if missing or (output == "document") != (fields is None):
             raise TypeError(
                 f"Command {command.__name__}: a {output} Command needs the parameters "
-                f"{', '.join(REQUIRED_PARAMETERS[output])}, and fields only if it is a list."
+                f"{', '.join(REQUIRED_PARAMETERS[output])}, and fields unless it is a document."
             )
 
         @functools.wraps(command)
-        def run(*args: P.args, **kwargs: P.kwargs) -> Document:
+        def run(*args: P.args, **kwargs: P.kwargs) -> Document | Rows:
             output_format = cast(Format, kwargs["output_format"])
             if output_format not in formats:
                 raise UsageError(
@@ -47,13 +48,20 @@ def command_meta[**P](
                     hint=f"Use --format with one of: {', '.join(formats)}.",
                 )
             result = command(*args, **kwargs)
-            if fields is not None:
+            if output == "rows" and fields is not None:
+                return Rows(_project(result, fields), output_format)
+            if output == "list" and fields is not None:
                 result = _envelope(result, fields, cast(int, kwargs["limit"]))
             return Document(result, output_format)
 
         return run
 
     return decorate
+
+
+def _project(rows: Iterable[Mapping[str, Any]], fields: Fields) -> Iterator[dict[str, Any]]:
+    for row in rows:
+        yield {name: row[name] for name in fields.default}
 
 
 def _envelope(items: Sequence[Mapping[str, Any]], fields: Fields, limit: int) -> dict[str, Any]:
