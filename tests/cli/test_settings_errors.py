@@ -40,3 +40,16 @@ def test_unknown_key_with_a_suggestion(shop: Path) -> None:
         "example.levl",
         True,
     )
+
+
+def test_output_flags_have_no_settings_key(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b'[output]\nformat = "table"\n')
+
+    result = run_cli("init", app=example_app())
+    error = result.stderr_json_lines()[-1]
+
+    assert (result.exit_code, error["code"], error["details"]["errors"][0]["key"]) == (
+        3,
+        "settings_invalid",
+        "output",
+    )
