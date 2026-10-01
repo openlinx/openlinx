@@ -42,3 +42,39 @@ No environment variable selects the Workspace, sets a setting or changes a Comma
 There are two exceptions:
 - **Proxy variables.** `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, in any letter case, are honoured for fetching, because they are the operating system's network configuration. They are the only variables that `spider commands` lists under `environment`.
 - **Detection signals.** Variables that host agents set, such as Codex's `CODEX_SANDBOX_NETWORK_DISABLED`, may shape the wording of diagnostics and hints. They never change a result, an exit code, the Workspace or a setting.
+
+## Creating a Workspace: `spider init`
+
+`spider init` makes a folder a local Workspace: the current folder, or the folder given with `--workspace`. It creates the folder and any missing parents.
+
+```
+spider init
+spider init --workspace ~/work/shop
+```
+
+It creates only what is missing, and never changes a file that exists. A `spider.toml` already in the folder, for example one committed to the repository, is kept byte for byte. Running it twice is safe: the second run creates nothing.
+
+| Created | Content |
+|---|---|
+| `.spider/` | the data folder |
+| `.spider/.gitignore` | `# Created by spider: crawl data is not committed.` and `*`, so git ignores the data folder's contents |
+| `.spider/crawls/` | where Crawls are stored |
+| `spider.toml` | the settings file, which sets no value |
+
+For the home folder, `spider init` sets up the global Workspace instead, and its settings file is `~/.spider/spider.toml`.
+
+The result on stdout:
+
+```json
+{"workspace":"/home/ana/work/shop","data_dir":"/home/ana/work/shop/.spider","settings_file":"/home/ana/work/shop/spider.toml","global":false,"created":["/home/ana/work/shop/.spider","/home/ana/work/shop/.spider/.gitignore","/home/ana/work/shop/.spider/crawls","/home/ana/work/shop/spider.toml"]}
+```
+
+| Key | Value |
+|---|---|
+| `workspace`, `data_dir`, `settings_file` | absolute paths |
+| `global` | `true` only for the home folder |
+| `created` | the paths this run created, in the order of the table above; `[]` when nothing was missing |
+
+Diagnostics on stderr:
+- **`workspace_nested`** (warning, exit code 0): a folder above the new Workspace, below the home folder, is already a Workspace. `details.parent` is its root. Commands run below the new Workspace now use it.
+- **`workspace_not_writable`** (error, exit code 7): the folder or its data folder cannot be created or written, for example because a path segment is a file. The message names the folder.
