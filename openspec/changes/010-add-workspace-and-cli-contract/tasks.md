@@ -55,7 +55,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 2.4 Drive "Fallback to the global Workspace" (workspace).
 - [x] 2.5 Drive "The home folder is the global Workspace" and "Location of the global Workspace" (workspace), a trivial pair.
 - [x] 2.6 Drive "The flag wins" (workspace).
-- [ ] 2.7 Drive "The home folder given with --workspace" (workspace). This is the `.mcpb` default for `spider mcp --workspace` (`090`).
+- [x] 2.7 Drive "The home folder given with --workspace" (workspace). This is the `.mcpb` default for `spider mcp --workspace` (`090`).
 - [ ] 2.8 Drive "Missing --workspace folder" (workspace). Green: `workspace_not_found`, registered with exit code 4.
 - [ ] 2.9 Drive "Forward slashes on Windows" (workspace), as a Windows-only test.
 - [ ] 2.10 Drive "Home folder with non-ASCII characters on Windows" (workspace), as a Windows-only test.

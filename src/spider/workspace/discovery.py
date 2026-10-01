@@ -19,12 +19,17 @@ class Workspace:
 
 def resolve_workspace(*, cwd: Path, flag: Path | None, home: Path) -> Workspace:
     if flag is not None:
-        return _local(cwd / flag)
+        root = cwd / flag
+        return _global(home) if root == home else _local(root)
     for folder in (cwd, *cwd.parents):
         if folder == home:
             break
         if (folder / DATA_DIR_NAME).is_dir() or (folder / SETTINGS_FILE_NAME).is_file():
             return _local(folder)
+    return _global(home)
+
+
+def _global(home: Path) -> Workspace:
     return Workspace(
         root=home,
         data_dir=home / DATA_DIR_NAME,

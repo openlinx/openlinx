@@ -84,3 +84,17 @@ def test_the_flag_wins(temp_workspace: TempWorkspace) -> None:
     workspace = resolve_workspace(cwd=work / "a", flag=work / "b", home=temp_workspace.home)
 
     assert workspace.root == work / "b"
+
+
+def test_the_home_folder_given_with_workspace_is_the_global_workspace(
+    temp_workspace: TempWorkspace,
+) -> None:
+    home = temp_workspace.home
+    (home / "work" / "a").mkdir()
+
+    workspace = resolve_workspace(cwd=home / "work" / "a", flag=home, home=home)
+
+    assert (workspace.is_global, workspace.settings_file) == (
+        True,
+        home / ".spider" / "spider.toml",
+    )
