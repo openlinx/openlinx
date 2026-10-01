@@ -1,20 +1,25 @@
 """The app factory and the console script (design D8 of 010-add-workspace-and-cli-contract)."""
 
-from typing import Annotated
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
 from spider import APP_NAME, __version__
 from spider.cli.commands import commands
 from spider.cli.init import init
-from spider.cli.runner import SpiderGroup
-from spider.output.writer import Output
+from spider.cli.runner import Invocation, SpiderGroup
+from spider.workspace.tables import SettingsTables
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
 
 
 def _print_version(ctx: typer.Context, value: bool) -> None:
     if value:
-        output: Output = ctx.obj
-        output.text(f"{APP_NAME} {__version__}\n")
+        invocation: Invocation = ctx.obj
+        invocation.output.text(f"{APP_NAME} {__version__}\n")
         raise typer.Exit
 
 
@@ -29,10 +34,22 @@ def root(
     """Agent-first SEO crawler."""
 
 
-def build_app() -> typer.Typer:
+@dataclass(frozen=True)
+class AppExtra:
+    settings_tables: "Mapping[str, type[BaseModel]]" = field(default_factory=dict)
+
+
+def build_app(extra: AppExtra | None = None) -> typer.Typer:
+    tables = SettingsTables()
+    for name, model in (extra or AppExtra()).settings_tables.items():
+        tables.register(name, model)
+
+    class AppGroup(SpiderGroup):
+        settings_tables = tables
+
     app = typer.Typer(
         name=APP_NAME,
-        cls=SpiderGroup,
+        cls=AppGroup,
         pretty_exceptions_enable=False,
         add_completion=False,
     )

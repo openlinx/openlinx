@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, ValidationError, create_model
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, TomlConfigSettingsSource
 
+from spider.output.diagnostics import ConfigError
 from spider.workspace.discovery import Workspace
 from spider.workspace.tables import SettingsTables
 
@@ -30,7 +31,23 @@ def load_settings(
         "SpiderSettings", __base__=_sources(workspace.settings_file), **fields
     )
     values: dict[str, Any] = dict(flags or {})
-    return Settings(root_model(**values))
+    try:
+        return Settings(root_model(**values))
+    except ValidationError as error:
+        raise ConfigError(
+            "settings_invalid",
+            f"The settings file {workspace.settings_file} is invalid.",
+            details={
+                "file": str(workspace.settings_file),
+                "errors": [
+                    {
+                        "key": ".".join(str(part) for part in problem["loc"]),
+                        "message": problem["msg"],
+                    }
+                    for problem in error.errors()
+                ],
+            },
+        ) from error
 
 
 def _sources(settings_file: Path) -> type[BaseSettings]:

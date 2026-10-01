@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.app import example_app
 from tests.support.cli import run_cli
 from tests.support.workspace import TempWorkspace
 
@@ -67,7 +68,7 @@ def test_second_run_creates_nothing(shop: Path) -> None:
 def test_existing_settings_file_is_kept_byte_for_byte(shop: Path) -> None:
     (shop / "spider.toml").write_bytes(b'[example]\nlevel = "high"\n')
 
-    run_cli("init")
+    run_cli("init", app=example_app())
 
     assert (shop / "spider.toml").read_bytes() == b'[example]\nlevel = "high"\n'
 

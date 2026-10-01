@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import typer
 from typer.testing import CliRunner
 
 from spider.cli.app import build_app
@@ -25,8 +26,10 @@ class CliResult:
         return [json.loads(line) for line in self.stderr.splitlines()]
 
 
-def run_cli(*args: str, input: str | bytes | None = None) -> CliResult:
-    result = CliRunner().invoke(build_app(), list(args), input=input)
+def run_cli(
+    *args: str, input: str | bytes | None = None, app: typer.Typer | None = None
+) -> CliResult:
+    result = CliRunner().invoke(app or build_app(), list(args), input=input)
     return CliResult(result.exit_code, result.stdout_bytes, result.stderr_bytes)
 
 

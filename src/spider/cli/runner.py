@@ -2,6 +2,7 @@
 
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, NoReturn
 
 # Typer 0.27 vendors Click and does not re-export its UsageError.
@@ -10,9 +11,19 @@ from typer.core import TyperGroup
 
 from spider.output.diagnostics import ExitCode, SpiderError, UsageError
 from spider.output.writer import Document, Output
+from spider.workspace.tables import SettingsTables
+
+
+@dataclass(frozen=True)
+class Invocation:
+    output: Output
+    settings_tables: SettingsTables
 
 
 class SpiderGroup(TyperGroup):
+    # Set by build_app on a subclass per app, so tests never share a registry.
+    settings_tables: SettingsTables
+
     def main(
         self,
         args: Sequence[str] | None = None,
@@ -33,7 +44,7 @@ class SpiderGroup(TyperGroup):
                 complete_var,
                 standalone_mode=False,
                 windows_expand_args=windows_expand_args,
-                obj=output,
+                obj=Invocation(output, self.settings_tables),
                 **extra,
             )
         except ClickUsageError as error:

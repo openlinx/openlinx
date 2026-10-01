@@ -7,8 +7,9 @@ import typer
 
 from spider.cli.meta import command_meta
 from spider.cli.options import FormatOpt, WorkspaceOpt
+from spider.cli.runner import Invocation
 from spider.output.diagnostics import Diagnostic
-from spider.output.writer import Format, Output
+from spider.output.writer import Format
 from spider.workspace.creation import create_workspace
 from spider.workspace.discovery import enclosing_workspace, target_workspace
 
@@ -18,13 +19,17 @@ def init(
     ctx: typer.Context, workspace_dir: WorkspaceOpt = None, output_format: FormatOpt = Format.JSON
 ) -> dict[str, Any]:
     """Make the current folder, or the --workspace folder, a Workspace."""
-    output: Output = ctx.obj
+    # Imported here: pydantic is too heavy for the CLI's startup path.
+    from spider.workspace.settings import load_settings
+
+    invocation: Invocation = ctx.obj
     home = Path.home()
     workspace = target_workspace(cwd=Path.cwd(), flag=workspace_dir, home=home)
+    load_settings(workspace, invocation.settings_tables)
     created = create_workspace(workspace)
     parent = enclosing_workspace(workspace, home)
     if parent is not None:
-        output.diagnostic(
+        invocation.output.diagnostic(
             Diagnostic(
                 "warning",
                 "workspace_nested",

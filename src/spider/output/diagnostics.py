@@ -76,3 +76,7 @@ class NotFoundError(SpiderError):
 
 class FileSystemError(SpiderError):
     exit_code = ExitCode.IO
+
+
+class ConfigError(SpiderError):
+    exit_code = ExitCode.CONFIG
