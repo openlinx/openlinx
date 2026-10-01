@@ -60,7 +60,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 2.9 Drive "Forward slashes on Windows" (workspace), as a Windows-only test.
 - [x] 2.10 Drive "Home folder with non-ASCII characters on Windows" (workspace), as a Windows-only test.
 - [x] 2.11 **Guard:** "A Workspace variable is ignored" (workspace). Nothing reads the environment, and the test keeps it that way.
-- [ ] 2.12 Docs: write `docs/workspace.md` on the Workspace layout and discovery, including the home-folder stop, `spider.toml` as a marker, and "no environment variables".
+- [x] 2.12 Docs: write `docs/workspace.md` on the Workspace layout and discovery, including the home-folder stop, `spider.toml` as a marker, and "no environment variables".
 - [ ] 2.13 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. `spider init` and encoding (seam 1)
