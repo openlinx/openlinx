@@ -5,6 +5,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, NoReturn
 
+import typer
+
 # Typer 0.27 vendors Click and does not re-export its UsageError.
 from typer._click.exceptions import UsageError as ClickUsageError
 from typer.core import TyperGroup
@@ -47,6 +49,9 @@ class SpiderGroup(TyperGroup):
                 obj=Invocation(output, self.settings_tables),
                 **extra,
             )
+        except typer.BadParameter as error:
+            output.diagnostic(UsageError("invalid_value", error.format_message()).diagnostic)
+            sys.exit(ExitCode.USAGE)
         except ClickUsageError as error:
             output.diagnostic(UsageError("usage_error", error.format_message()).diagnostic)
             sys.exit(ExitCode.USAGE)

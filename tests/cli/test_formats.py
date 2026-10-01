@@ -21,3 +21,9 @@ def test_table_for_people(shop: Path) -> None:
     stdout = run_cli("init", "--format", "table").stdout
 
     assert (b"data_dir" in stdout, stdout.startswith(b"{")) == (True, False)
+
+
+def test_unknown_format(shop: Path) -> None:
+    result = run_cli("init", "--format", "xml")
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_value")
