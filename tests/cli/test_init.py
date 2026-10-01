@@ -87,3 +87,17 @@ def test_workspace_written_with_forward_slashes_on_windows(temp_workspace: TempW
     result = run_cli("init", "--workspace", home.as_posix() + "/work/b")
 
     assert result.json()["workspace"] == str(home) + r"\work\b"
+
+
+def test_initialising_the_home_folder(
+    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = temp_workspace.home
+    monkeypatch.chdir(home)
+
+    result = run_cli("init").json()
+
+    assert (result["global"], result["settings_file"]) == (
+        True,
+        str(home / ".spider" / "spider.toml"),
+    )
