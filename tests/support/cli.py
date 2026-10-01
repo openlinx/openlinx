@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from typer.testing import CliRunner
 
-from spider.cli.app import app
+from spider.cli.app import build_app
 
 
 @dataclass(frozen=True)
@@ -18,7 +18,7 @@ class CliResult:
 
 
 def run_cli(*args: str, input: str | bytes | None = None) -> CliResult:
-    result = CliRunner().invoke(app, list(args), input=input)
+    result = CliRunner().invoke(build_app(), list(args), input=input)
     return CliResult(result.exit_code, result.stdout_bytes, result.stderr_bytes)
 
 

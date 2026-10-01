@@ -15,7 +15,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 1. CLI core and `spider commands` (seam 1)
 
-- [ ] 1.1 Setup:
+- [x] 1.1 Setup:
   - Add `pydantic-settings`, `orjson` and `rich` to the runtime dependencies, and to `tests/dependency_allowlist.txt` from 000.
   - Add ruff `banned-api` entries for `sys.stdout`, `sys.stderr`, `typer.echo` and `click.echo` outside `spider.output`.
   - Move 000's `--version` write into `spider.output`. In 000 it writes to `sys.stdout.buffer` directly from `spider.cli.app`, and the new ban would flag it. `Output` takes the write over in task 1.2.

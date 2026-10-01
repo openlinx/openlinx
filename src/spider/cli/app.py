@@ -1,28 +1,19 @@
-"""The root Typer app and the `spider` console script (design D7 of 000-scaffold-project)."""
+"""The app factory and the console script (design D8 of 010-add-workspace-and-cli-contract)."""
 
-import sys
 from typing import Annotated
 
 import typer
 
 from spider import APP_NAME, __version__
-
-app = typer.Typer(
-    name=APP_NAME,
-    pretty_exceptions_enable=False,
-    add_completion=False,
-    no_args_is_help=True,
-)
+from spider.output.streams import write_stdout
 
 
 def _print_version(value: bool) -> None:
     if value:
-        # Bytes, not text: a text stream on Windows would turn the LF into CR LF.
-        sys.stdout.buffer.write(f"{APP_NAME} {__version__}\n".encode())
+        write_stdout(f"{APP_NAME} {__version__}\n".encode())
         raise typer.Exit
 
 
-@app.callback()
 def root(
     version: Annotated[
         bool,
@@ -34,5 +25,16 @@ def root(
     """Agent-first SEO crawler."""
 
 
+def build_app() -> typer.Typer:
+    app = typer.Typer(
+        name=APP_NAME,
+        pretty_exceptions_enable=False,
+        add_completion=False,
+        no_args_is_help=True,
+    )
+    app.callback()(root)
+    return app
+
+
 def main() -> None:
-    app()
+    build_app()()
