@@ -135,3 +135,17 @@ def test_home_folder_with_non_ascii_characters_on_windows(tmp_path: Path) -> Non
     workspace = resolve_workspace(cwd=home / "notes", flag=None, home=home)
 
     assert str(workspace.data_dir) == str(home) + r"\.spider"
+
+
+def test_a_workspace_variable_is_ignored(
+    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work = temp_workspace.home / "work"
+    (work / "a" / ".spider").mkdir(parents=True)
+    (work / "b" / ".spider").mkdir(parents=True)
+    monkeypatch.setenv("SPIDER_WORKSPACE", str(work / "b"))
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:3128")
+
+    workspace = resolve_workspace(cwd=work / "a", flag=None, home=temp_workspace.home)
+
+    assert workspace.root == work / "a"
