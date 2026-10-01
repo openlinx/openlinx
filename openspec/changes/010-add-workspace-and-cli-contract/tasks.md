@@ -49,7 +49,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 2. Workspace resolution (seam 2)
 
-- [ ] 2.1 Drive "Workspace in the current folder" (workspace). Green: `resolve_workspace(cwd, flag, home)`.
+- [x] 2.1 Drive "Workspace in the current folder" (workspace). Green: `resolve_workspace(cwd, flag, home)`.
 - [ ] 2.2 Drive "Workspace in a parent folder" and "The nearest Workspace wins" (workspace), a trivial pair. Green: walk up to the home folder.
 - [ ] 2.3 Drive "A settings file alone marks a Workspace" (workspace).
 - [ ] 2.4 Drive "Fallback to the global Workspace" (workspace).
