@@ -61,3 +61,11 @@ def test_second_run_creates_nothing(shop: Path) -> None:
     result = run_cli("init")
 
     assert (result.exit_code, result.json()["created"]) == (0, [])
+
+
+def test_existing_settings_file_is_kept_byte_for_byte(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b'[example]\nlevel = "high"\n')
+
+    run_cli("init")
+
+    assert (shop / "spider.toml").read_bytes() == b'[example]\nlevel = "high"\n'
