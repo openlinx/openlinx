@@ -28,7 +28,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
     - the `Output` object writing orjson bytes to `sys.stdout.buffer`
     - `@command_meta`
     - a minimal `spider commands`
-- [ ] 1.3 Drive "Tool version" (cli-contract). Green: the `tool` block.
+- [x] 1.3 Drive "Tool version" (cli-contract). Green: the `tool` block.
 - [ ] 1.4 Drive "Unknown Command" (cli-contract).
   - Red: add `CliResult.stderr_json_lines()` to the helper.
   - Green:
