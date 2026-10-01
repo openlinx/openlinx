@@ -1,6 +1,9 @@
 """Diagnostics on stderr and exit codes (010-add-workspace-and-cli-contract, cli-contract)."""
 
+import json
+
 from tests.support.cli import run_cli
+from tests.support.workspace import TempWorkspace
 
 
 def test_unknown_command_is_a_usage_error() -> None:
@@ -20,3 +23,12 @@ def test_error_object_has_exactly_the_diagnostic_keys() -> None:
 
 def test_nothing_on_stdout_when_a_command_fails() -> None:
     assert run_cli("nosuchcommand").stdout == b""
+
+
+def test_only_json_lines_on_stderr(temp_workspace: TempWorkspace) -> None:
+    (temp_workspace.root / "notes.txt").write_bytes(b"")
+    site = temp_workspace.root / "notes.txt" / "site"
+
+    lines = run_cli("init", "--workspace", str(site)).stderr.splitlines()
+
+    assert [type(json.loads(line)) for line in lines] == [dict]
