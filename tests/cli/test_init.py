@@ -116,7 +116,7 @@ def test_nested_workspace_warning(shop: Path, blog_in_shop: Path) -> None:
     result = run_cli("init")
     warnings = [line for line in result.stderr_json_lines() if line["level"] == "warning"]
 
-    assert (result.exit_code, [(w["code"], w["details"]) for w in warnings]) == (
+    assert (result.exit_code, [(line["code"], line["details"]) for line in warnings]) == (
         0,
         [("workspace_nested", {"parent": str(shop)})],
     )
@@ -138,3 +138,26 @@ def test_unwritable_target_folder(temp_workspace: TempWorkspace) -> None:
         "workspace_not_writable",
         True,
     )
+
+
+def test_a_crawls_entry_that_is_a_file_makes_the_workspace_unwritable(shop: Path) -> None:
+    (shop / ".spider").mkdir()
+    (shop / ".spider" / "crawls").write_bytes(b"")
+
+    result = run_cli("init")
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (
+        7,
+        "workspace_not_writable",
+    )
+
+
+def test_no_nested_warning_for_a_workspace_above_a_target_outside_home(
+    temp_workspace: TempWorkspace,
+) -> None:
+    outer = temp_workspace.home.parent / "outer"
+    (outer / ".spider").mkdir(parents=True)
+
+    result = run_cli("init", "--workspace", str(outer / "site"))
+
+    assert (result.exit_code, result.stderr) == (0, b"")

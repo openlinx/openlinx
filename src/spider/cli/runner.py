@@ -37,10 +37,10 @@ class SpiderGroup(TyperGroup):
                 **extra,
             )
         except ClickUsageError as error:
-            output.error(UsageError("usage_error", error.format_message()))
+            output.diagnostic(UsageError("usage_error", error.format_message()).diagnostic)
             sys.exit(ExitCode.USAGE)
         except SpiderError as error:
-            output.error(error)
+            output.diagnostic(error.diagnostic)
             sys.exit(error.exit_code)
         # A Command returns its Document; --help and --version end in an Exit, whose code returns.
         if isinstance(returned, Document):

@@ -10,7 +10,7 @@ from spider.cli.options import FormatOpt, WorkspaceOpt
 from spider.output.diagnostics import Diagnostic
 from spider.output.writer import Format, Output
 from spider.workspace.creation import create_workspace
-from spider.workspace.discovery import enclosing_workspace, workspace_at
+from spider.workspace.discovery import enclosing_workspace, target_workspace
 
 
 @command_meta(formats=[Format.JSON, Format.TABLE])
@@ -19,9 +19,8 @@ def init(
 ) -> dict[str, Any]:
     """Make the current folder, or the --workspace folder, a Workspace."""
     output: Output = ctx.obj
-    home = Path.home().resolve()
-    target = Path.cwd() if workspace_dir is None else Path.cwd() / workspace_dir
-    workspace = workspace_at(target.resolve(), home)
+    home = Path.home()
+    workspace = target_workspace(cwd=Path.cwd(), flag=workspace_dir, home=home)
     created = create_workspace(workspace)
     parent = enclosing_workspace(workspace, home)
     if parent is not None:

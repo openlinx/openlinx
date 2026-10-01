@@ -77,4 +77,4 @@ The result on stdout:
 
 Diagnostics on stderr:
 - **`workspace_nested`** (warning, exit code 0): a folder above the new Workspace, below the home folder, is already a Workspace. `details.parent` is its root. Commands run below the new Workspace now use it.
-- **`workspace_not_writable`** (error, exit code 7): the folder or its data folder cannot be created or written, for example because a path segment is a file. The message names the folder.
+- **`workspace_not_writable`** (error, exit code 7): the folder or its data folder cannot be created or written, for example because a path segment is a file, or `.spider/crawls` is a file. The message names the folder; `details.path` is the path that failed and `details.error` the operating system's error name, such as `EEXIST`.
