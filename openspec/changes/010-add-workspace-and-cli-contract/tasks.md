@@ -56,13 +56,12 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 2.5 Drive "The home folder is the global Workspace" and "Location of the global Workspace" (workspace), a trivial pair.
 - [ ] 2.6 Drive "The flag wins" (workspace).
 - [ ] 2.7 Drive "The home folder given with --workspace" (workspace). This is the `.mcpb` default for `spider mcp --workspace` (`090`).
-- [ ] 2.8 Drive "A settings file in the home folder is not read" (workspace), with the `example` table registered by the test.
-- [ ] 2.9 Drive "Missing --workspace folder" (workspace). Green: `workspace_not_found`, registered with exit code 4.
-- [ ] 2.10 Drive "Forward slashes on Windows" (workspace), as a Windows-only test.
-- [ ] 2.11 Drive "Home folder with non-ASCII characters on Windows" (workspace), as a Windows-only test.
-- [ ] 2.12 **Guard:** "A Workspace variable is ignored" (workspace). Nothing reads the environment, and the test keeps it that way.
-- [ ] 2.13 Docs: write `docs/workspace.md` on the Workspace layout and discovery, including the home-folder stop, `spider.toml` as a marker, and "no environment variables".
-- [ ] 2.14 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
+- [ ] 2.8 Drive "Missing --workspace folder" (workspace). Green: `workspace_not_found`, registered with exit code 4.
+- [ ] 2.9 Drive "Forward slashes on Windows" (workspace), as a Windows-only test.
+- [ ] 2.10 Drive "Home folder with non-ASCII characters on Windows" (workspace), as a Windows-only test.
+- [ ] 2.11 **Guard:** "A Workspace variable is ignored" (workspace). Nothing reads the environment, and the test keeps it that way.
+- [ ] 2.12 Docs: write `docs/workspace.md` on the Workspace layout and discovery, including the home-folder stop, `spider.toml` as a marker, and "no environment variables".
+- [ ] 2.13 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. `spider init` and encoding (seam 1)
 
@@ -88,21 +87,22 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 4.1 Drive "Default" (workspace). Green: the settings registry, `register_settings_table`, and resolved settings.
 - [ ] 4.2 Drive "Settings file over default" (workspace). Green: the TOML source.
-- [ ] 4.3 Drive "Flag over settings file" (workspace). Green: flag values passed as init kwargs.
-- [ ] 4.4 Drive "Setting variables are ignored" (workspace). Green: drop the env, dotenv and secrets sources.
-- [ ] 4.5 Drive "Invalid value" (workspace) at seam 1. Green:
+- [ ] 4.3 Drive "A settings file in the home folder is not read" (workspace), with the `example` table registered by the test. Moved here from group 2: it needs the settings of 4.1 and 4.2. Green: settings load only from the resolved Workspace's settings file.
+- [ ] 4.4 Drive "Flag over settings file" (workspace). Green: flag values passed as init kwargs.
+- [ ] 4.5 Drive "Setting variables are ignored" (workspace). Green: drop the env, dotenv and secrets sources.
+- [ ] 4.6 Drive "Invalid value" (workspace) at seam 1. Green:
   - `spider init` validates an existing `spider.toml`
   - `settings_invalid` with exit code 3, `details.file` and `details.errors`
-- [ ] 4.6 Drive "Unknown key with a suggestion" (workspace). Green: `extra="forbid"` and the closest-match hint.
-- [ ] 4.7 Drive "Output flags have no settings key" (workspace).
-- [ ] 4.8 Drive "TOML syntax error" (workspace). Green: `line` from `TOMLDecodeError`.
-- [ ] 4.9 Drive "Every problem is listed" (workspace).
-- [ ] 4.10 Drive "Nothing is created when the settings are invalid" (workspace).
-- [ ] 4.11 Drive "Commands without a Workspace ignore the settings file" (workspace).
-- [ ] 4.12 Drive "A setting in the template" (workspace). Green: generate the commented template from the registered tables, replacing the placeholder from task 3.1.
-- [ ] 4.13 Drive "Template loads as defaults" (workspace) at seam 2.
-- [ ] 4.14 Docs: add the `spider.toml` section to `docs/workspace.md`: registered tables, precedence, validation and errors, and the template.
-- [ ] 4.15 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [ ] 4.7 Drive "Unknown key with a suggestion" (workspace). Green: `extra="forbid"` and the closest-match hint.
+- [ ] 4.8 Drive "Output flags have no settings key" (workspace).
+- [ ] 4.9 Drive "TOML syntax error" (workspace). Green: `line` from `TOMLDecodeError`.
+- [ ] 4.10 Drive "Every problem is listed" (workspace).
+- [ ] 4.11 Drive "Nothing is created when the settings are invalid" (workspace).
+- [ ] 4.12 Drive "Commands without a Workspace ignore the settings file" (workspace).
+- [ ] 4.13 Drive "A setting in the template" (workspace). Green: generate the commented template from the registered tables, replacing the placeholder from task 3.1.
+- [ ] 4.14 Drive "Template loads as defaults" (workspace) at seam 2.
+- [ ] 4.15 Docs: add the `spider.toml` section to `docs/workspace.md`: registered tables, precedence, validation and errors, and the template.
+- [ ] 4.16 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Formats and JSON Lines (seam 1, fixture app)
 
