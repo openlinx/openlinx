@@ -1,5 +1,8 @@
 """Finding the Workspace (010-add-workspace-and-cli-contract, workspace)."""
 
+import pytest
+
+from spider.output.diagnostics import SpiderError
 from spider.workspace.discovery import resolve_workspace
 from tests.support.workspace import TempWorkspace
 
@@ -98,3 +101,12 @@ def test_the_home_folder_given_with_workspace_is_the_global_workspace(
         True,
         home / ".spider" / "spider.toml",
     )
+
+
+def test_missing_workspace_folder_is_workspace_not_found(temp_workspace: TempWorkspace) -> None:
+    home = temp_workspace.home
+
+    with pytest.raises(SpiderError) as raised:
+        resolve_workspace(cwd=temp_workspace.root, flag=home / "missing", home=home)
+
+    assert (raised.value.code, raised.value.exit_code) == ("workspace_not_found", 4)

@@ -57,3 +57,7 @@ class SpiderError(Exception):
 
 class UsageError(SpiderError):
     exit_code = ExitCode.USAGE
+
+
+class NotFoundError(SpiderError):
+    exit_code = ExitCode.NOT_FOUND

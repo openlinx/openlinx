@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from spider import APP_NAME
+from spider.output.diagnostics import NotFoundError
 
 DATA_DIR_NAME = f".{APP_NAME}"
 SETTINGS_FILE_NAME = f"{APP_NAME}.toml"
@@ -20,6 +21,12 @@ class Workspace:
 def resolve_workspace(*, cwd: Path, flag: Path | None, home: Path) -> Workspace:
     if flag is not None:
         root = cwd / flag
+        if not root.is_dir():
+            raise NotFoundError(
+                "workspace_not_found",
+                f"The Workspace folder {root} does not exist.",
+                hint=f"Create it with: {APP_NAME} init --workspace {root}",
+            )
         return _global(home) if root == home else _local(root)
     for folder in (cwd, *cwd.parents):
         if folder == home:
