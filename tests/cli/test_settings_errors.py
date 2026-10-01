@@ -29,3 +29,14 @@ def test_invalid_value(shop: Path) -> None:
         error["details"]["file"],
         error["details"]["errors"][0]["key"],
     ) == (3, "settings_invalid", str(shop / "spider.toml"), "example.level")
+
+
+def test_unknown_key_with_a_suggestion(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b'[example]\nlevl = "high"\n')
+
+    error = run_cli("init", app=example_app()).stderr_json_lines()[-1]
+
+    assert (error["details"]["errors"][0]["key"], "level" in (error["hint"] or "")) == (
+        "example.levl",
+        True,
+    )

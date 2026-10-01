@@ -1,12 +1,18 @@
 """Resolved settings: spider.toml and flags (design D2 of 010-add-workspace-and-cli-contract)."""
 
+import difflib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ValidationError, create_model
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, TomlConfigSettingsSource
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    TomlConfigSettingsSource,
+)
 
 from spider.output.diagnostics import ConfigError
 from spider.workspace.discovery import Workspace
@@ -37,6 +43,7 @@ def load_settings(
         raise ConfigError(
             "settings_invalid",
             f"The settings file {workspace.settings_file} is invalid.",
+            hint=_suggestion(error, root_model),
             details={
                 "file": str(workspace.settings_file),
                 "errors": [
@@ -50,8 +57,25 @@ def load_settings(
         ) from error
 
 
+def _suggestion(error: ValidationError, root_model: type[BaseModel]) -> str | None:
+    for problem in error.errors():
+        if problem["type"] != "extra_forbidden":
+            continue
+        *parents, unknown = (str(part) for part in problem["loc"])
+        model = root_model
+        for part in parents:
+            # Every table, and every nested level of one, is a registered BaseModel.
+            model = cast(type[BaseModel], model.model_fields[part].annotation)
+        matches = difflib.get_close_matches(unknown, list(model.model_fields), n=1)
+        if matches:
+            return f"Did you mean {'.'.join([*parents, matches[0]])}?"
+    return None
+
+
 def _sources(settings_file: Path) -> type[BaseSettings]:
     class Root(BaseSettings):
+        model_config = SettingsConfigDict(extra="forbid")
+
         @classmethod
         def settings_customise_sources(
             cls,

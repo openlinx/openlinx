@@ -93,7 +93,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.6 Drive "Invalid value" (workspace) at seam 1. Green:
   - `spider init` validates an existing `spider.toml`
   - `settings_invalid` with exit code 3, `details.file` and `details.errors`
-- [ ] 4.7 Drive "Unknown key with a suggestion" (workspace). Green: `extra="forbid"` and the closest-match hint.
+- [x] 4.7 Drive "Unknown key with a suggestion" (workspace). Green: `extra="forbid"` and the closest-match hint.
 - [ ] 4.8 Drive "Output flags have no settings key" (workspace).
 - [ ] 4.9 Drive "TOML syntax error" (workspace). Green: `line` from `TOMLDecodeError`.
 - [ ] 4.10 Drive "Every problem is listed" (workspace).
