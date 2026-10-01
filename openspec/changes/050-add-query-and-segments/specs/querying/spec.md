@@ -32,7 +32,7 @@ The `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands SHALL read
 `spider commands --format json`, the self-description defined by `010-add-workspace-and-cli-contract`, SHALL describe the `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands. The description SHALL include each Command's output kind, every flag this capability defines for it, and every diagnostic code it can emit. The output kinds SHALL be:
 - `document` for `summary`, `page` and `sql`
 - `list` for `pages` and `issues`
-- `stream` for `export`
+- `rows` for `export`
 
 #### Scenario: The flags of pages are listed
 - **WHEN** `spider commands --format json` runs
@@ -40,7 +40,7 @@ The `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands SHALL read
 
 #### Scenario: Output kinds
 - **WHEN** `spider commands --format json` runs
-- **THEN** the entries for `summary`, `pages` and `export` have the output kinds `document`, `list` and `stream`
+- **THEN** the entries for `summary`, `pages` and `export` have the output kinds `document`, `list` and `rows`
 
 #### Scenario: The diagnostic codes of sql are listed
 - **WHEN** `spider commands --format json` runs
