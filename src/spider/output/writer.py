@@ -14,7 +14,6 @@ class Format(StrEnum):
     JSON = "json"
     JSONL = "jsonl"
     TABLE = "table"
-    CSV = "csv"
 
 
 @dataclass(frozen=True)

@@ -20,13 +20,13 @@ How every `spider` Command talks to agents and people. The spec is `openspec/cha
 - **`--format`** chooses the format of the result. Each Command supports the formats that `spider commands` lists for it. Any other format fails with `invalid_value`, and the hint lists the Command's formats. Errors stay JSON whatever `--format` says.
 
 ```
-spider commands --format csv
+spider commands --format jsonl
 ```
 
 stdout stays empty, the exit code is 2, and stderr has:
 
 ```json
-{"level":"error","code":"invalid_value","message":"This Command has no csv format.","hint":"Use --format with one of: json, table.","details":{}}
+{"level":"error","code":"invalid_value","message":"This Command has no jsonl format.","hint":"Use --format with one of: json, table.","details":{}}
 ```
 
 ## Diagnostics
