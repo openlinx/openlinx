@@ -278,4 +278,5 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 - **More analysis:** RDFa, accessibility, spelling, screenshots, more rich-result types.
 - **Rule plugins (after v1.0 only):** stage 2 of User SQL Rules (v0.3): Rules as Python entry-point plugins, once the internal APIs are stable.
 - **Crawl operation:** scheduled or distributed Crawls.
+- **Community Skill workflow packs:** workflows such as an e-commerce audit or a migration check, contributed as Markdown through the plugin marketplace.
 - **Distribution:** signed standalone binaries and winget.
