@@ -47,6 +47,15 @@ class Diagnostic:
     hint: str | None = None
     details: Mapping[str, Any] = field(default_factory=dict)
 
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "level": self.level,
+            "code": self.code,
+            "message": self.message,
+            "hint": self.hint,
+            "details": dict(self.details),
+        }
+
 
 class SpiderError(Exception):
     exit_code: ExitCode

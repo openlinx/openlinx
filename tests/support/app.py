@@ -119,6 +119,13 @@ def example_raises(output_format: FormatOpt = Format.JSON) -> Any:
     raise RuntimeError("disk exploded")
 
 
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def example_warning_inside(output_format: FormatOpt = Format.JSON) -> Any:
+    """Ends with a result whose warnings list holds one warning."""
+    warning = Diagnostic("warning", "example_warning", "An example warning.")
+    return {"warnings": [warning.to_json()]}
+
+
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
@@ -133,6 +140,7 @@ def example_app() -> typer.Typer:
                 example_warn_and_wait,
                 example_failed_outcome,
                 example_raises,
+                example_warning_inside,
             ],
         )
     )

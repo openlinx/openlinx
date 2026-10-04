@@ -3,7 +3,7 @@
 import shutil
 import threading
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, BinaryIO, Literal
 
@@ -68,7 +68,7 @@ class Output:
             self._stdout.flush()
 
     def diagnostic(self, diagnostic: Diagnostic) -> None:
-        self.stderr_line(_json_line(asdict(diagnostic)))
+        self.stderr_line(_json_line(diagnostic.to_json()))
 
     def stderr_line(self, line: bytes) -> None:
         # A piped stderr is block-buffered: without the flush an agent would see a warning only

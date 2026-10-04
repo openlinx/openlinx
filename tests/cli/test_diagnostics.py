@@ -50,3 +50,11 @@ def test_unexpected_failure() -> None:
         error["code"],
         "RuntimeError: disk exploded" in error["details"]["traceback"],
     ) == (70, "internal_error", True)
+
+
+def test_a_warning_inside_a_result() -> None:
+    result = run_cli("example-warning-inside", app=example_app())
+
+    assert [set(entry) for entry in result.json()["warnings"]] == [
+        {"level", "code", "message", "hint", "details"}
+    ]
