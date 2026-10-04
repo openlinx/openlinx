@@ -34,4 +34,10 @@ Every public table and column follows these conventions:
 - **Counts** are derived from the tables that hold the rows they count. No table stores them.
 - **Not measured is NULL.** A value that was not measured, or that does not apply, is NULL, never `0` or an empty string. `0` is a measured zero, and an empty string is a value that is present but empty.
 
-## Tables
+## Table `crawl`
+
+The Crawl's metadata, in exactly one row.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `id` | TEXT | no | PK | | | The crawl id. |

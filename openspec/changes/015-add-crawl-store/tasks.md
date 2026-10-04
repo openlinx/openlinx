@@ -30,7 +30,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.2 Drive "Documentation and declaration agree" at seam 6, over an empty declared schema.
 
   Done when: `docs/schema.md` exists with its conventions section and no tables, and a parser of it is compared with the schema service's description of the declared schema.
-- [ ] 1.3 Drive "Location of a crawl file" at seam 2.
+- [x] 1.3 Drive "Location of a crawl file" at seam 2.
 
   Done when: a Crawl with a given id can be created as `<data folder>/crawls/<id>.sqlite`, with a `crawl` table holding `id` only, and its `docs/schema.md` section.
 - [ ] 1.4 Drive "A new file matches the declaration" at seam 6.
