@@ -5,6 +5,8 @@
 ## What Changes
 
 > **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships 15 Rules of the catalogue, listed under "The v0.1 Rules" in ROADMAP.md. **Deferred to v0.2:** the other 27 Rules. In v0.1 `title-too-long` checks characters only, because pixel widths are v0.2.
+>
+> **SQL per Rule (2026-10-05):** every v0.1 Rule ships a reproducing SQL query over the public schema. Post-crawl Rules are evaluated by it; for per-URL Rules evaluated in Python, a test checks that the Python result equals the query. `rules show <id>` prints the query. The specs get this when 040 is re-grounded.
 
 - **The Rule model.** Each Rule has:
   - a stable kebab-case id and a category

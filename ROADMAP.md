@@ -45,7 +45,7 @@ widen:                          ├─► 022-min ─┐
 
 ### The v0.1 Rules
 
-040 ships these 15 Rules in v0.1. The other 27 Rules of its catalogue move to v0.2.
+040 ships these 15 Rules in v0.1, each with a reproducing SQL query over the public schema. The other 27 Rules of its catalogue move to v0.2.
 
 | Category | Rules |
 |---|---|
@@ -135,6 +135,10 @@ If a change needs something another change owns, it depends on that change inste
   - The Rule model and the 15 Rules listed above; `http-url` is a Warning with High Priority. **(v0.2)** the other 27 Rules of the 42-Rule catalogue.
   - Thresholds and disabling in `spider.toml`.
   - Evaluation per URL (through the per-response hook) and in the post-crawl passes.
+  - **Every Rule ships a reproducing SQL query** over the public schema, the foundation of v0.3's User SQL Rules:
+    - post-crawl Rules are evaluated by that query
+    - per-URL Rules may still be evaluated in Python during the Crawl, but a test checks, for each of them, that the Python result equals its SQL query over the stored Crawl
+    - `rules show <id>` prints the query, and an Issue can point to it ("reproduce with `spider sql`")
   - Issues and Affected URLs, including `issues.affected_count`.
   - The Health Score.
   - `spider rules [list|show <id>]` and `rule_not_found` (exit 4).
@@ -227,7 +231,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min join
 **Re-grounding checklist** (what to fix or design when each change is re-grounded):
 - 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
 - 080: `design.md:95` and task 7.8 still name 100's release pipeline for the Skill-copy check, which is now 085's.
-- 040: design the Rule model so that most built-in Rules can be expressed by the same SQL mechanism that user Rules will use.
+- 040: every v0.1 Rule ships a reproducing SQL query over the public schema. Post-crawl Rules are evaluated by it; for per-URL Rules evaluated in Python, a test checks that the Python result equals the query over the stored Crawl. `rules show <id>` prints the query, and an Issue can point to it.
 
 ## v0.2: crawl control, reports, CI gate, link graph
 
@@ -256,7 +260,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 
 - The diff Report. Crawl Diff itself (`diff A B`) moved to v0.2 with 110.
 - Custom Extraction (CSS, XPath, regex; configured in `spider.toml`).
-- **User SQL Rules**, stage 1: user Rules written as read-only SQL over the public schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)), with Rule metadata (Issue Type, Priority, description, how to fix). They are kept in `spider.toml` or in rule files, and can be shared as Rule packs. Stage 2, Python plugins, comes only after v1.0 (see Backlog).
+- **User SQL Rules**, stage 1: user Rules written as read-only SQL over the public schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)), with Rule metadata (Issue Type, Priority, description, how to fix). They are kept in `spider.toml` or in rule files, and can be shared as Rule packs. Stage 1 reuses 040's mechanism, where every built-in Rule already ships its SQL query. Stage 2, Python plugins, comes only after v1.0 (see Backlog).
 - Near-Duplicates (our own MinHash) with `duplicates [--exact|--near]`.
 - Offline structured-data validation (schema.org plus Google's rules for about 10 types, stored as YAML) with `structured-data`.
 
