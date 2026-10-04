@@ -11,6 +11,7 @@ from spider.cli.app import AppExtra, build_app
 from spider.cli.meta import command_meta
 from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt
 from spider.cli.runner import Invocation
+from spider.output.diagnostics import Diagnostic
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
 from tests.support.settings import ExampleSettings
@@ -86,6 +87,16 @@ def example_progress(ctx: typer.Context, output_format: FormatOpt = Format.JSON)
     return {"urls": 10}
 
 
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def example_mixed(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> Any:
+    """Reports a progress event, then a warning, then a second progress event."""
+    invocation: Invocation = ctx.obj
+    invocation.reporter.event("progress", crawled=1)
+    invocation.reporter.warn(Diagnostic("warning", "example_warning", "An example warning."))
+    invocation.reporter.event("progress", crawled=2)
+    return {"urls": 2}
+
+
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
@@ -96,6 +107,7 @@ def example_app() -> typer.Typer:
                 example_rows,
                 example_rows_waiting,
                 example_progress,
+                example_mixed,
             ],
         )
     )

@@ -5,6 +5,7 @@ import subprocess
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -36,5 +37,24 @@ def run_cli(
 def run_cli_process(*args: str, env: Mapping[str, str] | None = None) -> CliResult:
     completed = subprocess.run(
         [sys.executable, "-m", "spider", *args], capture_output=True, env=env, check=False
+    )
+    return CliResult(completed.returncode, completed.stdout, completed.stderr)
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RUN_EXAMPLE_APP = (
+    "import sys; from tests.support.app import example_app; example_app()(sys.argv[1:])"
+)
+# A hung Command fails its test instead of hanging CI.
+PROCESS_TIMEOUT = 20
+
+
+def run_example_process(*args: str) -> CliResult:
+    completed = subprocess.run(
+        [sys.executable, "-c", RUN_EXAMPLE_APP, *args],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        timeout=PROCESS_TIMEOUT,
+        check=False,
     )
     return CliResult(completed.returncode, completed.stdout, completed.stderr)
