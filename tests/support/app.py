@@ -113,6 +113,12 @@ def example_failed_outcome(output_format: FormatOpt = Format.JSON) -> Outcome:
     return Outcome({"state": "failed"}, FailedError("example_failed", "The example failed."))
 
 
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def example_raises(output_format: FormatOpt = Format.JSON) -> Any:
+    """Raises RuntimeError("disk exploded")."""
+    raise RuntimeError("disk exploded")
+
+
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
@@ -126,6 +132,7 @@ def example_app() -> typer.Typer:
                 example_mixed,
                 example_warn_and_wait,
                 example_failed_outcome,
+                example_raises,
             ],
         )
     )

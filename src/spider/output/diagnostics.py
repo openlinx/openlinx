@@ -92,3 +92,7 @@ class FileSystemError(SpiderError):
 
 class ConfigError(SpiderError):
     exit_code = ExitCode.CONFIG
+
+
+class InternalError(SpiderError):
+    exit_code = ExitCode.INTERNAL

@@ -39,3 +39,14 @@ def test_a_missing_argument_is_a_usage_error() -> None:
     result = run_cli("example-rows-waiting", app=example_app())
 
     assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "usage_error")
+
+
+def test_unexpected_failure() -> None:
+    result = run_cli("example-raises", app=example_app())
+    error = result.stderr_json_lines()[-1]
+
+    assert (
+        result.exit_code,
+        error["code"],
+        "RuntimeError: disk exploded" in error["details"]["traceback"],
+    ) == (70, "internal_error", True)

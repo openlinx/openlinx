@@ -1,6 +1,7 @@
 """Runs the app; each failure is a diagnostic (design D5 of 010-add-workspace-and-cli-contract)."""
 
 import sys
+import traceback
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, NoReturn
@@ -12,9 +13,10 @@ from typer._click.exceptions import MissingParameter
 from typer._click.exceptions import UsageError as ClickUsageError
 from typer.core import TyperGroup
 
+from spider import APP_NAME
 from spider.cli.meta import formats_hint, meta_of
 from spider.clock import SystemClock
-from spider.output.diagnostics import ExitCode, SpiderError, UsageError
+from spider.output.diagnostics import ExitCode, InternalError, SpiderError, UsageError
 from spider.output.report import CliReporter, Reporter
 from spider.output.writer import Document, Output, Rows
 from spider.workspace.tables import SettingsTables
@@ -81,7 +83,19 @@ class SpiderGroup(TyperGroup):
         except SpiderError as error:
             output.diagnostic(error.diagnostic)
             sys.exit(error.exit_code)
+        except Exception:
+            output.diagnostic(_internal_error().diagnostic)
+            sys.exit(ExitCode.INTERNAL)
         sys.exit(returned)
+
+
+def _internal_error() -> InternalError:
+    return InternalError(
+        "internal_error",
+        f"An unexpected failure stopped the Command. This is a bug in {APP_NAME}.",
+        hint="Report it with details.traceback.",
+        details={"traceback": traceback.format_exc()},
+    )
 
 
 def _invalid_value(error: typer.BadParameter) -> UsageError:
