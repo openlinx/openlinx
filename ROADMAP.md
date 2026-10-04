@@ -4,46 +4,60 @@
 
 Terms follow [CONTEXT.md](CONTEXT.md). How the pieces fit together is in [docs/architecture.md](docs/architecture.md), the decisions behind them are in [docs/adr/](docs/adr/), and how everything is tested is in [docs/testing.md](docs/testing.md).
 
-Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change numbers give the build order. The graph below shows which changes can run in parallel.
+Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change numbers name the changes; the build order below says when each one starts.
+
+**Scope cut (2026-10-05).** v0.1 is cut to the core path: crawl a site, store it, and ask it for Issues. Several changes ship only their minimum in v0.1 (marked *min*), and the rest of them moves to v0.2. The specs stay as written. The `design.md` and `tasks.md` of 015 and later are drafts: each is re-grounded against the code with `/opsx:update` just before its change starts, and that is also when the deferred requirements leave its specs.
 
 ## v0.1: first public pre-release
 
 | # | Change | Capabilities (specs) | Commands | Status |
 |---|---|---|---|---|
 | 000 | `000-scaffold-project` | none (tooling only) | `spider --version` | done |
-| 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | planned |
+| 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | in progress |
 | 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | planned |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | planned |
-| 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned |
-| 024 | `024-add-list-and-sitemap-modes` | `crawl-modes` | `crawl --list`, `crawl --sitemap` | planned |
-| 026 | `026-add-parse-pool` | `crawl-performance` (only if the pool goes ahead) | none | planned, conditional |
-| 030 | `030-add-page-data` | `page-data` | none (data only) | planned |
-| 040 | `040-add-rules` | `rules` | `rules` | planned |
-| 050 | `050-add-query-and-segments` | `querying`, `segments`; adds to `cli-contract` | `summary`, `pages`, `page`, `issues`, `sql`, `export`; `--segment`, `--format csv`, `--no-bom`, `-o` | planned |
-| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach/--dry-run`, `status`, `stop`, `resume`, `crawls` | planned |
-| 070 | `070-add-html-report` | `reporting` | `report`, `report brief` | planned |
-| 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned |
-| 100 | `100-add-installers` | `installation` | none (install scripts, release pipeline) | planned |
+| 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned, min |
+| 030 | `030-add-page-data` | `page-data` | none (data only) | planned, min |
+| 040 | `040-add-rules` | `rules` | `rules` | planned, 15 Rules |
+| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues` | planned, min |
+| 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned, min |
+
+v0.1 is installed with `uv tool install` (or `pipx`). The install scripts come with 100 in v0.2.
 
 ### Build order
 
+A thin end-to-end slice comes first, so the first Issues reach a user early. The changes then widen.
+
 ```
-000 ─► 010 ─► 015 ─► 020 ─┬─► 022 ─┬─► 030 ─► 040 ─► 050 ─┬─► 070 ─┐
-                          ├─► 024 ─┤                      │        ├─► 080 ─► 100
-                          ├─► 026  │                      │        │
-                          │        └──────► 060 ──────────┴────────┘
+slice:   000 ─► 010 ─► 015 ─► 020 ─► 030-min ─► 040-min ─► 050 issues
+                                │    (first      (3–5       (issues,
+                                │    columns)    Rules)     issues <id>)
+                                │
+widen:                          ├─► 022-min ─┐
+                                └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 summary/pages/page ─► 080
 ```
 
-- The critical path is mostly sequential: 000 → 010 → 015 → 020 → 022 → 030 → 040 → 050 → 070 → 080 → 100.
-- 090 comes after the v0.1 release, as v0.1.1.
-- Once 020 is in, 022, 024 and 026 can run in parallel.
-- 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). It can then run alongside 030–050.
-- 070 needs 050 (the summary model, CSV writing, test data) and 060 (for the end-to-end test).
-- **After 020 lands:** re-plan 030/040/050 so that a thin end-to-end slice comes first (crawl → store → a minimal `issues` with 3–5 Rules), and deepen from there.
+- **The slice:** 015 → 020 → 030-min → 040-min → 050-issues. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
+- **Widening:** 022-min can start as soon as 020 is in, in its own worktree, alongside the slice. The rest of 030-min, 040 up to its 15 Rules, and 050's `summary`, `pages` and `page` follow. 080 comes last, because the Skill is generated from the finished Commands, columns and Rules.
+- 090 comes after the v0.1 release, as v0.1.1. The v0.2 changes come after that.
+
+### The v0.1 Rules
+
+040 ships these 15 Rules in v0.1. The other 27 Rules of its catalogue move to v0.2.
+
+| Category | Rules |
+|---|---|
+| `response_codes` | `internal-4xx`, `internal-5xx`, `internal-no-response`, `internal-3xx`, `redirect-chain`, `redirect-loop`, `internal-blocked-by-robots-txt` |
+| `security` | `http-url` (a Warning with High Priority) |
+| `titles` | `title-missing`, `title-duplicate`, `title-too-long` (characters only, since pixel widths are v0.2) |
+| `meta_descriptions` | `meta-description-missing` |
+| `headings` | `h1-missing` |
+| `directives` | `noindex` |
+| `canonicals` | `canonical-to-non-indexable` |
 
 ### What each change owns
 
-If a change needs something another change owns, it depends on that change instead of redefining it.
+If a change needs something another change owns, it depends on that change instead of redefining it. Parts marked **(v0.2)** are deferred by the 2026-10-05 scope cut. The changes that move to v0.2 as a whole are marked on their own line, and what they own is unchanged.
 
 - **000-scaffold-project**:
   - `src/` package layout, the uv-managed project, ruff, strict mypy, and pytest with pytest-asyncio, hypothesis and coverage (a 90% line + branch gate).
@@ -89,68 +103,67 @@ If a change needs something another change owns, it depends on that change inste
   - Progress events and the result.
   - **Ctrl+C:** the Crawl becomes `stopped` with `stop_reason: interrupt`, and the command exits 130.
   - **Unreachable Seed:** the Crawl becomes `failed` and resumable, and the command exits 8.
-  - Parsing runs in-process at this stage.
-- **022-add-fetch-policy**:
+  - Parsing runs in-process.
+- **022-add-fetch-policy** (min in v0.1):
   - Timeouts, retries with backoff, and redirects followed hop by hop, with every hop recorded.
   - Limits: `--max-redirects`, loop detection, body and URL caps.
-  - Compression.
+  - `--user-agent`.
+  - Compression: gzip, deflate and br. **(v0.2)** zstd.
   - **TLS trust:** truststore with a certifi fallback, including a speed test.
-  - HTTP version per origin via ALPN (`http_1_1` / `http_2`).
-  - Proxy, basic auth, custom headers and user agent; no cookies are sent.
   - Status and size checks for Resources.
-  - The `response_headers` table, where cookie values are always stored as `***`.
+  - The `response_headers` table, where cookie values are always stored as `***`. No cookies are sent.
   - HTTPS, virtual hosts and gzip on the fixture site (trustme).
-- **024-add-list-and-sitemap-modes**:
+  - **(v0.2)** HTTP version per origin via ALPN (`http_1_1` / `http_2`), proxy (`--proxy` and the proxy variables), basic auth and custom headers.
+- **024-add-list-and-sitemap-modes** (v0.2):
   - List mode (`--list <file|->`) and Sitemap mode (`--sitemap <url>`, repeatable, with index files and gzip).
   - `mode_conflict` when two Crawl Modes are given.
-- **026-add-parse-pool** (conditional):
+- **026-add-parse-pool** (v0.2, conditional):
   - First, the ~500k-URL benchmark against 020's in-process parsing, run manually or nightly and not part of the CI gate. Its numbers go in `docs/benchmarks.md`.
   - The maintainer then decides. Only if parsing is the bottleneck: parsing in a process pool, with bounded queues, clean shutdown of workers on interrupt, and no console windows on Windows. Otherwise 026 is archived with the benchmark alone.
-- **030-add-page-data**:
+- **030-add-page-data** (min in v0.1):
   - Every Internal-tab column, added in the slice where it is first needed.
   - Indexability and Indexability Status.
   - Link attributes stored for analysis (building on 020's discovered Links and Link types).
   - Inlink and outlink counts, computed in the post-crawl passes.
-  - The Content Area and content metrics, Flesch, language, pixel widths and the Exact Duplicate hash.
+  - The Content Area and content metrics, and the Exact Duplicate hash.
   - Structured-data item counts, and cookie names without their values.
-  - **Raw HTML storage:** zstd; automatic when the Crawl's `--max-urls` is at most 50,000, decided when the Crawl starts; `--store-html/--no-store-html` override it.
-- **040-add-rules**:
-  - The Rule model and a catalogue of **42 Rules**; `http-url` is a Warning with High Priority.
+  - **(v0.2)** Flesch Reading Ease and the Readability band, language detection (`--detect-language`, py3langid), SERP pixel widths, and **raw HTML storage** (zstd; automatic when the Crawl's `--max-urls` is at most 50,000; `--store-html/--no-store-html`).
+- **040-add-rules** (15 Rules in v0.1):
+  - The Rule model and the 15 Rules listed above; `http-url` is a Warning with High Priority. **(v0.2)** the other 27 Rules of the 42-Rule catalogue.
   - Thresholds and disabling in `spider.toml`.
   - Evaluation per URL (through the per-response hook) and in the post-crawl passes.
   - Issues and Affected URLs, including `issues.affected_count`.
   - The Health Score.
   - `spider rules [list|show <id>]` and `rule_not_found` (exit 4).
-- **050-add-query-and-segments**:
-  - `summary` (the data model shared with the Report).
-  - `pages` with the `--where` language, `--fields`, `--sort` and paging.
-  - `page <url>`: JSON, where `--html` adds an `html` field and `--headers` shows redacted headers.
+- **050-add-query-and-segments** (min in v0.1):
+  - `summary` (the data model shared with the Report). **(v0.2)** its per-Segment breakdown.
+  - `pages` with the basic `--where` language (comparisons, `contains`, `is [not] null` and `and`), `--fields`, `--sort` and paging. **(v0.2)** the rest of `--where`: `~`/`!~`, `in`, `or`, `not` and parentheses.
+  - `page <url>`: JSON, where `--headers` shows redacted headers. **(v0.2)** `--html`, which needs 030's stored HTML.
   - `issues` and `issues <rule-id>`.
-  - Read-only `sql`.
-  - `export <view>`: `jsonl` by default, or `csv`; the `resources` view is defined over `urls` and `links`.
-  - **Segments** and `--segment`.
-  - **The CSV policy and output files**, for every Command (moved from 010 on 2026-10-01):
+  - **(v0.2)** Read-only `sql`.
+  - **(v0.2)** `export <view>`: `jsonl` by default, or `csv`; the `resources` view is defined over `urls` and `links`.
+  - **(v0.2)** **Segments** and `--segment`.
+  - **(v0.2)** **The CSV policy and output files**, for every Command (moved from 010 on 2026-10-01):
     - the `csv` format; the single **CSV policy** is UTF-8 with BOM, CRLF and formula neutralisation, with `--no-bom` to turn the BOM off
     - `-o <file>` writes exactly the stdout bytes, atomically, and leaves stdout empty (`output_written`, `output_not_writable`)
-- **060-add-crawl-control**:
+- **060-add-crawl-control** (v0.2):
   - `crawl --detach`: on Windows it uses CREATE_NO_WINDOW. In List mode, the parent stores the Seeds before spawning the Crawl.
   - `status`, which detects a dead process.
   - `stop` (`--wait`) and `resume`. Resume works for `stopped`, `interrupted` and `failed` Crawls, asks again for secrets, and accepts a higher `--max-urls`.
   - `crawl --dry-run`: the checked config, the equivalent command, and a URL estimate that may be `null`.
   - `crawls list|show|rm`, where `rm` also deletes that Crawl's reports and notes.
-- **070-add-html-report**:
+- **070-add-html-report** (v0.2):
   - `report`: a self-contained offline HTML file plus CSV files. It is written to `--dest <dir>` (default `.spider/reports/<crawl-id>/`), and a JSON receipt goes to stdout.
   - Report Sections, and `report brief --section <id>` / `--list`.
   - Report Notes, SVG charts, Health Score per Segment, and escaping.
   - The table script, tested at seam 9.
   - The **end-to-end CI test** on all three OSes: `crawl --detach` → `status` → `issues` → `report`.
-- **080-add-agent-skill**:
-  - **The Skill** (workflows, Hand-off rule, install instructions and one-liners), generated from `spider commands` by a developer script (`scripts/generate_skill.py`).
-    - Hand-off rule: when the URL estimate is `null`, the Skill hands the command to the user.
-  - `skill install`, and the outdated-Skill notice (never printed by a detached Crawl process).
-  - The plugin marketplace. The plugin ships without an MCP config until 090.
+- **080-add-agent-skill** (min in v0.1):
+  - **The Skill** (workflows, install instructions and one-liners), generated from `spider commands` by a developer script (`scripts/generate_skill.py`). In v0.1 the one-liner is `uv tool install`, and the workflows use only v0.1 Commands.
+  - `skill install`, and the outdated-Skill notice.
   - `doctor`, whose TLS check uses 022's TLS setup.
-- **100-add-installers**:
+  - **(v0.2)** the Full audit workflow (it needs 070's `report brief`); the dry run and the Hand-off rule (when the URL estimate is `null`, the Skill hands the command to the user), which need 060; the install-script one-liners (100); `sql` recipes and Segments; `doctor --proxy`; and the plugin marketplace, which ships without an MCP config until 090.
+- **100-add-installers** (v0.2):
   - `install.sh` and `install.ps1`: pin Python 3.14, run `doctor`, and ask before installing the Skill.
   - **Installer exit codes** are their own: 0 ok, 1 failed, 2 usage, 10 installed but `doctor` failed.
   - The release pipeline verifies that the committed Skill copy matches the generator's output.
@@ -180,8 +193,20 @@ The first change after v0.1, as the maintainer decided on 2026-10-01. It builds 
   - The `.mcpb` bundle: `scripts/build_mcpb.py`, added to 100's release pipeline, so it is attached to every GitHub release from v0.1.1.
   - The plugin `.mcp.json`, added to 080's plugin, and config snippets.
 
-## v0.2: link graph
+## v0.2: crawl control, reports, link graph
 
+The changes deferred by the 2026-10-05 scope cut come first, then the link-graph work.
+
+| # | Change | Capabilities (specs) | Commands | Status |
+|---|---|---|---|---|
+| 024 | `024-add-list-and-sitemap-modes` | `crawl-modes` | `crawl --list`, `crawl --sitemap` | planned |
+| 026 | `026-add-parse-pool` | `crawl-performance` (only if the pool goes ahead) | none | planned, conditional on its benchmark |
+| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach/--dry-run`, `status`, `stop`, `resume`, `crawls` | planned |
+| 070 | `070-add-html-report` | `reporting` | `report`, `report brief` | planned |
+| 100 | `100-add-installers` | `installation` | none (install scripts, release pipeline) | planned |
+
+- **The rest of the v0.1 changes,** marked **(v0.2)** under "What each change owns": 022's ALPN, proxy, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules; 050's `sql`, `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, dry run and Hand-off, install-script one-liners and plugin marketplace.
+- **Order:** 024 and 026 first (026's benchmark decides whether its pool is built). 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 100 comes last.
 - Link graph views: `links <url> --in|--out`.
 - Redirect Chain analysis: `redirects`, with per-hop headers and timing.
 - Sitemap analysis: `sitemaps` (sitemap vs crawl, non-indexable URLs in the sitemap).
