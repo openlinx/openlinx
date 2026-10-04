@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from spider.output.diagnostics import UsageError
+from spider.output.diagnostics import Diagnostic, UsageError
 from spider.output.paging import Fields, Page
 from spider.output.writer import Document, Format, Rows
 
@@ -53,7 +53,9 @@ def command_meta[**P](
                 return Document(result, output_format, "document")
             if meta.output == "rows":
                 return Rows(_project_all(result, meta.fields), output_format)
-            return Document(_envelope(result), output_format, "list")
+            return Document(
+                _envelope(result), output_format, "list", _more_items(result, output_format)
+            )
 
         run.command_meta = meta  # type: ignore[attr-defined]
         return run
@@ -102,6 +104,19 @@ def _project(item: Mapping[str, Any], fields: Fields) -> dict[str, Any]:
 def _project_all(rows: Iterable[Mapping[str, Any]], fields: Fields) -> Iterator[dict[str, Any]]:
     for row in rows:
         yield _project(row, fields)
+
+
+def _more_items(page: Page, output_format: Format) -> Diagnostic | None:
+    # Only json carries next_cursor in its envelope; jsonl and table would hide the next page.
+    if output_format is Format.JSON or page.next_cursor is None:
+        return None
+    return Diagnostic(
+        "info",
+        "more_items",
+        f"{len(page.items)} of {page.total} items printed.",
+        hint="Pass --cursor with details.next_cursor for the next page.",
+        details={"total": page.total, "next_cursor": page.next_cursor},
+    )
 
 
 def _envelope(page: Page) -> dict[str, Any]:

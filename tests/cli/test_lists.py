@@ -139,3 +139,18 @@ def test_garbage_cursor() -> None:
     result = run_cli("example-list", "--cursor", "abc", app=example_app())
 
     assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_cursor")
+
+
+@pytest.mark.parametrize("output_format", ["jsonl", "table"])
+def test_more_items_notice(output_format: str) -> None:
+    result = run_cli("example-list", "--format", output_format, "--limit", "2", app=example_app())
+    notice = result.stderr_json_lines()[-1]
+    cursor = notice["details"]["next_cursor"]
+
+    assert (notice["level"], notice["code"], notice["details"]["total"], bool(cursor)) == (
+        "info",
+        "more_items",
+        5,
+        True,
+    )
+    assert isinstance(cursor, str)

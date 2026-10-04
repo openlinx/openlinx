@@ -55,6 +55,8 @@ class SpiderGroup(TyperGroup):
             # returns. Rows are made while they are written, so their errors land here too.
             if isinstance(returned, Document):
                 output.document(returned)
+                if returned.notice is not None:
+                    output.diagnostic(returned.notice)
                 returned = ExitCode.OK
             elif isinstance(returned, Rows):
                 output.rows(returned)
