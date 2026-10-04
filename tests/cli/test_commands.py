@@ -1,9 +1,10 @@
 """`spider commands` (010-add-workspace-and-cli-contract, cli-contract)."""
 
+import os
 from typing import Any
 
 from tests.support.app import example_app
-from tests.support.cli import run_cli
+from tests.support.cli import run_cli, run_cli_process
 from tests.support.project import project_version
 
 
@@ -124,6 +125,15 @@ def test_the_proxy_variables_are_the_one_exception() -> None:
     environment = run_cli("commands").json()["environment"]
 
     assert [entry["names"] for entry in environment] == [["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]]
+
+
+def test_detection_signals_change_nothing() -> None:
+    plain = run_cli_process("commands", env=dict(os.environ))
+    signalled = run_cli_process(
+        "commands", env={**os.environ, "CODEX_SANDBOX_NETWORK_DISABLED": "1"}
+    )
+
+    assert (signalled.stdout == plain.stdout, plain.exit_code, signalled.exit_code) == (True, 0, 0)
 
 
 def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:
