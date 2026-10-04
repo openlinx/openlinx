@@ -170,7 +170,7 @@ The streams and the Reporter follow design D3: `Output(stdout, stderr)` takes it
 
 Each part of the self-description has one source (design D5 and D7): options and arguments come from the Click params, output kinds, formats and fields from `@command_meta`, and diagnostics from the error-code registry. Nothing is listed twice.
 
-- [ ] 8.1 Drive "Before the Command name" (cli-contract). Green: the `argv` check with its hint.
+- [x] 8.1 Drive "Before the Command name" (cli-contract). Green: the `argv` check with its hint.
 - [ ] 8.2 **Guard:** "After the Command name" and "A flag the Command does not use" (cli-contract).
 - [ ] 8.3 Drive "Global flags of init" (cli-contract). Green: `global` in the option metadata.
 - [ ] 8.4 Drive "Entry of a document Command" (cli-contract). Green: `output`, `events`, `formats` and `fields` in the entries, derived from `@command_meta`.

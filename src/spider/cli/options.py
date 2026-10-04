@@ -18,3 +18,6 @@ CursorOpt = Annotated[
 FieldsOpt = Annotated[
     str | None, typer.Option("--fields", help="Comma-separated fields of each item.")
 ]
+
+# Flags that mean the same on every Command that takes them, always after its name.
+GLOBAL_FLAGS = frozenset({"--workspace", "--format", "--crawl"})

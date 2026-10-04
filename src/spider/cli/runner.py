@@ -15,6 +15,7 @@ from typer.core import TyperGroup
 
 from spider import APP_NAME
 from spider.cli.meta import formats_hint, meta_of
+from spider.cli.options import GLOBAL_FLAGS
 from spider.clock import SystemClock
 from spider.output.diagnostics import ExitCode, InternalError, SpiderError, UsageError
 from spider.output.reporter import CliReporter, Reporter
@@ -43,11 +44,11 @@ class SpiderGroup(TyperGroup):
         **extra: Any,
     ) -> NoReturn:
         # Not no_args_is_help: from Click 8.2 on it raises a usage error, which exits 2.
-        if not (sys.argv[1:] if args is None else args):
-            args = ["--help"]
+        args = list(sys.argv[1:] if args is None else args) or ["--help"]
         # The one place the process streams are read; spider.output only takes them.
         output = Output(sys.stdout.buffer, sys.stderr.buffer)  # noqa: TID251
         try:
+            _check_global_flags_follow_the_command(args)
             returned = super().main(
                 args,
                 prog_name,
@@ -87,6 +88,20 @@ class SpiderGroup(TyperGroup):
             output.diagnostic(internal.diagnostic)
             sys.exit(internal.exit_code)
         sys.exit(returned)
+
+
+def _check_global_flags_follow_the_command(args: Sequence[str]) -> None:
+    # Click would only say "No such option", which does not tell an agent where the flag goes.
+    for arg in args:
+        if not arg.startswith("-") or arg == "--":
+            return
+        flag = arg.partition("=")[0]
+        if flag in GLOBAL_FLAGS:
+            raise UsageError(
+                "usage_error",
+                f"{flag} is given before the Command name.",
+                hint=f"Put {flag} after the Command name, as in: {APP_NAME} init {flag} ...",
+            )
 
 
 def _internal_error() -> InternalError:
