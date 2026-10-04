@@ -122,7 +122,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 The paging logic lives in the pure module `spider.output.paging` (design D6): the cursor codec, the fingerprint, the `Page(items, total, next_cursor)` type, field selection and the in-memory pager. It imports only the standard library, orjson and `spider`, never Click. `050` builds SQL keyset paging on the same `Page` and codec, and `090` calls it without Click.
 
-- [ ] 6.1 Drive "Cursor round trip" and "Cursor characters" (cli-contract) at seam 4, a trivial pair. Green: `spider.output.paging` with the cursor codec of design D6, without padding.
+- [x] 6.1 Drive "Cursor round trip" and "Cursor characters" (cli-contract) at seam 4, a trivial pair. Green: `spider.output.paging` with the cursor codec of design D6, without padding.
 - [ ] 6.2 Drive "Undecodable cursor" (cli-contract) at seam 4, table-driven: `abc`, the empty string, base64 that is not JSON, a wrong `v`, a missing `k`, and a different fingerprint. Green: the codec's validation, which raises `invalid_cursor`.
 - [ ] 6.3 Drive "First page" (cli-contract) at seam 1. Green:
   - `Page(items, total, next_cursor)` and the in-memory pager in `spider.output.paging`
