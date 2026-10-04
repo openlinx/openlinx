@@ -7,11 +7,13 @@ from sqlalchemy import create_engine, insert
 from sqlalchemy.pool import NullPool
 
 from spider.store.schema import crawl, metadata
+from spider.workspace.creation import crawls_dir, create_data_folder
 from spider.workspace.discovery import Workspace
 
 
 def create_crawl(workspace: Workspace, *, crawl_id: str) -> Path:
-    file = workspace.data_dir / "crawls" / f"{crawl_id}.sqlite"
+    create_data_folder(workspace)
+    file = crawls_dir(workspace) / f"{crawl_id}.sqlite"
     engine = create_engine("sqlite://", creator=lambda: sqlite3.connect(file), poolclass=NullPool)
     try:
         with engine.begin() as connection:

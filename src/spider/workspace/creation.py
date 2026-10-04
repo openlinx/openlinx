@@ -1,6 +1,8 @@
 """Creating a Workspace's files (design D1 of 010-add-workspace-and-cli-contract)."""
 
 import errno
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from spider.naming import APP_NAME
@@ -12,19 +14,31 @@ GITIGNORE = f"# Created by {APP_NAME}: crawl data is not committed.\n*\n"
 
 
 def create_workspace(workspace: Workspace, settings_text: str) -> list[Path]:
-    folder, gitignore, crawls, settings = (
-        workspace.data_dir,
-        workspace.data_dir / ".gitignore",
-        workspace.data_dir / "crawls",
-        workspace.settings_file,
-    )
-    created: list[Path] = []
-    try:
+    created = create_data_folder(workspace)
+    with _writing(workspace):
+        created += _file(workspace.settings_file, settings_text)
+    return created
+
+
+def create_data_folder(workspace: Workspace) -> list[Path]:
+    folder = workspace.data_dir
+    with _writing(workspace):
         workspace.root.mkdir(parents=True, exist_ok=True)
-        created += _folder(folder)
-        created += _file(gitignore, GITIGNORE)
-        created += _folder(crawls)
-        created += _file(settings, settings_text)
+        return [
+            *_folder(folder),
+            *_file(folder / ".gitignore", GITIGNORE),
+            *_folder(crawls_dir(workspace)),
+        ]
+
+
+def crawls_dir(workspace: Workspace) -> Path:
+    return workspace.data_dir / "crawls"
+
+
+@contextmanager
+def _writing(workspace: Workspace) -> Iterator[None]:
+    try:
+        yield
     except OSError as error:
         raise SpiderError(
             WORKSPACE_NOT_WRITABLE,
@@ -34,7 +48,6 @@ def create_workspace(workspace: Workspace, settings_text: str) -> list[Path]:
                 "error": errno.errorcode.get(error.errno or 0),
             },
         ) from error
-    return created
 
 
 def _folder(path: Path) -> list[Path]:
