@@ -15,6 +15,8 @@ Both need five things:
 
 ## What Changes
 
+> **Scope (2026-10-05, see ROADMAP.md):** **v0.1.1** ships 060-min: `crawl --detach`, `status` (with dead-process detection) and `stop` (`--wait`), for Spider mode only, with the recorded runs, the control requests and the command recorded for Crawls started through MCP. **Deferred to v0.2:** `resume`, `crawl --dry-run` with its URL estimate and equivalent command, `crawls list|show|rm`, and detached List mode (`024` is v0.2). Each requirement in the spec is marked with its release.
+
 - **`spider crawl … --detach`**:
   - It validates like a foreground `crawl`, reserves the crawl id, and starts a separate background process that creates the Crawl.
   - Within 10 seconds it prints `{crawl_id, state, run, pid, crawl_file, log_file, warnings, hint}`.

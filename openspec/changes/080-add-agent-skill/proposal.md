@@ -4,6 +4,10 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
 
 ## What Changes
 
+> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the generated Skill, `skill install`, the outdated-Skill notice, the repository copy, `doctor`, and an SQL cookbook (`sql` recipes over the public schema); its install line is `uv tool install`. **Deferred to v0.2:** the Full audit workflow (it needs `070`), the dry-run guardrail and Hand-off (they need `060`), the install-script one-liners (`100`), Segments and their recipes, `doctor --proxy`, and the plugin marketplace manifests.
+>
+> **Large-Crawl guardrail in v0.1:** the Skill always passes `--max-urls`; decided when 080 is re-grounded.
+
 - **Skill generation.** One generator module renders the Skill from the CLI's own metadata (Commands, Page data columns, Rules, the crawl store schema) and Markdown templates, and stamps it with the CLI version. Two callers use it:
   - `spider skill install`
   - the developer script `scripts/generate_skill.py <dir>`, which writes the repository copy. It is not a user Command.
@@ -64,7 +68,7 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
 - Workflows for Commands that don't exist yet are added in the releases that bring those Commands:
   - `links`, `redirects`, `sitemaps`: **v0.2**
   - `diff`, `duplicates`, `structured-data`: **v0.3**
-- The plugin's MCP server config (`.mcp.json`) belongs to `090-add-mcp-server`, in **v0.1.1**. The install scripts behind the one-liners, and the release pipeline, belong to `100-add-installers`.
+- The plugin's MCP server config (`.mcp.json`) belongs to `090-add-mcp-server`, in **v0.1.1**. The install scripts behind the one-liners belong to `100-add-installers` (v0.2), and the release pipeline to `085-add-release` (v0.1, not drafted yet).
 - No `spider skill generate` Command. Generation for the repository is a developer script, as the maintainer decided on 2026-09-27.
 - Local edits to an installed Skill are not preserved. Reinstalling replaces the whole folder. No release plans a merge.
 - There is no `spider skill uninstall` in v0.1. The uninstall steps are documented by `100-add-installers`.

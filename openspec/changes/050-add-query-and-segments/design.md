@@ -1,3 +1,5 @@
+> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+
 ## Context
 
 See proposal.md (Why) for motivation. This change adds no tables. It reads what other changes write:

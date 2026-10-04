@@ -1,3 +1,5 @@
+> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+
 ## Context
 
 See proposal.md (Why) for the motivation. The approach is shaped by these constraints:
@@ -19,8 +21,8 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - config resolution and the settings registry
 - **`024-add-list-and-sitemap-modes`:** the list and sitemap readers.
 - **Consumers:**
-  - `090-add-mcp-server` always starts Crawls detached, needs the detach JSON within 10 seconds, and relies on breakaway from Windows job objects.
-  - `080-add-agent-skill` runs `--dry-run` before every Crawl and treats a null estimate as large.
+  - `090-add-mcp-server` (v0.1.1) starts long Crawls detached, needs the detach JSON within 10 seconds, and relies on breakaway from Windows job objects.
+  - `080-add-agent-skill`'s dry-run guardrail (deferred to v0.2) runs `--dry-run` before every Crawl and treats a null estimate as large.
   - `070-add-html-report`'s end-to-end test polls `status` until the Crawl State is `completed`.
 
 ## Goals / Non-Goals

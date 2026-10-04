@@ -1,3 +1,5 @@
+> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+
 ## Context
 
 The motivation is in proposal.md. The exact column definitions are in `specs/page-data/spec.md`. This design covers how the data is produced and stored, and where the boundaries with the other changes lie ([ROADMAP.md](../../../ROADMAP.md), "What each change owns").
@@ -15,7 +17,7 @@ The motivation is in proposal.md. The exact column definitions are in `specs/pag
   - `origins.http_version` (`http_1_1` / `http_2`)
   - `response_headers`, where cookie values are stored as `***`
   - the gzip fixture support
-- **`026-add-parse-pool`:** it moves parsing into a process pool. This change's extractor must stay a pure, picklable function of its input.
+- **`026-add-parse-pool`:** it may move parsing into a process pool, only if its benchmark shows parsing is the bottleneck. This change's extractor must stay a pure, picklable function of its input.
 - **Scale target:** about 500k URLs and tens of millions of Link rows in one SQLite file ([ADR-0003](../../../docs/adr/0003-sqlalchemy-core-not-orm.md)).
 
 ## Goals / Non-Goals
@@ -35,7 +37,7 @@ The motivation is in proposal.md. The exact column definitions are in `specs/pag
 
 ### D1. The Page record is one flat table that repeats response values
 `pages` holds every Internal-tab column, including values that `urls` and `origins` already hold: status code, content type, sizes, response time, `fetched_at`, HTTP version and Crawl Depth.
-- **How it is written.** `020`'s per-response hook writes the row in the URL's writer unit, from the same response, so the copies always agree. For an analysed Page, the hook adds the output of this change's Page extractor, which runs where `020` parses (in-process, or in `026`'s pool). For every other Page, the hook writes only the response-derived columns.
+- **How it is written.** `020`'s per-response hook writes the row in the URL's writer unit, from the same response, so the copies always agree. For an analysed Page, the hook adds the output of this change's Page extractor, which runs where `020` parses (in-process, or in `026`'s pool if it is built). For every other Page, the hook writes only the response-derived columns.
 - *Alternative: normalised tables.* `pages` would hold only HTML-derived data, and consumers would join `urls`, or read a SQL view. Rejected: every consumer would need the join, namely `050`'s `--where` and `--fields`, `export`, the Report and agents writing SQL. Views would also complicate `spider schema` and `--where`.
 - *Cost:* a few duplicated columns. The scenario "Repeated values equal the urls row" pins the agreement.
 

@@ -1,3 +1,5 @@
+> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+
 "Drive" means one TDD slice:
 1. Write the failing test for the named scenario at the named seam, and watch it fail for the right reason.
 2. Write only enough code to pass.

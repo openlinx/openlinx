@@ -87,7 +87,7 @@ None. `010-add-workspace-and-cli-contract` is still in flight. This change regis
   - the query Commands that use `--crawl`
   - `spider sql` and its SQLite authorizer
   - keyset paging bound to a Crawl
-- **`060-add-crawl-control` (v0.1):**
+- **`060-add-crawl-control` (v0.2):**
   - `control_requests`, `crawl_runs` and the heartbeat
   - liveness through the writer claim
   - reserving `<id>.log` for `--detach`

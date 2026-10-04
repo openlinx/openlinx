@@ -1,3 +1,5 @@
+> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+
 ## Context
 
 The motivation is in proposal.md, and the catalogue and behaviour are in `specs/rules/spec.md`. Ownership follows [ROADMAP.md](../../../ROADMAP.md) ("What each change owns"). Rules read three sources:

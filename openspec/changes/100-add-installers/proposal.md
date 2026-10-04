@@ -10,6 +10,8 @@ Every release must also publish the same artifacts reproducibly: the PyPI packag
 
 ## What Changes
 
+> **Scope (2026-10-05, see ROADMAP.md):** this change is **v0.2** and keeps only the install scripts, their options and their exit codes. The release pipeline below (the tag workflow, `release_check.py` with the Skill-copy check, `uv build`, PyPI trusted publishing and the GitHub release) and the documented developer install move to `085-add-release` in v0.1. This change then adds its scripts and their smoke tests to 085's workflow.
+
 - **`scripts/install.sh` (POSIX `sh`, macOS and Linux) and `scripts/install.ps1` (Windows PowerShell 5.1 and PowerShell 7).**
   - They are served at the URLs that `080-add-agent-skill` quotes, as GitHub release assets:
     - macOS and Linux: `curl -LsSf https://github.com/OWNER/REPO/releases/latest/download/install.sh | sh`
