@@ -50,7 +50,16 @@ def select_fields(requested: str | None, fields: Fields) -> tuple[str, ...]:
         return fields.default
     if requested == ALL_FIELDS:
         return fields.available
-    return tuple(requested.split(","))
+    names = tuple(requested.split(","))
+    for name in names:
+        if name not in fields.available:
+            raise UsageError(
+                "unknown_field",
+                f"This Command has no field {name}.",
+                hint=f"Use --fields with any of: {', '.join(fields.available)}, or {ALL_FIELDS}.",
+                details={"field": name, "available": list(fields.available)},
+            )
+    return names
 
 
 def project(items: Sequence[Mapping[str, Any]], fields: Sequence[str]) -> list[dict[str, Any]]:

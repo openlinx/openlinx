@@ -137,7 +137,7 @@ The paging logic lives in the pure module `spider.output.paging` (design D6): th
 - [x] 6.10 Drive "Default fields" and "Fields in the requested order" (cli-contract), a trivial pair. Green: `--fields`, and field selection in `spider.output.paging`, with the default fields from `@command_meta`.
 - [x] 6.11 Drive "Default format comes first" and "Default fields are available" (cli-contract), a trivial pair. Green: `check_command` refuses a Command whose `--format` default is not `formats[0]`, or whose default fields are not a subset of `available`. Today the second would surface as a `KeyError` at run time.
 - [x] 6.12 Drive "All fields" (cli-contract).
-- [ ] 6.13 Drive "Unknown field" (cli-contract). Green: `unknown_field` with `details.available`.
+- [x] 6.13 Drive "Unknown field" (cli-contract). Green: `unknown_field` with `details.available`.
 - [ ] 6.14 Drive "A different limit continues the list" (cli-contract).
 - [ ] 6.15 Drive "Cursor from a different request" (cli-contract). Green: the fingerprint in `spider.output.paging`, from the Command path and the arguments that select or order items.
 - [ ] 6.16 **Guard:** "Garbage cursor" (cli-contract) at seam 1. The codec of 6.2 already rejects it.

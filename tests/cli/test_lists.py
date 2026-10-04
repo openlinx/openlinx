@@ -104,3 +104,14 @@ def test_all_fields() -> None:
     page = run_cli("example-list", "--fields", "all", "--limit", "1", app=example_app()).json()
 
     assert [list(item.items()) for item in page["items"]] == [[("n", 1), ("sq", 1)]]
+
+
+def test_unknown_field() -> None:
+    result = run_cli("example-list", "--fields", "n,size", app=example_app())
+    error = result.stderr_json_lines()[-1]
+
+    assert (result.exit_code, error["code"], error["details"]) == (
+        2,
+        "unknown_field",
+        {"field": "size", "available": ["n", "sq"]},
+    )
