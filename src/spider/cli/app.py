@@ -53,6 +53,8 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         cls=AppGroup,
         pretty_exceptions_enable=False,
         add_completion=False,
+        # Plain Click help: cheaper for agents to parse, and rich stays off the startup path.
+        rich_markup_mode=None,
     )
     app.callback()(root)
     registered: list[Callable[..., Any]] = [commands, init, *extra.commands]
