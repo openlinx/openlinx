@@ -167,7 +167,7 @@ If a change needs something another change owns, it depends on that change inste
   - **The Skill** (workflows, install instructions and one-liners), generated from `spider commands` by a developer script (`scripts/generate_skill.py`). In v0.1 the one-liner is `uv tool install`, and the workflows use only v0.1 Commands.
   - `skill install`, and the outdated-Skill notice.
   - `doctor`, whose TLS check uses 022's TLS setup.
-  - **(v0.2)** the Full audit workflow (it needs 070's `report brief`); the dry run and the Hand-off rule (when the URL estimate is `null`, the Skill hands the command to the user), which need 060; the install-script one-liners (100); `sql` recipes and Segments; `doctor --proxy`; and the plugin marketplace, which ships without an MCP config until 090.
+  - **(v0.2)** the Full audit workflow (it needs 070's `report brief`); the dry run and the Hand-off rule (when the URL estimate is `null`, the Skill hands the command to the user), which need 060; the install-script one-liners (100); `sql` recipes and Segments; `doctor --proxy`; and the plugin marketplace, which ships with 090's `.mcp.json`.
 - **085-add-release** (v0.1; not drafted yet, so `openspec/changes/085-*` does not exist):
   - Before it starts: the product name is chosen and checked as free on PyPI and GitHub.
   - A GitHub Actions workflow triggered by `v*` tags: the test suite, the sdist and wheel built with `uv build`, publishing to PyPI through trusted publishing, and a GitHub release with them.
@@ -194,7 +194,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min join
 | # | Change | Capabilities (specs) | Commands / MCP tools | Status |
 |---|---|---|---|---|
 | 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop` | planned, min |
-| 090 | `090-add-mcp-server` | `mcp-server`; modifies `installation`, `agent-skill` | `mcp` (+ MCP tools) | planned |
+| 090 | `090-add-mcp-server` | `mcp-server`; modifies `agent-skill` and 085's release capability | `mcp` (+ MCP tools) | planned |
 
 - **Order:** 060-min, then 090.
 - **060-min** is `crawl --detach`, `status` (with dead-process detection) and `stop` (`--wait`), for Spider mode only. `resume`, `crawl --dry-run`, `crawls list|show|rm` and detached List mode stay in v0.2.
@@ -204,8 +204,9 @@ The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min join
   - **Tools:** the foreground and the detached crawl, `status` and `stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues` and `rules`, plus `schema` and `doctor`.
   - **(v0.2)** the tools of the v0.2 Commands: `resume`, the dry run, `crawls list`, `sql`, List and Sitemap modes, and the `report` and `report_brief` tools with inline Report Notes, which come with 070.
   - Errors use 010's full diagnostic shape.
-  - The `.mcpb` bundle: `scripts/build_mcpb.py`, added to 100's release pipeline, so it is attached to every GitHub release from v0.1.1.
-  - The plugin `.mcp.json`, added to 080's plugin, and config snippets.
+  - The `.mcpb` bundle: `scripts/build_mcpb.py`, added to 085's release workflow, so it is attached to every GitHub release from v0.1.1.
+  - A `.mcp.json` example and the client config snippets, shipped as docs in `docs/mcp.md`.
+  - **(v0.2)** The plugin `.mcp.json`, which comes with 080's plugin marketplace.
 
 ## v0.2: crawl control, reports, link graph
 
