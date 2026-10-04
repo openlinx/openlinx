@@ -271,8 +271,9 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 
 ## Backlog
 
+- **Data import (high priority, before Integrations):** `spider import <file> --as <table>` loads a CSV, such as a GSC or Ahrefs export, into the crawl file as an extra table. Agents can then join it with crawl data in SQL and rank Issues by traffic. It is a cheap, agent-first alternative to OAuth integrations, and suits agents that already have Ahrefs or GSC MCP servers.
 - **Report formats:** PDF, report translations.
-- **Integrations:** Google Search Console (including URL Inspection), GA4, PageSpeed Insights / Core Web Vitals, Ahrefs.
+- **Integrations:** Google Search Console (including URL Inspection), GA4, PageSpeed Insights / Core Web Vitals, Ahrefs. Data import comes first.
 - **New interfaces:** REST API and web UI.
 - **More analysis:** RDFa, accessibility, spelling, screenshots, more rich-result types.
 - **Rule plugins (after v1.0 only):** stage 2 of User SQL Rules (v0.3): Rules as Python entry-point plugins, once the internal APIs are stable.
