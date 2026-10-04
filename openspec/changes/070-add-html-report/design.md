@@ -11,7 +11,7 @@ CSV files are written with the CSV serialiser of `050-add-query-and-segments`, w
 
 The **Report Service** (`src/spider/services/report.py`) builds a ReportModel once per invocation. The HTML renderer and the Section Brief builder both read that model, so the Report and its briefs cannot disagree.
 
-`080-add-agent-skill`'s Full audit workflow (deferred to v0.2) is drafted against three things: `report brief --section <id>` with its accepted values listed by `spider commands`, one subagent per Report Section, and `report --notes <dir>`. `090-add-mcp-server` (v0.1.1) stores inline notes under the Crawl's reports folder, and `060-add-crawl-control`'s `crawls rm` deletes that folder.
+`080-add-agent-skill`'s Full audit workflow (deferred to v0.2) is drafted against three things: `report brief --section <id>` with its accepted values listed by `spider commands`, one subagent per Report Section, and `report --notes <dir>`. `090-add-mcp-server`'s `report` tool (v0.2, together with this change) stores inline notes under the Crawl's reports folder, and `060-add-crawl-control`'s `crawls rm` deletes that folder.
 
 ## Goals / Non-Goals
 
@@ -173,7 +173,7 @@ None. The change writes no store data. Report files live outside the crawl store
 
 ## Open Questions
 
-- Should `report` pick up a default notes folder such as `reports/<crawl id>/notes/`, where 090 (v0.1.1) stores inline notes, when `--notes` is omitted? This would be additive.
+- Should `report` pick up a default notes folder such as `reports/<crawl id>/notes/`, where 090's `report` tool stores inline notes, when `--notes` is omitted? This would be additive.
 - CONTEXT.md allows a Report Section to cover one Segment. v0.1 has one `segments` Report Section plus `report --segment`. Should per-Segment Report Sections come later?
 - Should the header show Scope details (subfolder, `--include` patterns) for Section Crawls? This needs a secret-free Scope summary from 020 and is additive.
 - How much print styling should the Report get, so that "Save as PDF" in a browser looks good until the PDF backlog item?

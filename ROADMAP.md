@@ -39,7 +39,7 @@ widen:                          ├─► 022-min ─┐
 
 - **The slice:** 015 → 020 → 030-min → 040-min → 050-issues. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
 - **Widening:** 022-min can start as soon as 020 is in, in its own worktree, alongside the slice. The rest of 030-min, 040 up to its 15 Rules, and 050's `summary`, `pages` and `page` follow. 080 comes last, because the Skill is generated from the finished Commands, columns and Rules.
-- 090 comes after the v0.1 release, as v0.1.1. The v0.2 changes come after that.
+- **v0.1.1** comes after the v0.1 release: 060-min first, then 090. The v0.2 changes come after that.
 
 ### The v0.1 Rules
 
@@ -57,7 +57,7 @@ widen:                          ├─► 022-min ─┐
 
 ### What each change owns
 
-If a change needs something another change owns, it depends on that change instead of redefining it. Parts marked **(v0.2)** are deferred by the 2026-10-05 scope cut. The changes that move to v0.2 as a whole are marked on their own line, and what they own is unchanged.
+If a change needs something another change owns, it depends on that change instead of redefining it. Parts marked **(v0.1.1)** or **(v0.2)** are deferred by the 2026-10-05 scope cut. The changes that move to v0.2 as a whole are marked on their own line, and what they own is unchanged.
 
 - **000-scaffold-project**:
   - `src/` package layout, the uv-managed project, ruff, strict mypy, and pytest with pytest-asyncio, hypothesis and coverage (a 90% line + branch gate).
@@ -146,12 +146,15 @@ If a change needs something another change owns, it depends on that change inste
   - **(v0.2)** **The CSV policy and output files**, for every Command (moved from 010 on 2026-10-01):
     - the `csv` format; the single **CSV policy** is UTF-8 with BOM, CRLF and formula neutralisation, with `--no-bom` to turn the BOM off
     - `-o <file>` writes exactly the stdout bytes, atomically, and leaves stdout empty (`output_written`, `output_not_writable`)
-- **060-add-crawl-control** (v0.2):
-  - `crawl --detach`: on Windows it uses CREATE_NO_WINDOW. In List mode, the parent stores the Seeds before spawning the Crawl.
-  - `status`, which detects a dead process.
-  - `stop` (`--wait`) and `resume`. Resume works for `stopped`, `interrupted` and `failed` Crawls, asks again for secrets, and accepts a higher `--max-urls`.
-  - `crawl --dry-run`: the checked config, the equivalent command, and a URL estimate that may be `null`.
-  - `crawls list|show|rm`, where `rm` also deletes that Crawl's reports and notes.
+- **060-add-crawl-control** (min in v0.1.1, rest in v0.2):
+  - **(v0.1.1)** `crawl --detach` in Spider mode: on Windows it uses CREATE_NO_WINDOW.
+  - **(v0.1.1)** `status`, which detects a dead process.
+  - **(v0.1.1)** `stop` (`--wait`).
+  - **(v0.1.1)** The recorded runs and control requests behind them, and the command recorded for Crawls started through MCP.
+  - **(v0.2)** Detached List mode, where the parent stores the Seeds before spawning the Crawl.
+  - **(v0.2)** `resume`. Resume works for `stopped`, `interrupted` and `failed` Crawls, asks again for secrets, and accepts a higher `--max-urls`.
+  - **(v0.2)** `crawl --dry-run`: the checked config, the equivalent command, and a URL estimate that may be `null`.
+  - **(v0.2)** `crawls list|show|rm`, where `rm` also deletes that Crawl's reports and notes.
 - **070-add-html-report** (v0.2):
   - `report`: a self-contained offline HTML file plus CSV files. It is written to `--dest <dir>` (default `.spider/reports/<crawl-id>/`), and a JSON receipt goes to stdout.
   - Report Sections, and `report brief --section <id>` / `--list`.
@@ -178,17 +181,22 @@ If a change needs something another change owns, it depends on that change inste
 | Structured-data validation errors / warnings | v0.3 |
 | Unique JS Inlinks / Outlinks, cookies set by scripts | v1.1 |
 
-## v0.1.1: MCP server
+## v0.1.1: background Crawls and the MCP server
 
-The first change after v0.1, as the maintainer decided on 2026-10-01. It builds on the released v0.1.
+The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min joined it on 2026-10-05, because MCP needs background Crawls. It builds on the released v0.1.
 
 | # | Change | Capabilities (specs) | Commands / MCP tools | Status |
 |---|---|---|---|---|
+| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop` | planned, min |
 | 090 | `090-add-mcp-server` | `mcp-server`; modifies `installation`, `agent-skill` | `mcp` (+ MCP tools) | planned |
+
+- **Order:** 060-min, then 090.
+- **060-min** is `crawl --detach`, `status` (with dead-process detection) and `stop` (`--wait`), for Spider mode only. `resume`, `crawl --dry-run`, `crawls list|show|rm` and detached List mode stay in v0.2.
 
 - **090-add-mcp-server**:
   - `spider mcp --workspace <path>`.
-  - **Tools:** they mirror the Commands, plus `schema`, `rules` and `doctor`, and `report` accepts notes inline.
+  - **Tools:** the foreground and the detached crawl, `status` and `stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues` and `rules`, plus `schema` and `doctor`.
+  - **(v0.2)** the tools of the v0.2 Commands: `resume`, the dry run, `crawls list`, `sql`, List and Sitemap modes, and the `report` and `report_brief` tools with inline Report Notes, which come with 070.
   - Errors use 010's full diagnostic shape.
   - The `.mcpb` bundle: `scripts/build_mcpb.py`, added to 100's release pipeline, so it is attached to every GitHub release from v0.1.1.
   - The plugin `.mcp.json`, added to 080's plugin, and config snippets.
@@ -201,12 +209,12 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 |---|---|---|---|---|
 | 024 | `024-add-list-and-sitemap-modes` | `crawl-modes` | `crawl --list`, `crawl --sitemap` | planned |
 | 026 | `026-add-parse-pool` | `crawl-performance` (only if the pool goes ahead) | none | planned, conditional on its benchmark |
-| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach/--dry-run`, `status`, `stop`, `resume`, `crawls` | planned |
+| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --dry-run`, `resume`, `crawls`, detached List mode | planned, rest after v0.1.1 |
 | 070 | `070-add-html-report` | `reporting` | `report`, `report brief` | planned |
 | 100 | `100-add-installers` | `installation` | none (install scripts, release pipeline) | planned |
 
-- **The rest of the v0.1 changes,** marked **(v0.2)** under "What each change owns": 022's ALPN, proxy, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules; 050's `sql`, `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, dry run and Hand-off, install-script one-liners and plugin marketplace.
-- **Order:** 024 and 026 first (026's benchmark decides whether its pool is built). 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 100 comes last.
+- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands; 022's ALPN, proxy, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules; 050's `sql`, `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, dry run and Hand-off, install-script one-liners and plugin marketplace.
+- **Order:** 024 and 026 first (026's benchmark decides whether its pool is built). The rest of 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 100 comes last.
 - Link graph views: `links <url> --in|--out`.
 - Redirect Chain analysis: `redirects`, with per-hop headers and timing.
 - Sitemap analysis: `sitemaps` (sitemap vs crawl, non-indexable URLs in the sitemap).

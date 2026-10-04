@@ -54,7 +54,7 @@ Screaming Frog serves these with its List mode and its sitemap upload. `020-add-
   - `000-scaffold-project`: the sitemap routes of the fixture site.
 - **Used by:**
   - `060-add-crawl-control`: the estimate and the detached List mode.
-  - `090-add-mcp-server` (v0.1.1): `crawl_start` with a list of URLs.
+  - `090-add-mcp-server`: `crawl_start` with a list of URLs, from v0.2 together with this change.
 - **Code:** `src/spider/crawl/listfile.py`, `src/spider/crawl/sitemaps.py`, and the mode handling in the Crawl Service and `src/spider/cli/crawl.py`.
 - **New dependencies:** none. XML is read with the standard library's pull parser, with no entity expansion.
 - **Docs:** the List and Sitemap modes part of `docs/crawling.md`.

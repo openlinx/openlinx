@@ -25,6 +25,8 @@ A Crawl's Crawl State is `crawl.state` from `015-add-crawl-store`: `running`, `s
 
 `completed` SHALL be final. While a stop request is waiting to be handled, the Crawl SHALL stay `running`, and the Commands of this capability SHALL report `"stop_requested": true`.
 
+> **v0.1.1** (060-min), except the transition back to `running` through `spider resume`, which is **v0.2**.
+
 #### Scenario: A Crawl that reaches its end is completed
 - **WHEN** `spider crawl {site}/ --detach` runs on a site whose `/` links to `/a`, and `spider status --crawl <id>` is polled until the state is no longer `running`
 - **THEN** `spider status --crawl <id>` prints `"state": "completed"` and `"stop_reason": null`
@@ -54,6 +56,8 @@ Other rules:
 - **The run:** it SHALL be recorded with `detached` = 1.
 - **Secrets:** they SHALL be passed to the background process through its environment, never on its command line.
 - **Failure to start:** if the background process exits before it has created the Crawl, the Command SHALL exit with code 1 and error code `detach_failed`, with a hint that contains the log file's path.
+
+> **v0.1.1** (060-min).
 
 #### Scenario: Detach returns while the Crawl runs
 - **WHEN** `spider crawl {site}/ --detach` runs against the slow fixture site
@@ -90,6 +94,8 @@ Other rules:
 ### Requirement: Detached List-mode Crawls
 With `--list` (`024-add-list-and-sitemap-modes`) and `--detach`, the detaching Command SHALL read and check the list itself, and store the Seeds for the background process, before that process starts. So `--list -` SHALL work with `--detach`, and list errors such as `empty_list` SHALL be reported by the detaching Command, with no background process started and no Crawl created.
 
+> **v0.2.**
+
 #### Scenario: A detached Crawl reads its list from standard input
 - **WHEN** `spider crawl --list - --detach` runs with the line `{site}/a` on standard input, and the Crawl then completes
 - **THEN** its `seeds` table holds exactly the row `(1, "{site}/a")`
@@ -105,6 +111,8 @@ The background process SHALL survive the end of the process and terminal that st
   - It SHALL be created outside the caller's job object when that job allows breakaway.
   - When the caller's job object kills its processes on close and does not allow breakaway, the output SHALL hold a `job_may_end_crawl` warning whose hint suggests running the Command from a normal terminal.
 - **On macOS and Linux:** it SHALL run in a new session, with standard input from the null device.
+
+> **v0.1.1** (060-min).
 
 #### Scenario: Closing the console does not end the Crawl (Windows)
 - **WHEN** `spider crawl {site}/ --detach` runs inside a console process started with CREATE_NEW_CONSOLE against the slow fixture site, and that console process is then terminated
@@ -128,6 +136,8 @@ The background process SHALL survive the end of the process and terminal that st
 - **Checking for requests:** the crawl process, foreground or background, SHALL check for new requests at least once per second.
 - **Handling:** for each request it acts on, it SHALL set `handled_at` and `handled_by_run`.
 
+> **v0.1.1** (060-min).
+
 #### Scenario: A foreground Crawl in another terminal is stopped
 - **WHEN** `spider crawl {site}/` runs as a subprocess against the slow fixture site, and `spider stop --crawl <id>` runs in another process
 - **THEN** the crawl subprocess exits with code 0 and prints `"state": "stopped"` and `"stop_reason": "requested"`
@@ -149,6 +159,8 @@ URLs not completed SHALL stay `queued`.
 The Command SHALL wait until the state is `stopped`, or until `--wait <seconds>` (default 60) has passed. It SHALL then print `{"crawl_id", "state", "stop_reason", "stop_requested"}` and exit with code 0. With `--wait 0` it SHALL return as soon as the request is recorded.
 
 For a Crawl that is not `running`, `stop` SHALL change nothing, print its Crawl State and exit with code 0. For a `running` Crawl whose process is gone, it SHALL first record `interrupted`, as "Detecting a dead crawl process" describes.
+
+> **v0.1.1** (060-min).
 
 #### Scenario: Stop waits for the Crawl to stop
 - **WHEN** a Crawl of the slow fixture site is running in another process, and `spider stop --crawl <id>` runs
@@ -183,6 +195,8 @@ The counts SHALL come from the stored `urls` table, so they may trail the crawl 
 - `stopped` otherwise, `interrupted` or `failed`: `spider resume --crawl <crawl id>`
 - `completed`: `spider summary --crawl <crawl id>`
 
+> **v0.1.1** (060-min).
+
 #### Scenario: Status of a completed Crawl
 - **WHEN** a Crawl of a site where `/` links to `/a`, `/b` and `/missing` (which returns 404) has completed, and `spider status --crawl <id>` runs
 - **THEN** it prints `"state": "completed"`, `"urls": {"discovered": 4, "fetched": 4, "errors": 0, "skipped": 0, "queued": 0}` and `"eta_s": null`
@@ -209,6 +223,8 @@ The Commands of this capability SHALL compute three values:
 - **`eta_s`:** the remaining URLs divided by `rate`, rounded to whole seconds. The remaining URLs are the `queued` URLs, capped by the number of requests that `--max-urls` still allows. It SHALL be null unless the state is `running` and `rate` is above 0.
 - **`eta_is_lower_bound`:** `true` when new URLs can still be discovered (Spider mode, or a `--max-depth` above 0), and `false` otherwise.
 
+> **v0.1.1** (060-min).
+
 #### Scenario: Rate and ETA from recent progress
 - **WHEN** a running Crawl with no URL limit has 120 URLs requested in the last 60 seconds of fake-clock time and 300 URLs queued, and its status is computed
 - **THEN** `rate` is 2.0 and `eta_s` is 150
@@ -232,6 +248,8 @@ A crawl process SHALL write `heartbeat_at` in its `crawl_runs` row at least ever
 3. report the Crawl as `interrupted`
 
 When a process holds the claim but its heartbeat is older than 60 seconds, the state SHALL stay `running`, and `status` SHALL add a `heartbeat_stale` warning.
+
+> **v0.1.1** (060-min).
 
 #### Scenario: A killed Crawl is reported as interrupted
 - **WHEN** the process of a running Crawl of the slow fixture site is killed with SIGKILL, and `spider status --crawl <id>` runs
@@ -260,6 +278,8 @@ With `--detach`, it SHALL run in the background and print the output of `crawl -
 `resume` SHALL be refused, without changing the Crawl:
 - with exit code 1 and error code `crawl_completed` for a `completed` Crawl, with a hint that gives the Crawl's re-run command
 - with exit code 5 and error code `crawl_locked` (`015-add-crawl-store`) while another process holds the writer claim
+
+> **v0.2.**
 
 #### Scenario: A stopped Crawl is completed by resume
 - **WHEN** a Crawl of the slow fixture site has been stopped after about 10 pages, and `spider resume --crawl <id>` runs
@@ -304,6 +324,8 @@ Secrets are never stored in clear:
 
 `resume` SHALL also be refused with exit code 2 and error code `limit_reached` when the URLs requested so far already reach `--max-urls`, with a hint that gives `--max-urls`.
 
+> **v0.2.**
+
 #### Scenario: Other settings cannot change on resume
 - **WHEN** `spider resume --crawl <id> --include "/x"` runs for a `stopped` Crawl
 - **THEN** it exits with code 2, and its only stderr error has `code` = `override_not_allowed`
@@ -339,6 +361,8 @@ Secrets are never stored in clear:
 ### Requirement: One writer per Crawl
 Every process that runs a Crawl or a resume SHALL hold the Crawl's writer claim (`015-add-crawl-store`) for as long as it runs. A second such process SHALL be refused with exit code 5 and error code `crawl_locked`, whose hint names `spider status`. A process that takes the claim for another purpose, such as recording `interrupted` or `crawls rm`, SHALL hold it only for that operation.
 
+> **v0.1.1** (060-min), except the scenarios that run `spider resume`, which are **v0.2**.
+
 #### Scenario: Two resumes at the same time
 - **WHEN** two `spider resume --crawl <id>` processes start at the same time for a `stopped` Crawl of the slow fixture site
 - **THEN** exactly one of them exits with code 5 and the error code `crawl_locked`
@@ -355,6 +379,8 @@ Every process that runs a Crawl or a resume SHALL hold the Crawl's writer claim 
 `spider crawl … --dry-run` SHALL validate its arguments exactly like a real Crawl, with the same error codes and exit codes. It SHALL create no file in the Workspace. It SHALL print `{"dry_run": true, "crawl_mode", "config", "command", "estimate", "warnings"}` and exit with code 0. `config` SHALL be the resolved config, as a Crawl would record it in `crawl.config`, with secrets redacted.
 
 To build the estimate, it SHALL request nothing except robots.txt of the Seed's origin and sitemap files. It SHALL request nothing at all with `--no-estimate`. When no request succeeds because the network is unavailable, `estimate.urls` SHALL be null, and `warnings` SHALL hold `estimate_unavailable` with a hint about network access.
+
+> **v0.2.**
 
 #### Scenario: The resolved config is printed
 - **WHEN** `spider crawl {site}/ --concurrency 2 --dry-run` runs
@@ -394,6 +420,8 @@ To build the estimate, it SHALL request nothing except robots.txt of the Seed's 
 
 `urls_listed` SHALL count every listed URL read before filtering. `explanation` SHALL say that a Spider Crawl usually finds more Pages than its sitemaps list, and that it also requests Resources and External URLs. When `urls` is above `--max-urls` (and `--max-urls` is not 0), `warnings` SHALL hold `estimate_exceeds_max_urls`.
 
+> **v0.2.**
+
 #### Scenario: Sitemaps named in robots.txt are counted
 - **WHEN** `/robots.txt` lists `{site}/sitemap.xml`, which lists `{site}/a`, `{site}/b`, `{site}/c` and `http://other.test/x`, and `spider crawl {site}/ --dry-run` runs
 - **THEN** `estimate` has `"urls": 3`, `"basis": "sitemaps"`, `"confidence": "medium"` and `"urls_listed": 4`
@@ -431,6 +459,8 @@ A dry run's `command`, and the `rerun_command` of `crawls show`, SHALL be `{"arg
 - **Standard input:** a list read from standard input SHALL keep `--list -`, with a `list_from_stdin` warning whose hint shows how to feed the stored Seeds back in.
 - **Settings that are not flags:** settings from `spider.toml` that are not flags of `spider crawl` and differ from their defaults (for example `[store]`, `[rules]` or `[content_area]`) SHALL be listed by their dotted keys in `details.keys` of a `settings_not_in_command` warning. Its hint SHALL say to copy them into the `spider.toml` of the Workspace where the command runs.
 - **Proxy variables:** the `environment` table of `crawl.config` SHALL be neither rendered nor listed, because the command reads the proxy variables from the environment where it runs.
+
+> **v0.2**, except the `argv` rule for Spider mode, which v0.1.1 needs for Crawls started through MCP.
 
 #### Scenario: Quoting for POSIX shells
 - **WHEN** the command is rendered for a Spider-mode Crawl of `http://site.test/` with `include` = `["/blog/(a|b)"]` and `user_agent` = `Bob's Bot`
@@ -475,7 +505,7 @@ When the Crawl Service starts or resumes a Crawl for a caller that has no comman
 
 Secrets SHALL be redacted as in any recorded command.
 
-> **Deferred to v0.1.1:** `090-add-mcp-server` is this requirement's only consumer, so it is built when 090 needs it.
+> **v0.1.1** (060-min): `090-add-mcp-server` starts Crawls through the Crawl Service. Its resume part is **v0.2**.
 
 #### Scenario: A Crawl started through the Crawl Service records an equivalent command
 - **WHEN** the Crawl Service starts a detached Crawl of `{site}/` with `max_depth` 2 for a caller without a command line
@@ -497,6 +527,8 @@ Every run of a Crawl SHALL add one row to the table `crawl_runs`: the first `spi
 | `stop_reason` | TEXT | yes | `max_urls`, `interrupt`, `requested` | Why a stopped run stopped |
 | `error` | TEXT | yes | json | The error diagnostic of a failed run, in the full shape of `010-add-workspace-and-cli-contract` |
 
+> **v0.1.1** (060-min), except the scenario that resumes, which is **v0.2**.
+
 #### Scenario: Each run is recorded
 - **WHEN** a Crawl is started with `spider crawl {site}/`, stopped, and resumed with `spider resume --crawl <id>` until it completes
 - **THEN** `crawl_runs` holds 2 rows, each with a non-null `ended_at`: run 1 with `command_argv` starting `["spider", "crawl"` and `end_state` = `stopped`, and run 2 with `command_argv` starting `["spider", "resume"` and `end_state` = `completed`
@@ -513,6 +545,8 @@ The crawl store SHALL hold stop requests in `control_requests`, a control table 
 | `handled_at` | TEXT | yes | timestamp | When the crawl process acted on it; NULL until then |
 | `handled_by_run` | INTEGER, references `crawl_runs.run` | yes | | The run that acted on it |
 
+> **v0.1.1** (060-min).
+
 #### Scenario: A stop request names who wrote it and which run handled it
 - **WHEN** a running Crawl in its first run has been stopped by a `spider stop --crawl <id>` process
 - **THEN** its `control_requests` row has `requested_by_pid` equal to that process's id, and `handled_by_run` = 1
@@ -525,6 +559,8 @@ The crawl store SHALL hold stop requests in `control_requests`, a control table 
 - `file_size_bytes`
 
 `--state <state>` SHALL keep only Crawls in that Crawl State. A crawl file that cannot be read SHALL be listed with `state` null, and an `error` diagnostic in the full shape `{level, code, message, hint, details}` with the code `crawl_file_invalid`. It SHALL NOT fail the list. A Crawl started by another process in the same Workspace, for example by the user after a Hand-off, SHALL be listed like any other.
+
+> **v0.2.**
 
 #### Scenario: Crawls are listed newest first
 - **WHEN** a Workspace holds a Crawl started at 10:00 and one started at 11:00, and `spider crawls list` runs
@@ -549,6 +585,8 @@ The crawl store SHALL hold stop requests in `control_requests`, a control table 
 - `rerun_command`
 - `warnings`, `crawl_file`, `log_file`, `tool_version` and `schema_version`
 
+> **v0.2.**
+
 #### Scenario: The recorded command is shown
 - **WHEN** `spider crawl {site}/ --max-depth 2` has completed, and `spider crawls show <id>` runs
 - **THEN** `command_argv` is `["spider", "crawl", "{site}/", "--max-depth", "2"]`
@@ -561,12 +599,14 @@ The crawl store SHALL hold stop requests in `control_requests`, a control table 
 `spider crawls rm <id>…` SHALL delete each given Crawl, including:
 - its crawl file, with the `-wal`, `-shm`, writer-claim and log files
 - any files left for its background process
-- its reports folder `.spider/reports/<crawl id>/` (`070-add-html-report`), which also holds the Report Notes saved by `090-add-mcp-server` (v0.1.1)
+- its reports folder `.spider/reports/<crawl id>/` (`070-add-html-report`), which also holds the Report Notes saved by `090-add-mcp-server`'s `report` tool (v0.2)
 
 It SHALL print `{"removed": [<crawl ids>], "paths": [<removed paths>], "freed_bytes": <n>}` and exit with code 0. It SHALL refuse, deleting nothing for the Crawl concerned:
 - with exit code 2 and error code `explicit_id_required` for `latest`
 - with exit code 5 and error code `crawl_locked` for a Crawl whose writer claim another process holds
 - with exit code 5 and error code `file_in_use` when, on Windows, another process has the crawl file open
+
+> **v0.2.**
 
 #### Scenario: A completed Crawl is removed
 - **WHEN** `spider crawls rm <id>` runs for a `completed` Crawl

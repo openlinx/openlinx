@@ -2,9 +2,11 @@
 
 In Claude Desktop and claude.ai, skills run in Anthropic's cloud sandbox. Crawling from there needs the "All domains" egress setting, and the sandbox can never reach local or staging sites, so Claude Desktop users need a local MCP server. MCP-first clients such as Codex, Cursor, VS Code and Gemini CLI also work better with tools than with shell commands. A thin MCP layer over the same services gives all of them the CLI's data, in the CLI's JSON, with no second API to maintain.
 
-This change is **v0.1.1**, the first change after v0.1, as the maintainer decided on 2026-10-01. It builds on the released v0.1 (000–080 and `100-add-installers`).
+This change is **v0.1.1**, the first change after v0.1, as the maintainer decided on 2026-10-01. It builds on the released v0.1 and on 060-min, which also ships in v0.1.1.
 
 ## What Changes
+
+> **v0.1.1 scope (2026-10-05, see ROADMAP.md):** the tools for the foreground and the detached crawl in Spider mode, `crawl_status`, `crawl_stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues` and `rules`, plus `schema` and `doctor`. **Deferred to v0.2:** `crawl_resume`, `crawls_list`, `sql`, `dry_run`, the `urls` and `sitemap` inputs (`024`), `page`'s `html`, the `report` and `report_brief` tools with inline Report Notes (`070`), and the dry-run and Hand-off guardrails in the server instructions.
 
 - **New Command `spider mcp [--workspace <path>]`.** It runs a local stdio MCP server built on the MCP Python SDK `mcp` 2.x (`MCPServer`). Its tools mirror the crawl-control, query and report Commands:
 
@@ -87,10 +89,10 @@ This change is **v0.1.1**, the first change after v0.1, as the maintainer decide
 - **Depends on:**
   - `010-add-workspace-and-cli-contract`: Workspace resolution, the diagnostic shape, exit codes and command metadata
   - `015-add-crawl-store`: `--crawl` and `schema`
-  - `024-add-list-and-sitemap-modes`: `mode_conflict`, and the List and Sitemap modes
+  - `024-add-list-and-sitemap-modes` (v0.2): `mode_conflict`, and the List and Sitemap modes
   - `040-add-rules`: rules
-  - `050-add-query-and-segments`: the query services, including `page` with `html` and `encoding`
-  - `060-add-crawl-control`: detach, status, stop, `resume --detach` and dry run, and the equivalent command it records for Crawls started through MCP
-  - `070-add-html-report`: report with `--dest`, report brief, and the Report Notes contract
+  - `050-add-query-and-segments`: the query services; `page` with `html` and `encoding`, and `sql`, from v0.2
+  - `060-add-crawl-control`: 060-min (v0.1.1) for detach, status and stop, and the command it records for Crawls started through MCP; `resume --detach`, dry run and `crawls list` from v0.2
+  - `070-add-html-report` (v0.2): report with `--dest`, report brief, and the Report Notes contract
   - `080-add-agent-skill`: `doctor`, the plugin manifests and the outdated-Skill notice
   - `100-add-installers`: the release workflow, `SHA256SUMS` and the pin test
