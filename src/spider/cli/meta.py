@@ -15,6 +15,7 @@ type OutputKind = Literal["document", "list", "rows"]
 
 @dataclass(frozen=True)
 class CommandMeta:
+    name: str
     output: OutputKind
     formats: tuple[Format, ...]
     fields: Fields | None
@@ -40,10 +41,14 @@ def command_meta[**P](
     formats: Sequence[Format],
     fields: Fields | None = None,
     events: bool = False,
+    name: str | None = None,
 ) -> Callable[[Callable[P, Any]], Callable[P, Document | Rows]]:
-    meta = CommandMeta(output, tuple(formats), fields, events)
-
     def decorate(command: Callable[P, Any]) -> Callable[P, Document | Rows]:
+        # The one name of the Command: registration, spider commands, cursors and MCP use it.
+        meta = CommandMeta(
+            name or command.__name__.replace("_", "-"), output, tuple(formats), fields, events
+        )
+
         @functools.wraps(command)
         def run(*args: P.args, **kwargs: P.kwargs) -> Document | Rows:
             output_format = cast(Format, kwargs["output_format"])
@@ -75,7 +80,7 @@ def meta_of(command: Callable[..., Any]) -> CommandMeta | None:
     return meta
 
 
-def check_command(command: Callable[..., Any]) -> None:
+def check_command(command: Callable[..., Any]) -> CommandMeta:
     meta = meta_of(command)
     if meta is None:
         raise TypeError(f"Command {command.__name__} has no @command_meta.")
@@ -98,6 +103,7 @@ def check_command(command: Callable[..., Any]) -> None:
         problems.append("its default fields are not all available")
     if problems:
         raise TypeError(f"Command {command.__name__}: {'; '.join(problems)}.")
+    return meta
 
 
 def formats_hint(meta: CommandMeta) -> str:

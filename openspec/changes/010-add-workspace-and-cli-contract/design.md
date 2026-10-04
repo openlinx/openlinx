@@ -141,7 +141,7 @@ Moved to `050-add-query-and-segments`, together with the `csv` format, `--no-bom
 ### D6. Paging and cursors
 
 - **Cursor format:** `base64url(orjson({"v":1,"q":fingerprint,"k":keyset}))`, without padding.
-  - The fingerprint is the first 16 hex characters of the SHA-256 of the canonical JSON of the Command path plus the arguments that select or order items.
+  - The fingerprint is the first 16 hex characters of the SHA-256 of the canonical JSON of the Command's name (`CommandMeta.name`, D7) plus the arguments that select or order items.
   - `--limit`, `--fields` and `--format` are excluded from the fingerprint.
 - **This change provides,** in the pure module `spider.output.paging` (standard library, orjson and `spider` only, never Click):
   - the codec and its validation, which raises `invalid_cursor`
@@ -165,6 +165,7 @@ Moved to `050-add-query-and-segments`, together with the `csv` format, `--no-bom
 - **Walking the Commands:** `spider commands` walks the Click tree of the app and skips hidden Commands.
 - **Metadata:**
   - Each Command registers its `output` kind, `events`, formats, fields and examples with `@command_meta(...)`.
+  - **One name per Command:** `CommandMeta.name`, from `@command_meta(name=...)` or else the function name with `-` for `_`, as Typer would make it. `build_app` registers the Command under it, `spider commands` lists it, `090` maps an MCP tool to it, and it is the Command identity in the cursor fingerprint (D6). A list Command declares its name as a module constant and passes the same constant to `fingerprint`, so no Command repeats its name as a literal, and nothing reads the Click path, which `090`'s services do not have.
   - Options carry `global` and `setting` in their Typer `metadata`, and `secret` only when they map to no setting.
 - **One source for each fact:** arguments and options, with their types, defaults and choices, are read from the Click params. Nothing restates them.
 - **Secrets:** an option mapped to a setting inherits `secret` from the settings field (D2), and `check_command` refuses such an option that also declares `secret`. An option with no setting declares `secret` itself. Resolving the inherited flag imports the table's model, so `spider commands` loads pydantic once an option maps to a setting (D10).

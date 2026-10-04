@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from tests.support.app import example_app
 from tests.support.cli import run_cli
 from tests.support.project import project_version
 
@@ -51,6 +52,16 @@ def test_entry_of_a_document_command() -> None:
         False,
         ["json", "table"],
         None,
+    )
+
+
+def test_entry_of_a_list_command() -> None:
+    entry = _entry(run_cli("commands", app=example_app()).json(), "example-list")
+
+    assert (entry["output"], entry["formats"], entry["fields"]) == (
+        "list",
+        ["json", "jsonl", "table"],
+        {"available": ["n", "sq"], "default": ["n"]},
     )
 
 

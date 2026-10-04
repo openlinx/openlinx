@@ -35,7 +35,9 @@ def _entry(name: str, command: Any) -> dict[str, Any]:
         "events": meta.events,
         "formats": list(meta.formats),
         "options": _options(command),
-        "fields": None,
+        "fields": None
+        if meta.fields is None
+        else {"available": list(meta.fields.available), "default": list(meta.fields.default)},
     }
 
 

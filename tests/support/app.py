@@ -18,11 +18,16 @@ from spider.output.writer import Format
 from tests.support.settings import ExampleSettings
 
 EXAMPLE_WARNING = Diagnostic("warning", "example_warning", "An example warning.")
+EXAMPLE_LIST = "example-list"
+EXAMPLE_LONG_LIST = "example-long-list"
 EXAMPLE_FIELDS = Fields(available=("n", "sq"), default=("n",))
 
 
 @command_meta(
-    output="list", formats=[Format.JSON, Format.JSONL, Format.TABLE], fields=EXAMPLE_FIELDS
+    name=EXAMPLE_LIST,
+    output="list",
+    formats=[Format.JSON, Format.JSONL, Format.TABLE],
+    fields=EXAMPLE_FIELDS,
 )
 def example_list(
     output_format: FormatOpt = Format.JSON,
@@ -37,7 +42,7 @@ def example_list(
         items,
         limit=limit,
         cursor=cursor,
-        fingerprint=fingerprint("example-list", {"odd": odd}),
+        fingerprint=fingerprint(EXAMPLE_LIST, {"odd": odd}),
         fields=select_fields(fields, EXAMPLE_FIELDS),
     )
 
@@ -45,7 +50,12 @@ def example_list(
 N_ONLY = Fields(available=("n",), default=("n",))
 
 
-@command_meta(output="list", formats=[Format.JSON, Format.JSONL, Format.TABLE], fields=N_ONLY)
+@command_meta(
+    name=EXAMPLE_LONG_LIST,
+    output="list",
+    formats=[Format.JSON, Format.JSONL, Format.TABLE],
+    fields=N_ONLY,
+)
 def example_long_list(
     output_format: FormatOpt = Format.JSON,
     limit: LimitOpt = 50,
@@ -58,7 +68,7 @@ def example_long_list(
         items,
         limit=limit,
         cursor=cursor,
-        fingerprint=fingerprint("example-long-list", {}),
+        fingerprint=fingerprint(EXAMPLE_LONG_LIST, {}),
         fields=select_fields(fields, N_ONLY),
     )
 

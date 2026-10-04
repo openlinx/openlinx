@@ -59,8 +59,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
     app.callback()(root)
     registered: list[Callable[..., Any]] = [commands, init, *extra.commands]
     for command in registered:
-        check_command(command)
-        app.command()(command)
+        app.command(name=check_command(command).name)(command)
     return app
 
 
