@@ -117,7 +117,9 @@ Errors, warnings and info lines are JSON objects, one per line on stderr. Each h
 - A failing Command writes exactly one error, as its last line on stderr.
 - Warnings and info lines never change the exit code.
 - Errors found while parsing the command line use the same shape: `usage_error` for an unknown Command, an unknown flag or a missing argument, and `invalid_value` for a value that is not allowed.
+- An unexpected failure is `internal_error` with exit code 70, and `details.traceback` holds the Python traceback. It is a bug in the tool; no raw traceback ever reaches stderr.
 - An error or warning inside a result, such as an entry of a `warnings` list, has the same shape.
+- **Written as they happen:** every stderr line, diagnostic or progress event, is written whole and flushed at once, so an agent reading a running Command sees a warning when it happens, not when the Command ends. Lines appear in the order they were reported.
 
 ```
 spider nosuchcommand
@@ -126,6 +128,32 @@ spider nosuchcommand
 ```json
 {"level":"error","code":"usage_error","message":"No such command 'nosuchcommand'. Did you mean 'commands'?","hint":null,"details":{}}
 ```
+
+## Progress events
+
+A Command that reports progress writes each event to stderr as one JSON line, flushed at once:
+
+```json
+{"event":"progress","ts":"2026-09-27T14:03:12.345Z","data":{"crawled":3}}
+```
+
+- `event` names the event, `ts` is the UTC time with milliseconds, and `data` is an object.
+- Events and diagnostics share stderr. Tell them apart by the key: an event has `event`, a diagnostic has `level`.
+- stdout never carries events, and there is no result event: the result goes to stdout once, when the Command ends.
+- `spider commands` marks the Commands that report progress with `"events":true`.
+
+## Partial results
+
+Some failures still have a result worth reading, such as a Crawl that stopped part way. Such a Command:
+- prints its result on stdout
+- writes exactly one error, as its last line on stderr
+- exits with that error's exit code
+
+```json
+{"state":"failed"}
+```
+
+Every other failing Command leaves stdout empty, so an agent can rely on this: a non-zero exit code with a JSON result on stdout means a partial result, and the error on stderr says what went wrong.
 
 ## Exit codes
 
