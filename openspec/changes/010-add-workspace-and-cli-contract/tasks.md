@@ -193,7 +193,7 @@ Each part of the self-description has one source (design D5 and D7): options and
 
 Each task is one commit. Guards and refactors are allowed here, and a refactor names the scenarios that must stay green.
 
-- [ ] 9.1 Drive "Initialising without the CLI" (workspace) at seam 2. Green, following design D9:
+- [x] 9.1 Drive "Initialising without the CLI" (workspace) at seam 2. Green, following design D9:
   - `spider.services.workspace.init_workspace(request, tables, reporter)`, with a typed `InitRequest` and `InitResult`
   - the `Collected` reporter, which keeps warnings and events in memory. It is production code: `090` uses it to put warnings into a tool result.
   - `spider.cli.init` becomes a thin adapter: it builds the request from the flags, calls the service with the CLI reporter, and returns the result. Every group 3 and group 4 scenario stays green.

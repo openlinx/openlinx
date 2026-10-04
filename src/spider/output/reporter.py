@@ -24,3 +24,15 @@ class CliReporter:
 
     def event(self, name: str, **data: Any) -> None:
         self._output.stderr_line(event_line(name, data, self._clock.now()))
+
+
+class Collected:
+    def __init__(self) -> None:
+        self.warnings: list[Diagnostic] = []
+        self.events: list[tuple[str, dict[str, Any]]] = []
+
+    def warn(self, diagnostic: Diagnostic) -> None:
+        self.warnings.append(diagnostic)
+
+    def event(self, name: str, **data: Any) -> None:
+        self.events.append((name, data))
