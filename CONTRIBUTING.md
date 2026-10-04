@@ -86,6 +86,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 ## Adding a dependency
 
 - **Runtime:** `uv add <name>`. In the same commit, add the new package and everything it pulls in to `tests/dependency_allowlist.txt`, one name per line with a short reason. `uv run pytest tests/test_dependencies.py --no-cov` names whatever is missing. Telemetry and LLM SDKs are refused even when allowlisted.
+- **Version caps:** cap the major version of a runtime dependency that a public contract rests on: `sqlalchemy` (the crawl file schema) and `typer` (the CLI, pinned to its minor version for `typer._click`). Leave the others uncapped.
 - **Development only:** `uv add --dev <name>`. The allowlist covers runtime dependencies only.
 
 ## Conventions
