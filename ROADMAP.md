@@ -176,6 +176,7 @@ If a change needs something another change owns, it depends on that change inste
   - A GitHub Actions workflow triggered by `v*` tags: the test suite, the sdist and wheel built with `uv build`, publishing to PyPI through trusted publishing, and a GitHub release with them.
   - The release gates: the tag matches the package version, and the committed Skill copy matches the generator's output (moved from 100).
   - The documented install with `uv tool install` or `pipx` (moved from 100).
+  - An install smoke check instead of a pin test: on Windows, macOS and Linux, the workflow installs the built wheel with uv on the Python version from `.python-version` (3.14), then runs `spider --version` and `spider doctor`.
   - **(v0.1.1)** The `.mcpb` bundle that 090 builds, attached to every GitHub release.
 - **100-add-installers** (v0.2):
   - `install.sh` and `install.ps1`: pin Python 3.14, run `doctor`, and ask before installing the Skill. They are attached to 085's GitHub release.
