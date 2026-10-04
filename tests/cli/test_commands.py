@@ -85,6 +85,25 @@ def test_option_details() -> None:
     }
 
 
+def test_a_secret_option_inherits_from_its_setting() -> None:
+    options = _options(run_cli("commands", app=example_app()).json(), "example-settings")
+
+    assert [
+        (options[name]["setting"], options[name]["secret"]) for name in ("--token", "--level")
+    ] == [
+        ("example.token", True),
+        ("example.level", False),
+    ]
+
+
+def test_a_secret_option_without_a_setting() -> None:
+    option = _options(run_cli("commands", app=example_app()).json(), "example-settings")[
+        "--api-key"
+    ]
+
+    assert (option["setting"], option["secret"]) == (None, True)
+
+
 def test_error_codes_of_this_change() -> None:
     diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
     expected = {
@@ -152,3 +171,7 @@ def test_same_description_on_every_os(name: str) -> None:
 def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:
     entry: dict[str, Any] = next(c for c in description["commands"] if c["name"] == name)
     return entry
+
+
+def _options(description: dict[str, Any], name: str) -> dict[str, Any]:
+    return {option["name"]: option for option in _entry(description, name)["options"]}

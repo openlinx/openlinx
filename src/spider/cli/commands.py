@@ -11,8 +11,10 @@ from typer.core import TyperGroup
 from spider import APP_NAME, __version__
 from spider.cli.meta import CommandMeta, Example, command_meta, meta_of
 from spider.cli.options import FORMAT_PARAMETER, FormatOpt, options_with_meta
+from spider.cli.runner import Invocation
 from spider.output.codes import DECLARED, ExitCode
 from spider.output.writer import Format
+from spider.workspace.tables import SettingsTables
 
 # Click's type names, in the words of JSON Schema where they differ.
 TYPE_NAMES = {"text": "string", "integer range": "integer", "float": "number"}
@@ -40,10 +42,11 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
     no Workspace.
     """
     root = cast(TyperGroup, ctx.find_root().command)
+    invocation: Invocation = ctx.obj
     return {
         "tool": {"name": APP_NAME, "version": __version__},
         "commands": [
-            _entry(name, command)
+            _entry(name, command, invocation.settings_tables)
             for name, command in sorted(root.commands.items())
             # Hidden Commands are not part of the contract: --help does not show them either.
             if not command.hidden
@@ -57,7 +60,7 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
     }
 
 
-def _entry(name: str, command: Any) -> dict[str, Any]:
+def _entry(name: str, command: Any, tables: SettingsTables) -> dict[str, Any]:
     # build_app refuses a Command without @command_meta, so every entry has one.
     meta = cast(CommandMeta, meta_of(command.callback))
     # Source line breaks are not content: each paragraph becomes one line.
@@ -71,7 +74,7 @@ def _entry(name: str, command: Any) -> dict[str, Any]:
         "events": meta.events,
         "formats": list(meta.formats),
         "arguments": _arguments(command),
-        "options": _options(command, meta),
+        "options": _options(command, meta, tables),
         "fields": None if meta.fields is None else meta.fields.to_json(),
         "examples": [example.to_json() for example in meta.examples],
     }
@@ -92,7 +95,7 @@ def _arguments(command: Any) -> list[dict[str, Any]]:
     ]
 
 
-def _options(command: Any, meta: CommandMeta) -> list[dict[str, Any]]:
+def _options(command: Any, meta: CommandMeta, tables: SettingsTables) -> list[dict[str, Any]]:
     entries = []
     for param, extra in options_with_meta(command):
         choices = getattr(param.type, "choices", None)
@@ -110,7 +113,10 @@ def _options(command: Any, meta: CommandMeta) -> list[dict[str, Any]]:
                 "multiple": param.multiple,
                 "global": extra.is_global,
                 "setting": extra.setting,
-                "secret": extra.secret,
+                # An option mapped to a setting inherits it; check_command refuses both.
+                "secret": extra.secret
+                if extra.setting is None
+                else tables.is_secret(extra.setting),
                 "description": param.help,
             }
         )

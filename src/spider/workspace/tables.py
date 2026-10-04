@@ -27,9 +27,20 @@ class SettingsTables:
 
     def items(self) -> Iterator[tuple[str, Table]]:
         for name, reference in self._references.items():
-            module, _, attribute = reference.partition(":")
-            table: Table = getattr(importlib.import_module(module), attribute)
-            yield name, table
+            yield name, _resolve(reference)
+
+    def is_secret(self, setting: str) -> bool:
+        # Declared once, on the settings field (json_schema_extra), so redaction reads it too.
+        name, _, key = setting.partition(".")
+        model: Any = _resolve(self._references[name])
+        extra = model.model_fields[key].json_schema_extra
+        return isinstance(extra, dict) and extra.get("secret") is True
+
+
+def _resolve(reference: str) -> Table:
+    module, _, attribute = reference.partition(":")
+    table: Table = getattr(importlib.import_module(module), attribute)
+    return table
 
 
 def keyed_entry(table: Any) -> Any:

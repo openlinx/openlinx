@@ -8,7 +8,7 @@ import typer
 
 from spider.cli.app import AppExtra, build_app
 from spider.cli.meta import command_meta
-from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt
+from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt, OptionMeta
 from spider.cli.runner import Invocation
 from spider.output.codes import DiagnosticCode, ExitCode
 from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
@@ -163,6 +163,29 @@ def example_aborted(output_format: FormatOpt = Format.JSON) -> Any:
     raise typer.Abort
 
 
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def example_settings(
+    output_format: FormatOpt = Format.JSON,
+    level: Annotated[
+        str | None,
+        typer.Option("--level", help="How much the example does."),
+        OptionMeta(setting="example.level"),
+    ] = None,
+    token: Annotated[
+        str | None,
+        typer.Option("--token", help="The example's token."),
+        OptionMeta(setting="example.token"),
+    ] = None,
+    api_key: Annotated[
+        str | None,
+        typer.Option("--api-key", help="A key that maps to no setting."),
+        OptionMeta(secret=True),
+    ] = None,
+) -> Any:
+    """Has options mapped to the settings example.level and example.token, and --api-key."""
+    return {"level": level}
+
+
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
@@ -182,6 +205,7 @@ def example_app() -> typer.Typer:
                 example_warning_inside,
                 example_interrupted,
                 example_aborted,
+                example_settings,
             ],
         )
     )

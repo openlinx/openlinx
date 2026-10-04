@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from spider.cli.options import FORMAT_PARAMETER
+from spider.cli.options import FORMAT_PARAMETER, option_meta
 from spider.output.codes import INVALID_VALUE, MORE_ITEMS
 from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
 from spider.output.paging import Fields, Page
@@ -116,6 +116,11 @@ def check_command(command: Callable[..., Any]) -> CommandMeta:
     default_format = declared.get(FORMAT_PARAMETER)
     if default_format is not None and (default_format.default,) != meta.formats[:1]:
         problems.append("its --format default is not the first of its formats")
+    problems += [
+        f"{name} declares secret, which its setting {extra.setting} decides"
+        for name in declared
+        if (extra := option_meta(command, name)).setting is not None and extra.secret
+    ]
     if (meta.output == "document") != (meta.fields is None):
         problems.append("fields belong to list and rows Commands only")
     elif meta.fields is not None and not set(meta.fields.default) <= set(meta.fields.available):

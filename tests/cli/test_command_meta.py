@@ -1,13 +1,14 @@
 """Registering Commands on the app (design D7 of 010-add-workspace-and-cli-contract)."""
 
 from collections.abc import Callable
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
+import typer
 
 from spider.cli.app import AppExtra, build_app
 from spider.cli.meta import command_meta
-from spider.cli.options import FormatOpt
+from spider.cli.options import FormatOpt, OptionMeta
 from spider.output.paging import Fields
 from spider.output.writer import Format
 
@@ -71,3 +72,20 @@ def test_default_format_comes_first_and_default_fields_are_available(
 ) -> None:
     with pytest.raises(TypeError, match=command.__name__):
         build_app(extra=AppExtra(commands=[command]))
+
+
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def secret_twice(
+    output_format: FormatOpt = Format.JSON,
+    token: Annotated[
+        str | None,
+        typer.Option("--token", help="A token."),
+        OptionMeta(setting="example.token", secret=True),
+    ] = None,
+) -> dict[str, Any]:
+    return {}
+
+
+def test_an_option_mapped_to_a_setting_does_not_declare_secret() -> None:
+    with pytest.raises(TypeError, match=r"example.token"):
+        build_app(extra=AppExtra(commands=[secret_twice]))

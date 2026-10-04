@@ -205,7 +205,7 @@ Each task is one commit. Guards and refactors are allowed here, and a refactor n
 - [x] 9.5 Drive "Settings tables load with the settings" (cli-contract) as a real process. Green:
   - tables are registered as `"module:Class"` references, resolved only when settings load (design D2)
   - `register()` no longer checks the table rules. A test resolves every table registered by `build_app()` and by the fixture app, and checks the rules of D2 on each.
-- [ ] 9.6 Drive "A secret option inherits from its setting" and "A secret option without a setting" (cli-contract), a trivial pair, with the fixture `example` settings Command. Green (design D7):
+- [x] 9.6 Drive "A secret option inherits from its setting" and "A secret option without a setting" (cli-contract), a trivial pair, with the fixture `example` settings Command. Green (design D7):
   - `secret` is declared once, on the settings field
   - an option mapped to a setting inherits it, and `check_command` refuses such an option that also declares `secret`
   - an option without a setting declares `secret` itself
