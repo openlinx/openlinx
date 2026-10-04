@@ -13,6 +13,8 @@ class ExampleSettings(BaseModel):
 
 
 class GroupSettings(BaseModel):
+    """A named group of the example."""
+
     model_config = ConfigDict(extra="forbid")
 
     level: Literal["low", "high"] = Field("low", description="How much the group does.")

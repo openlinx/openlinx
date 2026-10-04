@@ -17,18 +17,25 @@ HEADER = (
 def settings_template(tables: SettingsTables) -> str:
     parts = [HEADER]
     for name, table in tables.items():
-        if keyed_entry(table) is not None:
-            continue
-        model: Any = table
-        lines = [f"[{name}]"]
-        for key, field in model.model_fields.items():
-            lines.append(f"# {field.description}")
-            if field.default is None:
-                lines.append(f"# {key} =")
-            else:
-                lines.append(f"# {key} = {_toml_literal(field.default)}")
+        entry = keyed_entry(table)
+        if entry is None:
+            lines = [f"[{name}]", *_settings(table)]
+        else:
+            # No entry exists until the user names one, so even the header stays a comment.
+            lines = [f"# {entry.__doc__}", f"# [{name}.<name>]", *_settings(entry)]
         parts.append("\n".join(lines) + "\n")
     return "\n".join(parts)
+
+
+def _settings(model: Any) -> list[str]:
+    lines = []
+    for key, field in model.model_fields.items():
+        lines.append(f"# {field.description}")
+        if field.default is None:
+            lines.append(f"# {key} =")
+        else:
+            lines.append(f"# {key} = {_toml_literal(field.default)}")
+    return lines
 
 
 def _toml_literal(value: Any) -> str:

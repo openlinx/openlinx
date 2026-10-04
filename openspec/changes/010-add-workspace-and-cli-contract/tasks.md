@@ -201,7 +201,7 @@ Each task is one commit. Guards and refactors are allowed here, and a refactor n
 - [x] 9.3 Drive "Named entries" and "Unknown key in a named entry" (workspace), a trivial pair, with the fixture keyed table `[groups]`. Green:
   - a registered table may be `dict[str, V]`, where V is a table model or a TOML literal type (design D2)
   - the closest-key hint walks into the entries of a keyed table
-- [ ] 9.4 Drive "A keyed table in the template" (workspace). Green: the template writes a keyed table as its description and a commented `# [<table>.<name>]` header, followed by its entry's settings.
+- [x] 9.4 Drive "A keyed table in the template" (workspace). Green: the template writes a keyed table as its description and a commented `# [<table>.<name>]` header, followed by its entry's settings.
 - [ ] 9.5 Drive "Settings tables load with the settings" (cli-contract) as a real process. Green:
   - tables are registered as `"module:Class"` references, resolved only when settings load (design D2)
   - `register()` no longer checks the table rules. A test resolves every table registered by `build_app()` and by the fixture app, and checks the rules of D2 on each.

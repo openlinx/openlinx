@@ -24,6 +24,9 @@ class SettingsTables:
             _check_model(name, table)
         elif entry not in TOML_LITERAL_TYPES:
             _check_model(f"{name}.<name>", entry)
+            # The template describes the keyed table with it.
+            if not entry.__doc__ or "\n" in entry.__doc__:
+                raise TypeError(f"Settings table [{name}] needs a one-line entry docstring.")
         if name in self._tables:
             raise TypeError(f"Settings table [{name}] is registered twice.")
         self._tables[name] = table

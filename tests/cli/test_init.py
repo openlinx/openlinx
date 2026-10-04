@@ -170,3 +170,11 @@ def test_an_unset_setting_in_the_template(shop: Path) -> None:
     lines = (shop / "spider.toml").read_text(encoding="utf-8").splitlines()
 
     assert lines.index("[example]") < lines.index("# token =")
+
+
+def test_a_keyed_table_in_the_template(shop: Path) -> None:
+    run_cli("init", app=example_app())
+
+    lines = (shop / "spider.toml").read_text(encoding="utf-8").splitlines()
+
+    assert '# level = "low"' in lines[lines.index("# [groups.<name>]") :]

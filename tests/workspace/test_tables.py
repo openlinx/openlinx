@@ -3,7 +3,7 @@
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from spider.workspace.tables import SettingsTables
+from spider.workspace.tables import SettingsTables, Table
 
 
 class Loose(BaseModel):
@@ -36,10 +36,21 @@ class TomlDefaults(BaseModel):
     proxy: str | None = Field(None, description="A proxy, unset by default.")
 
 
-@pytest.mark.parametrize("model", [Loose, Undescribed, TwoLineDescription, NotANumberDefault])
-def test_a_table_the_template_cannot_describe_is_refused(model: type[BaseModel]) -> None:
+@pytest.mark.parametrize(
+    "table",
+    [
+        Loose,
+        Undescribed,
+        TwoLineDescription,
+        NotANumberDefault,
+        dict[str, Loose],
+        dict[int, TomlDefaults],
+        dict[str, TomlDefaults],
+    ],
+)
+def test_a_table_the_template_cannot_describe_is_refused(table: Table) -> None:
     with pytest.raises(TypeError):
-        SettingsTables().register("example", model)
+        SettingsTables().register("example", table)
 
 
 def test_a_table_with_toml_defaults_registers() -> None:
