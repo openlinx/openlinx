@@ -104,6 +104,22 @@ def test_warning_and_info_codes_of_this_change() -> None:
     ] == [("warning", None), ("info", None)]
 
 
+def test_naming_rule_for_input_errors() -> None:
+    diagnostics = run_cli("commands").json()["diagnostics"]
+
+    assert [
+        (d["code"], d["exit_code"])
+        for d in diagnostics
+        if d["code"].startswith(("invalid_", "unknown_")) or d["code"] == "usage_error"
+        if d["exit_code"] != 2
+    ] + [
+        (d["code"], d["exit_code"])
+        for d in diagnostics
+        if d["code"].endswith("_not_found") or d["code"] == "no_crawls"
+        if d["exit_code"] != 4
+    ] == []
+
+
 def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:
     entry: dict[str, Any] = next(c for c in description["commands"] if c["name"] == name)
     return entry
