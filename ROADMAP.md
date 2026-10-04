@@ -223,9 +223,10 @@ The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min join
   - A `.mcp.json` example and the client config snippets, shipped as docs in `docs/mcp.md`.
   - **(v0.2)** The plugin `.mcp.json`, which comes with 080's plugin marketplace.
 
-**Re-grounding checklist** (stale lines in the drafts, fixed when each change is re-grounded):
+**Re-grounding checklist** (what to fix or design when each change is re-grounded):
 - 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
 - 080: `design.md:95` and task 7.8 still name 100's release pipeline for the Skill-copy check, which is now 085's.
+- 040: design the Rule model so that most built-in Rules can be expressed by the same SQL mechanism that user Rules will use.
 
 ## v0.2: crawl control, reports, CI gate, link graph
 
@@ -254,6 +255,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 
 - The diff Report. Crawl Diff itself (`diff A B`) moved to v0.2 with 110.
 - Custom Extraction (CSS, XPath, regex; configured in `spider.toml`).
+- **User SQL Rules**, stage 1: user Rules written as read-only SQL over the public schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)), with Rule metadata (Issue Type, Priority, description, how to fix). They are kept in `spider.toml` or in rule files, and can be shared as Rule packs. Stage 2, Python plugins, comes only after v1.0 (see Backlog).
 - Near-Duplicates (our own MinHash) with `duplicates [--exact|--near]`.
 - Offline structured-data validation (schema.org plus Google's rules for about 10 types, stored as YAML) with `structured-data`.
 
@@ -272,6 +274,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 - **Report formats:** PDF, report translations.
 - **Integrations:** Google Search Console (including URL Inspection), GA4, PageSpeed Insights / Core Web Vitals, Ahrefs.
 - **New interfaces:** REST API and web UI.
-- **More analysis:** RDFa, accessibility, spelling, screenshots, more rich-result types, third-party Rule plugins.
+- **More analysis:** RDFa, accessibility, spelling, screenshots, more rich-result types.
+- **Rule plugins (after v1.0 only):** stage 2 of User SQL Rules (v0.3): Rules as Python entry-point plugins, once the internal APIs are stable.
 - **Crawl operation:** scheduled or distributed Crawls.
 - **Distribution:** signed standalone binaries and winget.
