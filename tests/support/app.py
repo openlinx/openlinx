@@ -38,12 +38,15 @@ def example_list(
     )
 
 
-ROWS_FIELDS = Fields(available=("n",), default=("n",))
+N_ONLY = Fields(available=("n",), default=("n",))
 
 
-@command_meta(output="list", formats=[Format.JSON, Format.JSONL, Format.TABLE], fields=ROWS_FIELDS)
+@command_meta(output="list", formats=[Format.JSON, Format.JSONL, Format.TABLE], fields=N_ONLY)
 def example_long_list(
-    output_format: FormatOpt = Format.JSON, limit: LimitOpt = 50, cursor: CursorOpt = None
+    output_format: FormatOpt = Format.JSON,
+    limit: LimitOpt = 50,
+    cursor: CursorOpt = None,
+    fields: FieldsOpt = None,
 ) -> Page:
     """A list Command whose items are n=1 to n=60."""
     items = [{"n": n} for n in range(1, 61)]
@@ -52,18 +55,18 @@ def example_long_list(
         limit=limit,
         cursor=cursor,
         fingerprint=fingerprint("example-long-list", {}),
-        fields=("n",),
+        fields=select_fields(fields, N_ONLY),
     )
 
 
-@command_meta(output="rows", formats=[Format.JSONL], fields=ROWS_FIELDS)
+@command_meta(output="rows", formats=[Format.JSONL], fields=N_ONLY)
 def example_rows(output_format: FormatOpt = Format.JSONL) -> Iterator[Any]:
     """A rows Command that returns the rows n=1 and n=2."""
     yield {"n": 1}
     yield {"n": 2}
 
 
-@command_meta(output="rows", formats=[Format.JSONL], fields=ROWS_FIELDS)
+@command_meta(output="rows", formats=[Format.JSONL], fields=N_ONLY)
 def example_rows_waiting(signal: Path, output_format: FormatOpt = Format.JSONL) -> Iterator[Any]:
     """Yields n=1, waits up to 5 s for the signal file, then n=2, or n=-1 if it never came."""
     yield {"n": 1}

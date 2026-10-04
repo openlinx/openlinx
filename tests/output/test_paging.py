@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from spider.output.diagnostics import SpiderError
-from spider.output.paging import decode_cursor, encode_cursor
+from spider.output.paging import decode_cursor, encode_cursor, paginate
 
 FINGERPRINT = "0123456789abcdef"
 # Payloads of every length modulo 3, and bytes that plain base64 writes as + and /.
@@ -44,5 +44,15 @@ def _base64(payload: bytes) -> str:
 def test_undecodable_cursor(cursor: str) -> None:
     with pytest.raises(SpiderError) as raised:
         decode_cursor(cursor, FINGERPRINT)
+
+    assert raised.value.code == "invalid_cursor"
+
+
+@pytest.mark.parametrize("keyset", ["x", None, 1.5, -3, True])
+def test_a_cursor_whose_position_is_not_an_index_is_undecodable(keyset: Any) -> None:
+    cursor = encode_cursor(FINGERPRINT, keyset)
+
+    with pytest.raises(SpiderError) as raised:
+        paginate([{"n": 1}], limit=1, cursor=cursor, fingerprint=FINGERPRINT, fields=("n",))
 
     assert raised.value.code == "invalid_cursor"

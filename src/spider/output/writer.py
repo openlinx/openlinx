@@ -27,7 +27,6 @@ class Document:
     value: Any
     format: Format
     kind: Literal["document", "list"]
-    # Written to stderr after the document, such as more_items for a page without its envelope.
     notice: Diagnostic | None = None
 
 

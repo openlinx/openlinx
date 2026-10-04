@@ -24,6 +24,10 @@ def rows_without_fields(output_format: FormatOpt = Format.JSONL) -> list[Any]:
     return []
 
 
+def list_without_cursor(output_format: FormatOpt = Format.JSON, limit: int = 50) -> Any:
+    return None
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -36,6 +40,9 @@ def rows_without_fields(output_format: FormatOpt = Format.JSONL) -> list[Any]:
         command_meta(
             output="rows", formats=[Format.JSONL, Format.TABLE], fields=Fields(("n",), ("n",))
         )(rows_without_fields),
+        command_meta(output="list", formats=[Format.JSON], fields=Fields(("n",), ("n",)))(
+            list_without_cursor
+        ),
     ],
 )
 def test_a_command_its_output_kind_cannot_serve_is_refused(command: Callable[..., Any]) -> None:
@@ -49,7 +56,12 @@ def table_first(output_format: FormatOpt = Format.TABLE) -> dict[str, Any]:
 
 
 @command_meta(output="list", formats=[Format.JSON], fields=Fields(("n", "sq"), ("n", "size")))
-def unavailable_default_field(output_format: FormatOpt = Format.JSON, limit: int = 50) -> Any:
+def unavailable_default_field(
+    output_format: FormatOpt = Format.JSON,
+    limit: int = 50,
+    cursor: str | None = None,
+    fields: str | None = None,
+) -> Any:
     return None
 
 

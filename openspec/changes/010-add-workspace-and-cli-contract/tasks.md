@@ -143,7 +143,7 @@ The paging logic lives in the pure module `spider.output.paging` (design D6): th
 - [x] 6.16 **Guard:** "Garbage cursor" (cli-contract) at seam 1. The codec of 6.2 already rejects it.
 - [x] 6.17 Drive "More items notice" (cli-contract). Green: the info line `more_items` for `jsonl` and `table`.
 - [x] 6.18 Docs: add paging, `--fields` and cursors to `docs/cli.md`.
-- [ ] 6.19 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
+- [x] 6.19 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Progress events, partial results and diagnostics
 

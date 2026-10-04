@@ -84,7 +84,7 @@ Pass `next_cursor` back with `--cursor` until it is `null`. That prints every it
 {"level":"error","code":"invalid_cursor","message":"The cursor was not made by this request, or it was altered.","hint":"Pass the next_cursor of the same request, or leave out --cursor to start again.","details":{}}
 ```
 
-With `jsonl` and `table` there is no envelope. When more items exist than were printed, the info line `more_items` on stderr gives the `total` and the `next_cursor`:
+With `jsonl` and `table` there is no envelope. When more items exist than were printed, the info line `more_items` on stderr gives the `total` and the `next_cursor`. With `--limit 0` it is the only place the total appears, and its `next_cursor` is `null`. With `--format jsonl --limit 2`:
 
 ```json
 {"level":"info","code":"more_items","message":"2 of 5 items printed.","hint":"Pass --cursor with details.next_cursor for the next page.","details":{"total":5,"next_cursor":"eyJ2IjoxLCJxIjoiMzBiZDUwNzRkMzlkZmY4MSIsImsiOjJ9"}}

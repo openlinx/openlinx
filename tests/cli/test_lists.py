@@ -60,7 +60,13 @@ def test_everything_on_one_page() -> None:
 def test_default_limit() -> None:
     page = run_cli("example-long-list", app=example_app()).json()
 
-    assert (page["items"], type(page["next_cursor"])) == ([{"n": n} for n in range(1, 51)], str)
+    cursor = page["next_cursor"]
+
+    assert (page["items"], type(cursor), cursor != "") == (
+        [{"n": n} for n in range(1, 51)],
+        str,
+        True,
+    )
 
 
 def test_count_only() -> None:
@@ -147,10 +153,21 @@ def test_more_items_notice(output_format: str) -> None:
     notice = result.stderr_json_lines()[-1]
     cursor = notice["details"]["next_cursor"]
 
-    assert (notice["level"], notice["code"], notice["details"]["total"], bool(cursor)) == (
-        "info",
+    assert (
+        notice["level"],
+        notice["code"],
+        notice["details"]["total"],
+        type(cursor),
+        cursor != "",
+    ) == ("info", "more_items", 5, str, True)
+
+
+def test_count_only_as_lines_still_gives_the_total() -> None:
+    result = run_cli("example-list", "--format", "jsonl", "--limit", "0", app=example_app())
+    notice = result.stderr_json_lines()[-1]
+
+    assert (result.stdout, notice["code"], notice["details"]) == (
+        b"",
         "more_items",
-        5,
-        True,
+        {"total": 5, "next_cursor": None},
     )
-    assert isinstance(cursor, str)
