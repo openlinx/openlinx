@@ -1,5 +1,7 @@
 """List Commands (010-add-workspace-and-cli-contract, cli-contract)."""
 
+import pytest
+
 from tests.support.app import example_app
 from tests.support.cli import run_cli
 
@@ -71,3 +73,10 @@ def test_same_request_same_output() -> None:
     first, second = (run_cli("example-list", "--limit", "2", app=example_app()) for _ in range(2))
 
     assert first.stdout == second.stdout
+
+
+@pytest.mark.parametrize("limit", ["1001", "-1"])
+def test_limit_above_the_maximum_and_negative_limit(limit: str) -> None:
+    result = run_cli("example-list", "--limit", limit, app=example_app())
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_value")
