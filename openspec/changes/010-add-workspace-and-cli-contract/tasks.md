@@ -156,7 +156,7 @@ The streams and the Reporter follow design D3: `Output(stdout, stderr)` takes it
   - the `Reporter` protocol: `warn(diagnostic)` and `event(name, **data)`
   - the CLI reporter, which writes through `Output` and is reached from the `Invocation`
   - `init`'s `workspace_nested` warning goes through the reporter
-- [ ] 7.4 Drive "Events go to stderr" (cli-contract) at seam 1.
+- [x] 7.4 **Guard:** "Events go to stderr" (cli-contract) at seam 1. The CLI reporter of 7.3 already writes events to stderr.
 - [ ] 7.5 **Guard:** "Events and diagnostics share stderr" (cli-contract), as a real process with `run_cli_process`, proving that the lines come out in emission order.
 - [ ] 7.6 Drive "A warning is readable at once" (cli-contract) as a real process, with a fixture Command that warns and then waits for a signal file. Green: every stderr line, event or diagnostic, is written under one `threading.Lock` and flushed. Today `Output.diagnostic` never flushes, and a piped `sys.stderr.buffer` is block-buffered.
 - [ ] 7.7 Drive "The result of a failed outcome is printed" (cli-contract) at seam 1. Green: `Outcome(result, error)`.
