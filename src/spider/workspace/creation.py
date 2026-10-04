@@ -4,7 +4,8 @@ import errno
 from pathlib import Path
 
 from spider import APP_NAME
-from spider.output.diagnostics import FileSystemError
+from spider.output.codes import WORKSPACE_NOT_WRITABLE
+from spider.output.diagnostics import SpiderError
 from spider.workspace.discovery import Workspace
 
 GITIGNORE = f"# Created by {APP_NAME}: crawl data is not committed.\n*\n"
@@ -25,8 +26,8 @@ def create_workspace(workspace: Workspace, settings_text: str) -> list[Path]:
         created += _folder(crawls)
         created += _file(settings, settings_text)
     except OSError as error:
-        raise FileSystemError(
-            "workspace_not_writable",
+        raise SpiderError(
+            WORKSPACE_NOT_WRITABLE,
             f"Cannot create or write the Workspace folder {workspace.root}.",
             details={
                 "path": str(error.filename or workspace.root),

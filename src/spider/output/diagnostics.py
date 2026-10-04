@@ -1,51 +1,29 @@
-"""Exit codes, and errors bound to them (design D5 of 010-add-workspace-and-cli-contract)."""
+"""Diagnostics, and errors bound to their code (design D5 of 010-add-workspace-and-cli-contract)."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import IntEnum
-from typing import Any, Literal
+from typing import Any
 
-from spider import APP_NAME
-
-
-class ExitCode(IntEnum):
-    OK = 0
-    FAILED = 1
-    USAGE = 2
-    CONFIG = 3
-    NOT_FOUND = 4
-    BUSY = 5
-    INCOMPATIBLE = 6
-    IO = 7
-    NETWORK = 8
-    INTERNAL = 70
-    INTERRUPTED = 130
-
-
-EXIT_CODE_DESCRIPTIONS: Mapping[ExitCode, str] = {
-    ExitCode.OK: "success",
-    ExitCode.FAILED: "the Command ran but could not do everything asked; the error says what",
-    ExitCode.USAGE: (
-        "the command line is wrong: an unknown Command, flag or name, or a missing or invalid value"
-    ),
-    ExitCode.CONFIG: f"{APP_NAME}.toml or a setting is invalid",
-    ExitCode.NOT_FOUND: "a Workspace, Crawl or item named on the command line does not exist",
-    ExitCode.BUSY: "another process holds the Crawl",
-    ExitCode.INCOMPATIBLE: "the crawl file cannot be used by this version",
-    ExitCode.IO: "reading or writing a file or folder failed",
-    ExitCode.NETWORK: "the network or a required host cannot be reached",
-    ExitCode.INTERNAL: "an unexpected failure, which is a bug in the tool",
-    ExitCode.INTERRUPTED: "stopped with Ctrl+C",
-}
+from spider.output.codes import DiagnosticCode, Level
 
 
 @dataclass(frozen=True)
 class Diagnostic:
-    level: Literal["error", "warning", "info"]
+    level: Level
     code: str
     message: str
     hint: str | None = None
     details: Mapping[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def of(
+        cls,
+        code: DiagnosticCode,
+        message: str,
+        hint: str | None = None,
+        details: Mapping[str, Any] | None = None,
+    ) -> "Diagnostic":
+        return cls(code.level, code.code, message, hint, dict(details or {}))
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -58,17 +36,18 @@ class Diagnostic:
 
 
 class SpiderError(Exception):
-    exit_code: ExitCode
-
     def __init__(
         self,
-        code: str,
+        code: DiagnosticCode,
         message: str,
         hint: str | None = None,
         details: Mapping[str, Any] | None = None,
     ) -> None:
+        if code.exit_code is None:
+            raise TypeError(f"{code.code} is a {code.level}, not an error.")
         super().__init__(message)
-        self.diagnostic = Diagnostic("error", code, message, hint, dict(details or {}))
+        self.exit_code = code.exit_code
+        self.diagnostic = Diagnostic.of(code, message, hint, details)
 
     @property
     def code(self) -> str:
@@ -81,27 +60,3 @@ class Outcome:
 
     result: Any
     error: SpiderError
-
-
-class FailedError(SpiderError):
-    exit_code = ExitCode.FAILED
-
-
-class UsageError(SpiderError):
-    exit_code = ExitCode.USAGE
-
-
-class NotFoundError(SpiderError):
-    exit_code = ExitCode.NOT_FOUND
-
-
-class FileSystemError(SpiderError):
-    exit_code = ExitCode.IO
-
-
-class ConfigError(SpiderError):
-    exit_code = ExitCode.CONFIG
-
-
-class InternalError(SpiderError):
-    exit_code = ExitCode.INTERNAL

@@ -176,7 +176,7 @@ Each part of the self-description has one source (design D5 and D7): options and
 - [x] 8.4 Drive "Entry of a document Command" (cli-contract). Green: `output`, `events`, `formats` and `fields` in the entries, derived from `@command_meta`.
 - [x] 8.5 Drive "Entry of a list Command" (cli-contract), with the fixture app. Also give the fingerprint its Command identity from one source: the Command name that `@command_meta` and registration know, the same string an MCP tool maps to. No list Command passes its name as a literal, and the Click path is not used, because `090`'s services have no Click.
 - [x] 8.6 Drive "Option details" (cli-contract). Green: option and argument entries derived from the Click params.
-- [ ] 8.7 Drive "Error codes of this change" and "Warning and info codes of this change" (cli-contract), a trivial pair. Green: the error-code registry of design D5.
+- [x] 8.7 Drive "Error codes of this change" and "Warning and info codes of this change" (cli-contract), a trivial pair. Green: the error-code registry of design D5.
   - Each code is one constant holding its code, level, exit code and description.
   - `SpiderError` takes that constant instead of a loose string. Migrate every call site: `init.py`, `creation.py`, `discovery.py`, `settings.py`, `runner.py` and `meta.py`.
   - `EXIT_CODE_DESCRIPTIONS` folds into the `ExitCode` enum, so each member carries its description.

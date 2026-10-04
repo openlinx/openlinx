@@ -17,7 +17,8 @@ from spider import APP_NAME
 from spider.cli.meta import formats_hint, meta_of
 from spider.cli.options import option_meta
 from spider.clock import SystemClock
-from spider.output.diagnostics import ExitCode, InternalError, SpiderError, UsageError
+from spider.output.codes import INTERNAL_ERROR, INVALID_VALUE, USAGE_ERROR, ExitCode
+from spider.output.diagnostics import SpiderError
 from spider.output.reporter import CliReporter, Reporter
 from spider.output.writer import Document, Output, Rows
 from spider.workspace.tables import SettingsTables
@@ -72,13 +73,13 @@ class SpiderGroup(TyperGroup):
                 returned = ExitCode.OK
         except MissingParameter as error:
             # A BadParameter subclass, but a missing argument is a usage error (cli-contract).
-            output.diagnostic(UsageError("usage_error", error.format_message()).diagnostic)
+            output.diagnostic(SpiderError(USAGE_ERROR, error.format_message()).diagnostic)
             sys.exit(ExitCode.USAGE)
         except typer.BadParameter as error:
             output.diagnostic(_invalid_value(error).diagnostic)
             sys.exit(ExitCode.USAGE)
         except ClickUsageError as error:
-            output.diagnostic(UsageError("usage_error", error.format_message()).diagnostic)
+            output.diagnostic(SpiderError(USAGE_ERROR, error.format_message()).diagnostic)
             sys.exit(ExitCode.USAGE)
         except SpiderError as error:
             output.diagnostic(error.diagnostic)
@@ -109,26 +110,26 @@ def _check_global_flags_follow_the_command(args: Sequence[str], global_flags: se
             return
         flag = arg.partition("=")[0]
         if flag in global_flags:
-            raise UsageError(
-                "usage_error",
+            raise SpiderError(
+                USAGE_ERROR,
                 f"{flag} is given before the Command name.",
                 hint=f"Put {flag} after the Command name, as in: {APP_NAME} init {flag} ...",
             )
 
 
-def _internal_error() -> InternalError:
-    return InternalError(
-        "internal_error",
+def _internal_error() -> SpiderError:
+    return SpiderError(
+        INTERNAL_ERROR,
         f"An unexpected failure stopped the Command. This is a bug in {APP_NAME}.",
         hint="Report it with details.traceback.",
         details={"traceback": traceback.format_exc()},
     )
 
 
-def _invalid_value(error: typer.BadParameter) -> UsageError:
+def _invalid_value(error: typer.BadParameter) -> SpiderError:
     hint = None
     if error.param is not None and error.param.name == "output_format" and error.ctx is not None:
         callback = error.ctx.command.callback
         meta = meta_of(callback) if callback is not None else None
         hint = formats_hint(meta) if meta is not None else None
-    return UsageError("invalid_value", error.format_message(), hint=hint)
+    return SpiderError(INVALID_VALUE, error.format_message(), hint=hint)

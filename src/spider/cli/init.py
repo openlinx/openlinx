@@ -8,6 +8,7 @@ import typer
 from spider.cli.meta import command_meta
 from spider.cli.options import FormatOpt, WorkspaceOpt
 from spider.cli.runner import Invocation
+from spider.output.codes import WORKSPACE_NESTED
 from spider.output.diagnostics import Diagnostic
 from spider.output.writer import Format
 from spider.workspace.creation import create_workspace
@@ -32,9 +33,8 @@ def init(
     parent = enclosing_workspace(workspace, home)
     if parent is not None:
         invocation.reporter.warn(
-            Diagnostic(
-                "warning",
-                "workspace_nested",
+            Diagnostic.of(
+                WORKSPACE_NESTED,
                 f"{workspace.root} is inside the Workspace {parent.root}.",
                 hint=f"Commands run below {workspace.root} now use the new Workspace.",
                 details={"parent": str(parent.root)},

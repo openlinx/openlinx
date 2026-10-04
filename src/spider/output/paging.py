@@ -9,7 +9,8 @@ from typing import Any
 
 import orjson
 
-from spider.output.diagnostics import UsageError
+from spider.output.codes import INVALID_CURSOR, INVALID_VALUE, UNKNOWN_FIELD
+from spider.output.diagnostics import SpiderError
 
 CURSOR_VERSION = 1
 CURSOR_CHARACTERS = re.compile(r"[A-Za-z0-9_-]+")
@@ -63,15 +64,15 @@ def select_fields(requested: str | None, fields: Fields) -> tuple[str, ...]:
     if names == (ALL_FIELDS,):
         return fields.available
     if "" in names:
-        raise UsageError(
-            "invalid_value",
+        raise SpiderError(
+            INVALID_VALUE,
             f"--fields {requested!r} has an empty field name.",
             hint="Separate field names with single commas, such as --fields n,sq.",
         )
     for name in names:
         if name not in fields.available:
-            raise UsageError(
-                "unknown_field",
+            raise SpiderError(
+                UNKNOWN_FIELD,
                 f"This Command has no field {name}.",
                 hint=f"Use --fields with any of: {', '.join(fields.available)}, or {ALL_FIELDS}.",
                 details={"field": name, "available": list(fields.available)},
@@ -107,9 +108,9 @@ def decode_cursor(cursor: str, fingerprint: str) -> Any:
     return payload["k"]
 
 
-def _invalid_cursor() -> UsageError:
-    return UsageError(
-        "invalid_cursor",
+def _invalid_cursor() -> SpiderError:
+    return SpiderError(
+        INVALID_CURSOR,
         "The cursor was not made by this request, or it was altered.",
         hint="Pass the next_cursor of the same request, or leave out --cursor to start again.",
     )

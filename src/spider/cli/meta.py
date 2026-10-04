@@ -6,7 +6,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from spider.output.diagnostics import Diagnostic, Outcome, UsageError
+from spider.output.codes import INVALID_VALUE, MORE_ITEMS
+from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
 from spider.output.paging import Fields, Page
 from spider.output.writer import Document, Format, Rows
 
@@ -53,8 +54,8 @@ def command_meta[**P](
         def run(*args: P.args, **kwargs: P.kwargs) -> Document | Rows:
             output_format = cast(Format, kwargs["output_format"])
             if output_format not in meta.formats:
-                raise UsageError(
-                    "invalid_value",
+                raise SpiderError(
+                    INVALID_VALUE,
                     f"This Command has no {output_format} format.",
                     hint=formats_hint(meta),
                 )
@@ -116,9 +117,8 @@ def _more_items(page: Page, output_format: Format) -> Diagnostic | None:
     count_only = not page.items and page.total > 0
     if output_format is Format.JSON or (page.next_cursor is None and not count_only):
         return None
-    return Diagnostic(
-        "info",
-        "more_items",
+    return Diagnostic.of(
+        MORE_ITEMS,
         f"{len(page.items)} of {page.total} items printed.",
         hint=(
             "Pass --limit above 0 to print items."

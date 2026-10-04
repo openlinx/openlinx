@@ -12,11 +12,14 @@ from spider.cli.app import AppExtra, build_app
 from spider.cli.meta import command_meta
 from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt
 from spider.cli.runner import Invocation
-from spider.output.diagnostics import Diagnostic, FailedError, Outcome
+from spider.output.codes import DiagnosticCode, ExitCode
+from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
 from tests.support.settings import ExampleSettings
 
+# Declared here, not in spider.output.codes: the tool never lists the fixture app's codes.
+EXAMPLE_FAILED = DiagnosticCode("example_failed", "error", ExitCode.FAILED, "The example failed.")
 EXAMPLE_WARNING = Diagnostic("warning", "example_warning", "An example warning.")
 EXAMPLE_LIST = "example-list"
 EXAMPLE_LONG_LIST = "example-long-list"
@@ -121,7 +124,7 @@ def example_warn_and_wait(ctx: typer.Context, output_format: FormatOpt = Format.
 @command_meta(output="document", formats=[Format.JSON, Format.TABLE])
 def example_failed_outcome(output_format: FormatOpt = Format.JSON) -> Outcome:
     """Ends with the result state=failed and an error whose exit code is 1."""
-    return Outcome({"state": "failed"}, FailedError("example_failed", "The example failed."))
+    return Outcome({"state": "failed"}, SpiderError(EXAMPLE_FAILED, "The example failed."))
 
 
 @command_meta(output="document", formats=[Format.JSON, Format.TABLE])

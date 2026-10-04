@@ -78,6 +78,32 @@ def test_option_details() -> None:
     }
 
 
+def test_error_codes_of_this_change() -> None:
+    diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
+    expected = {
+        "usage_error": 2,
+        "invalid_value": 2,
+        "unknown_field": 2,
+        "invalid_cursor": 2,
+        "settings_invalid": 3,
+        "workspace_not_found": 4,
+        "workspace_not_writable": 7,
+        "internal_error": 70,
+        "interrupted": 130,
+    }
+
+    assert {code: diagnostics[code]["exit_code"] for code in expected} == expected
+
+
+def test_warning_and_info_codes_of_this_change() -> None:
+    diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
+
+    assert [
+        (diagnostics[code]["level"], diagnostics[code]["exit_code"])
+        for code in ("workspace_nested", "more_items")
+    ] == [("warning", None), ("info", None)]
+
+
 def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:
     entry: dict[str, Any] = next(c for c in description["commands"] if c["name"] == name)
     return entry

@@ -9,7 +9,7 @@ from typer.core import TyperGroup
 from spider import APP_NAME, __version__
 from spider.cli.meta import CommandMeta, command_meta, meta_of
 from spider.cli.options import FormatOpt, option_meta
-from spider.output.diagnostics import EXIT_CODE_DESCRIPTIONS
+from spider.output.codes import DECLARED, ExitCode
 from spider.output.writer import Format
 
 
@@ -21,8 +21,17 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
         "tool": {"name": APP_NAME, "version": __version__},
         "commands": [_entry(name, root.commands[name]) for name in sorted(root.commands)],
         "exit_codes": [
-            {"code": code.value, "name": code.name.lower(), "description": description}
-            for code, description in EXIT_CODE_DESCRIPTIONS.items()
+            {"code": code.value, "name": code.name.lower(), "description": code.description}
+            for code in ExitCode
+        ],
+        "diagnostics": [
+            {
+                "code": declared.code,
+                "level": declared.level,
+                "exit_code": None if declared.exit_code is None else declared.exit_code.value,
+                "description": declared.description,
+            }
+            for declared in DECLARED
         ],
     }
 

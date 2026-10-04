@@ -16,7 +16,8 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
-from spider.output.diagnostics import ConfigError
+from spider.output.codes import SETTINGS_INVALID
+from spider.output.diagnostics import SpiderError
 from spider.workspace.discovery import Workspace
 from spider.workspace.tables import SettingsTables
 
@@ -65,9 +66,9 @@ def load_settings(
 
 def _invalid(
     settings_file: Path, what: str, errors: list[dict[str, Any]], hint: str | None = None
-) -> ConfigError:
-    return ConfigError(
-        "settings_invalid",
+) -> SpiderError:
+    return SpiderError(
+        SETTINGS_INVALID,
         f"The settings file {settings_file} {what}.",
         hint=hint,
         details={"file": str(settings_file), "errors": errors},
