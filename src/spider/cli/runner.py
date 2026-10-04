@@ -13,7 +13,9 @@ from typer._click.exceptions import UsageError as ClickUsageError
 from typer.core import TyperGroup
 
 from spider.cli.meta import formats_hint, meta_of
+from spider.clock import SystemClock
 from spider.output.diagnostics import ExitCode, SpiderError, UsageError
+from spider.output.report import CliReporter, Reporter
 from spider.output.writer import Document, Output, Rows
 from spider.workspace.tables import SettingsTables
 
@@ -21,6 +23,7 @@ from spider.workspace.tables import SettingsTables
 @dataclass(frozen=True)
 class Invocation:
     output: Output
+    reporter: Reporter
     settings_tables: SettingsTables
 
 
@@ -40,7 +43,8 @@ class SpiderGroup(TyperGroup):
         # Not no_args_is_help: from Click 8.2 on it raises a usage error, which exits 2.
         if not (sys.argv[1:] if args is None else args):
             args = ["--help"]
-        output = Output()
+        # The one place the process streams are read; spider.output only takes them.
+        output = Output(sys.stdout.buffer, sys.stderr.buffer)  # noqa: TID251
         try:
             returned = super().main(
                 args,
@@ -48,7 +52,7 @@ class SpiderGroup(TyperGroup):
                 complete_var,
                 standalone_mode=False,
                 windows_expand_args=windows_expand_args,
-                obj=Invocation(output, self.settings_tables),
+                obj=Invocation(output, CliReporter(output, SystemClock()), self.settings_tables),
                 **extra,
             )
             # A Command returns its result; --help and --version end in an Exit, whose code

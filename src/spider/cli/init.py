@@ -31,7 +31,7 @@ def init(
     created = create_workspace(workspace, settings_template(invocation.settings_tables))
     parent = enclosing_workspace(workspace, home)
     if parent is not None:
-        invocation.output.diagnostic(
+        invocation.reporter.warn(
             Diagnostic(
                 "warning",
                 "workspace_nested",

@@ -10,6 +10,7 @@ import typer
 from spider.cli.app import AppExtra, build_app
 from spider.cli.meta import command_meta
 from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt
+from spider.cli.runner import Invocation
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
 from tests.support.settings import ExampleSettings
@@ -76,10 +77,25 @@ def example_rows_waiting(signal: Path, output_format: FormatOpt = Format.JSONL) 
     yield {"n": 2 if signal.exists() else -1}
 
 
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def example_progress(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> Any:
+    """Reports two progress events, then ends with the result urls=10."""
+    invocation: Invocation = ctx.obj
+    invocation.reporter.event("progress", crawled=5)
+    invocation.reporter.event("progress", crawled=10)
+    return {"urls": 10}
+
+
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
             settings_tables={"example": ExampleSettings},
-            commands=[example_list, example_long_list, example_rows, example_rows_waiting],
+            commands=[
+                example_list,
+                example_long_list,
+                example_rows,
+                example_rows_waiting,
+                example_progress,
+            ],
         )
     )
