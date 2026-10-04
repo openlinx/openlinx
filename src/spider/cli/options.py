@@ -2,7 +2,7 @@
 
 import inspect
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
@@ -23,6 +23,8 @@ class OptionMeta:
 
 
 GLOBAL = OptionMeta(is_global=True)
+# The parameter every Command declares for --format; the wrapper and the runner read it.
+FORMAT_PARAMETER = "output_format"
 
 FormatOpt = Annotated[Format, typer.Option("--format", help="Output format."), GLOBAL]
 WorkspaceOpt = Annotated[
@@ -51,3 +53,9 @@ def option_meta(callback: Callable[..., Any], name: str) -> OptionMeta:
     hints = typing.get_type_hints(inspect.unwrap(callback), include_extras=True)
     metadata = getattr(hints.get(name), "__metadata__", ())
     return next((item for item in metadata if isinstance(item, OptionMeta)), OptionMeta())
+
+
+def options_with_meta(command: Any) -> Iterator[tuple[Any, OptionMeta]]:
+    for param in command.params:
+        if param.param_type_name == "option":
+            yield param, option_meta(command.callback, str(param.name))

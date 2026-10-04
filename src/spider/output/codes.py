@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Literal
+from typing import Any, Literal
 
 from spider import APP_NAME
 
@@ -42,8 +42,16 @@ class DiagnosticCode:
     exit_code: ExitCode | None
     description: str
 
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "level": self.level,
+            "exit_code": None if self.exit_code is None else self.exit_code.value,
+            "description": self.description,
+        }
 
-# In declaration order; spider commands, the naming-rule test and 090's error mapping read it.
+
+# Codes are listed in the order they are declared, so related codes stay together.
 DECLARED: list[DiagnosticCode] = []
 
 

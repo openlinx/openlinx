@@ -2,6 +2,7 @@
 
 import inspect
 from enum import Enum
+from pathlib import PurePath
 from typing import Any, cast
 
 import typer
@@ -9,9 +10,12 @@ from typer.core import TyperGroup
 
 from spider import APP_NAME, __version__
 from spider.cli.meta import CommandMeta, Example, command_meta, meta_of
-from spider.cli.options import FormatOpt, option_meta
+from spider.cli.options import FORMAT_PARAMETER, FormatOpt, options_with_meta
 from spider.output.codes import DECLARED, ExitCode
 from spider.output.writer import Format
+
+# Click's type names, in the words of JSON Schema where they differ.
+TYPE_NAMES = {"text": "string", "integer range": "integer", "float": "number"}
 
 # The only variables the tool honours: the OS's proxy settings, which 022 applies to fetching.
 ENVIRONMENT = [
@@ -38,20 +42,17 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
     root = cast(TyperGroup, ctx.find_root().command)
     return {
         "tool": {"name": APP_NAME, "version": __version__},
-        "commands": [_entry(name, root.commands[name]) for name in sorted(root.commands)],
+        "commands": [
+            _entry(name, command)
+            for name, command in sorted(root.commands.items())
+            # Hidden Commands are not part of the contract: --help does not show them either.
+            if not command.hidden
+        ],
         "exit_codes": [
             {"code": code.value, "name": code.name.lower(), "description": code.description}
             for code in ExitCode
         ],
-        "diagnostics": [
-            {
-                "code": declared.code,
-                "level": declared.level,
-                "exit_code": None if declared.exit_code is None else declared.exit_code.value,
-                "description": declared.description,
-            }
-            for declared in DECLARED
-        ],
+        "diagnostics": [declared.to_json() for declared in DECLARED],
         "environment": ENVIRONMENT,
     }
 
@@ -71,13 +72,8 @@ def _entry(name: str, command: Any) -> dict[str, Any]:
         "formats": list(meta.formats),
         "arguments": _arguments(command),
         "options": _options(command, meta),
-        "fields": None
-        if meta.fields is None
-        else {"available": list(meta.fields.available), "default": list(meta.fields.default)},
-        "examples": [
-            {"command": example.command, "description": example.description}
-            for example in meta.examples
-        ],
+        "fields": None if meta.fields is None else meta.fields.to_json(),
+        "examples": [example.to_json() for example in meta.examples],
     }
 
 
@@ -98,12 +94,9 @@ def _arguments(command: Any) -> list[dict[str, Any]]:
 
 def _options(command: Any, meta: CommandMeta) -> list[dict[str, Any]]:
     entries = []
-    for param in command.params:
-        if param.param_type_name != "option":
-            continue
-        extra = option_meta(command.callback, param.name)
+    for param, extra in options_with_meta(command):
         choices = getattr(param.type, "choices", None)
-        if param.name == "output_format":
+        if param.name == FORMAT_PARAMETER:
             # Click knows every format; the Command offers only its own.
             choices = meta.formats
         entries.append(
@@ -124,17 +117,16 @@ def _options(command: Any, meta: CommandMeta) -> list[dict[str, Any]]:
     return entries
 
 
-# Click's type names, in the words of JSON Schema where they differ.
-TYPE_NAMES = {"text": "string", "integer range": "integer", "float": "number"}
-
-
 def _type(param: Any) -> str:
     name = str(param.type.name)
     return TYPE_NAMES.get(name, name)
 
 
 def _json_value(value: Any) -> Any:
-    return value.value if isinstance(value, Enum) else value
+    if isinstance(value, Enum):
+        return value.value
+    # The same text on every OS, never a path made absolute on this machine.
+    return value.as_posix() if isinstance(value, PurePath) else value
 
 
 def _long_name(param: Any) -> str:

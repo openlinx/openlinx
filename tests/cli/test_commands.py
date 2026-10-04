@@ -134,10 +134,9 @@ def test_the_proxy_variables_are_the_one_exception() -> None:
 
 
 def test_detection_signals_change_nothing() -> None:
-    plain = run_cli_process("commands", env=dict(os.environ))
-    signalled = run_cli_process(
-        "commands", env={**os.environ, "CODEX_SANDBOX_NETWORK_DISABLED": "1"}
-    )
+    without = {k: v for k, v in os.environ.items() if k != "CODEX_SANDBOX_NETWORK_DISABLED"}
+    plain = run_cli_process("commands", env=without)
+    signalled = run_cli_process("commands", env={**without, "CODEX_SANDBOX_NETWORK_DISABLED": "1"})
 
     assert (signalled.stdout == plain.stdout, plain.exit_code, signalled.exit_code) == (True, 0, 0)
 
@@ -146,7 +145,8 @@ def test_detection_signals_change_nothing() -> None:
 def test_same_description_on_every_os(name: str) -> None:
     expected = json.loads((CONTRACT / f"{name}.json").read_text(encoding="utf-8"))
 
-    assert _entry(run_cli("commands").json(), name) == expected
+    # Compared as compact JSON, so the key order counts too.
+    assert json.dumps(_entry(run_cli("commands").json(), name)) == json.dumps(expected)
 
 
 def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:

@@ -32,8 +32,9 @@ def init(
 ) -> dict[str, Any]:
     """Make the current folder, or the --workspace folder, a Workspace.
 
-    Creates only what is missing: .spider/ with its .gitignore and crawls/, and a commented
-    spider.toml. It never changes an existing file, and it checks an existing spider.toml first.
+    Creates only what is missing: the data folder with its .gitignore and crawls folder, and a
+    commented settings file. It never changes an existing file, and it checks an existing
+    settings file first.
     """
     # Imported here: pydantic is too heavy for the CLI's startup path.
     from spider.workspace.settings import load_settings

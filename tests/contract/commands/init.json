@@ -1,10 +1,13 @@
 {
   "name": "init",
   "summary": "Make the current folder, or the --workspace folder, a Workspace.",
-  "description": "Make the current folder, or the --workspace folder, a Workspace.\n\nCreates only what is missing: .spider/ with its .gitignore and crawls/, and a commented spider.toml. It never changes an existing file, and it checks an existing spider.toml first.",
+  "description": "Make the current folder, or the --workspace folder, a Workspace.\n\nCreates only what is missing: the data folder with its .gitignore and crawls folder, and a commented settings file. It never changes an existing file, and it checks an existing settings file first.",
   "output": "document",
   "events": false,
-  "formats": ["json", "table"],
+  "formats": [
+    "json",
+    "table"
+  ],
   "arguments": [],
   "options": [
     {
@@ -24,7 +27,10 @@
       "name": "--format",
       "short": null,
       "type": "choice",
-      "choices": ["json", "table"],
+      "choices": [
+        "json",
+        "table"
+      ],
       "default": "json",
       "required": false,
       "multiple": false,
@@ -36,7 +42,13 @@
   ],
   "fields": null,
   "examples": [
-    {"command": "spider init", "description": "Make the current folder a Workspace."},
-    {"command": "spider init --workspace site", "description": "Create the folder site and make it a Workspace."}
+    {
+      "command": "spider init",
+      "description": "Make the current folder a Workspace."
+    },
+    {
+      "command": "spider init --workspace site",
+      "description": "Create the folder site and make it a Workspace."
+    }
   ]
 }

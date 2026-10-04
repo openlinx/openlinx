@@ -16,7 +16,7 @@ from typer.core import TyperGroup
 
 from spider import APP_NAME
 from spider.cli.meta import formats_hint, meta_of
-from spider.cli.options import option_meta
+from spider.cli.options import FORMAT_PARAMETER, options_with_meta
 from spider.clock import SystemClock
 from spider.output.codes import INTERNAL_ERROR, INTERRUPTED, INVALID_VALUE, USAGE_ERROR, ExitCode
 from spider.output.diagnostics import SpiderError
@@ -108,10 +108,8 @@ def _global_flags(group: TyperGroup) -> set[str]:
     return {
         opt
         for command in group.commands.values()
-        for param in command.params
-        if param.param_type_name == "option"
-        and command.callback is not None
-        and option_meta(command.callback, str(param.name)).is_global
+        for param, extra in options_with_meta(command)
+        if extra.is_global
         for opt in param.opts
     }
 
@@ -126,7 +124,7 @@ def _check_global_flags_follow_the_command(args: Sequence[str], global_flags: se
             raise SpiderError(
                 USAGE_ERROR,
                 f"{flag} is given before the Command name.",
-                hint=f"Put {flag} after the Command name, as in: {APP_NAME} init {flag} ...",
+                hint=f"Put {flag} after the Command name: {APP_NAME} <Command> {flag} ...",
             )
 
 
@@ -145,7 +143,7 @@ def _internal_error() -> SpiderError:
 
 def _invalid_value(error: typer.BadParameter) -> SpiderError:
     hint = None
-    if error.param is not None and error.param.name == "output_format" and error.ctx is not None:
+    if error.param is not None and error.param.name == FORMAT_PARAMETER and error.ctx is not None:
         callback = error.ctx.command.callback
         meta = meta_of(callback) if callback is not None else None
         hint = formats_hint(meta) if meta is not None else None

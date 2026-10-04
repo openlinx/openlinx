@@ -187,7 +187,7 @@ Each part of the self-description has one source (design D5 and D7): options and
 - [x] 8.11 **Guard:** "Detection signals change nothing" (workspace), with `CODEX_SANDBOX_NETWORK_DISABLED=1` set for one of the two runs.
 - [x] 8.12 Drive "Same description on every OS" (cli-contract). Compare the `init` and `commands` entries with hand-written expected JSON in `tests/contract/commands/`, on every OS.
 - [x] 8.13 Docs: add "Using spider" (`init`, `commands`) to `README.md`, and the error-code registry to `docs/cli.md`.
-- [ ] 8.14 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green. Also switch `example-rows-waiting` to the stdin handshake, so no test polls or sleeps, and give the missing-argument test its own small fixture Command.
+- [x] 8.14 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green. Also switch `example-rows-waiting` to the stdin handshake, so no test polls or sleeps, and give the missing-argument test its own small fixture Command.
 
 ## 9. Foundations for later changes
 

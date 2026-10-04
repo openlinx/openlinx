@@ -22,6 +22,9 @@ class Fields:
     available: tuple[str, ...]
     default: tuple[str, ...]
 
+    def to_json(self) -> dict[str, Any]:
+        return {"available": list(self.available), "default": list(self.default)}
+
 
 @dataclass(frozen=True)
 class Page:

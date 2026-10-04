@@ -117,7 +117,8 @@ Moved to `050-add-query-and-segments`, together with the `csv` format, `--no-bom
 
 - **The error-code registry:** every diagnostic code is one constant, `DiagnosticCode(code, level, exit_code, description)`, declared in the pure module `spider.output.codes`. The module's constants, in declaration order, are the one list of codes.
   - `spider commands` prints `diagnostics` from it, the naming-rule test reads it, and `090` maps errors to MCP errors from it.
-  - A later change adds its codes to that module. Codes are never declared anywhere else, so nothing has to be imported to list them.
+  - A later change adds its codes to that module. Codes are never declared anywhere else in `src/`, so nothing has to be imported to list them. The fixture app of the tests declares its own codes in `tests/support/app.py`, so the real tool never lists them.
+  - Warnings and info lines are built with `Diagnostic.of(code, ...)`, so they carry a declared code too.
   - A test enforces the naming rule: `invalid_*`, `unknown_*` and `usage_error` map to 2, and `*_not_found` and `no_crawls` map to 4. Warnings and info codes have no exit code.
 - **Exit codes:** the `ExitCode` enum carries each member's description, so the exit code table has one source too.
 - **Errors:** `SpiderError(code, message, hint=None, details={})` takes a `DiagnosticCode` constant, never a loose string, and its exit code comes from that constant. Warnings and info lines are `Diagnostic` objects built from a constant of their level, such as `WORKSPACE_NESTED`.

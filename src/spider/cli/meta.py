@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
+from spider.cli.options import FORMAT_PARAMETER
 from spider.output.codes import INVALID_VALUE, MORE_ITEMS
 from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
 from spider.output.paging import Fields, Page
@@ -18,6 +19,9 @@ type OutputKind = Literal["document", "list", "rows"]
 class Example:
     command: str
     description: str
+
+    def to_json(self) -> dict[str, Any]:
+        return {"command": self.command, "description": self.description}
 
 
 @dataclass(frozen=True)
@@ -37,9 +41,9 @@ KIND_FORMATS: Mapping[OutputKind, frozenset[Format]] = {
     "rows": frozenset({Format.JSONL}),
 }
 KIND_PARAMETERS: Mapping[OutputKind, tuple[str, ...]] = {
-    "document": ("output_format",),
-    "list": ("output_format", "limit", "cursor", "fields"),
-    "rows": ("output_format",),
+    "document": (FORMAT_PARAMETER,),
+    "list": (FORMAT_PARAMETER, "limit", "cursor", "fields"),
+    "rows": (FORMAT_PARAMETER,),
 }
 
 
@@ -65,7 +69,7 @@ def command_meta[**P](
 
         @functools.wraps(command)
         def run(*args: P.args, **kwargs: P.kwargs) -> Document | Rows:
-            output_format = cast(Format, kwargs["output_format"])
+            output_format = cast(Format, kwargs[FORMAT_PARAMETER])
             if output_format not in meta.formats:
                 raise SpiderError(
                     INVALID_VALUE,
@@ -109,7 +113,8 @@ def check_command(command: Callable[..., Any]) -> CommandMeta:
         for format_ in meta.formats
         if format_ not in KIND_FORMATS[meta.output]
     ]
-    if "output_format" in declared and (declared["output_format"].default,) != meta.formats[:1]:
+    default_format = declared.get(FORMAT_PARAMETER)
+    if default_format is not None and (default_format.default,) != meta.formats[:1]:
         problems.append("its --format default is not the first of its formats")
     if (meta.output == "document") != (meta.fields is None):
         problems.append("fields belong to list and rows Commands only")

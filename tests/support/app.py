@@ -1,9 +1,7 @@
 """The fixture app the scenarios use (design D8 of 010-add-workspace-and-cli-contract)."""
 
 import sys
-import time
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Annotated, Any
 
 import typer
@@ -20,7 +18,8 @@ from tests.support.settings import ExampleSettings
 
 # Declared here, not in spider.output.codes: the tool never lists the fixture app's codes.
 EXAMPLE_FAILED = DiagnosticCode("example_failed", "error", ExitCode.FAILED, "The example failed.")
-EXAMPLE_WARNING = Diagnostic("warning", "example_warning", "An example warning.")
+EXAMPLE_WARNING_CODE = DiagnosticCode("example_warning", "warning", None, "An example warning.")
+EXAMPLE_WARNING = Diagnostic.of(EXAMPLE_WARNING_CODE, "An example warning.")
 EXAMPLE_LIST = "example-list"
 EXAMPLE_LONG_LIST = "example-long-list"
 EXAMPLE_FIELDS = Fields(available=("n", "sq"), default=("n",))
@@ -84,13 +83,24 @@ def example_rows(output_format: FormatOpt = Format.JSONL) -> Iterator[Any]:
 
 
 @command_meta(output="rows", formats=[Format.JSONL], fields=N_ONLY)
-def example_rows_waiting(signal: Path, output_format: FormatOpt = Format.JSONL) -> Iterator[Any]:
-    """Yields n=1, waits up to 5 s for the signal file, then n=2, or n=-1 if it never came."""
+def example_rows_waiting(output_format: FormatOpt = Format.JSONL) -> Iterator[Any]:
+    """Yields n=1, waits for a line on stdin, then yields n=2."""
     yield {"n": 1}
-    deadline = time.monotonic() + 5
-    while not signal.exists() and time.monotonic() < deadline:
-        time.sleep(0.01)
-    yield {"n": 2 if signal.exists() else -1}
+    sys.stdin.readline()
+    yield {"n": 2}
+
+
+@command_meta(output="rows", formats=[Format.JSONL], fields=N_ONLY)
+def example_rows_interrupted(output_format: FormatOpt = Format.JSONL) -> Iterator[Any]:
+    """Yields n=1, then stops as if Ctrl+C was pressed while the rows stream."""
+    yield {"n": 1}
+    raise KeyboardInterrupt
+
+
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def example_needs_argument(name: str, output_format: FormatOpt = Format.JSON) -> Any:
+    """Takes one required argument."""
+    return {"name": name}
 
 
 @command_meta(output="document", formats=[Format.JSON, Format.TABLE], events=True)
@@ -160,6 +170,8 @@ def example_app() -> typer.Typer:
                 example_long_list,
                 example_rows,
                 example_rows_waiting,
+                example_rows_interrupted,
+                example_needs_argument,
                 example_progress,
                 example_mixed,
                 example_warn_and_wait,
