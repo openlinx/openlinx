@@ -166,6 +166,7 @@ If a change needs something another change owns, it depends on that change inste
 - **080-add-agent-skill** (min in v0.1):
   - **The Skill** (workflows, install instructions and one-liners), generated from `spider commands` by a developer script (`scripts/generate_skill.py`). In v0.1 the one-liner is `uv tool install`, and the workflows use only v0.1 Commands.
   - `skill install`, and the outdated-Skill notice.
+  - The large-Crawl guardrail in v0.1: the Skill always passes `--max-urls` (decided when 080 is re-grounded).
   - `doctor`, whose TLS check uses 022's TLS setup.
   - **(v0.2)** the Full audit workflow (it needs 070's `report brief`); the dry run and the Hand-off rule (when the URL estimate is `null`, the Skill hands the command to the user), which need 060; the install-script one-liners (100); `sql` recipes and Segments; `doctor --proxy`; and the plugin marketplace, which ships with 090's `.mcp.json`.
 - **085-add-release** (v0.1; not drafted yet, so `openspec/changes/085-*` does not exist):
