@@ -14,12 +14,14 @@ from spider.output.codes import DiagnosticCode, ExitCode
 from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
-from tests.support.settings import ExampleSettings, GroupsTable
 
 # Declared here, not in spider.output.codes: the tool never lists the fixture app's codes.
 EXAMPLE_FAILED = DiagnosticCode("example_failed", "error", ExitCode.FAILED, "The example failed.")
 EXAMPLE_WARNING_CODE = DiagnosticCode("example_warning", "warning", None, "An example warning.")
 EXAMPLE_WARNING = Diagnostic.of(EXAMPLE_WARNING_CODE, "An example warning.")
+# References, not imports: the tables load only with the settings.
+EXAMPLE_TABLE = "tests.support.settings:ExampleSettings"
+GROUPS_TABLE = "tests.support.settings:GroupsTable"
 EXAMPLE_LIST = "example-list"
 EXAMPLE_LONG_LIST = "example-long-list"
 EXAMPLE_FIELDS = Fields(available=("n", "sq"), default=("n",))
@@ -164,7 +166,7 @@ def example_aborted(output_format: FormatOpt = Format.JSON) -> Any:
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
-            settings_tables={"example": ExampleSettings, "groups": GroupsTable},
+            settings_tables={"example": EXAMPLE_TABLE, "groups": GROUPS_TABLE},
             commands=[
                 example_list,
                 example_long_list,

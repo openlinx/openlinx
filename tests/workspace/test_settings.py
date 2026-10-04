@@ -9,13 +9,14 @@ from spider.workspace.discovery import resolve_workspace, target_workspace
 from spider.workspace.settings import load_settings
 from spider.workspace.tables import SettingsTables
 from spider.workspace.template import settings_template
-from tests.support.settings import ExampleSettings, GroupsTable
+from tests.support.app import EXAMPLE_TABLE, GROUPS_TABLE
+from tests.support.settings import ExampleSettings
 from tests.support.workspace import TempWorkspace
 
 
 def example_tables() -> SettingsTables:
     tables = SettingsTables()
-    tables.register("example", ExampleSettings)
+    tables.register("example", EXAMPLE_TABLE)
     return tables
 
 
@@ -100,7 +101,7 @@ def test_named_entries(temp_workspace: TempWorkspace) -> None:
     (shop / "spider.toml").write_bytes(b'[groups.blog]\nlevel = "high"\n')
     workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
     tables = SettingsTables()
-    tables.register("groups", GroupsTable)
+    tables.register("groups", GROUPS_TABLE)
 
     settings = load_settings(workspace, tables)
 

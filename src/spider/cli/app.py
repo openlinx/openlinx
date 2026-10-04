@@ -11,7 +11,7 @@ from spider.cli.commands import commands
 from spider.cli.init import init
 from spider.cli.meta import check_command
 from spider.cli.runner import Invocation, SpiderGroup
-from spider.workspace.tables import SettingsTables, Table
+from spider.workspace.tables import SettingsTables
 
 
 def _print_version(ctx: typer.Context, value: bool) -> None:
@@ -34,15 +34,16 @@ def root(
 
 @dataclass(frozen=True)
 class AppExtra:
-    settings_tables: Mapping[str, Table] = field(default_factory=dict)
+    # Table name to its "module:Class" reference.
+    settings_tables: Mapping[str, str] = field(default_factory=dict)
     commands: Sequence[Callable[..., Any]] = ()
 
 
 def build_app(extra: AppExtra | None = None) -> typer.Typer:
     extra = extra or AppExtra()
     tables = SettingsTables()
-    for name, model in extra.settings_tables.items():
-        tables.register(name, model)
+    for name, reference in extra.settings_tables.items():
+        tables.register(name, reference)
 
     class AppGroup(SpiderGroup):
         settings_tables = tables

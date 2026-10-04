@@ -1,7 +1,8 @@
 """The registry of spider.toml tables (design D2 of 010-add-workspace-and-cli-contract)."""
 
+import importlib
 import math
-from collections.abc import ItemsView
+from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, get_args, get_origin
 
 if TYPE_CHECKING:
@@ -16,23 +17,19 @@ TOML_LITERAL_TYPES = (str, int, float, bool)
 
 class SettingsTables:
     def __init__(self) -> None:
-        self._tables: dict[str, Table] = {}
+        # "module:Class" references: a table's module, and pydantic, load only with the settings.
+        self._references: dict[str, str] = {}
 
-    def register(self, name: str, table: Table) -> None:
-        entry = keyed_entry(table)
-        if entry is None:
-            _check_model(name, table)
-        elif entry not in TOML_LITERAL_TYPES:
-            _check_model(f"{name}.<name>", entry)
-            # The template describes the keyed table with it.
-            if not entry.__doc__ or "\n" in entry.__doc__:
-                raise TypeError(f"Settings table [{name}] needs a one-line entry docstring.")
-        if name in self._tables:
+    def register(self, name: str, reference: str) -> None:
+        if name in self._references:
             raise TypeError(f"Settings table [{name}] is registered twice.")
-        self._tables[name] = table
+        self._references[name] = reference
 
-    def items(self) -> "ItemsView[str, Table]":
-        return self._tables.items()
+    def items(self) -> Iterator[tuple[str, Table]]:
+        for name, reference in self._references.items():
+            module, _, attribute = reference.partition(":")
+            table: Table = getattr(importlib.import_module(module), attribute)
+            yield name, table
 
 
 def keyed_entry(table: Any) -> Any:
@@ -43,6 +40,18 @@ def keyed_entry(table: Any) -> Any:
     if key is not str:
         raise TypeError(f"A keyed settings table needs str keys, not {key}.")
     return entry
+
+
+def check_table(name: str, table: Table) -> None:
+    """Raises TypeError unless the table follows the table rules of design D2."""
+    entry = keyed_entry(table)
+    if entry is None:
+        _check_model(name, table)
+    elif entry not in TOML_LITERAL_TYPES:
+        _check_model(f"{name}.<name>", entry)
+        # The template describes the keyed table with it.
+        if not entry.__doc__ or "\n" in entry.__doc__:
+            raise TypeError(f"Settings table [{name}] needs a one-line entry docstring.")
 
 
 def _check_model(name: str, model: Any) -> None:
