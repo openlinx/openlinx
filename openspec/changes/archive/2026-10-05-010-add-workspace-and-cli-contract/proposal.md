@@ -71,7 +71,7 @@ None. No specs exist yet.
   - `spider schema`, and the `--crawl` flag
   - the `[store]` settings table
 - **`020-add-crawl-core` (v0.1):**
-  - the first Command that reports progress events and partial results, `crawl`, with its exit codes 8 (`seed_unreachable`) and 130 (Ctrl+C)
+  - the first Command that reports progress events and partial results, `crawl`, with its exit code 8 (`seed_unreachable`) and the Crawl's side of Ctrl+C (exit 130, which this change maps for every Command)
 - **`022-add-fetch-policy` (v0.1):** the fetch flags and which of them are secret. `015` does the redaction.
 - **`050-add-query-and-segments` (v0.1):**
   - the query Commands
@@ -82,14 +82,15 @@ None. No specs exist yet.
 - **`060-add-crawl-control` (v0.1):** crawl control.
 - **`070-add-html-report` (v0.1):** the report receipt and `--dest`.
 - **`080-add-agent-skill` (v0.1):** the Skill, generated from `spider commands`, and `spider doctor`.
-- **`090-add-mcp-server` (v0.1):** MCP tools, which reuse the diagnostic shape.
+- **`090-add-mcp-server` (v0.1.1):** MCP tools, which call the same services and reuse the `Page` type, the diagnostic shape and the error-code registry.
 
 ## Impact
 
 - **New runtime dependencies:** `pydantic-settings`, `orjson`, and `rich`, which is made explicit for table output.
 - **Code:**
   - `src/spider/workspace/`: discovery, the settings registry and the template
-  - `src/spider/output/`: formats, paging, cursors, events, diagnostics and exit codes
+  - `src/spider/output/`: formats, paging (the `Page` type, cursors and the pager), events, the `Reporter`, diagnostics, the error-code registry and exit codes
+  - `src/spider/services/`: the services that Commands adapt, starting with `init`
   - `src/spider/cli/`: the app factory, `init`, `commands`, and the global flag definitions
 - **Docs:** new `docs/cli.md` and `docs/workspace.md`. Also updates to `docs/architecture.md` and `README.md`.
 - **Test support:**

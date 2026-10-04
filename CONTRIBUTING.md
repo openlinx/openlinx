@@ -92,7 +92,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 
 - **Terms:** use the terms of [CONTEXT.md](CONTEXT.md) exactly, capitalised as defined there, such as Workspace, Crawl, Page, Issue and Command. This applies in code, tests, docs and commit messages. Test names use them too.
 - **Decisions:** a settled architectural decision is an ADR in [docs/adr/](docs/adr/). Don't reopen a decision that has one. Write a new ADR instead of quietly working around it.
-- **Placeholder name:** `spider` is a working name. It appears in `pyproject.toml` (the distribution and the console script), as the import package `spider`, and in the constant `APP_NAME` for anything users see. Use `APP_NAME` rather than typing the name in user-visible text, so a rename stays mechanical.
+- **Placeholder name:** `spider` is a working name. It appears in `pyproject.toml` (the distribution and the console script), as the import package `spider`, and in the module `spider.naming` for anything users see: `APP_NAME`, the settings file name, the data folder and the global Workspace folder. Use those constants rather than typing a name in `src/`, and say "the settings file" or "the data folder" in comments, so a rename stays mechanical. `tests/test_naming.py` fails on the literals `spider.toml` and `.spider` anywhere else in `src/`; tests keep the literals.
 
 ## Code style
 

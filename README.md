@@ -14,7 +14,7 @@ A Skill teaches the agent when and how to use each Command. The tool itself neve
 ## Status
 
 Pre-release: there is no release yet.
-- **Progress:** the scaffold is done (change `000-scaffold-project`, archived), and so far `spider` only prints its version. The next change is `010-add-workspace-and-cli-contract`.
+- **Progress:** the scaffold (`000-scaffold-project`) and `010-add-workspace-and-cli-contract` are done and archived: Workspaces, `spider.toml` settings, `spider init`, `spider commands` and the CLI contract that every later Command follows. Next is `015-add-crawl-store`. There is no crawling yet.
 - **Name:** the product name is still open. `spider` is a placeholder for the command, the Python package, `spider.toml` and the `.spider/` directory of each Workspace.
 
 ## Development quick start
@@ -25,6 +25,28 @@ You need [uv](https://docs.astral.sh/uv/). It installs the Python version from `
 uv sync
 uv run spider --version
 ```
+
+## Using spider
+
+Make a folder a Workspace, the place where Crawls and settings live:
+
+```
+spider init
+```
+
+It creates `.spider/` (Crawl data, git-ignored) and a commented `spider.toml`, and prints what it made as JSON:
+
+```json
+{"workspace":"/home/me/shop","data_dir":"/home/me/shop/.spider","settings_file":"/home/me/shop/spider.toml","global":false,"created":["/home/me/shop/.spider","/home/me/shop/.spider/.gitignore","/home/me/shop/.spider/crawls","/home/me/shop/spider.toml"]}
+```
+
+Ask the tool to describe itself, as an agent does before anything else:
+
+```
+spider commands
+```
+
+It prints one JSON document with every Command, its options and output, the exit codes, every diagnostic code and the environment variables it honours. See [docs/cli.md](docs/cli.md) for the contract every Command follows and [docs/workspace.md](docs/workspace.md) for Workspaces and `spider.toml`.
 
 ## Learn more
 

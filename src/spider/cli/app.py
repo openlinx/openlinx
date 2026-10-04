@@ -1,28 +1,27 @@
-"""The root Typer app and the `spider` console script (design D7 of 000-scaffold-project)."""
+"""The app factory and the console script (design D8 of 010-add-workspace-and-cli-contract)."""
 
-import sys
-from typing import Annotated
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Annotated, Any
 
 import typer
 
-from spider import APP_NAME, __version__
+from spider import __version__
+from spider.cli.commands import commands
+from spider.cli.init import init
+from spider.cli.meta import check_command
+from spider.cli.runner import Invocation, SpiderGroup
+from spider.naming import APP_NAME
+from spider.workspace.tables import SettingsTables
 
-app = typer.Typer(
-    name=APP_NAME,
-    pretty_exceptions_enable=False,
-    add_completion=False,
-    no_args_is_help=True,
-)
 
-
-def _print_version(value: bool) -> None:
+def _print_version(ctx: typer.Context, value: bool) -> None:
     if value:
-        # Bytes, not text: a text stream on Windows would turn the LF into CR LF.
-        sys.stdout.buffer.write(f"{APP_NAME} {__version__}\n".encode())
+        invocation: Invocation = ctx.obj
+        invocation.output.text(f"{APP_NAME} {__version__}\n")
         raise typer.Exit
 
 
-@app.callback()
 def root(
     version: Annotated[
         bool,
@@ -34,5 +33,36 @@ def root(
     """Agent-first SEO crawler."""
 
 
+@dataclass(frozen=True)
+class AppExtra:
+    # Table name to its "module:Class" reference.
+    settings_tables: Mapping[str, str] = field(default_factory=dict)
+    commands: Sequence[Callable[..., Any]] = ()
+
+
+def build_app(extra: AppExtra | None = None) -> typer.Typer:
+    extra = extra or AppExtra()
+    tables = SettingsTables()
+    for name, reference in extra.settings_tables.items():
+        tables.register(name, reference)
+
+    class AppGroup(SpiderGroup):
+        settings_tables = tables
+
+    app = typer.Typer(
+        name=APP_NAME,
+        cls=AppGroup,
+        pretty_exceptions_enable=False,
+        add_completion=False,
+        # Plain Click help: cheaper for agents to parse, and rich stays off the startup path.
+        rich_markup_mode=None,
+    )
+    app.callback()(root)
+    registered: list[Callable[..., Any]] = [commands, init, *extra.commands]
+    for command in registered:
+        app.command(name=check_command(command).name)(command)
+    return app
+
+
 def main() -> None:
-    app()
+    build_app()()

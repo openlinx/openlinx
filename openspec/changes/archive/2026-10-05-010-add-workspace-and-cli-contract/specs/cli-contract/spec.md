@@ -158,6 +158,8 @@ Items SHALL come in a deterministic order, so the same request against unchanged
 
 An unknown field name SHALL fail with `unknown_field`, with `details.field` and `details.available`.
 
+Spaces around a name SHALL be ignored, and a name given twice SHALL count once, at its first place. An empty name SHALL fail with `invalid_value`.
+
 #### Scenario: Default fields
 - **WHEN** the example list Command runs with `--limit 1`
 - **THEN** `items` is `[{"n":1}]`
@@ -170,6 +172,14 @@ An unknown field name SHALL fail with `unknown_field`, with `details.field` and 
 - **WHEN** the example list Command runs with `--fields all --limit 1`
 - **THEN** `items` is `[{"n":1,"sq":1}]`
 
+#### Scenario: Spaces and repeats in --fields
+- **WHEN** the example list Command runs with `--fields " sq , n,sq" --limit 1`
+- **THEN** `items` is `[{"sq":1,"n":1}]`
+
+#### Scenario: Empty field name
+- **WHEN** the example list Command runs with `--fields n,,sq`
+- **THEN** the exit code is 2, and the error has the code `invalid_value`
+
 #### Scenario: Unknown field
 - **WHEN** the example list Command runs with `--fields n,size`
 - **THEN** the exit code is 2, and the error has the code `unknown_field` and `"details":{"field":"size","available":["n","sq"]}`
@@ -177,6 +187,20 @@ An unknown field name SHALL fail with `unknown_field`, with `details.field` and 
 ### Requirement: Cursors
 
 A cursor SHALL be an opaque string, accepted only by the Command, arguments and filters that produced it. `--limit`, `--fields` and `--format` MAY change between pages. Any other cursor SHALL fail with `invalid_cursor`. That includes a cursor that was altered or truncated, or one produced by a different request.
+
+A cursor SHALL use only the URL-safe base64 characters `A`–`Z`, `a`–`z`, `0`–`9`, `-` and `_`, without `=` padding, so it can be passed on a command line without quoting.
+
+#### Scenario: Cursor round trip
+- **WHEN** a cursor is made for a request and a position in its list, and then read back for the same request
+- **THEN** reading it gives that position
+
+#### Scenario: Cursor characters
+- **WHEN** a cursor is made for a request and a position in its list
+- **THEN** the cursor contains only the characters `A`–`Z`, `a`–`z`, `0`–`9`, `-` and `_`
+
+#### Scenario: Undecodable cursor
+- **WHEN** a cursor is read back that is `abc`, empty, base64 of text that is not JSON, of an unknown version, without a position, or made for a different request
+- **THEN** each one fails with the code `invalid_cursor`
 
 #### Scenario: A different limit continues the list
 - **WHEN** the `next_cursor` of the example list Command run with `--limit 1` is passed to the same Command with `--limit 2 --cursor <that cursor>`
@@ -207,17 +231,17 @@ A Command that reports progress SHALL write each event to stderr as one compact 
 - **THEN** stderr has exactly two lines, and both have `"event":"progress"`
 
 #### Scenario: Events and diagnostics share stderr
-- **WHEN** a Command reports a `progress` event and a warning
-- **THEN** every line of stderr is a JSON object with either an `event` key or a `level` key
+- **WHEN** a Command reports a `progress` event, then a warning, then a second `progress` event
+- **THEN** stderr has exactly three lines, each a JSON object: an `event` line, then a `level` line, then an `event` line
 
 ### Requirement: Partial results
 
-A Command whose result describes a failed outcome SHALL:
+A document Command whose result describes a failed outcome SHALL:
 - print that result on stdout
 - write exactly one error diagnostic, as its last line on stderr
 - exit with that error's exit code
 
-Every other failing Command SHALL write nothing to stdout.
+Every other failing document or list Command SHALL write nothing to stdout. A rows Command that fails keeps on stdout the rows it wrote before the failure, and its error follows on stderr.
 
 #### Scenario: The result of a failed outcome is printed
 - **WHEN** a Command ends with the result `{"state":"failed"}` and an error diagnostic whose exit code is 1
@@ -229,7 +253,7 @@ Every other failing Command SHALL write nothing to stdout.
 
 ### Requirement: Diagnostics on stderr
 
-Errors, warnings and notices SHALL be written to stderr, one compact JSON object per line. Each object SHALL have exactly these keys:
+Errors, warnings and notices SHALL be written to stderr, one compact JSON object per line. Each line, diagnostic or progress event, SHALL be written whole and flushed as it happens, and stderr lines SHALL appear in the order they were reported. Each object SHALL have exactly these keys:
 - `level`: `error`, `warning` or `info`
 - `code`: lowercase snake_case
 - `message`
@@ -238,7 +262,7 @@ Errors, warnings and notices SHALL be written to stderr, one compact JSON object
 
 A failing Command SHALL write exactly one error object, as its last line on stderr. An error or warning reported inside a result, such as an entry in a `warnings` list, SHALL use the same shape.
 
-Errors found while parsing the command line SHALL use the same shape: `usage_error` for an unknown Command, an unknown flag or a missing argument, and `invalid_value` for a value that is not allowed. An unexpected failure SHALL use `internal_error`, with the Python traceback text in `details.traceback`.
+Errors found while parsing the command line SHALL use the same shape: `usage_error` for an unknown Command, an unknown flag or a missing argument, and `invalid_value` for a value that is not allowed. An unexpected failure SHALL use `internal_error`, with the Python traceback text in `details.traceback`. A Command stopped with Ctrl+C SHALL use `interrupted`, never `internal_error`.
 
 Nothing else SHALL appear on stderr apart from progress events: no raw tracebacks, progress bars or log lines.
 
@@ -257,6 +281,14 @@ Nothing else SHALL appear on stderr apart from progress events: no raw traceback
 #### Scenario: Unexpected failure
 - **WHEN** a Command raises `RuntimeError("disk exploded")`
 - **THEN** the exit code is 70, and the error has the code `internal_error` and a `details.traceback` that contains `RuntimeError: disk exploded`
+
+#### Scenario: A warning is readable at once
+- **WHEN** a Command running as a real process with stderr piped writes a warning, and then waits for a line on its stdin before it ends
+- **THEN** the warning line can be read from stderr before that line is sent
+
+#### Scenario: Interrupted
+- **WHEN** a Command is stopped with Ctrl+C
+- **THEN** the exit code is 130, and the last line of stderr is an error with the code `interrupted`
 
 #### Scenario: A warning inside a result
 - **WHEN** a Command ends with a result whose `warnings` list holds one warning
@@ -286,13 +318,19 @@ Every diagnostic code that is an error SHALL map to exactly one exit code:
 
 Warnings and info lines SHALL NOT change the exit code.
 
+Every diagnostic code SHALL be declared once, with its level, its exit code (none for warnings and info) and a description. `spider commands` SHALL list exactly the declared codes, and no Command SHALL report a code that is not declared.
+
 #### Scenario: The table is self-described
 - **WHEN** `spider commands` runs
 - **THEN** the `code` and `name` pairs of `exit_codes` are, in order, `0 ok`, `1 failed`, `2 usage`, `3 config`, `4 not_found`, `5 busy`, `6 incompatible`, `7 io`, `8 network`, `70 internal`, `130 interrupted`
 
 #### Scenario: Error codes of this change
 - **WHEN** `spider commands` runs
-- **THEN** its `diagnostics` give these exit codes: `usage_error` 2, `invalid_value` 2, `unknown_field` 2, `invalid_cursor` 2, `settings_invalid` 3, `workspace_not_found` 4, `workspace_not_writable` 7 and `internal_error` 70
+- **THEN** its `diagnostics` give these exit codes: `usage_error` 2, `invalid_value` 2, `unknown_field` 2, `invalid_cursor` 2, `settings_invalid` 3, `workspace_not_found` 4, `workspace_not_writable` 7, `internal_error` 70 and `interrupted` 130
+
+#### Scenario: Warning and info codes of this change
+- **WHEN** `spider commands` runs
+- **THEN** its `diagnostics` include `workspace_nested` with `"level":"warning"` and `more_items` with `"level":"info"`, both with `"exit_code":null`
 
 #### Scenario: Naming rule for input errors
 - **WHEN** `spider commands` runs
@@ -350,6 +388,28 @@ A Command's name is its full path, for example `crawls list`. Each Command entry
 
 The output SHALL be identical on every OS for the same version, and SHALL NOT need a Workspace.
 
+The description SHALL be consistent, and the tool SHALL refuse to start with a Command that would break this:
+- the default of a Command's `--format` is the first of its `formats`
+- the default fields of a Command are all among its available fields
+
+An option whose `setting` is not null SHALL take `secret` from that setting, so a secret setting and its flag are never described differently. An option without a setting SHALL declare `secret` itself.
+
+#### Scenario: Default format comes first
+- **WHEN** the tool is built with a document Command whose formats are `json` and `table`, and whose `--format` defaults to `table`
+- **THEN** building the tool fails, naming that Command
+
+#### Scenario: Default fields are available
+- **WHEN** the tool is built with a list Command whose available fields are `n` and `sq`, and whose default fields are `n` and `size`
+- **THEN** building the tool fails, naming that Command
+
+#### Scenario: A secret option inherits from its setting
+- **WHEN** `spider commands` runs in a tool that includes the example settings Command, whose `--level` maps to `example.level` and whose `--token` maps to the secret setting `example.token`
+- **THEN** its `--token` option has `"setting":"example.token"` and `"secret":true`, and its `--level` option has `"setting":"example.level"` and `"secret":false`
+
+#### Scenario: A secret option without a setting
+- **WHEN** `spider commands` runs in a tool that includes the example settings Command, whose `--api-key` maps to no setting and is declared secret
+- **THEN** its `--api-key` option has `"setting":null` and `"secret":true`
+
 #### Scenario: The Command lists itself
 - **WHEN** `spider commands` runs
 - **THEN** `commands` has an entry with `"name":"commands"`
@@ -373,6 +433,22 @@ The output SHALL be identical on every OS for the same version, and SHALL NOT ne
 #### Scenario: Same description on every OS
 - **WHEN** `spider commands` runs on Windows, macOS and Linux
 - **THEN** the entry for `init` is byte-identical on all three
+
+### Requirement: Light start
+
+`spider --help` and `spider commands` SHALL start without loading any module outside the standard library, Typer and the modules Typer itself depends on, orjson and `spider`. `spider commands` MAY also load pydantic when an option maps to a setting. A settings table SHALL be loaded only when settings load, or when the settings template is written.
+
+#### Scenario: Help starts light
+- **WHEN** `spider --help` runs in a fresh process
+- **THEN** every top-level module loaded is in the standard library, Typer or its dependencies, orjson or `spider`
+
+#### Scenario: The self-description starts light
+- **WHEN** `spider commands` runs in a fresh process
+- **THEN** every top-level module loaded is in the standard library, Typer or its dependencies, orjson or `spider`
+
+#### Scenario: Settings tables load with the settings
+- **WHEN** `spider --help` runs in a fresh process, in a tool whose `example` table is registered
+- **THEN** the module that defines the `example` table is not loaded
 
 ### Requirement: Help and version are plain text
 

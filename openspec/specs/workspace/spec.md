@@ -1,3 +1,5 @@
+# workspace Specification
+
 ## Purpose
 
 Defines where a Workspace keeps its Crawls and settings, how every Command finds the Workspace, how `spider init` creates one, and how `spider.toml` settings combine with flags and defaults.
@@ -6,8 +8,10 @@ Conventions used in the scenarios:
 - `H` is the absolute path of the home folder.
 - Paths are written with `/`, and Windows uses `\`.
 - Settings scenarios use `example.level`, a setting with the allowed values `"low"` and `"high"` and the default `"low"`. It stands in for the settings tables that later changes register, such as `[store]` from `015-add-crawl-store`.
+- `example.token` is a secret string setting that is unset by default. It stands in for settings such as `022`'s proxy.
+- `groups` is a keyed table: its entries are named by the user, and each has a `level` like `example.level`. It stands in for `040`'s `[rules.<id>]`.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Workspace layout
 
@@ -156,12 +160,22 @@ When the target or its data folder cannot be created or written, `spider init` S
 - **WHEN** `spider init --workspace H/work/notes.txt/site` runs, and `H/work/notes.txt` is a file
 - **THEN** the exit code is 7, and the error has the code `workspace_not_writable`
 
+### Requirement: Initialising without the CLI
+
+What `spider init` does SHALL be available as a service call that takes typed inputs and a reporter for warnings and events, and returns the same result as the Command's JSON. A caller other than the CLI, such as the MCP server of `090-add-mcp-server`, SHALL get the same files, result and diagnostics.
+
+#### Scenario: Initialising without the CLI
+- **WHEN** the Workspace service initialises `H/work/shop/blog` with a reporter that collects what it is given, and `H/work/shop` contains `.spider/`
+- **THEN** the result's `created` lists the four created paths, and the reporter holds exactly one warning, `workspace_nested`, whose `details.parent` is `H/work/shop`
+
 ### Requirement: Commented settings template
 
 The `spider.toml` written by `spider init` SHALL be valid TOML that sets no value. It SHALL start with a comment that names the precedence (flag, then `spider.toml`, then default). For every setting the tool knows, it SHALL contain:
 - the setting's table header, uncommented
 - a comment describing the setting
-- the commented-out line `# <key> = <default>`
+- the commented-out line `# <key> = <default>`, or `# <key> =` for a setting that is unset by default
+
+A keyed table SHALL appear as a comment describing it and the commented-out header `# [<table>.<name>]`, followed by the commented-out lines of an entry's settings.
 
 Loading this file SHALL give the same settings as having no settings file.
 
@@ -169,18 +183,26 @@ Loading this file SHALL give the same settings as having no settings file.
 - **WHEN** `spider init` runs in the empty folder `H/work/shop`
 - **THEN** `H/work/shop/spider.toml` contains the line `[example]`, followed later by the line `# level = "low"`
 
+#### Scenario: An unset setting in the template
+- **WHEN** `spider init` runs in the empty folder `H/work/shop`
+- **THEN** `H/work/shop/spider.toml` contains the line `[example]`, followed later by the line `# token =`
+
+#### Scenario: A keyed table in the template
+- **WHEN** `spider init` runs in the empty folder `H/work/shop`
+- **THEN** `H/work/shop/spider.toml` contains the line `# [groups.<name>]`, followed later by the line `# level = "low"`
+
 #### Scenario: Template loads as defaults
 - **WHEN** the settings of `H/work/shop` are resolved right after `spider init` created its `spider.toml`
 - **THEN** they are equal to the settings resolved for the Workspace `H/work/empty`, which has `.spider/` but no `spider.toml`
 
 ### Requirement: Settings precedence
 
-Settings SHALL be grouped in `spider.toml` tables that each change registers. Each setting SHALL take its value from the first source that sets it:
+Settings SHALL be grouped in `spider.toml` tables that each change registers. A keyed table SHALL hold entries named by the user, each written `[<table>.<name>]` with the same settings. Each setting SHALL take its value from the first source that sets it:
 1. its Command flag
 2. `spider.toml`
 3. its default
 
-A setting that mirrors a flag SHALL live in the table named after its Command. Its key SHALL be the flag's long name without the leading dashes, with `-` replaced by `_`.
+A setting that mirrors a flag SHALL live in a table the Command reads, usually named after it. Its key SHALL be the flag's long name without the leading dashes, with `-` replaced by `_`.
 
 `--format`, `--fields`, `--limit`, `--cursor`, `--crawl` and `--workspace` SHALL have no `spider.toml` key.
 
@@ -195,6 +217,10 @@ A setting that mirrors a flag SHALL live in the table named after its Command. I
 #### Scenario: Flag over settings file
 - **WHEN** the settings are resolved from a `spider.toml` that contains `[example]\nlevel = "high"\n`, with the flag value `"low"` given for `example.level`
 - **THEN** `example.level` is `"low"`
+
+#### Scenario: Named entries
+- **WHEN** the settings are resolved from a `spider.toml` that contains `[groups.blog]\nlevel = "high"\n`
+- **THEN** `groups.blog.level` is `"high"`
 
 #### Scenario: Output flags have no settings key
 - **WHEN** `spider init` runs in `H/work/shop`, whose `spider.toml` contains `[output]\nformat = "table"\n`
@@ -219,6 +245,10 @@ Unknown tables and keys SHALL be problems. The error's hint SHALL name the close
 #### Scenario: Unknown key with a suggestion
 - **WHEN** `spider init` runs in `H/work/shop`, whose `spider.toml` contains `[example]\nlevl = "high"\n`
 - **THEN** `details.errors[0].key` is `"example.levl"`, and the hint contains `level`
+
+#### Scenario: Unknown key in a named entry
+- **WHEN** `spider init` runs in `H/work/shop`, whose `spider.toml` contains `[groups.blog]\nlevl = "high"\n`
+- **THEN** `details.errors[0].key` is `"groups.blog.levl"`, and the hint contains `level`
 
 #### Scenario: TOML syntax error
 - **WHEN** `spider init` runs in `H/work/shop`, whose `spider.toml` contains `[example\n`
