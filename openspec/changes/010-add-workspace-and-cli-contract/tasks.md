@@ -130,7 +130,7 @@ The paging logic lives in the pure module `spider.output.paging` (design D6): th
   - the example list Command returns a `Page`. The `@command_meta` wrapper only adapts a `Page` to the formats: it never slices, pages or projects items.
 - [x] 6.4 Drive "Following cursors" (cli-contract). Green: `--cursor`, read back by the pager.
 - [x] 6.5 Drive "Everything on one page" and "Default limit" (cli-contract), a trivial pair, using the 60-item fixture list.
-- [ ] 6.6 Drive "Count only" (cli-contract).
+- [x] 6.6 Drive "Count only" (cli-contract).
 - [ ] 6.7 **Guard:** "Same request, same output" (cli-contract).
 - [ ] 6.8 Drive "Limit above the maximum" and "Negative limit" (cli-contract), a trivial pair.
 - [ ] 6.9 Drive "Limit of the wrong type" (cli-contract). Green: map Click `BadParameter` to `invalid_value`.

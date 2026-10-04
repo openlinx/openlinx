@@ -59,3 +59,9 @@ def test_default_limit() -> None:
     page = run_cli("example-long-list", app=example_app()).json()
 
     assert (page["items"], type(page["next_cursor"])) == ([{"n": n} for n in range(1, 51)], str)
+
+
+def test_count_only() -> None:
+    result = run_cli("example-list", "--limit", "0", app=example_app())
+
+    assert result.stdout == b'{"total":5,"items":[],"next_cursor":null}\n'

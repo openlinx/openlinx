@@ -38,7 +38,9 @@ def paginate(
     # A static list never changes under the reader, so the keyset can be the next index.
     start: int = 0 if cursor is None else decode_cursor(cursor, fingerprint)
     end = start + limit
-    next_cursor = encode_cursor(fingerprint, end) if end < len(items) else None
+    # A limit of 0 asks only for the count, so there is no next page to point to.
+    more = limit > 0 and end < len(items)
+    next_cursor = encode_cursor(fingerprint, end) if more else None
     return Page(project(items[start:end], fields), len(items), next_cursor)
 
 
