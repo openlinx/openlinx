@@ -9,10 +9,8 @@ if TYPE_CHECKING:
     # Only for typing: pydantic must stay off the CLI's startup path.
     from pydantic import BaseModel
 
-# A table model, or a keyed table: dict[str, V] whose V is a table model or a TOML literal type.
+# A table model, or a keyed table: dict[str, V] whose V is a table model.
 type Table = type[BaseModel] | type[dict[str, Any]]
-
-TOML_LITERAL_TYPES = (str, int, float, bool)
 
 
 class SettingsTables:
@@ -58,7 +56,11 @@ def check_table(name: str, table: Table) -> None:
     entry = keyed_entry(table)
     if entry is None:
         _check_model(name, table)
-    elif entry not in TOML_LITERAL_TYPES:
+    else:
+        # Literal entries (`<name> = <value>`) have no docstring to describe the table in the
+        # template, so they wait for the change that needs them (050's [segments]).
+        if not isinstance(entry, type) or not hasattr(entry, "model_fields"):
+            raise TypeError(f"Settings table [{name}] needs a table model for its entries.")
         _check_model(f"{name}.<name>", entry)
         # The template describes the keyed table with it.
         if not entry.__doc__ or "\n" in entry.__doc__:

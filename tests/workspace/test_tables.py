@@ -8,6 +8,7 @@ import typer
 from pydantic import BaseModel, ConfigDict, Field
 
 from spider.cli.app import build_app
+from spider.cli.options import options_with_meta
 from spider.cli.runner import SpiderGroup
 from spider.workspace.tables import SettingsTables, Table, check_table
 from tests.support.app import example_app
@@ -53,6 +54,7 @@ class TomlDefaults(BaseModel):
         dict[str, Loose],
         dict[int, TomlDefaults],
         dict[str, TomlDefaults],
+        dict[str, str],
     ],
 )
 def test_a_table_the_template_cannot_describe_is_refused(table: Table) -> None:
@@ -60,9 +62,8 @@ def test_a_table_the_template_cannot_describe_is_refused(table: Table) -> None:
         check_table("example", table)
 
 
-@pytest.mark.parametrize("table", [TomlDefaults, dict[str, str]])
-def test_a_table_with_toml_defaults_follows_the_rules(table: Table) -> None:
-    check_table("example", table)
+def test_a_table_with_toml_defaults_follows_the_rules() -> None:
+    check_table("example", TomlDefaults)
 
 
 @pytest.mark.parametrize("app", [build_app, example_app])
@@ -71,6 +72,32 @@ def test_every_registered_table_follows_the_rules(app: Callable[[], typer.Typer]
 
     for name, table in tables.items():
         check_table(name, table)
+
+
+@pytest.mark.parametrize("app", [build_app, example_app])
+def test_every_option_setting_names_a_setting_of_a_registered_table(
+    app: Callable[[], typer.Typer],
+) -> None:
+    group = cast(SpiderGroup, typer.main.get_group(app()))
+    tables = dict(group.settings_tables.items())
+    settings = [
+        extra.setting
+        for command in group.commands.values()
+        for _, extra in options_with_meta(command)
+        if extra.setting is not None
+    ]
+
+    assert [
+        setting
+        for setting in settings
+        if not _names_a_flat_setting(tables, *setting.partition(".")[::2])
+    ] == []
+
+
+def _names_a_flat_setting(tables: dict[str, Table], name: str, key: str) -> bool:
+    table = tables.get(name)
+    # A keyed table has no model_fields: its settings sit inside named entries.
+    return key in getattr(table, "model_fields", {})
 
 
 def test_a_table_resolves_from_its_reference() -> None:

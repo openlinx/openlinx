@@ -69,8 +69,6 @@ select = [
 "typer._click".msg = "Import Typer's vendored Click through spider.cli.click_compat."
 
 [tool.ruff.lint.per-file-ignores]
-"src/spider/output/**" = ["TID251"]
-"src/spider/cli/click_compat.py" = ["TID251"]
 "tests/**" = ["S101", "T20", "S603", "S607"]
 "scripts/**" = ["T20", "S603"]
 

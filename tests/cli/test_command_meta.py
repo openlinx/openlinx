@@ -87,5 +87,5 @@ def secret_twice(
 
 
 def test_an_option_mapped_to_a_setting_does_not_declare_secret() -> None:
-    with pytest.raises(TypeError, match=r"example.token"):
+    with pytest.raises(TypeError, match=r"example\.token"):
         build_app(extra=AppExtra(commands=[secret_twice]))

@@ -53,8 +53,8 @@ Settings come only from a Command's flag, then the Workspace's `spider.toml`, th
   - a default TOML can write: a string, a finite number, a boolean or a list of those
   - or a `None` default for a setting that is unset; the template writes it as `# <key> =`
   - flat tables, except keyed tables
-- **Keyed tables:** a table may be `dict[str, V]`, where V is a table model with a one-line docstring, or a TOML literal type, for entries the user names, such as `[rules.<id>]` or `[segments]`. The template writes the entry docstring and a commented `# [<table>.<name>]` header.
-- **Secrets** are declared once, on the settings field (`json_schema_extra={"secret": True}`). An option mapped to that setting inherits it, so `spider commands` reads the table's model; an option with no setting declares `secret` itself.
+- **Keyed tables:** a table may be `dict[str, V]`, where V is a table model with a one-line docstring, for entries the user names, such as `[rules.<id>]`. Entries that are TOML literals (`050`'s `[segments]`) wait for the change that needs them, which also decides how the template describes them. The template writes the entry docstring and a commented `# [<table>.<name>]` header.
+- **Secrets** are declared once, on the settings field (`json_schema_extra={"secret": True}`). An option mapped to that setting inherits it, so `spider commands` reads the table's model; an option with no setting declares `secret` itself. A test checks that every option's setting names a setting of a registered table.
 
 ## Crawl pipeline
 

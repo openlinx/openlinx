@@ -217,4 +217,4 @@ Each task is one commit. Guards and refactors are allowed here, and a refactor n
   - add the settings rules of D2: table ownership, `None` defaults, keyed tables, lazy references, and secrets on the field
   - add the error-code registry and the startup allowlist
   - check the HTTP client text against ADR-0001, and fix it only if something has drifted
-- [ ] 9.11 Review: run the code-review skill on the whole change, then refactor with the whole suite green.
+- [x] 9.11 Review: run the code-review skill on the whole change, then refactor with the whole suite green.
