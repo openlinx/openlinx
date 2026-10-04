@@ -19,7 +19,7 @@
 
 **Non-Goals:**
 - Crawl files, `spider schema` and `--crawl` (`015`).
-- Ctrl+C handling. Exit code 130 is reserved here, and `020` implements it together with its scenario.
+- The Crawl's side of Ctrl+C. This change maps an interrupt to `interrupted` (130) for every Command; `020` adds the Crawl state `stopped` with its stop reason.
 - Any real setting. The settings system ships here, and its first real table is `[store]` (`015`).
 
 ## Decisions
@@ -129,9 +129,10 @@ Moved to `050-add-query-and-segments`, together with the `csv` format, `--no-bom
   | Click `UsageError` | `usage_error` |
   | Click `BadParameter` | `invalid_value` |
   | a known global flag found before the Command name (checked on `argv` before Click parses) | `usage_error`, with the hint |
+  | `KeyboardInterrupt`, or Click's `Abort` (Ctrl+C or end of input inside Click) | `interrupted` (130) |
   | any other `Exception` | `internal_error` (70), with `traceback.format_exc()` |
 
-- **Why these exit codes:** 1 means "failed" (`080` uses it for failed checks), and 70 (`EX_SOFTWARE`) marks a bug, so agents can tell a failed operation from a defect. Exit code 130 is reserved, and `020` maps Ctrl+C to it.
+- **Why these exit codes:** 1 means "failed" (`080` uses it for failed checks), and 70 (`EX_SOFTWARE`) marks a bug, so agents can tell a failed operation from a defect. Ctrl+C is `interrupted` (130): a user's interrupt is not a bug, so it never becomes `internal_error`.
 - **Alternatives:**
   - **Click's plain-text errors.** Not parseable.
   - **Exit code 1 for everything.** Agents could not branch on the kind of failure.
@@ -256,7 +257,7 @@ Nothing to migrate: this change is greenfield.
   - Put diagnostics inside results with `Diagnostic.to_json()`.
 - **Streams and outcomes:**
   - Warnings and progress go through the `Reporter`, never `Output`.
-  - A failed outcome is returned as `Outcome(result, error)`. `020`'s `seed_unreachable` (exit 8) and Ctrl+C (exit 130, which `020` maps) use it, and so do `080`'s failed checks (exit 1).
+  - A failed outcome is returned as `Outcome(result, error)`. `020`'s `seed_unreachable` (exit 8) and a Crawl stopped with Ctrl+C (exit 130) use it, and so do `080`'s failed checks (exit 1).
 - **Settings:**
   - Register a table by its `"module:Class"` reference in `build_app`. The table-rules test of D2 checks it. A table belongs to one change, and later changes add fields to its model.
   - A setting that mirrors a flag lives in `[<command>]` under the flag's name, with `_` for `-`. Mark it `secret` on the settings field (`015` redacts it), and the option inherits the flag.

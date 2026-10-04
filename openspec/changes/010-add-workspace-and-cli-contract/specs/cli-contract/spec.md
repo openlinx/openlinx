@@ -262,7 +262,7 @@ Errors, warnings and notices SHALL be written to stderr, one compact JSON object
 
 A failing Command SHALL write exactly one error object, as its last line on stderr. An error or warning reported inside a result, such as an entry in a `warnings` list, SHALL use the same shape.
 
-Errors found while parsing the command line SHALL use the same shape: `usage_error` for an unknown Command, an unknown flag or a missing argument, and `invalid_value` for a value that is not allowed. An unexpected failure SHALL use `internal_error`, with the Python traceback text in `details.traceback`.
+Errors found while parsing the command line SHALL use the same shape: `usage_error` for an unknown Command, an unknown flag or a missing argument, and `invalid_value` for a value that is not allowed. An unexpected failure SHALL use `internal_error`, with the Python traceback text in `details.traceback`. A Command stopped with Ctrl+C SHALL use `interrupted`, never `internal_error`.
 
 Nothing else SHALL appear on stderr apart from progress events: no raw tracebacks, progress bars or log lines.
 
@@ -285,6 +285,10 @@ Nothing else SHALL appear on stderr apart from progress events: no raw traceback
 #### Scenario: A warning is readable at once
 - **WHEN** a Command running as a real process with stderr piped writes a warning, and then waits for a line on its stdin before it ends
 - **THEN** the warning line can be read from stderr before that line is sent
+
+#### Scenario: Interrupted
+- **WHEN** a Command is stopped with Ctrl+C
+- **THEN** the exit code is 130, and the last line of stderr is an error with the code `interrupted`
 
 #### Scenario: A warning inside a result
 - **WHEN** a Command ends with a result whose `warnings` list holds one warning
@@ -322,7 +326,7 @@ Every diagnostic code SHALL be declared once, with its level, its exit code (non
 
 #### Scenario: Error codes of this change
 - **WHEN** `spider commands` runs
-- **THEN** its `diagnostics` give these exit codes: `usage_error` 2, `invalid_value` 2, `unknown_field` 2, `invalid_cursor` 2, `settings_invalid` 3, `workspace_not_found` 4, `workspace_not_writable` 7 and `internal_error` 70
+- **THEN** its `diagnostics` give these exit codes: `usage_error` 2, `invalid_value` 2, `unknown_field` 2, `invalid_cursor` 2, `settings_invalid` 3, `workspace_not_found` 4, `workspace_not_writable` 7, `internal_error` 70 and `interrupted` 130
 
 #### Scenario: Warning and info codes of this change
 - **WHEN** `spider commands` runs

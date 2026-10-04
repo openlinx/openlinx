@@ -71,7 +71,7 @@ None. No specs exist yet.
   - `spider schema`, and the `--crawl` flag
   - the `[store]` settings table
 - **`020-add-crawl-core` (v0.1):**
-  - the first Command that reports progress events and partial results, `crawl`, with its exit codes 8 (`seed_unreachable`) and 130 (Ctrl+C)
+  - the first Command that reports progress events and partial results, `crawl`, with its exit code 8 (`seed_unreachable`) and the Crawl's side of Ctrl+C (exit 130, which this change maps for every Command)
 - **`022-add-fetch-policy` (v0.1):** the fetch flags and which of them are secret. `015` does the redaction.
 - **`050-add-query-and-segments` (v0.1):**
   - the query Commands
