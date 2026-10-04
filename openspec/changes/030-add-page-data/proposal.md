@@ -76,7 +76,7 @@ _None._ No specs exist yet. This change builds on requirements of `010`, `015`, 
   - `origins.http_version`
   - the redaction of cookie values in `response_headers`
   - the gzip fixture support
-- **Works with `026-add-parse-pool`,** whose process pool runs this change's Page extractor. The extractor stays a pure function of its input.
+- **Works with `026-add-parse-pool`** (v0.2, conditional): its process pool, built only if its benchmark shows parsing is the bottleneck, would run this change's Page extractor. The extractor stays a pure function of its input either way.
 - **Consumers:**
   - `040` evaluates Rules over `pages`, `links` and `urls`.
   - `050` exposes `pages`, `page`, `page --html` and `export`.

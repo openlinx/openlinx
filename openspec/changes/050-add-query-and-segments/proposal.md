@@ -53,7 +53,7 @@ Global flags added by this change to the CLI contract: `--format csv`, `--no-bom
 - xlsx export: **v1.0**.
 - REST API and web UI: **backlog**.
 - Any SQL that writes to a crawl store: never. The store is changed only by the Crawl's writer.
-- MCP tool definitions: `090-add-mcp-server` (v0.1). The HTML Report and Section Briefs: `070-add-html-report` (v0.1).
+- MCP tool definitions: `090-add-mcp-server` (v0.1.1). The HTML Report and Section Briefs: `070-add-html-report` (v0.2).
 
 ## Impact
 

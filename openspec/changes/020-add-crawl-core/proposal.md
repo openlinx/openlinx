@@ -1,6 +1,6 @@
 ## Why
 
-Everything else in v0.1 reads what a Crawl records: page data (`030`), Rules (`040`), queries and Segments (`050`), crawl control (`060`) and the Report (`070`). ADR-0001 settles an own asyncio engine whose frontier lives in the crawl store.
+Everything after it reads what a Crawl records: page data (`030`), Rules (`040`) and queries (`050`) in v0.1, then Segments (`050`), crawl control (`060`) and the Report (`070`) in v0.2. ADR-0001 settles an own asyncio engine whose frontier lives in the crawl store.
 
 This change builds the core of that engine: a foreground Spider-mode Crawl with Screaming Frog's Scope, robots.txt and Link-following behaviour, politeness, the persistent frontier, and the hooks that later changes plug into. The rest of the crawler builds on this core, and those changes can then run in parallel:
 - fetch policy (`022`)
@@ -35,7 +35,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 - **Hooks for later changes:**
   - a **per-response hook**, called once for every URL that reaches a final state, inside the same writer unit
   - the **post-crawl passes**, run when a Crawl ends as `completed` or `stopped`, and run again after every continued run
-  - an extractor registry, run in-process at this stage (`026` moves it into a process pool)
+  - an extractor registry, run in-process at this stage (`026` may move it into a process pool, only if its benchmark shows parsing is the bottleneck)
 - **Output, following the stream rules of `010`:**
   - `{event, ts, data}` progress events on stderr: `crawl_started`, `progress` every 10 seconds, and `stopping`.
   - Warnings as diagnostics.
@@ -69,9 +69,9 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - timeouts, retries, and redirects with every hop recorded
   - body and URL limits, compression, TLS trust, HTTP version
   - user agent, custom headers, basic auth, proxy, and `response_headers`
-- List mode, Sitemap mode and `mode_conflict`: `024-add-list-and-sitemap-modes` (v0.1).
-- Parsing in a process pool: `026-add-parse-pool` (v0.1).
-- `--detach`, `--dry-run`, `status`, `stop`, `resume` and `crawls`: `060-add-crawl-control` (v0.1).
+- List mode, Sitemap mode and `mode_conflict`: `024-add-list-and-sitemap-modes` (v0.2).
+- Parsing in a process pool: `026-add-parse-pool` (v0.2), only if its benchmark shows parsing is the bottleneck.
+- `--detach`, `--dry-run`, `status`, `stop`, `resume` and `crawls`: `060-add-crawl-control` (v0.2).
 - Page-data columns and stored Link attributes: `030-add-page-data` (v0.1). Rules: `040-add-rules` (v0.1).
 - Discovering sitemaps during a Spider crawl, and Link Score: **v0.2**.
 - JavaScript rendering and JS-only Links: **v1.1**.

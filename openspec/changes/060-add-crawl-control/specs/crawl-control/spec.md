@@ -475,6 +475,8 @@ When the Crawl Service starts or resumes a Crawl for a caller that has no comman
 
 Secrets SHALL be redacted as in any recorded command.
 
+> **Deferred to v0.1.1:** `090-add-mcp-server` is this requirement's only consumer, so it is built when 090 needs it.
+
 #### Scenario: A Crawl started through the Crawl Service records an equivalent command
 - **WHEN** the Crawl Service starts a detached Crawl of `{site}/` with `max_depth` 2 for a caller without a command line
 - **THEN** `crawl.command_argv` is `["spider", "crawl", "{site}/", "--max-depth", "2", "--detach"]`
@@ -559,7 +561,7 @@ The crawl store SHALL hold stop requests in `control_requests`, a control table 
 `spider crawls rm <id>…` SHALL delete each given Crawl, including:
 - its crawl file, with the `-wal`, `-shm`, writer-claim and log files
 - any files left for its background process
-- its reports folder `.spider/reports/<crawl id>/` (`070-add-html-report`), which also holds the Report Notes saved by `090-add-mcp-server`
+- its reports folder `.spider/reports/<crawl id>/` (`070-add-html-report`), which also holds the Report Notes saved by `090-add-mcp-server` (v0.1.1)
 
 It SHALL print `{"removed": [<crawl ids>], "paths": [<removed paths>], "freed_bytes": <n>}` and exit with code 0. It SHALL refuse, deleting nothing for the Crawl concerned:
 - with exit code 2 and error code `explicit_id_required` for `latest`

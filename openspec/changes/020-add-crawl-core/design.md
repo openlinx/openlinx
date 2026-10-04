@@ -19,7 +19,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - this change is the core
   - `022` adds the fetch policy (timeouts, retries, redirects, limits, compression, TLS, HTTP version, request identity)
   - `024` adds List and Sitemap modes
-  - `026` moves parsing into a process pool
+  - `026` may move parsing into a process pool, only if its benchmark shows parsing is the bottleneck
   - each must plug in without reworking the core
 - **Platforms:** Windows, macOS and Linux × Python 3.12–3.14, using `asyncio.run(..., loop_factory=...)` with the loop wiring from `000`.
 
@@ -115,7 +115,7 @@ This is the same order `030` documents for text, and both go through one shared 
   - sinks, which turn those structs into rows inside the URL's writer unit
   - per-response handlers
   - post-crawl passes
-- **Where extractors run:** in the crawl process in this change. `026` moves the same extractor functions into worker processes without changing their signatures.
+- **Where extractors run:** in the crawl process in this change. If `026` builds its pool (only if its benchmark shows parsing is the bottleneck), it moves the same extractor functions into worker processes without changing their signatures.
 - **Per-response handlers** run for every URL that reaches a final state, including `error` and `skipped`. So `030` can record cookies on any status and header Links on non-HTML responses, and `040` can evaluate Rules on single URLs.
 - **Post-crawl passes** run when a Crawl ends as `completed` or `stopped`, before its final Crawl State is written:
   - `030` computes inlink counts there, and `040` evaluates the Rules that span several Pages.
