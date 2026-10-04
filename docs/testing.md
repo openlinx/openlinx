@@ -32,6 +32,19 @@ A seam is a public interface where behaviour is observed without reaching inside
 
 A change's `design.md` names the seams it is tested at. Adding a new seam is a design decision recorded there and agreed with the maintainer before any test uses it.
 
+### Where tests live
+
+| Folder | Seam |
+|---|---|
+| `tests/cli/` | 1, CLI |
+| `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API |
+| `tests/output/` | 4, the output layer's pure logic |
+| `tests/contract/` | 6, the store contract (`test_schema.py`, with its parser of `docs/schema.md`), and the hand-written expected JSON of the CLI contract tests (`commands/`) |
+| `tests/js/` | 9, the Report script |
+| `tests/` | the repository's own guards: dependencies, naming, line endings, docs links, isolation |
+
+Shared helpers are in `tests/support/` and the fixture site in `tests/fixture_site/` (see [Helpers](#helpers)).
+
 ### Boundary doubles
 
 These fakes stand in for things outside our code. They are the only test doubles allowed:
