@@ -17,7 +17,7 @@ from spider import APP_NAME
 from spider.cli.meta import formats_hint, meta_of
 from spider.clock import SystemClock
 from spider.output.diagnostics import ExitCode, InternalError, SpiderError, UsageError
-from spider.output.report import CliReporter, Reporter
+from spider.output.reporter import CliReporter, Reporter
 from spider.output.writer import Document, Output, Rows
 from spider.workspace.tables import SettingsTables
 
@@ -64,8 +64,7 @@ class SpiderGroup(TyperGroup):
                 if returned.notice is not None:
                     output.diagnostic(returned.notice)
                 if returned.error is not None:
-                    output.diagnostic(returned.error.diagnostic)
-                    sys.exit(returned.error.exit_code)
+                    raise returned.error
                 returned = ExitCode.OK
             elif isinstance(returned, Rows):
                 output.rows(returned)
@@ -84,8 +83,9 @@ class SpiderGroup(TyperGroup):
             output.diagnostic(error.diagnostic)
             sys.exit(error.exit_code)
         except Exception:
-            output.diagnostic(_internal_error().diagnostic)
-            sys.exit(ExitCode.INTERNAL)
+            internal = _internal_error()
+            output.diagnostic(internal.diagnostic)
+            sys.exit(internal.exit_code)
         sys.exit(returned)
 
 

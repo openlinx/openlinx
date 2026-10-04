@@ -58,7 +58,7 @@ def fingerprint(command: str, selection: Mapping[str, Any]) -> str:
 def select_fields(requested: str | None, fields: Fields) -> tuple[str, ...]:
     if requested is None:
         return fields.default
-    # Lenient where the meaning is plain: spaces are dropped and a repeat counts once.
+    # Lenient where the meaning is plain, strict where it is not: an empty name is refused.
     names = tuple(dict.fromkeys(name.strip() for name in requested.split(",")))
     if names == (ALL_FIELDS,):
         return fields.available

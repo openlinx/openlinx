@@ -17,6 +17,7 @@ from spider.output.paging import Fields, Page, fingerprint, paginate, select_fie
 from spider.output.writer import Format
 from tests.support.settings import ExampleSettings
 
+EXAMPLE_WARNING = Diagnostic("warning", "example_warning", "An example warning.")
 EXAMPLE_FIELDS = Fields(available=("n", "sq"), default=("n",))
 
 
@@ -93,7 +94,7 @@ def example_mixed(ctx: typer.Context, output_format: FormatOpt = Format.JSON) ->
     """Reports a progress event, then a warning, then a second progress event."""
     invocation: Invocation = ctx.obj
     invocation.reporter.event("progress", crawled=1)
-    invocation.reporter.warn(Diagnostic("warning", "example_warning", "An example warning."))
+    invocation.reporter.warn(EXAMPLE_WARNING)
     invocation.reporter.event("progress", crawled=2)
     return {"urls": 2}
 
@@ -102,7 +103,7 @@ def example_mixed(ctx: typer.Context, output_format: FormatOpt = Format.JSON) ->
 def example_warn_and_wait(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> Any:
     """Writes a warning, then waits for a line on stdin before it ends."""
     invocation: Invocation = ctx.obj
-    invocation.reporter.warn(Diagnostic("warning", "example_warning", "An example warning."))
+    invocation.reporter.warn(EXAMPLE_WARNING)
     sys.stdin.readline()
     return {"done": True}
 
@@ -122,8 +123,7 @@ def example_raises(output_format: FormatOpt = Format.JSON) -> Any:
 @command_meta(output="document", formats=[Format.JSON, Format.TABLE])
 def example_warning_inside(output_format: FormatOpt = Format.JSON) -> Any:
     """Ends with a result whose warnings list holds one warning."""
-    warning = Diagnostic("warning", "example_warning", "An example warning.")
-    return {"warnings": [warning.to_json()]}
+    return {"warnings": [EXAMPLE_WARNING.to_json()]}
 
 
 def example_app() -> typer.Typer:

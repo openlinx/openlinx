@@ -101,7 +101,7 @@
 - **When bytes are written:**
   - Documents and lists are rendered fully and written only when the Command ends. That gives "nothing on stdout when a Command fails".
   - Rows are written and flushed row by row.
-  - **Partial results (G2):** a Command returns `Outcome(result, error)`. The runner writes the result, then the error line, then exits with the error's exit code.
+  - **Partial results (G2):** a document Command returns `Outcome(result, error)`. Lists and rows have no partial result: a list fails whole, and a rows Command's earlier rows are already written. The runner writes the result, then the error line, then exits with the error's exit code.
 - **Progress events (G1):** the CLI reporter's `event(name, **data)` writes `{"event","ts","data"}` to stderr through `Output`, and flushes. The time comes from the injected `Clock`, formatted `YYYY-MM-DDTHH:MM:SS.sssZ`. stdout never carries events.
 - **Lint guard:** ruff `banned-api` forbids `sys.stdout`, `sys.stderr`, `print`, `typer.echo` and `click.echo` outside `spider.output`.
 - **Alternatives:**

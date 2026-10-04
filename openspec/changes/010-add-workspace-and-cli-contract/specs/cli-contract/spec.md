@@ -236,12 +236,12 @@ A Command that reports progress SHALL write each event to stderr as one compact 
 
 ### Requirement: Partial results
 
-A Command whose result describes a failed outcome SHALL:
+A document Command whose result describes a failed outcome SHALL:
 - print that result on stdout
 - write exactly one error diagnostic, as its last line on stderr
 - exit with that error's exit code
 
-Every other failing Command SHALL write nothing to stdout.
+Every other failing document or list Command SHALL write nothing to stdout. A rows Command that fails keeps on stdout the rows it wrote before the failure, and its error follows on stderr.
 
 #### Scenario: The result of a failed outcome is printed
 - **WHEN** a Command ends with the result `{"state":"failed"}` and an error diagnostic whose exit code is 1

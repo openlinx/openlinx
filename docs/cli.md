@@ -140,11 +140,10 @@ A Command that reports progress writes each event to stderr as one JSON line, fl
 - `event` names the event, `ts` is the UTC time with milliseconds, and `data` is an object.
 - Events and diagnostics share stderr. Tell them apart by the key: an event has `event`, a diagnostic has `level`.
 - stdout never carries events, and there is no result event: the result goes to stdout once, when the Command ends.
-- `spider commands` marks the Commands that report progress with `"events":true`.
 
 ## Partial results
 
-Some failures still have a result worth reading, such as a Crawl that stopped part way. Such a Command:
+Some failures still have a result worth reading, such as a Crawl that stopped part way. Such a document Command:
 - prints its result on stdout
 - writes exactly one error, as its last line on stderr
 - exits with that error's exit code
@@ -153,7 +152,7 @@ Some failures still have a result worth reading, such as a Crawl that stopped pa
 {"state":"failed"}
 ```
 
-Every other failing Command leaves stdout empty, so an agent can rely on this: a non-zero exit code with a JSON result on stdout means a partial result, and the error on stderr says what went wrong.
+Every other failing document or list Command leaves stdout empty, so for those an agent can rely on this: a non-zero exit code with a JSON result on stdout means a partial result, and the error on stderr says what went wrong. A rows Command is different: the rows written before a failure stay on stdout.
 
 ## Exit codes
 

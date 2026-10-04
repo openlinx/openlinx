@@ -49,9 +49,9 @@ def command_meta[**P](
                     hint=formats_hint(meta),
                 )
             result = command(*args, **kwargs)
-            if isinstance(result, Outcome):
-                return Document(result.result, output_format, "document", error=result.error)
             if meta.fields is None:
+                if isinstance(result, Outcome):
+                    return Document(result.result, output_format, "document", error=result.error)
                 return Document(result, output_format, "document")
             if meta.output == "rows":
                 return Rows(result, output_format)
