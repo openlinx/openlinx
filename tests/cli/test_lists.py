@@ -47,3 +47,15 @@ def test_following_cursors() -> None:
         [{"n": 3}, {"n": 4}],
         [{"n": 5}],
     ]
+
+
+def test_everything_on_one_page() -> None:
+    page = run_cli("example-list", app=example_app()).json()
+
+    assert (len(page["items"]), page["next_cursor"]) == (5, None)
+
+
+def test_default_limit() -> None:
+    page = run_cli("example-long-list", app=example_app()).json()
+
+    assert (page["items"], type(page["next_cursor"])) == ([{"n": n} for n in range(1, 51)], str)

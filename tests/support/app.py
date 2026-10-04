@@ -37,6 +37,17 @@ def example_list(
 ROWS_FIELDS = Fields(available=("n",), default=("n",))
 
 
+@command_meta(output="list", formats=[Format.JSON, Format.JSONL, Format.TABLE], fields=ROWS_FIELDS)
+def example_long_list(
+    output_format: FormatOpt = Format.JSON, limit: LimitOpt = 50, cursor: CursorOpt = None
+) -> Page:
+    """A list Command whose items are n=1 to n=60."""
+    items = [{"n": n} for n in range(1, 61)]
+    return paginate(
+        items, limit=limit, cursor=cursor, fingerprint="example-long-list", fields=("n",)
+    )
+
+
 @command_meta(output="rows", formats=[Format.JSONL], fields=ROWS_FIELDS)
 def example_rows(output_format: FormatOpt = Format.JSONL) -> Iterator[Any]:
     """A rows Command that returns the rows n=1 and n=2."""
@@ -58,6 +69,6 @@ def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
             settings_tables={"example": ExampleSettings},
-            commands=[example_list, example_rows, example_rows_waiting],
+            commands=[example_list, example_long_list, example_rows, example_rows_waiting],
         )
     )
