@@ -66,6 +66,18 @@ class SpiderError(Exception):
         return self.diagnostic.code
 
 
+@dataclass(frozen=True)
+class Outcome:
+    """A result that describes a failed outcome: it is printed, then its error ends the run."""
+
+    result: Any
+    error: SpiderError
+
+
+class FailedError(SpiderError):
+    exit_code = ExitCode.FAILED
+
+
 class UsageError(SpiderError):
     exit_code = ExitCode.USAGE
 

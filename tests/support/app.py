@@ -12,7 +12,7 @@ from spider.cli.app import AppExtra, build_app
 from spider.cli.meta import command_meta
 from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt
 from spider.cli.runner import Invocation
-from spider.output.diagnostics import Diagnostic
+from spider.output.diagnostics import Diagnostic, FailedError, Outcome
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
 from tests.support.settings import ExampleSettings
@@ -107,6 +107,12 @@ def example_warn_and_wait(ctx: typer.Context, output_format: FormatOpt = Format.
     return {"done": True}
 
 
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def example_failed_outcome(output_format: FormatOpt = Format.JSON) -> Outcome:
+    """Ends with the result state=failed and an error whose exit code is 1."""
+    return Outcome({"state": "failed"}, FailedError("example_failed", "The example failed."))
+
+
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
@@ -119,6 +125,7 @@ def example_app() -> typer.Typer:
                 example_progress,
                 example_mixed,
                 example_warn_and_wait,
+                example_failed_outcome,
             ],
         )
     )

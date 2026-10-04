@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from spider.output.diagnostics import Diagnostic, UsageError
+from spider.output.diagnostics import Diagnostic, Outcome, UsageError
 from spider.output.paging import Fields, Page
 from spider.output.writer import Document, Format, Rows
 
@@ -49,6 +49,8 @@ def command_meta[**P](
                     hint=formats_hint(meta),
                 )
             result = command(*args, **kwargs)
+            if isinstance(result, Outcome):
+                return Document(result.result, output_format, "document", error=result.error)
             if meta.fields is None:
                 return Document(result, output_format, "document")
             if meta.output == "rows":

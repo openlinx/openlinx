@@ -61,6 +61,9 @@ class SpiderGroup(TyperGroup):
                 output.document(returned)
                 if returned.notice is not None:
                     output.diagnostic(returned.notice)
+                if returned.error is not None:
+                    output.diagnostic(returned.error.diagnostic)
+                    sys.exit(returned.error.exit_code)
                 returned = ExitCode.OK
             elif isinstance(returned, Rows):
                 output.rows(returned)

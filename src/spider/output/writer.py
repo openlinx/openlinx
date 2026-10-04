@@ -9,7 +9,7 @@ from typing import Any, BinaryIO, Literal
 
 import orjson
 
-from spider.output.diagnostics import Diagnostic
+from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.table import render_items_table, render_table
 
 # Not a terminal: a fixed width, so the table is the same on every OS and in CI.
@@ -28,6 +28,7 @@ class Document:
     format: Format
     kind: Literal["document", "list"]
     notice: Diagnostic | None = None
+    error: SpiderError | None = None
 
 
 @dataclass(frozen=True)
