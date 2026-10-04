@@ -55,7 +55,9 @@
   - A default that TOML can write: a string, a finite number, a boolean, or a list of those.
   - Or a `None` default, which makes the setting unset. The template writes it as `# <key> =`, commented out like every other setting.
   - Flat: every key is a setting, with no nested tables, with one exception.
-  - **Keyed tables:** a table may be `dict[str, V]`, where V is a table model that follows these rules, or a TOML literal type. Its reference names a module-level alias, such as `RulesTable = dict[str, RuleSettings]`. Only a whole table can be keyed: a field inside a table cannot be a `dict`, until a change needs one. Its keys are names chosen by the user, or ids from a known set, and the entries are written `[<table>.<name>]` for a model, or `<name> = <value>` for a literal. `040`'s `[rules.<id>]` is `dict[str, RuleSettings]`, and `050`'s `[segments]` is `dict[str, str]`. The owning change validates the keys with a pydantic validator, and the problems surface as `settings_invalid` with keys such as `rules.title-to-long`. The template writes a keyed table as its description and a commented `# [<table>.<name>]` header, followed by the entry model's settings, so the file still sets no value.
+  - **Keyed tables:** a table may be `dict[str, V]`, where V is a table model that follows these rules and has a one-line docstring. Its reference names a module-level alias, such as `RulesTable = dict[str, RuleSettings]`. Only a whole table can be keyed: a field inside a table cannot be a `dict`, until a change needs one. Its keys are names chosen by the user, or ids from a known set, and the entries are written `[<table>.<name>]`. `040`'s `[rules.<id>]` is `dict[str, RuleSettings]`. The owning change validates the keys with a pydantic validator, and the problems surface as `settings_invalid` with keys such as `rules.title-to-long`.
+  - **The keyed table's description** is the entry model's one-line docstring. The template writes it as a comment, then a commented `# [<table>.<name>]` header, followed by the entry model's settings, so the file still sets no value.
+  - **Literal entries** (`<name> = <value>`, V a TOML literal type) are refused by the table rules until a change needs them, because a literal type has no docstring to describe the table. `050` decides how `[segments]` describes literal entries.
 - **Secrets** are declared once, on the settings field (`json_schema_extra={"secret": True}`). An option mapped to that setting inherits it (D7). `015`'s redaction reads the same declaration.
 - **Sources**, set by `settings_customise_sources`:
   1. init kwargs, which carry flag values
@@ -267,8 +269,9 @@ Nothing to migrate: this change is greenfield.
   - A failed outcome is returned as `Outcome(result, error)`. `020`'s `seed_unreachable` (exit 8) and a Crawl stopped with Ctrl+C (exit 130) use it, and so do `080`'s failed checks (exit 1).
 - **Settings:**
   - Register a table by its `"module:Class"` reference in `build_app`. The table-rules test of D2 checks it. A table belongs to one change, and later changes add fields to its model.
-  - A setting that mirrors a flag lives in `[<command>]` under the flag's name, with `_` for `-`. Mark it `secret` on the settings field (`015` redacts it), and the option inherits the flag.
+  - A setting that mirrors a flag lives in a table the Command reads, usually named after it, under the flag's name, with `_` for `-`. A setting can serve several Commands, such as `crawl.max_urls` for `crawl` and a later `resume`. Mark it `secret` on the settings field (`015` redacts it), and the option inherits the flag.
   - Use a `None` default for an unset setting, and a keyed table for user-named entries such as `[rules.<id>]` and `[segments]`.
+  - `settings.table(Model)` reads flat tables only. The first change that reads a keyed table in code (`040` or `050`) adds a typed getter for it.
   - The first change that adds a path-valued setting also specifies that relative paths are taken from `spider.toml`'s folder.
 - **Paging:** list Commands return a `Page` and use the codec from D6. SQL-backed lists (`050`) add the crawl id and their filters to the fingerprint, and use `unknown_field` for `--fields` and `unknown_column` for `--where` and `--sort`.
 - **CSV:** every CSV writer goes through `050`'s policy. That includes `050`'s export and `070`'s Report files.

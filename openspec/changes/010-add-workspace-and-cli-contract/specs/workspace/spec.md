@@ -200,7 +200,7 @@ Settings SHALL be grouped in `spider.toml` tables that each change registers. A 
 2. `spider.toml`
 3. its default
 
-A setting that mirrors a flag SHALL live in the table named after its Command. Its key SHALL be the flag's long name without the leading dashes, with `-` replaced by `_`.
+A setting that mirrors a flag SHALL live in a table the Command reads, usually named after it. Its key SHALL be the flag's long name without the leading dashes, with `-` replaced by `_`.
 
 `--format`, `--fields`, `--limit`, `--cursor`, `--crawl` and `--workspace` SHALL have no `spider.toml` key.
 
