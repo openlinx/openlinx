@@ -41,3 +41,21 @@ def rows_without_fields(output_format: FormatOpt = Format.JSONL) -> list[Any]:
 def test_a_command_its_output_kind_cannot_serve_is_refused(command: Callable[..., Any]) -> None:
     with pytest.raises(TypeError):
         build_app(extra=AppExtra(commands=[command]))
+
+
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def table_first(output_format: FormatOpt = Format.TABLE) -> dict[str, Any]:
+    return {}
+
+
+@command_meta(output="list", formats=[Format.JSON], fields=Fields(("n", "sq"), ("n", "size")))
+def unavailable_default_field(output_format: FormatOpt = Format.JSON, limit: int = 50) -> Any:
+    return None
+
+
+@pytest.mark.parametrize("command", [table_first, unavailable_default_field])
+def test_default_format_comes_first_and_default_fields_are_available(
+    command: Callable[..., Any],
+) -> None:
+    with pytest.raises(TypeError, match=command.__name__):
+        build_app(extra=AppExtra(commands=[command]))

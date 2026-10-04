@@ -81,8 +81,12 @@ def check_command(command: Callable[..., Any]) -> None:
         for format_ in meta.formats
         if format_ not in KIND_FORMATS[meta.output]
     ]
+    if "output_format" in declared and (declared["output_format"].default,) != meta.formats[:1]:
+        problems.append("its --format default is not the first of its formats")
     if (meta.output == "document") != (meta.fields is None):
         problems.append("fields belong to list and rows Commands only")
+    elif meta.fields is not None and not set(meta.fields.default) <= set(meta.fields.available):
+        problems.append("its default fields are not all available")
     if problems:
         raise TypeError(f"Command {command.__name__}: {'; '.join(problems)}.")
 
