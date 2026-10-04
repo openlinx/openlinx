@@ -1,16 +1,17 @@
 ## Purpose
 
-Defines how each Crawl is stored as one self-contained SQLite file with a public, versioned schema. It covers:
+Defines how each Crawl is stored as one self-contained SQLite file with a public, versioned, documented schema ("your crawl is a database"). It covers:
 - crawl ids, and selecting a Crawl with `--crawl`
-- crawl metadata and the redaction of secrets
-- the transactional writer and the one-writer claim, with its two exceptions
-- the journal mode, concurrent reading, and schema upgrades
-- `spider schema` and the conventions every table follows
+- crawl metadata, Crawl States and the redaction of secrets
+- the transactional writer, its write check, and reading while a Crawl is written
+- the journal mode
+- `spider schema`, `docs/schema.md`, and the conventions every table follows
 
 Conventions used in the scenarios:
 - `H` is the absolute path of the home folder.
 - Paths are written with `/`, and Windows uses `\`.
-- "A Command that reads a Crawl" is any Command with the `--crawl` option. Until `050-add-query-and-segments` adds the real ones, an example Command stands in, and it reports the id of the Crawl it read.
+- "A Command that reads a Crawl" is any Command with the `--crawl` option. Until `050-add-query-and-segments` adds the real ones, an example Command on the test app stands in, and it reports the id of the Crawl it read.
+- Redaction scenarios use the test app's `example-settings` Command (`010-add-workspace-and-cli-contract`): `--token` maps to the secret setting `example.token`, `--level` maps to the plain setting `example.level`, and `--api-key` maps to no setting and is secret on its own.
 
 ## ADDED Requirements
 
@@ -33,48 +34,23 @@ A crawl id SHALL consist of:
 - a hyphen
 - 4 random characters from `0123456789abcdefghjkmnpqrstvwxyz`
 
-An id SHALL count as taken in a Workspace when any of `<id>.sqlite`, `<id>.lock` or `<id>.log` exists in its `crawls/` folder. A new id SHALL never be a taken one: new random characters SHALL be drawn until it is not.
-
-A caller MAY choose the id of the Crawl it creates. That is usually an id it reserved first, by creating `<id>.lock` or `<id>.log`.
-- Creating a Crawl with a chosen id SHALL succeed when `<id>.sqlite` does not exist.
-- It SHALL fail with `crawl_id_taken` when `<id>.sqlite` exists.
-- It SHALL fail with `invalid_value` when the id does not have the form above.
+An id SHALL count as taken in a Workspace when `<id>.sqlite` exists in its `crawls/` folder. A new id SHALL never be a taken one: new random characters SHALL be drawn until it is not, and the crawl file SHALL be created exclusively, so two processes can never create the same id.
 
 #### Scenario: Id from the start time
 - **WHEN** a Crawl is created at `2026-09-27T14:03:12.345Z`, and the random source yields `k3f9`
 - **THEN** its id is `20260927-140312-k3f9`
 
-#### Scenario: An id with a crawl file is taken
+#### Scenario: A taken id is drawn again
 - **WHEN** `20260927-140312-k3f9.sqlite` exists, and a Crawl is created at `2026-09-27T14:03:12.900Z` while the random source yields `k3f9` and then `m2p7`
-- **THEN** the new Crawl's id is `20260927-140312-m2p7`
-
-#### Scenario: An id with a log file is taken
-- **WHEN** `20260927-140312-k3f9.log` exists, and a Crawl is created at `2026-09-27T14:03:12.900Z` while the random source yields `k3f9` and then `m2p7`
-- **THEN** the new Crawl's id is `20260927-140312-m2p7`
-
-#### Scenario: An id with a lock file is taken
-- **WHEN** `20260927-140312-k3f9.lock` exists, and a Crawl is created at `2026-09-27T14:03:12.900Z` while the random source yields `k3f9` and then `m2p7`
 - **THEN** the new Crawl's id is `20260927-140312-m2p7`
 
 #### Scenario: Character set
 - **WHEN** ids are created with the system random source for any UTC start time from `2000-01-01T00:00:00.000Z` to `2099-12-31T23:59:59.999Z`
 - **THEN** every id matches `^[0-9]{8}-[0-9]{6}-[0-9a-hjkmnp-tv-z]{4}$`
 
-#### Scenario: A chosen id is used
-- **WHEN** a Crawl is created with the chosen id `20260927-140312-k3f9`, and only `20260927-140312-k3f9.log` exists
-- **THEN** the file `20260927-140312-k3f9.sqlite` exists in the Workspace's `crawls/` folder
-
-#### Scenario: A chosen id that has a crawl file is refused
-- **WHEN** a Crawl is created with the chosen id `20260927-140312-k3f9`, and `20260927-140312-k3f9.sqlite` exists
-- **THEN** creation fails with the error code `crawl_id_taken`
-
-#### Scenario: A malformed chosen id is refused
-- **WHEN** a Crawl is created with the chosen id `crawl-1`
-- **THEN** creation fails with the error code `invalid_value`
-
 ### Requirement: Storing a Crawl creates the data folder
 
-Creating a Crawl SHALL create the Workspace's data folder, its `.gitignore` (as `010-add-workspace-and-cli-contract` defines it) and its `crawls/` folder when they are missing. It SHALL NOT create `spider.toml`. When the data folder cannot be created or written, creating the Crawl SHALL fail with `workspace_not_writable`.
+Creating a Crawl SHALL create the Workspace's data folder, its `.gitignore` and its `crawls/` folder, as `010-add-workspace-and-cli-contract` defines them, when they are missing. It SHALL NOT create the settings file. When the data folder cannot be created or written, creating the Crawl SHALL fail with `workspace_not_writable`, whose `details.path` names the path that failed, before anything is crawled.
 
 #### Scenario: First Crawl in the global Workspace
 - **WHEN** a Crawl with the id `20260927-140312-k3f9` is created in the global Workspace, and `H/.spider` does not exist
@@ -86,7 +62,15 @@ Creating a Crawl SHALL create the Workspace's data folder, its `.gitignore` (as 
 
 #### Scenario: Unwritable data folder
 - **WHEN** a Crawl is created in the global Workspace, and `H/.spider` is a file
-- **THEN** creation fails with the error code `workspace_not_writable`
+- **THEN** creation fails with the error code `workspace_not_writable`, and `details.path` starts with `H/.spider`
+
+### Requirement: The writer checks that it can write
+
+Opening a Crawl's writer SHALL first run a write inside a transaction that it rolls back. When that fails, opening SHALL fail with `crawl_not_writable`, whose `details.file` is the crawl file, before any unit of work runs. The file SHALL be left unchanged.
+
+#### Scenario: A read-only crawl file
+- **WHEN** the writer is opened for a crawl file that has the read-only file attribute
+- **THEN** opening fails with the error code `crawl_not_writable`, `details.file` is that file's path, and the SHA-256 of the file is unchanged
 
 ### Requirement: Selecting a Crawl with --crawl
 
@@ -95,9 +79,9 @@ A Command that reads a Crawl SHALL take the global flag `--crawl` with one of th
 - a crawl id
 - the path of a crawl file: a value that contains a path separator or ends in `.sqlite`
 
-`latest` SHALL be the Crawl that started most recently, whatever its state. The start time is taken from the id; among ids with the same second, it is taken from `crawl.started_at`.
+`latest` SHALL be the Crawl that started most recently, whatever its state. The start time is taken from the id. Among ids of the same second, the later `crawl.started_at` wins, and then the greater id, so the choice is always the same.
 
-Only files named `<id>.sqlite` SHALL count as Crawls; a reservation alone is not one. Selecting a Crawl SHALL NOT create any file or folder.
+Only files named `<id>.sqlite` SHALL count as Crawls. Selecting a Crawl SHALL NOT create any file or folder.
 
 Failures SHALL use these error codes:
 
@@ -105,7 +89,7 @@ Failures SHALL use these error codes:
 |---|---|
 | `no_crawls` | the Workspace has no Crawl; the hint names `spider crawl` |
 | `crawl_not_found` | no Crawl has the given id |
-| `crawl_file_invalid` | the selected file is not a readable crawl file |
+| `crawl_file_invalid` | the selected file is not a readable crawl file; `details.file` names it |
 | `invalid_value` | any other value |
 
 #### Scenario: Latest is the most recent start
@@ -120,7 +104,7 @@ Failures SHALL use these error codes:
 - **WHEN** `latest` is resolved in a Workspace holding `20260927-100000-zzzz`, started at `2026-09-27T10:00:00.100Z`, and `20260927-100000-aaaa`, started at `2026-09-27T10:00:00.900Z`
 - **THEN** the Crawl `20260927-100000-aaaa` is selected
 
-#### Scenario: A reservation is not a Crawl
+#### Scenario: Only crawl files are Crawls
 - **WHEN** `latest` is resolved in a Workspace holding `20260927-100000-aaaa.sqlite` and only `20260927-110000-bbbb.log` for the later id
 - **THEN** the Crawl `20260927-100000-aaaa` is selected
 
@@ -172,6 +156,10 @@ Failures SHALL use these error codes:
 - **WHEN** a Command that reads a Crawl runs with `--crawl yesterday`
 - **THEN** the exit code is 2, and the error has the code `invalid_value`
 
+#### Scenario: The flag is described as global
+- **WHEN** `spider commands` runs on the test app
+- **THEN** the example Command's `--crawl` option has `"global":true` and `"default":"latest"`
+
 ### Requirement: Crawl metadata
 
 Every crawl file SHALL hold the table `crawl`, with exactly one row, and the table `seeds`, with one row per Seed. They SHALL have these columns:
@@ -196,6 +184,8 @@ Every crawl file SHALL hold the table `crawl`, with exactly one row, and the tab
 | `seeds.position` | the 1-based order in which the Seed was given |
 | `seeds.url` | the Seed URL as given |
 
+The `crawl` row SHALL hold no counts or statistics. Counts are derived from the tables that hold the rows they count.
+
 #### Scenario: Metadata of a new Crawl
 - **WHEN** a Spider-mode Crawl is created with:
   - the time `2026-09-27T14:03:12.345Z`
@@ -210,12 +200,12 @@ Every crawl file SHALL hold the table `crawl`, with exactly one row, and the tab
   - `config` `{"store":{"journal_mode":"auto"}}`
 
 #### Scenario: Seeds keep their order
-- **WHEN** a List-mode Crawl is created with the Seeds `https://example.com/b` and then `https://example.com/a`
+- **WHEN** a Crawl is created with the Seeds `https://example.com/b` and then `https://example.com/a`
 - **THEN** `seeds` holds exactly the rows `(1, "https://example.com/b")` and `(2, "https://example.com/a")`
 
 #### Scenario: Version stamp
 - **WHEN** a Crawl is created
-- **THEN** `crawl.tool_version` equals the `version` in `pyproject.toml`, and `crawl.schema_version` is `1`
+- **THEN** `crawl.tool_version` equals the `version` in `pyproject.toml`, and `crawl.schema_version` and SQLite's `user_version` are both `1`
 
 #### Scenario: Environment stamp
 - **WHEN** a Crawl is created
@@ -236,10 +226,10 @@ Every crawl file SHALL hold the table `crawl`, with exactly one row, and the tab
 | State | Meaning |
 |---|---|
 | `running` | a process is crawling, or was when it last wrote the file |
-| `stopped` | paused before its end; it can be resumed |
+| `stopped` | ended before its end |
 | `completed` | it ran to the end |
-| `failed` | it could not continue; it can be resumed |
-| `interrupted` | its process died without recording an end; it can be resumed |
+| `failed` | it could not continue |
+| `interrupted` | its process died without recording an end |
 
 #### Scenario: State values are documented
 - **WHEN** `spider schema crawl` runs
@@ -247,48 +237,36 @@ Every crawl file SHALL hold the table `crawl`, with exactly one row, and the tab
 
 ### Requirement: Redacting secrets
 
-When a Crawl is created, the secrets in its recorded command line (`crawl.command_argv`) and its recorded config (`crawl.config`) SHALL be replaced by `***`. There are three forms:
-- **A whole secret value,** such as the value of `--auth`.
-- **The value of a sensitive header,** keeping the header's name: `Authorization: ***`. The sensitive headers are `Cookie`, and every header whose name contains `auth`, `token`, `secret`, `key` or `password`, ignoring case.
-- **The password in a URL's user information,** keeping the user name: `http://ann:***@proxy.test:8080`.
+When a Crawl is created, the secrets in its recorded command line (`crawl.command_argv`) and its recorded config (`crawl.config`) SHALL be replaced:
+- A secret is the value of a secret option or a secret setting, as `010-add-workspace-and-cli-contract` declares them: once, on the settings field, or on an option that maps to no setting.
+- A secret value that is a URL with a password SHALL keep everything but the password: `http://ann:***@proxy.test:8080`.
+- Any other secret value SHALL become `***`.
 
-Redaction SHALL cover both the `--flag value` and the `--flag=value` forms. The Command that owns a flag or setting declares whether it is secret, and in which form. No part of the crawl file SHALL contain a redacted value.
+Redaction SHALL cover both the `--flag value` and the `--flag=value` forms. No part of the crawl file SHALL contain a redacted value.
 
-#### Scenario: Secret flag with a separate value
-- **WHEN** the command line `["spider","crawl","https://example.com/","--auth","ann:s3cret"]` is redacted, with `--auth` a whole secret
-- **THEN** the result is `["spider","crawl","https://example.com/","--auth","***"]`
+#### Scenario: Secret option with a separate value
+- **WHEN** the command line `["spider","example-settings","--token","s3cret"]` is redacted
+- **THEN** the result is `["spider","example-settings","--token","***"]`
 
-#### Scenario: Secret flag with a joined value
-- **WHEN** the command line `["spider","crawl","https://example.com/","--auth=ann:s3cret"]` is redacted, with `--auth` a whole secret
-- **THEN** the result is `["spider","crawl","https://example.com/","--auth=***"]`
+#### Scenario: Secret option with a joined value
+- **WHEN** the command line `["spider","example-settings","--api-key=s3cret"]` is redacted
+- **THEN** the result is `["spider","example-settings","--api-key=***"]`
 
-#### Scenario: A sensitive header keeps its name
-- **WHEN** the command line `["spider","crawl","https://example.com/","--header","Authorization: Bearer abc123"]` is redacted, with `--header` a header secret
-- **THEN** the result is `["spider","crawl","https://example.com/","--header","Authorization: ***"]`
-
-#### Scenario: Cookie header
-- **WHEN** the command line `["spider","crawl","https://example.com/","--header","Cookie: sid=abc"]` is redacted, with `--header` a header secret
-- **THEN** the result is `["spider","crawl","https://example.com/","--header","Cookie: ***"]`
-
-#### Scenario: Other headers are kept
-- **WHEN** the command line `["spider","crawl","https://example.com/","--header","Accept-Language: de"]` is redacted, with `--header` a header secret
-- **THEN** the result is `["spider","crawl","https://example.com/","--header","Accept-Language: de"]`
-
-#### Scenario: Proxy password
-- **WHEN** the command line `["spider","crawl","https://example.com/","--proxy","http://ann:s3cret@proxy.test:8080"]` is redacted, with `--proxy` a URL secret
-- **THEN** the result is `["spider","crawl","https://example.com/","--proxy","http://ann:***@proxy.test:8080"]`
+#### Scenario: A URL keeps everything but its password
+- **WHEN** the command line `["spider","example-settings","--token","http://ann:s3cret@proxy.test:8080"]` is redacted
+- **THEN** the result is `["spider","example-settings","--token","http://ann:***@proxy.test:8080"]`
 
 #### Scenario: Secret setting
-- **WHEN** the config `{"crawl":{"auth":"ann:s3cret"}}` is redacted, with `crawl.auth` a whole secret
-- **THEN** the result is `{"crawl":{"auth":"***"}}`
+- **WHEN** the config `{"example":{"level":"high","token":"s3cret"}}` is redacted
+- **THEN** the result is `{"example":{"level":"high","token":"***"}}`
 
-#### Scenario: Header setting
-- **WHEN** the config `{"crawl":{"header":["Authorization: Bearer abc123","Accept-Language: de"]}}` is redacted, with `crawl.header` a header secret
-- **THEN** the result is `{"crawl":{"header":["Authorization: ***","Accept-Language: de"]}}`
+#### Scenario: Other values are kept
+- **WHEN** the command line `["spider","example-settings","--level","high"]` is redacted
+- **THEN** the result is `["spider","example-settings","--level","high"]`
 
 #### Scenario: The secret is nowhere in the file
-- **WHEN** a Crawl is created with the command line `["spider","crawl","https://example.com/","--auth","ann:s3cret"]`, with `--auth` a whole secret, and its writer is closed
-- **THEN** the bytes of the crawl file do not contain `s3cret`
+- **WHEN** a Crawl is created with the command line `["spider","example-settings","--token","s3cret"]` and the config `{"example":{"token":"s3cret"}}`, and its writer is closed
+- **THEN** the bytes of the crawl file and of its `-wal` file do not contain `s3cret`
 
 ### Requirement: Transactional writer
 
@@ -300,7 +278,7 @@ Crawl data SHALL be written only through the Crawl's transactional writer. Calle
   - 1 second has passed since the first unit after the last commit
   - a caller asks for a flush
   - the writer is closed
-- **Durability:** a unit whose transaction was committed SHALL survive the writing process being killed. A kill SHALL lose at most the units that ran after the last commit.
+- **Durability:** a unit whose transaction was committed SHALL survive the writing process being killed. A kill SHALL lose at most the units that ran after the last commit, and SHALL leave a sound file.
 
 #### Scenario: A unit sees the units before it
 - **WHEN** one unit inserts the Seed `(1, "https://example.com/a")`, and the next unit counts the rows of `seeds`, before any commit
@@ -338,119 +316,40 @@ Crawl data SHALL be written only through the Crawl's transactional writer. Calle
 - **WHEN** 1,000 units that each insert one Seed have run, and the writer is closed at once
 - **THEN** a separate reader sees 1,000 rows in `seeds`
 
-#### Scenario: A killed writer leaves a sound file
-- **WHEN** a process runs 3 units, flushes, and is then killed: SIGKILL on Linux and macOS, TerminateProcess on Windows
-- **THEN** `PRAGMA integrity_check` on the crawl file returns `ok`
-
-#### Scenario: A killed writer keeps committed units
+#### Scenario: A killed writer keeps committed units in a sound file
 - **WHEN** a process runs 3 units that each insert one Seed, flushes, and is then killed: SIGKILL on Linux and macOS, TerminateProcess on Windows
-- **THEN** a reader sees 3 rows in `seeds`
+- **THEN** `PRAGMA integrity_check` on the crawl file returns `ok`, and a reader sees 3 rows in `seeds`
 
 #### Scenario: A killed writer loses uncommitted units
 - **WHEN** a process runs 3 units that each insert one Seed, and is killed less than a second later without a flush
 - **THEN** a reader sees 0 rows in `seeds`
 
-### Requirement: One writing process per Crawl
-
-At most one process at a time SHALL hold a Crawl's writer claim, which is needed to write its data. That covers the Crawl itself, a resume, and a schema upgrade.
-
-Another process that tries to take the claim SHALL fail with `crawl_locked` without changing the file. The claim SHALL end when the writing process ends, even when it is killed.
-
-Reading SHALL NOT be blocked by the claim.
-
-#### Scenario: A second writer is refused
-- **WHEN** process A holds the writer claim of the Crawl `20260927-140312-k3f9`, and process B tries to take it
-- **THEN** process B fails with the error code `crawl_locked`
-
-#### Scenario: A killed writer releases the Crawl
-- **WHEN** the process holding the writer claim of the Crawl `20260927-140312-k3f9` is killed, and another process then takes the claim
-- **THEN** it succeeds
-
-#### Scenario: Readers are not blocked
-- **WHEN** process A holds the writer claim of the Crawl `20260927-140312-k3f9`, and process B reads `crawl.state`
-- **THEN** process B reads `"running"`
-
-### Requirement: Control writes by other processes
-
-A process that does not hold a Crawl's writer claim SHALL be able to write rows of the Crawl's control tables, which are the tables the schema marks as control tables. It writes them in short transactions that wait up to 5 seconds for SQLite's locks, even while another process writes the Crawl.
-
-Through such a control write it SHALL NOT be able to change any other table.
-
-This change defines no control table. `060-add-crawl-control` adds `control_requests`.
-
-#### Scenario: A control row is written while the Crawl is written
-- **WHEN** process A holds the writer claim of a Crawl that has a control table, and process B inserts a row into that control table
-- **THEN** the row is committed
-
-#### Scenario: A control write cannot change Crawl data
-- **WHEN** a control write tries to insert a row into `seeds`
-- **THEN** it fails with a not-authorized error, and `seeds` is unchanged
-
-### Requirement: Recording a dead Crawl as interrupted
-
-When a process finds a Crawl whose state is `running` but whose writer claim no process holds, it SHALL be able to record the state `interrupted`. It takes the writer claim, sets `crawl.state` to `interrupted`, and releases the claim.
-
-A Crawl whose claim is held SHALL be left unchanged. When the crawl file cannot be written, nothing SHALL be recorded, and the check SHALL still report that no process is writing the Crawl.
-
-#### Scenario: A dead Crawl is recorded as interrupted
-- **WHEN** the process writing a Crawl in the state `running` is killed, and another process checks the Crawl
-- **THEN** `crawl.state` is `"interrupted"`
-
-#### Scenario: A live Crawl is left running
-- **WHEN** a process holds the writer claim of a Crawl in the state `running`, and another process checks the Crawl
-- **THEN** `crawl.state` is still `"running"`
-
-#### Scenario: A read-only file records nothing
-- **WHEN** the process writing a Crawl in the state `running` is killed, its crawl file then gets the read-only file attribute, and another process checks the Crawl
-- **THEN** `crawl.state` is still `"running"`
-
-### Requirement: Journal mode on local and network locations
+### Requirement: Journal mode
 
 A new crawl file SHALL use the journal mode chosen from the setting `store.journal_mode` and the file's location:
 
-| Setting | Local location | Network location |
+| Setting | Local location | UNC path |
 |---|---|---|
 | `"auto"` (the default) | `wal` | `delete` (rollback journal), with the warning `store_wal_unavailable` |
 | `"wal"` | `wal` | `wal`, with no warning |
 | `"delete"` | `delete` | `delete`, with no warning |
 
-A network location is any of:
-- a UNC path
-- a Windows drive whose type is remote
-- a path whose filesystem type is `nfs`, `nfs4`, `cifs`, `smb3`, `smbfs`, `afpfs`, `webdav`, `9p` or `fuse.sshfs`
-
-`crawl.journal_mode` SHALL record the mode used.
+A UNC path is one that starts with `\\` or `//`. `crawl.journal_mode` SHALL record the mode used. When SQLite does not grant the WAL mode it was asked for, the file SHALL use `delete` with the same warning.
 
 #### Scenario: UNC path
-- **WHEN** the location `\\fileserver\share\site\.spider` is classified
-- **THEN** it is a network location
-
-#### Scenario: Mapped network drive
-- **WHEN** the location `Z:\site\.spider` is classified, and the mount table reports drive `Z:` as remote
-- **THEN** it is a network location
-
-#### Scenario: Local drive
-- **WHEN** the location `C:\site\.spider` is classified, and the mount table reports drive `C:` as fixed
-- **THEN** it is a local location
-
-#### Scenario: SMB share on macOS
-- **WHEN** the location `/Volumes/share/site/.spider` is classified, and the mount table reports its mount point `/Volumes/share` with the filesystem type `smbfs`
-- **THEN** it is a network location
-
-#### Scenario: Local filesystem on Linux
-- **WHEN** the location `/home/ann/site/.spider` is classified, and the mount table reports its mount point `/` with the filesystem type `ext4`
-- **THEN** it is a local location
-
-#### Scenario: Automatic mode on a network location
-- **WHEN** the journal mode is chosen for `"auto"` and a network location
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\fileserver\share\site\.spider`
 - **THEN** it is `delete`, with the warning `store_wal_unavailable`
 
-#### Scenario: Forced WAL on a network location
-- **WHEN** the journal mode is chosen for `"wal"` and a network location
+#### Scenario: Local path
+- **WHEN** the journal mode is chosen for `"auto"` and the location `C:\site\.spider`
 - **THEN** it is `wal`, with no warning
 
-#### Scenario: Forced rollback journal on a local location
-- **WHEN** the journal mode is chosen for `"delete"` and a local location
+#### Scenario: Forced WAL on a UNC path
+- **WHEN** the journal mode is chosen for `"wal"` and the location `\\fileserver\share\site\.spider`
+- **THEN** it is `wal`, with no warning
+
+#### Scenario: Forced rollback journal on a local path
+- **WHEN** the journal mode is chosen for `"delete"` and the location `/home/ann/site/.spider`
 - **THEN** it is `delete`, with no warning
 
 #### Scenario: Local disk
@@ -480,7 +379,7 @@ In `wal` mode, a process SHALL be able to read a Crawl while another process wri
 In `delete` mode, a reader that cannot read within 5 seconds because a write is in progress SHALL fail with `crawl_busy` instead of waiting longer.
 
 #### Scenario: Reading during a write in WAL mode
-- **WHEN** a writer process has committed 3 Seed rows and keeps holding the writer claim, and another process reads `seeds`
+- **WHEN** a writer process has committed 3 Seed rows and keeps its writer open, and another process reads `seeds`
 - **THEN** the reader sees 3 rows
 
 #### Scenario: Busy in rollback-journal mode
@@ -489,12 +388,7 @@ In `delete` mode, a reader that cannot read within 5 seconds because a write is 
 
 ### Requirement: Readers never change a crawl file
 
-Commands that only read a Crawl SHALL open its file read-only. Reading SHALL leave the file's bytes unchanged. There are three exceptions:
-- a schema upgrade
-- a control write
-- recording `interrupted`
-
-Any attempt to write through a read-only handle SHALL fail.
+Commands that only read a Crawl SHALL open its file read-only. Reading SHALL leave the file's bytes unchanged, and any attempt to write through a read-only handle SHALL fail.
 
 #### Scenario: Bytes are unchanged by reading
 - **WHEN** the metadata and Seeds of a completed Crawl are read
@@ -512,65 +406,11 @@ When an operation on a Crawl finishes, the process SHALL hold no open handle to 
 - **WHEN** on Windows a process reads the metadata of a completed Crawl and then keeps running
 - **THEN** another process can delete the crawl file
 
-### Requirement: Older crawl files are upgraded when opened
+### Requirement: Crawl files from a newer tool are refused
 
-When a crawl file with an older schema version is opened for any purpose, the tool SHALL first upgrade the file in place to its own schema version.
-
-The upgrade SHALL:
-- keep all of the file's data
-- report the warning `crawl_migrated` with `details.from` and `details.to`
-- be all-or-nothing
-- be done by at most one process at a time
-
-It SHALL fail without changing the file, with these codes:
-
-| Code | When |
-|---|---|
-| `crawl_busy` | another process is writing the Crawl |
-| `crawl_not_writable` | the file cannot be written |
-| `crawl_migration_failed` | an upgrade step fails |
-
-#### Scenario: Schema version after the upgrade
-- **WHEN** a crawl file at schema version 1 is opened by a tool whose schema version is 2
-- **THEN** `crawl.schema_version` is `2`
-
-#### Scenario: SQLite user_version after the upgrade
-- **WHEN** a crawl file at schema version 1 is opened by a tool whose schema version is 2
-- **THEN** SQLite's `user_version` of the file is `2`
-
-#### Scenario: Data survives the upgrade
-- **WHEN** a crawl file at schema version 1, holding the Seed `(1, "https://example.com/")`, is opened by a tool whose schema version is 2
-- **THEN** `seeds` holds exactly the row `(1, "https://example.com/")`
-
-#### Scenario: Upgrade warning
-- **WHEN** a crawl file at schema version 1 is opened by a tool whose schema version is 2
-- **THEN** the warning `crawl_migrated` is reported with `"details":{"from":1,"to":2}`
-
-#### Scenario: No upgrade while another process writes
-- **WHEN** a crawl file at schema version 1 is being written by another process, and a tool whose schema version is 2 opens it
-- **THEN** the open fails with the error code `crawl_busy`, and `crawl.schema_version` is still `1`
-
-#### Scenario: Read-only file
-- **WHEN** a crawl file at schema version 1 has the read-only file attribute, and a tool whose schema version is 2 opens it
-- **THEN** the open fails with the error code `crawl_not_writable`
-
-#### Scenario: Failed upgrade step
-- **WHEN** a crawl file at schema version 1 is opened by a tool whose step from version 1 to 2 fails
-- **THEN** the open fails with the error code `crawl_migration_failed`, and `crawl.schema_version` is still `1`
-
-#### Scenario: Two processes open the same old file
-- **WHEN** two processes of a tool whose schema version is 2 open the same crawl file at schema version 1 at the same time
-- **THEN** both opens succeed, and `crawl.schema_version` is `2`
-
-### Requirement: Newer or unknown crawl files are refused
-
-A crawl file whose schema version is newer than the tool's SHALL be refused with `crawl_schema_too_new`:
+A crawl file whose schema version is newer than the tool's SHALL be refused with `crawl_schema_too_new`, without changing the file:
 - `details.file_schema_version` and `details.tool_schema_version` give the two versions
 - the hint says to upgrade the tool
-
-A crawl file whose schema revision the tool does not know SHALL be refused with `crawl_schema_unknown`. This happens, for example, with a file from a pre-release build.
-
-In both cases the file SHALL NOT be changed.
 
 #### Scenario: File from a newer tool
 - **WHEN** a crawl file at schema version 99 is opened by a tool whose schema version is 1
@@ -579,10 +419,6 @@ In both cases the file SHALL NOT be changed.
 #### Scenario: A refused file is unchanged
 - **WHEN** a crawl file at schema version 99 is opened by a tool whose schema version is 1
 - **THEN** the SHA-256 of the crawl file is the same as before
-
-#### Scenario: Unknown schema revision
-- **WHEN** a crawl file at schema version 1 records the schema revision `deadbeef0000`, which the tool does not know
-- **THEN** the open fails with the error code `crawl_schema_unknown`
 
 ### Requirement: Listing the schema with spider schema
 
@@ -599,7 +435,7 @@ Each item SHALL have `name`, `kind` (`table` or `view`), `description` and `colu
 - `format`: `timestamp`, `boolean`, `json` or `null`
 - `values`: the allowed values, or `null`
 
-An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists the table names. Tables whose names start with `_` are internal and SHALL NOT be listed. The Command SHALL NOT need a Workspace.
+An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists the table names. Tables whose names start with `_` are internal and SHALL NOT be listed. The Command SHALL NOT need a Workspace or a Crawl.
 
 #### Scenario: One table
 - **WHEN** `spider schema seeds --fields name` runs
@@ -617,6 +453,10 @@ An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists t
 - **WHEN** `spider schema crawl` runs
 - **THEN** the columns `started_at`, `section_crawl` and `config` have the formats `"timestamp"`, `"boolean"` and `"json"`, respectively
 
+#### Scenario: The next page
+- **WHEN** `spider schema --fields name --limit 1` runs, and then runs again with `--cursor` set to the first result's `next_cursor`
+- **THEN** the second result's `items` is `[{"name":"seeds"}]`
+
 #### Scenario: Unknown table
 - **WHEN** `spider schema nosuch` runs
 - **THEN** the exit code is 2, and the error has the code `unknown_table` and a `details.tables` that contains `"crawl"` and `"seeds"`
@@ -627,7 +467,7 @@ An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists t
 
 #### Scenario: No Workspace needed
 - **WHEN** `spider schema` runs in `H/work/notes`, which is not a Workspace, while `H/.spider` does not exist
-- **THEN** the exit code is 0
+- **THEN** the exit code is 0, and `H/.spider` still does not exist
 
 #### Scenario: Self-description of schema
 - **WHEN** `spider commands` runs
@@ -641,13 +481,19 @@ An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists t
 - **WHEN** `spider commands` runs
 - **THEN** the `--limit` option of the `schema` entry has `"type":"integer"`, `"default":50` and `"global":false`
 
-### Requirement: Documented schema matches the store
+### Requirement: The documented schema, the declared schema and the file agree
 
-`docs/schema.md` SHALL document every public table and column. For each one it SHALL give the same name, type, nullability, key, reference, format, values and description that `spider schema` reports. `spider schema` SHALL report nothing that `docs/schema.md` lacks.
+The public schema SHALL be declared once, as the store's table definitions, and the two other places that show it SHALL agree with them:
+- **`docs/schema.md`,** the public schema reference, SHALL document every public table and column with the same name, type, nullability, key, reference, format, values and description as the declared schema, and SHALL document nothing else.
+- **A new crawl file** SHALL have exactly the declared tables and columns, with the same types, nullability, primary keys and foreign keys, as SQLite reports them.
 
-#### Scenario: Documentation and store agree
-- **WHEN** the output of `spider schema --limit 1000` is compared with the tables parsed from `docs/schema.md`
+#### Scenario: Documentation and declaration agree
+- **WHEN** the tables parsed from `docs/schema.md` are compared with the description of the declared schema, which `spider schema --limit 1000` prints
 - **THEN** they are equal
+
+#### Scenario: A new file matches the declaration
+- **WHEN** a Crawl is created, and `PRAGMA table_info` and `PRAGMA foreign_key_list` are read for each table of its file
+- **THEN** every public table and column of the declared schema is there, with the declared type, nullability, primary key and reference, and the file has no other public table or column
 
 ### Requirement: Public schema conventions
 
@@ -656,9 +502,10 @@ Every public table and column SHALL follow these conventions:
 - **Descriptions:** every table and every column has a non-empty description.
 - **Timestamps:** TEXT in the form `YYYY-MM-DDTHH:MM:SS.sssZ`, in UTC, with the format `timestamp`.
 - **Booleans:** INTEGER `0` or `1`, with the format `boolean`.
-- **JSON:** TEXT holding valid JSON, with the format `json`.
+- **JSON:** TEXT holding valid JSON, with the format `json`, only for recorded inputs and for lists without a fixed shape. A value that queries filter, sort or count by SHALL be a column of its own.
 - **Enumerations:** TEXT whose allowed values are lowercase snake_case, listed in `values`.
-- **Measured quantities:** the column name ends with its unit: `_ms`, `_bytes`, `_px` or `_pct`.
+- **Measured quantities:** the column name ends with its unit: `_ms`, `_bytes`, `_px` or `_pct`. Each column has one meaning, so two different measures, such as two hashes or two sizes, are two distinctly named columns.
+- **Order:** a table whose rows have an order SHALL carry it in an INTEGER column that grows in insert order, such as `seeds.position`. Queries that list rows in order SHALL use that column, never a timestamp.
 
 #### Scenario: Names are snake_case
 - **WHEN** `spider schema --limit 1000` runs
@@ -694,23 +541,23 @@ A value that was not measured, or that does not apply, SHALL be stored as NULL. 
 
 ### Requirement: Crawl store diagnostics
 
-This change's diagnostic codes SHALL be registered with these exit codes, and `spider commands` SHALL list them:
+This change's diagnostic codes SHALL be declared in the registry of `010-add-workspace-and-cli-contract`, with these levels and exit codes, so `spider commands` lists them:
 
 | Code | Level | Exit code |
 |---|---|---|
 | `no_crawls`, `crawl_not_found` | error | 4 |
-| `crawl_id_taken`, `crawl_locked`, `crawl_busy` | error | 5 |
-| `crawl_file_invalid`, `crawl_schema_too_new`, `crawl_schema_unknown`, `crawl_migration_failed` | error | 6 |
+| `crawl_busy` | error | 5 |
+| `crawl_file_invalid`, `crawl_schema_too_new` | error | 6 |
 | `crawl_not_writable` | error | 7 |
 | `unknown_table` | error | 2 |
-| `store_wal_unavailable`, `crawl_migrated` | warning | none |
+| `store_wal_unavailable` | warning | none |
 
 #### Scenario: Store codes are self-described
 - **WHEN** `spider commands` runs
 - **THEN** its `diagnostics` give these exit codes:
-  - `crawl_not_found` 4
-  - `crawl_id_taken` 5, `crawl_locked` 5
-  - `crawl_schema_too_new` 6
+  - `no_crawls` 4, `crawl_not_found` 4
+  - `crawl_busy` 5
+  - `crawl_file_invalid` 6, `crawl_schema_too_new` 6
   - `crawl_not_writable` 7
   - `unknown_table` 2
   - `store_wal_unavailable` null
