@@ -1,5 +1,6 @@
 """`spider commands`, the self-description (design D7 of 010-add-workspace-and-cli-contract)."""
 
+from enum import Enum
 from typing import Any, cast
 
 import typer
@@ -34,22 +35,68 @@ def _entry(name: str, command: Any) -> dict[str, Any]:
         "output": meta.output,
         "events": meta.events,
         "formats": list(meta.formats),
-        "options": _options(command),
+        "arguments": _arguments(command),
+        "options": _options(command, meta),
         "fields": None
         if meta.fields is None
         else {"available": list(meta.fields.available), "default": list(meta.fields.default)},
     }
 
 
-def _options(command: Any) -> list[dict[str, Any]]:
+def _arguments(command: Any) -> list[dict[str, Any]]:
     return [
         {
-            "name": _long_name(param),
-            "global": option_meta(command.callback, param.name).is_global,
+            "name": param.name,
+            "type": _type(param),
+            "required": param.required,
+            "variadic": param.nargs == -1,
+            "default": _json_value(param.default),
+            "description": getattr(param, "help", None),
         }
         for param in command.params
-        if param.param_type_name == "option"
+        if param.param_type_name == "argument"
     ]
+
+
+def _options(command: Any, meta: CommandMeta) -> list[dict[str, Any]]:
+    entries = []
+    for param in command.params:
+        if param.param_type_name != "option":
+            continue
+        extra = option_meta(command.callback, param.name)
+        choices = getattr(param.type, "choices", None)
+        if param.name == "output_format":
+            # Click knows every format; the Command offers only its own.
+            choices = meta.formats
+        entries.append(
+            {
+                "name": _long_name(param),
+                "short": next((opt for opt in param.opts if len(opt) == 2), None),
+                "type": _type(param),
+                "choices": None if choices is None else [_json_value(c) for c in choices],
+                "default": _json_value(param.default),
+                "required": param.required,
+                "multiple": param.multiple,
+                "global": extra.is_global,
+                "setting": extra.setting,
+                "secret": extra.secret,
+                "description": param.help,
+            }
+        )
+    return entries
+
+
+# Click's type names, in the words of JSON Schema where they differ.
+TYPE_NAMES = {"text": "string", "integer range": "integer", "float": "number"}
+
+
+def _type(param: Any) -> str:
+    name = str(param.type.name)
+    return TYPE_NAMES.get(name, name)
+
+
+def _json_value(value: Any) -> Any:
+    return value.value if isinstance(value, Enum) else value
 
 
 def _long_name(param: Any) -> str:

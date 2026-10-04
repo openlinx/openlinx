@@ -17,6 +17,8 @@ class OptionMeta:
     """What `spider commands` says about an option beyond what Click knows."""
 
     is_global: bool = False
+    setting: str | None = None
+    secret: bool = False
 
 
 GLOBAL = OptionMeta(is_global=True)

@@ -65,6 +65,19 @@ def test_entry_of_a_list_command() -> None:
     )
 
 
+def test_option_details() -> None:
+    entry = _entry(run_cli("commands").json(), "init")
+    option = next(option for option in entry["options"] if option["name"] == "--workspace")
+
+    assert {key: option.get(key) for key in ("type", "default", "global", "setting", "secret")} == {
+        "type": "path",
+        "default": None,
+        "global": True,
+        "setting": None,
+        "secret": False,
+    }
+
+
 def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:
     entry: dict[str, Any] = next(c for c in description["commands"] if c["name"] == name)
     return entry
