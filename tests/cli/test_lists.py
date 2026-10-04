@@ -133,3 +133,9 @@ def test_cursor_from_a_different_request() -> None:
     result = run_cli("example-list", "--odd", "--cursor", cursor, app=app)
 
     assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_cursor")
+
+
+def test_garbage_cursor() -> None:
+    result = run_cli("example-list", "--cursor", "abc", app=example_app())
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_cursor")
