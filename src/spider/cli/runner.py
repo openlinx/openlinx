@@ -9,6 +9,7 @@ from typing import Any, NoReturn
 import typer
 
 # Typer 0.27 vendors Click and does not re-export its UsageError.
+from typer._click.core import Context as ClickContext
 from typer._click.exceptions import MissingParameter
 from typer._click.exceptions import UsageError as ClickUsageError
 from typer.core import TyperGroup
@@ -17,7 +18,7 @@ from spider import APP_NAME
 from spider.cli.meta import formats_hint, meta_of
 from spider.cli.options import option_meta
 from spider.clock import SystemClock
-from spider.output.codes import INTERNAL_ERROR, INVALID_VALUE, USAGE_ERROR, ExitCode
+from spider.output.codes import INTERNAL_ERROR, INTERRUPTED, INVALID_VALUE, USAGE_ERROR, ExitCode
 from spider.output.diagnostics import SpiderError
 from spider.output.reporter import CliReporter, Reporter
 from spider.output.writer import Document, Output, Rows
@@ -84,11 +85,23 @@ class SpiderGroup(TyperGroup):
         except SpiderError as error:
             output.diagnostic(error.diagnostic)
             sys.exit(error.exit_code)
+        except (KeyboardInterrupt, typer.Abort):
+            # Rows stream after invoke, so Ctrl+C can land here; Click's prompts raise Abort.
+            interrupted = _interrupted()
+            output.diagnostic(interrupted.diagnostic)
+            sys.exit(interrupted.exit_code)
         except Exception:
             internal = _internal_error()
             output.diagnostic(internal.diagnostic)
             sys.exit(internal.exit_code)
         sys.exit(returned)
+
+    def invoke(self, ctx: ClickContext) -> Any:
+        # Typer turns KeyboardInterrupt into Exit(130), which comes back as a bare exit code.
+        try:
+            return super().invoke(ctx)
+        except KeyboardInterrupt as error:
+            raise _interrupted() from error
 
 
 def _global_flags(group: TyperGroup) -> set[str]:
@@ -115,6 +128,10 @@ def _check_global_flags_follow_the_command(args: Sequence[str], global_flags: se
                 f"{flag} is given before the Command name.",
                 hint=f"Put {flag} after the Command name, as in: {APP_NAME} init {flag} ...",
             )
+
+
+def _interrupted() -> SpiderError:
+    return SpiderError(INTERRUPTED, "Stopped with Ctrl+C.")
 
 
 def _internal_error() -> SpiderError:

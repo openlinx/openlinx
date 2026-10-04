@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from tests.support.app import example_app
 from tests.support.cli import run_cli
 from tests.support.workspace import TempWorkspace
@@ -58,3 +60,10 @@ def test_a_warning_inside_a_result() -> None:
     assert [set(entry) for entry in result.json()["warnings"]] == [
         {"level", "code", "message", "hint", "details"}
     ]
+
+
+@pytest.mark.parametrize("command", ["example-interrupted", "example-aborted"])
+def test_interrupted(command: str) -> None:
+    result = run_cli(command, app=example_app())
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (130, "interrupted")

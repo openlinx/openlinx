@@ -139,6 +139,18 @@ def example_warning_inside(output_format: FormatOpt = Format.JSON) -> Any:
     return {"warnings": [EXAMPLE_WARNING.to_json()]}
 
 
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def example_interrupted(output_format: FormatOpt = Format.JSON) -> Any:
+    """Stops as if Ctrl+C was pressed."""
+    raise KeyboardInterrupt
+
+
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def example_aborted(output_format: FormatOpt = Format.JSON) -> Any:
+    """Stops with Click's Abort, as Ctrl+C inside Click does."""
+    raise typer.Abort
+
+
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
@@ -154,6 +166,8 @@ def example_app() -> typer.Typer:
                 example_failed_outcome,
                 example_raises,
                 example_warning_inside,
+                example_interrupted,
+                example_aborted,
             ],
         )
     )

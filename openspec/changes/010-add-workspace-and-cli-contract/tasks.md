@@ -181,7 +181,7 @@ Each part of the self-description has one source (design D5 and D7): options and
   - `SpiderError` takes that constant instead of a loose string. Migrate every call site: `init.py`, `creation.py`, `discovery.py`, `settings.py`, `runner.py` and `meta.py`.
   - `EXIT_CODE_DESCRIPTIONS` folds into the `ExitCode` enum, so each member carries its description.
   - `spider commands` lists `diagnostics` from the registry.
-- [ ] 8.8 Drive "Interrupted" (cli-contract) at seam 1, with a fixture Command that raises `KeyboardInterrupt`, and Click's `Abort` too. Green: the runner maps both to `interrupted` (exit 130), registered in the error-code registry of 8.7.
+- [x] 8.8 Drive "Interrupted" (cli-contract) at seam 1, with a fixture Command that raises `KeyboardInterrupt`, and Click's `Abort` too. Green: the runner maps both to `interrupted` (exit 130), registered in the error-code registry of 8.7.
 - [ ] 8.9 **Guard:** "Naming rule for input errors" (cli-contract). The test reads the same registry that `spider commands` prints and that `090` maps errors from.
 - [ ] 8.10 Drive "The proxy variables are the one exception" (workspace). Green: the `environment` key of `spider commands`, which lists the proxy family that `022` honours.
 - [ ] 8.11 **Guard:** "Detection signals change nothing" (workspace), with `CODEX_SANDBOX_NETWORK_DISABLED=1` set for one of the two runs.
