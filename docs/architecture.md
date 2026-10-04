@@ -28,6 +28,34 @@ A short map for contributors and coding agents. Terms follow [CONTEXT.md](../CON
   - The **Report Service** handles the ReportModel, HTML and Section Briefs.
 - **The tool never calls an LLM** ([ADR-0004](adr/0004-tool-never-calls-an-llm.md)).
 
+## Commands, services and output
+
+- **A Command is an adapter plus a service.** The adapter turns flags into a typed request, picks the Reporter, calls the service and returns its result. The service holds the logic: plain Python with typed inputs and outputs, and no Click, Typer or `Output`. `spider init` is the adapter of `spider.services.workspace.init_workspace`. The MCP server (`090`) calls the same services directly and never invokes a Click Command.
+- **The Reporter** (`spider.output.reporter`) is how a service reports warnings and progress events: `warn(diagnostic)` and `event(name, **data)`.
+  - `CliReporter` writes each call to stderr as one JSON line.
+  - `Collected` keeps the calls in memory, so the MCP server can put the warnings into a tool result.
+- **The output layer** (`spider.output`) is the only code that writes. The runner builds one `Output` from the process's byte streams per invocation.
+  - stdout carries only the result: a document or a list is written when the Command ends, rows are written one by one.
+  - Every stderr line, a diagnostic or an event, is written under a lock and flushed at once.
+  - ruff bans `print`, `sys.stdout`, `sys.stderr` and the echo functions everywhere else.
+- **The error-code registry:** every diagnostic code is one `DiagnosticCode` constant in `spider.output.codes`, with its level, exit code and description, and no code is declared anywhere else in `src/`. `SpiderError` takes such a constant, never a loose string. `spider commands` lists the codes and the exit codes from it, and the MCP server maps errors from it.
+- **The startup allowlist:** `spider --help` and `spider commands` may load only the standard library, Typer and its own dependencies (not rich: Typer's rich help is off), orjson and `spider`. A test checks it in a fresh process, so a new dependency must be allowed or imported lazily. pydantic, rich and every settings table load only in the Commands that need them.
+- **Typer's vendored Click** (`typer._click`) is imported only in `spider.cli.click_compat`, and `typer` is pinned below the next minor version, so an upgrade touches one module and one pin.
+- **The product name** is still open: every name-derived string in `src/` (the command name, the settings file, the data folder) comes from `spider.naming`.
+
+## Settings
+
+Settings come only from a Command's flag, then the Workspace's `spider.toml`, then the default. Each change registers its own tables:
+- **Ownership:** one table has one owning change, the one that registers it. A later change adds fields to that table's model and never registers a second table for the same concern.
+- **Lazy references:** a table is registered in `build_app` by its `"module:Class"` reference and imported only when settings load or the template is written, so `--help` loads no table and no pydantic.
+- **Table rules,** checked by a test on every registered table, because the commented template and the error hints rely on them:
+  - `extra="forbid"`, and a one-line description on every setting
+  - a default TOML can write: a string, a finite number, a boolean or a list of those
+  - or a `None` default for a setting that is unset; the template writes it as `# <key> =`
+  - flat tables, except keyed tables
+- **Keyed tables:** a table may be `dict[str, V]`, where V is a table model with a one-line docstring, or a TOML literal type, for entries the user names, such as `[rules.<id>]` or `[segments]`. The template writes the entry docstring and a commented `# [<table>.<name>]` header.
+- **Secrets** are declared once, on the settings field (`json_schema_extra={"secret": True}`). An option mapped to that setting inherits it, so `spider commands` reads the table's model; an option with no setting declares `secret` itself.
+
 ## Crawl pipeline
 
 ```
@@ -111,9 +139,10 @@ Crawl Store ──► ReportModel ──┬──► HTML renderer ──► rep
 src/spider/
   cli/          Typer app, one module per command group
   mcp/          MCP server
-  services/     query, crawl, report
+  naming.py     the product name and the names made from it
+  services/     workspace (init), query, crawl, report
   workspace/    Workspace discovery, settings (spider.toml)
-  output/       JSON/table/CSV serialisation, paging, errors, exit codes
+  output/       JSON/table/CSV serialisation, the Reporter, paging, diagnostic codes, exit codes
   store/        schema (Core tables), writer, migrations/, read-only access
   crawl/        frontier, scheduler, fetcher/, robots, scope, engine
   extract/      Page data extractors, links, content, readability, pixel widths
