@@ -85,7 +85,7 @@ None. `010-add-workspace-and-cli-contract` is still in flight. This change regis
   - declaring which fetch flags are secret
 - **`050-add-query-and-segments` (v0.1):**
   - the query Commands that use `--crawl`
-  - `spider sql` and its SQLite authorizer (v0.2)
+  - `spider sql` and its SQLite authorizer
   - keyset paging bound to a Crawl
 - **`060-add-crawl-control` (v0.2):**
   - `control_requests`, `crawl_runs` and the heartbeat

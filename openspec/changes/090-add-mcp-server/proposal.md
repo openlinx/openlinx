@@ -6,7 +6,7 @@ This change is **v0.1.1**, the first change after v0.1, as the maintainer decide
 
 ## What Changes
 
-> **v0.1.1 scope (2026-10-05, see ROADMAP.md):** the tools for the foreground and the detached crawl in Spider mode, `crawl_status`, `crawl_stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues` and `rules`, plus `schema` and `doctor`. **Deferred to v0.2:** `crawl_resume`, `crawls_list`, `sql`, `dry_run`, the `urls` and `sitemap` inputs (`024`), `page`'s `html`, the `report` and `report_brief` tools with inline Report Notes (`070`), and the dry-run and Hand-off guardrails in the server instructions.
+> **v0.1.1 scope (2026-10-05, see ROADMAP.md):** the tools for the foreground and the detached crawl in Spider mode, `crawl_status`, `crawl_stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues`, `sql` and `rules`, plus `schema` and `doctor`. **Deferred to v0.2:** `crawl_resume`, `crawls_list`, `dry_run`, the `urls` and `sitemap` inputs (`024`), `page`'s `html`, the `report` and `report_brief` tools with inline Report Notes (`070`), and the dry-run and Hand-off guardrails in the server instructions.
 
 - **New Command `spider mcp [--workspace <path>]`.** It runs a local stdio MCP server built on the MCP Python SDK `mcp` 2.x (`MCPServer`). Its tools mirror the crawl-control, query and report Commands:
 
@@ -88,7 +88,7 @@ This change is **v0.1.1**, the first change after v0.1, as the maintainer decide
   - `015-add-crawl-store`: `--crawl` and `schema`
   - `024-add-list-and-sitemap-modes` (v0.2): `mode_conflict`, and the List and Sitemap modes
   - `040-add-rules`: rules
-  - `050-add-query-and-segments`: the query services; `page` with `html` and `encoding`, and `sql`, from v0.2
+  - `050-add-query-and-segments`: the query services and `sql`; `page` with `html` and `encoding` from v0.2
   - `060-add-crawl-control`: 060-min (v0.1.1) for detach, status and stop, and the command it records for Crawls started through MCP; `resume --detach`, dry run and `crawls list` from v0.2
   - `070-add-html-report` (v0.2): report with `--dest`, report brief, and the Report Notes contract
   - `080-add-agent-skill`: `doctor` and the outdated-Skill notice

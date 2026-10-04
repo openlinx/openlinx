@@ -4,7 +4,7 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
 
 ## What Changes
 
-> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the generated Skill, `skill install`, the outdated-Skill notice, the repository copy and `doctor`; its install line is `uv tool install`. **Deferred to v0.2:** the Full audit workflow (it needs `070`), the dry-run guardrail and Hand-off (they need `060`), the install-script one-liners (`100`), `sql` recipes and Segments, `doctor --proxy`, and the plugin marketplace manifests.
+> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the generated Skill, `skill install`, the outdated-Skill notice, the repository copy, `doctor`, and an SQL cookbook (`sql` recipes over the public schema); its install line is `uv tool install`. **Deferred to v0.2:** the Full audit workflow (it needs `070`), the dry-run guardrail and Hand-off (they need `060`), the install-script one-liners (`100`), Segments and their recipes, `doctor --proxy`, and the plugin marketplace manifests.
 >
 > **Large-Crawl guardrail in v0.1:** the Skill always passes `--max-urls`; decided when 080 is re-grounded.
 

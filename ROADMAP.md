@@ -19,7 +19,7 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned, min |
 | 030 | `030-add-page-data` | `page-data` | none (data only) | planned, min |
 | 040 | `040-add-rules` | `rules` | `rules` | planned, 15 Rules |
-| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues` | planned, min |
+| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | planned, min |
 | 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned, min |
 | 085 | `085-add-release` | decided when it is drafted | none (release workflow) | planned, not drafted yet |
 
@@ -35,11 +35,11 @@ slice:   000 ─► 010 ─► 015 ─► 020 ─► 030-min ─► 040-min ─�
                                 │    columns)    Rules)     issues <id>)
                                 │
 widen:                          ├─► 022-min ─┐
-                                └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 summary/pages/page ─► 080 ─► 085 ─► v0.1 tag
+                                └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 sql, summary/pages/page ─► 080 ─► 085 ─► v0.1 tag
 ```
 
 - **The slice:** 015 → 020 → 030-min → 040-min → 050-issues. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
-- **Widening:** 022-min can start as soon as 020 is in, in its own worktree, alongside the slice. The rest of 030-min, 040 up to its 15 Rules, and 050's `summary`, `pages` and `page` follow. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
+- **Widening:** 022-min can start as soon as 020 is in, in its own worktree, alongside the slice. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Release:** 085 comes last, before the v0.1 tag. The product name must be chosen, and checked as free on PyPI and GitHub, before 085 starts.
 - **v0.1.1** comes after the v0.1 release: 060-min first, then 090. The v0.2 changes come after that.
 
@@ -91,7 +91,7 @@ If a change needs something another change owns, it depends on that change inste
   - `spider schema [TABLE]`, with table order fixed by change number.
   - The `--crawl latest|<id>|<path>` option used by every query Command.
   - Redaction of secrets in recorded commands and config, both whole values and partial (`Cookie: ***`, `user:***@proxy`).
-  - Table conventions and `docs/schema.md` as the contract.
+  - Table conventions, and `docs/schema.md` as the contract: the public schema reference of [ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md), in v0.1.
 - **020-add-crawl-core**:
   - Spider mode (`crawl <url>`) and URL normalisation.
   - **Scope:** `--scope host|subdomains|subfolder`, `--subdomains`, `--include/--exclude`, `--max-depth`, `--max-urls` (default 10,000; reaching it leaves the Crawl resumable), `--strip-params`.
@@ -149,7 +149,7 @@ If a change needs something another change owns, it depends on that change inste
   - `page <url>`: JSON, where `--headers` shows redacted headers. **(v0.2)** `--html`, which needs 030's stored HTML.
   - `issues` and `issues <rule-id>`.
   - The **end-to-end CI test** on Windows, macOS and Linux: a foreground `crawl` → `issues`. It is the last part of the thin slice. 070's end-to-end test is added in v0.2.
-  - **(v0.2)** Read-only `sql`.
+  - Read-only `sql`: exactly one `SELECT`/`WITH` statement, with a default row limit and a timeout.
   - **(v0.2)** `export <view>`: `jsonl` by default, or `csv`; the `resources` view is defined over `urls` and `links`.
   - **(v0.2)** **Segments** and `--segment`.
   - **(v0.2)** **The CSV policy and output files**, for every Command (moved from 010 on 2026-10-01):
@@ -175,7 +175,8 @@ If a change needs something another change owns, it depends on that change inste
   - `skill install`, and the outdated-Skill notice.
   - The large-Crawl guardrail in v0.1: the Skill always passes `--max-urls` (decided when 080 is re-grounded).
   - `doctor`, whose TLS check uses 022's TLS setup.
-  - **(v0.2)** the Full audit workflow (it needs 070's `report brief`); the dry run and the Hand-off rule (when the URL estimate is `null`, the Skill hands the command to the user), which need 060; the install-script one-liners (100); `sql` recipes and Segments; `doctor --proxy`; and the plugin marketplace, which ships with 090's `.mcp.json`.
+  - An **SQL cookbook** in the Skill: `sql` recipes over the public schema. **(v0.2)** Segment recipes.
+  - **(v0.2)** the Full audit workflow (it needs 070's `report brief`); the dry run and the Hand-off rule (when the URL estimate is `null`, the Skill hands the command to the user), which need 060; the install-script one-liners (100); Segments and their recipes; `doctor --proxy`; and the plugin marketplace, which ships with 090's `.mcp.json`.
   - **(v0.2)** The **fix and verify** workflow: the agent reads the Issues, fixes the site's code in the repository, re-crawls only the Affected URLs in List mode, and confirms that the Issue is gone. It depends on 024 and on `rules apply`.
 - **085-add-release** (v0.1; not drafted yet, so `openspec/changes/085-*` does not exist):
   - Before it starts: the product name is chosen and checked as free on PyPI and GitHub.
@@ -216,8 +217,8 @@ The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min join
 
 - **090-add-mcp-server**:
   - `spider mcp --workspace <path>`.
-  - **Tools:** the foreground and the detached crawl, `status` and `stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues` and `rules`, plus `schema` and `doctor`.
-  - **(v0.2)** the tools of the v0.2 Commands: `resume`, the dry run, `crawls list`, `sql`, List and Sitemap modes, and the `report` and `report_brief` tools with inline Report Notes, which come with 070.
+  - **Tools:** the foreground and the detached crawl, `status` and `stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues`, `sql` and `rules`, plus `schema` and `doctor`.
+  - **(v0.2)** the tools of the v0.2 Commands: `resume`, the dry run, `crawls list`, List and Sitemap modes, and the `report` and `report_brief` tools with inline Report Notes, which come with 070.
   - Errors use 010's full diagnostic shape.
   - The `.mcpb` bundle: `scripts/build_mcpb.py`, added to 085's release workflow, so it is attached to every GitHub release from v0.1.1.
   - A `.mcp.json` example and the client config snippets, shipped as docs in `docs/mcp.md`.
@@ -241,7 +242,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 | 100 | `100-add-installers` | `installation` | none (install scripts) | planned |
 | 110 | `110-add-ci-gate` | decided when it is drafted | `diff A B`, `--fail-on`; a GitHub Action | planned, not drafted yet |
 
-- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands; 022's ALPN, `--proxy`, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules and the `ai_search` category; 050's `sql`, `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, fix and verify, dry run and Hand-off, install-script one-liners and plugin marketplace.
+- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands; 022's ALPN, `--proxy`, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules and the `ai_search` category; 050's `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, fix and verify, dry run and Hand-off, install-script one-liners and plugin marketplace.
 - **Order:** 024 and 026 first (026's benchmark decides whether its pool is built). The rest of 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 110 needs 024 and 040's Issues. 100 comes last.
 - Link graph views: `links <url> --in|--out`.
 - Redirect Chain analysis: `redirects`, with per-hop headers and timing.

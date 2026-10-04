@@ -4,7 +4,7 @@ After a Crawl, the crawl store holds everything, but agents and people still nee
 
 ## What Changes
 
-> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships `summary`, `pages`, `page` and `issues`. **Deferred to v0.2:** `sql`, `export`, Segments (the `segments` capability, `--segment`, the per-Segment breakdown in `summary`), `page --html`, the `--where` operators beyond comparisons, `contains`, `is [not] null` and `and`, and the whole `cli-contract` delta (`--format csv`, the CSV policy, `--no-bom` and `-o`).
+> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships `summary`, `pages`, `page`, `issues` and read-only `sql`. **Deferred to v0.2:** `export`, Segments (the `segments` capability, `--segment`, the per-Segment breakdown in `summary`), `page --html`, the `--where` operators beyond comparisons, `contains`, `is [not] null` and `and`, and the whole `cli-contract` delta (`--format csv`, the CSV policy, `--no-bom` and `-o`).
 >
 > **End-to-end test in v0.1:** a cross-OS CI test, a foreground `crawl` → `issues` on Windows, macOS and Linux, is the last part of the thin slice (050-issues).
 
