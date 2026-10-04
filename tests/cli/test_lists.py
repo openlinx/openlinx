@@ -124,3 +124,12 @@ def test_a_different_limit_continues_the_list() -> None:
     page = run_cli("example-list", "--limit", "2", "--cursor", cursor, app=app).json()
 
     assert page["items"] == [{"n": 2}, {"n": 3}]
+
+
+def test_cursor_from_a_different_request() -> None:
+    app = example_app()
+    cursor = run_cli("example-list", "--limit", "1", app=app).json()["next_cursor"]
+
+    result = run_cli("example-list", "--odd", "--cursor", cursor, app=app)
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_cursor")

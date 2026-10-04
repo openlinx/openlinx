@@ -3,14 +3,14 @@
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 
 from spider.cli.app import AppExtra, build_app
 from spider.cli.meta import command_meta
 from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt
-from spider.output.paging import Fields, Page, paginate, select_fields
+from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
 from tests.support.settings import ExampleSettings
 
@@ -25,14 +25,15 @@ def example_list(
     limit: LimitOpt = 50,
     cursor: CursorOpt = None,
     fields: FieldsOpt = None,
+    odd: Annotated[bool, typer.Option("--odd", help="Only the items with an odd n.")] = False,
 ) -> Page:
     """The example list Command of the cli-contract scenarios."""
-    items = [{"n": n, "sq": n * n} for n in range(1, 6)]
+    items = [{"n": n, "sq": n * n} for n in range(1, 6) if n % 2 or not odd]
     return paginate(
         items,
         limit=limit,
         cursor=cursor,
-        fingerprint="example-list",
+        fingerprint=fingerprint("example-list", {"odd": odd}),
         fields=select_fields(fields, EXAMPLE_FIELDS),
     )
 
@@ -47,7 +48,11 @@ def example_long_list(
     """A list Command whose items are n=1 to n=60."""
     items = [{"n": n} for n in range(1, 61)]
     return paginate(
-        items, limit=limit, cursor=cursor, fingerprint="example-long-list", fields=("n",)
+        items,
+        limit=limit,
+        cursor=cursor,
+        fingerprint=fingerprint("example-long-list", {}),
+        fields=("n",),
     )
 
 

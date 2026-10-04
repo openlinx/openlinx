@@ -1,6 +1,7 @@
 """Pages, cursors and fields (design D6 of 010-add-workspace-and-cli-contract)."""
 
 import base64
+import hashlib
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -43,6 +44,12 @@ def paginate(
     more = limit > 0 and end < len(items)
     next_cursor = encode_cursor(fingerprint, end) if more else None
     return Page(project(items[start:end], fields), len(items), next_cursor)
+
+
+def fingerprint(command: str, selection: Mapping[str, Any]) -> str:
+    # Only what selects or orders items: --limit, --fields and --format may change between pages.
+    canonical = orjson.dumps([command, selection], option=orjson.OPT_SORT_KEYS)
+    return hashlib.sha256(canonical).hexdigest()[:16]
 
 
 def select_fields(requested: str | None, fields: Fields) -> tuple[str, ...]:
