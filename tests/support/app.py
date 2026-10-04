@@ -1,5 +1,6 @@
 """The fixture app the scenarios use (design D8 of 010-add-workspace-and-cli-contract)."""
 
+import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -97,6 +98,15 @@ def example_mixed(ctx: typer.Context, output_format: FormatOpt = Format.JSON) ->
     return {"urls": 2}
 
 
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def example_warn_and_wait(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> Any:
+    """Writes a warning, then waits for a line on stdin before it ends."""
+    invocation: Invocation = ctx.obj
+    invocation.reporter.warn(Diagnostic("warning", "example_warning", "An example warning."))
+    sys.stdin.readline()
+    return {"done": True}
+
+
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
@@ -108,6 +118,7 @@ def example_app() -> typer.Typer:
                 example_rows_waiting,
                 example_progress,
                 example_mixed,
+                example_warn_and_wait,
             ],
         )
     )

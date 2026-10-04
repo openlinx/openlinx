@@ -1,6 +1,7 @@
 """The one Output object of an invocation (design D3 of 010-add-workspace-and-cli-contract)."""
 
 import shutil
+import threading
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from enum import StrEnum
@@ -40,6 +41,7 @@ class Output:
     def __init__(self, stdout: BinaryIO, stderr: BinaryIO) -> None:
         self._stdout = stdout
         self._stderr = stderr
+        self._stderr_lock = threading.Lock()
 
     def text(self, text: str) -> None:
         self._stdout.write(text.encode())
@@ -68,7 +70,11 @@ class Output:
         self.stderr_line(_json_line(asdict(diagnostic)))
 
     def stderr_line(self, line: bytes) -> None:
-        self._stderr.write(line)
+        # A piped stderr is block-buffered: without the flush an agent would see a warning only
+        # when the process ends. The lock keeps lines from two threads whole and in order.
+        with self._stderr_lock:
+            self._stderr.write(line)
+            self._stderr.flush()
 
 
 def _json_line(value: Any) -> bytes:

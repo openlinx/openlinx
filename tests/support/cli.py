@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,7 +47,7 @@ RUN_EXAMPLE_APP = (
     "import sys; from tests.support.app import example_app; example_app()(sys.argv[1:])"
 )
 # A hung Command fails its test instead of hanging CI.
-PROCESS_TIMEOUT = 20
+PROCESS_TIMEOUT = 10
 
 
 def run_example_process(*args: str) -> CliResult:
@@ -58,3 +59,18 @@ def run_example_process(*args: str) -> CliResult:
         check=False,
     )
     return CliResult(completed.returncode, completed.stdout, completed.stderr)
+
+
+def start_example_process(*args: str) -> subprocess.Popen[bytes]:
+    process = subprocess.Popen(
+        [sys.executable, "-c", RUN_EXAMPLE_APP, *args],
+        cwd=REPO_ROOT,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    # A line that never comes would block a read forever; killing the process ends the read.
+    watchdog = threading.Timer(PROCESS_TIMEOUT, process.kill)
+    watchdog.daemon = True
+    watchdog.start()
+    return process

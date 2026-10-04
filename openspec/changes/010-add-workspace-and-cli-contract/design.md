@@ -189,7 +189,7 @@ Moved to `050-add-query-and-segments`, together with the `csv` format, `--no-bom
   - a partial-result Command
   - a Command that raises `RuntimeError`
   - a Command whose result holds a warning
-  - a Command that writes a warning and then waits for a signal file
+  - a Command that writes a warning and then waits for a line on its stdin
   - the `example` settings Command, whose `--level` maps to `example.level`, whose `--token` maps to the secret `example.token`, and whose `--api-key` maps to no setting and is secret
   - the keyed settings table `groups`, whose entries each have a `level`
 - **Why this is not a test double:** the fixture Commands use the same public registration API as real Commands, and they replace none of our code. They are consumers of the contract, the way a test route exercises a web framework.

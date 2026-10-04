@@ -283,8 +283,8 @@ Nothing else SHALL appear on stderr apart from progress events: no raw traceback
 - **THEN** the exit code is 70, and the error has the code `internal_error` and a `details.traceback` that contains `RuntimeError: disk exploded`
 
 #### Scenario: A warning is readable at once
-- **WHEN** a Command running as a real process with stderr piped writes a warning, and then waits for a signal file before it ends
-- **THEN** the warning line can be read from stderr before the signal file is created
+- **WHEN** a Command running as a real process with stderr piped writes a warning, and then waits for a line on its stdin before it ends
+- **THEN** the warning line can be read from stderr before that line is sent
 
 #### Scenario: A warning inside a result
 - **WHEN** a Command ends with a result whose `warnings` list holds one warning
