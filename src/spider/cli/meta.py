@@ -18,6 +18,7 @@ class CommandMeta:
     output: OutputKind
     formats: tuple[Format, ...]
     fields: Fields | None
+    events: bool
 
 
 # What each output kind can serve, and the parameters every Command of the kind declares.
@@ -34,9 +35,13 @@ KIND_PARAMETERS: Mapping[OutputKind, tuple[str, ...]] = {
 
 
 def command_meta[**P](
-    *, output: OutputKind, formats: Sequence[Format], fields: Fields | None = None
+    *,
+    output: OutputKind,
+    formats: Sequence[Format],
+    fields: Fields | None = None,
+    events: bool = False,
 ) -> Callable[[Callable[P, Any]], Callable[P, Document | Rows]]:
-    meta = CommandMeta(output, tuple(formats), fields)
+    meta = CommandMeta(output, tuple(formats), fields, events)
 
     def decorate(command: Callable[P, Any]) -> Callable[P, Document | Rows]:
         @functools.wraps(command)

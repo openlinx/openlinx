@@ -43,6 +43,17 @@ def test_global_flags_of_init() -> None:
     assert (flags.get("--workspace"), flags.get("--format")) == (True, True)
 
 
+def test_entry_of_a_document_command() -> None:
+    entry = _entry(run_cli("commands").json(), "init")
+
+    assert (entry["output"], entry["events"], entry["formats"], entry["fields"]) == (
+        "document",
+        False,
+        ["json", "table"],
+        None,
+    )
+
+
 def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:
     entry: dict[str, Any] = next(c for c in description["commands"] if c["name"] == name)
     return entry

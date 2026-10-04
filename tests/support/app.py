@@ -80,7 +80,7 @@ def example_rows_waiting(signal: Path, output_format: FormatOpt = Format.JSONL) 
     yield {"n": 2 if signal.exists() else -1}
 
 
-@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE], events=True)
 def example_progress(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> Any:
     """Reports two progress events, then ends with the result urls=10."""
     invocation: Invocation = ctx.obj
@@ -89,7 +89,7 @@ def example_progress(ctx: typer.Context, output_format: FormatOpt = Format.JSON)
     return {"urls": 10}
 
 
-@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE], events=True)
 def example_mixed(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> Any:
     """Reports a progress event, then a warning, then a second progress event."""
     invocation: Invocation = ctx.obj
