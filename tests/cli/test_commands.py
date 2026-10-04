@@ -1,5 +1,7 @@
 """`spider commands` (010-add-workspace-and-cli-contract, cli-contract)."""
 
+from typing import Any
+
 from tests.support.cli import run_cli
 from tests.support.project import project_version
 
@@ -32,3 +34,15 @@ def test_the_exit_code_table_is_self_described() -> None:
         (70, "internal"),
         (130, "interrupted"),
     ]
+
+
+def test_global_flags_of_init() -> None:
+    entry = _entry(run_cli("commands").json(), "init")
+    flags = {option["name"]: option["global"] for option in entry["options"]}
+
+    assert (flags.get("--workspace"), flags.get("--format")) == (True, True)
+
+
+def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:
+    entry: dict[str, Any] = next(c for c in description["commands"] if c["name"] == name)
+    return entry
