@@ -14,7 +14,7 @@ from spider.output.codes import DiagnosticCode, ExitCode
 from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
-from tests.support.settings import ExampleSettings
+from tests.support.settings import ExampleSettings, GroupsTable
 
 # Declared here, not in spider.output.codes: the tool never lists the fixture app's codes.
 EXAMPLE_FAILED = DiagnosticCode("example_failed", "error", ExitCode.FAILED, "The example failed.")
@@ -164,7 +164,7 @@ def example_aborted(output_format: FormatOpt = Format.JSON) -> Any:
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
-            settings_tables={"example": ExampleSettings},
+            settings_tables={"example": ExampleSettings, "groups": GroupsTable},
             commands=[
                 example_list,
                 example_long_list,

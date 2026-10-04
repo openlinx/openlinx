@@ -5,7 +5,7 @@ from typing import Any
 
 from spider import APP_NAME
 from spider.workspace.discovery import SETTINGS_FILE_NAME
-from spider.workspace.tables import SettingsTables
+from spider.workspace.tables import SettingsTables, keyed_entry
 
 HEADER = (
     f"# {APP_NAME} settings. Each setting takes the first value it finds:\n"
@@ -16,7 +16,10 @@ HEADER = (
 
 def settings_template(tables: SettingsTables) -> str:
     parts = [HEADER]
-    for name, model in tables.items():
+    for name, table in tables.items():
+        if keyed_entry(table) is not None:
+            continue
+        model: Any = table
         lines = [f"[{name}]"]
         for key, field in model.model_fields.items():
             lines.append(f"# {field.description}")

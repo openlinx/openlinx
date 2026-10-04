@@ -198,7 +198,7 @@ Each task is one commit. Guards and refactors are allowed here, and a refactor n
   - the `Collected` reporter, which keeps warnings and events in memory. It is production code: `090` uses it to put warnings into a tool result.
   - `spider.cli.init` becomes a thin adapter: it builds the request from the flags, calls the service with the CLI reporter, and returns the result. Every group 3 and group 4 scenario stays green.
 - [x] 9.2 Drive "An unset setting in the template" (workspace), with `example.token` added to the fixture table. Green: the table rules of design D2 allow a `None` default, and the template writes `# <key> =` for it.
-- [ ] 9.3 Drive "Named entries" and "Unknown key in a named entry" (workspace), a trivial pair, with the fixture keyed table `[groups]`. Green:
+- [x] 9.3 Drive "Named entries" and "Unknown key in a named entry" (workspace), a trivial pair, with the fixture keyed table `[groups]`. Green:
   - a registered table may be `dict[str, V]`, where V is a table model or a TOML literal type (design D2)
   - the closest-key hint walks into the entries of a keyed table
 - [ ] 9.4 Drive "A keyed table in the template" (workspace). Green: the template writes a keyed table as its description and a commented `# [<table>.<name>]` header, followed by its entry's settings.

@@ -9,7 +9,7 @@ from spider.workspace.discovery import resolve_workspace, target_workspace
 from spider.workspace.settings import load_settings
 from spider.workspace.tables import SettingsTables
 from spider.workspace.template import settings_template
-from tests.support.settings import ExampleSettings
+from tests.support.settings import ExampleSettings, GroupsTable
 from tests.support.workspace import TempWorkspace
 
 
@@ -93,3 +93,15 @@ def test_template_loads_as_defaults(temp_workspace: TempWorkspace) -> None:
     from_template = load_settings(shop, tables).table(ExampleSettings)
 
     assert from_template == load_settings(empty, tables).table(ExampleSettings)
+
+
+def test_named_entries(temp_workspace: TempWorkspace) -> None:
+    shop = workspace_with_data_folder(temp_workspace)
+    (shop / "spider.toml").write_bytes(b'[groups.blog]\nlevel = "high"\n')
+    workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
+    tables = SettingsTables()
+    tables.register("groups", GroupsTable)
+
+    settings = load_settings(workspace, tables)
+
+    assert settings.root.model_dump()["groups"]["blog"]["level"] == "high"

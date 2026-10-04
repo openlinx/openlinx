@@ -6,7 +6,7 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from pydantic import BaseModel, ValidationError, create_model
 from pydantic_settings import (
@@ -19,7 +19,7 @@ from pydantic_settings import (
 from spider.output.codes import SETTINGS_INVALID
 from spider.output.diagnostics import SpiderError
 from spider.workspace.discovery import Workspace
-from spider.workspace.tables import SettingsTables
+from spider.workspace.tables import SettingsTables, keyed_entry
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,10 @@ def load_settings(
     tables: SettingsTables,
     flags: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> Settings:
-    fields: dict[str, Any] = {name: (model, model()) for name, model in tables.items()}
+    fields: dict[str, Any] = {
+        name: (table, {} if keyed_entry(table) is not None else table())
+        for name, table in tables.items()
+    }
     root_model = create_model(
         "SpiderSettings", __base__=_sources(workspace.settings_file), **fields
     )
@@ -116,10 +119,11 @@ def _suggestion(error: ValidationError, root_model: type[BaseModel]) -> str | No
         if problem["type"] != "extra_forbidden":
             continue
         *parents, unknown = (str(part) for part in problem["loc"])
-        model = root_model
+        model: Any = root_model
         for part in parents:
-            # Every table, and every nested level of one, is a registered BaseModel.
-            model = cast(type[BaseModel], model.model_fields[part].annotation)
+            # A keyed table's part is an entry's name: the next level is the entry model.
+            entry = keyed_entry(model)
+            model = entry if entry is not None else model.model_fields[part].annotation
         matches = difflib.get_close_matches(unknown, list(model.model_fields), n=1)
         if matches:
             return f"Did you mean {'.'.join([*parents, matches[0]])}?"

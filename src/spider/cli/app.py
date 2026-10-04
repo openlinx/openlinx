@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated, Any
 
 import typer
 
@@ -11,10 +11,7 @@ from spider.cli.commands import commands
 from spider.cli.init import init
 from spider.cli.meta import check_command
 from spider.cli.runner import Invocation, SpiderGroup
-from spider.workspace.tables import SettingsTables
-
-if TYPE_CHECKING:
-    from pydantic import BaseModel
+from spider.workspace.tables import SettingsTables, Table
 
 
 def _print_version(ctx: typer.Context, value: bool) -> None:
@@ -37,7 +34,7 @@ def root(
 
 @dataclass(frozen=True)
 class AppExtra:
-    settings_tables: "Mapping[str, type[BaseModel]]" = field(default_factory=dict)
+    settings_tables: Mapping[str, Table] = field(default_factory=dict)
     commands: Sequence[Callable[..., Any]] = ()
 
 

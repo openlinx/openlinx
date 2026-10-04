@@ -1,4 +1,4 @@
-"""The scenarios' `example` settings table (design D8 of 010-add-workspace-and-cli-contract)."""
+"""The scenarios' settings tables (design D8 of 010-add-workspace-and-cli-contract)."""
 
 from typing import Literal
 
@@ -10,3 +10,12 @@ class ExampleSettings(BaseModel):
 
     level: Literal["low", "high"] = Field("low", description="How much the example does.")
     token: str | None = Field(None, description="The example's token.")
+
+
+class GroupSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level: Literal["low", "high"] = Field("low", description="How much the group does.")
+
+
+GroupsTable = dict[str, GroupSettings]

@@ -31,6 +31,17 @@ def test_unknown_key_with_a_suggestion(shop: Path) -> None:
     )
 
 
+def test_unknown_key_in_a_named_entry(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b'[groups.blog]\nlevl = "high"\n')
+
+    error = run_cli("init", app=example_app()).stderr_json_lines()[-1]
+
+    assert (error["details"]["errors"][0]["key"], "level" in (error["hint"] or "")) == (
+        "groups.blog.levl",
+        True,
+    )
+
+
 def test_output_flags_have_no_settings_key(shop: Path) -> None:
     (shop / "spider.toml").write_bytes(b'[output]\nformat = "table"\n')
 
