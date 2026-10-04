@@ -160,7 +160,7 @@ The streams and the Reporter follow design D3: `Output(stdout, stderr)` takes it
 - [x] 7.5 **Guard:** "Events and diagnostics share stderr" (cli-contract), as a real process with `run_cli_process`, proving that the lines come out in emission order.
 - [x] 7.6 Drive "A warning is readable at once" (cli-contract) as a real process, with a fixture Command that warns and then waits for a line on its stdin, so the handshake needs no polling. Green: every stderr line, event or diagnostic, is written under one `threading.Lock` and flushed. Today `Output.diagnostic` never flushes, and a piped `sys.stderr.buffer` is block-buffered.
 - [x] 7.7 Drive "The result of a failed outcome is printed" (cli-contract) at seam 1. Green: `Outcome(result, error)`.
-- [ ] 7.8 Drive "One error and its exit code" (cli-contract) at seam 1.
+- [x] 7.8 **Guard:** "One error and its exit code" (cli-contract) at seam 1. The runner of 7.7 already writes the error last and exits with its code.
 - [ ] 7.9 Drive "Unexpected failure" (cli-contract) at seam 1, with the fixture Command that raises. Green: `internal_error` with exit code 70 and `details.traceback`.
 - [ ] 7.10 Drive "A warning inside a result" (cli-contract) at seam 1. Green: `Diagnostic.to_json()`.
 - [ ] 7.11 Docs: add progress events, partial results, the order and flushing of stderr lines, and diagnostics inside results to `docs/cli.md`.
