@@ -1,10 +1,15 @@
-"""The documented and the declared schema agree (015-add-crawl-store, crawl-store)."""
+"""The documented, the declared and the stored schema agree (015-add-crawl-store, crawl-store)."""
 
 import re
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
 from spider.services.schema import describe_schema
+from spider.store.crawls import create_crawl
+from spider.workspace.discovery import resolve_workspace
+from tests.support.workspace import TempWorkspace
 
 SCHEMA_DOC = Path(__file__).resolve().parents[2] / "docs" / "schema.md"
 SECTION = re.compile(r"^## (Table|View) `([^`]+)`$", re.MULTILINE)
@@ -54,3 +59,45 @@ def test_documentation_and_declaration_agree() -> None:
     documented = documented_schema(SCHEMA_DOC.read_text(encoding="utf-8"))
 
     assert documented == describe_schema()
+
+
+def file_schema(file: Path) -> dict[str, list[tuple[Any, ...]]]:
+    """Public tables as SQLite reports them: (name, type, nullable, primary key, reference)."""
+    with closing(sqlite3.connect(f"{file.as_uri()}?mode=ro", uri=True)) as connection:
+        names = [
+            name
+            for (name,) in connection.execute(
+                "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name"
+            )
+            if not name.startswith(("sqlite_", "_"))
+        ]
+        tables = {}
+        for name in names:
+            references = {
+                row[3]: f"{row[2]}.{row[4]}"
+                for row in connection.execute(f"PRAGMA foreign_key_list({name})")
+            }
+            tables[name] = [
+                (column, type_, not notnull, pk > 0, references.get(column))
+                for _, column, type_, notnull, _, pk in connection.execute(
+                    f"PRAGMA table_info({name})"
+                )
+            ]
+    return tables
+
+
+def test_a_new_file_matches_the_declaration(temp_workspace: TempWorkspace) -> None:
+    shop = temp_workspace.root / "shop"
+    (shop / ".spider" / "crawls").mkdir(parents=True)
+    workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
+    file = create_crawl(workspace, crawl_id="20260927-140312-k3f9")
+
+    declared = {
+        table["name"]: [
+            (c["name"], c["type"], c["nullable"], c["primary_key"], c["references"])
+            for c in table["columns"]
+        ]
+        for table in describe_schema()
+    }
+
+    assert file_schema(file) == declared

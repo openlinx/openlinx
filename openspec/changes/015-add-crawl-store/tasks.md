@@ -33,7 +33,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.3 Drive "Location of a crawl file" at seam 2.
 
   Done when: a Crawl with a given id can be created as `<data folder>/crawls/<id>.sqlite`, with a `crawl` table holding `id` only, and its `docs/schema.md` section.
-- [ ] 1.4 Drive "A new file matches the declaration" at seam 6.
+- [x] 1.4 **Guard:** "A new file matches the declaration" at seam 6. It passed at once: `create_crawl` builds the file from the declared tables with `create_all()`.
 
   Done when: a test compares `PRAGMA table_info` and `PRAGMA foreign_key_list` of every public table in a new crawl file with the declared schema, and fails on any extra public table or column.
 - [ ] 1.5 Drive "First Crawl in the global Workspace" at seam 2.
