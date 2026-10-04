@@ -131,7 +131,7 @@ The paging logic lives in the pure module `spider.output.paging` (design D6): th
 - [x] 6.4 Drive "Following cursors" (cli-contract). Green: `--cursor`, read back by the pager.
 - [x] 6.5 Drive "Everything on one page" and "Default limit" (cli-contract), a trivial pair, using the 60-item fixture list.
 - [x] 6.6 Drive "Count only" (cli-contract).
-- [ ] 6.7 **Guard:** "Same request, same output" (cli-contract).
+- [x] 6.7 **Guard:** "Same request, same output" (cli-contract).
 - [ ] 6.8 Drive "Limit above the maximum" and "Negative limit" (cli-contract), a trivial pair.
 - [ ] 6.9 Drive "Limit of the wrong type" (cli-contract). Green: map Click `BadParameter` to `invalid_value`.
 - [ ] 6.10 Drive "Default fields" and "Fields in the requested order" (cli-contract), a trivial pair. Green: `--fields`, and field selection in `spider.output.paging`, with the default fields from `@command_meta`.

@@ -65,3 +65,9 @@ def test_count_only() -> None:
     result = run_cli("example-list", "--limit", "0", app=example_app())
 
     assert result.stdout == b'{"total":5,"items":[],"next_cursor":null}\n'
+
+
+def test_same_request_same_output() -> None:
+    first, second = (run_cli("example-list", "--limit", "2", app=example_app()) for _ in range(2))
+
+    assert first.stdout == second.stdout
