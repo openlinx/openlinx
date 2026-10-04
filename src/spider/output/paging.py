@@ -12,6 +12,7 @@ from spider.output.diagnostics import UsageError
 
 CURSOR_VERSION = 1
 CURSOR_CHARACTERS = re.compile(r"[A-Za-z0-9_-]+")
+ALL_FIELDS = "all"
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,8 @@ def paginate(
 def select_fields(requested: str | None, fields: Fields) -> tuple[str, ...]:
     if requested is None:
         return fields.default
+    if requested == ALL_FIELDS:
+        return fields.available
     return tuple(requested.split(","))
 
 

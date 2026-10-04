@@ -98,3 +98,9 @@ def test_fields_in_the_requested_order() -> None:
     page = run_cli("example-list", "--fields", "sq,n", "--limit", "1", app=example_app()).json()
 
     assert [list(item.items()) for item in page["items"]] == [[("sq", 1), ("n", 1)]]
+
+
+def test_all_fields() -> None:
+    page = run_cli("example-list", "--fields", "all", "--limit", "1", app=example_app()).json()
+
+    assert [list(item.items()) for item in page["items"]] == [[("n", 1), ("sq", 1)]]
