@@ -1,11 +1,15 @@
 """Pages, cursors and fields (design D6 of 010-add-workspace-and-cli-contract)."""
 
 import base64
+import re
 from typing import Any
 
 import orjson
 
+from spider.output.diagnostics import UsageError
+
 CURSOR_VERSION = 1
+CURSOR_CHARACTERS = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def encode_cursor(fingerprint: str, keyset: Any) -> str:
@@ -15,5 +19,26 @@ def encode_cursor(fingerprint: str, keyset: Any) -> str:
 
 
 def decode_cursor(cursor: str, fingerprint: str) -> Any:
-    payload = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
-    return orjson.loads(payload)["k"]
+    # urlsafe_b64decode would silently drop characters outside the alphabet.
+    if not CURSOR_CHARACTERS.fullmatch(cursor):
+        raise _invalid_cursor()
+    try:
+        payload = orjson.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
+    except ValueError as error:
+        raise _invalid_cursor() from error
+    if (
+        not isinstance(payload, dict)
+        or payload.get("v") != CURSOR_VERSION
+        or payload.get("q") != fingerprint
+        or "k" not in payload
+    ):
+        raise _invalid_cursor()
+    return payload["k"]
+
+
+def _invalid_cursor() -> UsageError:
+    return UsageError(
+        "invalid_cursor",
+        "The cursor was not made by this request, or it was altered.",
+        hint="Pass the next_cursor of the same request, or leave out --cursor to start again.",
+    )
