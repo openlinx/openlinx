@@ -27,7 +27,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.1 Setup: add `sqlalchemy` (2.x) to the runtime dependencies and to `tests/dependency_allowlist.txt`.
 
   Done when: `uv sync --locked` and `uv run scripts/check.py` pass, and the startup allowlist test (`tests/cli/test_startup.py`) still passes without allowing `sqlalchemy`.
-- [ ] 1.2 Drive "Documentation and declaration agree" at seam 6, over an empty declared schema.
+- [x] 1.2 Drive "Documentation and declaration agree" at seam 6, over an empty declared schema.
 
   Done when: `docs/schema.md` exists with its conventions section and no tables, and a parser of it is compared with the schema service's description of the declared schema.
 - [ ] 1.3 Drive "Location of a crawl file" at seam 2.
