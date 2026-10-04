@@ -147,7 +147,7 @@ The paging logic lives in the pure module `spider.output.paging` (design D6): th
 
 ## 7. Progress events, partial results and diagnostics
 
-The streams and the Reporter follow design D3: `Output(stdout, stderr)` takes its byte streams and is built once, in the runner. Every stderr line is written under one `threading.Lock` and flushed. Services report through the `Reporter` protocol, never through `Output`.
+The streams and the Reporter follow design D3: `Output(stdout, stderr)` takes its byte streams and is built once, in the runner. Every stderr line is written under one `threading.Lock` and flushed. Services report through the `Reporter` protocol, never through `Output`. In the real-process tests, every wait has a hard timeout of a few seconds, so a missing line or signal file fails the test instead of hanging CI. The handshake has no fixed sleeps: each side acts only on what it has read.
 
 - [ ] 7.1 Drive "Event line" (cli-contract) at seam 4, with `FakeClock`. Green: the event encoder.
 - [ ] 7.2 Drive "The result goes to stdout" (cli-contract) at seam 1, with the fixture progress Command. Green:
@@ -207,11 +207,11 @@ Each task is one commit. Guards and refactors are allowed here, and a refactor n
   - `secret` is declared once, on the settings field
   - an option mapped to a setting inherits it, and `check_command` refuses such an option that also declares `secret`
   - an option without a setting declares `secret` itself
-- [ ] 9.7 Drive "Help starts light" and "The self-description starts light" (cli-contract), a trivial pair, replacing 000's deny-list guard. Green: the allowlist of design D10, checked by running `spider --help` and `spider commands` in a subprocess and reading `sys.modules`. Today `spider --help` loads rich through Typer's rich help, so this task turns rich help off, or records in D10 why rich stays allowed for `--help`.
+- [ ] 9.7 Drive "Help starts light" and "The self-description starts light" (cli-contract), a trivial pair, replacing 000's deny-list guard. Green: the allowlist of design D10, with Typer's own dependencies, checked by running `spider --help` and `spider commands` in a subprocess and reading `sys.modules`. Today `spider --help` loads rich through Typer's rich help, so this task turns rich help off.
 - [ ] 9.8 Refactor: the Typer compatibility module of design D10. Move the `typer._click` imports of `spider.cli.runner` into `spider.cli.click_compat`, ban `typer._click` elsewhere with ruff `banned-api`, and pin `typer>=0.27.2,<0.28`. "Unknown Command", "Limit of the wrong type" and the missing-argument test stay green.
 - [ ] 9.9 Docs: in `docs/architecture.md`:
   - add the output layer, the `Reporter` and the services rule: a Command is an adapter plus a service, and `090` calls the service directly
   - add the settings rules of D2: table ownership, `None` defaults, keyed tables, lazy references, and secrets on the field
   - add the error-code registry and the startup allowlist
-  - check the HTTP client text against ADR-0001 (aiohttp behind a Fetcher interface), and fix any drift
+  - check the HTTP client text against ADR-0001, and fix it only if something has drifted
 - [ ] 9.10 Review: run the code-review skill on the whole change, then refactor with the whole suite green.
