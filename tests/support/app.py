@@ -9,8 +9,8 @@ import typer
 
 from spider.cli.app import AppExtra, build_app
 from spider.cli.meta import command_meta
-from spider.cli.options import CursorOpt, FormatOpt, LimitOpt
-from spider.output.paging import Fields, Page, paginate
+from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt
+from spider.output.paging import Fields, Page, paginate, select_fields
 from spider.output.writer import Format
 from tests.support.settings import ExampleSettings
 
@@ -21,7 +21,10 @@ EXAMPLE_FIELDS = Fields(available=("n", "sq"), default=("n",))
     output="list", formats=[Format.JSON, Format.JSONL, Format.TABLE], fields=EXAMPLE_FIELDS
 )
 def example_list(
-    output_format: FormatOpt = Format.JSON, limit: LimitOpt = 50, cursor: CursorOpt = None
+    output_format: FormatOpt = Format.JSON,
+    limit: LimitOpt = 50,
+    cursor: CursorOpt = None,
+    fields: FieldsOpt = None,
 ) -> Page:
     """The example list Command of the cli-contract scenarios."""
     items = [{"n": n, "sq": n * n} for n in range(1, 6)]
@@ -30,7 +33,7 @@ def example_list(
         limit=limit,
         cursor=cursor,
         fingerprint="example-list",
-        fields=EXAMPLE_FIELDS.default,
+        fields=select_fields(fields, EXAMPLE_FIELDS),
     )
 
 

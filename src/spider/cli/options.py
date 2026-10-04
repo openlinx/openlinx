@@ -15,3 +15,6 @@ LimitOpt = Annotated[
 CursorOpt = Annotated[
     str | None, typer.Option("--cursor", help="The next_cursor of the previous page.")
 ]
+FieldsOpt = Annotated[
+    str | None, typer.Option("--fields", help="Comma-separated fields of each item.")
+]

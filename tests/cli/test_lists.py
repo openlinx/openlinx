@@ -86,3 +86,15 @@ def test_limit_of_the_wrong_type() -> None:
     result = run_cli("example-list", "--limit", "abc", app=example_app())
 
     assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_value")
+
+
+def test_default_fields() -> None:
+    page = run_cli("example-list", "--limit", "1", app=example_app()).json()
+
+    assert page["items"] == [{"n": 1}]
+
+
+def test_fields_in_the_requested_order() -> None:
+    page = run_cli("example-list", "--fields", "sq,n", "--limit", "1", app=example_app()).json()
+
+    assert [list(item.items()) for item in page["items"]] == [[("sq", 1), ("n", 1)]]

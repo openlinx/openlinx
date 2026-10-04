@@ -44,6 +44,12 @@ def paginate(
     return Page(project(items[start:end], fields), len(items), next_cursor)
 
 
+def select_fields(requested: str | None, fields: Fields) -> tuple[str, ...]:
+    if requested is None:
+        return fields.default
+    return tuple(requested.split(","))
+
+
 def project(items: Sequence[Mapping[str, Any]], fields: Sequence[str]) -> list[dict[str, Any]]:
     return [{name: item[name] for name in fields} for item in items]
 
