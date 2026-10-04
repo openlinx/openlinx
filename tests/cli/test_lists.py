@@ -80,3 +80,9 @@ def test_limit_above_the_maximum_and_negative_limit(limit: str) -> None:
     result = run_cli("example-list", "--limit", limit, app=example_app())
 
     assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_value")
+
+
+def test_limit_of_the_wrong_type() -> None:
+    result = run_cli("example-list", "--limit", "abc", app=example_app())
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_value")
