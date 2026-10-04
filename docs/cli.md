@@ -54,6 +54,53 @@ Some Commands offer fewer: `spider commands` itself is `json` or `table`. The `c
   ```
 - **`table`:** a table for people to read. Its layout is not a contract, so agents should never parse it. On a terminal it fits the terminal's width; otherwise it is 120 columns wide, so it looks the same everywhere.
 
+## Lists: paging, fields and cursors
+
+A list Command prints one page of its items. The examples use a list whose items are `{"n":1,"sq":1}` to `{"n":5,"sq":25}`, whose fields are `n` and `sq`, and whose default field is `n`.
+
+- **The envelope** with `--format json`:
+  - `total`: how many items match
+  - `items`: at most `--limit` items
+  - `next_cursor`: an opaque string for the next page, or `null` on the last page
+- **`--limit`** is 50 by default, and takes 0 to 1000. `--limit 0` prints only the count, with `"items":[]` and `"next_cursor":null`. Any other value is `invalid_value`.
+- **Order:** items always come in the same order, so the same request on unchanged data prints the same bytes.
+
+```
+spider <list Command> --limit 2
+```
+
+```json
+{"total":5,"items":[{"n":1},{"n":2}],"next_cursor":"eyJ2IjoxLCJxIjoiMzBiZDUwNzRkMzlkZmY4MSIsImsiOjJ9"}
+```
+
+### Cursors
+
+Pass `next_cursor` back with `--cursor` until it is `null`. That prints every item exactly once.
+- A cursor works only for the Command, arguments and filters that made it. `--limit`, `--fields` and `--format` may change between pages.
+- Any other cursor fails with `invalid_cursor`: one from a different request, such as a different filter, and one that was altered or truncated.
+- A cursor uses only `A`–`Z`, `a`–`z`, `0`–`9`, `-` and `_`, so it needs no quoting in a shell.
+
+```json
+{"level":"error","code":"invalid_cursor","message":"The cursor was not made by this request, or it was altered.","hint":"Pass the next_cursor of the same request, or leave out --cursor to start again.","details":{}}
+```
+
+With `jsonl` and `table` there is no envelope. When more items exist than were printed, the info line `more_items` on stderr gives the `total` and the `next_cursor`:
+
+```json
+{"level":"info","code":"more_items","message":"2 of 5 items printed.","hint":"Pass --cursor with details.next_cursor for the next page.","details":{"total":5,"next_cursor":"eyJ2IjoxLCJxIjoiMzBiZDUwNzRkMzlkZmY4MSIsImsiOjJ9"}}
+```
+
+### Fields
+
+- `--fields sq,n` gives each item exactly those keys, in that order: `{"sq":1,"n":1}`.
+- `--fields all` gives every available field, in the Command's order: `{"n":1,"sq":1}`.
+- Without `--fields`, the Command's default fields apply. `spider commands` lists the available and default fields of every list Command.
+- An unknown field fails with `unknown_field`, which names the field and the available ones:
+
+```json
+{"level":"error","code":"unknown_field","message":"This Command has no field size.","hint":"Use --fields with any of: n, sq, or all.","details":{"field":"size","available":["n","sq"]}}
+```
+
 ## Diagnostics
 
 Errors, warnings and info lines are JSON objects, one per line on stderr. Each has exactly these keys:
