@@ -38,7 +38,7 @@ widen:                          ├─► 022-min ─┐
                                 └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 summary/pages/page ─► 080 ─► 085 ─► v0.1 tag
 ```
 
-- **The slice:** 015 → 020 → 030-min → 040-min → 050-issues. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
+- **The slice:** 015 → 020 → 030-min → 040-min → 050-issues. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
 - **Widening:** 022-min can start as soon as 020 is in, in its own worktree, alongside the slice. The rest of 030-min, 040 up to its 15 Rules, and 050's `summary`, `pages` and `page` follow. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Release:** 085 comes last, before the v0.1 tag. The product name must be chosen, and checked as free on PyPI and GitHub, before 085 starts.
 - **v0.1.1** comes after the v0.1 release: 060-min first, then 090. The v0.2 changes come after that.
@@ -142,6 +142,7 @@ If a change needs something another change owns, it depends on that change inste
   - `pages` with the basic `--where` language (comparisons, `contains`, `is [not] null` and `and`), `--fields`, `--sort` and paging. **(v0.2)** the rest of `--where`: `~`/`!~`, `in`, `or`, `not` and parentheses.
   - `page <url>`: JSON, where `--headers` shows redacted headers. **(v0.2)** `--html`, which needs 030's stored HTML.
   - `issues` and `issues <rule-id>`.
+  - The **end-to-end CI test** on Windows, macOS and Linux: a foreground `crawl` → `issues`. It is the last part of the thin slice. 070's end-to-end test is added in v0.2.
   - **(v0.2)** Read-only `sql`.
   - **(v0.2)** `export <view>`: `jsonl` by default, or `csv`; the `resources` view is defined over `urls` and `links`.
   - **(v0.2)** **Segments** and `--segment`.
