@@ -212,6 +212,10 @@ The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min join
   - A `.mcp.json` example and the client config snippets, shipped as docs in `docs/mcp.md`.
   - **(v0.2)** The plugin `.mcp.json`, which comes with 080's plugin marketplace.
 
+**Re-grounding checklist** (stale lines in the drafts, fixed when each change is re-grounded):
+- 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
+- 080: `design.md:95` and task 7.8 still name 100's release pipeline for the Skill-copy check, which is now 085's.
+
 ## v0.2: crawl control, reports, link graph
 
 The changes deferred by the 2026-10-05 scope cut come first, then the link-graph work.
