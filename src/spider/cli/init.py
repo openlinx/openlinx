@@ -5,7 +5,8 @@ from typing import Any
 
 import typer
 
-from spider.cli.meta import command_meta
+from spider import APP_NAME
+from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, WorkspaceOpt
 from spider.cli.runner import Invocation
 from spider.output.codes import WORKSPACE_NESTED
@@ -16,11 +17,24 @@ from spider.workspace.discovery import enclosing_workspace, target_workspace
 from spider.workspace.template import settings_template
 
 
-@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+@command_meta(
+    output="document",
+    formats=[Format.JSON, Format.TABLE],
+    examples=[
+        Example(f"{APP_NAME} init", "Make the current folder a Workspace."),
+        Example(
+            f"{APP_NAME} init --workspace site", "Create the folder site and make it a Workspace."
+        ),
+    ],
+)
 def init(
     ctx: typer.Context, workspace_dir: WorkspaceOpt = None, output_format: FormatOpt = Format.JSON
 ) -> dict[str, Any]:
-    """Make the current folder, or the --workspace folder, a Workspace."""
+    """Make the current folder, or the --workspace folder, a Workspace.
+
+    Creates only what is missing: .spider/ with its .gitignore and crawls/, and a commented
+    spider.toml. It never changes an existing file, and it checks an existing spider.toml first.
+    """
     # Imported here: pydantic is too heavy for the CLI's startup path.
     from spider.workspace.settings import load_settings
 

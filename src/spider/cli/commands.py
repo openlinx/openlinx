@@ -1,5 +1,6 @@
 """`spider commands`, the self-description (design D7 of 010-add-workspace-and-cli-contract)."""
 
+import inspect
 from enum import Enum
 from typing import Any, cast
 
@@ -7,7 +8,7 @@ import typer
 from typer.core import TyperGroup
 
 from spider import APP_NAME, __version__
-from spider.cli.meta import CommandMeta, command_meta, meta_of
+from spider.cli.meta import CommandMeta, Example, command_meta, meta_of
 from spider.cli.options import FormatOpt, option_meta
 from spider.output.codes import DECLARED, ExitCode
 from spider.output.writer import Format
@@ -22,9 +23,18 @@ ENVIRONMENT = [
 ]
 
 
-@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+@command_meta(
+    output="document",
+    formats=[Format.JSON, Format.TABLE],
+    examples=[Example(f"{APP_NAME} commands", "Describe every Command.")],
+)
 def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict[str, Any]:
-    """Describe every Command as JSON."""
+    """Describe every Command as JSON.
+
+    Lists every Command with its output kind, formats, arguments, options and fields, then the
+    exit codes, every diagnostic code and the environment variables the tool honours. It needs
+    no Workspace.
+    """
     root = cast(TyperGroup, ctx.find_root().command)
     return {
         "tool": {"name": APP_NAME, "version": __version__},
@@ -49,8 +59,13 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
 def _entry(name: str, command: Any) -> dict[str, Any]:
     # build_app refuses a Command without @command_meta, so every entry has one.
     meta = cast(CommandMeta, meta_of(command.callback))
+    # Source line breaks are not content: each paragraph becomes one line.
+    paragraphs = (inspect.getdoc(inspect.unwrap(command.callback)) or "").split("\n\n")
+    doc = "\n\n".join(" ".join(paragraph.split()) for paragraph in paragraphs)
     return {
         "name": name,
+        "summary": doc.partition("\n")[0],
+        "description": doc,
         "output": meta.output,
         "events": meta.events,
         "formats": list(meta.formats),
@@ -59,6 +74,10 @@ def _entry(name: str, command: Any) -> dict[str, Any]:
         "fields": None
         if meta.fields is None
         else {"available": list(meta.fields.available), "default": list(meta.fields.default)},
+        "examples": [
+            {"command": example.command, "description": example.description}
+            for example in meta.examples
+        ],
     }
 
 

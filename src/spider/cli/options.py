@@ -9,6 +9,7 @@ from typing import Annotated, Any
 
 import typer
 
+from spider import APP_NAME
 from spider.output.writer import Format
 
 
@@ -25,7 +26,14 @@ GLOBAL = OptionMeta(is_global=True)
 
 FormatOpt = Annotated[Format, typer.Option("--format", help="Output format."), GLOBAL]
 WorkspaceOpt = Annotated[
-    Path | None, typer.Option("--workspace", help="The Workspace folder."), GLOBAL
+    Path | None,
+    typer.Option(
+        "--workspace",
+        # Symbolic, not the real home path, so the self-description is the same on every OS.
+        help="The Workspace folder. Without it, the nearest folder upwards that holds "
+        f".{APP_NAME}/ or {APP_NAME}.toml, else the global Workspace ~/.{APP_NAME}.",
+    ),
+    GLOBAL,
 ]
 LimitOpt = Annotated[
     int, typer.Option("--limit", min=0, max=1000, help="The most items to print, from 0 to 1000.")

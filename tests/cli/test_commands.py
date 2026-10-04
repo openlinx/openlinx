@@ -1,11 +1,17 @@
 """`spider commands` (010-add-workspace-and-cli-contract, cli-contract)."""
 
+import json
 import os
+from pathlib import Path
 from typing import Any
+
+import pytest
 
 from tests.support.app import example_app
 from tests.support.cli import run_cli, run_cli_process
 from tests.support.project import project_version
+
+CONTRACT = Path(__file__).resolve().parents[1] / "contract" / "commands"
 
 
 def test_the_command_lists_itself() -> None:
@@ -134,6 +140,13 @@ def test_detection_signals_change_nothing() -> None:
     )
 
     assert (signalled.stdout == plain.stdout, plain.exit_code, signalled.exit_code) == (True, 0, 0)
+
+
+@pytest.mark.parametrize("name", ["init", "commands"])
+def test_same_description_on_every_os(name: str) -> None:
+    expected = json.loads((CONTRACT / f"{name}.json").read_text(encoding="utf-8"))
+
+    assert _entry(run_cli("commands").json(), name) == expected
 
 
 def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:

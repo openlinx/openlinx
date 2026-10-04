@@ -1,0 +1,28 @@
+{
+  "name": "commands",
+  "summary": "Describe every Command as JSON.",
+  "description": "Describe every Command as JSON.\n\nLists every Command with its output kind, formats, arguments, options and fields, then the exit codes, every diagnostic code and the environment variables the tool honours. It needs no Workspace.",
+  "output": "document",
+  "events": false,
+  "formats": ["json", "table"],
+  "arguments": [],
+  "options": [
+    {
+      "name": "--format",
+      "short": null,
+      "type": "choice",
+      "choices": ["json", "table"],
+      "default": "json",
+      "required": false,
+      "multiple": false,
+      "global": true,
+      "setting": null,
+      "secret": false,
+      "description": "Output format."
+    }
+  ],
+  "fields": null,
+  "examples": [
+    {"command": "spider commands", "description": "Describe every Command."}
+  ]
+}

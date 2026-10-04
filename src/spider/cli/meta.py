@@ -15,12 +15,19 @@ type OutputKind = Literal["document", "list", "rows"]
 
 
 @dataclass(frozen=True)
+class Example:
+    command: str
+    description: str
+
+
+@dataclass(frozen=True)
 class CommandMeta:
     name: str
     output: OutputKind
     formats: tuple[Format, ...]
     fields: Fields | None
     events: bool
+    examples: tuple[Example, ...]
 
 
 # What each output kind can serve, and the parameters every Command of the kind declares.
@@ -43,11 +50,17 @@ def command_meta[**P](
     fields: Fields | None = None,
     events: bool = False,
     name: str | None = None,
+    examples: Sequence[Example] = (),
 ) -> Callable[[Callable[P, Any]], Callable[P, Document | Rows]]:
     def decorate(command: Callable[P, Any]) -> Callable[P, Document | Rows]:
         # The one name of the Command: registration, spider commands, cursors and MCP use it.
         meta = CommandMeta(
-            name or command.__name__.replace("_", "-"), output, tuple(formats), fields, events
+            name or command.__name__.replace("_", "-"),
+            output,
+            tuple(formats),
+            fields,
+            events,
+            tuple(examples),
         )
 
         @functools.wraps(command)
