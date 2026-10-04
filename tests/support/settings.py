@@ -9,3 +9,4 @@ class ExampleSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     level: Literal["low", "high"] = Field("low", description="How much the example does.")
+    token: str | None = Field(None, description="The example's token.")

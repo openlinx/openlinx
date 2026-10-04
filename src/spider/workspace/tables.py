@@ -15,13 +15,13 @@ class SettingsTables:
 
     def register(self, name: str, model: "type[BaseModel]") -> None:
         # The template and the error hints rely on flat tables whose keys all have a
-        # one-line description and a default that is a TOML literal.
+        # one-line description and a default that is a TOML literal, or None for unset.
         if model.model_config.get("extra") != "forbid":
             raise TypeError(f'Settings table [{name}] must set extra="forbid".')
         for key, field in model.model_fields.items():
             if not field.description or "\n" in field.description:
                 raise TypeError(f"Setting {name}.{key} needs a one-line description.")
-            if not _is_toml_literal(field.default):
+            if field.default is not None and not _is_toml_literal(field.default):
                 raise TypeError(f"Setting {name}.{key} needs a default TOML can write.")
         if name in self._models:
             raise TypeError(f"Settings table [{name}] is registered twice.")

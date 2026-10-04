@@ -20,7 +20,10 @@ def settings_template(tables: SettingsTables) -> str:
         lines = [f"[{name}]"]
         for key, field in model.model_fields.items():
             lines.append(f"# {field.description}")
-            lines.append(f"# {key} = {_toml_literal(field.default)}")
+            if field.default is None:
+                lines.append(f"# {key} =")
+            else:
+                lines.append(f"# {key} = {_toml_literal(field.default)}")
         parts.append("\n".join(lines) + "\n")
     return "\n".join(parts)
 

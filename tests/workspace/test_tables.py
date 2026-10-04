@@ -22,12 +22,6 @@ class TwoLineDescription(BaseModel):
     level: str = Field("low", description="A level.\nOn two lines.")
 
 
-class NoTomlDefault(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    proxy: str | None = Field(None, description="A proxy.")
-
-
 class NotANumberDefault(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -39,11 +33,10 @@ class TomlDefaults(BaseModel):
 
     ratio: float = Field(0.5, description="A ratio.")
     hosts: list[str] = Field(["a", "b"], description="Some hosts.")
+    proxy: str | None = Field(None, description="A proxy, unset by default.")
 
 
-@pytest.mark.parametrize(
-    "model", [Loose, Undescribed, TwoLineDescription, NoTomlDefault, NotANumberDefault]
-)
+@pytest.mark.parametrize("model", [Loose, Undescribed, TwoLineDescription, NotANumberDefault])
 def test_a_table_the_template_cannot_describe_is_refused(model: type[BaseModel]) -> None:
     with pytest.raises(TypeError):
         SettingsTables().register("example", model)
