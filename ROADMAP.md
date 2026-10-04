@@ -8,6 +8,15 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 
 **Scope cut (2026-10-05).** v0.1 is cut to the core path: crawl a site, store it, and ask it for Issues. Several changes ship only their minimum in v0.1 (marked *min*), and the rest of them moves to v0.2. The specs stay as written. The `design.md` and `tasks.md` of 015 and later are drafts: each is re-grounded against the code with `/opsx:update` just before its change starts, and that is also when the deferred requirements leave its specs.
 
+## Positioning
+
+Other tools already ship a crawler with a CLI, an MCP server and a Skill. This one stands on three things:
+- **Your crawl is a database:** each Crawl is a SQLite file with a public, versioned, documented schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)) and read-only `spider sql`. Every Issue can be reproduced by a query.
+- **A contract-tested CLI for agents:** one JSON result per Command, a registry of diagnostics and error codes, and cursor paging.
+- **No telemetry, no account, no LLM calls** ([ADR-0004](docs/adr/0004-tool-never-calls-an-llm.md)).
+
+We deliberately do not claim these as unique: the MCP server, the Skill, the CI gate, Crawl Diff, the Health Score and `llms.txt` checks.
+
 ## v0.1: first public pre-release
 
 | # | Change | Capabilities (specs) | Commands | Status |
