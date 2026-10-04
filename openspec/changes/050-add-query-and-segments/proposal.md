@@ -4,6 +4,8 @@ After a Crawl, the crawl store holds everything, but agents and people still nee
 
 ## What Changes
 
+> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships `summary`, `pages`, `page` and `issues`. **Deferred to v0.2:** `sql`, `export`, Segments (the `segments` capability, `--segment`, the per-Segment breakdown in `summary`), `page --html`, the `--where` operators beyond comparisons, `contains`, `is [not] null` and `and`, and the whole `cli-contract` delta (`--format csv`, the CSV policy, `--no-bom` and `-o`).
+
 New Commands, all read-only. They take `--format` (`json`, `jsonl` and `table`) and the `--workspace` flag from `010-add-workspace-and-cli-contract`, the `--crawl` option (`latest|<id>|<path>`) from `015-add-crawl-store`, and the `csv` format, `--no-bom` and `-o` from this change:
 
 | Command | Flags added by this change |

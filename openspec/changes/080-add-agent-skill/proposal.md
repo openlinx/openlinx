@@ -4,6 +4,8 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
 
 ## What Changes
 
+> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the generated Skill, `skill install`, the outdated-Skill notice, the repository copy and `doctor`; its install line is `uv tool install`. **Deferred to v0.2:** the Full audit workflow (it needs `070`), the dry-run guardrail and Hand-off (they need `060`), the install-script one-liners (`100`), `sql` recipes and Segments, `doctor --proxy`, and the plugin marketplace manifests.
+
 - **Skill generation.** One generator module renders the Skill from the CLI's own metadata (Commands, Page data columns, Rules, the crawl store schema) and Markdown templates, and stamps it with the CLI version. Two callers use it:
   - `spider skill install`
   - the developer script `scripts/generate_skill.py <dir>`, which writes the repository copy. It is not a user Command.

@@ -1,3 +1,5 @@
+> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+
 ## Context
 
 See proposal.md (Why) for motivation. Everything the Report shows comes from the **Query Service** of `050-add-query-and-segments`:

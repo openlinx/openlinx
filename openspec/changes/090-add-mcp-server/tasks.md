@@ -1,3 +1,5 @@
+> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+
 Every task is one red → green slice and one commit whose message names its scenario:
 1. Write the failing test at the named seam (docs/testing.md) and watch it fail for the right reason.
 2. Write only enough code to make it pass.

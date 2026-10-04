@@ -1,3 +1,5 @@
+> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+
 Each task below is one vertical TDD slice and one commit. It is done when:
 1. the test for the named scenario, or trivial pair of scenarios, written first at the named seam, fails for the right reason
 2. only enough code is written to make it pass

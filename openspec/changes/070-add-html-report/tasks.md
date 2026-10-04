@@ -1,3 +1,5 @@
+> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+
 Each implementation task below is **one red → green slice** for one scenario, or for a trivial pair. Scenarios are named `Requirement › Scenario` from `specs/reporting/spec.md`.
 1. Write the test at the named seam (docs/testing.md), with the literal expected values from the spec, and watch it fail for the right reason.
 2. Write only enough code to pass it.

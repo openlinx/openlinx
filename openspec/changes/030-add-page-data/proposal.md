@@ -4,6 +4,8 @@
 
 ## What Changes
 
+> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the minimum. **Deferred to v0.2:** Flesch Reading Ease, the Readability band and the syllable count; `--detect-language` and py3langid; SERP pixel widths; and raw HTML storage (`page_sources`, zstd, `--store-html/--no-store-html`).
+
 - **New crawl-store tables.** Each follows the table conventions of `015-add-crawl-store`, is described column by column in `spider schema` and is documented in `docs/schema.md`. Every table and column is added in the TDD slice whose scenario first needs it.
   - `pages`: one row per Page. This is the flat Page record with all 94 Internal-tab columns: identity and response, titles and headings, directives, size, content, links and structured data.
   - `links`: one row per Link that `020-add-crawl-core` discovers, enriched with what analysis needs: the element and attribute, anchor or alt text, `rel` flags, the internal/external flag and the Content Area flag. The Link types are those of 020's Link type table.

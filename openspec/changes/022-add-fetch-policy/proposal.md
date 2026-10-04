@@ -13,6 +13,8 @@ The response headers must also be stored, without cookie values, because `page -
 
 ## What Changes
 
+> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the minimum: timeouts and retries, redirects, body and URL limits, `--user-agent`, gzip, deflate and br, TLS trust, the Resource checks and `response_headers`. **Deferred to v0.2:** `--header`, `--auth`, `--proxy` and the proxy variables, the ALPN check behind `origins.http_version`, and zstd decoding.
+
 - **Request identity:**
   - `--user-agent <string>`. The default is `spider/<version> (+<project URL>)`.
   - `--header "Name: Value"`, repeatable, setting `crawl.header`.

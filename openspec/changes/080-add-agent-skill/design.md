@@ -1,3 +1,5 @@
+> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+
 ## Context
 
 See proposal.md for the motivation. This change adds no crawl behaviour. It packages knowledge that other changes own:
