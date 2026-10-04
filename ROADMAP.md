@@ -91,16 +91,16 @@ If a change needs something another change owns, it depends on that change inste
     - Formats are `json|jsonl|table`. The `csv` format, the CSV policy and `-o` belong to 050.
     - Also: the paging envelope, exit codes, `spider commands --format json` (including each Command's output kind), and the global flags.
 - **015-add-crawl-store**:
-  - One SQLite file per Crawl and crawl ids, including ids chosen by the caller and reserved (needed by `--detach`).
-  - The `crawl` and `seeds` tables.
-  - The transactional writer: units of work mixing inserts, updates and reads, flushed in batches. A crash loses at most the unflushed batch.
-  - WAL, with a network-drive fallback and a `store.journal_mode` override.
-  - Read-only access, with two stated exceptions: control rows written by other processes, and a reader marking a dead Crawl `interrupted`.
-  - Migrations and versioning.
+  - One SQLite file per Crawl, and crawl ids.
+  - The `crawl` and `seeds` tables. Counts are derived from tables, never stored on `crawl`.
+  - The transactional writer: units of work mixing inserts, updates and reads, flushed in batches. A crash loses at most the unflushed batch. Opening it runs a rolled-back write check (`crawl_not_writable`).
+  - WAL with `synchronous=NORMAL`, a rollback journal on UNC paths, and a `store.journal_mode` override. **(v0.2)** network-drive detection from the mount table.
+  - Read-only access that releases the file after each operation, and `crawl_schema_too_new` for files from a newer tool.
+  - Schema versioning. No migrations before v0.1; the first schema change after v0.1 brings them, with a migration test from every published schema version.
   - `spider schema [TABLE]`, with table order fixed by change number.
   - The `--crawl latest|<id>|<path>` option used by every query Command.
-  - Redaction of secrets in recorded commands and config, both whole values and partial (`Cookie: ***`, `user:***@proxy`).
-  - Table conventions, and `docs/schema.md` as the contract: the public schema reference of [ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md), in v0.1.
+  - Redaction of secrets in recorded commands and config: whole values (`***`) and URL passwords (`user:***@proxy`). 022 adds the header shape (`Cookie: ***`) in v0.2.
+  - Table conventions, and `docs/schema.md` as the contract: the public schema reference of [ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md), in v0.1. It is checked against the declared schema, and a new crawl file against both through `PRAGMA table_info`.
 - **020-add-crawl-core**:
   - Spider mode (`crawl <url>`) and URL normalisation.
   - **Scope:** `--scope host|subdomains|subfolder`, `--subdomains`, `--include/--exclude`, `--max-depth`, `--max-urls` (default 10,000; reaching it leaves the Crawl resumable), `--strip-params`.
@@ -173,6 +173,7 @@ If a change needs something another change owns, it depends on that change inste
   - **(v0.1.1)** `status`, which detects a dead process.
   - **(v0.1.1)** `stop` (`--wait`).
   - **(v0.1.1)** The recorded runs and control requests behind them, and the command recorded for Crawls started through MCP.
+  - **(v0.1.1)** Moved from 015 on 2026-10-05: the writer claim (`crawl_locked`) and liveness, recording a dead Crawl `interrupted`, control writes by processes without the claim, and reserved crawl ids (`<id>.log`, `crawl_id_taken`).
   - **(v0.2)** Detached List mode, where the parent stores the Seeds before spawning the Crawl.
   - **(v0.2)** `resume`. Resume works for `stopped`, `interrupted` and `failed` Crawls, asks again for secrets, and accepts a higher `--max-urls`.
   - **(v0.2)** `crawl --dry-run`: the checked config, the equivalent command, and a URL estimate that may be `null`.
@@ -244,6 +245,9 @@ The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min join
 **Re-grounding checklist** (what to fix or design when each change is re-grounded):
 - 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
 - 080: `design.md:95` and task 7.8 still name 100's release pipeline for the Skill-copy check, which is now 085's.
+- 060: own what moved from 015 (see 060's entry): its design still calls `015`'s `check_writer`, `write_control`, reservation and `crawl_id_taken`, and its spec and tasks rely on them.
+- 026: `psutil` is no longer a dependency of 015; add it as a test dependency if the pool is built.
+- 020–050: no Alembic revision per change before v0.1; tables are added to the declared schema and `docs/schema.md` in the same slice (015 D5, D6).
 - 040: every v0.1 Rule ships a reproducing SQL query over the public schema. Post-crawl Rules are evaluated by it; for per-URL Rules evaluated in Python, a test checks that the Python result equals the query over the stored Crawl. `rules show <id>` prints the query, and an Issue can point to it.
 
 ## v0.2: crawl control, reports, CI gate, link graph
