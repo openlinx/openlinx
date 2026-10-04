@@ -43,7 +43,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.7 **Guard:** "Unwritable data folder" at seam 2, with a real `H/.spider` that is a file. It passed at once: the data folder comes from `010`'s Workspace creation, which already maps the failed `mkdir` to `workspace_not_writable`.
 
   Done when: creation fails with `workspace_not_writable` and `details.path`, before any crawl file exists.
-- [ ] 1.8 Docs: start `docs/crawl-store.md` with crawl files and the data folder.
+- [x] 1.8 Docs: start `docs/crawl-store.md` with crawl files and the data folder.
 - [ ] 1.9 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. New crawl ids (slice)

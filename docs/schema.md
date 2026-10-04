@@ -2,7 +2,7 @@
 
 Every Crawl is one SQLite file, and its tables are a public, versioned contract ([ADR-0002](adr/0002-sqlite-crawl-store-public-schema.md)): agents and people may query them directly with read-only SQL. This page is the reference for those tables. Terms follow [CONTEXT.md](../CONTEXT.md).
 
-This page is written by hand, for people and agents. A test compares it with the schema the tool declares, so the two cannot drift apart.
+This page is written by hand, for people and agents. A test compares it with the schema the tool declares, so the two cannot drift apart. Where crawl files live and how they are written is in [crawl-store.md](crawl-store.md).
 
 ## How to read a table section
 
