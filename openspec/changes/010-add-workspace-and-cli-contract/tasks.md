@@ -9,7 +9,7 @@ Scenario names are the `#### Scenario:` titles in `specs/<capability>/spec.md`. 
 - seam 2: the Workspace API
 - seam 4: pure logic
 
-"The fixture app" is the app from `build_app(extra=…)` with the contract fixture Commands and the `example` settings table (design D8). The only test double is `FakeClock`.
+"The fixture app" is the app from `build_app(extra=…)` with the contract fixture Commands, the `example` settings table and, from task 9.3, the keyed `groups` table (design D8). The only test double is `FakeClock`.
 
 A **guard** is a test for a scenario that earlier code already satisfies. It passes on its first run, and it is kept to pin the contract.
 
@@ -118,51 +118,100 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.8 Docs: add the formats and JSON Lines to `docs/cli.md`.
 - [x] 5.9 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
-## 6. Paging, fields and cursors (seam 1, example list Command)
+## 6. Paging, fields and cursors (seams 4 and 1, example list Command)
 
-- [ ] 6.1 Drive "First page" (cli-contract). Green: the in-memory pager, `--limit`, and the cursor codec of design D6.
-- [ ] 6.2 Drive "Following cursors" (cli-contract).
-- [ ] 6.3 Drive "Everything on one page" and "Default limit" (cli-contract), a trivial pair, using the 60-item fixture list.
-- [ ] 6.4 Drive "Count only" (cli-contract).
-- [ ] 6.5 **Guard:** "Same request, same output" (cli-contract).
-- [ ] 6.6 Drive "Limit above the maximum" and "Negative limit" (cli-contract), a trivial pair.
-- [ ] 6.7 Drive "Limit of the wrong type" (cli-contract). Green: map Click `BadParameter` to `invalid_value`.
-- [ ] 6.8 Drive "Default fields" and "Fields in the requested order" (cli-contract), a trivial pair. Green: `--fields`, and the default fields from `@command_meta`.
-- [ ] 6.9 Drive "All fields" (cli-contract).
-- [ ] 6.10 Drive "Unknown field" (cli-contract). Green: `unknown_field` with `details.available`.
-- [ ] 6.11 Drive "A different limit continues the list" (cli-contract).
-- [ ] 6.12 Drive "Cursor from a different request" (cli-contract). Green: the fingerprint and `invalid_cursor`.
-- [ ] 6.13 Drive "Garbage cursor" (cli-contract).
-- [ ] 6.14 Drive "More items notice" (cli-contract). Green: the info line `more_items` for `jsonl` and `table`.
-- [ ] 6.15 Docs: add paging, `--fields` and cursors to `docs/cli.md`.
-- [ ] 6.16 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
+The paging logic lives in the pure module `spider.output.paging` (design D6): the cursor codec, the fingerprint, the `Page(items, total, next_cursor)` type, field selection and the in-memory pager. It imports only the standard library, orjson and `spider`, never Click. `050` builds SQL keyset paging on the same `Page` and codec, and `090` calls it without Click.
+
+- [ ] 6.1 Drive "Cursor round trip" and "Cursor characters" (cli-contract) at seam 4, a trivial pair. Green: `spider.output.paging` with the cursor codec of design D6, without padding.
+- [ ] 6.2 Drive "Undecodable cursor" (cli-contract) at seam 4, table-driven: `abc`, the empty string, base64 that is not JSON, a wrong `v`, a missing `k`, and a different fingerprint. Green: the codec's validation, which raises `invalid_cursor`.
+- [ ] 6.3 Drive "First page" (cli-contract) at seam 1. Green:
+  - `Page(items, total, next_cursor)` and the in-memory pager in `spider.output.paging`
+  - `--limit` and `--cursor`
+  - the example list Command returns a `Page`. The `@command_meta` wrapper only adapts a `Page` to the formats: it never slices, pages or projects items.
+- [ ] 6.4 Drive "Following cursors" (cli-contract).
+- [ ] 6.5 Drive "Everything on one page" and "Default limit" (cli-contract), a trivial pair, using the 60-item fixture list.
+- [ ] 6.6 Drive "Count only" (cli-contract).
+- [ ] 6.7 **Guard:** "Same request, same output" (cli-contract).
+- [ ] 6.8 Drive "Limit above the maximum" and "Negative limit" (cli-contract), a trivial pair.
+- [ ] 6.9 Drive "Limit of the wrong type" (cli-contract). Green: map Click `BadParameter` to `invalid_value`.
+- [ ] 6.10 Drive "Default fields" and "Fields in the requested order" (cli-contract), a trivial pair. Green: `--fields`, and field selection in `spider.output.paging`, with the default fields from `@command_meta`.
+- [ ] 6.11 Drive "Default format comes first" and "Default fields are available" (cli-contract), a trivial pair. Green: `check_command` refuses a Command whose `--format` default is not `formats[0]`, or whose default fields are not a subset of `available`. Today the second would surface as a `KeyError` at run time.
+- [ ] 6.12 Drive "All fields" (cli-contract).
+- [ ] 6.13 Drive "Unknown field" (cli-contract). Green: `unknown_field` with `details.available`.
+- [ ] 6.14 Drive "A different limit continues the list" (cli-contract).
+- [ ] 6.15 Drive "Cursor from a different request" (cli-contract). Green: the fingerprint in `spider.output.paging`, from the Command path and the arguments that select or order items.
+- [ ] 6.16 **Guard:** "Garbage cursor" (cli-contract) at seam 1. The codec of 6.2 already rejects it.
+- [ ] 6.17 Drive "More items notice" (cli-contract). Green: the info line `more_items` for `jsonl` and `table`.
+- [ ] 6.18 Docs: add paging, `--fields` and cursors to `docs/cli.md`.
+- [ ] 6.19 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Progress events, partial results and diagnostics
 
-- [ ] 7.1 Drive "Event line" (cli-contract) at seam 4, with `FakeClock`. Green: the event encoder.
-- [ ] 7.2 Drive "The result goes to stdout" (cli-contract) at seam 1, with the fixture progress Command. Green: `Output.event`.
-- [ ] 7.3 Drive "Events go to stderr" (cli-contract) at seam 1.
-- [ ] 7.4 Drive "Events and diagnostics share stderr" (cli-contract) at seam 1.
-- [ ] 7.5 Drive "The result of a failed outcome is printed" (cli-contract) at seam 1. Green: `Outcome(result, error)`.
-- [ ] 7.6 Drive "One error and its exit code" (cli-contract) at seam 1.
-- [ ] 7.7 Drive "Unexpected failure" (cli-contract) at seam 1, with the fixture Command that raises. Green: `internal_error` with exit code 70 and `details.traceback`.
-- [ ] 7.8 Drive "A warning inside a result" (cli-contract) at seam 1. Green: `Diagnostic.to_json()`.
-- [ ] 7.9 Docs: add progress events, partial results and diagnostics inside results to `docs/cli.md`.
-- [ ] 7.10 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+The streams and the Reporter follow design D3: `Output(stdout, stderr)` takes its byte streams and is built once, in the runner. Every stderr line is written under one `threading.Lock` and flushed. Services report through the `Reporter` protocol, never through `Output`.
 
-## 8. Global flags and the complete self-description (seam 1)
+- [ ] 7.1 Drive "Event line" (cli-contract) at seam 4, with `FakeClock`. Green: the event encoder.
+- [ ] 7.2 Drive "The result goes to stdout" (cli-contract) at seam 1, with the fixture progress Command. Green:
+  - `Output(stdout, stderr)` takes its byte streams. The runner builds it once from `sys.stdout.buffer` and `sys.stderr.buffer`, and `spider.output.writer` no longer reads `sys.*`.
+  - the `Reporter` protocol: `warn(diagnostic)` and `event(name, **data)`
+  - the CLI reporter, which writes through `Output` and is reached from the `Invocation`
+  - `init`'s `workspace_nested` warning goes through the reporter
+- [ ] 7.3 Drive "Events go to stderr" (cli-contract) at seam 1.
+- [ ] 7.4 **Guard:** "Events and diagnostics share stderr" (cli-contract), as a real process with `run_cli_process`, proving that the lines come out in emission order.
+- [ ] 7.5 Drive "A warning is readable at once" (cli-contract) as a real process, with a fixture Command that warns and then waits for a signal file. Green: every stderr line, event or diagnostic, is written under one `threading.Lock` and flushed. Today `Output.diagnostic` never flushes, and a piped `sys.stderr.buffer` is block-buffered.
+- [ ] 7.6 Drive "The result of a failed outcome is printed" (cli-contract) at seam 1. Green: `Outcome(result, error)`.
+- [ ] 7.7 Drive "One error and its exit code" (cli-contract) at seam 1.
+- [ ] 7.8 Drive "Unexpected failure" (cli-contract) at seam 1, with the fixture Command that raises. Green: `internal_error` with exit code 70 and `details.traceback`.
+- [ ] 7.9 Drive "A warning inside a result" (cli-contract) at seam 1. Green: `Diagnostic.to_json()`.
+- [ ] 7.10 Docs: add progress events, partial results, the order and flushing of stderr lines, and diagnostics inside results to `docs/cli.md`.
+- [ ] 7.11 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+
+## 8. Global flags, the error-code registry and the complete self-description (seam 1)
+
+Each part of the self-description has one source (design D5 and D7): options and arguments come from the Click params, output kinds, formats and fields from `@command_meta`, and diagnostics from the error-code registry. Nothing is listed twice.
 
 - [ ] 8.1 Drive "Before the Command name" (cli-contract). Green: the `argv` check with its hint.
 - [ ] 8.2 **Guard:** "After the Command name" and "A flag the Command does not use" (cli-contract).
 - [ ] 8.3 Drive "Global flags of init" (cli-contract). Green: `global` in the option metadata.
-- [ ] 8.4 Drive "Entry of a document Command" (cli-contract). Green: `output`, `events`, `formats` and `fields` in the entries.
+- [ ] 8.4 Drive "Entry of a document Command" (cli-contract). Green: `output`, `events`, `formats` and `fields` in the entries, derived from `@command_meta`.
 - [ ] 8.5 Drive "Entry of a list Command" (cli-contract), with the fixture app.
-- [ ] 8.6 Drive "Option details" (cli-contract).
-- [ ] 8.7 Drive "Error codes of this change" and "Naming rule for input errors" (cli-contract), a trivial pair. Green: register every code of this change.
-- [ ] 8.8 Drive "The proxy variables are the one exception" (workspace). Green: the `environment` key of `spider commands`, which lists the proxy family that `022` honours.
-- [ ] 8.9 **Guard:** "Detection signals change nothing" (workspace), with `CODEX_SANDBOX_NETWORK_DISABLED=1` set for one of the two runs.
-- [ ] 8.10 Drive "Same description on every OS" (cli-contract). Compare the `init` and `commands` entries with hand-written expected JSON in `tests/contract/commands/`, on every OS.
-- [ ] 8.11 Docs:
-  - Add "Using spider" (`init`, `commands`) to `README.md`.
-  - Add the output layer and the settings registry to `docs/architecture.md`.
-- [ ] 8.12 Review: run the code-review skill on group 8's commits and on the whole change, then refactor with the whole suite green.
+- [ ] 8.6 Drive "Option details" (cli-contract). Green: option and argument entries derived from the Click params.
+- [ ] 8.7 Drive "Error codes of this change" and "Warning and info codes of this change" (cli-contract), a trivial pair. Green: the error-code registry of design D5.
+  - Each code is one constant holding its code, level, exit code and description.
+  - `SpiderError` takes that constant instead of a loose string. Migrate every call site: `init.py`, `creation.py`, `discovery.py`, `settings.py`, `runner.py` and `meta.py`.
+  - `EXIT_CODE_DESCRIPTIONS` folds into the `ExitCode` enum, so each member carries its description.
+  - `spider commands` lists `diagnostics` from the registry.
+- [ ] 8.8 **Guard:** "Naming rule for input errors" (cli-contract). The test reads the same registry that `spider commands` prints and that `090` maps errors from.
+- [ ] 8.9 Drive "The proxy variables are the one exception" (workspace). Green: the `environment` key of `spider commands`, which lists the proxy family that `022` honours.
+- [ ] 8.10 **Guard:** "Detection signals change nothing" (workspace), with `CODEX_SANDBOX_NETWORK_DISABLED=1` set for one of the two runs.
+- [ ] 8.11 Drive "Same description on every OS" (cli-contract). Compare the `init` and `commands` entries with hand-written expected JSON in `tests/contract/commands/`, on every OS.
+- [ ] 8.12 Docs: add "Using spider" (`init`, `commands`) to `README.md`, and the error-code registry to `docs/cli.md`.
+- [ ] 8.13 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+
+## 9. Foundations for later changes
+
+Each task is one commit. Guards and refactors are allowed here, and a refactor names the scenarios that must stay green.
+
+- [ ] 9.1 Drive "Initialising without the CLI" (workspace) at seam 2. Green, following design D9:
+  - `spider.services.workspace.init_workspace(request, tables, reporter)`, with a typed `InitRequest` and `InitResult`
+  - the `Collected` reporter, which keeps warnings and events in memory. It is production code: `090` uses it to put warnings into a tool result.
+  - `spider.cli.init` becomes a thin adapter: it builds the request from the flags, calls the service with the CLI reporter, and returns the result. Every group 3 and group 4 scenario stays green.
+- [ ] 9.2 Drive "An unset setting in the template" (workspace), with `example.token` added to the fixture table. Green: the table rules of design D2 allow a `None` default, and the template writes `# <key> =` for it.
+- [ ] 9.3 Drive "Named entries" and "Unknown key in a named entry" (workspace), a trivial pair, with the fixture keyed table `[groups]`. Green:
+  - a registered table may be `dict[str, V]`, where V is a table model or a TOML literal type (design D2)
+  - the closest-key hint walks into the entries of a keyed table
+- [ ] 9.4 Drive "A keyed table in the template" (workspace). Green: the template writes a keyed table as its description and a commented `# [<table>.<name>]` header, followed by its entry's settings.
+- [ ] 9.5 Drive "Settings tables load with the settings" (cli-contract) as a real process. Green:
+  - tables are registered as `"module:Class"` references, resolved only when settings load (design D2)
+  - `register()` no longer checks the table rules. A test resolves every table registered by `build_app()` and by the fixture app, and checks the rules of D2 on each.
+- [ ] 9.6 Drive "A secret option inherits from its setting" and "A secret option without a setting" (cli-contract), a trivial pair, with the fixture `example` settings Command. Green (design D7):
+  - `secret` is declared once, on the settings field
+  - an option mapped to a setting inherits it, and `check_command` refuses such an option that also declares `secret`
+  - an option without a setting declares `secret` itself
+- [ ] 9.7 Drive "Help starts light" and "The self-description starts light" (cli-contract), a trivial pair, replacing 000's deny-list guard. Green: the allowlist of design D10, checked by running `spider --help` and `spider commands` in a subprocess and reading `sys.modules`. Today `spider --help` loads rich through Typer's rich help, so this task turns rich help off, or records in D10 why rich stays allowed for `--help`.
+- [ ] 9.8 Refactor: the Typer compatibility module of design D10. Move the `typer._click` imports of `spider.cli.runner` into `spider.cli.click_compat`, ban `typer._click` elsewhere with ruff `banned-api`, and pin `typer>=0.27.2,<0.28`. "Unknown Command", "Limit of the wrong type" and the missing-argument test stay green.
+- [ ] 9.9 Docs: in `docs/architecture.md`:
+  - add the output layer, the `Reporter` and the services rule: a Command is an adapter plus a service, and `090` calls the service directly
+  - add the settings rules of D2: table ownership, `None` defaults, keyed tables, lazy references, and secrets on the field
+  - add the error-code registry and the startup allowlist
+  - check the HTTP client text against ADR-0001 (aiohttp behind a Fetcher interface), and fix any drift
+- [ ] 9.10 Review: run the code-review skill on the whole change, then refactor with the whole suite green.
