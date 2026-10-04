@@ -2,6 +2,8 @@
 
 import base64
 import re
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import orjson
@@ -10,6 +12,32 @@ from spider.output.diagnostics import UsageError
 
 CURSOR_VERSION = 1
 CURSOR_CHARACTERS = re.compile(r"[A-Za-z0-9_-]+")
+
+
+@dataclass(frozen=True)
+class Fields:
+    available: tuple[str, ...]
+    default: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Page:
+    items: Sequence[Mapping[str, Any]]
+    total: int
+    next_cursor: str | None
+
+
+def paginate(
+    items: Sequence[Mapping[str, Any]], *, limit: int, fingerprint: str, fields: Sequence[str]
+) -> Page:
+    # A static list never changes under the reader, so the keyset can be the next index.
+    end = limit
+    next_cursor = encode_cursor(fingerprint, end) if end < len(items) else None
+    return Page(project(items[:end], fields), len(items), next_cursor)
+
+
+def project(items: Sequence[Mapping[str, Any]], fields: Sequence[str]) -> list[dict[str, Any]]:
+    return [{name: item[name] for name in fields} for item in items]
 
 
 def encode_cursor(fingerprint: str, keyset: Any) -> str:

@@ -22,3 +22,14 @@ def test_a_list_table_shows_items_not_the_envelope() -> None:
     stdout = run_cli("example-list", "--format", "table", app=example_app()).stdout
 
     assert (b"next_cursor" in stdout, b"items" in stdout) == (False, False)
+
+
+def test_first_page() -> None:
+    page = run_cli("example-list", "--limit", "2", app=example_app()).json()
+
+    assert (page["total"], page["items"], type(page["next_cursor"]), page["next_cursor"] != "") == (
+        5,
+        [{"n": 1}, {"n": 2}],
+        str,
+        True,
+    )

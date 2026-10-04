@@ -7,15 +7,10 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from spider.output.diagnostics import UsageError
+from spider.output.paging import Fields, Page
 from spider.output.writer import Document, Format, Rows
 
 type OutputKind = Literal["document", "list", "rows"]
-
-
-@dataclass(frozen=True)
-class Fields:
-    available: tuple[str, ...]
-    default: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -58,8 +53,7 @@ def command_meta[**P](
                 return Document(result, output_format, "document")
             if meta.output == "rows":
                 return Rows(_project_all(result, meta.fields), output_format)
-            limit = cast(int, kwargs["limit"])
-            return Document(_envelope(result, meta.fields, limit), output_format, "list")
+            return Document(_envelope(result), output_format, "list")
 
         run.command_meta = meta  # type: ignore[attr-defined]
         return run
@@ -106,6 +100,5 @@ def _project_all(rows: Iterable[Mapping[str, Any]], fields: Fields) -> Iterator[
         yield _project(row, fields)
 
 
-def _envelope(items: Sequence[Mapping[str, Any]], fields: Fields, limit: int) -> dict[str, Any]:
-    page = [_project(item, fields) for item in items[:limit]]
-    return {"total": len(items), "items": page, "next_cursor": None}
+def _envelope(page: Page) -> dict[str, Any]:
+    return {"total": page.total, "items": page.items, "next_cursor": page.next_cursor}

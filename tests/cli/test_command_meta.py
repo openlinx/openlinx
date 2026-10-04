@@ -6,8 +6,9 @@ from typing import Any
 import pytest
 
 from spider.cli.app import AppExtra, build_app
-from spider.cli.meta import Fields, command_meta
+from spider.cli.meta import command_meta
 from spider.cli.options import FormatOpt
+from spider.output.paging import Fields
 from spider.output.writer import Format
 
 
