@@ -40,7 +40,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: creating a Crawl creates the data folder, its `.gitignore` and `crawls/` when they are missing, reusing `010`'s Workspace creation.
 - [x] 1.6 **Guard:** "No settings file is created by storing a Crawl", at seam 2.
-- [ ] 1.7 Drive "Unwritable data folder" at seam 2, with a real `H/.spider` that is a file.
+- [x] 1.7 **Guard:** "Unwritable data folder" at seam 2, with a real `H/.spider` that is a file. It passed at once: the data folder comes from `010`'s Workspace creation, which already maps the failed `mkdir` to `workspace_not_writable`.
 
   Done when: creation fails with `workspace_not_writable` and `details.path`, before any crawl file exists.
 - [ ] 1.8 Docs: start `docs/crawl-store.md` with crawl files and the data folder.
