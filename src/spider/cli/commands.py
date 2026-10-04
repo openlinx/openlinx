@@ -9,11 +9,12 @@ from typing import Any, cast
 import typer
 from typer.core import TyperArgument, TyperGroup
 
-from spider import APP_NAME, __version__
+from spider import __version__
 from spider.cli.click_compat import Command, Parameter
 from spider.cli.meta import CommandMeta, Example, command_meta, meta_of
 from spider.cli.options import FORMAT_PARAMETER, FormatOpt, options_with_meta
 from spider.cli.runner import Invocation
+from spider.naming import APP_NAME
 from spider.output.codes import DECLARED, ExitCode
 from spider.output.writer import Format
 from spider.workspace.tables import SettingsTables

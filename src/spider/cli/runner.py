@@ -9,13 +9,13 @@ from typing import Any, NoReturn
 import typer
 from typer.core import TyperGroup
 
-from spider import APP_NAME
 from spider.cli.click_compat import Context as ClickContext
 from spider.cli.click_compat import MissingParameter
 from spider.cli.click_compat import UsageError as ClickUsageError
 from spider.cli.meta import formats_hint, meta_of
 from spider.cli.options import FORMAT_PARAMETER, options_with_meta
 from spider.clock import SystemClock
+from spider.naming import APP_NAME
 from spider.output.codes import INTERNAL_ERROR, INTERRUPTED, INVALID_VALUE, USAGE_ERROR, ExitCode
 from spider.output.diagnostics import SpiderError
 from spider.output.reporter import CliReporter, Reporter

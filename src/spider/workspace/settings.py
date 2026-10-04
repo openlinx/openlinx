@@ -1,4 +1,4 @@
-"""Resolved settings: spider.toml and flags (design D2 of 010-add-workspace-and-cli-contract)."""
+"""Resolved settings: settings file and flags (design D2 of 010-add-workspace-and-cli-contract)."""
 
 import difflib
 import re
@@ -143,7 +143,7 @@ def _sources(settings_file: Path) -> type[BaseSettings]:
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
-            # No env, .env or secrets source: settings come only from flags and spider.toml.
+            # No env, .env or secrets source: settings come only from flags and the settings file.
             return (init_settings, TomlConfigSettingsSource(settings_cls, toml_file=settings_file))
 
     return Root

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Literal
 
-from spider import APP_NAME
+from spider.naming import SETTINGS_FILE_NAME
 
 type Level = Literal["error", "warning", "info"]
 
@@ -25,7 +25,7 @@ class ExitCode(IntEnum):
         "the command line is wrong: an unknown Command, flag or name, "
         "or a missing or invalid value",
     )
-    CONFIG = 3, f"{APP_NAME}.toml or a setting is invalid"
+    CONFIG = 3, f"{SETTINGS_FILE_NAME} or a setting is invalid"
     NOT_FOUND = 4, "a Workspace, Crawl or item named on the command line does not exist"
     BUSY = 5, "another process holds the Crawl"
     INCOMPATIBLE = 6, "the crawl file cannot be used by this version"
@@ -85,7 +85,7 @@ SETTINGS_INVALID = _declare(
     "settings_invalid",
     "error",
     ExitCode.CONFIG,
-    f"{APP_NAME}.toml cannot be read or breaks the settings rules; "
+    f"{SETTINGS_FILE_NAME} cannot be read or breaks the settings rules; "
     "details.errors lists each problem.",
 )
 WORKSPACE_NOT_FOUND = _declare(

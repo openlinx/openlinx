@@ -5,10 +5,10 @@ from typing import Any
 
 import typer
 
-from spider import APP_NAME
 from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, WorkspaceOpt
 from spider.cli.runner import Invocation
+from spider.naming import APP_NAME
 from spider.output.writer import Format
 from spider.services.workspace import InitRequest, init_workspace
 

@@ -3,7 +3,7 @@
 import errno
 from pathlib import Path
 
-from spider import APP_NAME
+from spider.naming import APP_NAME
 from spider.output.codes import WORKSPACE_NOT_WRITABLE
 from spider.output.diagnostics import SpiderError
 from spider.workspace.discovery import Workspace

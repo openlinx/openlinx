@@ -10,8 +10,8 @@ from typing import Annotated, Any
 import typer
 from typer.core import TyperOption
 
-from spider import APP_NAME
 from spider.cli.click_compat import Command
+from spider.naming import DATA_DIR_NAME, GLOBAL_DATA_DIR, SETTINGS_FILE_NAME
 from spider.output.writer import Format
 
 
@@ -35,7 +35,7 @@ WorkspaceOpt = Annotated[
         "--workspace",
         # Symbolic, not the real home path, so the self-description is the same on every OS.
         help="The Workspace folder. Without it, the nearest folder upwards that holds "
-        f".{APP_NAME}/ or {APP_NAME}.toml, else the global Workspace ~/.{APP_NAME}.",
+        f"{DATA_DIR_NAME}/ or {SETTINGS_FILE_NAME}, else the global Workspace {GLOBAL_DATA_DIR}.",
     ),
     GLOBAL,
 ]

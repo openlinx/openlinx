@@ -6,11 +6,12 @@ from typing import Annotated, Any
 
 import typer
 
-from spider import APP_NAME, __version__
+from spider import __version__
 from spider.cli.commands import commands
 from spider.cli.init import init
 from spider.cli.meta import check_command
 from spider.cli.runner import Invocation, SpiderGroup
+from spider.naming import APP_NAME
 from spider.workspace.tables import SettingsTables
 
 

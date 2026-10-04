@@ -1,10 +1,9 @@
-"""The commented spider.toml that init writes (design D2 of 010-add-workspace-and-cli-contract)."""
+"""The commented settings file init writes (design D2 of 010-add-workspace-and-cli-contract)."""
 
 import json
 from typing import Any
 
-from spider import APP_NAME
-from spider.workspace.discovery import SETTINGS_FILE_NAME
+from spider.naming import APP_NAME, SETTINGS_FILE_NAME
 from spider.workspace.tables import SettingsTables, keyed_entry
 
 HEADER = (

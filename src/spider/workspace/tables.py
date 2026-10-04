@@ -1,4 +1,4 @@
-"""The registry of spider.toml tables (design D2 of 010-add-workspace-and-cli-contract)."""
+"""The registry of settings tables (design D2 of 010-add-workspace-and-cli-contract)."""
 
 import importlib
 import math

@@ -40,7 +40,7 @@ def init_workspace(request: InitRequest, tables: SettingsTables, reporter: Repor
     from spider.workspace.settings import load_settings
 
     workspace = target_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
-    # Loaded only to validate spider.toml, before anything is created.
+    # Loaded only to validate the settings file, before anything is created.
     load_settings(workspace, tables)
     created = create_workspace(workspace, settings_template(tables))
     parent = enclosing_workspace(workspace, request.home)

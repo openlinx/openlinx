@@ -3,12 +3,9 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from spider import APP_NAME
+from spider.naming import APP_NAME, DATA_DIR_NAME, SETTINGS_FILE_NAME
 from spider.output.codes import WORKSPACE_NOT_FOUND
 from spider.output.diagnostics import SpiderError
-
-DATA_DIR_NAME = f".{APP_NAME}"
-SETTINGS_FILE_NAME = f"{APP_NAME}.toml"
 
 
 @dataclass(frozen=True)
