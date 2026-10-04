@@ -44,7 +44,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: creation fails with `workspace_not_writable` and `details.path`, before any crawl file exists.
 - [x] 1.8 Docs: start `docs/crawl-store.md` with crawl files and the data folder.
-- [ ] 1.9 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [x] 1.9 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. New crawl ids (slice)
 

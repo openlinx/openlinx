@@ -23,7 +23,14 @@ def test_first_crawl_in_the_global_workspace(temp_workspace: TempWorkspace) -> N
 
     create_crawl(workspace, crawl_id="20260927-140312-k3f9")
 
-    assert (temp_workspace.home / ".spider" / "crawls" / "20260927-140312-k3f9.sqlite").is_file()
+    data = temp_workspace.home / ".spider"
+    assert (
+        (data / "crawls" / "20260927-140312-k3f9.sqlite").is_file(),
+        (data / ".gitignore").is_file(),
+    ) == (
+        True,
+        True,
+    )
 
 
 def test_no_settings_file_is_created_by_storing_a_crawl(temp_workspace: TempWorkspace) -> None:

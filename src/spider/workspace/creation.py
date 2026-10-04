@@ -27,12 +27,8 @@ def create_data_folder(workspace: Workspace) -> list[Path]:
         return [
             *_folder(folder),
             *_file(folder / ".gitignore", GITIGNORE),
-            *_folder(crawls_dir(workspace)),
+            *_folder(workspace.crawls_dir),
         ]
-
-
-def crawls_dir(workspace: Workspace) -> Path:
-    return workspace.data_dir / "crawls"
 
 
 @contextmanager

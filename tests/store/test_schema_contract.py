@@ -94,8 +94,14 @@ def test_a_new_file_matches_the_declaration(temp_workspace: TempWorkspace) -> No
 
     declared = {
         table["name"]: [
-            (c["name"], c["type"], c["nullable"], c["primary_key"], c["references"])
-            for c in table["columns"]
+            (
+                column["name"],
+                column["type"],
+                column["nullable"],
+                column["primary_key"],
+                column["references"],
+            )
+            for column in table["columns"]
         ]
         for table in describe_schema()
     }

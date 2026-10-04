@@ -2,7 +2,6 @@
 
 from sqlalchemy import Column, MetaData, Table, Text
 
-# The only definition of the public schema; each change adds its tables here.
 metadata = MetaData()
 
 crawl = Table(

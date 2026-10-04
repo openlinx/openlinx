@@ -1,14 +1,15 @@
 """The schema service behind `spider schema` (design D6 of 015-add-crawl-store)."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Column
-from sqlalchemy.dialects import sqlite
-
-from spider.store.schema import metadata
+if TYPE_CHECKING:
+    from sqlalchemy import Column
 
 
 def describe_schema() -> list[dict[str, Any]]:
+    # Imported here: sqlalchemy stays off the CLI's startup path (design D9).
+    from spider.store.schema import metadata
+
     return [
         {
             "name": table.name,
@@ -20,7 +21,9 @@ def describe_schema() -> list[dict[str, Any]]:
     ]
 
 
-def _column(column: Column[Any]) -> dict[str, Any]:
+def _column(column: "Column[Any]") -> dict[str, Any]:
+    from sqlalchemy.dialects import sqlite
+
     return {
         "name": column.name,
         "description": column.comment,
