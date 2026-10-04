@@ -158,6 +158,8 @@ Items SHALL come in a deterministic order, so the same request against unchanged
 
 An unknown field name SHALL fail with `unknown_field`, with `details.field` and `details.available`.
 
+Spaces around a name SHALL be ignored, and a name given twice SHALL count once, at its first place. An empty name SHALL fail with `invalid_value`.
+
 #### Scenario: Default fields
 - **WHEN** the example list Command runs with `--limit 1`
 - **THEN** `items` is `[{"n":1}]`
@@ -169,6 +171,14 @@ An unknown field name SHALL fail with `unknown_field`, with `details.field` and 
 #### Scenario: All fields
 - **WHEN** the example list Command runs with `--fields all --limit 1`
 - **THEN** `items` is `[{"n":1,"sq":1}]`
+
+#### Scenario: Spaces and repeats in --fields
+- **WHEN** the example list Command runs with `--fields " sq , n,sq" --limit 1`
+- **THEN** `items` is `[{"sq":1,"n":1}]`
+
+#### Scenario: Empty field name
+- **WHEN** the example list Command runs with `--fields n,,sq`
+- **THEN** the exit code is 2, and the error has the code `invalid_value`
 
 #### Scenario: Unknown field
 - **WHEN** the example list Command runs with `--fields n,size`

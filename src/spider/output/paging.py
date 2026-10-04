@@ -58,9 +58,16 @@ def fingerprint(command: str, selection: Mapping[str, Any]) -> str:
 def select_fields(requested: str | None, fields: Fields) -> tuple[str, ...]:
     if requested is None:
         return fields.default
-    if requested == ALL_FIELDS:
+    # Lenient where the meaning is plain: spaces are dropped and a repeat counts once.
+    names = tuple(dict.fromkeys(name.strip() for name in requested.split(",")))
+    if names == (ALL_FIELDS,):
         return fields.available
-    names = tuple(requested.split(","))
+    if "" in names:
+        raise UsageError(
+            "invalid_value",
+            f"--fields {requested!r} has an empty field name.",
+            hint="Separate field names with single commas, such as --fields n,sq.",
+        )
     for name in names:
         if name not in fields.available:
             raise UsageError(

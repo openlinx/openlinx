@@ -94,6 +94,7 @@ With `jsonl` and `table` there is no envelope. When more items exist than were p
 
 - `--fields sq,n` gives each item exactly those keys, in that order: `{"sq":1,"n":1}`.
 - `--fields all` gives every available field, in the Command's order: `{"n":1,"sq":1}`.
+- Spaces around a name are ignored, and a name given twice counts once, at its first place: `--fields " sq , n,sq"` is `--fields sq,n`. An empty name, as in `--fields n,,sq`, is `invalid_value`.
 - Without `--fields`, the Command's default fields apply. `spider commands` lists the available and default fields of every list Command.
 - An unknown field fails with `unknown_field`, which names the field and the available ones:
 

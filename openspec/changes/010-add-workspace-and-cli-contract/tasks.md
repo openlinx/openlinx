@@ -149,21 +149,22 @@ The paging logic lives in the pure module `spider.output.paging` (design D6): th
 
 The streams and the Reporter follow design D3: `Output(stdout, stderr)` takes its byte streams and is built once, in the runner. Every stderr line is written under one `threading.Lock` and flushed. Services report through the `Reporter` protocol, never through `Output`. In the real-process tests, every wait has a hard timeout of a few seconds, so a missing line or signal file fails the test instead of hanging CI. The handshake has no fixed sleeps: each side acts only on what it has read.
 
-- [ ] 7.1 Drive "Event line" (cli-contract) at seam 4, with `FakeClock`. Green: the event encoder.
-- [ ] 7.2 Drive "The result goes to stdout" (cli-contract) at seam 1, with the fixture progress Command. Green:
+- [x] 7.1 Drive "Spaces and repeats in --fields" and "Empty field name" (cli-contract), a trivial pair, decided in the group 6 review. Green: `select_fields` strips each name, keeps the first of a repeated name, and refuses an empty name with `invalid_value`.
+- [ ] 7.2 Drive "Event line" (cli-contract) at seam 4, with `FakeClock`. Green: the event encoder.
+- [ ] 7.3 Drive "The result goes to stdout" (cli-contract) at seam 1, with the fixture progress Command. Green:
   - `Output(stdout, stderr)` takes its byte streams. The runner builds it once from `sys.stdout.buffer` and `sys.stderr.buffer`, and `spider.output.writer` no longer reads `sys.*`.
   - the `Reporter` protocol: `warn(diagnostic)` and `event(name, **data)`
   - the CLI reporter, which writes through `Output` and is reached from the `Invocation`
   - `init`'s `workspace_nested` warning goes through the reporter
-- [ ] 7.3 Drive "Events go to stderr" (cli-contract) at seam 1.
-- [ ] 7.4 **Guard:** "Events and diagnostics share stderr" (cli-contract), as a real process with `run_cli_process`, proving that the lines come out in emission order.
-- [ ] 7.5 Drive "A warning is readable at once" (cli-contract) as a real process, with a fixture Command that warns and then waits for a signal file. Green: every stderr line, event or diagnostic, is written under one `threading.Lock` and flushed. Today `Output.diagnostic` never flushes, and a piped `sys.stderr.buffer` is block-buffered.
-- [ ] 7.6 Drive "The result of a failed outcome is printed" (cli-contract) at seam 1. Green: `Outcome(result, error)`.
-- [ ] 7.7 Drive "One error and its exit code" (cli-contract) at seam 1.
-- [ ] 7.8 Drive "Unexpected failure" (cli-contract) at seam 1, with the fixture Command that raises. Green: `internal_error` with exit code 70 and `details.traceback`.
-- [ ] 7.9 Drive "A warning inside a result" (cli-contract) at seam 1. Green: `Diagnostic.to_json()`.
-- [ ] 7.10 Docs: add progress events, partial results, the order and flushing of stderr lines, and diagnostics inside results to `docs/cli.md`.
-- [ ] 7.11 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [ ] 7.4 Drive "Events go to stderr" (cli-contract) at seam 1.
+- [ ] 7.5 **Guard:** "Events and diagnostics share stderr" (cli-contract), as a real process with `run_cli_process`, proving that the lines come out in emission order.
+- [ ] 7.6 Drive "A warning is readable at once" (cli-contract) as a real process, with a fixture Command that warns and then waits for a signal file. Green: every stderr line, event or diagnostic, is written under one `threading.Lock` and flushed. Today `Output.diagnostic` never flushes, and a piped `sys.stderr.buffer` is block-buffered.
+- [ ] 7.7 Drive "The result of a failed outcome is printed" (cli-contract) at seam 1. Green: `Outcome(result, error)`.
+- [ ] 7.8 Drive "One error and its exit code" (cli-contract) at seam 1.
+- [ ] 7.9 Drive "Unexpected failure" (cli-contract) at seam 1, with the fixture Command that raises. Green: `internal_error` with exit code 70 and `details.traceback`.
+- [ ] 7.10 Drive "A warning inside a result" (cli-contract) at seam 1. Green: `Diagnostic.to_json()`.
+- [ ] 7.11 Docs: add progress events, partial results, the order and flushing of stderr lines, and diagnostics inside results to `docs/cli.md`.
+- [ ] 7.12 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Global flags, the error-code registry and the complete self-description (seam 1)
 
@@ -173,7 +174,7 @@ Each part of the self-description has one source (design D5 and D7): options and
 - [ ] 8.2 **Guard:** "After the Command name" and "A flag the Command does not use" (cli-contract).
 - [ ] 8.3 Drive "Global flags of init" (cli-contract). Green: `global` in the option metadata.
 - [ ] 8.4 Drive "Entry of a document Command" (cli-contract). Green: `output`, `events`, `formats` and `fields` in the entries, derived from `@command_meta`.
-- [ ] 8.5 Drive "Entry of a list Command" (cli-contract), with the fixture app.
+- [ ] 8.5 Drive "Entry of a list Command" (cli-contract), with the fixture app. Also give the fingerprint its Command identity from one source: the Command name that `@command_meta` and registration know, the same string an MCP tool maps to. No list Command passes its name as a literal, and the Click path is not used, because `090`'s services have no Click.
 - [ ] 8.6 Drive "Option details" (cli-contract). Green: option and argument entries derived from the Click params.
 - [ ] 8.7 Drive "Error codes of this change" and "Warning and info codes of this change" (cli-contract), a trivial pair. Green: the error-code registry of design D5.
   - Each code is one constant holding its code, level, exit code and description.

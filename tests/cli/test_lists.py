@@ -171,3 +171,16 @@ def test_count_only_as_lines_still_gives_the_total() -> None:
         "more_items",
         {"total": 5, "next_cursor": None},
     )
+
+
+def test_spaces_and_repeats_in_fields() -> None:
+    result = run_cli("example-list", "--fields", " sq , n,sq", "--limit", "1", app=example_app())
+
+    assert [list(item.items()) for item in result.json()["items"]] == [[("sq", 1), ("n", 1)]]
+
+
+@pytest.mark.parametrize("fields", ["n,,sq", "", " "])
+def test_empty_field_name(fields: str) -> None:
+    result = run_cli("example-list", "--fields", fields, app=example_app())
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_value")
