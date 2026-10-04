@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
+from typer.core import TyperOption
 
 from spider import APP_NAME
+from spider.cli.click_compat import Command
 from spider.output.writer import Format
 
 
@@ -55,7 +57,7 @@ def option_meta(callback: Callable[..., Any], name: str) -> OptionMeta:
     return next((item for item in metadata if isinstance(item, OptionMeta)), OptionMeta())
 
 
-def options_with_meta(command: Any) -> Iterator[tuple[Any, OptionMeta]]:
+def options_with_meta(command: Command) -> Iterator[tuple[TyperOption, OptionMeta]]:
     for param in command.params:
-        if param.param_type_name == "option":
+        if isinstance(param, TyperOption) and command.callback is not None:
             yield param, option_meta(command.callback, str(param.name))

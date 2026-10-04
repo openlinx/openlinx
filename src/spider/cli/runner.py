@@ -7,14 +7,12 @@ from dataclasses import dataclass
 from typing import Any, NoReturn
 
 import typer
-
-# Typer 0.27 vendors Click and does not re-export its UsageError.
-from typer._click.core import Context as ClickContext
-from typer._click.exceptions import MissingParameter
-from typer._click.exceptions import UsageError as ClickUsageError
 from typer.core import TyperGroup
 
 from spider import APP_NAME
+from spider.cli.click_compat import Context as ClickContext
+from spider.cli.click_compat import MissingParameter
+from spider.cli.click_compat import UsageError as ClickUsageError
 from spider.cli.meta import formats_hint, meta_of
 from spider.cli.options import FORMAT_PARAMETER, options_with_meta
 from spider.clock import SystemClock

@@ -1,14 +1,16 @@
 """`spider commands`, the self-description (design D7 of 010-add-workspace-and-cli-contract)."""
 
 import inspect
+from collections.abc import Callable
 from enum import Enum
 from pathlib import PurePath
 from typing import Any, cast
 
 import typer
-from typer.core import TyperGroup
+from typer.core import TyperArgument, TyperGroup
 
 from spider import APP_NAME, __version__
+from spider.cli.click_compat import Command, Parameter
 from spider.cli.meta import CommandMeta, Example, command_meta, meta_of
 from spider.cli.options import FORMAT_PARAMETER, FormatOpt, options_with_meta
 from spider.cli.runner import Invocation
@@ -60,11 +62,12 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
     }
 
 
-def _entry(name: str, command: Any, tables: SettingsTables) -> dict[str, Any]:
-    # build_app refuses a Command without @command_meta, so every entry has one.
-    meta = cast(CommandMeta, meta_of(command.callback))
+def _entry(name: str, command: Command, tables: SettingsTables) -> dict[str, Any]:
+    # build_app refuses a Command without @command_meta, so every entry has a callback with one.
+    callback = cast(Callable[..., Any], command.callback)
+    meta = cast(CommandMeta, meta_of(callback))
     # Source line breaks are not content: each paragraph becomes one line.
-    paragraphs = (inspect.getdoc(inspect.unwrap(command.callback)) or "").split("\n\n")
+    paragraphs = (inspect.getdoc(inspect.unwrap(callback)) or "").split("\n\n")
     doc = "\n\n".join(" ".join(paragraph.split()) for paragraph in paragraphs)
     return {
         "name": name,
@@ -80,7 +83,7 @@ def _entry(name: str, command: Any, tables: SettingsTables) -> dict[str, Any]:
     }
 
 
-def _arguments(command: Any) -> list[dict[str, Any]]:
+def _arguments(command: Command) -> list[dict[str, Any]]:
     return [
         {
             "name": param.name,
@@ -88,14 +91,14 @@ def _arguments(command: Any) -> list[dict[str, Any]]:
             "required": param.required,
             "variadic": param.nargs == -1,
             "default": _json_value(param.default),
-            "description": getattr(param, "help", None),
+            "description": param.help,
         }
         for param in command.params
-        if param.param_type_name == "argument"
+        if isinstance(param, TyperArgument)
     ]
 
 
-def _options(command: Any, meta: CommandMeta, tables: SettingsTables) -> list[dict[str, Any]]:
+def _options(command: Command, meta: CommandMeta, tables: SettingsTables) -> list[dict[str, Any]]:
     entries = []
     for param, extra in options_with_meta(command):
         choices = getattr(param.type, "choices", None)
@@ -123,7 +126,7 @@ def _options(command: Any, meta: CommandMeta, tables: SettingsTables) -> list[di
     return entries
 
 
-def _type(param: Any) -> str:
+def _type(param: Parameter) -> str:
     name = str(param.type.name)
     return TYPE_NAMES.get(name, name)
 
@@ -135,5 +138,5 @@ def _json_value(value: Any) -> Any:
     return value.as_posix() if isinstance(value, PurePath) else value
 
 
-def _long_name(param: Any) -> str:
+def _long_name(param: Parameter) -> str:
     return str(max(param.opts, key=len))
