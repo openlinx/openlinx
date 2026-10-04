@@ -13,6 +13,7 @@ pydantic-settings  # spider.toml settings (design D2 of 010-add-workspace-and-cl
 pydantic  # pydantic-settings: the settings models
 pydantic-core  # pydantic: validation
 annotated-types  # pydantic: constraint metadata
-typing-extensions  # pydantic, pydantic-core and typing-inspection: typing backports
+typing-extensions  # pydantic, pydantic-core, typing-inspection and sqlalchemy: typing backports
 typing-inspection  # pydantic and pydantic-settings: runtime type inspection
 python-dotenv  # pydantic-settings: the .env source, which spider drops (design D2 of 010)
+sqlalchemy  # the crawl store: SQLite through SQLAlchemy 2 Core (ADR-0003, 015-add-crawl-store)
