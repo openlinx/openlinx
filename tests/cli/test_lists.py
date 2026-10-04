@@ -115,3 +115,12 @@ def test_unknown_field() -> None:
         "unknown_field",
         {"field": "size", "available": ["n", "sq"]},
     )
+
+
+def test_a_different_limit_continues_the_list() -> None:
+    app = example_app()
+    cursor = run_cli("example-list", "--limit", "1", app=app).json()["next_cursor"]
+
+    page = run_cli("example-list", "--limit", "2", "--cursor", cursor, app=app).json()
+
+    assert page["items"] == [{"n": 2}, {"n": 3}]
