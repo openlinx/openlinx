@@ -12,6 +12,15 @@ from spider.cli.options import FormatOpt, option_meta
 from spider.output.codes import DECLARED, ExitCode
 from spider.output.writer import Format
 
+# The only variables the tool honours: the OS's proxy settings, which 022 applies to fetching.
+ENVIRONMENT = [
+    {
+        "names": ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"],
+        "description": "The proxy for fetching, matched in any letter case. "
+        "--proxy or [crawl] proxy overrides them.",
+    }
+]
+
 
 @command_meta(output="document", formats=[Format.JSON, Format.TABLE])
 def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict[str, Any]:
@@ -33,6 +42,7 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
             }
             for declared in DECLARED
         ],
+        "environment": ENVIRONMENT,
     }
 
 

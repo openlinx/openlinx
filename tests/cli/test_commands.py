@@ -120,6 +120,12 @@ def test_naming_rule_for_input_errors() -> None:
     ] == []
 
 
+def test_the_proxy_variables_are_the_one_exception() -> None:
+    environment = run_cli("commands").json()["environment"]
+
+    assert [entry["names"] for entry in environment] == [["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]]
+
+
 def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:
     entry: dict[str, Any] = next(c for c in description["commands"] if c["name"] == name)
     return entry
