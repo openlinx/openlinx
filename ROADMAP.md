@@ -114,8 +114,9 @@ If a change needs something another change owns, it depends on that change inste
   - **TLS trust:** truststore with a certifi fallback, including a speed test.
   - Status and size checks for Resources.
   - The `response_headers` table, where cookie values are always stored as `***`. No cookies are sent.
+  - The standard proxy variables `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are honoured (010's one exception to its no-environment-variables rule), with proxy passwords redacted.
   - HTTPS, virtual hosts and gzip on the fixture site (trustme).
-  - **(v0.2)** HTTP version per origin via ALPN (`http_1_1` / `http_2`), proxy (`--proxy` and the proxy variables), basic auth and custom headers.
+  - **(v0.2)** HTTP version per origin via ALPN (`http_1_1` / `http_2`), the `--proxy` flag (and `[crawl] proxy`), basic auth and custom headers.
 - **024-add-list-and-sitemap-modes** (v0.2):
   - List mode (`--list <file|->`) and Sitemap mode (`--sitemap <url>`, repeatable, with index files and gzip).
   - `mode_conflict` when two Crawl Modes are given.
@@ -222,7 +223,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 | 070 | `070-add-html-report` | `reporting` | `report`, `report brief` | planned |
 | 100 | `100-add-installers` | `installation` | none (install scripts) | planned |
 
-- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands; 022's ALPN, proxy, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules; 050's `sql`, `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, dry run and Hand-off, install-script one-liners and plugin marketplace.
+- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands; 022's ALPN, `--proxy`, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules; 050's `sql`, `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, dry run and Hand-off, install-script one-liners and plugin marketplace.
 - **Order:** 024 and 026 first (026's benchmark decides whether its pool is built). The rest of 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 100 comes last.
 - Link graph views: `links <url> --in|--out`.
 - Redirect Chain analysis: `redirects`, with per-hop headers and timing.
