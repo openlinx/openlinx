@@ -66,7 +66,7 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
 - Workflows for Commands that don't exist yet are added in the releases that bring those Commands:
   - `links`, `redirects`, `sitemaps`: **v0.2**
   - `diff`, `duplicates`, `structured-data`: **v0.3**
-- The plugin's MCP server config (`.mcp.json`) belongs to `090-add-mcp-server`, in **v0.1.1**. The install scripts behind the one-liners, and the release pipeline, belong to `100-add-installers`.
+- The plugin's MCP server config (`.mcp.json`) belongs to `090-add-mcp-server`, in **v0.1.1**. The install scripts behind the one-liners belong to `100-add-installers` (v0.2), and the release pipeline to `085-add-release` (v0.1, not drafted yet).
 - No `spider skill generate` Command. Generation for the repository is a developer script, as the maintainer decided on 2026-09-27.
 - Local edits to an installed Skill are not preserved. Reinstalling replaces the whole folder. No release plans a merge.
 - There is no `spider skill uninstall` in v0.1. The uninstall steps are documented by `100-add-installers`.

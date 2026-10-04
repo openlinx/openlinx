@@ -21,8 +21,9 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 | 040 | `040-add-rules` | `rules` | `rules` | planned, 15 Rules |
 | 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues` | planned, min |
 | 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned, min |
+| 085 | `085-add-release` | decided when it is drafted | none (release workflow) | planned, not drafted yet |
 
-v0.1 is installed with `uv tool install` (or `pipx`). The install scripts come with 100 in v0.2.
+v0.1 is installed from PyPI, where 085 publishes it, with `uv tool install` (or `pipx`). The install scripts come with 100 in v0.2.
 
 ### Build order
 
@@ -34,11 +35,12 @@ slice:   000 ─► 010 ─► 015 ─► 020 ─► 030-min ─► 040-min ─�
                                 │    columns)    Rules)     issues <id>)
                                 │
 widen:                          ├─► 022-min ─┐
-                                └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 summary/pages/page ─► 080
+                                └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 summary/pages/page ─► 080 ─► 085 ─► v0.1 tag
 ```
 
 - **The slice:** 015 → 020 → 030-min → 040-min → 050-issues. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
-- **Widening:** 022-min can start as soon as 020 is in, in its own worktree, alongside the slice. The rest of 030-min, 040 up to its 15 Rules, and 050's `summary`, `pages` and `page` follow. 080 comes last, because the Skill is generated from the finished Commands, columns and Rules.
+- **Widening:** 022-min can start as soon as 020 is in, in its own worktree, alongside the slice. The rest of 030-min, 040 up to its 15 Rules, and 050's `summary`, `pages` and `page` follow. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
+- **Release:** 085 comes last, before the v0.1 tag. The product name must be chosen, and checked as free on PyPI and GitHub, before 085 starts.
 - **v0.1.1** comes after the v0.1 release: 060-min first, then 090. The v0.2 changes come after that.
 
 ### The v0.1 Rules
@@ -166,11 +168,15 @@ If a change needs something another change owns, it depends on that change inste
   - `skill install`, and the outdated-Skill notice.
   - `doctor`, whose TLS check uses 022's TLS setup.
   - **(v0.2)** the Full audit workflow (it needs 070's `report brief`); the dry run and the Hand-off rule (when the URL estimate is `null`, the Skill hands the command to the user), which need 060; the install-script one-liners (100); `sql` recipes and Segments; `doctor --proxy`; and the plugin marketplace, which ships without an MCP config until 090.
+- **085-add-release** (v0.1; not drafted yet, so `openspec/changes/085-*` does not exist):
+  - Before it starts: the product name is chosen and checked as free on PyPI and GitHub.
+  - A GitHub Actions workflow triggered by `v*` tags: the test suite, the sdist and wheel built with `uv build`, publishing to PyPI through trusted publishing, and a GitHub release with them.
+  - The release gates: the tag matches the package version, and the committed Skill copy matches the generator's output (moved from 100).
+  - The documented install with `uv tool install` or `pipx` (moved from 100).
+  - **(v0.1.1)** The `.mcpb` bundle that 090 builds, attached to every GitHub release.
 - **100-add-installers** (v0.2):
-  - `install.sh` and `install.ps1`: pin Python 3.14, run `doctor`, and ask before installing the Skill.
+  - `install.sh` and `install.ps1`: pin Python 3.14, run `doctor`, and ask before installing the Skill. They are attached to 085's GitHub release.
   - **Installer exit codes** are their own: 0 ok, 1 failed, 2 usage, 10 installed but `doctor` failed.
-  - The release pipeline verifies that the committed Skill copy matches the generator's output.
-  - Documented developer install with `uv tool install` or `pipx`.
 
 ### Columns that stay null until they are measured
 
@@ -211,7 +217,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 | 026 | `026-add-parse-pool` | `crawl-performance` (only if the pool goes ahead) | none | planned, conditional on its benchmark |
 | 060 | `060-add-crawl-control` | `crawl-control` | `crawl --dry-run`, `resume`, `crawls`, detached List mode | planned, rest after v0.1.1 |
 | 070 | `070-add-html-report` | `reporting` | `report`, `report brief` | planned |
-| 100 | `100-add-installers` | `installation` | none (install scripts, release pipeline) | planned |
+| 100 | `100-add-installers` | `installation` | none (install scripts) | planned |
 
 - **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands; 022's ALPN, proxy, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules; 050's `sql`, `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, dry run and Hand-off, install-script one-liners and plugin marketplace.
 - **Order:** 024 and 026 first (026's benchmark decides whether its pool is built). The rest of 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 100 comes last.
