@@ -128,7 +128,7 @@ The paging logic lives in the pure module `spider.output.paging` (design D6): th
   - `Page(items, total, next_cursor)` and the in-memory pager in `spider.output.paging`
   - `--limit` pages through the pager, whose `next_cursor` comes from the codec
   - the example list Command returns a `Page`. The `@command_meta` wrapper only adapts a `Page` to the formats: it never slices, pages or projects items.
-- [ ] 6.4 Drive "Following cursors" (cli-contract). Green: `--cursor`, read back by the pager.
+- [x] 6.4 Drive "Following cursors" (cli-contract). Green: `--cursor`, read back by the pager.
 - [ ] 6.5 Drive "Everything on one page" and "Default limit" (cli-contract), a trivial pair, using the 60-item fixture list.
 - [ ] 6.6 Drive "Count only" (cli-contract).
 - [ ] 6.7 **Guard:** "Same request, same output" (cli-contract).

@@ -33,3 +33,17 @@ def test_first_page() -> None:
         str,
         True,
     )
+
+
+def test_following_cursors() -> None:
+    app = example_app()
+    pages = [run_cli("example-list", "--limit", "2", app=app).json()]
+    while pages[-1]["next_cursor"] is not None and len(pages) < 10:
+        cursor = pages[-1]["next_cursor"]
+        pages.append(run_cli("example-list", "--limit", "2", "--cursor", cursor, app=app).json())
+
+    assert [page["items"] for page in pages] == [
+        [{"n": 1}, {"n": 2}],
+        [{"n": 3}, {"n": 4}],
+        [{"n": 5}],
+    ]

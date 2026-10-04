@@ -28,12 +28,18 @@ class Page:
 
 
 def paginate(
-    items: Sequence[Mapping[str, Any]], *, limit: int, fingerprint: str, fields: Sequence[str]
+    items: Sequence[Mapping[str, Any]],
+    *,
+    limit: int,
+    cursor: str | None,
+    fingerprint: str,
+    fields: Sequence[str],
 ) -> Page:
     # A static list never changes under the reader, so the keyset can be the next index.
-    end = limit
+    start: int = 0 if cursor is None else decode_cursor(cursor, fingerprint)
+    end = start + limit
     next_cursor = encode_cursor(fingerprint, end) if end < len(items) else None
-    return Page(project(items[:end], fields), len(items), next_cursor)
+    return Page(project(items[start:end], fields), len(items), next_cursor)
 
 
 def project(items: Sequence[Mapping[str, Any]], fields: Sequence[str]) -> list[dict[str, Any]]:
