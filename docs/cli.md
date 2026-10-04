@@ -140,6 +140,7 @@ A Command that reports progress writes each event to stderr as one JSON line, fl
 - `event` names the event, `ts` is the UTC time with milliseconds, and `data` is an object.
 - Events and diagnostics share stderr. Tell them apart by the key: an event has `event`, a diagnostic has `level`.
 - stdout never carries events, and there is no result event: the result goes to stdout once, when the Command ends.
+- `spider commands` marks the Commands that report progress with `"events":true`.
 
 ## Partial results
 
@@ -176,4 +177,22 @@ Every error code maps to exactly one exit code:
 - `usage_error`, and every code that starts with `invalid_` or `unknown_`, map to 2.
 - Every code that ends with `_not_found`, and `no_crawls`, map to 4.
 
-An agent can branch on the exit code alone: 1 means the operation failed, 70 means the tool has a bug.
+An agent can branch on the exit code alone: 1 means the operation failed, 70 means the tool has a bug, and 130 means someone pressed Ctrl+C. An interrupt is never reported as a bug: it is `interrupted`, with exit code 130.
+
+### The diagnostic codes
+
+Every code is declared once, with its level, its exit code and a description, and `spider commands` lists them under `diagnostics`. A Command never reports a code that is not declared. The codes of this change:
+
+| Code | Level | Exit code | Meaning |
+|---|---|---|---|
+| `usage_error` | error | 2 | an unknown Command or flag, a missing argument, or a global flag before the Command name |
+| `invalid_value` | error | 2 | a flag or argument value that is not allowed |
+| `unknown_field` | error | 2 | a `--fields` name the Command does not have |
+| `invalid_cursor` | error | 2 | a `--cursor` made by a different request, or altered |
+| `settings_invalid` | error | 3 | `spider.toml` cannot be read or breaks the settings rules |
+| `workspace_not_found` | error | 4 | the `--workspace` folder does not exist |
+| `workspace_not_writable` | error | 7 | the Workspace folder or its data folder cannot be created or written |
+| `internal_error` | error | 70 | an unexpected failure, which is a bug |
+| `interrupted` | error | 130 | stopped with Ctrl+C |
+| `workspace_nested` | warning | | the new Workspace is inside another Workspace |
+| `more_items` | info | | more items exist than were printed |
