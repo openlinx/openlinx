@@ -150,7 +150,7 @@ The paging logic lives in the pure module `spider.output.paging` (design D6): th
 The streams and the Reporter follow design D3: `Output(stdout, stderr)` takes its byte streams and is built once, in the runner. Every stderr line is written under one `threading.Lock` and flushed. Services report through the `Reporter` protocol, never through `Output`. In the real-process tests, every wait has a hard timeout of a few seconds, so a missing line or signal file fails the test instead of hanging CI. The handshake has no fixed sleeps: each side acts only on what it has read.
 
 - [x] 7.1 Drive "Spaces and repeats in --fields" and "Empty field name" (cli-contract), a trivial pair, decided in the group 6 review. Green: `select_fields` strips each name, keeps the first of a repeated name, and refuses an empty name with `invalid_value`.
-- [ ] 7.2 Drive "Event line" (cli-contract) at seam 4, with `FakeClock`. Green: the event encoder.
+- [x] 7.2 Drive "Event line" (cli-contract) at seam 4, with `FakeClock`. Green: the event encoder.
 - [ ] 7.3 Drive "The result goes to stdout" (cli-contract) at seam 1, with the fixture progress Command. Green:
   - `Output(stdout, stderr)` takes its byte streams. The runner builds it once from `sys.stdout.buffer` and `sys.stderr.buffer`, and `spider.output.writer` no longer reads `sys.*`.
   - the `Reporter` protocol: `warn(diagnostic)` and `event(name, **data)`
