@@ -171,6 +171,7 @@ If a change needs something another change owns, it depends on that change inste
   - The large-Crawl guardrail in v0.1: the Skill always passes `--max-urls` (decided when 080 is re-grounded).
   - `doctor`, whose TLS check uses 022's TLS setup.
   - **(v0.2)** the Full audit workflow (it needs 070's `report brief`); the dry run and the Hand-off rule (when the URL estimate is `null`, the Skill hands the command to the user), which need 060; the install-script one-liners (100); `sql` recipes and Segments; `doctor --proxy`; and the plugin marketplace, which ships with 090's `.mcp.json`.
+  - **(v0.2)** The **fix and verify** workflow: the agent reads the Issues, fixes the site's code in the repository, re-crawls only the Affected URLs in List mode, and confirms that the Issue is gone. It depends on 024 and on `rules apply`.
 - **085-add-release** (v0.1; not drafted yet, so `openspec/changes/085-*` does not exist):
   - Before it starts: the product name is chosen and checked as free on PyPI and GitHub.
   - A GitHub Actions workflow triggered by `v*` tags: the test suite, the sdist and wheel built with `uv build`, publishing to PyPI through trusted publishing, and a GitHub release with them.
@@ -234,7 +235,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 | 100 | `100-add-installers` | `installation` | none (install scripts) | planned |
 | 110 | `110-add-ci-gate` | decided when it is drafted | `diff A B`, `--fail-on`; a GitHub Action | planned, not drafted yet |
 
-- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands; 022's ALPN, `--proxy`, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules; 050's `sql`, `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, dry run and Hand-off, install-script one-liners and plugin marketplace.
+- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands; 022's ALPN, `--proxy`, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules; 050's `sql`, `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, fix and verify, dry run and Hand-off, install-script one-liners and plugin marketplace.
 - **Order:** 024 and 026 first (026's benchmark decides whether its pool is built). The rest of 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 110 needs 024 and 040's Issues. 100 comes last.
 - Link graph views: `links <url> --in|--out`.
 - Redirect Chain analysis: `redirects`, with per-hop headers and timing.
