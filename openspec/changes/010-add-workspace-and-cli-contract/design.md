@@ -214,6 +214,11 @@ Moved to `050-add-query-and-segments`, together with the `csv` format, `--no-bom
   - Typer's rich help is turned off: our main readers are agents, and plain Click help is cheaper to parse and keeps rich, markdown_it and pygments off the startup path. rich stays a runtime dependency, imported only for `--format table`.
 - **Typer compatibility:** Typer 0.27 vendors Click as the private `typer._click`, and does not re-export `UsageError` or `MissingParameter`. Those imports live in one module, `spider.cli.click_compat`, ruff bans `typer._click` everywhere else, and `typer` is pinned below 0.28. A Typer upgrade then touches one file and one pin.
 
+### D11. One source for the product name
+
+- **The rule:** the product name is still open, so every string derived from it in `src/` comes from the constants of one module, `spider.naming`: the command name, the settings file name, the data folder name and the global Workspace folder. A guard test fails on the literals `spider.toml` and `.spider` anywhere else in `src/`.
+- **Why now:** the eventual rename then edits one module, plus the package name, which is a separate, mechanical step. Tests keep the literals, so they check the names that users see.
+
 ## Test seams
 
 Seams from docs/testing.md used by this change:
