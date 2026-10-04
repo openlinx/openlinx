@@ -39,7 +39,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.5 Drive "First Crawl in the global Workspace" at seam 2.
 
   Done when: creating a Crawl creates the data folder, its `.gitignore` and `crawls/` when they are missing, reusing `010`'s Workspace creation.
-- [ ] 1.6 **Guard:** "No settings file is created by storing a Crawl", at seam 2.
+- [x] 1.6 **Guard:** "No settings file is created by storing a Crawl", at seam 2.
 - [ ] 1.7 Drive "Unwritable data folder" at seam 2, with a real `H/.spider` that is a file.
 
   Done when: creation fails with `workspace_not_writable` and `details.path`, before any crawl file exists.
