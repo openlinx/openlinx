@@ -181,6 +181,11 @@ If a change needs something another change owns, it depends on that change inste
 - **100-add-installers** (v0.2):
   - `install.sh` and `install.ps1`: pin Python 3.14, run `doctor`, and ask before installing the Skill. They are attached to 085's GitHub release.
   - **Installer exit codes** are their own: 0 ok, 1 failed, 2 usage, 10 installed but `doctor` failed.
+- **110-add-ci-gate** (v0.2; not drafted yet): SEO regression testing in CI, "SEO checks that block a bad deploy, the way tests do".
+  - Crawl Diff (`diff A B`), pulled forward from v0.3. The diff Report stays in v0.3.
+  - `--fail-on <issue|warning|opportunity>`: a non-zero exit when the new Crawl has new Issues of that Issue Type or a more severe one, compared with a baseline Crawl. The exit code is decided when 110 is drafted.
+  - A composite GitHub Action: install spider, crawl a staging site or localhost, diff against a baseline crawl file kept as a CI artifact, and fail the job.
+  - Depends on 024 (List mode, to re-crawl a URL list) and on 040's Issues.
 
 ### Columns that stay null until they are measured
 
@@ -216,7 +221,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min join
 - 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
 - 080: `design.md:95` and task 7.8 still name 100's release pipeline for the Skill-copy check, which is now 085's.
 
-## v0.2: crawl control, reports, link graph
+## v0.2: crawl control, reports, CI gate, link graph
 
 The changes deferred by the 2026-10-05 scope cut come first, then the link-graph work.
 
@@ -227,9 +232,10 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 | 060 | `060-add-crawl-control` | `crawl-control` | `crawl --dry-run`, `resume`, `crawls`, detached List mode | planned, rest after v0.1.1 |
 | 070 | `070-add-html-report` | `reporting` | `report`, `report brief` | planned |
 | 100 | `100-add-installers` | `installation` | none (install scripts) | planned |
+| 110 | `110-add-ci-gate` | decided when it is drafted | `diff A B`, `--fail-on`; a GitHub Action | planned, not drafted yet |
 
 - **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands; 022's ALPN, `--proxy`, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules; 050's `sql`, `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, dry run and Hand-off, install-script one-liners and plugin marketplace.
-- **Order:** 024 and 026 first (026's benchmark decides whether its pool is built). The rest of 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 100 comes last.
+- **Order:** 024 and 026 first (026's benchmark decides whether its pool is built). The rest of 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 110 needs 024 and 040's Issues. 100 comes last.
 - Link graph views: `links <url> --in|--out`.
 - Redirect Chain analysis: `redirects`, with per-hop headers and timing.
 - Sitemap analysis: `sitemaps` (sitemap vs crawl, non-indexable URLs in the sitemap).
@@ -240,7 +246,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 
 ## v0.3: comparison and content
 
-- Crawl Diff (`diff A B`) and a diff Report.
+- The diff Report. Crawl Diff itself (`diff A B`) moved to v0.2 with 110.
 - Custom Extraction (CSS, XPath, regex; configured in `spider.toml`).
 - Near-Duplicates (our own MinHash) with `duplicates [--exact|--near]`.
 - Offline structured-data validation (schema.org plus Google's rules for about 10 types, stored as YAML) with `structured-data`.
