@@ -22,7 +22,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | # | Change | Capabilities (specs) | Commands | Status |
 |---|---|---|---|---|
 | 000 | `000-scaffold-project` | none (tooling only) | `spider --version` | done |
-| 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | in progress |
+| 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | done |
 | 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | planned |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | planned |
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned, min |

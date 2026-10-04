@@ -14,7 +14,7 @@ A Skill teaches the agent when and how to use each Command. The tool itself neve
 ## Status
 
 Pre-release: there is no release yet.
-- **Progress:** the scaffold is done (change `000-scaffold-project`, archived). Change `010-add-workspace-and-cli-contract` is in progress: Workspaces, `spider.toml` settings and the CLI contract that every later Command follows. There is no crawling yet.
+- **Progress:** the scaffold (`000-scaffold-project`) and `010-add-workspace-and-cli-contract` are done and archived: Workspaces, `spider.toml` settings, `spider init`, `spider commands` and the CLI contract that every later Command follows. Next is `015-add-crawl-store`. There is no crawling yet.
 - **Name:** the product name is still open. `spider` is a placeholder for the command, the Python package, `spider.toml` and the `.spider/` directory of each Workspace.
 
 ## Development quick start

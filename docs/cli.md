@@ -1,6 +1,6 @@
 # The CLI contract
 
-How every `spider` Command talks to agents and people. The spec is `openspec/changes/010-add-workspace-and-cli-contract/specs/cli-contract/spec.md` until the change is archived, then `openspec/specs/cli-contract/spec.md`. Terms follow [CONTEXT.md](../CONTEXT.md).
+How every `spider` Command talks to agents and people. The spec is [openspec/specs/cli-contract/spec.md](../openspec/specs/cli-contract/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
 `spider commands` describes every Command, the exit codes and the diagnostic codes as one JSON document. Agents read it instead of this page.
 

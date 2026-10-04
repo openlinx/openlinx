@@ -1,6 +1,6 @@
 # The Workspace
 
-Where `spider` keeps its Crawls and settings, and how every Command finds them. The spec is `openspec/changes/010-add-workspace-and-cli-contract/specs/workspace/spec.md` until the change is archived, then `openspec/specs/workspace/spec.md`. Terms follow [CONTEXT.md](../CONTEXT.md).
+Where `spider` keeps its Crawls and settings, and how every Command finds them. The spec is [openspec/specs/workspace/spec.md](../openspec/specs/workspace/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
 ## Layout
 
