@@ -204,6 +204,7 @@ If a change needs something another change owns, it depends on that change inste
 - **110-add-ci-gate** (v0.2; not drafted yet): SEO regression testing in CI, "SEO checks that block a bad deploy, the way tests do".
   - Crawl Diff (`diff A B`), pulled forward from v0.3. The diff Report stays in v0.3.
   - `--fail-on <issue|warning|opportunity>`: a non-zero exit when the new Crawl has new Issues of that Issue Type or a more severe one, compared with a baseline Crawl. The exit code is decided when 110 is drafted.
+  - CI output formats besides the exit code: SARIF and JUnit.
   - A composite GitHub Action: install spider, crawl a staging site or localhost, diff against a baseline crawl file kept as a CI artifact, and fail the job.
   - Depends on 024 (List mode, to re-crawl a URL list) and on 040's Issues.
 
@@ -236,6 +237,9 @@ The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min join
   - The `.mcpb` bundle: `scripts/build_mcpb.py`, added to 085's release workflow, so it is attached to every GitHub release from v0.1.1.
   - A `.mcp.json` example and the client config snippets, shipped as docs in `docs/mcp.md`.
   - **(v0.2)** The plugin `.mcp.json`, which comes with 080's plugin marketplace.
+- **Distribution in v0.1.1:**
+  - List the MCP server on the MCP Registry, under the chosen product name.
+  - Offer the CLI as a deterministic crawler backend for popular SEO skill packs (for example claude-seo).
 
 **Re-grounding checklist** (what to fix or design when each change is re-grounded):
 - 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
