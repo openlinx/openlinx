@@ -104,7 +104,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: `CrawlWriter` takes an optional `on_commit` observer, called on the writer thread after each successful commit with the number of units it committed (`020` can use it for progress and metrics), and the test waits for it on a `threading.Event` with a hard timeout instead of running another unit.
 - [x] 5.2 Drive "By id" at seam 2.
 - [x] 5.3 Drive "Latest is the most recent start" at seam 2.
-- [ ] 5.4 **Guard:** "A running Crawl can be latest", at seam 2.
+- [x] 5.4 **Guard:** "A running Crawl can be latest", at seam 2. It passed at once: `latest` reads the ids, never the state.
 - [ ] 5.5 Drive "Two Crawls in the same second" at seam 2. Done when: ties break by `started_at`, then by id.
 - [ ] 5.6 Drive "Only crawl files are Crawls" at seam 2.
 - [ ] 5.7 Drive "No Crawls" at seam 2. Done when: `no_crawls` (exit 4) is declared in `spider.output.codes`, and its hint is built from `spider.naming`.

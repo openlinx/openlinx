@@ -1,9 +1,12 @@
 """Selecting a Crawl with --crawl (015-add-crawl-store, crawl-store)."""
 
+from spider.store.crawls import set_state
 from spider.store.records import CrawlFile
 from spider.store.selection import resolve_crawl
+from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import Workspace, resolve_workspace
-from tests.support.crawls import create_crawl_at
+from tests.support.clock import FakeClock
+from tests.support.crawls import STARTED_AT, create_crawl_at
 from tests.support.workspace import TempWorkspace
 
 
@@ -31,5 +34,14 @@ def resolve_latest(temp_workspace: TempWorkspace) -> str:
 def test_latest_is_the_most_recent_start(temp_workspace: TempWorkspace) -> None:
     create_crawl_at(temp_workspace, "2026-09-27T11:00:00.000Z", "bbbb")
     create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+
+    assert resolve_latest(temp_workspace) == "20260927-110000-bbbb"
+
+
+def test_a_running_crawl_can_be_latest(temp_workspace: TempWorkspace) -> None:
+    completed = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    with CrawlWriter(completed.path, FakeClock()) as writer:
+        writer.run(lambda connection: set_state(connection, "completed", STARTED_AT))
+    create_crawl_at(temp_workspace, "2026-09-27T11:00:00.000Z", "bbbb")
 
     assert resolve_latest(temp_workspace) == "20260927-110000-bbbb"
