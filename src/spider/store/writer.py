@@ -15,9 +15,14 @@ from typing import Any, Self, cast
 from sqlalchemy import Connection, update
 
 from spider.clock import Clock
-from spider.output.codes import CRAWL_NOT_WRITABLE
+from spider.output.codes import CRAWL_BUSY, CRAWL_NOT_WRITABLE
 from spider.output.diagnostics import SpiderError
-from spider.store.connections import not_writable_name, opening
+from spider.store.connections import (
+    WRITER_BUSY_SECONDS,
+    is_busy,
+    not_writable_name,
+    opening,
+)
 from spider.store.schema import crawl
 
 QUEUE_SIZE = 50_000
@@ -47,9 +52,14 @@ class _Job:
 
 class CrawlWriter:
     def __init__(
-        self, path: Path, clock: Clock, on_commit: Callable[[int], None] | None = None
+        self,
+        path: Path,
+        clock: Clock,
+        on_commit: Callable[[int], None] | None = None,
+        busy_seconds: float = WRITER_BUSY_SECONDS,
     ) -> None:
         self._path = path
+        self._busy_seconds = busy_seconds
         self._clock = clock
         self._on_commit = on_commit
         self._queue: Queue[_Job] = Queue(maxsize=QUEUE_SIZE)
@@ -102,6 +112,9 @@ class CrawlWriter:
             self._queue.put(_Job(_Control.CLOSE, done))
             self._wait(done)
         self._thread.join()
+        # As it is: leaving a with block after a busy unit must still exit with crawl_busy.
+        if isinstance(self._failure, SpiderError):
+            raise self._failure
         # A commit that failed while no unit was waiting would otherwise lose units silently.
         if self._failure is not None:
             raise CrawlWriterClosedError(CLOSED) from self._failure
@@ -143,7 +156,10 @@ class CrawlWriter:
 
     def _serve(self, started: Future[None]) -> None:
         try:
-            with opening(self._path) as engine, engine.connect() as connection:
+            with (
+                opening(self._path, busy_seconds=self._busy_seconds) as engine,
+                engine.connect() as connection,
+            ):
                 _check_writable(connection)
                 started.set_result(None)
                 self._work(connection)
@@ -169,10 +185,13 @@ class CrawlWriter:
                 if not self._handle(job, connection):
                     return
             except BaseException as error:
+                failure = self._busy_error(error)
                 # A failed commit ends the writer; the caller of the job in hand learns why.
                 if not job.done.done():
-                    job.done.set_exception(error)
-                raise
+                    job.done.set_exception(failure)
+                if failure is error:
+                    raise
+                raise failure from error
 
     def _handle(self, job: _Job, connection: Connection) -> bool:
         if isinstance(job.work, _Control):
@@ -189,6 +208,8 @@ class CrawlWriter:
             self._uncommitted, self._succeeded = 0, 0
             self._first_uncommitted_at = self._clock.monotonic()
         result, error = _run(job.work, connection)
+        if error is not None:
+            error = self._busy_error(error)
         self._uncommitted += 1
         self._succeeded += error is None
         self._commit_if_due(connection)
@@ -213,7 +234,23 @@ class CrawlWriter:
         if self._on_commit is not None and self._succeeded:
             self._on_commit(self._succeeded)
 
+    def _busy_error(self, error: BaseException) -> BaseException:
+        if not is_busy(error):
+            return error
+        busy = SpiderError(
+            CRAWL_BUSY,
+            f"The crawl file {self._path} is held by another connection, and writing "
+            f"waited {self._busy_seconds:g} seconds.",
+            hint="Try again when the other process has ended.",
+            details={"file": str(self._path)},
+        )
+        busy.__cause__ = error
+        return busy
+
     def _open_error(self, error: BaseException) -> BaseException:
+        busy = self._busy_error(error)
+        if busy is not error:
+            return busy
         name = not_writable_name(error)
         if name is None:
             return error

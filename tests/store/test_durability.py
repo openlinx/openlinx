@@ -6,8 +6,17 @@ import pytest
 
 from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect
+from spider.store.records import CrawlFile
 from spider.store.selection import resolve_crawl
-from tests.support.crawls import crawl_without_seeds, create_any_crawl, current_workspace, query
+from spider.store.writer import CrawlWriter
+from tests.support.clock import FakeClock
+from tests.support.crawls import (
+    crawl_without_seeds,
+    create_any_crawl,
+    current_workspace,
+    insert_seed,
+    query,
+)
 from tests.support.store_worker import StoreWorker
 from tests.support.workspace import TempWorkspace
 
@@ -15,6 +24,8 @@ from tests.support.workspace import TempWorkspace
 pytestmark = pytest.mark.slow
 
 COUNT = "SELECT count(*) FROM seeds"
+# Long enough for SQLite to retry, short enough to keep the test quick.
+SHORT_BUSY_SECONDS = 0.2
 
 
 def test_a_killed_writer_keeps_committed_units_in_a_sound_file(
@@ -68,3 +79,47 @@ def test_busy_in_rollback_journal_mode(temp_workspace: TempWorkspace) -> None:
             resolve_crawl(str(crawl.path), workspace=workspace, cwd=temp_workspace.root)
 
     assert (raised.value.code, raised.value.exit_code) == ("crawl_busy", 5)
+
+
+def delete_mode_crawl(temp_workspace: TempWorkspace) -> CrawlFile:
+    crawl = create_any_crawl(temp_workspace)
+    with closing(connect(crawl.path)) as connection:
+        connection.execute("PRAGMA journal_mode = DELETE")
+    return crawl
+
+
+def test_a_busy_writer_on_open(temp_workspace: TempWorkspace) -> None:
+    crawl = delete_mode_crawl(temp_workspace)
+
+    with StoreWorker(crawl.path) as worker:
+        worker.lock()
+        with pytest.raises(SpiderError) as raised:
+            CrawlWriter(crawl.path, FakeClock(), busy_seconds=SHORT_BUSY_SECONDS)
+
+    assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (
+        "crawl_busy",
+        5,
+        {"file": str(crawl.path)},
+    )
+
+
+def test_a_busy_writer_in_a_unit(temp_workspace: TempWorkspace) -> None:
+    crawl = delete_mode_crawl(temp_workspace)
+
+    def run_while_locked() -> None:
+        with (
+            CrawlWriter(crawl.path, FakeClock(), busy_seconds=SHORT_BUSY_SECONDS) as writer,
+            StoreWorker(crawl.path) as worker,
+        ):
+            worker.lock()
+            writer.run(insert_seed(9, "https://example.com/9"))
+
+    # Around the writer's with block too: leaving it raises the same crawl_busy again.
+    with pytest.raises(SpiderError) as raised:
+        run_while_locked()
+
+    assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (
+        "crawl_busy",
+        5,
+        {"file": str(crawl.path)},
+    )

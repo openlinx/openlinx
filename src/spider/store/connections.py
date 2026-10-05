@@ -33,9 +33,10 @@ def not_writable_name(error: BaseException) -> str | None:
     return str(getattr(cause, "sqlite_errorname", code))
 
 
-def is_busy(error: DBAPIError) -> bool:
+def is_busy(error: BaseException) -> bool:
+    cause = error.orig if isinstance(error, DBAPIError) else error
     # Masked to the primary code, so BUSY_RECOVERY and BUSY_SNAPSHOT count too.
-    code = getattr(error.orig, "sqlite_errorcode", None)
+    code = getattr(cause, "sqlite_errorcode", None)
     return code is not None and code & 0xFF == sqlite3.SQLITE_BUSY
 
 
@@ -46,20 +47,27 @@ def file_uri(path: PurePath) -> str:
     return f"file://{posix}" if posix.startswith("/") else f"file:///{posix}"
 
 
-def connect(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
+def connect(
+    path: Path, *, read_only: bool = False, busy_seconds: float | None = None
+) -> sqlite3.Connection:
     # rw, not SQLite's default rwc: a missing crawl file is an error, never a new empty file.
     uri = file_uri(path.resolve()) + ("?mode=ro" if read_only else "?mode=rw")
     # A reader gives up after 5 s (crawl_busy); the writer waits out a reader's longest wait.
-    timeout = READER_BUSY_SECONDS if read_only else WRITER_BUSY_SECONDS
-    connection = sqlite3.connect(uri, uri=True, timeout=timeout)
+    if busy_seconds is None:
+        busy_seconds = READER_BUSY_SECONDS if read_only else WRITER_BUSY_SECONDS
+    connection = sqlite3.connect(uri, uri=True, timeout=busy_seconds)
     connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
 @contextmanager
-def opening(path: Path, *, read_only: bool = False) -> Iterator[Engine]:
+def opening(
+    path: Path, *, read_only: bool = False, busy_seconds: float | None = None
+) -> Iterator[Engine]:
     engine = create_engine(
-        "sqlite://", creator=lambda: connect(path, read_only=read_only), poolclass=NullPool
+        "sqlite://",
+        creator=lambda: connect(path, read_only=read_only, busy_seconds=busy_seconds),
+        poolclass=NullPool,
     )
     if not read_only:
         event.listen(engine, "connect", _own_transactions)

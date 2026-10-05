@@ -116,7 +116,8 @@ CRAWL_BUSY = _declare(
     "crawl_busy",
     "error",
     ExitCode.BUSY,
-    "A write held the crawl file for longer than a reader waits; details.file names it.",
+    "Another connection held the crawl file for longer than a reader or the writer waits; "
+    "details.file names it.",
 )
 CRAWL_FILE_INVALID = _declare(
     "crawl_file_invalid",
