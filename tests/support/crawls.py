@@ -13,6 +13,7 @@ from spider.store.connections import connect
 from spider.store.records import CrawlFile, NewCrawl
 from spider.workspace.discovery import Workspace, resolve_workspace
 from tests.support.clock import FakeClock
+from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
 
 # The start time of the spec's example Crawl 20260927-140312-k3f9.
@@ -36,6 +37,13 @@ def create_any_crawl(temp_workspace: TempWorkspace, **changes: Any) -> CrawlFile
     workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
     request = replace(new_crawl(workspace), **changes)
     return create_crawl(request, FakeClock(start=STARTED_AT), Collected())
+
+
+def create_crawl_at(temp_workspace: TempWorkspace, started_at: str, suffix: str) -> CrawlFile:
+    """Any Crawl started at the ISO time `started_at`, whose id ends with `suffix`."""
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+    clock = FakeClock(start=datetime.fromisoformat(started_at))
+    return create_crawl(new_crawl(workspace), clock, Collected(), scripted_choice(suffix))
 
 
 def query(file: Path, sql: str) -> list[tuple[Any, ...]]:

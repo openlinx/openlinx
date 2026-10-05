@@ -102,7 +102,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.1 Drive the idle timer of D4 at seam 2: with no unit submitted, `FakeClock.advance(1.0)` commits the open transaction.
 
   Done when: `CrawlWriter` takes an optional `on_commit` observer, called on the writer thread after each successful commit with the number of units it committed (`020` can use it for progress and metrics), and the test waits for it on a `threading.Event` with a hard timeout instead of running another unit.
-- [ ] 5.2 Drive "By id" at seam 2.
+- [x] 5.2 Drive "By id" at seam 2.
 - [ ] 5.3 Drive "Latest is the most recent start" at seam 2.
 - [ ] 5.4 **Guard:** "A running Crawl can be latest", at seam 2.
 - [ ] 5.5 Drive "Two Crawls in the same second" at seam 2. Done when: ties break by `started_at`, then by id.
