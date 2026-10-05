@@ -112,7 +112,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.9 Drive "Malformed reference" at seam 2.
 - [x] 5.10 Drive "Not a crawl file" at seam 2. Done when: `crawl_file_invalid` (exit 6) is declared, with `details.file`.
 - [x] 5.11 Drive "A broken newest file is reported, not skipped" at seam 2.
-- [ ] 5.12 Drive "Reading creates nothing" at seam 2.
+- [x] 5.12 **Guard:** "Reading creates nothing" at seam 2. It passed at once: resolution only lists `crawls/` and opens files read-only, and the Workspace comes from `resolve_workspace`, which creates nothing.
 - [ ] 5.13 Drive "The flag defaults to latest" at seam 1, with an example Command that reads a Crawl on the test app.
 
   Done when: `--crawl` is a global option declared once in `spider.cli.options`, with the default `latest`, and resolving it imports the store only inside the Command's body.

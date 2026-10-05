@@ -120,6 +120,17 @@ def test_a_broken_newest_file_is_reported_not_skipped(temp_workspace: TempWorksp
     )
 
 
+def test_reading_creates_nothing(temp_workspace: TempWorkspace) -> None:
+    notes = temp_workspace.root / "notes"
+    notes.mkdir()
+    workspace = resolve_workspace(cwd=notes, flag=None, home=temp_workspace.home)
+
+    with pytest.raises(SpiderError):
+        resolve_crawl("latest", workspace=workspace, cwd=notes)
+
+    assert (workspace.is_global, (temp_workspace.home / ".spider").exists()) == (True, False)
+
+
 def test_a_sqlite_file_not_named_by_an_id_is_not_a_crawl(temp_workspace: TempWorkspace) -> None:
     crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
     (crawl.path.parent / "notes.sqlite").write_text("", encoding="utf-8")
