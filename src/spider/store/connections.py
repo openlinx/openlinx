@@ -33,6 +33,10 @@ def not_writable_name(error: BaseException) -> str | None:
     return str(getattr(cause, "sqlite_errorname", code))
 
 
+def is_busy(error: DBAPIError) -> bool:
+    return getattr(error.orig, "sqlite_errorcode", None) == sqlite3.SQLITE_BUSY
+
+
 def file_uri(path: PurePath) -> str:
     posix = quote(path.as_posix(), safe="/:")
     # A UNC path keeps its host in the path (file:////host/share): SQLite refuses any URI

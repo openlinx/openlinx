@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlalchemy import Connection, insert
 
+from spider.store.connections import connect
 from spider.store.schema import seeds
 from spider.store.writer import CrawlWriter
 from tests.support.cli import PROCESS_TIMEOUT, REPO_ROOT
@@ -68,6 +69,11 @@ def main(crawl_file: Path) -> None:
                 writer.run(_insert_seed(int(argument)))
             elif command == "flush":
                 writer.flush()
+            elif command == "lock":
+                # Held until the process dies: in rollback-journal mode it shuts out readers.
+                locker = connect(crawl_file)
+                locker.isolation_level = None
+                locker.execute("BEGIN EXCLUSIVE")
             print(READY, flush=True)
 
 

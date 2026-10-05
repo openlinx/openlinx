@@ -112,6 +112,12 @@ CRAWL_NOT_FOUND = _declare(
     ExitCode.NOT_FOUND,
     "No Crawl in the Workspace has the --crawl id, or no file exists at the --crawl path.",
 )
+CRAWL_BUSY = _declare(
+    "crawl_busy",
+    "error",
+    ExitCode.BUSY,
+    "A write held the crawl file for longer than a reader waits; details.file names it.",
+)
 CRAWL_FILE_INVALID = _declare(
     "crawl_file_invalid",
     "error",
