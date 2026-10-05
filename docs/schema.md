@@ -50,3 +50,12 @@ The Crawl's metadata, in exactly one row.
 | `cwd` | TEXT | no | | | | The absolute folder the Command ran in. |
 | `settings_file` | TEXT | yes | | | | The absolute path of the settings file that was read, or NULL without one. |
 | `config` | TEXT | no | | `json` | | The resolved settings as an object of tables and keys, secrets redacted. |
+
+## Table `seeds`
+
+The Seeds the Crawl started from, in the order they were given.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `position` | INTEGER | no | PK | | | The 1-based order in which the Seed was given. |
+| `url` | TEXT | no | | | | The Seed URL as given. |

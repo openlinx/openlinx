@@ -1,6 +1,6 @@
 """The declared public schema of a crawl file (design D6 of 015-add-crawl-store)."""
 
-from sqlalchemy import Column, MetaData, Table, Text
+from sqlalchemy import Column, Integer, MetaData, Table, Text
 
 from spider.store.types import Flag, Json, Timestamp
 
@@ -58,5 +58,20 @@ crawl = Table(
         comment="The resolved settings as an object of tables and keys, secrets redacted.",
     ),
     comment="The Crawl's metadata, in exactly one row.",
+    info={"change": 15},
+)
+
+seeds = Table(
+    "seeds",
+    metadata,
+    Column(
+        "position",
+        Integer,
+        primary_key=True,
+        autoincrement=False,
+        comment="The 1-based order in which the Seed was given.",
+    ),
+    Column("url", Text, nullable=False, comment="The Seed URL as given."),
+    comment="The Seeds the Crawl started from, in the order they were given.",
     info={"change": 15},
 )

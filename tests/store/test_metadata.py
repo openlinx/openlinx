@@ -1,6 +1,7 @@
 """Crawl metadata (015-add-crawl-store, crawl-store)."""
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from spider.output.reporter import Collected
@@ -8,7 +9,7 @@ from spider.services.crawls import create_crawl
 from spider.store.records import NewCrawl
 from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
-from tests.support.crawls import crawl_row, new_crawl
+from tests.support.crawls import crawl_row, new_crawl, query
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
 
@@ -22,6 +23,7 @@ def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
     request = NewCrawl(
         workspace=workspace,
         crawl_mode="spider",
+        seeds=["https://example.com/"],
         command_argv=["spider", "crawl", "https://example.com/"],
         cwd=shop,
         config={"store": {"journal_mode": "auto"}},
@@ -56,3 +58,17 @@ def test_timestamp_text(temp_workspace: TempWorkspace) -> None:
 
     started_at = crawl_row(crawl.path)["started_at"]
     assert (started_at, len(started_at)) == ("2026-09-27T14:03:12.345Z", 24)
+
+
+def test_seeds_keep_their_order(temp_workspace: TempWorkspace) -> None:
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+    request = replace(
+        new_crawl(workspace), seeds=["https://example.com/b", "https://example.com/a"]
+    )
+
+    crawl = create_crawl(request, FakeClock(), Collected())
+
+    assert query(crawl.path, "SELECT position, url FROM seeds ORDER BY position") == [
+        (1, "https://example.com/b"),
+        (2, "https://example.com/a"),
+    ]

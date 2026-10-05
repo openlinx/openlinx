@@ -14,6 +14,7 @@ type CrawlMode = Literal["spider", "list", "sitemap"]
 class NewCrawl:
     workspace: Workspace
     crawl_mode: CrawlMode
+    seeds: Sequence[str]
     command_argv: Sequence[str]
     cwd: Path
     config: Mapping[str, Any]

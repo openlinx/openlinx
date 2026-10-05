@@ -8,7 +8,7 @@ from sqlalchemy.pool import NullPool
 
 from spider.store.ids import Choice, new_crawl_id
 from spider.store.records import CrawlFile, NewCrawl
-from spider.store.schema import crawl, metadata
+from spider.store.schema import crawl, metadata, seeds
 from spider.workspace.creation import create_data_folder
 
 
@@ -56,6 +56,13 @@ def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: dateti
                     settings_file=str(settings_file) if settings_file.is_file() else None,
                     config=dict(request.config),
                 )
+            )
+            connection.execute(
+                insert(seeds),
+                [
+                    {"position": position, "url": url}
+                    for position, url in enumerate(request.seeds, start=1)
+                ],
             )
     finally:
         engine.dispose()
