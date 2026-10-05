@@ -167,7 +167,7 @@ spider schema seeds --fields name
 {"schema_version":1,"total":1,"items":[{"name":"seeds"}],"next_cursor":null}
 ```
 
-Each item has `name`, `kind`, `description` and `columns`; each column has `name`, `description`, `type`, `nullable`, `primary_key`, `references`, `format` and `values`. Tables are listed in the order of the change that added them. An unknown TABLE fails with `unknown_table` (exit code 2), whose `details.tables` lists the tables. [schema.md](schema.md) documents the same tables for people.
+`jsonl` and `table` print the items only, so an agent that needs `schema_version` reads the `json` result. Each item has `name`, `kind`, `description` and `columns`; each column has `name`, `description`, `type`, `nullable`, `primary_key`, `references`, `format` and `values`. Tables are listed in the order of the change that added them. An unknown TABLE fails with `unknown_table` (exit code 2), whose `details.tables` lists the tables. [schema.md](schema.md) documents the same tables for people.
 
 ## Selecting a Crawl
 

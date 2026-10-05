@@ -60,7 +60,7 @@ def test_settings_tables_load_with_the_settings() -> None:
     assert "tests.support.settings" not in loaded
 
 
-@pytest.mark.parametrize("command", [["--help"], ["commands"], ["schema", "--help"]])
+@pytest.mark.parametrize("command", [["--help"], ["commands"], ["schema", "--help"]], ids=" ".join)
 def test_startup_loads_only_the_allowlist(command: list[str]) -> None:
     loaded = modules_loaded("spider.cli.app", "build_app", *command)
     top_level = {name.partition(".")[0] for name in loaded - interpreter_startup_modules()}

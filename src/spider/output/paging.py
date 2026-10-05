@@ -31,7 +31,7 @@ class Page:
     items: Sequence[Mapping[str, Any]]
     total: int
     next_cursor: str | None
-    # Keys that the JSON result puts before total, such as spider schema's schema_version.
+    # Keys that the JSON result puts before total, such as a version of what is listed.
     header: Mapping[str, Any] = field(default_factory=dict)
 
 

@@ -28,7 +28,7 @@ def test_descriptions_are_present() -> None:
         column["description"] for table in tables for column in table["columns"]
     ]
 
-    assert [d for d in descriptions if not isinstance(d, str) or not d.strip()] == []
+    assert [text for text in descriptions if not isinstance(text, str) or not text.strip()] == []
 
 
 def all_columns() -> list[dict[str, Any]]:

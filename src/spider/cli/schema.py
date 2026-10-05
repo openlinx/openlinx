@@ -12,10 +12,8 @@ from spider.output.writer import Format
 from spider.services.schema import describe_schema
 
 SCHEMA = "schema"
-SCHEMA_FIELDS = Fields(
-    available=("name", "kind", "description", "columns"),
-    default=("name", "kind", "description", "columns"),
-)
+TABLE_FIELDS = ("name", "kind", "description", "columns")
+SCHEMA_FIELDS = Fields(available=TABLE_FIELDS, default=TABLE_FIELDS)
 
 
 @command_meta(

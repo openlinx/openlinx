@@ -46,21 +46,26 @@ def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFi
             f"No Crawl in the Workspace {workspace.root} has the id {crawl_id}.",
             hint=f"Leave out --crawl to read the {LATEST} Crawl, or give the path of a crawl file.",
         )
-    found_id = _metadata(path)["id"]
-    if found_id != crawl_id:
-        raise SpiderError(
-            CRAWL_FILE_INVALID,
-            f"The crawl file {path} holds the Crawl {found_id}, not {crawl_id}.",
-            hint=f"Give its path to read it as {found_id}, "
-            f"or rename it to {crawl_path(path.parent, found_id).name}.",
-            details={"file": str(path), "expected_id": crawl_id, "found_id": found_id},
-        )
+    _metadata_of(path, crawl_id)
     return CrawlFile(crawl_id, path)
 
 
 def _is_path(reference: str) -> bool:
     separators = {"/", os.sep, os.altsep} - {None}
     return reference.endswith(CRAWL_FILE_SUFFIX) or any(s in reference for s in separators)
+
+
+def _metadata_of(path: Path, crawl_id: str) -> dict[str, Any]:
+    """The metadata of a file named after `crawl_id`, which must hold that Crawl."""
+    metadata = _metadata(path)
+    if metadata["id"] != crawl_id:
+        raise SpiderError(
+            CRAWL_FILE_INVALID,
+            f"The crawl file {path} holds the Crawl {metadata['id']}, not {crawl_id}.",
+            hint=f"Give its path to read it as {metadata['id']}.",
+            details={"file": str(path), "expected_id": crawl_id, "found_id": metadata["id"]},
+        )
+    return metadata
 
 
 def _metadata(path: Path) -> dict[str, Any]:
@@ -92,5 +97,8 @@ def _latest(workspace: Workspace) -> str:
         return candidates[0]
     return max(
         candidates,
-        key=lambda crawl_id: (_metadata(crawl_path(crawls_dir, crawl_id))["started_at"], crawl_id),
+        key=lambda crawl_id: (
+            _metadata_of(crawl_path(crawls_dir, crawl_id), crawl_id)["started_at"],
+            crawl_id,
+        ),
     )
