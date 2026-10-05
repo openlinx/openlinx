@@ -1,5 +1,6 @@
 """Crawl files in the Workspace's data folder (designs D1 and D2 of 015-add-crawl-store)."""
 
+import platform
 import sqlite3
 from datetime import datetime
 
@@ -59,6 +60,8 @@ def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: dateti
                     config=dict(request.config),
                     tool_version=__version__,
                     schema_version=SCHEMA_VERSION,
+                    python_version=platform.python_version(),
+                    platform=platform.platform(),
                 )
             )
             connection.execute(

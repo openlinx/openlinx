@@ -1,6 +1,7 @@
 """Crawl metadata (015-add-crawl-store, crawl-store)."""
 
 import json
+import re
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -86,3 +87,15 @@ def test_version_stamp(temp_workspace: TempWorkspace) -> None:
         row["schema_version"],
         query(crawl.path, "PRAGMA user_version"),
     ) == (project_version(), 1, [(1,)])
+
+
+def test_environment_stamp(temp_workspace: TempWorkspace) -> None:
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+
+    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+
+    row = crawl_row(crawl.path)
+    assert (
+        bool(re.fullmatch(r"3\.(12|13|14)\.[0-9]+", row["python_version"])),
+        isinstance(row["platform"], str) and row["platform"] != "",
+    ) == (True, True)

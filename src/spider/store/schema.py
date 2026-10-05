@@ -71,6 +71,18 @@ crawl = Table(
         nullable=False,
         comment="The schema version of this file, also stored as SQLite's user_version.",
     ),
+    Column(
+        "python_version",
+        Text,
+        nullable=False,
+        comment="The Python version that created the Crawl.",
+    ),
+    Column(
+        "platform",
+        Text,
+        nullable=False,
+        comment="The operating system that created the Crawl, as Python describes it.",
+    ),
     comment="The Crawl's metadata, in exactly one row.",
     info={"change": 15},
 )

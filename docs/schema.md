@@ -52,6 +52,8 @@ The Crawl's metadata, in exactly one row.
 | `config` | TEXT | no | | `json` | | The resolved settings as an object of tables and keys, secrets redacted. |
 | `tool_version` | TEXT | no | | | | The version of the tool that created the Crawl. |
 | `schema_version` | INTEGER | no | | | | The schema version of this file, also stored as SQLite's user_version. |
+| `python_version` | TEXT | no | | | | The Python version that created the Crawl. |
+| `platform` | TEXT | no | | | | The operating system that created the Crawl, as Python describes it. |
 
 ## Table `seeds`
 
