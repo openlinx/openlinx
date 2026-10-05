@@ -157,7 +157,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 7.5 Drive "Busy in rollback-journal mode", with a real process that holds an exclusive lock for 8 s. Mark the test `slow`.
 
   Done when: readers wait at most 5 s, then fail with `crawl_busy` (exit 5), including `--crawl` resolution, which until then reports a busy read as `crawl_file_invalid`.
-- [ ] 7.6 Drive "Bytes are unchanged by reading" and "Writes through a reader fail", a trivial pair.
+- [x] 7.6 **Guard:** "Bytes are unchanged by reading" and "Writes through a reader fail", a trivial pair. It passed at once: readers open with `mode=ro` since group 3, so SQLite refuses the write and leaves the file's bytes alone.
 - [ ] 7.7 Drive "Deleting after a read on Windows", as a Windows-only test.
 - [ ] 7.8 Drive "File from a newer tool" and "A refused file is unchanged", a trivial pair. Done when: `crawl_schema_too_new` (exit 6) is declared, with both versions in `details`.
 - [ ] 7.9 Docs: add durability, reading during a Crawl and schema versions (no upgrades before v0.1) to `docs/crawl-store.md`.
