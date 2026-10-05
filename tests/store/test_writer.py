@@ -67,3 +67,15 @@ def test_a_failing_unit_leaves_no_change(temp_workspace: TempWorkspace) -> None:
         writer.run(failing_insert(2, "https://example.com/b"))
 
     assert (raised.type, query(crawl.path, SEEDS)) == (ValueError, [])
+
+
+def test_other_units_survive_a_failing_unit(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(insert_seed(1, "https://example.com/a"))
+        with pytest.raises(ValueError, match=r"^bad$"):
+            writer.run(failing_insert(2, "https://example.com/b"))
+        writer.run(insert_seed(3, "https://example.com/c"))
+
+    assert [position for position, _ in query(crawl.path, SEEDS)] == [1, 3]
