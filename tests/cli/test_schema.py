@@ -58,3 +58,13 @@ def test_state_values_are_documented() -> None:
         "failed",
         "interrupted",
     ]
+
+
+def test_the_next_page() -> None:
+    first = run_cli("schema", "--fields", "name", "--limit", "1").json()
+
+    second = run_cli(
+        "schema", "--fields", "name", "--limit", "1", "--cursor", first["next_cursor"]
+    ).json()
+
+    assert second["items"] == [{"name": "seeds"}]
