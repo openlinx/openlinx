@@ -124,24 +124,29 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 6. `spider schema` and the conventions (widening, seams 1 and 6)
 
-- [ ] 6.1 Drive "One table" at seam 1.
+Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions A–C) before group 6's own work.
+
+- [ ] 6.1 **Guard:** "Companion files are not Crawls" at seam 2. Done when: `docs/crawl-store.md` says that selecting creates no folder and no crawl file, and that SQLite's `-wal` and `-shm` companions of an existing crawl file may appear (a WAL reader needs the shared-memory file; `immutable=1` stays rejected, D2). 7.6 still proves that a crawl file can be deleted after a read on Windows.
+- [ ] 6.2 Drive "A missing crawl file path" at seam 2. Done when: a path is checked for existence before the read-only open, and gives `crawl_not_found` (exit 4) with `details.file`; a file that exists but is not a crawl file stays `crawl_file_invalid`.
+- [ ] 6.3 Drive "A crawl file that holds another id" at seam 2. Done when: a Crawl selected by id or `latest` whose `crawl` row has another id fails with `crawl_file_invalid` and `details.file`, `details.expected_id` and `details.found_id`; a Crawl selected by path keeps the id of its row, whatever the file is named, pinned by a guard through `resolve_crawl`.
+- [ ] 6.4 Drive "One table" at seam 1.
 
   Done when: `spider schema [TABLE]` is the adapter of the schema service, registered with `@command_meta(name=...)` as a list Command, paged with `paginate` and `fingerprint`, and its JSON result starts with `schema_version`.
-- [ ] 6.2 Drive "First tables" at seam 1. Done when: tables are ordered by the adding change's number, then by position within the change.
-- [ ] 6.3 Drive "Columns of seeds" at seam 1.
-- [ ] 6.4 Drive "Column formats" at seam 1.
-- [ ] 6.5 Drive "State values are documented" at seam 1.
-- [ ] 6.6 Drive "The next page" at seam 1.
-- [ ] 6.7 Drive "Unknown table" at seam 1. Done when: `unknown_table` (exit 2) is declared, with `details.tables`.
-- [ ] 6.8 **Guard:** "Internal tables are hidden" and "No Workspace needed", at seam 1.
-- [ ] 6.9 **Guard:** "Names are snake_case" and "Descriptions are present", at seam 6. They check every later table automatically.
-- [ ] 6.10 **Guard:** "Booleans are integers" and "Enumeration values are snake_case", at seam 6.
-- [ ] 6.11 **Guard:** "Documentation and declaration agree", now through `spider schema --limit 1000` at seam 6.
-- [ ] 6.12 Drive "Self-description of schema" at seam 1.
-- [ ] 6.13 Drive "Global flags of schema" and "Default limit of schema" at seam 1, a trivial pair.
-- [ ] 6.14 **Guard:** the startup allowlist test passes with `schema` registered: `spider --help` and `spider commands` load no `sqlalchemy`.
-- [ ] 6.15 Docs: add "How to add a table" to `docs/schema.md` (docs rows and the declared table in the same slice, the conventions, no migration before v0.1). Add `spider schema` to `docs/cli.md`.
-- [ ] 6.16 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
+- [ ] 6.5 Drive "First tables" at seam 1. Done when: tables are ordered by the adding change's number, then by position within the change.
+- [ ] 6.6 Drive "Columns of seeds" at seam 1.
+- [ ] 6.7 Drive "Column formats" at seam 1.
+- [ ] 6.8 Drive "State values are documented" at seam 1.
+- [ ] 6.9 Drive "The next page" at seam 1.
+- [ ] 6.10 Drive "Unknown table" at seam 1. Done when: `unknown_table` (exit 2) is declared, with `details.tables`.
+- [ ] 6.11 **Guard:** "Internal tables are hidden" and "No Workspace needed", at seam 1.
+- [ ] 6.12 **Guard:** "Names are snake_case" and "Descriptions are present", at seam 6. They check every later table automatically.
+- [ ] 6.13 **Guard:** "Booleans are integers" and "Enumeration values are snake_case", at seam 6.
+- [ ] 6.14 **Guard:** "Documentation and declaration agree", now through `spider schema --limit 1000` at seam 6.
+- [ ] 6.15 Drive "Self-description of schema" at seam 1.
+- [ ] 6.16 Drive "Global flags of schema" and "Default limit of schema" at seam 1, a trivial pair.
+- [ ] 6.17 **Guard:** the startup allowlist test passes with `schema` registered: `spider --help` and `spider commands` load no `sqlalchemy`.
+- [ ] 6.18 Docs: add "How to add a table" to `docs/schema.md` (docs rows and the declared table in the same slice, the conventions, no migration before v0.1). Add `spider schema` to `docs/cli.md`.
+- [ ] 6.19 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Durability and reading across processes (widening, seam 2 with real processes)
 

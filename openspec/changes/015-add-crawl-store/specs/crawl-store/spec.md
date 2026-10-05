@@ -85,15 +85,17 @@ A Command that reads a Crawl SHALL take the global flag `--crawl` with one of th
 
 `latest` SHALL be the Crawl that started most recently, whatever its state. The start time is taken from the id. Among ids of the same second, the later `crawl.started_at` wins, and then the greater id, so the choice is always the same.
 
-Only files named `<id>.sqlite` SHALL count as Crawls. Selecting a Crawl SHALL NOT create any file or folder.
+Only files named `<id>.sqlite` SHALL count as Crawls. Selecting a Crawl SHALL NOT create any folder or crawl file. SQLite's own `-wal` and `-shm` companions of an existing crawl file MAY appear, because a reader in WAL mode needs the shared-memory file; they never count as Crawls.
+
+A Crawl selected by id or by `latest` SHALL be the Crawl of that id: its file is named after its id, so a `crawl` row with another id makes the file invalid. A Crawl selected by path SHALL have the id of its `crawl` row, whatever the file is named.
 
 Failures SHALL use these error codes:
 
 | Code | When |
 |---|---|
 | `no_crawls` | the Workspace has no Crawl; the hint names `spider crawl` |
-| `crawl_not_found` | no Crawl has the given id |
-| `crawl_file_invalid` | the selected file is not a readable crawl file; `details.file` names it |
+| `crawl_not_found` | no Crawl has the given id, or no file exists at the given path |
+| `crawl_file_invalid` | the selected file is not a readable crawl file, or a file selected by id or `latest` holds another id; `details.file` names it |
 | `invalid_value` | any other value |
 
 #### Scenario: Latest is the most recent start
@@ -131,6 +133,18 @@ Failures SHALL use these error codes:
 #### Scenario: Not a crawl file
 - **WHEN** `H/work/notes.sqlite`, a text file containing `hello`, is resolved
 - **THEN** resolution fails with the error code `crawl_file_invalid`
+
+#### Scenario: A missing crawl file path
+- **WHEN** `H/work/none.sqlite` is resolved, and no such file exists
+- **THEN** resolution fails with the error code `crawl_not_found`
+
+#### Scenario: A crawl file that holds another id
+- **WHEN** `20260927-100000-aaaa` is resolved, and the `crawl` row of `20260927-100000-aaaa.sqlite` has the id `20260927-090000-zzzz`
+- **THEN** resolution fails with the error code `crawl_file_invalid`, and `details` has `expected_id` `"20260927-100000-aaaa"` and `found_id` `"20260927-090000-zzzz"`
+
+#### Scenario: Companion files are not Crawls
+- **WHEN** `latest` is resolved in a Workspace holding `20260927-100000-aaaa.sqlite` and only `20260927-110000-bbbb.sqlite-wal` for the later id
+- **THEN** the Crawl `20260927-100000-aaaa` is selected
 
 #### Scenario: A broken newest file is reported, not skipped
 - **WHEN** `latest` is resolved in a Workspace holding a valid `20260927-100000-aaaa` and an empty file `20260927-110000-bbbb.sqlite`

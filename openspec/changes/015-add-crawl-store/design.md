@@ -164,7 +164,9 @@
   - A path (a value with a path separator or ending in `.sqlite`) is taken from `cwd`. The returned `CrawlFile` carries the id from the file's `crawl` row.
   - `latest` sorts by id, and breaks ties between ids of the same second with `crawl.started_at`, then the id itself.
   - Every selected file is read before it is returned. A broken newest file is reported, never skipped, so an agent never reads an older Crawl without knowing it; a broken file among the ids of the newest second fails the tie-break the same way. Not a SQLite file, no `crawl` table, or not exactly one `crawl` row is `crawl_file_invalid`.
-  - It never creates a file or folder, so it resolves the Workspace with `resolve_workspace`, not the creating path.
+  - It never creates a folder or a crawl file, so it resolves the Workspace with `resolve_workspace`, not the creating path. SQLite's `-wal` and `-shm` companions of an existing crawl file may appear, because a WAL reader needs the shared-memory file; `immutable=1` stays rejected (D2), and the companions never count as Crawls.
+  - A path that does not exist is `crawl_not_found`, checked before the read-only open; an existing file that is not a crawl file is `crawl_file_invalid`.
+  - By id or `latest`, the file name is the id: a `crawl` row with another id is `crawl_file_invalid`, with `details.expected_id` and `details.found_id`, so `--crawl X` never returns Crawl Y. By path, the row's id is authoritative and the name does not matter (ADR-0002 allows copied and renamed files).
 - **Hints** are built from `spider.naming` (`f"{APP_NAME} crawl"`), never from a literal.
 - **The CLI scenarios** use an example Command that reads a Crawl, registered on the test app (`tests/support/app.py`). The real consumers arrive in `050`.
 
