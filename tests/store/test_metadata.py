@@ -139,3 +139,14 @@ def test_no_settings_file(temp_workspace: TempWorkspace) -> None:
     crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
 
     assert crawl_row(crawl.path)["settings_file"] is None
+
+
+def test_local_disk(temp_workspace: TempWorkspace) -> None:
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+
+    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+
+    assert (
+        crawl_row(crawl.path)["journal_mode"],
+        query(crawl.path, "PRAGMA journal_mode"),
+    ) == ("wal", [("wal",)])

@@ -4,13 +4,14 @@ from typing import get_args
 
 from sqlalchemy import Column, Integer, MetaData, Table, Text
 
-from spider.store.records import CrawlMode, CrawlState
+from spider.store.records import CrawlMode, CrawlState, JournalMode
 from spider.store.types import Flag, Json, Timestamp
 
 # Stays 1 until the first schema change after v0.1, which brings migrations (design D5).
 SCHEMA_VERSION = 1
 CRAWL_MODES = list(get_args(CrawlMode.__value__))
 CRAWL_STATES = list(get_args(CrawlState.__value__))
+JOURNAL_MODES = list(get_args(JournalMode.__value__))
 
 metadata = MetaData()
 
@@ -73,6 +74,13 @@ crawl = Table(
         Integer,
         nullable=False,
         comment="The schema version of this file, also stored as SQLite's user_version.",
+    ),
+    Column(
+        "journal_mode",
+        Text,
+        nullable=False,
+        comment="The SQLite journal mode the file was created with.",
+        info={"values": JOURNAL_MODES},
     ),
     Column(
         "python_version",

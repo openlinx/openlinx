@@ -8,6 +8,7 @@ from typing import Any, Literal
 from spider.workspace.discovery import Workspace
 
 type CrawlMode = Literal["spider", "list", "sitemap"]
+type JournalMode = Literal["wal", "delete"]
 type CrawlState = Literal["running", "stopped", "completed", "failed", "interrupted"]
 
 

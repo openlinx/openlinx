@@ -2,7 +2,9 @@
 
 import platform
 import sqlite3
+from contextlib import closing
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import Connection, create_engine, insert, update
 from sqlalchemy.pool import NullPool
@@ -45,8 +47,11 @@ def _claim_new_file(request: NewCrawl, started_at: datetime, choice: Choice) -> 
 
 def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: datetime) -> None:
     settings_file = request.workspace.settings_file
+    # The journal mode belongs to the file, so it is set once, outside any transaction.
+    with closing(sqlite3.connect(crawl_file.path)) as connection:
+        (journal_mode,) = connection.execute("PRAGMA journal_mode = WAL").fetchone()
     engine = create_engine(
-        "sqlite://", creator=lambda: sqlite3.connect(crawl_file.path), poolclass=NullPool
+        "sqlite://", creator=lambda: _connect(crawl_file.path), poolclass=NullPool
     )
     try:
         with engine.begin() as connection:
@@ -65,6 +70,7 @@ def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: dateti
                     config=dict(request.config),
                     tool_version=__version__,
                     schema_version=SCHEMA_VERSION,
+                    journal_mode=journal_mode,
                     python_version=platform.python_version(),
                     platform=platform.platform(),
                 )
@@ -78,3 +84,10 @@ def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: dateti
             )
     finally:
         engine.dispose()
+
+
+def _connect(path: Path) -> sqlite3.Connection:
+    connection = sqlite3.connect(path)
+    # WAL keeps committed units durable with NORMAL, without a sync on every commit.
+    connection.execute("PRAGMA synchronous = NORMAL")
+    return connection
