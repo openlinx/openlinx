@@ -56,20 +56,22 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 
 - **Counts are not recorded.** No column holds the number of URLs, Pages or Issues: they are counted from the tables that hold them, so they can never disagree.
 - **`started_at`** is the same instant as the time in the crawl id, read once when the Crawl is created.
-- **`settings_file`** is the Workspace's `spider.toml` when it existed, otherwise NULL. `config` holds the settings the Crawl ran with, with every table and key, so the file says how it was made even when `spider.toml` changes later.
+- **`settings_file`** is the `spider.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key, so the file says how it was made even when `spider.toml` changes later.
 - **The environment stamp** (`python_version` and `platform`) helps when a crawl file is attached to a bug report.
 
 ## Crawl States
 
-`state` holds one of the Crawl States of [CONTEXT.md](../CONTEXT.md):
+`state` holds one of the Crawl States, as [CONTEXT.md](../CONTEXT.md) defines them:
 
 | State | Meaning |
 |---|---|
 | `running` | a process is crawling, or was when it last wrote the file |
-| `stopped` | ended before its end, for example at a URL limit or on Ctrl+C |
+| `stopped` | paused before its end, resumable |
 | `completed` | it ran to the end |
-| `failed` | it could not continue |
-| `interrupted` | its process died without recording an end |
+| `failed` | it could not continue, resumable |
+| `interrupted` | its process died without recording an end, resumable |
+
+Resuming arrives with `060-add-crawl-control` (v0.2).
 
 - A new Crawl starts as `running`.
 - `completed_at` is set when the state becomes `completed`, and is NULL in every other state. A `stopped` or `failed` Crawl has no completion time.

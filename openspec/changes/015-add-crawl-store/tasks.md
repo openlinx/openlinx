@@ -76,7 +76,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: any `OSError` other than `FileExistsError` from claiming or writing a crawl file becomes `workspace_not_writable` with `details.path`, so no permissions problem reaches an agent as a traceback.
 - [x] 3.12 Docs: add the metadata, the Crawl States and the NULL rule to `docs/crawl-store.md`.
-- [ ] 3.13 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [x] 3.13 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. The transactional writer (slice, seam 2)
 

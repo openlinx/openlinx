@@ -2,7 +2,6 @@
 
 import json
 import re
-from dataclasses import replace
 from datetime import UTC, datetime
 
 from spider.output.reporter import Collected
@@ -11,12 +10,10 @@ from spider.store.crawls import set_state
 from spider.store.records import NewCrawl
 from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
-from tests.support.crawls import crawl_row, new_crawl, query, run_unit
+from tests.support.crawls import STARTED_AT, crawl_row, create_any_crawl, query, run_unit
 from tests.support.project import project_version
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
-
-STARTED_AT = datetime(2026, 9, 27, 14, 3, 12, 345000, tzinfo=UTC)
 
 
 def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
@@ -55,21 +52,16 @@ def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
 
 
 def test_timestamp_text(temp_workspace: TempWorkspace) -> None:
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-
-    crawl = create_crawl(new_crawl(workspace), FakeClock(start=STARTED_AT), Collected())
+    crawl = create_any_crawl(temp_workspace)
 
     started_at = crawl_row(crawl.path)["started_at"]
     assert (started_at, len(started_at)) == ("2026-09-27T14:03:12.345Z", 24)
 
 
 def test_seeds_keep_their_order(temp_workspace: TempWorkspace) -> None:
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-    request = replace(
-        new_crawl(workspace), seeds=["https://example.com/b", "https://example.com/a"]
+    crawl = create_any_crawl(
+        temp_workspace, seeds=["https://example.com/b", "https://example.com/a"]
     )
-
-    crawl = create_crawl(request, FakeClock(), Collected())
 
     assert query(crawl.path, "SELECT position, url FROM seeds ORDER BY position") == [
         (1, "https://example.com/b"),
@@ -78,9 +70,7 @@ def test_seeds_keep_their_order(temp_workspace: TempWorkspace) -> None:
 
 
 def test_version_stamp(temp_workspace: TempWorkspace) -> None:
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-
-    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+    crawl = create_any_crawl(temp_workspace)
 
     row = crawl_row(crawl.path)
     assert (
@@ -91,20 +81,18 @@ def test_version_stamp(temp_workspace: TempWorkspace) -> None:
 
 
 def test_environment_stamp(temp_workspace: TempWorkspace) -> None:
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-
-    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+    crawl = create_any_crawl(temp_workspace)
 
     row = crawl_row(crawl.path)
+    python_version, platform = stamp = row["python_version"], row["platform"]
     assert (
-        bool(re.fullmatch(r"3\.(12|13|14)\.[0-9]+", row["python_version"])),
-        isinstance(row["platform"], str) and row["platform"] != "",
-    ) == (True, True)
+        re.fullmatch(r"3\.(12|13|14)\.[0-9]+", python_version) is not None,
+        platform != "",
+    ) == (True, True), stamp
 
 
 def test_completion_time(temp_workspace: TempWorkspace) -> None:
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+    crawl = create_any_crawl(temp_workspace)
     completed_at = datetime(2026, 9, 27, 15, 0, 0, tzinfo=UTC)
 
     run_unit(crawl.path, lambda connection: set_state(connection, "completed", completed_at))
@@ -113,8 +101,7 @@ def test_completion_time(temp_workspace: TempWorkspace) -> None:
 
 
 def test_a_stopped_crawl_has_no_completion_time(temp_workspace: TempWorkspace) -> None:
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+    crawl = create_any_crawl(temp_workspace)
     stopped_at = datetime(2026, 9, 27, 15, 0, 0, tzinfo=UTC)
 
     run_unit(crawl.path, lambda connection: set_state(connection, "stopped", stopped_at))
@@ -123,28 +110,20 @@ def test_a_stopped_crawl_has_no_completion_time(temp_workspace: TempWorkspace) -
 
 
 def test_a_running_crawl_has_no_completion_time(temp_workspace: TempWorkspace) -> None:
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-
-    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+    crawl = create_any_crawl(temp_workspace)
 
     row = crawl_row(crawl.path)
     assert (row["state"], row["completed_at"]) == ("running", None)
 
 
 def test_no_settings_file(temp_workspace: TempWorkspace) -> None:
-    shop = temp_workspace.root / "shop"
-    (shop / ".spider").mkdir(parents=True)
-    workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
-
-    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+    crawl = create_any_crawl(temp_workspace)
 
     assert crawl_row(crawl.path)["settings_file"] is None
 
 
 def test_local_disk(temp_workspace: TempWorkspace) -> None:
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-
-    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+    crawl = create_any_crawl(temp_workspace)
 
     assert (
         crawl_row(crawl.path)["journal_mode"],

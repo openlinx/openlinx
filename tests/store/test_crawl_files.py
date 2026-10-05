@@ -9,12 +9,10 @@ from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
 from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
-from tests.support.crawls import new_crawl
+from tests.support.crawls import STARTED_AT, new_crawl
 from tests.support.permissions import unwritable_folder
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
-
-STARTED_AT = datetime(2026, 9, 27, 14, 3, 12, 345000, tzinfo=UTC)
 
 
 def test_location_of_a_crawl_file(temp_workspace: TempWorkspace) -> None:

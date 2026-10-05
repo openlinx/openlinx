@@ -1,4 +1,4 @@
-"""What creating a Crawl takes and gives, without loading the store (designs D6 and D9 of 015)."""
+"""The store's records and enumerations, loading no sqlalchemy (designs D6 and D9 of 015)."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -20,6 +20,7 @@ class NewCrawl:
     command_argv: Sequence[str]
     cwd: Path
     config: Mapping[str, Any]
+    settings_file: Path | None = None
     section_crawl: bool = False
 
 

@@ -15,14 +15,14 @@ GITIGNORE = f"# Created by {APP_NAME}: crawl data is not committed.\n*\n"
 
 def create_workspace(workspace: Workspace, settings_text: str) -> list[Path]:
     created = create_data_folder(workspace)
-    with not_writable_errors(workspace):
+    with as_workspace_not_writable(workspace):
         created += _file(workspace.settings_file, settings_text)
     return created
 
 
 def create_data_folder(workspace: Workspace) -> list[Path]:
     folder = workspace.data_dir
-    with not_writable_errors(workspace):
+    with as_workspace_not_writable(workspace):
         workspace.root.mkdir(parents=True, exist_ok=True)
         return [
             *_folder(folder),
@@ -32,7 +32,7 @@ def create_data_folder(workspace: Workspace) -> list[Path]:
 
 
 @contextmanager
-def not_writable_errors(workspace: Workspace) -> Iterator[None]:
+def as_workspace_not_writable(workspace: Workspace) -> Iterator[None]:
     try:
         yield
     except OSError as error:

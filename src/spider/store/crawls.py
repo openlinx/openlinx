@@ -2,27 +2,42 @@
 
 import platform
 import sqlite3
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import Connection, create_engine, insert, update
-from sqlalchemy.pool import NullPool
+from sqlalchemy import Connection, insert, update
+from sqlalchemy.exc import DBAPIError
 
 from spider import __version__
+from spider.output.codes import WORKSPACE_NOT_WRITABLE
+from spider.output.diagnostics import SpiderError
+from spider.store.connections import connect, opening
 from spider.store.ids import Choice, new_crawl_id
 from spider.store.records import CrawlFile, CrawlState, NewCrawl
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
-from spider.workspace.creation import create_data_folder, not_writable_errors
+from spider.workspace.creation import as_workspace_not_writable, create_data_folder
+
+# SQLite's primary result codes for a file or folder that cannot be written.
+NOT_WRITABLE = {
+    sqlite3.SQLITE_PERM,
+    sqlite3.SQLITE_READONLY,
+    sqlite3.SQLITE_IOERR,
+    sqlite3.SQLITE_FULL,
+    sqlite3.SQLITE_CANTOPEN,
+}
 
 
 def create_crawl_file(request: NewCrawl, started_at: datetime, choice: Choice) -> CrawlFile:
-    create_data_folder(request.workspace)
+    workspace = request.workspace
+    create_data_folder(workspace)
     # A permissions problem must reach an agent as an error code, never as a traceback.
-    with not_writable_errors(request.workspace):
-        crawl_file = _claim_new_file(request, started_at, choice)
+    with as_workspace_not_writable(workspace):
+        crawl_file = _claim_new_file(workspace.crawls_dir, started_at, choice)
         try:
-            _write_new_file(crawl_file, request, started_at)
+            with _sqlite_not_writable(crawl_file.path):
+                _write_new_file(crawl_file, request, started_at)
         except BaseException:
             # A claimed file left empty would break --crawl latest in this Workspace.
             crawl_file.path.unlink()
@@ -35,10 +50,10 @@ def set_state(connection: Connection, state: CrawlState, at: datetime) -> None:
     connection.execute(update(crawl).values(state=state, completed_at=completed_at))
 
 
-def _claim_new_file(request: NewCrawl, started_at: datetime, choice: Choice) -> CrawlFile:
+def _claim_new_file(crawls_dir: Path, started_at: datetime, choice: Choice) -> CrawlFile:
     while True:
         crawl_id = new_crawl_id(started_at, choice)
-        path = request.workspace.crawls_dir / f"{crawl_id}.sqlite"
+        path = crawls_dir / f"{crawl_id}.sqlite"
         # Exclusive create: of two processes that draw the same id, only one gets the file.
         try:
             path.open("xb").close()
@@ -48,48 +63,54 @@ def _claim_new_file(request: NewCrawl, started_at: datetime, choice: Choice) -> 
 
 
 def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: datetime) -> None:
-    settings_file = request.workspace.settings_file
     # The journal mode belongs to the file, so it is set once, outside any transaction.
-    with closing(sqlite3.connect(crawl_file.path)) as connection:
+    with closing(connect(crawl_file.path)) as connection:
         (journal_mode,) = connection.execute("PRAGMA journal_mode = WAL").fetchone()
-    engine = create_engine(
-        "sqlite://", creator=lambda: _connect(crawl_file.path), poolclass=NullPool
-    )
+    settings_file = request.settings_file
+    with (
+        opening(crawl_file.path, journal_mode=journal_mode) as engine,
+        engine.begin() as connection,
+    ):
+        metadata.create_all(connection)
+        connection.exec_driver_sql(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        connection.execute(
+            insert(crawl).values(
+                id=crawl_file.id,
+                crawl_mode=request.crawl_mode,
+                section_crawl=request.section_crawl,
+                state="running",
+                started_at=started_at,
+                command_argv=list(request.command_argv),
+                cwd=str(request.cwd.absolute()),
+                settings_file=None if settings_file is None else str(settings_file.absolute()),
+                config=dict(request.config),
+                tool_version=__version__,
+                schema_version=SCHEMA_VERSION,
+                journal_mode=journal_mode,
+                python_version=platform.python_version(),
+                platform=platform.platform(),
+            )
+        )
+        connection.execute(
+            insert(seeds),
+            [
+                {"position": position, "url": url}
+                for position, url in enumerate(request.seeds, start=1)
+            ],
+        )
+
+
+@contextmanager
+def _sqlite_not_writable(file: Path) -> Iterator[None]:
     try:
-        with engine.begin() as connection:
-            metadata.create_all(connection)
-            connection.exec_driver_sql(f"PRAGMA user_version = {SCHEMA_VERSION}")
-            connection.execute(
-                insert(crawl).values(
-                    id=crawl_file.id,
-                    crawl_mode=request.crawl_mode,
-                    section_crawl=request.section_crawl,
-                    state="running",
-                    started_at=started_at,
-                    command_argv=list(request.command_argv),
-                    cwd=str(request.cwd),
-                    settings_file=str(settings_file) if settings_file.is_file() else None,
-                    config=dict(request.config),
-                    tool_version=__version__,
-                    schema_version=SCHEMA_VERSION,
-                    journal_mode=journal_mode,
-                    python_version=platform.python_version(),
-                    platform=platform.platform(),
-                )
-            )
-            connection.execute(
-                insert(seeds),
-                [
-                    {"position": position, "url": url}
-                    for position, url in enumerate(request.seeds, start=1)
-                ],
-            )
-    finally:
-        engine.dispose()
-
-
-def _connect(path: Path) -> sqlite3.Connection:
-    connection = sqlite3.connect(path)
-    # WAL keeps committed units durable with NORMAL, without a sync on every commit.
-    connection.execute("PRAGMA synchronous = NORMAL")
-    return connection
+        yield
+    except (sqlite3.Error, DBAPIError) as error:
+        cause = error.orig if isinstance(error, DBAPIError) else error
+        code = getattr(cause, "sqlite_errorcode", None)
+        if code is None or code & 0xFF not in NOT_WRITABLE:
+            raise
+        raise SpiderError(
+            WORKSPACE_NOT_WRITABLE,
+            f"Cannot write the new crawl file {file}.",
+            details={"path": str(file), "error": getattr(cause, "sqlite_errorname", None)},
+        ) from error
