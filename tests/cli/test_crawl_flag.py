@@ -43,3 +43,18 @@ def test_no_crawls_on_the_command_line(temp_workspace: TempWorkspace) -> None:
         "no_crawls",
         True,
     )
+
+
+def test_a_text_file_on_the_command_line(temp_workspace: TempWorkspace) -> None:
+    notes = temp_workspace.root / "notes.sqlite"
+    notes.write_text("hello", encoding="utf-8")
+
+    result = run_cli(EXAMPLE_READ_CRAWL, "--crawl", str(notes), app=example_app())
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (6, "crawl_file_invalid")
+
+
+def test_a_malformed_value_on_the_command_line(temp_workspace: TempWorkspace) -> None:
+    result = run_cli(EXAMPLE_READ_CRAWL, "--crawl", "yesterday", app=example_app())
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "invalid_value")
