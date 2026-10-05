@@ -32,7 +32,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: `docs/schema.md` exists with its conventions section and no tables, and a parser of it is compared with the schema service's description of the declared schema.
 - [x] 1.3 Drive "Location of a crawl file" at seam 2.
 
-  Done when: a Crawl with a given id can be created as `<data folder>/crawls/<id>.sqlite`, with a `crawl` table holding `id` only, and its `docs/schema.md` section.
+  Done when: a Crawl with a given id can be created as `<data folder>/crawls/<id>.sqlite`, with a `crawl` table holding `id` only, and its `docs/schema.md` section. Since 2.3 the id is drawn, never given: the test gets `k3f9` from the injected random source, and chosen ids belong to `060`.
 - [x] 1.4 **Guard:** "A new file matches the declaration" at seam 6. It passed at once: `create_crawl` builds the file from the declared tables with `create_all()`.
 
   Done when: a test compares `PRAGMA table_info` and `PRAGMA foreign_key_list` of every public table in a new crawl file with the declared schema, and fails on any extra public table or column.
