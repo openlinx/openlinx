@@ -61,7 +61,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 3.1 Drive "Metadata of a new Crawl".
 
   Done when: the `crawl` row holds `crawl_mode`, `section_crawl`, `state`, `started_at`, `completed_at`, `command_argv`, `cwd`, `settings_file` and `config`, through the shared timestamp, JSON and boolean column types, each with its `docs/schema.md` row.
-- [ ] 3.2 **Guard:** "Timestamp text".
+- [x] 3.2 **Guard:** "Timestamp text".
 - [ ] 3.3 Drive "Seeds keep their order". Done when: the `seeds` table and its `docs/schema.md` section exist.
 - [ ] 3.4 Drive "Version stamp". The test reads `pyproject.toml` with `tomllib`. Done when: `tool_version`, `schema_version` and SQLite `user_version` are written, with their docs rows.
 - [ ] 3.5 Drive "Environment stamp". Done when: `python_version` and `platform` are written, with their docs rows.
