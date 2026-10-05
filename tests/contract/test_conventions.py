@@ -29,3 +29,24 @@ def test_descriptions_are_present() -> None:
     ]
 
     assert [d for d in descriptions if not isinstance(d, str) or not d.strip()] == []
+
+
+def all_columns() -> list[dict[str, Any]]:
+    return [column for table in public_tables() for column in table["columns"]]
+
+
+def test_booleans_are_integers() -> None:
+    assert [
+        column["name"]
+        for column in all_columns()
+        if column["format"] == "boolean" and column["type"] != "INTEGER"
+    ] == []
+
+
+def test_enumeration_values_are_snake_case() -> None:
+    assert [
+        value
+        for column in all_columns()
+        for value in column["values"] or []
+        if not SNAKE_CASE.fullmatch(value)
+    ] == []
