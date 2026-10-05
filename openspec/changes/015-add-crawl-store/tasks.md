@@ -48,7 +48,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 2. New crawl ids (slice)
 
-- [ ] 2.1 Drive "Id from the start time" at seam 4, with `FakeClock` and an injected random source.
+- [x] 2.1 Drive "Id from the start time" at seam 4, with `FakeClock` and an injected random source.
 - [ ] 2.2 Drive "Character set" at seam 4, with a hypothesis property over start times and the system random source.
 - [ ] 2.3 Drive "A taken id is drawn again" at seam 2.
 

@@ -37,7 +37,7 @@ A change's `design.md` names the seams it is tested at. Adding a new seam is a d
 | Folder | Seam |
 |---|---|
 | `tests/cli/` | 1, CLI |
-| `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API |
+| `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API; 4, the store's pure logic, such as crawl ids |
 | `tests/output/` | 4, the output layer's pure logic |
 | `tests/contract/` | 6, the store contract (`test_schema.py`, with its parser of `docs/schema.md`), and the hand-written expected JSON of the CLI contract tests (`commands/`) |
 | `tests/js/` | 9, the Report script |
@@ -95,6 +95,7 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
   - `await sleep(seconds)` advances virtual time and yields once to the event loop, with no real wait.
 
   Production code takes a `Clock`, which is `SystemClock` outside tests.
+- **`scripted_choice(characters)`** (`tests/support/randomness.py`): the random-source double. It stands in for `secrets.choice`, and each call returns the next of `characters`, so `scripted_choice("k3f9")` makes the crawl id suffix `k3f9`.
 
 ## Quality gates (CI)
 
