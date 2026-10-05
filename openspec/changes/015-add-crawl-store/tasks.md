@@ -116,7 +116,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.13 Drive "The flag defaults to latest" at seam 1, with an example Command that reads a Crawl on the test app.
 
   Done when: `--crawl` is a global option declared once in `spider.cli.options`, with the default `latest`, and resolving it imports the store only inside the Command's body.
-- [ ] 5.14 Drive "The flag is described as global" at seam 1.
+- [x] 5.14 **Guard:** "The flag is described as global" at seam 1. It passed at once: `CrawlOpt` carries `OptionMeta(is_global=True)`, and `spider commands` already reports both from 010.
 - [ ] 5.15 Drive "Unknown id on the command line" and "No Crawls on the command line" at seam 1, a trivial pair.
 - [ ] 5.16 Drive "A text file on the command line" and "A malformed value on the command line" at seam 1, a trivial pair.
 - [ ] 5.17 Docs: add `--crawl latest|<id>|<path>` to `docs/crawl-store.md` and `docs/cli.md`.

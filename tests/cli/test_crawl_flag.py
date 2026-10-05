@@ -13,3 +13,14 @@ def test_the_flag_defaults_to_latest(temp_workspace: TempWorkspace) -> None:
     result = run_cli(EXAMPLE_READ_CRAWL, app=example_app())
 
     assert (result.exit_code, result.json()) == (0, {"crawl": "20260927-110000-bbbb"})
+
+
+def test_the_flag_is_described_as_global() -> None:
+    entry = next(
+        command
+        for command in run_cli("commands", app=example_app()).json()["commands"]
+        if command["name"] == EXAMPLE_READ_CRAWL
+    )
+    option = next(option for option in entry["options"] if option["name"] == "--crawl")
+
+    assert (option["global"], option["default"]) == (True, "latest")
