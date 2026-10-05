@@ -2,6 +2,7 @@
 
 import hashlib
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from sqlalchemy import Connection, func, insert, select, update
@@ -173,3 +174,41 @@ def test_the_writer_waits_30_seconds_for_a_lock_and_checks_references(
         )
 
     assert pragmas == (1, 30_000)
+
+
+def numbered_insert(position: int) -> Callable[[Connection], int]:
+    """Returns how many units ran before it, so the order units ran in can be read back."""
+
+    def unit(connection: Connection) -> int:
+        ran_before = count_seeds(connection)
+        insert_seed(position, f"https://example.com/{position}")(connection)
+        return ran_before
+
+    return unit
+
+
+def test_units_from_several_threads_never_interleave(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+
+        def caller(number: int) -> list[int]:
+            return [writer.run(numbered_insert(number * 1000 + n)) for n in range(50)]
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            orders = list(pool.map(caller, range(4)))
+
+    assert (
+        all(order == sorted(order) for order in orders),
+        sorted(index for order in orders for index in order),
+    ) == (True, list(range(200)))
+
+
+async def test_run_async_from_an_event_loop(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        await writer.run_async(insert_seed(1, "https://example.com/a"))
+        count = await writer.run_async(count_seeds)
+
+    assert count == 1

@@ -1,11 +1,12 @@
 """The transactional writer: units of work on one thread (design D4 of 015-add-crawl-store)."""
 
+import asyncio
 import threading
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
 from pathlib import Path
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from types import TracebackType
 from typing import Any, Literal, Self
 
@@ -49,6 +50,16 @@ class CrawlWriter:
         done: Future[T] = Future()
         self._queue.put(_Job(unit, done))
         return done.result()
+
+    async def run_async[T](self, unit: Callable[[Connection], T]) -> T:
+        done: Future[T] = Future()
+        job = _Job(unit, done)
+        try:
+            self._queue.put_nowait(job)
+        except Full:
+            # Backpressure without blocking the event loop.
+            await asyncio.to_thread(self._queue.put, job)
+        return await asyncio.wrap_future(done)
 
     def flush(self) -> None:
         done: Future[None] = Future()
