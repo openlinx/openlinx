@@ -106,7 +106,7 @@
 ### D5. Schema versions, without migrations until the first release
 
 - **New files** are made with `metadata.create_all()`, and stamped with `crawl.schema_version` and `PRAGMA user_version`, both `1`.
-- **Opening a file** reads `user_version` without the declared schema:
+- **Opening a file** for reading reads `user_version` without the declared schema (`spider.store.reading.reading`, so every reader and `--crawl` resolution). The writer does not check it in v0.1: it only opens a file its own process just created; `060` adds the check with resume:
 
   | Condition | Result |
   |---|---|
