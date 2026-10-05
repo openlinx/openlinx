@@ -7,10 +7,11 @@ from datetime import UTC, datetime
 
 from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
+from spider.store.crawls import set_state
 from spider.store.records import NewCrawl
 from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
-from tests.support.crawls import crawl_row, new_crawl, query
+from tests.support.crawls import crawl_row, new_crawl, query, run_unit
 from tests.support.project import project_version
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
@@ -99,3 +100,13 @@ def test_environment_stamp(temp_workspace: TempWorkspace) -> None:
         bool(re.fullmatch(r"3\.(12|13|14)\.[0-9]+", row["python_version"])),
         isinstance(row["platform"], str) and row["platform"] != "",
     ) == (True, True)
+
+
+def test_completion_time(temp_workspace: TempWorkspace) -> None:
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+    completed_at = datetime(2026, 9, 27, 15, 0, 0, tzinfo=UTC)
+
+    run_unit(crawl.path, lambda connection: set_state(connection, "completed", completed_at))
+
+    assert crawl_row(crawl.path)["completed_at"] == "2026-09-27T15:00:00.000Z"

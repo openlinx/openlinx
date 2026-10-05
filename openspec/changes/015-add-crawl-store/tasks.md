@@ -65,7 +65,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 3.3 Drive "Seeds keep their order". Done when: the `seeds` table and its `docs/schema.md` section exist.
 - [x] 3.4 Drive "Version stamp". The test reads `pyproject.toml` with `tomllib`. Done when: `tool_version`, `schema_version` and SQLite `user_version` are written, with their docs rows.
 - [x] 3.5 Drive "Environment stamp". Done when: `python_version` and `platform` are written, with their docs rows.
-- [ ] 3.6 Drive "Completion time". Done when: setting the state sets `completed_at` only for `completed`.
+- [x] 3.6 Drive "Completion time". Done when: setting the state sets `completed_at` only for `completed`.
 - [ ] 3.7 Drive "A stopped Crawl has no completion time".
 - [ ] 3.8 **Guard:** "A running Crawl has no completion time" and "No settings file", a pair.
 - [ ] 3.9 Drive "Local disk". Done when: new crawl files use WAL with `synchronous=NORMAL`, and `crawl.journal_mode` records it, with its docs row.

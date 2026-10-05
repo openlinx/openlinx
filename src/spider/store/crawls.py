@@ -4,12 +4,12 @@ import platform
 import sqlite3
 from datetime import datetime
 
-from sqlalchemy import create_engine, insert
+from sqlalchemy import Connection, create_engine, insert, update
 from sqlalchemy.pool import NullPool
 
 from spider import __version__
 from spider.store.ids import Choice, new_crawl_id
-from spider.store.records import CrawlFile, NewCrawl
+from spider.store.records import CrawlFile, CrawlState, NewCrawl
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
 from spider.workspace.creation import create_data_folder
 
@@ -24,6 +24,10 @@ def create_crawl_file(request: NewCrawl, started_at: datetime, choice: Choice) -
         crawl_file.path.unlink()
         raise
     return crawl_file
+
+
+def set_state(connection: Connection, state: CrawlState, at: datetime) -> None:
+    connection.execute(update(crawl).values(state=state, completed_at=at))
 
 
 def _claim_new_file(request: NewCrawl, started_at: datetime, choice: Choice) -> CrawlFile:

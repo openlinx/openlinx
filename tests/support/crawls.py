@@ -1,9 +1,13 @@
 """Creating and reading Crawls in tests (015-add-crawl-store)."""
 
 import sqlite3
+from collections.abc import Callable
 from contextlib import closing
 from pathlib import Path
 from typing import Any
+
+from sqlalchemy import Connection, create_engine
+from sqlalchemy.pool import NullPool
 
 from spider.store.records import NewCrawl
 from spider.workspace.discovery import Workspace
@@ -31,3 +35,13 @@ def crawl_row(file: Path) -> dict[str, Any]:
     with closing(sqlite3.connect(f"{file.as_uri()}?mode=ro", uri=True)) as connection:
         connection.row_factory = sqlite3.Row
         return dict(connection.execute("SELECT * FROM crawl").fetchone())
+
+
+def run_unit[T](file: Path, unit: Callable[[Connection], T]) -> T:
+    """Runs one unit of work in its own committed transaction, until the writer of group 4."""
+    engine = create_engine("sqlite://", creator=lambda: sqlite3.connect(file), poolclass=NullPool)
+    try:
+        with engine.begin() as connection:
+            return unit(connection)
+    finally:
+        engine.dispose()

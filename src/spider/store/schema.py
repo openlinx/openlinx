@@ -1,13 +1,16 @@
 """The declared public schema of a crawl file (design D6 of 015-add-crawl-store)."""
 
+from typing import get_args
+
 from sqlalchemy import Column, Integer, MetaData, Table, Text
 
+from spider.store.records import CrawlMode, CrawlState
 from spider.store.types import Flag, Json, Timestamp
 
 # Stays 1 until the first schema change after v0.1, which brings migrations (design D5).
 SCHEMA_VERSION = 1
-CRAWL_MODES = ["spider", "list", "sitemap"]
-CRAWL_STATES = ["running", "stopped", "completed", "failed", "interrupted"]
+CRAWL_MODES = list(get_args(CrawlMode.__value__))
+CRAWL_STATES = list(get_args(CrawlState.__value__))
 
 metadata = MetaData()
 
