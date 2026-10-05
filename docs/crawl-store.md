@@ -77,6 +77,28 @@ Resuming arrives with `060-add-crawl-control` (v0.2).
 - `completed_at` is set when the state becomes `completed`, and is NULL in every other state. A `stopped` or `failed` Crawl has no completion time.
 - A `running` state does not prove that a process is still crawling: a process that was killed leaves it behind. Telling the two apart is `060-add-crawl-control`'s job, which records such a Crawl as `interrupted`.
 
+## Writing a Crawl
+
+Creating a Crawl writes its file, its `crawl` row and its Seeds in one transaction. Everything written after that goes through the Crawl's writer, in **units of work**.
+
+- **A unit** is a function that gets a database connection and may insert, update and read rows. It returns a value to its caller, for example the next URL to fetch.
+- **One at a time, in order.** The writer runs units on its own thread, one at a time, in the order they were submitted. Units can come from several threads, or from an event loop without blocking it.
+- **One open transaction.** Every unit sees what the units before it wrote, committed or not, so a unit can read a row and update it in one step.
+- **Atomic units.** A unit that fails leaves no change: its writes are rolled back, its error reaches its caller, and the units before and after it are unaffected. That holds for Ctrl+C inside a unit too.
+- **When it commits:**
+
+  | Trigger | |
+  |---|---|
+  | 500 units since the last commit | the batch |
+  | 1 second after the first unit since the last commit | the timer, checked after each unit and every 50 ms while idle |
+  | `flush()` | at once, before `flush()` returns |
+  | `close()` | everything still open |
+
+- **What a crash loses.** A process that is killed loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound.
+- **The write check.** Opening the writer first runs a write that it rolls back. A crawl file that cannot be written, for example one with the read-only attribute, fails at once with `crawl_not_writable` (exit code 7) and `details.file`, before anything is crawled, and the file is left unchanged.
+- **One writer per Crawl.** In v0.1 only the process that creates a Crawl writes it, because a Crawl cannot be resumed or detached yet. `060-add-crawl-control` adds a claim on the file when a second process can write.
+- **After `close()`,** the writer accepts no more units: a unit submitted then fails at once. Closing twice is harmless.
+
 ## Not measured is NULL
 
 A value that was not measured, or that does not apply, is stored as NULL, never as `0` or an empty string. `0` is a measured zero, and an empty string is a value that is present but empty. So `completed_at` is NULL while a Crawl runs, and `settings_file` is NULL when there was no settings file. Queries should test `IS NULL`, not `= 0` or `= ''`.

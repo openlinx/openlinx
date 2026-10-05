@@ -94,7 +94,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.10 Drive the connection pragmas of D2 at seam 2: every connection has `foreign_keys` on, the writer waits up to 30 s for a lock and readers 5 s. Mapping a busy reader to `crawl_busy` stays in 7.4.
 - [x] 4.11 Drive concurrent callers at seam 2: units submitted from several threads run one at a time, and each caller's units run in the order it submitted them. `run_async` runs a unit from a real event loop made by `spider.aio.loop_factory`.
 - [x] 4.12 Drive the writer's end at seam 2: `close()` can be called twice; a unit submitted after `close()` fails at once with a clear error; a unit that raises a `BaseException`, such as `KeyboardInterrupt`, rolls back like any failing unit, reaches its caller, and the writer keeps running. Done when: D4 records this behaviour.
-- [ ] 4.13 Docs: add units, commit triggers, the write check and "one writer by construction in v0.1" to `docs/crawl-store.md`.
+- [x] 4.13 Docs: add units, commit triggers, the write check and "one writer by construction in v0.1" to `docs/crawl-store.md`.
 - [ ] 4.14 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Selecting a Crawl (slice, seams 2 and 1)
