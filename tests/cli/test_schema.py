@@ -2,7 +2,10 @@
 
 from typing import Any
 
+import pytest
+
 from tests.support.cli import run_cli
+from tests.support.workspace import TempWorkspace
 
 
 def test_one_table() -> None:
@@ -79,3 +82,21 @@ def test_unknown_table() -> None:
         error["code"],
         {"crawl", "seeds"} <= set(error["details"]["tables"]),
     ) == (2, "unknown_table", True)
+
+
+def test_internal_tables_are_hidden() -> None:
+    items = run_cli("schema", "--fields", "name", "--limit", "1000").json()["items"]
+
+    assert [item["name"] for item in items if item["name"].startswith("_")] == []
+
+
+def test_no_workspace_needed(
+    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    notes = temp_workspace.root / "notes"
+    notes.mkdir()
+    monkeypatch.chdir(notes)
+
+    result = run_cli("schema")
+
+    assert (result.exit_code, (temp_workspace.home / ".spider").exists()) == (0, False)

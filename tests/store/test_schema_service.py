@@ -28,3 +28,23 @@ def test_tables_are_ordered_by_the_adding_change_then_by_position() -> None:
     names = [table["name"] for table in describe_schema().tables]
 
     assert names == ["earlier_rows", "crawl", "seeds"]
+
+
+@pytest.fixture
+def internal_table() -> Iterator[None]:
+    table = Table(
+        "_writer_state",
+        metadata,
+        Column("n", Integer, primary_key=True, comment="A number."),
+        comment="Internal rows of the tool.",
+        info={"change": 15},
+    )
+    yield
+    metadata.remove(table)
+
+
+@pytest.mark.usefixtures("internal_table")
+def test_tables_whose_names_start_with_an_underscore_are_internal() -> None:
+    names = [table["name"] for table in describe_schema().tables]
+
+    assert names == ["crawl", "seeds"]
