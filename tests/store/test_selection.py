@@ -45,3 +45,10 @@ def test_a_running_crawl_can_be_latest(temp_workspace: TempWorkspace) -> None:
     create_crawl_at(temp_workspace, "2026-09-27T11:00:00.000Z", "bbbb")
 
     assert resolve_latest(temp_workspace) == "20260927-110000-bbbb"
+
+
+def test_two_crawls_in_the_same_second(temp_workspace: TempWorkspace) -> None:
+    create_crawl_at(temp_workspace, "2026-09-27T10:00:00.100Z", "zzzz")
+    create_crawl_at(temp_workspace, "2026-09-27T10:00:00.900Z", "aaaa")
+
+    assert resolve_latest(temp_workspace) == "20260927-100000-aaaa"
