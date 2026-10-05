@@ -48,3 +48,13 @@ def test_column_formats() -> None:
         "boolean",
         "json",
     ]
+
+
+def test_state_values_are_documented() -> None:
+    assert columns_of("crawl")["state"]["values"] == [
+        "running",
+        "stopped",
+        "completed",
+        "failed",
+        "interrupted",
+    ]
