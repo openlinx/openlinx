@@ -11,6 +11,9 @@ from sqlalchemy import Connection, Engine, create_engine, event
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.pool import NullPool
 
+READER_BUSY_SECONDS = 5.0
+WRITER_BUSY_SECONDS = 30.0
+
 # SQLite's primary result codes for a file or folder that cannot be written.
 NOT_WRITABLE = {
     sqlite3.SQLITE_PERM,
@@ -39,7 +42,11 @@ def file_uri(path: PurePath) -> str:
 
 def connect(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
     uri = file_uri(path.resolve()) + ("?mode=ro" if read_only else "")
-    return sqlite3.connect(uri, uri=True)
+    # A reader gives up after 5 s (crawl_busy); the writer waits out a reader's longest wait.
+    timeout = READER_BUSY_SECONDS if read_only else WRITER_BUSY_SECONDS
+    connection = sqlite3.connect(uri, uri=True, timeout=timeout)
+    connection.execute("PRAGMA foreign_keys = ON")
+    return connection
 
 
 @contextmanager

@@ -157,3 +157,19 @@ def test_a_read_only_crawl_file(temp_workspace: TempWorkspace) -> None:
         raised.value.diagnostic.details["file"],
         hashlib.sha256(crawl.path.read_bytes()).hexdigest(),
     ) == ("crawl_not_writable", str(crawl.path), before)
+
+
+def test_the_writer_waits_30_seconds_for_a_lock_and_checks_references(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        pragmas: tuple[int, int] = writer.run(
+            lambda connection: (
+                connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one(),
+                connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one(),
+            )
+        )
+
+    assert pragmas == (1, 30_000)
