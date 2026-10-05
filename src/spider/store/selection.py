@@ -1,9 +1,12 @@
 """Resolving --crawl to a crawl file (design D8 of 015-add-crawl-store)."""
 
+import os
 from pathlib import Path
 
+from sqlalchemy.exc import DBAPIError
+
 from spider.naming import APP_NAME
-from spider.output.codes import CRAWL_NOT_FOUND, INVALID_VALUE, NO_CRAWLS
+from spider.output.codes import CRAWL_FILE_INVALID, CRAWL_NOT_FOUND, INVALID_VALUE, NO_CRAWLS
 from spider.output.diagnostics import SpiderError
 from spider.store.ids import is_crawl_id
 from spider.store.reading import read_metadata
@@ -14,6 +17,9 @@ LATEST = "latest"
 
 
 def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFile:
+    if _is_path(reference):
+        path = cwd / reference
+        return CrawlFile(_crawl_id(path), path)
     if reference == LATEST:
         reference = _latest(workspace)
     elif not is_crawl_id(reference):
@@ -30,6 +36,24 @@ def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFi
             hint="Leave out --crawl to read the latest Crawl, or give the path of a crawl file.",
         )
     return CrawlFile(reference, path)
+
+
+def _is_path(reference: str) -> bool:
+    separators = {"/", os.sep, os.altsep} - {None}
+    return reference.endswith(".sqlite") or any(s in reference for s in separators)
+
+
+def _crawl_id(path: Path) -> str:
+    try:
+        crawl_id: str = read_metadata(path)["id"]
+    except DBAPIError as error:
+        raise SpiderError(
+            CRAWL_FILE_INVALID,
+            f"{path} is not a readable crawl file.",
+            hint=f"Give another crawl file, or crawl again with: {APP_NAME} crawl <url>",
+            details={"file": str(path)},
+        ) from error
+    return crawl_id
 
 
 def _latest(workspace: Workspace) -> str:

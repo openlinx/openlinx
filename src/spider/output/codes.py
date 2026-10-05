@@ -103,6 +103,12 @@ NO_CRAWLS = _declare(
 CRAWL_NOT_FOUND = _declare(
     "crawl_not_found", "error", ExitCode.NOT_FOUND, "No Crawl in the Workspace has the --crawl id."
 )
+CRAWL_FILE_INVALID = _declare(
+    "crawl_file_invalid",
+    "error",
+    ExitCode.INCOMPATIBLE,
+    "The selected file is not a readable crawl file; details.file names it.",
+)
 CRAWL_NOT_WRITABLE = _declare(
     "crawl_not_writable",
     "error",
