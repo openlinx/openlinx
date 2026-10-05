@@ -22,3 +22,14 @@ def test_a_killed_writer_keeps_committed_units_in_a_sound_file(
         [("ok",)],
         [(3,)],
     )
+
+
+def test_a_killed_writer_loses_uncommitted_units(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    worker = StoreWorker(crawl.path)
+    for position in (1, 2, 3):
+        worker.send(f"insert {position}")
+
+    worker.kill()
+
+    assert query(crawl.path, COUNT) == [(0,)]
