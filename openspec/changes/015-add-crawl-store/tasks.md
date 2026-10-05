@@ -153,7 +153,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 7.1 **Guard:** every declared public table has an integer `info["change"]` and a comment, and every column has a comment, checked over the declared metadata at seam 6 (group 6's review). Done when: a later change that forgets one fails at its own slice with a clear assertion, never with a `KeyError` inside `spider schema`.
 - [x] 7.2 **Guard:** "A killed writer keeps committed units in a sound file". It passed at once: the writer of group 4 commits on `flush()`. Done when: `tests/support/store_worker.py` exists, a subprocess that runs units, flushes on request and waits to be killed.
 - [x] 7.3 **Guard:** "A killed writer loses uncommitted units". It passed at once: the units wait in the writer's open transaction, and the worker's frozen clock never fires the 1 s timer.
-- [ ] 7.4 Drive "Reading during a write in WAL mode".
+- [x] 7.4 **Guard:** "Reading during a write in WAL mode". It passed at once: new files use WAL since group 3, and readers open read-only per operation.
 - [ ] 7.5 Drive "Busy in rollback-journal mode", with a real process that holds an exclusive lock for 8 s. Mark the test `slow`.
 
   Done when: readers wait at most 5 s, then fail with `crawl_busy` (exit 5), including `--crawl` resolution, which until then reports a busy read as `crawl_file_invalid`.

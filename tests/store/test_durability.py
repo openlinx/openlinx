@@ -33,3 +33,16 @@ def test_a_killed_writer_loses_uncommitted_units(temp_workspace: TempWorkspace) 
     worker.kill()
 
     assert query(crawl.path, COUNT) == [(0,)]
+
+
+def test_reading_during_a_write_in_wal_mode(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    worker = StoreWorker(crawl.path)
+    for position in (1, 2, 3):
+        worker.send(f"insert {position}")
+    worker.send("flush")
+
+    seen = query(crawl.path, COUNT)
+    worker.kill()
+
+    assert seen == [(3,)]
