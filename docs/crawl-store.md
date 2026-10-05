@@ -37,7 +37,7 @@ Every Command that reads a Crawl takes the global flag `--crawl`, next to `--wor
 |---|---|
 | `latest` (the default) | the Crawl of the Workspace that started last, whatever its state |
 | a crawl id, such as `20260927-140312-k3f9` | the Crawl with that id in the Workspace |
-| a path: a value that contains `/` (or `\` on Windows) or ends in `.sqlite` | that crawl file, from any folder; a relative path is taken from the current folder |
+| a path: a value that contains `/` (or `\` on Windows) or ends in `.sqlite` | that crawl file, from any folder; a relative path is taken from the current folder. The Crawl is the one its `crawl` row names, whatever the file is called, so a copied or renamed file works |
 
 - **Latest** is read from the ids, which start with the start time. Among ids of the same second, the later `crawl.started_at` wins, and then the greater id, so the choice is always the same. A `running` Crawl can be the latest.
 - **Only crawl files are Crawls.** Only files named `<id>.sqlite` in `crawls/` count; any other file there is ignored.
@@ -47,8 +47,8 @@ Every Command that reads a Crawl takes the global flag `--crawl`, next to `--wor
 | Code | Exit code | When |
 |---|---|---|
 | `no_crawls` | 4 | the Workspace has no Crawl; the hint says how to start one with `spider crawl` |
-| `crawl_not_found` | 4 | no Crawl in the Workspace has the given id |
-| `crawl_file_invalid` | 6 | the selected file is not a readable crawl file; `details.file` names it |
+| `crawl_not_found` | 4 | no Crawl in the Workspace has the given id, or no file exists at the given path (`details.file`) |
+| `crawl_file_invalid` | 6 | the selected file is not a readable crawl file, or a file selected by id or `latest` holds another id (`details.expected_id` and `details.found_id`); `details.file` names it |
 | `invalid_value` | 2 | the value is not `latest`, a crawl id or a path |
 
 ## The data folder
