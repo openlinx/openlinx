@@ -139,7 +139,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 6.9 **Guard:** "The next page" at seam 1. It passed at once: `paginate` of 010 pages the description, and 6.4 already passes the cursor through.
 - [x] 6.10 Drive "Unknown table" at seam 1. Done when: `unknown_table` (exit 2) is declared, with `details.tables`.
 - [x] 6.11 **Guard:** "Internal tables are hidden" and "No Workspace needed", at seam 1. Both passed at once, but the first only because no internal table exists yet, so a temporary `_writer_state` table at seam 2 drove the `_` filter of D6.
-- [ ] 6.12 **Guard:** "Names are snake_case" and "Descriptions are present", at seam 6. They check every later table automatically.
+- [x] 6.12 **Guard:** "Names are snake_case" and "Descriptions are present", at seam 6. They check every later table automatically.
 - [ ] 6.13 **Guard:** "Booleans are integers" and "Enumeration values are snake_case", at seam 6.
 - [ ] 6.14 **Guard:** "Documentation and declaration agree", now through `spider schema --limit 1000` at seam 6.
 - [ ] 6.15 Drive "Self-description of schema" at seam 1.
