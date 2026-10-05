@@ -155,6 +155,10 @@ Some failures still have a result worth reading, such as a Crawl that stopped pa
 
 Every other failing document or list Command leaves stdout empty, so for those an agent can rely on this: a non-zero exit code with a JSON result on stdout means a partial result, and the error on stderr says what went wrong. A rows Command is different: the rows written before a failure stay on stdout.
 
+## Selecting a Crawl
+
+Every Command that reads a Crawl takes the global flag `--crawl latest|<id>|<path>`, with the default `latest`. `spider commands` describes it with `"global":true` and `"default":"latest"`. What each value selects, and its errors (`no_crawls`, `crawl_not_found`, `crawl_file_invalid` and `invalid_value`), are in [crawl-store.md](crawl-store.md). The first Commands that read a Crawl arrive with `050-add-query-and-segments`.
+
 ## Exit codes
 
 The meaning of a code never changes. Codes 9 to 63 are reserved.

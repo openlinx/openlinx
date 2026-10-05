@@ -29,6 +29,28 @@ YYYYMMDD-HHMMSS-xxxx
 - **Never a taken id:** an id is taken when its crawl file exists. A new Crawl whose drawn id is taken draws new random characters until the id is free.
 - **Two processes cannot get the same id.** The crawl file is created exclusively, so when two processes draw the same id in the same second, only one of them creates the file and the other draws again.
 
+## Selecting a Crawl
+
+Every Command that reads a Crawl takes the global flag `--crawl`, next to `--workspace`:
+
+| Value | Selects |
+|---|---|
+| `latest` (the default) | the Crawl of the Workspace that started last, whatever its state |
+| a crawl id, such as `20260927-140312-k3f9` | the Crawl with that id in the Workspace |
+| a path: a value that contains `/` (or `\` on Windows) or ends in `.sqlite` | that crawl file, from any folder; a relative path is taken from the current folder |
+
+- **Latest** is read from the ids, which start with the start time. Among ids of the same second, the later `crawl.started_at` wins, and then the greater id, so the choice is always the same. A `running` Crawl can be the latest.
+- **Only crawl files are Crawls.** Only files named `<id>.sqlite` in `crawls/` count; any other file there is ignored.
+- **A broken file is reported, never skipped.** The selected file is read before the Command uses it. When the newest file is not a readable crawl file, `latest` fails with `crawl_file_invalid` naming it, instead of quietly reading an older Crawl.
+- **Selecting creates nothing:** no data folder, no `crawls/` folder and no file, even in a global Workspace that has none yet.
+
+| Code | Exit code | When |
+|---|---|---|
+| `no_crawls` | 4 | the Workspace has no Crawl; the hint says how to start one with `spider crawl` |
+| `crawl_not_found` | 4 | no Crawl in the Workspace has the given id |
+| `crawl_file_invalid` | 6 | the selected file is not a readable crawl file; `details.file` names it |
+| `invalid_value` | 2 | the value is not `latest`, a crawl id or a path |
+
 ## The data folder
 
 Storing a Crawl needs no `spider init` first. Creating a Crawl creates whatever is missing of the data folder, as `spider init` would:
