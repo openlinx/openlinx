@@ -48,6 +48,8 @@
 - **One engine per operation**, created with `NullPool`.
   - A `creator` calls `sqlite3.connect(<uri>, uri=True)`.
   - The URI is percent-encoded from the absolute path, which handles spaces, `#`, `?`, `%`, non-ASCII characters and drive letters. Readers add `mode=ro`.
+  - A UNC path keeps its host inside the path, `file:////host/share/…`: SQLite refuses a URI authority other than `localhost`, so `Path.as_uri()` cannot be used.
+  - `spider.store.connections` is the only code that opens a crawl file.
   - The context manager disposes the engine, so no handle outlives the operation. This matters on Windows (the deletion scenario) and for `090`'s long-running MCP server.
 - **Connection pragmas:**
   - `foreign_keys=ON`
@@ -83,6 +85,7 @@
   - `close()` commits, runs `wal_checkpoint(TRUNCATE)` and joins the thread.
 - **Reads inside units** see every earlier unit's effects, because they share the transaction. `020`'s frontier can therefore take the next URL and mark it in a single unit.
 - **Backpressure:** the submission queue is bounded at 50,000 units, and `run` blocks when the queue is full.
+- **Creating a Crawl is the one write outside the writer.** The new file's tables, its `crawl` row and its Seeds are written in the file's first transaction, before any writer opens; the write check needs that row. Every later write is a unit.
 - **One writer per Crawl, by construction in v0.1:** only the process that creates a Crawl writes it, because v0.1 has no resume and no detach. `060-min` (v0.1.1) adds the writer claim when a second process can write: a detached Crawl and `status`, then `resume` in v0.2.
 - **Alternatives:**
   - **Row batches without units.** They cannot express the frontier's read-then-update steps.
@@ -109,7 +112,8 @@
 
 - **One declaration:** the Core `MetaData` in `spider.store` is the only definition of the public schema. Later changes add their tables to it.
   - Descriptions come from `Table(comment=…)` and `Column(comment=…)`.
-  - `format`, `values` and the adding change's number (`info={"change": 15}`) come from `info`.
+  - `values` and the adding change's number (`info={"change": 15}`) come from `info`. `values` is read from the `Literal` type that the code uses, such as `CrawlState`, so it is declared once.
+  - `format` comes from the column's type: `Timestamp`, `Json` and `Flag` in `spider.store.types` each carry theirs, so a column's format cannot disagree with how it is stored.
   - **Column types** shared with later changes: a UTC timestamp stored as TEXT `YYYY-MM-DDTHH:MM:SS.sssZ`, JSON stored as TEXT encoded with orjson, and a boolean stored as INTEGER.
 - **The schema service** builds the description of the public tables from the metadata: items in `(change number, position within the change)` order, so the order does not depend on which change was merged first, without tables whose names start with `_`. `spider schema` is its adapter, and `090`'s `schema` tool calls the same service.
 - **`spider schema`** is a list Command, `@command_meta(name=SCHEMA)` with the name as a module constant. It pages the static description with `paginate`, and its fingerprint holds the Command name and TABLE. Its JSON result is `010`'s envelope with `schema_version` added as the first key.
@@ -209,9 +213,10 @@ This is the first store version, so there is nothing to migrate. The migration t
 ## Interface points for later changes
 
 - **Tables:**
-  1. In the slice that first needs a table or column, add it to the declared schema and to `docs/schema.md` together. Use `info={"change": <n>}`, and give every table and column a comment.
+  1. In the slice that first needs a table or column, add it to the declared schema and to `docs/schema.md` together. Use `info={"change": <n>}`, give every table and column a comment, and use the shared column types for timestamps, JSON and booleans.
   2. Follow the conventions (D6), with NULL for "not measured".
   3. No migration before v0.1 (D5).
+- **Creating a Crawl:** `020`'s Crawl service calls `spider.services.crawls.create_crawl` with a `NewCrawl`, including the settings file it read the settings from.
 - **Writing:** all Crawl data goes through `CrawlWriter` units. `020` adds `crawl.scope`, `crawl.stop_reason` and `crawl.warnings`, and stores a row for every requested URL, including 403s, 5xx responses and network errors.
 - **States:**
   - `020` sets `running`, then `completed` (with `completed_at`), `stopped` (with `stop_reason`: `max_urls`, or `interrupt` for Ctrl+C with exit code 130) or `failed` (an unreachable Seed, exit code 8).
