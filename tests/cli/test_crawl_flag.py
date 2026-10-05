@@ -24,3 +24,22 @@ def test_the_flag_is_described_as_global() -> None:
     option = next(option for option in entry["options"] if option["name"] == "--crawl")
 
     assert (option["global"], option["default"]) == (True, "latest")
+
+
+def test_unknown_id_on_the_command_line(temp_workspace: TempWorkspace) -> None:
+    create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+
+    result = run_cli(EXAMPLE_READ_CRAWL, "--crawl", "20260101-000000-zzzz", app=example_app())
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (4, "crawl_not_found")
+
+
+def test_no_crawls_on_the_command_line(temp_workspace: TempWorkspace) -> None:
+    result = run_cli(EXAMPLE_READ_CRAWL, app=example_app())
+    error = result.stderr_json_lines()[-1]
+
+    assert (result.exit_code, error["code"], "spider crawl" in error["hint"]) == (
+        4,
+        "no_crawls",
+        True,
+    )

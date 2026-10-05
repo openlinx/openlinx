@@ -117,7 +117,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: `--crawl` is a global option declared once in `spider.cli.options`, with the default `latest`, and resolving it imports the store only inside the Command's body.
 - [x] 5.14 **Guard:** "The flag is described as global" at seam 1. It passed at once: `CrawlOpt` carries `OptionMeta(is_global=True)`, and `spider commands` already reports both from 010.
-- [ ] 5.15 Drive "Unknown id on the command line" and "No Crawls on the command line" at seam 1, a trivial pair.
+- [x] 5.15 **Guard:** "Unknown id on the command line" and "No Crawls on the command line" at seam 1, a trivial pair. Both passed at once: the runner of 010 maps every `SpiderError` to its exit code and stderr line.
 - [ ] 5.16 Drive "A text file on the command line" and "A malformed value on the command line" at seam 1, a trivial pair.
 - [ ] 5.17 Docs: add `--crawl latest|<id>|<path>` to `docs/crawl-store.md` and `docs/cli.md`.
 - [ ] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
