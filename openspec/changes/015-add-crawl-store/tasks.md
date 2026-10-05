@@ -160,7 +160,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 7.6 **Guard:** "Bytes are unchanged by reading" and "Writes through a reader fail", a trivial pair. It passed at once: readers open with `mode=ro` since group 3, so SQLite refuses the write and leaves the file's bytes alone.
 - [x] 7.7 **Guard:** "Deleting after a read on Windows", as a Windows-only test. It passed at once: every reader disposes its NullPool engine after the operation (D2). The read leaves the `-wal` and `-shm` companions, which do not block the delete and stay behind after it.
 - [x] 7.8 Drive "File from a newer tool" and "A refused file is unchanged", a trivial pair. Done when: `crawl_schema_too_new` (exit 6) is declared, with both versions in `details`.
-- [ ] 7.9 Docs: add durability, reading during a Crawl and schema versions (no upgrades before v0.1) to `docs/crawl-store.md`.
+- [x] 7.9 Docs: add durability, reading during a Crawl and schema versions (no upgrades before v0.1) to `docs/crawl-store.md`.
 - [ ] 7.10 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Journal mode and the store setting (widening)

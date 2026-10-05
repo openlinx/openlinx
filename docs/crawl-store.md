@@ -117,10 +117,23 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
   | `close()` | everything still open |
 
 - **Watching commits.** An optional `on_commit` callable, given when the writer is opened, is called on the writer thread after each commit with the number of units that commit made durable, for progress and metrics. It must be quick, and an error it raises ends the writer like a failed commit.
-- **What a crash loses.** A process that is killed loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound.
+- **What a crash loses.** A process that is killed, even with SIGKILL or TerminateProcess, loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound: `PRAGMA integrity_check` returns `ok`. Tests kill a real writer process to check both.
 - **The write check.** Opening the writer first runs a write that it rolls back. A crawl file that cannot be written, for example one with the read-only attribute, fails at once with `crawl_not_writable` (exit code 7) and `details.file`, before anything is crawled, and the file is left unchanged.
 - **One writer per Crawl.** In v0.1 only the process that creates a Crawl writes it, because a Crawl cannot be resumed or detached yet. `060-add-crawl-control` adds a claim on the file when a second process can write.
 - **After `close()`,** the writer accepts no more units: a unit submitted then fails at once. Closing twice is harmless.
+
+## Reading a Crawl
+
+Commands that only read a Crawl open its file read-only, for one operation at a time:
+- **Nothing changes.** Reading leaves the crawl file's bytes as they were, and a write through a reader fails with SQLite's read-only error.
+- **Files are released.** Each read closes its connection when it ends, so even a process that keeps running, such as the MCP server, holds no handle to the file: on Windows another process can delete it right after a read. SQLite's `-wal` and `-shm` companions may stay next to it.
+- **Reading while a Crawl is written.** In WAL mode, the default on local disks, a reader sees every committed row while another process writes, and never waits for it. In rollback-journal mode a write shuts readers out: a reader waits up to 5 seconds, then fails with `crawl_busy` (exit code 5) and `details.file`. `--crawl` resolution reads the same way.
+
+## Schema versions
+
+Every crawl file records its schema version twice: in `crawl.schema_version` and in SQLite's `user_version`, which a tool reads before any table.
+- **A file from a newer tool is refused** with `crawl_schema_too_new` (exit code 6), with `details.file_schema_version` and `details.tool_schema_version`, and the file is left unchanged. The hint says to upgrade.
+- **No upgrades before v0.1.** Until the first release the schema is not yet public and stays at version `1`: changes edit the tables directly, and a crawl file made by an earlier development build may fail as `crawl_file_invalid`; crawl again. From v0.1 on, every schema change adds 1 to the version and brings an in-place upgrade of older files.
 
 ## Not measured is NULL
 
