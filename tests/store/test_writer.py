@@ -12,6 +12,7 @@ from tests.support.crawls import create_any_crawl, query
 from tests.support.workspace import TempWorkspace
 
 SEEDS = "SELECT position, url FROM seeds ORDER BY position"
+COUNT = "SELECT count(*) FROM seeds"
 
 
 def insert_seed(position: int, url: str) -> Callable[[Connection], None]:
@@ -79,3 +80,13 @@ def test_other_units_survive_a_failing_unit(temp_workspace: TempWorkspace) -> No
         writer.run(insert_seed(3, "https://example.com/c"))
 
     assert [position for position, _ in query(crawl.path, SEEDS)] == [1, 3]
+
+
+def test_closing_commits_everything(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        for position in range(1, 1001):
+            writer.run(insert_seed(position, f"https://example.com/{position}"))
+
+    assert query(crawl.path, COUNT) == [(1000,)]
