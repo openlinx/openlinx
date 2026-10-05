@@ -99,25 +99,28 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 5. Selecting a Crawl (slice, seams 2 and 1)
 
-- [ ] 5.1 Drive "By id" at seam 2.
-- [ ] 5.2 Drive "Latest is the most recent start" at seam 2.
-- [ ] 5.3 **Guard:** "A running Crawl can be latest", at seam 2.
-- [ ] 5.4 Drive "Two Crawls in the same second" at seam 2. Done when: ties break by `started_at`, then by id.
-- [ ] 5.5 Drive "Only crawl files are Crawls" at seam 2.
-- [ ] 5.6 Drive "No Crawls" at seam 2. Done when: `no_crawls` (exit 4) is declared in `spider.output.codes`, and its hint is built from `spider.naming`.
-- [ ] 5.7 Drive "Unknown id" at seam 2. Done when: `crawl_not_found` (exit 4) is declared.
-- [ ] 5.8 Drive "Malformed reference" at seam 2.
-- [ ] 5.9 Drive "Not a crawl file" at seam 2. Done when: `crawl_file_invalid` (exit 6) is declared, with `details.file`.
-- [ ] 5.10 Drive "A broken newest file is reported, not skipped" at seam 2.
-- [ ] 5.11 Drive "Reading creates nothing" at seam 2.
-- [ ] 5.12 Drive "The flag defaults to latest" at seam 1, with an example Command that reads a Crawl on the test app.
+- [ ] 5.1 Drive the idle timer of D4 at seam 2: with no unit submitted, `FakeClock.advance(1.0)` commits the open transaction.
+
+  Done when: `CrawlWriter` takes an optional `on_commit` observer, called on the writer thread after each successful commit with the number of units it committed (`020` can use it for progress and metrics), and the test waits for it on a `threading.Event` with a hard timeout instead of running another unit.
+- [ ] 5.2 Drive "By id" at seam 2.
+- [ ] 5.3 Drive "Latest is the most recent start" at seam 2.
+- [ ] 5.4 **Guard:** "A running Crawl can be latest", at seam 2.
+- [ ] 5.5 Drive "Two Crawls in the same second" at seam 2. Done when: ties break by `started_at`, then by id.
+- [ ] 5.6 Drive "Only crawl files are Crawls" at seam 2.
+- [ ] 5.7 Drive "No Crawls" at seam 2. Done when: `no_crawls` (exit 4) is declared in `spider.output.codes`, and its hint is built from `spider.naming`.
+- [ ] 5.8 Drive "Unknown id" at seam 2. Done when: `crawl_not_found` (exit 4) is declared.
+- [ ] 5.9 Drive "Malformed reference" at seam 2.
+- [ ] 5.10 Drive "Not a crawl file" at seam 2. Done when: `crawl_file_invalid` (exit 6) is declared, with `details.file`.
+- [ ] 5.11 Drive "A broken newest file is reported, not skipped" at seam 2.
+- [ ] 5.12 Drive "Reading creates nothing" at seam 2.
+- [ ] 5.13 Drive "The flag defaults to latest" at seam 1, with an example Command that reads a Crawl on the test app.
 
   Done when: `--crawl` is a global option declared once in `spider.cli.options`, with the default `latest`, and resolving it imports the store only inside the Command's body.
-- [ ] 5.13 Drive "The flag is described as global" at seam 1.
-- [ ] 5.14 Drive "Unknown id on the command line" and "No Crawls on the command line" at seam 1, a trivial pair.
-- [ ] 5.15 Drive "A text file on the command line" and "A malformed value on the command line" at seam 1, a trivial pair.
-- [ ] 5.16 Docs: add `--crawl latest|<id>|<path>` to `docs/crawl-store.md` and `docs/cli.md`.
-- [ ] 5.17 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [ ] 5.14 Drive "The flag is described as global" at seam 1.
+- [ ] 5.15 Drive "Unknown id on the command line" and "No Crawls on the command line" at seam 1, a trivial pair.
+- [ ] 5.16 Drive "A text file on the command line" and "A malformed value on the command line" at seam 1, a trivial pair.
+- [ ] 5.17 Docs: add `--crawl latest|<id>|<path>` to `docs/crawl-store.md` and `docs/cli.md`.
+- [ ] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. `spider schema` and the conventions (widening, seams 1 and 6)
 

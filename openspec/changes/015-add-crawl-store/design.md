@@ -83,6 +83,7 @@
   - On an exception the writer rolls back to the savepoint, and the exception is raised to that unit's caller. Earlier and later units are unaffected.
 - **Commits:** after 500 units, 1 s after the first uncommitted unit (measured with the injected `Clock`'s `monotonic()`, checked every 50 ms and after each unit), on `flush()`, and on `close()`.
   - `close()` commits, runs `wal_checkpoint(TRUNCATE)` and joins the thread.
+  - **The commit observer:** `CrawlWriter(path, clock, on_commit=None)`. When given, `on_commit(units)` is called on the writer thread after each successful commit, with the number of units that commit made durable; it is not called when nothing was pending. `020` can use it for progress and metrics; the idle-timer test waits on it. An exception it raises ends the writer like a failed commit.
 - **Reads inside units** see every earlier unit's effects, because they share the transaction. `020`'s frontier can therefore take the next URL and mark it in a single unit.
 - **Backpressure:** the submission queue is bounded at 50,000 units, and `run` blocks when the queue is full.
 - **Callers and threads:** units may come from any thread, or from an event loop through `run_async`, which never blocks the loop. The writer thread alone owns the connection, runs one unit at a time and keeps each caller's order. A caller gets its unit's result only after the commit check, so a reader that runs after the 500th unit returns sees the batch.
