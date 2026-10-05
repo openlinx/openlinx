@@ -82,7 +82,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [x] 4.1 Drive "A unit sees the units before it". Done when: `CrawlWriter.run` runs units on a writer thread inside one open transaction.
 - [x] 4.2 Drive "A unit updates a row of an earlier unit".
-- [ ] 4.3 Drive "A failing unit leaves no change". Done when: each unit is atomic, and its error reaches its caller.
+- [x] 4.3 Drive "A failing unit leaves no change". Done when: each unit is atomic, and its error reaches its caller.
 - [ ] 4.4 Drive "Other units survive a failing unit".
 - [ ] 4.5 Drive "Closing commits everything".
 - [ ] 4.6 Drive "Units wait for the batch" and "The 500th unit commits the batch", a trivial pair with `FakeClock` frozen.

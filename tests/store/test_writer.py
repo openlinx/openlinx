@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+import pytest
 from sqlalchemy import Connection, func, insert, select, update
 
 from spider.store.schema import seeds
@@ -46,3 +47,23 @@ def test_a_unit_updates_a_row_of_an_earlier_unit(temp_workspace: TempWorkspace) 
         )
 
     assert query(crawl.path, SEEDS) == [(1, "https://example.com/b")]
+
+
+def failing_insert(position: int, url: str) -> Callable[[Connection], None]:
+    def unit(connection: Connection) -> None:
+        insert_seed(position, url)(connection)
+        raise ValueError("bad")
+
+    return unit
+
+
+def test_a_failing_unit_leaves_no_change(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+
+    with (
+        CrawlWriter(crawl.path, FakeClock()) as writer,
+        pytest.raises(ValueError, match=r"^bad$") as raised,
+    ):
+        writer.run(failing_insert(2, "https://example.com/b"))
+
+    assert (raised.type, query(crawl.path, SEEDS)) == (ValueError, [])

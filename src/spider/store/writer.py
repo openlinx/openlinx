@@ -69,7 +69,15 @@ class CrawlWriter:
                         connection.commit()
                         job.done.set_result(None)
                         return
-                    job.done.set_result(job.unit(connection))
+                    savepoint = connection.begin_nested()
+                    try:
+                        result = job.unit(connection)
+                    except Exception as error:
+                        savepoint.rollback()
+                        job.done.set_exception(error)
+                        continue
+                    savepoint.commit()
+                    job.done.set_result(result)
         except BaseException as error:
             if not started.done():
                 started.set_exception(error)
