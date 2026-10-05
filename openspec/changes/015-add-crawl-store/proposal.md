@@ -32,7 +32,7 @@
   - The override is the `[store] journal_mode = "auto" | "wal" | "delete"` setting, the first real table of `010`'s settings registry.
 - **Reading**
   - Readers open files read-only and release them after every operation.
-  - In rollback-journal mode a busy read fails with `crawl_busy` after 5 s.
+  - In rollback-journal mode a busy read fails with `crawl_busy` after 5 s, and a writer held off by another connection fails with it after 30 s.
   - A file from a newer tool is refused with `crawl_schema_too_new`.
 - **The public schema reference**
   - `spider schema [TABLE]`, a list Command paged by `010`'s pager. Its result starts with `schema_version`, and tables are ordered by the number of the change that added them.

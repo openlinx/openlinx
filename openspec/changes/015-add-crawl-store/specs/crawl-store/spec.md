@@ -390,11 +390,13 @@ This change SHALL register the `spider.toml` table `[store]`, with the setting `
 - **WHEN** `spider init` runs in `H/work/shop`, whose `spider.toml` contains `[store]\njournal_mode = "fast"\n`
 - **THEN** the exit code is 3, and the error has the code `settings_invalid` and `details.errors[0].key` `"store.journal_mode"`
 
-### Requirement: Reading while a Crawl is written
+### Requirement: Reading while a Crawl is written, and waiting for a lock
 
 In `wal` mode, a process SHALL be able to read a Crawl while another process writes it, and it SHALL see every committed row.
 
 In `delete` mode, a reader that cannot read within 5 seconds because a write is in progress SHALL fail with `crawl_busy` instead of waiting longer.
+
+In either mode, a writer that cannot write within 30 seconds because another connection holds the crawl file, on opening, on starting a transaction or while a unit runs, SHALL fail with `crawl_busy`. In both cases `details.file` SHALL name the crawl file.
 
 #### Scenario: Reading during a write in WAL mode
 - **WHEN** a writer process has committed 3 Seed rows and keeps its writer open, and another process reads `seeds`
@@ -403,6 +405,14 @@ In `delete` mode, a reader that cannot read within 5 seconds because a write is 
 #### Scenario: Busy in rollback-journal mode
 - **WHEN** a crawl file in `delete` mode is held under an exclusive write lock for 8 seconds, and another process reads it during that time
 - **THEN** the reader fails with the error code `crawl_busy`
+
+#### Scenario: A busy writer on open
+- **WHEN** a crawl file in `delete` mode is held under an exclusive lock by another process, and its writer is opened and waits out its busy timeout
+- **THEN** opening fails with the error code `crawl_busy`, and `details.file` is that file's path
+
+#### Scenario: A busy writer in a unit
+- **WHEN** the writer of a crawl file in `delete` mode is open, another process then holds the file under an exclusive lock, and a unit waits out the writer's busy timeout
+- **THEN** the unit's caller receives the error code `crawl_busy`, and `details.file` is that file's path
 
 ### Requirement: Readers never change a crawl file
 

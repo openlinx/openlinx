@@ -165,15 +165,18 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 
 ## 8. Journal mode and the store setting (widening)
 
-- [ ] 8.1 Drive "UNC path" at seam 4. Done when: the journal-mode choice is a pure function, and `store_wal_unavailable` is declared as a warning.
-- [ ] 8.2 Drive "Local path" at seam 4.
-- [ ] 8.3 Drive "Forced WAL on a UNC path" and "Forced rollback journal on a local path" at seam 4, a trivial pair.
-- [ ] 8.4 Drive "The store setting in the template" and "An invalid store setting" at seam 1, a trivial pair.
+- [ ] 8.1 Drive "A busy writer on open" and "A busy writer in a unit" at seam 2, a trivial pair, with a real process that holds an exclusive lock on a `delete`-mode file (the manager's ruling on group 7's open question A). Mark the tests `slow`.
+
+  Done when: a writer that waits out its busy timeout, on opening, on `BEGIN IMMEDIATE` or in a unit, fails with `crawl_busy` (exit 5) and `details.file`, never a raw `DBAPIError` or `internal_error`. The timeout is a `CrawlWriter` constructor parameter, 30 s by default.
+- [ ] 8.2 Drive "UNC path" at seam 4. Done when: the journal-mode choice is a pure function, and `store_wal_unavailable` is declared as a warning.
+- [ ] 8.3 Drive "Local path" at seam 4.
+- [ ] 8.4 Drive "Forced WAL on a UNC path" and "Forced rollback journal on a local path" at seam 4, a trivial pair.
+- [ ] 8.5 Drive "The store setting in the template" and "An invalid store setting" at seam 1, a trivial pair.
 
   Done when: `[store]` is registered in `build_app` by its `"module:Class"` reference, and the table-rules test of `010` covers it.
-- [ ] 8.5 Drive "Crawl on a UNC path on Windows" at seam 2. It runs through `\\localhost\C$` and is skipped when the share is not reachable. Done when: the warning reaches the Reporter with `details.path`.
-- [ ] 8.6 Docs: add the journal mode, the UNC fallback, the `store.journal_mode` override for other network folders, and the v0.2 plan for the mount table to `docs/crawl-store.md`.
-- [ ] 8.7 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [ ] 8.6 Drive "Crawl on a UNC path on Windows" at seam 2. It runs through `\\localhost\C$` and is skipped when the share is not reachable. Done when: the warning reaches the Reporter with `details.path`.
+- [ ] 8.7 Docs: add the journal mode, the UNC fallback, the `store.journal_mode` override for other network folders, the v0.2 plan for the mount table, and the writer's `crawl_busy` after 30 s to `docs/crawl-store.md`.
+- [ ] 8.8 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
 ## 9. Redaction (widening, before `022`-min)
 
