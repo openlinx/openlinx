@@ -83,7 +83,7 @@
   - On an exception the writer rolls back to the savepoint, and the exception is raised to that unit's caller. Earlier and later units are unaffected.
 - **Commits:** after 500 units, 1 s after the first uncommitted unit (measured with the injected `Clock`'s `monotonic()`, checked every 50 ms and after each unit), on `flush()`, and on `close()`.
   - `close()` commits, runs `wal_checkpoint(TRUNCATE)` and joins the thread.
-  - **The commit observer:** `CrawlWriter(path, clock, on_commit=None)`. When given, `on_commit(units)` is called on the writer thread after each successful commit, with the number of units that commit made durable; it is not called when nothing was pending. `020` can use it for progress and metrics; the idle-timer test waits on it. An exception it raises ends the writer like a failed commit.
+  - **The commit observer:** `CrawlWriter(path, clock, on_commit=None)`. When given, `on_commit(units)` is called on the writer thread after each successful commit, with the number of units that commit made durable; it is not called when the commit made no unit durable (nothing was pending, or every pending unit failed). `020` can use it for progress and metrics; the idle-timer test waits on it. An exception it raises ends the writer like a failed commit, and reaches the caller of the unit in hand even though that unit was committed.
 - **Reads inside units** see every earlier unit's effects, because they share the transaction. `020`'s frontier can therefore take the next URL and mark it in a single unit.
 - **Backpressure:** the submission queue is bounded at 50,000 units, and `run` blocks when the queue is full.
 - **Callers and threads:** units may come from any thread, or from an event loop through `run_async`, which never blocks the loop. The writer thread alone owns the connection, runs one unit at a time and keeps each caller's order. A caller gets its unit's result only after the commit check, so a reader that runs after the 500th unit returns sees the batch.
@@ -158,11 +158,12 @@
 
 ### D8. `--crawl`
 
-- **The option** is declared once in `spider.cli.options`, next to `--workspace`: `str`, default `latest`, with `OptionMeta(is_global=True)`. Its module imports no store code, so `--help` and `spider commands` stay on the startup allowlist.
-- **Resolution** is a store function that the query services call (`050` and `090`):
-  - Only `<id>.sqlite` files count as Crawls.
+- **The option** is declared once in `spider.cli.options`, next to `--workspace`: `str`, default `latest`, with `OptionMeta(is_global=True)`. Its module imports no sqlalchemy: it takes `LATEST` from `spider.store.records`, which loads none, so `--help` and `spider commands` stay on the startup allowlist.
+- **Resolution** is the store function `spider.store.selection.resolve_crawl(reference, workspace=, cwd=)`, which the query services call (`050` and `090`) inside their bodies:
+  - Only `<id>.sqlite` files count as Crawls. `spider.store.ids` owns the id format and the file name.
+  - A path (a value with a path separator or ending in `.sqlite`) is taken from `cwd`. The returned `CrawlFile` carries the id from the file's `crawl` row.
   - `latest` sorts by id, and breaks ties between ids of the same second with `crawl.started_at`, then the id itself.
-  - A broken newest file is reported, never skipped, so an agent never reads an older Crawl without knowing it.
+  - Every selected file is read before it is returned. A broken newest file is reported, never skipped, so an agent never reads an older Crawl without knowing it; a broken file among the ids of the newest second fails the tie-break the same way. Not a SQLite file, no `crawl` table, or not exactly one `crawl` row is `crawl_file_invalid`.
   - It never creates a file or folder, so it resolves the Workspace with `resolve_workspace`, not the creating path.
 - **Hints** are built from `spider.naming` (`f"{APP_NAME} crawl"`), never from a literal.
 - **The CLI scenarios** use an example Command that reads a Crawl, registered on the test app (`tests/support/app.py`). The real consumers arrive in `050`.

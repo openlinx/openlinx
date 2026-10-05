@@ -150,7 +150,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 7.3 Drive "Reading during a write in WAL mode".
 - [ ] 7.4 Drive "Busy in rollback-journal mode", with a real process that holds an exclusive lock for 8 s. Mark the test `slow`.
 
-  Done when: readers wait at most 5 s, then fail with `crawl_busy` (exit 5).
+  Done when: readers wait at most 5 s, then fail with `crawl_busy` (exit 5), including `--crawl` resolution, which until then reports a busy read as `crawl_file_invalid`.
 - [ ] 7.5 Drive "Bytes are unchanged by reading" and "Writes through a reader fail", a trivial pair.
 - [ ] 7.6 Drive "Deleting after a read on Windows", as a Windows-only test.
 - [ ] 7.7 Drive "File from a newer tool" and "A refused file is unchanged", a trivial pair. Done when: `crawl_schema_too_new` (exit 6) is declared, with both versions in `details`.
