@@ -100,6 +100,9 @@ WORKSPACE_NOT_WRITABLE = _declare(
 NO_CRAWLS = _declare(
     "no_crawls", "error", ExitCode.NOT_FOUND, "The Workspace has no Crawl to read yet."
 )
+CRAWL_NOT_FOUND = _declare(
+    "crawl_not_found", "error", ExitCode.NOT_FOUND, "No Crawl in the Workspace has the --crawl id."
+)
 CRAWL_NOT_WRITABLE = _declare(
     "crawl_not_writable",
     "error",
