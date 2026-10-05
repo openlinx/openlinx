@@ -66,6 +66,7 @@ class CrawlWriter:
                 while True:
                     job = self._queue.get()
                     if job.unit is None:
+                        connection.commit()
                         job.done.set_result(None)
                         return
                     job.done.set_result(job.unit(connection))

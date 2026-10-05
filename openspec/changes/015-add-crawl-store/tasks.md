@@ -81,7 +81,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 ## 4. The transactional writer (slice, seam 2)
 
 - [x] 4.1 Drive "A unit sees the units before it". Done when: `CrawlWriter.run` runs units on a writer thread inside one open transaction.
-- [ ] 4.2 Drive "A unit updates a row of an earlier unit".
+- [x] 4.2 Drive "A unit updates a row of an earlier unit".
 - [ ] 4.3 Drive "A failing unit leaves no change". Done when: each unit is atomic, and its error reaches its caller.
 - [ ] 4.4 Drive "Other units survive a failing unit".
 - [ ] 4.5 Drive "Closing commits everything".
