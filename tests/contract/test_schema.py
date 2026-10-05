@@ -61,7 +61,7 @@ def _column(row: str) -> dict[str, Any]:
 def test_documentation_and_declaration_agree() -> None:
     documented = documented_schema(SCHEMA_DOC.read_text(encoding="utf-8"))
 
-    assert documented == describe_schema()
+    assert documented == describe_schema().tables
 
 
 def file_schema(file: Path) -> dict[str, list[tuple[Any, ...]]]:
@@ -106,7 +106,7 @@ def test_a_new_file_matches_the_declaration(temp_workspace: TempWorkspace) -> No
             )
             for column in table["columns"]
         ]
-        for table in describe_schema()
+        for table in describe_schema().tables
     }
 
     assert file_schema(file) == declared

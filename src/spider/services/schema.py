@@ -1,24 +1,34 @@
 """The schema service behind `spider schema` (design D6 of 015-add-crawl-store)."""
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from sqlalchemy import Column
 
 
-def describe_schema() -> list[dict[str, Any]]:
-    # Imported here: sqlalchemy stays off the CLI's startup path (design D9).
-    from spider.store.schema import metadata
+@dataclass(frozen=True)
+class SchemaDescription:
+    schema_version: int
+    tables: Sequence[dict[str, Any]]
 
-    return [
+
+def describe_schema(table: str | None = None) -> SchemaDescription:
+    # Imported here: sqlalchemy stays off the CLI's startup path (design D9).
+    from spider.store.schema import SCHEMA_VERSION, metadata
+
+    tables = [
         {
-            "name": table.name,
+            "name": declared.name,
             "kind": "table",
-            "description": table.comment,
-            "columns": [_column(column) for column in table.columns],
+            "description": declared.comment,
+            "columns": [_column(column) for column in declared.columns],
         }
-        for table in metadata.tables.values()
+        for declared in metadata.tables.values()
+        if table is None or declared.name == table
     ]
+    return SchemaDescription(SCHEMA_VERSION, tables)
 
 
 def _column(column: "Column[Any]") -> dict[str, Any]:

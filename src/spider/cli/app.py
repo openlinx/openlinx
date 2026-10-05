@@ -11,6 +11,7 @@ from spider.cli.commands import commands
 from spider.cli.init import init
 from spider.cli.meta import check_command
 from spider.cli.runner import Invocation, SpiderGroup
+from spider.cli.schema import schema
 from spider.naming import APP_NAME
 from spider.workspace.tables import SettingsTables
 
@@ -58,7 +59,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         rich_markup_mode=None,
     )
     app.callback()(root)
-    registered: list[Callable[..., Any]] = [commands, init, *extra.commands]
+    registered: list[Callable[..., Any]] = [commands, init, schema, *extra.commands]
     for command in registered:
         app.command(name=check_command(command).name)(command)
     return app

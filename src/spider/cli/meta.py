@@ -153,4 +153,9 @@ def _more_items(page: Page, output_format: Format) -> Diagnostic | None:
 
 
 def _envelope(page: Page) -> dict[str, Any]:
-    return {"total": page.total, "items": page.items, "next_cursor": page.next_cursor}
+    return {
+        **page.header,
+        "total": page.total,
+        "items": page.items,
+        "next_cursor": page.next_cursor,
+    }
