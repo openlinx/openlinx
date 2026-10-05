@@ -10,12 +10,12 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 
 **060-min joins v0.1 (2026-10-05).** An agent runs Commands through its shell tool, which times out after minutes, so a foreground Crawl caps what an agent can crawl. With `crawl --detach`, `status` and `stop` in v0.1, an agent crawls a large site in the background and queries the crawl file while the Crawl is still writing.
 
-**Large sites first (2026-10-05).** The product bets on full crawls of large sites (see Positioning), so three more things join v0.1: 060's `resume`, no default `--max-urls` limit, and 026's ~500k-URL benchmark.
+**Large sites first (2026-10-05).** The product bets on full crawls of large sites (see Positioning), so three more things join v0.1: 060's `resume`, no default `--max-urls` limit, and 026's ~500k-URL benchmark. Hostile sites wait until after the v0.1 release: proxies, anti-bot and WAF challenges, adaptive throttling. The first users' sites are friendly to crawl.
 
 **Robustness rule (2026-10-05), for every change from 020 on.** On a 500k-URL Crawl every rare failure happens, so:
 - **One URL never stops the Crawl.** A failure in fetching, decoding, parsing, extraction or Rule evaluation becomes that URL's recorded outcome (`fetch_state`, its error kind, `parse_error`) plus a counted warning, and the Crawl moves on. Only failures of the whole Crawl stop it, each with a `stop_reason`, and leave it resumable: an unreachable Seed, a crawl file that cannot be written (disk full included), and the zero-success breaker.
 - **Parsing never trusts its input.** Every extractor gets property-based tests (hypothesis) over arbitrary bytes and malformed HTML. It returns Page data or a `parse_error`, and never raises.
-- **Hostile fixtures, grown by each change** on the fixture site: stalled and trickling bodies, missing or broken `Content-Encoding`, wrong or invalid charsets, a gzip bomb, huge pages, deeply nested HTML, connection resets, redirect loops, and storms of 429 and 503.
+- **Hostile fixtures, grown by each change** on the fixture site: stalled and trickling bodies, missing or broken `Content-Encoding`, wrong or invalid charsets, a gzip bomb, huge pages, deeply nested HTML, connection resets, redirect loops, and 429 and 503 responses.
 - **026's benchmark is also a soak test.** Its synthetic site injects a share of those faults, and a run passes only if it ends with no crash, flat memory, and every URL accounted for in `urls`.
 
 ## Positioning
@@ -139,7 +139,7 @@ If a change needs something another change owns, it depends on that change inste
   - **TLS trust:** truststore with a certifi fallback, including a speed test.
   - Status and size checks for Resources.
   - The `response_headers` table, where cookie values are always stored as `***`. No cookies are sent.
-  - The standard proxy variables `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are honoured (010's one exception to its no-environment-variables rule), with proxy passwords redacted.
+  - **(v0.2)** The standard proxy variables `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are honoured (010's one exception to its no-environment-variables rule), with proxy passwords redacted.
   - HTTPS, virtual hosts and gzip on the fixture site (trustme).
   - **(v0.2)** HTTP version per origin via ALPN (`http_1_1` / `http_2`), the `--proxy` flag (and `[crawl] proxy`), basic auth and custom headers.
 - **024-add-list-and-sitemap-modes** (v0.2):
@@ -276,10 +276,11 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
   - Invariant tests at seam 3+6: `--max-urls` is never exceeded under concurrency (in-flight URLs count toward it), each URL is fetched once, and link cycles end.
   - A deterministic dispatch order: an explicit insertion sequence as the tie-break, never a timestamp.
   - The apex→www direction joins Scope in one direction only. A `seed_base_mismatch` warning when the Seed's canonical or Links point to the other host. About 20 seed/base cases make a good table test.
-- 022:
+- 022 (after v0.1, with the hostile-site work; v0.1 keeps 022's retries, `Retry-After` and host pause as designed):
   - Throttling is host state: after a 429 the host drops to 1 request in flight and recovers step by step after N consecutive 2xx. Waiting per host is capped in total; after that, its remaining URLs are recorded as rate-limited without a request.
   - Classification: 429 is always rate-limited. 503 is rate-limited only with `Retry-After`, otherwise a server error. 403, or a challenge page (`cf-mitigated: challenge`), is `blocked` and never retried. Each is its own outcome value, distinct from a 4xx Page.
   - Separate retry budgets for rate limits and for transport errors and 5xx, so they never multiply.
+- 022 (v0.1):
   - The request timeout covers the body read. Fixture routes: a stalled body, a body that trickles forever, and a 503 whose body stalls.
   - A `Location` that is not http(s) is refused.
 - 024: sitemap URLs are taken round-robin across child sitemaps, capped relative to `--max-urls`, within a total time budget. A walk cut short is `truncated` ("unknown", not "missing"). `Sitemap:` lines that are not http(s) are ignored.
