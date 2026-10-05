@@ -1,6 +1,5 @@
 """Crawl ids: the UTC start time and 4 random characters (design D1 of 015-add-crawl-store)."""
 
-import secrets
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
@@ -11,6 +10,6 @@ SUFFIX_LENGTH = 4
 type Choice = Callable[[Sequence[str]], str]
 
 
-def new_crawl_id(started_at: datetime, choice: Choice = secrets.choice) -> str:
+def new_crawl_id(started_at: datetime, choice: Choice) -> str:
     suffix = "".join(choice(SUFFIX_ALPHABET) for _ in range(SUFFIX_LENGTH))
     return f"{started_at.astimezone(UTC):%Y%m%d-%H%M%S}-{suffix}"

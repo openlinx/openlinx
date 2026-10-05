@@ -26,7 +26,7 @@ YYYYMMDD-HHMMSS-xxxx
 
 - **Sortable:** ids sort by start time, to the second, so `ls` lists Crawls in the order they started.
 - **The random characters** come from `0123456789abcdefghjkmnpqrstvwxyz`. It leaves out `i`, `l`, `o` and `u`, so an id read aloud or copied by hand is not mistaken for another.
-- **Never reused:** an id is taken when its crawl file exists. A new Crawl whose drawn id is taken draws new random characters until the id is free.
+- **Never a taken id:** an id is taken when its crawl file exists. A new Crawl whose drawn id is taken draws new random characters until the id is free.
 - **Two processes cannot get the same id.** The crawl file is created exclusively, so when two processes draw the same id in the same second, only one of them creates the file and the other draws again.
 
 ## The data folder

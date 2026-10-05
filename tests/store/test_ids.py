@@ -1,6 +1,7 @@
 """Crawl ids (015-add-crawl-store, crawl-store)."""
 
 import re
+import secrets
 from datetime import UTC, datetime
 
 from hypothesis import given
@@ -25,4 +26,6 @@ def test_id_from_the_start_time() -> None:
     )
 )
 def test_character_set(started_at: datetime) -> None:
-    assert re.fullmatch(r"[0-9]{8}-[0-9]{6}-[0-9a-hjkmnp-tv-z]{4}", new_crawl_id(started_at))
+    crawl_id = new_crawl_id(started_at, secrets.choice)
+
+    assert re.fullmatch(r"[0-9]{8}-[0-9]{6}-[0-9a-hjkmnp-tv-z]{4}", crawl_id)
