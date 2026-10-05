@@ -115,3 +115,17 @@ def test_the_500th_unit_commits_the_batch(temp_workspace: TempWorkspace) -> None
         seen = query(crawl.path, COUNT)
 
     assert seen == [(500,)]
+
+
+def test_the_timer_commits(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+    clock = FakeClock()
+
+    with CrawlWriter(crawl.path, clock) as writer:
+        run_inserts(writer, 3)
+        clock.advance(1.0)
+        # The next unit runs the timer check; the idle check every 50 ms calls the same code.
+        writer.run(count_seeds)
+        seen = query(crawl.path, COUNT)
+
+    assert seen == [(3,)]

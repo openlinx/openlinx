@@ -5,7 +5,7 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
 from pathlib import Path
-from queue import Queue
+from queue import Empty, Queue
 from types import TracebackType
 from typing import Any, Self
 
@@ -16,6 +16,9 @@ from spider.store.connections import opening
 
 QUEUE_SIZE = 50_000
 BATCH_SIZE = 500
+COMMIT_AFTER_SECONDS = 1.0
+# Real time between timer checks while no unit arrives; the timer itself reads the Clock.
+IDLE_CHECK_SECONDS = 0.05
 
 
 @dataclass(frozen=True)
@@ -30,6 +33,9 @@ class CrawlWriter:
         self._path = path
         self._clock = clock
         self._queue: Queue[_Job] = Queue(maxsize=QUEUE_SIZE)
+        # Owned by the writer thread: units and the time of the first one since the last commit.
+        self._uncommitted = 0
+        self._first_uncommitted_at = 0.0
         started: Future[None] = Future()
         self._thread = threading.Thread(
             target=self._serve, args=(started,), name=f"crawl writer {path.name}", daemon=True
@@ -63,20 +69,22 @@ class CrawlWriter:
         try:
             with opening(self._path) as engine, engine.connect() as connection:
                 started.set_result(None)
-                uncommitted = 0
                 while True:
-                    job = self._queue.get()
+                    try:
+                        job = self._queue.get(timeout=IDLE_CHECK_SECONDS)
+                    except Empty:
+                        self._commit_if_due(connection)
+                        continue
                     if job.unit is None:
                         connection.commit()
                         job.done.set_result(None)
                         return
                     if not connection.in_transaction():
                         connection.begin()
+                        self._uncommitted, self._first_uncommitted_at = 0, self._clock.monotonic()
                     result, error = _run(job.unit, connection)
-                    uncommitted += 1
-                    if uncommitted >= BATCH_SIZE:
-                        connection.commit()
-                        uncommitted = 0
+                    self._uncommitted += 1
+                    self._commit_if_due(connection)
                     # Only now: a caller that reads after its unit returns sees the commit.
                     if error is None:
                         job.done.set_result(result)
@@ -86,6 +94,13 @@ class CrawlWriter:
             if not started.done():
                 started.set_exception(error)
             raise
+
+    def _commit_if_due(self, connection: Connection) -> None:
+        if not connection.in_transaction():
+            return
+        waited = self._clock.monotonic() - self._first_uncommitted_at
+        if self._uncommitted >= BATCH_SIZE or waited >= COMMIT_AFTER_SECONDS:
+            connection.commit()
 
 
 def _run(unit: Callable[[Connection], Any], connection: Connection) -> tuple[Any, Exception | None]:
