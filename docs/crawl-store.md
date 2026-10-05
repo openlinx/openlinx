@@ -94,6 +94,7 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
   | `flush()` | at once, before `flush()` returns |
   | `close()` | everything still open |
 
+- **Watching commits.** An optional `on_commit` callable, given when the writer is opened, is called on the writer thread after each commit with the number of units that commit made durable, for progress and metrics. It must be quick, and an error it raises ends the writer like a failed commit.
 - **What a crash loses.** A process that is killed loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound.
 - **The write check.** Opening the writer first runs a write that it rolls back. A crawl file that cannot be written, for example one with the read-only attribute, fails at once with `crawl_not_writable` (exit code 7) and `details.file`, before anything is crawled, and the file is left unchanged.
 - **One writer per Crawl.** In v0.1 only the process that creates a Crawl writes it, because a Crawl cannot be resumed or detached yet. `060-add-crawl-control` adds a claim on the file when a second process can write.

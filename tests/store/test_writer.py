@@ -1,6 +1,7 @@
 """The transactional writer (015-add-crawl-store, crawl-store)."""
 
 import hashlib
+import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -143,6 +144,25 @@ def test_the_timer_commits(temp_workspace: TempWorkspace) -> None:
         seen = query(crawl.path, COUNT)
 
     assert seen == [(3,)]
+
+
+def test_the_timer_commits_while_no_unit_arrives(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    clock = FakeClock()
+    committed: list[int] = []
+    observed = threading.Event()
+
+    def on_commit(units: int) -> None:
+        committed.append(units)
+        observed.set()
+
+    with CrawlWriter(crawl.path, clock, on_commit=on_commit) as writer:
+        run_inserts(writer, 3)
+        clock.advance(1.0)
+        observed.wait(timeout=10)
+        seen = query(crawl.path, COUNT)
+
+    assert (seen, committed[:1]) == ([(3,)], [3])
 
 
 def test_a_flush_commits_at_once(temp_workspace: TempWorkspace) -> None:

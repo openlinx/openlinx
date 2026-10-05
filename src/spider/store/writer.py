@@ -46,15 +46,20 @@ class _Job:
 
 
 class CrawlWriter:
-    def __init__(self, path: Path, clock: Clock) -> None:
+    def __init__(
+        self, path: Path, clock: Clock, on_commit: Callable[[int], None] | None = None
+    ) -> None:
         self._path = path
         self._clock = clock
+        self._on_commit = on_commit
         self._queue: Queue[_Job] = Queue(maxsize=QUEUE_SIZE)
         self._lock = threading.Lock()
         self._closed = False
         self._failure: BaseException | None = None
-        # Owned by the writer thread: units and the time of the first one since the last commit.
+        # Owned by the writer thread: units since the last commit, those that left a change, and
+        # the time of the first one.
         self._uncommitted = 0
+        self._succeeded = 0
         self._first_uncommitted_at = 0.0
         started: Future[None] = Future()
         self._thread = threading.Thread(
@@ -171,7 +176,7 @@ class CrawlWriter:
 
     def _handle(self, job: _Job, connection: Connection) -> bool:
         if isinstance(job.work, _Control):
-            connection.commit()
+            self._commit(connection)
             if job.work is _Control.CLOSE:
                 # Readers that stay open would otherwise keep the WAL from shrinking. Run on the
                 # driver's connection: through SQLAlchemy it would begin a transaction first.
@@ -181,9 +186,11 @@ class CrawlWriter:
             return job.work is _Control.FLUSH
         if not connection.in_transaction():
             connection.begin()
-            self._uncommitted, self._first_uncommitted_at = 0, self._clock.monotonic()
+            self._uncommitted, self._succeeded = 0, 0
+            self._first_uncommitted_at = self._clock.monotonic()
         result, error = _run(job.work, connection)
         self._uncommitted += 1
+        self._succeeded += error is None
         self._commit_if_due(connection)
         # Only now: a caller that reads after its unit returns sees the commit.
         if error is None:
@@ -197,7 +204,14 @@ class CrawlWriter:
             return
         waited = self._clock.monotonic() - self._first_uncommitted_at
         if self._uncommitted >= BATCH_SIZE or waited >= COMMIT_AFTER_SECONDS:
-            connection.commit()
+            self._commit(connection)
+
+    def _commit(self, connection: Connection) -> None:
+        if not connection.in_transaction():
+            return
+        connection.commit()
+        if self._on_commit is not None:
+            self._on_commit(self._succeeded)
 
     def _open_error(self, error: BaseException) -> BaseException:
         name = not_writable_name(error)
