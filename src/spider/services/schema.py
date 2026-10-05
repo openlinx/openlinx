@@ -25,7 +25,10 @@ def describe_schema(table: str | None = None) -> SchemaDescription:
             "description": declared.comment,
             "columns": [_column(column) for column in declared.columns],
         }
-        for declared in metadata.tables.values()
+        # sorted() is stable, so tables of one change keep the order the change declared them.
+        for declared in sorted(
+            metadata.tables.values(), key=lambda candidate: candidate.info["change"]
+        )
         if table is None or declared.name == table
     ]
     return SchemaDescription(SCHEMA_VERSION, tables)

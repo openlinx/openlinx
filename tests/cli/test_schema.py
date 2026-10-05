@@ -10,3 +10,12 @@ def test_one_table() -> None:
         0,
         b'{"schema_version":1,"total":1,"items":[{"name":"seeds"}],"next_cursor":null}\n',
     )
+
+
+def test_first_tables() -> None:
+    result = run_cli("schema", "--fields", "name,kind", "--limit", "2")
+
+    assert result.json()["items"] == [
+        {"name": "crawl", "kind": "table"},
+        {"name": "seeds", "kind": "table"},
+    ]

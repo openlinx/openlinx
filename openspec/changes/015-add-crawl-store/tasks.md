@@ -132,7 +132,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 6.4 Drive "One table" at seam 1.
 
   Done when: `spider schema [TABLE]` is the adapter of the schema service, registered with `@command_meta(name=...)` as a list Command, paged with `paginate` and `fingerprint`, and its JSON result starts with `schema_version`.
-- [ ] 6.5 Drive "First tables" at seam 1. Done when: tables are ordered by the adding change's number, then by position within the change.
+- [x] 6.5 Drive "First tables" at seam 1. Done when: tables are ordered by the adding change's number, then by position within the change.
 - [ ] 6.6 Drive "Columns of seeds" at seam 1.
 - [ ] 6.7 Drive "Column formats" at seam 1.
 - [ ] 6.8 Drive "State values are documented" at seam 1.
