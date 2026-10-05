@@ -1,5 +1,7 @@
 """Selecting a Crawl with --crawl (015-add-crawl-store, crawl-store)."""
 
+from pathlib import Path
+
 import pytest
 
 from spider.output.diagnostics import SpiderError
@@ -103,6 +105,19 @@ def test_not_a_crawl_file(temp_workspace: TempWorkspace) -> None:
         raised.value.exit_code,
         raised.value.diagnostic.details["file"],
     ) == ("crawl_file_invalid", 6, str(notes))
+
+
+def test_a_broken_newest_file_is_reported_not_skipped(temp_workspace: TempWorkspace) -> None:
+    crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    (crawl.path.parent / "20260927-110000-bbbb.sqlite").write_bytes(b"")
+
+    with pytest.raises(SpiderError) as raised:
+        resolve_latest(temp_workspace)
+
+    assert (raised.value.code, Path(raised.value.diagnostic.details["file"]).name) == (
+        "crawl_file_invalid",
+        "20260927-110000-bbbb.sqlite",
+    )
 
 
 def test_a_sqlite_file_not_named_by_an_id_is_not_a_crawl(temp_workspace: TempWorkspace) -> None:

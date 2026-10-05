@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.exc import DBAPIError
 
@@ -19,7 +20,7 @@ LATEST = "latest"
 def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFile:
     if _is_path(reference):
         path = cwd / reference
-        return CrawlFile(_crawl_id(path), path)
+        return _open(path)
     if reference == LATEST:
         reference = _latest(workspace)
     elif not is_crawl_id(reference):
@@ -35,7 +36,7 @@ def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFi
             f"No Crawl in the Workspace {workspace.root} has the id {reference}.",
             hint="Leave out --crawl to read the latest Crawl, or give the path of a crawl file.",
         )
-    return CrawlFile(reference, path)
+    return _open(path)
 
 
 def _is_path(reference: str) -> bool:
@@ -43,9 +44,13 @@ def _is_path(reference: str) -> bool:
     return reference.endswith(".sqlite") or any(s in reference for s in separators)
 
 
-def _crawl_id(path: Path) -> str:
+def _open(path: Path) -> CrawlFile:
+    return CrawlFile(_metadata(path)["id"], path)
+
+
+def _metadata(path: Path) -> dict[str, Any]:
     try:
-        crawl_id: str = read_metadata(path)["id"]
+        return read_metadata(path)
     except DBAPIError as error:
         raise SpiderError(
             CRAWL_FILE_INVALID,
@@ -53,7 +58,6 @@ def _crawl_id(path: Path) -> str:
             hint=f"Give another crawl file, or crawl again with: {APP_NAME} crawl <url>",
             details={"file": str(path)},
         ) from error
-    return crawl_id
 
 
 def _latest(workspace: Workspace) -> str:
@@ -73,7 +77,7 @@ def _latest(workspace: Workspace) -> str:
     return max(
         candidates,
         key=lambda crawl_id: (
-            read_metadata(crawls_dir / f"{crawl_id}.sqlite")["started_at"],
+            _metadata(crawls_dir / f"{crawl_id}.sqlite")["started_at"],
             crawl_id,
         ),
     )
