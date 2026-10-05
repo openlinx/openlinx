@@ -159,10 +159,10 @@ def test_the_timer_commits_while_no_unit_arrives(temp_workspace: TempWorkspace) 
     with CrawlWriter(crawl.path, clock, on_commit=on_commit) as writer:
         run_inserts(writer, 3)
         clock.advance(1.0)
-        observed.wait(timeout=10)
+        fired = observed.wait(timeout=10)
         seen = query(crawl.path, COUNT)
 
-    assert (seen, committed[:1]) == ([(3,)], [3])
+    assert (fired, seen, committed[:1]) == (True, [(3,)], [3])
 
 
 def test_a_flush_commits_at_once(temp_workspace: TempWorkspace) -> None:

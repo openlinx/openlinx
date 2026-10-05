@@ -210,7 +210,7 @@ class CrawlWriter:
         if not connection.in_transaction():
             return
         connection.commit()
-        if self._on_commit is not None:
+        if self._on_commit is not None and self._succeeded:
             self._on_commit(self._succeeded)
 
     def _open_error(self, error: BaseException) -> BaseException:

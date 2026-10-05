@@ -3,20 +3,18 @@
 from pathlib import Path
 
 import pytest
+from sqlalchemy import delete
 
 from spider.output.diagnostics import SpiderError
 from spider.store.crawls import set_state
 from spider.store.records import CrawlFile
+from spider.store.schema import crawl as crawl_table
 from spider.store.selection import resolve_crawl
 from spider.store.writer import CrawlWriter
-from spider.workspace.discovery import Workspace, resolve_workspace
+from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
-from tests.support.crawls import STARTED_AT, create_crawl_at
+from tests.support.crawls import STARTED_AT, create_crawl_at, current_workspace
 from tests.support.workspace import TempWorkspace
-
-
-def current_workspace(temp_workspace: TempWorkspace) -> Workspace:
-    return resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
 
 
 def test_by_id(temp_workspace: TempWorkspace) -> None:
@@ -105,6 +103,17 @@ def test_not_a_crawl_file(temp_workspace: TempWorkspace) -> None:
         raised.value.exit_code,
         raised.value.diagnostic.details["file"],
     ) == ("crawl_file_invalid", 6, str(notes))
+
+
+def test_a_crawl_file_without_its_crawl_row(temp_workspace: TempWorkspace) -> None:
+    crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(lambda connection: connection.execute(delete(crawl_table)))
+
+    with pytest.raises(SpiderError) as raised:
+        resolve_latest(temp_workspace)
+
+    assert raised.value.code == "crawl_file_invalid"
 
 
 def test_a_broken_newest_file_is_reported_not_skipped(temp_workspace: TempWorkspace) -> None:

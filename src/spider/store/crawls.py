@@ -14,7 +14,7 @@ from spider import __version__
 from spider.output.codes import WORKSPACE_NOT_WRITABLE
 from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect, not_writable_name, opening
-from spider.store.ids import Choice, new_crawl_id
+from spider.store.ids import Choice, crawl_path, new_crawl_id
 from spider.store.records import CrawlFile, CrawlState, NewCrawl
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
 from spider.workspace.creation import as_workspace_not_writable, create_data_folder
@@ -44,7 +44,7 @@ def set_state(connection: Connection, state: CrawlState, at: datetime) -> None:
 def _claim_new_file(crawls_dir: Path, started_at: datetime, choice: Choice) -> CrawlFile:
     while True:
         crawl_id = new_crawl_id(started_at, choice)
-        path = crawls_dir / f"{crawl_id}.sqlite"
+        path = crawl_path(crawls_dir, crawl_id)
         # Exclusive create: of two processes that draw the same id, only one gets the file.
         try:
             path.open("xb").close()

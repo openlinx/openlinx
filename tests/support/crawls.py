@@ -20,6 +20,10 @@ from tests.support.workspace import TempWorkspace
 STARTED_AT = datetime(2026, 9, 27, 14, 3, 12, 345000, tzinfo=UTC)
 
 
+def current_workspace(temp_workspace: TempWorkspace) -> Workspace:
+    return resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+
+
 def new_crawl(workspace: Workspace) -> NewCrawl:
     """Any Spider-mode Crawl, for tests whose scenario does not name its metadata."""
     return NewCrawl(
@@ -34,16 +38,16 @@ def new_crawl(workspace: Workspace) -> NewCrawl:
 
 def create_any_crawl(temp_workspace: TempWorkspace, **changes: Any) -> CrawlFile:
     """`new_crawl` with `changes`, created at `STARTED_AT` where the current folder resolves."""
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-    request = replace(new_crawl(workspace), **changes)
+    request = replace(new_crawl(current_workspace(temp_workspace)), **changes)
     return create_crawl(request, FakeClock(start=STARTED_AT), Collected())
 
 
 def create_crawl_at(temp_workspace: TempWorkspace, started_at: str, suffix: str) -> CrawlFile:
     """Any Crawl started at the ISO time `started_at`, whose id ends with `suffix`."""
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
     clock = FakeClock(start=datetime.fromisoformat(started_at))
-    return create_crawl(new_crawl(workspace), clock, Collected(), scripted_choice(suffix))
+    return create_crawl(
+        new_crawl(current_workspace(temp_workspace)), clock, Collected(), scripted_choice(suffix)
+    )
 
 
 def query(file: Path, sql: str) -> list[tuple[Any, ...]]:
