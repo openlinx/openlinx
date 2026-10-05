@@ -4,12 +4,11 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path, PurePath
+from typing import Any
 from urllib.parse import quote
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Connection, Engine, create_engine, event
 from sqlalchemy.pool import NullPool
-
-from spider.store.records import JournalMode
 
 
 def file_uri(path: PurePath) -> str:
@@ -25,20 +24,29 @@ def connect(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
 
 
 @contextmanager
-def opening(
-    path: Path, *, read_only: bool = False, journal_mode: JournalMode | None = None
-) -> Iterator[Engine]:
-    def creator() -> sqlite3.Connection:
-        connection = connect(path, read_only=read_only)
-        if journal_mode is not None:
-            # WAL stays durable at NORMAL; a rollback journal needs FULL for every commit.
-            synchronous = "NORMAL" if journal_mode == "wal" else "FULL"
-            connection.execute(f"PRAGMA synchronous = {synchronous}")
-        return connection
-
-    engine = create_engine("sqlite://", creator=creator, poolclass=NullPool)
+def opening(path: Path, *, read_only: bool = False) -> Iterator[Engine]:
+    engine = create_engine(
+        "sqlite://", creator=lambda: connect(path, read_only=read_only), poolclass=NullPool
+    )
+    if not read_only:
+        event.listen(engine, "connect", _own_transactions)
+        event.listen(engine, "begin", _begin_immediate)
     # Disposed at once, so no handle outlives the operation: Windows could not delete the file.
     try:
         yield engine
     finally:
         engine.dispose()
+
+
+def _own_transactions(connection: sqlite3.Connection, _: Any) -> None:
+    # pysqlite's implicit BEGIN would break SAVEPOINT; the begin event below issues ours.
+    connection.isolation_level = None
+    (journal_mode,) = connection.execute("PRAGMA journal_mode").fetchone()
+    # WAL stays durable at NORMAL; a rollback journal needs FULL for every commit.
+    synchronous = "NORMAL" if journal_mode == "wal" else "FULL"
+    connection.execute(f"PRAGMA synchronous = {synchronous}")
+
+
+def _begin_immediate(connection: Connection) -> None:
+    # IMMEDIATE takes the write lock at once, so a busy file fails at BEGIN, not mid-unit.
+    connection.exec_driver_sql("BEGIN IMMEDIATE")

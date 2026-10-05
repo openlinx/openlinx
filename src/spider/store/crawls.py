@@ -67,10 +67,7 @@ def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: dateti
     with closing(connect(crawl_file.path)) as connection:
         (journal_mode,) = connection.execute("PRAGMA journal_mode = WAL").fetchone()
     settings_file = request.settings_file
-    with (
-        opening(crawl_file.path, journal_mode=journal_mode) as engine,
-        engine.begin() as connection,
-    ):
+    with opening(crawl_file.path) as engine, engine.begin() as connection:
         metadata.create_all(connection)
         connection.exec_driver_sql(f"PRAGMA user_version = {SCHEMA_VERSION}")
         connection.execute(
@@ -91,13 +88,14 @@ def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: dateti
                 platform=platform.platform(),
             )
         )
-        connection.execute(
-            insert(seeds),
-            [
-                {"position": position, "url": url}
-                for position, url in enumerate(request.seeds, start=1)
-            ],
-        )
+        if request.seeds:
+            connection.execute(
+                insert(seeds),
+                [
+                    {"position": position, "url": url}
+                    for position, url in enumerate(request.seeds, start=1)
+                ],
+            )
 
 
 @contextmanager
