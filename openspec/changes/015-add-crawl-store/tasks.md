@@ -137,7 +137,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 6.7 **Guard:** "Column formats" at seam 1. It passed at once: `Timestamp`, `Flag` and `Json` have carried their formats since group 3.
 - [x] 6.8 **Guard:** "State values are documented" at seam 1. It passed at once: `values` has been read from the `CrawlState` Literal since group 3.
 - [x] 6.9 **Guard:** "The next page" at seam 1. It passed at once: `paginate` of 010 pages the description, and 6.4 already passes the cursor through.
-- [ ] 6.10 Drive "Unknown table" at seam 1. Done when: `unknown_table` (exit 2) is declared, with `details.tables`.
+- [x] 6.10 Drive "Unknown table" at seam 1. Done when: `unknown_table` (exit 2) is declared, with `details.tables`.
 - [ ] 6.11 **Guard:** "Internal tables are hidden" and "No Workspace needed", at seam 1.
 - [ ] 6.12 **Guard:** "Names are snake_case" and "Descriptions are present", at seam 6. They check every later table automatically.
 - [ ] 6.13 **Guard:** "Booleans are integers" and "Enumeration values are snake_case", at seam 6.

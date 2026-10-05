@@ -4,6 +4,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from spider.output.codes import UNKNOWN_TABLE
+from spider.output.diagnostics import SpiderError
+
 if TYPE_CHECKING:
     from sqlalchemy import Column
 
@@ -18,18 +21,25 @@ def describe_schema(table: str | None = None) -> SchemaDescription:
     # Imported here: sqlalchemy stays off the CLI's startup path (design D9).
     from spider.store.schema import SCHEMA_VERSION, metadata
 
+    # sorted() is stable, so tables of one change keep the order the change declared them.
+    declared = sorted(metadata.tables.values(), key=lambda candidate: candidate.info["change"])
+    names = [candidate.name for candidate in declared]
+    if table is not None and table not in names:
+        raise SpiderError(
+            UNKNOWN_TABLE,
+            f"The schema has no table {table}.",
+            hint=f"Use one of: {', '.join(names)}.",
+            details={"tables": names},
+        )
     tables = [
         {
-            "name": declared.name,
+            "name": candidate.name,
             "kind": "table",
-            "description": declared.comment,
-            "columns": [_column(column) for column in declared.columns],
+            "description": candidate.comment,
+            "columns": [_column(column) for column in candidate.columns],
         }
-        # sorted() is stable, so tables of one change keep the order the change declared them.
-        for declared in sorted(
-            metadata.tables.values(), key=lambda candidate: candidate.info["change"]
-        )
-        if table is None or declared.name == table
+        for candidate in declared
+        if table is None or candidate.name == table
     ]
     return SchemaDescription(SCHEMA_VERSION, tables)
 

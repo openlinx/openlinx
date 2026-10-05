@@ -68,3 +68,14 @@ def test_the_next_page() -> None:
     ).json()
 
     assert second["items"] == [{"name": "seeds"}]
+
+
+def test_unknown_table() -> None:
+    result = run_cli("schema", "nosuch")
+    error = result.stderr_json_lines()[-1]
+
+    assert (
+        result.exit_code,
+        error["code"],
+        {"crawl", "seeds"} <= set(error["details"]["tables"]),
+    ) == (2, "unknown_table", True)

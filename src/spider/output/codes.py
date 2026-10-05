@@ -100,6 +100,12 @@ WORKSPACE_NOT_WRITABLE = _declare(
 NO_CRAWLS = _declare(
     "no_crawls", "error", ExitCode.NOT_FOUND, "The Workspace has no Crawl to read yet."
 )
+UNKNOWN_TABLE = _declare(
+    "unknown_table",
+    "error",
+    ExitCode.USAGE,
+    "A table name the public schema does not have; details.tables lists the tables.",
+)
 CRAWL_NOT_FOUND = _declare(
     "crawl_not_found", "error", ExitCode.NOT_FOUND, "No Crawl in the Workspace has the --crawl id."
 )
