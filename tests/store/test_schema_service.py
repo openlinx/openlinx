@@ -11,7 +11,10 @@ from spider.store.schema import metadata
 
 @pytest.fixture
 def table_of_an_earlier_change() -> Iterator[None]:
-    """Declared after 015's tables, the way a later module would add its own."""
+    """Declared after 015's tables, the way a later module would add its own.
+
+    Safe because the tests run serially; under xdist this must use an isolated MetaData copy.
+    """
     table = Table(
         "earlier_rows",
         metadata,

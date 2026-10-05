@@ -3,6 +3,7 @@
 import re
 from typing import Any
 
+from spider.store.schema import metadata
 from tests.support.cli import run_cli
 
 SNAKE_CASE = re.compile(r"[a-z][a-z0-9_]*")
@@ -50,3 +51,18 @@ def test_enumeration_values_are_snake_case() -> None:
         for value in column["values"] or []
         if not SNAKE_CASE.fullmatch(value)
     ] == []
+
+
+def test_every_declared_table_names_its_change_and_describes_itself() -> None:
+    # Over the declaration, so a later table that forgets one fails here, not inside spider schema.
+    missing = []
+    for table in metadata.tables.values():
+        if table.name.startswith("_"):
+            continue
+        if type(table.info.get("change")) is not int:
+            missing.append(f"{table.name}: info change")
+        if not table.comment:
+            missing.append(f"{table.name}: comment")
+        missing += [f"{table.name}.{c.name}: comment" for c in table.columns if not c.comment]
+
+    assert missing == []
