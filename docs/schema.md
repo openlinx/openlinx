@@ -34,6 +34,16 @@ Every public table and column follows these conventions:
 - **Counts** are derived from the tables that hold the rows they count. No table stores them.
 - **Not measured is NULL.** A value that was not measured, or that does not apply, is NULL, never `0` or an empty string. `0` is a measured zero, and an empty string is a value that is present but empty.
 
+## How to add a table
+
+A change that stores new data adds its tables and columns in the slice whose scenario first needs them:
+1. **Declare it** in the store's SQLAlchemy Core `MetaData`, the only definition of the schema. Give the table and every column a `comment`, the table `info={"change": <n>}` with the change's number, and use the shared column types for timestamps (`Timestamp`), JSON (`Json`) and booleans (`Flag`). Read an enumeration's `values` from the `Literal` the code uses.
+2. **Document it here, in the same commit:** a ``## Table `<name>` `` section, placed in change order, with the same description and one row per column. The contract test compares this page with `spider schema --limit 1000`, so it is never red between commits.
+3. **Follow the [conventions](#conventions).** Tests over `spider schema` check names, descriptions, booleans and enumeration values for every table, including new ones.
+4. **No migration before v0.1.** Until the first release the schema is not yet public: a change edits the declared tables directly, and `schema_version` stays `1`. From v0.1 on, a schema change adds 1 to `schema_version` and brings a migration, with a test from every published schema version.
+
+A table whose name starts with `_` is internal: it is left out of `spider schema` and of this page.
+
 ## Table `crawl`
 
 The Crawl's metadata, in exactly one row.
