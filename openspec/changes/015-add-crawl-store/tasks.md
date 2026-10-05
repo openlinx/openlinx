@@ -141,7 +141,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 6.11 **Guard:** "Internal tables are hidden" and "No Workspace needed", at seam 1. Both passed at once, but the first only because no internal table exists yet, so a temporary `_writer_state` table at seam 2 drove the `_` filter of D6.
 - [x] 6.12 **Guard:** "Names are snake_case" and "Descriptions are present", at seam 6. They check every later table automatically.
 - [x] 6.13 **Guard:** "Booleans are integers" and "Enumeration values are snake_case", at seam 6.
-- [ ] 6.14 **Guard:** "Documentation and declaration agree", now through `spider schema --limit 1000` at seam 6.
+- [x] 6.14 **Guard:** "Documentation and declaration agree", now through `spider schema --limit 1000` at seam 6.
 - [ ] 6.15 Drive "Self-description of schema" at seam 1.
 - [ ] 6.16 Drive "Global flags of schema" and "Default limit of schema" at seam 1, a trivial pair.
 - [ ] 6.17 **Guard:** the startup allowlist test passes with `schema` registered: `spider --help` and `spider commands` load no `sqlalchemy`.

@@ -10,6 +10,7 @@ from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
 from spider.services.schema import describe_schema
 from spider.workspace.discovery import resolve_workspace
+from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
 from tests.support.crawls import new_crawl
 from tests.support.workspace import TempWorkspace
@@ -61,7 +62,7 @@ def _column(row: str) -> dict[str, Any]:
 def test_documentation_and_declaration_agree() -> None:
     documented = documented_schema(SCHEMA_DOC.read_text(encoding="utf-8"))
 
-    assert documented == describe_schema().tables
+    assert documented == run_cli("schema", "--limit", "1000").json()["items"]
 
 
 def file_schema(file: Path) -> dict[str, list[tuple[Any, ...]]]:
