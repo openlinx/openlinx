@@ -263,6 +263,11 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 - 060: own what moved from 015 (see 060's entry): its design still calls `015`'s `check_writer`, `write_control`, reservation and `crawl_id_taken`, and its spec and tasks rely on them.
 - 060: remove the window in which a just-claimed, still-empty `<id>.sqlite` makes `--crawl latest` report crawl_file_invalid. Create the file as `<id>.sqlite.tmp` (claimed exclusively, counted as taken) and rename it after the schema is written, together with the reservations.
 - 020: `--max-urls` has no default limit (was 10,000); update the spec, the `max_urls_reached` scenarios and the URL estimate. 030: raw HTML storage can no longer be decided from a default `--max-urls`; decide it again when 030 is re-grounded.
+- 020: decide four design points from the architecture review of 2026-10-05 before its tasks are written:
+  - **Crawl state transitions:** 015's `set_state` writes any state from any state. A table of allowed transitions and one pure function that refuses the others, used by 020 (`running`, `completed`, `stopped`, `failed`) and later by 060 (`interrupted`, resume).
+  - **URL types:** a `NormalizedUrl` type (a `NewType` or a small frozen class) that only URL normalisation creates, so mypy refuses a raw string wherever the frontier, Scope or Links expect a normalised URL. Decide whether crawl ids get a type too.
+  - **Data access stays in the store:** writer units are defined only in `spider.store.*` modules, and the engine, extractors and Rules call them instead of writing SQL. Decide how 030 and 040 add their units under that rule.
+  - **One context for a Crawl's dependencies:** the clock, the Reporter, the writer, the settings, the Fetcher and the Scope are built in one place and passed as one object, instead of growing every signature.
 - 060: `resume` is v0.1 now; its spec markers move with 060-min's.
 - 026: re-ground for v0.1; the benchmark runs on Windows, macOS and Linux runners or a stated machine, never as part of the CI gate.
 - 026: `psutil` is no longer a dependency of 015; add it as a test dependency if the pool is built.
