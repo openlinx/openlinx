@@ -10,6 +10,7 @@ from spider.services.crawls import create_crawl
 from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
 from tests.support.crawls import new_crawl
+from tests.support.permissions import unwritable_folder
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
 
@@ -81,3 +82,17 @@ def test_a_taken_id_is_drawn_again(temp_workspace: TempWorkspace) -> None:
     crawl = create_crawl(new_crawl(workspace), clock, Collected(), scripted_choice("k3f9m2p7"))
 
     assert crawl.id == "20260927-140312-m2p7"
+
+
+def test_unwritable_crawls_folder(temp_workspace: TempWorkspace) -> None:
+    crawls = temp_workspace.root / "shop" / ".spider" / "crawls"
+    crawls.mkdir(parents=True)
+    workspace = resolve_workspace(cwd=crawls.parent.parent, flag=None, home=temp_workspace.home)
+
+    with unwritable_folder(crawls), pytest.raises(SpiderError) as raised:
+        create_crawl(new_crawl(workspace), FakeClock(), Collected())
+
+    assert (raised.value.code, raised.value.diagnostic.details["path"].startswith(str(crawls))) == (
+        "workspace_not_writable",
+        True,
+    )

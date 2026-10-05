@@ -96,6 +96,7 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 
   Production code takes a `Clock`, which is `SystemClock` outside tests.
 - **Crawls** (`tests/support/crawls.py`): `new_crawl(workspace)` is a `NewCrawl` request for any Spider-mode Crawl, for tests whose scenario does not name its metadata; pass it to `spider.services.crawls.create_crawl`. `crawl_row(file)` reads the `crawl` row as SQLite stores it, and `query(file, sql)` any rows, both through a read-only connection. `run_unit(file, unit)` runs one unit of work, such as `spider.store.crawls.set_state`, in its own committed transaction; it stands in only until the writer of group 4 of 015 runs units.
+- **`unwritable_folder(folder)`** (`tests/support/permissions.py`): a context manager under which no file can be created in a real folder: its mode is `0o555` on POSIX, and a deny entry for Everyone is added with `icacls` on Windows, where the read-only attribute does not protect a folder. It restores the folder afterwards, and skips the test when it runs as root.
 - **`scripted_choice(characters)`** (`tests/support/randomness.py`): the random-source double. It stands in for `secrets.choice`, and each call returns the next of `characters`, so `scripted_choice("k3f9")` makes the crawl id suffix `k3f9`.
 
 ## Quality gates (CI)

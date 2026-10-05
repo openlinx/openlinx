@@ -72,7 +72,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 3.10 Drive "A copied file opens by its path".
 
   Done when: a crawl file opens read-only by its path, through a percent-encoded `mode=ro` URI and an engine disposed after the operation.
-- [ ] 3.11 Drive "Unwritable crawls folder" at seam 2, with a real folder that denies creating files (its mode on POSIX, a deny ACL on Windows, where the read-only attribute does not protect a folder).
+- [x] 3.11 Drive "Unwritable crawls folder" at seam 2, with a real folder that denies creating files (its mode on POSIX, a deny ACL on Windows, where the read-only attribute does not protect a folder).
 
   Done when: any `OSError` other than `FileExistsError` from claiming or writing a crawl file becomes `workspace_not_writable` with `details.path`, so no permissions problem reaches an agent as a traceback.
 - [ ] 3.12 Docs: add the metadata, the Crawl States and the NULL rule to `docs/crawl-store.md`.

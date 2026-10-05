@@ -13,18 +13,20 @@ from spider import __version__
 from spider.store.ids import Choice, new_crawl_id
 from spider.store.records import CrawlFile, CrawlState, NewCrawl
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
-from spider.workspace.creation import create_data_folder
+from spider.workspace.creation import create_data_folder, not_writable_errors
 
 
 def create_crawl_file(request: NewCrawl, started_at: datetime, choice: Choice) -> CrawlFile:
     create_data_folder(request.workspace)
-    crawl_file = _claim_new_file(request, started_at, choice)
-    try:
-        _write_new_file(crawl_file, request, started_at)
-    except BaseException:
-        # A claimed file left empty would break --crawl latest in this Workspace.
-        crawl_file.path.unlink()
-        raise
+    # A permissions problem must reach an agent as an error code, never as a traceback.
+    with not_writable_errors(request.workspace):
+        crawl_file = _claim_new_file(request, started_at, choice)
+        try:
+            _write_new_file(crawl_file, request, started_at)
+        except BaseException:
+            # A claimed file left empty would break --crawl latest in this Workspace.
+            crawl_file.path.unlink()
+            raise
     return crawl_file
 
 
