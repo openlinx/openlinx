@@ -91,7 +91,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.9 Drive "A read-only crawl file", with the real read-only attribute.
 
   Done when: opening the writer runs a rolled-back write first, and fails with `crawl_not_writable` (exit 7) and `details.file`, leaving the file unchanged.
-- [x] 4.10 Drive the connection pragmas of D2 at seam 2: every connection has `foreign_keys` on, the writer waits up to 30 s for a lock and readers 5 s. Mapping a busy reader to `crawl_busy` stays in 7.4.
+- [x] 4.10 Drive the connection pragmas of D2 at seam 2: every connection has `foreign_keys` on, the writer waits up to 30 s for a lock and readers 5 s. Mapping a busy reader to `crawl_busy` stays in 7.5.
 - [x] 4.11 Drive concurrent callers at seam 2: units submitted from several threads run one at a time, and each caller's units run in the order it submitted them. `run_async` runs a unit from a real event loop made by `spider.aio.loop_factory`.
 - [x] 4.12 Drive the writer's end at seam 2: `close()` can be called twice; a unit submitted after `close()` fails at once with a clear error; a unit that raises a `BaseException`, such as `KeyboardInterrupt`, rolls back like any failing unit, reaches its caller, and the writer keeps running. Done when: D4 records this behaviour.
 - [x] 4.13 Docs: add units, commit triggers, the write check and "one writer by construction in v0.1" to `docs/crawl-store.md`.
@@ -126,7 +126,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions A–C) before group 6's own work.
 
-- [x] 6.1 **Guard:** "Companion files are not Crawls" at seam 2. It passed at once: only `<id>.sqlite` files are listed. Done when: `docs/crawl-store.md` says that selecting creates no folder and no crawl file, and that SQLite's `-wal` and `-shm` companions of an existing crawl file may appear (a WAL reader needs the shared-memory file; `immutable=1` stays rejected, D2). 7.6 still proves that a crawl file can be deleted after a read on Windows.
+- [x] 6.1 **Guard:** "Companion files are not Crawls" at seam 2. It passed at once: only `<id>.sqlite` files are listed. Done when: `docs/crawl-store.md` says that selecting creates no folder and no crawl file, and that SQLite's `-wal` and `-shm` companions of an existing crawl file may appear (a WAL reader needs the shared-memory file; `immutable=1` stays rejected, D2). 7.7 still proves that a crawl file can be deleted after a read on Windows.
 - [x] 6.2 Drive "A missing crawl file path" at seam 2. Done when: a path is checked for existence before the read-only open, and gives `crawl_not_found` (exit 4) with `details.file`; a file that exists but is not a crawl file stays `crawl_file_invalid`.
 - [x] 6.3 Drive "A crawl file that holds another id" at seam 2. Done when: a Crawl selected by id or `latest` whose `crawl` row has another id fails with `crawl_file_invalid` and `details.file`, `details.expected_id` and `details.found_id`; a Crawl selected by path keeps the id of its row, whatever the file is named, pinned by a guard through `resolve_crawl`.
 - [x] 6.4 Drive "One table" at seam 1.
@@ -150,17 +150,18 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 
 ## 7. Durability and reading across processes (widening, seam 2 with real processes)
 
-- [ ] 7.1 Drive "A killed writer keeps committed units in a sound file". Done when: `tests/support/store_worker.py` exists, a subprocess that runs units, flushes on request and waits to be killed.
-- [ ] 7.2 Drive "A killed writer loses uncommitted units".
-- [ ] 7.3 Drive "Reading during a write in WAL mode".
-- [ ] 7.4 Drive "Busy in rollback-journal mode", with a real process that holds an exclusive lock for 8 s. Mark the test `slow`.
+- [ ] 7.1 **Guard:** every declared public table has an integer `info["change"]` and a comment, and every column has a comment, checked over the declared metadata at seam 6 (group 6's review). Done when: a later change that forgets one fails at its own slice with a clear assertion, never with a `KeyError` inside `spider schema`.
+- [ ] 7.2 Drive "A killed writer keeps committed units in a sound file". Done when: `tests/support/store_worker.py` exists, a subprocess that runs units, flushes on request and waits to be killed.
+- [ ] 7.3 Drive "A killed writer loses uncommitted units".
+- [ ] 7.4 Drive "Reading during a write in WAL mode".
+- [ ] 7.5 Drive "Busy in rollback-journal mode", with a real process that holds an exclusive lock for 8 s. Mark the test `slow`.
 
   Done when: readers wait at most 5 s, then fail with `crawl_busy` (exit 5), including `--crawl` resolution, which until then reports a busy read as `crawl_file_invalid`.
-- [ ] 7.5 Drive "Bytes are unchanged by reading" and "Writes through a reader fail", a trivial pair.
-- [ ] 7.6 Drive "Deleting after a read on Windows", as a Windows-only test.
-- [ ] 7.7 Drive "File from a newer tool" and "A refused file is unchanged", a trivial pair. Done when: `crawl_schema_too_new` (exit 6) is declared, with both versions in `details`.
-- [ ] 7.8 Docs: add durability, reading during a Crawl and schema versions (no upgrades before v0.1) to `docs/crawl-store.md`.
-- [ ] 7.9 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [ ] 7.6 Drive "Bytes are unchanged by reading" and "Writes through a reader fail", a trivial pair.
+- [ ] 7.7 Drive "Deleting after a read on Windows", as a Windows-only test.
+- [ ] 7.8 Drive "File from a newer tool" and "A refused file is unchanged", a trivial pair. Done when: `crawl_schema_too_new` (exit 6) is declared, with both versions in `details`.
+- [ ] 7.9 Docs: add durability, reading during a Crawl and schema versions (no upgrades before v0.1) to `docs/crawl-store.md`.
+- [ ] 7.10 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Journal mode and the store setting (widening)
 

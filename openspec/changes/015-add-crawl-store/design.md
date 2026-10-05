@@ -241,3 +241,4 @@ This is the first store version, so there is nothing to migrate. The migration t
 ## Open Questions
 
 - Should `spider schema` show which change added each table, for example `added_by: "015"`? It is additive, and not needed by any scenario.
+- `--format table` of `spider schema` renders columns as a JSON cell; a per-column table view is a candidate for `050`'s table work.
