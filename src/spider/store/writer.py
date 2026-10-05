@@ -23,6 +23,13 @@ BATCH_SIZE = 500
 COMMIT_AFTER_SECONDS = 1.0
 # Real time between timer checks while no unit arrives; the timer itself reads the Clock.
 IDLE_CHECK_SECONDS = 0.05
+# How often a waiting caller checks that the writer thread is still there.
+ALIVE_CHECK_SECONDS = 0.5
+CLOSED = "The crawl writer is closed."
+
+
+class CrawlWriterClosedError(RuntimeError):
+    """A unit or a flush reached a writer that was closed, or whose thread ended."""
 
 
 @dataclass(frozen=True)
@@ -36,6 +43,8 @@ class CrawlWriter:
         self._path = path
         self._clock = clock
         self._queue: Queue[_Job] = Queue(maxsize=QUEUE_SIZE)
+        self._closing = threading.Lock()
+        self._closed = False
         # Owned by the writer thread: units and the time of the first one since the last commit.
         self._uncommitted = 0
         self._first_uncommitted_at = 0.0
@@ -48,28 +57,38 @@ class CrawlWriter:
 
     def run[T](self, unit: Callable[[Connection], T]) -> T:
         done: Future[T] = Future()
-        self._queue.put(_Job(unit, done))
-        return done.result()
+        self._submit(_Job(unit, done))
+        return self._wait(done)
 
     async def run_async[T](self, unit: Callable[[Connection], T]) -> T:
         done: Future[T] = Future()
         job = _Job(unit, done)
         try:
-            self._queue.put_nowait(job)
+            self._submit(job, block=False)
         except Full:
             # Backpressure without blocking the event loop.
-            await asyncio.to_thread(self._queue.put, job)
-        return await asyncio.wrap_future(done)
+            await asyncio.to_thread(self._submit, job)
+        waiting = asyncio.wrap_future(done)
+        while True:
+            try:
+                return await asyncio.wait_for(asyncio.shield(waiting), ALIVE_CHECK_SECONDS)
+            except TimeoutError:
+                self._check_alive(done)
 
     def flush(self) -> None:
         done: Future[None] = Future()
-        self._queue.put(_Job("flush", done))
-        done.result()
+        self._submit(_Job("flush", done))
+        self._wait(done)
 
     def close(self) -> None:
-        done: Future[None] = Future()
-        self._queue.put(_Job("close", done))
-        done.result()
+        with self._closing:
+            if self._closed:
+                return
+            self._closed = True
+        if self._thread.is_alive():
+            done: Future[None] = Future()
+            self._queue.put(_Job("close", done))
+            self._wait(done)
         self._thread.join()
 
     def __enter__(self) -> Self:
@@ -83,6 +102,23 @@ class CrawlWriter:
     ) -> None:
         self.close()
 
+    def _submit(self, job: _Job, *, block: bool = True) -> None:
+        if self._closed:
+            raise CrawlWriterClosedError(CLOSED)
+        self._queue.put(job, block=block)
+
+    def _wait[T](self, done: Future[T]) -> T:
+        while True:
+            try:
+                return done.result(timeout=ALIVE_CHECK_SECONDS)
+            except TimeoutError:
+                self._check_alive(done)
+
+    def _check_alive(self, done: Future[Any]) -> None:
+        # A job queued after the thread drained the queue on its way out would wait forever.
+        if not self._thread.is_alive() and not done.done():
+            raise CrawlWriterClosedError(CLOSED)
+
     def _serve(self, started: Future[None]) -> None:
         try:
             with opening(self._path) as engine, engine.connect() as connection:
@@ -90,10 +126,13 @@ class CrawlWriter:
                 started.set_result(None)
                 self._work(connection)
         except BaseException as error:
-            if started.done():
-                raise
-            # Before any unit: the caller that opened the writer gets the error, not the thread.
-            started.set_exception(self._open_error(error))
+            # Never raised on this thread: its caller already has it, and a thread's traceback
+            # would reach stderr as raw text.
+            if not started.done():
+                started.set_exception(self._open_error(error))
+        finally:
+            self._closed = True
+            _fail_queued(self._queue)
 
     def _work(self, connection: Connection) -> None:
         while True:
@@ -102,23 +141,32 @@ class CrawlWriter:
             except Empty:
                 self._commit_if_due(connection)
                 continue
-            if isinstance(job.unit, str):
-                connection.commit()
-                job.done.set_result(None)
-                if job.unit == "close":
+            try:
+                if not self._do(job, connection):
                     return
-                continue
-            if not connection.in_transaction():
-                connection.begin()
-                self._uncommitted, self._first_uncommitted_at = 0, self._clock.monotonic()
-            result, error = _run(job.unit, connection)
-            self._uncommitted += 1
-            self._commit_if_due(connection)
-            # Only now: a caller that reads after its unit returns sees the commit.
-            if error is None:
-                job.done.set_result(result)
-            else:
-                job.done.set_exception(error)
+            except BaseException as error:
+                # A failed commit ends the writer; the caller of the job in hand learns why.
+                if not job.done.done():
+                    job.done.set_exception(error)
+                raise
+
+    def _do(self, job: _Job, connection: Connection) -> bool:
+        if isinstance(job.unit, str):
+            connection.commit()
+            job.done.set_result(None)
+            return job.unit != "close"
+        if not connection.in_transaction():
+            connection.begin()
+            self._uncommitted, self._first_uncommitted_at = 0, self._clock.monotonic()
+        result, error = _run(job.unit, connection)
+        self._uncommitted += 1
+        self._commit_if_due(connection)
+        # Only now: a caller that reads after its unit returns sees the commit.
+        if error is None:
+            job.done.set_result(result)
+        else:
+            job.done.set_exception(error)
+        return True
 
     def _commit_if_due(self, connection: Connection) -> None:
         if not connection.in_transaction():
@@ -146,12 +194,24 @@ def _check_writable(connection: Connection) -> None:
     transaction.rollback()
 
 
-def _run(unit: Callable[[Connection], Any], connection: Connection) -> tuple[Any, Exception | None]:
+def _run(
+    unit: Callable[[Connection], Any], connection: Connection
+) -> tuple[Any, BaseException | None]:
     savepoint = connection.begin_nested()
     try:
         result = unit(connection)
-    except Exception as error:
+    # KeyboardInterrupt too: it rolls back like any failure and reaches the unit's caller.
+    except BaseException as error:
         savepoint.rollback()
         return None, error
     savepoint.commit()
     return result, None
+
+
+def _fail_queued(queue: Queue[_Job]) -> None:
+    while True:
+        try:
+            job = queue.get_nowait()
+        except Empty:
+            return
+        job.done.set_exception(CrawlWriterClosedError(CLOSED))

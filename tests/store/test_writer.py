@@ -9,7 +9,7 @@ from sqlalchemy import Connection, func, insert, select, update
 
 from spider.output.diagnostics import SpiderError
 from spider.store.schema import seeds
-from spider.store.writer import CrawlWriter
+from spider.store.writer import CrawlWriter, CrawlWriterClosedError
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, query
 from tests.support.permissions import read_only_file
@@ -212,3 +212,41 @@ async def test_run_async_from_an_event_loop(temp_workspace: TempWorkspace) -> No
         count = await writer.run_async(count_seeds)
 
     assert count == 1
+
+
+def test_closing_twice_is_allowed(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+    writer = CrawlWriter(crawl.path, FakeClock())
+    writer.run(insert_seed(1, "https://example.com/a"))
+
+    writer.close()
+    writer.close()
+
+    assert query(crawl.path, COUNT) == [(1,)]
+
+
+def test_a_unit_after_close_fails_at_once(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+    writer = CrawlWriter(crawl.path, FakeClock())
+    writer.close()
+
+    with pytest.raises(CrawlWriterClosedError, match=r"^The crawl writer is closed\.$"):
+        writer.run(count_seeds)
+
+
+def interrupted_insert(connection: Connection) -> None:
+    insert_seed(2, "https://example.com/b")(connection)
+    raise KeyboardInterrupt
+
+
+def test_an_interrupted_unit_rolls_back_and_the_writer_goes_on(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        with pytest.raises(KeyboardInterrupt):
+            writer.run(interrupted_insert)
+        writer.run(insert_seed(3, "https://example.com/c"))
+
+    assert [position for position, _ in query(crawl.path, SEEDS)] == [3]

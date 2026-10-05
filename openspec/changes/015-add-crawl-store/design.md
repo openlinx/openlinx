@@ -85,6 +85,12 @@
   - `close()` commits, runs `wal_checkpoint(TRUNCATE)` and joins the thread.
 - **Reads inside units** see every earlier unit's effects, because they share the transaction. `020`'s frontier can therefore take the next URL and mark it in a single unit.
 - **Backpressure:** the submission queue is bounded at 50,000 units, and `run` blocks when the queue is full.
+- **Callers and threads:** units may come from any thread, or from an event loop through `run_async`, which never blocks the loop. The writer thread alone owns the connection, runs one unit at a time and keeps each caller's order. A caller gets its unit's result only after the commit check, so a reader that runs after the 500th unit returns sees the batch.
+- **The writer's end:**
+  - `close()` may be called again; the second call does nothing.
+  - A unit or flush submitted after `close()` fails at once with `CrawlWriterClosedError`, a bug in the caller (exit code 70), never a hang.
+  - A unit that raises any `BaseException`, `KeyboardInterrupt` included, rolls back to its savepoint, the exception reaches that unit's caller, and the writer goes on. Ctrl+C is the Crawl service's to handle (`020`), not the writer's.
+  - If the writer thread ends unexpectedly, for example on a failed commit, the caller of the unit in hand gets that error, and every other waiting or later caller gets `CrawlWriterClosedError`. Nothing is raised on the writer thread, whose traceback would reach stderr as raw text.
 - **Creating a Crawl is the one write outside the writer.** The new file's tables, its `crawl` row and its Seeds are written in the file's first transaction, before any writer opens; the write check needs that row. Every later write is a unit.
 - **One writer per Crawl, by construction in v0.1:** only the process that creates a Crawl writes it, because v0.1 has no resume and no detach. `060-min` (v0.1.1) adds the writer claim when a second process can write: a detached Crawl and `status`, then `resume` in v0.2.
 - **Alternatives:**
