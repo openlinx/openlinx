@@ -120,3 +120,22 @@ def test_a_stopped_crawl_has_no_completion_time(temp_workspace: TempWorkspace) -
     run_unit(crawl.path, lambda connection: set_state(connection, "stopped", stopped_at))
 
     assert crawl_row(crawl.path)["completed_at"] is None
+
+
+def test_a_running_crawl_has_no_completion_time(temp_workspace: TempWorkspace) -> None:
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+
+    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+
+    row = crawl_row(crawl.path)
+    assert (row["state"], row["completed_at"]) == ("running", None)
+
+
+def test_no_settings_file(temp_workspace: TempWorkspace) -> None:
+    shop = temp_workspace.root / "shop"
+    (shop / ".spider").mkdir(parents=True)
+    workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
+
+    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+
+    assert crawl_row(crawl.path)["settings_file"] is None
