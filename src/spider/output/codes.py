@@ -97,6 +97,12 @@ WORKSPACE_NOT_WRITABLE = _declare(
     ExitCode.IO,
     "The Workspace folder or its data folder cannot be created or written.",
 )
+CRAWL_NOT_WRITABLE = _declare(
+    "crawl_not_writable",
+    "error",
+    ExitCode.IO,
+    "The crawl file cannot be written; details.file names it.",
+)
 INTERNAL_ERROR = _declare(
     "internal_error",
     "error",

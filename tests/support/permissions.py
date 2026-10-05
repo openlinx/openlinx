@@ -1,6 +1,7 @@
 """Real folders without write permission (015-add-crawl-store, task 3.11)."""
 
 import os
+import stat
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -33,6 +34,19 @@ def unwritable_folder(folder: Path) -> Iterator[None]:
             yield
         finally:
             folder.chmod(0o755)
+
+
+@contextmanager
+def read_only_file(file: Path) -> Iterator[None]:
+    """The read-only attribute on Windows; no write permission on POSIX."""
+    if sys.platform != "win32" and os.geteuid() == 0:
+        pytest.skip("root ignores file permissions")
+    mode = file.stat().st_mode
+    file.chmod(stat.S_IREAD)
+    try:
+        yield
+    finally:
+        file.chmod(mode)
 
 
 def _icacls(folder: Path, *args: str) -> None:

@@ -88,7 +88,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.6 Drive "Units wait for the batch" and "The 500th unit commits the batch", a trivial pair with `FakeClock` frozen.
 - [x] 4.7 Drive "The timer commits", with `FakeClock.advance(1.0)`. Done when: the 1 s commit runs on the injected clock.
 - [x] 4.8 Drive "A flush commits at once".
-- [ ] 4.9 Drive "A read-only crawl file", with the real read-only attribute.
+- [x] 4.9 Drive "A read-only crawl file", with the real read-only attribute.
 
   Done when: opening the writer runs a rolled-back write first, and fails with `crawl_not_writable` (exit 7) and `details.file`, leaving the file unchanged.
 - [ ] 4.10 Drive the connection pragmas of D2 at seam 2: every connection has `foreign_keys` on, the writer waits up to 30 s for a lock and readers 5 s. Mapping a busy reader to `crawl_busy` stays in 7.4.

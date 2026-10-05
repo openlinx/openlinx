@@ -1,14 +1,17 @@
 """The transactional writer (015-add-crawl-store, crawl-store)."""
 
+import hashlib
 from collections.abc import Callable
 
 import pytest
 from sqlalchemy import Connection, func, insert, select, update
 
+from spider.output.diagnostics import SpiderError
 from spider.store.schema import seeds
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, query
+from tests.support.permissions import read_only_file
 from tests.support.workspace import TempWorkspace
 
 SEEDS = "SELECT position, url FROM seeds ORDER BY position"
@@ -140,3 +143,17 @@ def test_a_flush_commits_at_once(temp_workspace: TempWorkspace) -> None:
         seen = query(crawl.path, COUNT)
 
     assert seen == [(3,)]
+
+
+def test_a_read_only_crawl_file(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace)
+    before = hashlib.sha256(crawl.path.read_bytes()).hexdigest()
+
+    with read_only_file(crawl.path), pytest.raises(SpiderError) as raised:
+        CrawlWriter(crawl.path, FakeClock())
+
+    assert (
+        raised.value.code,
+        raised.value.diagnostic.details["file"],
+        hashlib.sha256(crawl.path.read_bytes()).hexdigest(),
+    ) == ("crawl_not_writable", str(crawl.path), before)

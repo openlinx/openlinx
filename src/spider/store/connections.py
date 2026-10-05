@@ -8,7 +8,26 @@ from typing import Any
 from urllib.parse import quote
 
 from sqlalchemy import Connection, Engine, create_engine, event
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.pool import NullPool
+
+# SQLite's primary result codes for a file or folder that cannot be written.
+NOT_WRITABLE = {
+    sqlite3.SQLITE_PERM,
+    sqlite3.SQLITE_READONLY,
+    sqlite3.SQLITE_IOERR,
+    sqlite3.SQLITE_FULL,
+    sqlite3.SQLITE_CANTOPEN,
+}
+
+
+def cannot_write(error: BaseException) -> str | None:
+    """SQLite's name for the error when it says a file cannot be written, otherwise None."""
+    cause = error.orig if isinstance(error, DBAPIError) else error
+    code = getattr(cause, "sqlite_errorcode", None)
+    if code is None or code & 0xFF not in NOT_WRITABLE:
+        return None
+    return str(getattr(cause, "sqlite_errorname", code))
 
 
 def file_uri(path: PurePath) -> str:

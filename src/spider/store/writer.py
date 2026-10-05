@@ -9,10 +9,13 @@ from queue import Empty, Queue
 from types import TracebackType
 from typing import Any, Literal, Self
 
-from sqlalchemy import Connection
+from sqlalchemy import Connection, update
 
 from spider.clock import Clock
-from spider.store.connections import opening
+from spider.output.codes import CRAWL_NOT_WRITABLE
+from spider.output.diagnostics import SpiderError
+from spider.store.connections import cannot_write, opening
+from spider.store.schema import crawl
 
 QUEUE_SIZE = 50_000
 BATCH_SIZE = 500
@@ -72,34 +75,39 @@ class CrawlWriter:
     def _serve(self, started: Future[None]) -> None:
         try:
             with opening(self._path) as engine, engine.connect() as connection:
+                _check_writable(connection)
                 started.set_result(None)
-                while True:
-                    try:
-                        job = self._queue.get(timeout=IDLE_CHECK_SECONDS)
-                    except Empty:
-                        self._commit_if_due(connection)
-                        continue
-                    if isinstance(job.unit, str):
-                        connection.commit()
-                        job.done.set_result(None)
-                        if job.unit == "close":
-                            return
-                        continue
-                    if not connection.in_transaction():
-                        connection.begin()
-                        self._uncommitted, self._first_uncommitted_at = 0, self._clock.monotonic()
-                    result, error = _run(job.unit, connection)
-                    self._uncommitted += 1
-                    self._commit_if_due(connection)
-                    # Only now: a caller that reads after its unit returns sees the commit.
-                    if error is None:
-                        job.done.set_result(result)
-                    else:
-                        job.done.set_exception(error)
+                self._work(connection)
         except BaseException as error:
-            if not started.done():
-                started.set_exception(error)
-            raise
+            if started.done():
+                raise
+            # Before any unit: the caller that opened the writer gets the error, not the thread.
+            started.set_exception(self._open_error(error))
+
+    def _work(self, connection: Connection) -> None:
+        while True:
+            try:
+                job = self._queue.get(timeout=IDLE_CHECK_SECONDS)
+            except Empty:
+                self._commit_if_due(connection)
+                continue
+            if isinstance(job.unit, str):
+                connection.commit()
+                job.done.set_result(None)
+                if job.unit == "close":
+                    return
+                continue
+            if not connection.in_transaction():
+                connection.begin()
+                self._uncommitted, self._first_uncommitted_at = 0, self._clock.monotonic()
+            result, error = _run(job.unit, connection)
+            self._uncommitted += 1
+            self._commit_if_due(connection)
+            # Only now: a caller that reads after its unit returns sees the commit.
+            if error is None:
+                job.done.set_result(result)
+            else:
+                job.done.set_exception(error)
 
     def _commit_if_due(self, connection: Connection) -> None:
         if not connection.in_transaction():
@@ -107,6 +115,24 @@ class CrawlWriter:
         waited = self._clock.monotonic() - self._first_uncommitted_at
         if self._uncommitted >= BATCH_SIZE or waited >= COMMIT_AFTER_SECONDS:
             connection.commit()
+
+    def _open_error(self, error: BaseException) -> BaseException:
+        name = cannot_write(error)
+        if name is None:
+            return error
+        return SpiderError(
+            CRAWL_NOT_WRITABLE,
+            f"Cannot write the crawl file {self._path}.",
+            hint="Check that the file and its folder are writable, and not read-only.",
+            details={"file": str(self._path), "error": name},
+        )
+
+
+def _check_writable(connection: Connection) -> None:
+    # A write that is rolled back, so an unwritable file fails before anything is crawled.
+    transaction = connection.begin()
+    connection.execute(update(crawl).values(id=crawl.c.id))
+    transaction.rollback()
 
 
 def _run(unit: Callable[[Connection], Any], connection: Connection) -> tuple[Any, Exception | None]:

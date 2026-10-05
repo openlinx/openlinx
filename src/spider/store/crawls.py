@@ -13,20 +13,11 @@ from sqlalchemy.exc import DBAPIError
 from spider import __version__
 from spider.output.codes import WORKSPACE_NOT_WRITABLE
 from spider.output.diagnostics import SpiderError
-from spider.store.connections import connect, opening
+from spider.store.connections import cannot_write, connect, opening
 from spider.store.ids import Choice, new_crawl_id
 from spider.store.records import CrawlFile, CrawlState, NewCrawl
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
 from spider.workspace.creation import as_workspace_not_writable, create_data_folder
-
-# SQLite's primary result codes for a file or folder that cannot be written.
-NOT_WRITABLE = {
-    sqlite3.SQLITE_PERM,
-    sqlite3.SQLITE_READONLY,
-    sqlite3.SQLITE_IOERR,
-    sqlite3.SQLITE_FULL,
-    sqlite3.SQLITE_CANTOPEN,
-}
 
 
 def create_crawl_file(request: NewCrawl, started_at: datetime, choice: Choice) -> CrawlFile:
@@ -103,12 +94,11 @@ def _sqlite_not_writable(file: Path) -> Iterator[None]:
     try:
         yield
     except (sqlite3.Error, DBAPIError) as error:
-        cause = error.orig if isinstance(error, DBAPIError) else error
-        code = getattr(cause, "sqlite_errorcode", None)
-        if code is None or code & 0xFF not in NOT_WRITABLE:
+        name = cannot_write(error)
+        if name is None:
             raise
         raise SpiderError(
             WORKSPACE_NOT_WRITABLE,
             f"Cannot write the new crawl file {file}.",
-            details={"path": str(file), "error": getattr(cause, "sqlite_errorname", None)},
+            details={"path": str(file), "error": name},
         ) from error
