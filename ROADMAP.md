@@ -8,10 +8,12 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 
 **Scope cut (2026-10-05).** v0.1 is cut to the core path: crawl a site, store it, and ask it for Issues. Several changes ship only their minimum in v0.1 (marked *min*), and the rest of them moves to v0.2. The specs stay as written. The `design.md` and `tasks.md` of 015 and later are drafts: each is re-grounded against the code with `/opsx:update` just before its change starts, and that is also when the deferred requirements leave its specs.
 
+**060-min joins v0.1 (2026-10-05).** An agent runs Commands through its shell tool, which times out after minutes, so a foreground Crawl caps what an agent can crawl. With `crawl --detach`, `status` and `stop` in v0.1, an agent crawls a large site in the background and queries the crawl file while the Crawl is still writing.
+
 ## Positioning
 
 Other tools already ship a crawler with a CLI, an MCP server and a Skill. This one stands on three things:
-- **Your crawl is a database:** each Crawl is a SQLite file with a public, versioned, documented schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)) and read-only `spider sql`. Every Issue can be reproduced by a query.
+- **Your crawl is a database:** each Crawl is a SQLite file with a public, versioned, documented schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)) and read-only `spider sql`, which works while a background Crawl is still writing. Every Issue can be reproduced by a query.
 - **A contract-tested CLI for agents:** one JSON result per Command, a registry of diagnostics and error codes, and cursor paging.
 - **No telemetry, no account, no LLM calls** ([ADR-0004](docs/adr/0004-tool-never-calls-an-llm.md)).
 
@@ -29,6 +31,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 030 | `030-add-page-data` | `page-data` | none (data only) | planned, min |
 | 040 | `040-add-rules` | `rules` | `rules` | planned, 15 Rules |
 | 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | planned, min |
+| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop` | planned, min |
 | 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned, min |
 | 085 | `085-add-release` | decided when it is drafted | none (release workflow) | planned, not drafted yet |
 
@@ -44,13 +47,14 @@ slice:   000 ─► 010 ─► 015 ─► 020 ─► 030-min ─► 040-min ─�
                                 │    columns)    Rules)     issues <id>)
                                 │
 widen:                          ├─► 022-min ─┐
+                                ├─► 060-min ─┤
                                 └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 sql, summary/pages/page ─► 080 ─► 085 ─► v0.1 tag
 ```
 
 - **The slice:** 015 → 020 → 030-min → 040-min → 050-issues. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
-- **Widening:** 022-min can start as soon as 020 is in, in its own worktree, alongside the slice. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
+- **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Release:** 085 comes last, before the v0.1 tag. The product name must be chosen, and checked as free on PyPI and GitHub, before 085 starts.
-- **v0.1.1** comes after the v0.1 release: 060-min first, then 090. The v0.2 changes come after that.
+- **v0.1.1** comes after the v0.1 release: 090. The v0.2 changes come after that.
 
 ### The v0.1 Rules
 
@@ -168,12 +172,13 @@ If a change needs something another change owns, it depends on that change inste
   - **(v0.2)** **The CSV policy and output files**, for every Command (moved from 010 on 2026-10-01):
     - the `csv` format; the single **CSV policy** is UTF-8 with BOM, CRLF and formula neutralisation, with `--no-bom` to turn the BOM off
     - `-o <file>` writes exactly the stdout bytes, atomically, and leaves stdout empty (`output_written`, `output_not_writable`)
-- **060-add-crawl-control** (min in v0.1.1, rest in v0.2):
-  - **(v0.1.1)** `crawl --detach` in Spider mode: on Windows it uses CREATE_NO_WINDOW.
-  - **(v0.1.1)** `status`, which detects a dead process.
-  - **(v0.1.1)** `stop` (`--wait`).
-  - **(v0.1.1)** The recorded runs and control requests behind them, and the command recorded for Crawls started through MCP.
-  - **(v0.1.1)** Moved from 015 on 2026-10-05: the writer claim (`crawl_locked`) and liveness, recording a dead Crawl `interrupted`, control writes by processes without the claim, and reserved crawl ids (`<id>.log`, `crawl_id_taken`).
+- **060-add-crawl-control** (min in v0.1, rest in v0.2):
+  - `crawl --detach` in Spider mode: on Windows it uses CREATE_NO_WINDOW.
+  - `status`, which detects a dead process.
+  - `stop` (`--wait`).
+  - The recorded runs and control requests behind them. **(v0.1.1)** The command recorded for Crawls started through MCP.
+  - The **end-to-end CI test** on Windows, macOS and Linux: `crawl --detach` → `status` → `issues`, with a `sql` query while the Crawl is still running, then `stop`.
+  - Moved from 015 on 2026-10-05: the writer claim (`crawl_locked`) and liveness, recording a dead Crawl `interrupted`, control writes by processes without the claim, and reserved crawl ids (`<id>.log`, `crawl_id_taken`).
   - **(v0.2)** Detached List mode, where the parent stores the Seeds before spawning the Crawl.
   - **(v0.2)** `resume`. Resume works for `stopped`, `interrupted` and `failed` Crawls, asks again for secrets, and accepts a higher `--max-urls`.
   - **(v0.2)** `crawl --dry-run`: the checked config, the equivalent command, and a URL estimate that may be `null`.
@@ -187,7 +192,7 @@ If a change needs something another change owns, it depends on that change inste
 - **080-add-agent-skill** (min in v0.1):
   - **The Skill** (workflows, install instructions and one-liners), generated from `spider commands` by a developer script (`scripts/generate_skill.py`). In v0.1 the one-liner is `uv tool install`, and the workflows use only v0.1 Commands.
   - `skill install`, and the outdated-Skill notice.
-  - The large-Crawl guardrail in v0.1: the Skill always passes `--max-urls` (decided when 080 is re-grounded).
+  - Large Crawls in v0.1: the Skill starts a Crawl with `crawl --detach`, follows it with `status`, queries it with `issues` and `sql` while it runs, and ends it with `stop`. Whether it also passes `--max-urls` is decided when 080 is re-grounded.
   - `doctor`, whose TLS check uses 022's TLS setup.
   - An **SQL cookbook** in the Skill: `sql` recipes over the public schema. **(v0.2)** Segment recipes.
   - **(v0.2)** the Full audit workflow (it needs 070's `report brief`); the dry run and the Hand-off rule (when the URL estimate is `null`, the Skill hands the command to the user), which need 060; the install-script one-liners (100); Segments and their recipes; `doctor --proxy`; and the plugin marketplace, which ships with 090's `.mcp.json`.
@@ -218,17 +223,13 @@ If a change needs something another change owns, it depends on that change inste
 | Structured-data validation errors / warnings | v0.3 |
 | Unique JS Inlinks / Outlinks, cookies set by scripts | v1.1 |
 
-## v0.1.1: background Crawls and the MCP server
+## v0.1.1: the MCP server
 
-The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min joined it on 2026-10-05, because MCP needs background Crawls. It builds on the released v0.1.
+The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the released v0.1, including 060-min's background Crawls, which MCP needs.
 
 | # | Change | Capabilities (specs) | Commands / MCP tools | Status |
 |---|---|---|---|---|
-| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop` | planned, min |
 | 090 | `090-add-mcp-server` | `mcp-server`; modifies `agent-skill` and 085's release capability | `mcp` (+ MCP tools) | planned |
-
-- **Order:** 060-min, then 090.
-- **060-min** is `crawl --detach`, `status` (with dead-process detection) and `stop` (`--wait`), for Spider mode only. `resume`, `crawl --dry-run`, `crawls list|show|rm` and detached List mode stay in v0.2.
 
 - **090-add-mcp-server**:
   - `spider mcp --workspace <path>`.
@@ -245,11 +246,32 @@ The first release after v0.1. MCP was moved here on 2026-10-01, and 060-min join
 **Re-grounding checklist** (what to fix or design when each change is re-grounded):
 - 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
 - 080: `design.md:95` and task 7.8 still name 100's release pipeline for the Skill-copy check, which is now 085's.
+- 060: re-ground for v0.1. Its proposal and the release notes in `specs/crawl-control/spec.md` still say v0.1.1 for 060-min; they become v0.1, except the command recorded for Crawls started through MCP (v0.1.1). It may not assume 022: 060-min needs only 015 and 020.
+- 015: its `design.md` (lines 13 and 86) and `proposal.md` (lines 11 and 71) say 060-min is v0.1.1. Fix the wording when 015 is archived; the one-writer-by-construction rule in 015 is unchanged until 060 lands.
 - 060: own what moved from 015 (see 060's entry): its design still calls `015`'s `check_writer`, `write_control`, reservation and `crawl_id_taken`, and its spec and tasks rely on them.
 - 060: remove the window in which a just-claimed, still-empty `<id>.sqlite` makes `--crawl latest` report crawl_file_invalid. Create the file as `<id>.sqlite.tmp` (claimed exclusively, counted as taken) and rename it after the schema is written, together with the reservations.
 - 026: `psutil` is no longer a dependency of 015; add it as a test dependency if the pool is built.
 - 020–050: no Alembic revision per change before v0.1; tables are added to the declared schema and `docs/schema.md` in the same slice (015 D5, D6).
 - 040: every v0.1 Rule ships a reproducing SQL query over the public schema. Post-crawl Rules are evaluated by it; for per-URL Rules evaluated in Python, a test checks that the Python result equals the query over the stored Crawl. `rules show <id>` prints the query, and an Issue can point to it.
+
+**From a code review of a peer open-source crawler (2026-10-05),** to weigh when each change is re-grounded. Points our drafts already cover are left out.
+- 020:
+  - Normalisation keeps the trailing slash: `/a` and `/a/` are distinct URLs, because which one redirects is itself a finding. Say so in the normalisation requirement.
+  - Backstops that end the Crawl with a `stop_reason`: a zero-success breaker (no URL stored after `max(8, 2 × concurrency)` finished requests), a per-URL watchdog, and stop as a grace period followed by cancellation.
+  - Invariant tests at seam 3+6: `--max-urls` is never exceeded under concurrency (in-flight URLs count toward it), each URL is fetched once, and link cycles end.
+  - A deterministic dispatch order: an explicit insertion sequence as the tie-break, never a timestamp.
+  - The apex→www direction joins Scope in one direction only. A `seed_base_mismatch` warning when the Seed's canonical or Links point to the other host. About 20 seed/base cases make a good table test.
+- 022:
+  - Throttling is host state: after a 429 the host drops to 1 request in flight and recovers step by step after N consecutive 2xx. Waiting per host is capped in total; after that, its remaining URLs are recorded as rate-limited without a request.
+  - Classification: 429 is always rate-limited. 503 is rate-limited only with `Retry-After`, otherwise a server error. 403, or a challenge page (`cf-mitigated: challenge`), is `blocked` and never retried. Each is its own outcome value, distinct from a 4xx Page.
+  - Separate retry budgets for rate limits and for transport errors and 5xx, so they never multiply.
+  - The request timeout covers the body read. Fixture routes: a stalled body, a body that trickles forever, and a 503 whose body stalls.
+  - A `Location` that is not http(s) is refused.
+- 024: sitemap URLs are taken round-robin across child sitemaps, capped relative to `--max-urls`, within a total time budget. A walk cut short is `truncated` ("unknown", not "missing"). `Sitemap:` lines that are not http(s) are ignored.
+- 026: a seeded synthetic site (deterministic, an injected Issue mix with recorded counts, a latency option, and a direct writer into the crawl store) for the 500k-URL benchmark and Rule performance. Benchmark method: interleave runs and take the minimum, use a fresh store per stage, prefer counts to wall time, and keep retracted rows.
+- 080: `skill install --project` and `--dry-run`, detecting files the user edited, and atomic writes.
+- 110: a small `--fail-on` grammar (`score<90`, `severity>=error`, `errors>0`). Exit 2 for a tripped gate, with the result printed first.
+- Not adopted, on purpose: ignoring robots.txt by default, robots.txt 5xx as allow-all, browser or AI-bot user-agent impersonation, tracking-parameter stripping by default, sampling coverage modes as the default, telemetry and auto-update.
 
 ## v0.2: crawl control, reports, CI gate, link graph
 
@@ -259,7 +281,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 |---|---|---|---|---|
 | 024 | `024-add-list-and-sitemap-modes` | `crawl-modes` | `crawl --list`, `crawl --sitemap` | planned |
 | 026 | `026-add-parse-pool` | `crawl-performance` (only if the pool goes ahead) | none | planned, conditional on its benchmark |
-| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --dry-run`, `resume`, `crawls`, detached List mode | planned, rest after v0.1.1 |
+| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --dry-run`, `resume`, `crawls`, detached List mode | planned, rest after v0.1 |
 | 070 | `070-add-html-report` | `reporting` | `report`, `report brief` | planned |
 | 100 | `100-add-installers` | `installation` | none (install scripts) | planned |
 | 110 | `110-add-ci-gate` | decided when it is drafted | `diff A B`, `--fail-on`; a GitHub Action | planned, not drafted yet |
