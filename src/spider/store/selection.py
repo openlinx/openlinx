@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from spider.naming import APP_NAME
-from spider.output.codes import CRAWL_NOT_FOUND, NO_CRAWLS
+from spider.output.codes import CRAWL_NOT_FOUND, INVALID_VALUE, NO_CRAWLS
 from spider.output.diagnostics import SpiderError
 from spider.store.ids import is_crawl_id
 from spider.store.reading import read_metadata
@@ -16,6 +16,12 @@ LATEST = "latest"
 def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFile:
     if reference == LATEST:
         reference = _latest(workspace)
+    elif not is_crawl_id(reference):
+        raise SpiderError(
+            INVALID_VALUE,
+            f"--crawl {reference} is not latest, a crawl id or the path of a crawl file.",
+            hint="Give latest, an id such as 20260927-140312-k3f9, or a path ending in .sqlite.",
+        )
     path = workspace.crawls_dir / f"{reference}.sqlite"
     if not path.is_file():
         raise SpiderError(

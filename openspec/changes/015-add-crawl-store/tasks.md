@@ -109,7 +109,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.6 Drive "Only crawl files are Crawls" at seam 2. Done when: only files named `<id>.sqlite` count. The scenario's `.log` file passed at once, so a `notes.sqlite` in `crawls/` drove the id filter.
 - [x] 5.7 Drive "No Crawls" at seam 2. Done when: `no_crawls` (exit 4) is declared in `spider.output.codes`, and its hint is built from `spider.naming`.
 - [x] 5.8 Drive "Unknown id" at seam 2. Done when: `crawl_not_found` (exit 4) is declared.
-- [ ] 5.9 Drive "Malformed reference" at seam 2.
+- [x] 5.9 Drive "Malformed reference" at seam 2.
 - [ ] 5.10 Drive "Not a crawl file" at seam 2. Done when: `crawl_file_invalid` (exit 6) is declared, with `details.file`.
 - [ ] 5.11 Drive "A broken newest file is reported, not skipped" at seam 2.
 - [ ] 5.12 Drive "Reading creates nothing" at seam 2.

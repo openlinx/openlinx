@@ -81,6 +81,15 @@ def test_unknown_id(temp_workspace: TempWorkspace) -> None:
     assert (raised.value.code, raised.value.exit_code) == ("crawl_not_found", 4)
 
 
+def test_malformed_reference(temp_workspace: TempWorkspace) -> None:
+    workspace = current_workspace(temp_workspace)
+
+    with pytest.raises(SpiderError) as raised:
+        resolve_crawl("yesterday", workspace=workspace, cwd=temp_workspace.root)
+
+    assert (raised.value.code, raised.value.exit_code) == ("invalid_value", 2)
+
+
 def test_a_sqlite_file_not_named_by_an_id_is_not_a_crawl(temp_workspace: TempWorkspace) -> None:
     crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
     (crawl.path.parent / "notes.sqlite").write_text("", encoding="utf-8")
