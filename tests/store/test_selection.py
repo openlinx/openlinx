@@ -21,3 +21,15 @@ def test_by_id(temp_workspace: TempWorkspace) -> None:
     assert selected == CrawlFile(
         "20260927-100000-aaaa", workspace.crawls_dir / "20260927-100000-aaaa.sqlite"
     )
+
+
+def resolve_latest(temp_workspace: TempWorkspace) -> str:
+    workspace = current_workspace(temp_workspace)
+    return resolve_crawl("latest", workspace=workspace, cwd=temp_workspace.root).id
+
+
+def test_latest_is_the_most_recent_start(temp_workspace: TempWorkspace) -> None:
+    create_crawl_at(temp_workspace, "2026-09-27T11:00:00.000Z", "bbbb")
+    create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+
+    assert resolve_latest(temp_workspace) == "20260927-110000-bbbb"
