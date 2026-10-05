@@ -53,7 +53,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 2.3 Drive "A taken id is drawn again" at seam 2.
 
   Done when: creating a Crawl without an id draws until `<id>.sqlite` is free, and creates the file exclusively.
-- [ ] 2.4 Docs: add ids to `docs/crawl-store.md`.
+- [x] 2.4 Docs: add ids to `docs/crawl-store.md`.
 - [ ] 2.5 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. Crawl metadata and states (slice, seam 2)
