@@ -199,6 +199,8 @@ No new seam is introduced. The store API is seam 2.
   - The writer checkpoints with `TRUNCATE` on close.
 - **The timing scenarios (the 5 s busy wait, kills) are slow.**
   - The commit timer uses `FakeClock`, so only the busy test and the subprocess tests take real seconds. Those are marked `slow`.
+- **A new crawl file is empty for a few milliseconds.**
+  - A `--crawl latest` that runs during the milliseconds between claiming and creating a file reports `crawl_file_invalid`. Accepted for v0.1. `060` removes the window with `.tmp` + rename alongside its reservations.
 
 ## Migration Plan
 
