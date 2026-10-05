@@ -41,3 +41,12 @@ The Crawl's metadata, in exactly one row.
 | Column | Type | Null | Key | Format | Values | Description |
 |---|---|---|---|---|---|---|
 | `id` | TEXT | no | PK | | | The crawl id. |
+| `crawl_mode` | TEXT | no | | | `spider`, `list`, `sitemap` | How the Crawl finds URLs. |
+| `section_crawl` | INTEGER | no | | `boolean` | | 1 for a Section Crawl, whose Scope is one part of a site, otherwise 0. |
+| `state` | TEXT | no | | | `running`, `stopped`, `completed`, `failed`, `interrupted` | The Crawl State. |
+| `started_at` | TEXT | no | | `timestamp` | | When the Crawl started. |
+| `completed_at` | TEXT | yes | | `timestamp` | | When the state became completed; NULL in every other state. |
+| `command_argv` | TEXT | no | | `json` | | The command line as an array that starts with the command name, secrets redacted. |
+| `cwd` | TEXT | no | | | | The absolute folder the Command ran in. |
+| `settings_file` | TEXT | yes | | | | The absolute path of the settings file that was read, or NULL without one. |
+| `config` | TEXT | no | | `json` | | The resolved settings as an object of tables and keys, secrets redacted. |

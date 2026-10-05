@@ -6,10 +6,12 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
+from spider.output.reporter import Collected
+from spider.services.crawls import create_crawl
 from spider.services.schema import describe_schema
-from spider.store.crawls import create_crawl
 from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
+from tests.support.crawls import new_crawl
 from tests.support.workspace import TempWorkspace
 
 SCHEMA_DOC = Path(__file__).resolve().parents[2] / "docs" / "schema.md"
@@ -91,7 +93,7 @@ def test_a_new_file_matches_the_declaration(temp_workspace: TempWorkspace) -> No
     shop = temp_workspace.root / "shop"
     (shop / ".spider" / "crawls").mkdir(parents=True)
     workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
-    file = create_crawl(workspace, FakeClock()).path
+    file = create_crawl(new_crawl(workspace), FakeClock(), Collected()).path
 
     declared = {
         table["name"]: [

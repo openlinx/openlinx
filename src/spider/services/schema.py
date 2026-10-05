@@ -31,6 +31,6 @@ def _column(column: "Column[Any]") -> dict[str, Any]:
         "nullable": column.nullable,
         "primary_key": column.primary_key,
         "references": None,
-        "format": None,
-        "values": None,
+        "format": getattr(column.type, "format", None),
+        "values": column.info.get("values"),
     }

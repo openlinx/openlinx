@@ -58,7 +58,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 3. Crawl metadata and states (slice, seam 2)
 
-- [ ] 3.1 Drive "Metadata of a new Crawl".
+- [x] 3.1 Drive "Metadata of a new Crawl".
 
   Done when: the `crawl` row holds `crawl_mode`, `section_crawl`, `state`, `started_at`, `completed_at`, `command_argv`, `cwd`, `settings_file` and `config`, through the shared timestamp, JSON and boolean column types, each with its `docs/schema.md` row.
 - [ ] 3.2 **Guard:** "Timestamp text".
