@@ -1,5 +1,7 @@
 """`spider schema` (015-add-crawl-store, crawl-store)."""
 
+from typing import Any
+
 from tests.support.cli import run_cli
 
 
@@ -30,4 +32,19 @@ def test_columns_of_seeds() -> None:
     ] == [
         {"name": "position", "type": "INTEGER", "nullable": False, "primary_key": True},
         {"name": "url", "type": "TEXT", "nullable": False, "primary_key": False},
+    ]
+
+
+def columns_of(table: str) -> dict[str, dict[str, Any]]:
+    (item,) = run_cli("schema", table).json()["items"]
+    return {column["name"]: column for column in item["columns"]}
+
+
+def test_column_formats() -> None:
+    columns = columns_of("crawl")
+
+    assert [columns[name]["format"] for name in ("started_at", "section_crawl", "config")] == [
+        "timestamp",
+        "boolean",
+        "json",
     ]

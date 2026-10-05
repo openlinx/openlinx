@@ -134,7 +134,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
   Done when: `spider schema [TABLE]` is the adapter of the schema service, registered with `@command_meta(name=...)` as a list Command, paged with `paginate` and `fingerprint`, and its JSON result starts with `schema_version`.
 - [x] 6.5 Drive "First tables" at seam 1. Done when: tables are ordered by the adding change's number, then by position within the change.
 - [x] 6.6 **Guard:** "Columns of seeds" at seam 1. It passed at once: the schema service has described the columns since group 1.
-- [ ] 6.7 Drive "Column formats" at seam 1.
+- [x] 6.7 **Guard:** "Column formats" at seam 1. It passed at once: `Timestamp`, `Flag` and `Json` have carried their formats since group 3.
 - [ ] 6.8 Drive "State values are documented" at seam 1.
 - [ ] 6.9 Drive "The next page" at seam 1.
 - [ ] 6.10 Drive "Unknown table" at seam 1. Done when: `unknown_table` (exit 2) is declared, with `details.tables`.
