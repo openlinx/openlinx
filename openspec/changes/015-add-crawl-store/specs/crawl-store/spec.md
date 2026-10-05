@@ -64,6 +64,10 @@ Creating a Crawl SHALL create the Workspace's data folder, its `.gitignore` and 
 - **WHEN** a Crawl is created in the global Workspace, and `H/.spider` is a file
 - **THEN** creation fails with the error code `workspace_not_writable`, and `details.path` starts with `H/.spider`
 
+#### Scenario: Unwritable crawls folder
+- **WHEN** a Crawl is created in the local Workspace `H/work/shop`, and no new file can be created in `H/work/shop/.spider/crawls/`
+- **THEN** creation fails with the error code `workspace_not_writable`, and `details.path` starts with `H/work/shop/.spider/crawls`
+
 ### Requirement: The writer checks that it can write
 
 Opening a Crawl's writer SHALL first run a write inside a transaction that it rolls back. When that fails, opening SHALL fail with `crawl_not_writable`, whose `details.file` is the crawl file, before any unit of work runs. The file SHALL be left unchanged.
