@@ -142,7 +142,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 6.12 **Guard:** "Names are snake_case" and "Descriptions are present", at seam 6. They check every later table automatically.
 - [x] 6.13 **Guard:** "Booleans are integers" and "Enumeration values are snake_case", at seam 6.
 - [x] 6.14 **Guard:** "Documentation and declaration agree", now through `spider schema --limit 1000` at seam 6.
-- [ ] 6.15 Drive "Self-description of schema" at seam 1.
+- [x] 6.15 **Guard:** "Self-description of schema" at seam 1. It passed at once: `@command_meta` of 010 describes every registered Command.
 - [ ] 6.16 Drive "Global flags of schema" and "Default limit of schema" at seam 1, a trivial pair.
 - [ ] 6.17 **Guard:** the startup allowlist test passes with `schema` registered: `spider --help` and `spider commands` load no `sqlalchemy`.
 - [ ] 6.18 Docs: add "How to add a table" to `docs/schema.md` (docs rows and the declared table in the same slice, the conventions, no migration before v0.1). Add `spider schema` to `docs/cli.md`.

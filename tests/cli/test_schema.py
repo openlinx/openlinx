@@ -100,3 +100,23 @@ def test_no_workspace_needed(
     result = run_cli("schema")
 
     assert (result.exit_code, (temp_workspace.home / ".spider").exists()) == (0, False)
+
+
+def schema_entry() -> dict[str, Any]:
+    entry: dict[str, Any] = next(
+        command for command in run_cli("commands").json()["commands"] if command["name"] == "schema"
+    )
+    return entry
+
+
+def test_self_description_of_schema() -> None:
+    entry = schema_entry()
+
+    assert (entry["output"], entry["formats"], entry["fields"]) == (
+        "list",
+        ["json", "jsonl", "table"],
+        {
+            "available": ["name", "kind", "description", "columns"],
+            "default": ["name", "kind", "description", "columns"],
+        },
+    )
