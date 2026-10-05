@@ -5,13 +5,16 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+from contextlib import closing
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 
+from spider.output.diagnostics import SpiderError
 from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
+from spider.store.connections import connect
 from spider.store.crawls import set_state
 from spider.store.reading import read_metadata, reading
 from spider.store.records import CrawlFile
@@ -94,3 +97,33 @@ def test_deleting_after_a_read_on_windows(temp_workspace: TempWorkspace) -> None
     )
 
     assert (deleted.returncode, crawl.path.exists()) == (0, False)
+
+
+def crawl_from_a_newer_tool(temp_workspace: TempWorkspace) -> CrawlFile:
+    crawl = create_any_crawl(temp_workspace)
+    with closing(connect(crawl.path)) as connection:
+        connection.execute("PRAGMA user_version = 99")
+    return crawl
+
+
+def test_file_from_a_newer_tool(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_from_a_newer_tool(temp_workspace)
+
+    with pytest.raises(SpiderError) as raised:
+        read_metadata(crawl.path)
+
+    assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (
+        "crawl_schema_too_new",
+        6,
+        {"file_schema_version": 99, "tool_schema_version": 1},
+    )
+
+
+def test_a_refused_file_is_unchanged(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_from_a_newer_tool(temp_workspace)
+    before = hashlib.sha256(crawl.path.read_bytes()).hexdigest()
+
+    with pytest.raises(SpiderError):
+        read_metadata(crawl.path)
+
+    assert hashlib.sha256(crawl.path.read_bytes()).hexdigest() == before

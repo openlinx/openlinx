@@ -125,6 +125,12 @@ CRAWL_FILE_INVALID = _declare(
     "The selected file is not a readable crawl file, or a file selected by id or latest holds "
     "another id; details.file names it.",
 )
+CRAWL_SCHEMA_TOO_NEW = _declare(
+    "crawl_schema_too_new",
+    "error",
+    ExitCode.INCOMPATIBLE,
+    "The crawl file was made by a newer tool; details give both schema versions.",
+)
 CRAWL_NOT_WRITABLE = _declare(
     "crawl_not_writable",
     "error",
