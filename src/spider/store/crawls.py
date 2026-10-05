@@ -27,7 +27,8 @@ def create_crawl_file(request: NewCrawl, started_at: datetime, choice: Choice) -
 
 
 def set_state(connection: Connection, state: CrawlState, at: datetime) -> None:
-    connection.execute(update(crawl).values(state=state, completed_at=at))
+    completed_at = at if state == "completed" else None
+    connection.execute(update(crawl).values(state=state, completed_at=completed_at))
 
 
 def _claim_new_file(request: NewCrawl, started_at: datetime, choice: Choice) -> CrawlFile:

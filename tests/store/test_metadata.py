@@ -110,3 +110,13 @@ def test_completion_time(temp_workspace: TempWorkspace) -> None:
     run_unit(crawl.path, lambda connection: set_state(connection, "completed", completed_at))
 
     assert crawl_row(crawl.path)["completed_at"] == "2026-09-27T15:00:00.000Z"
+
+
+def test_a_stopped_crawl_has_no_completion_time(temp_workspace: TempWorkspace) -> None:
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+    stopped_at = datetime(2026, 9, 27, 15, 0, 0, tzinfo=UTC)
+
+    run_unit(crawl.path, lambda connection: set_state(connection, "stopped", stopped_at))
+
+    assert crawl_row(crawl.path)["completed_at"] is None
