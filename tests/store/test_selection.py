@@ -1,5 +1,8 @@
 """Selecting a Crawl with --crawl (015-add-crawl-store, crawl-store)."""
 
+import pytest
+
+from spider.output.diagnostics import SpiderError
 from spider.store.crawls import set_state
 from spider.store.records import CrawlFile
 from spider.store.selection import resolve_crawl
@@ -59,6 +62,13 @@ def test_only_crawl_files_are_crawls(temp_workspace: TempWorkspace) -> None:
     (crawl.path.parent / "20260927-110000-bbbb.log").write_text("", encoding="utf-8")
 
     assert resolve_latest(temp_workspace) == "20260927-100000-aaaa"
+
+
+def test_no_crawls(temp_workspace: TempWorkspace) -> None:
+    with pytest.raises(SpiderError) as raised:
+        resolve_latest(temp_workspace)
+
+    assert (raised.value.code, raised.value.exit_code) == ("no_crawls", 4)
 
 
 def test_a_sqlite_file_not_named_by_an_id_is_not_a_crawl(temp_workspace: TempWorkspace) -> None:

@@ -97,6 +97,9 @@ WORKSPACE_NOT_WRITABLE = _declare(
     ExitCode.IO,
     "The Workspace folder or its data folder cannot be created or written.",
 )
+NO_CRAWLS = _declare(
+    "no_crawls", "error", ExitCode.NOT_FOUND, "The Workspace has no Crawl to read yet."
+)
 CRAWL_NOT_WRITABLE = _declare(
     "crawl_not_writable",
     "error",
