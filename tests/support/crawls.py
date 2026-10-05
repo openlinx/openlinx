@@ -1,13 +1,15 @@
 """Creating and reading Crawls in tests (015-add-crawl-store)."""
 
+import hashlib
 import sqlite3
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import Connection, delete, insert
 
 from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
@@ -44,6 +46,19 @@ def create_any_crawl(temp_workspace: TempWorkspace, **changes: Any) -> CrawlFile
     """`new_crawl` with `changes`, created at `STARTED_AT` where the current folder resolves."""
     request = replace(new_crawl(current_workspace(temp_workspace)), **changes)
     return create_crawl(request, FakeClock(start=STARTED_AT), Collected())
+
+
+def insert_seed(position: int, url: str) -> Callable[[Connection], None]:
+    """A unit that inserts one Seed."""
+
+    def unit(connection: Connection) -> None:
+        connection.execute(insert(seeds).values(position=position, url=url))
+
+    return unit
+
+
+def sha256_of(file: Path) -> str:
+    return hashlib.sha256(file.read_bytes()).hexdigest()
 
 
 def crawl_without_seeds(temp_workspace: TempWorkspace) -> CrawlFile:

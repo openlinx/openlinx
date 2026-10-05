@@ -1,6 +1,5 @@
 """Reading a Crawl (015-add-crawl-store, crawl-store)."""
 
-import hashlib
 import shutil
 import sqlite3
 import subprocess
@@ -23,7 +22,7 @@ from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import resolve_workspace
 from tests.support.cli import PROCESS_TIMEOUT
 from tests.support.clock import FakeClock
-from tests.support.crawls import STARTED_AT, create_any_crawl, new_crawl
+from tests.support.crawls import STARTED_AT, create_any_crawl, new_crawl, sha256_of
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
 
@@ -63,13 +62,13 @@ def completed_crawl(temp_workspace: TempWorkspace) -> CrawlFile:
 
 def test_bytes_are_unchanged_by_reading(temp_workspace: TempWorkspace) -> None:
     crawl = completed_crawl(temp_workspace)
-    before = hashlib.sha256(crawl.path.read_bytes()).hexdigest()
+    before = sha256_of(crawl.path)
 
     read_metadata(crawl.path)
     with reading(crawl.path) as connection:
         connection.execute(select(seeds)).all()
 
-    assert hashlib.sha256(crawl.path.read_bytes()).hexdigest() == before
+    assert sha256_of(crawl.path) == before
 
 
 def test_writes_through_a_reader_fail(temp_workspace: TempWorkspace) -> None:
@@ -83,20 +82,25 @@ def test_writes_through_a_reader_fail(temp_workspace: TempWorkspace) -> None:
     assert raised.value.orig.sqlite_errorcode & 0xFF == sqlite3.SQLITE_READONLY  # type: ignore[union-attr]
 
 
+DELETE_FILES = "import pathlib, sys\nfor f in sys.argv[1:]: pathlib.Path(f).unlink(missing_ok=True)"
+
+
+@pytest.mark.slow
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows refuses to delete an open file")
 def test_deleting_after_a_read_on_windows(temp_workspace: TempWorkspace) -> None:
     crawl = completed_crawl(temp_workspace)
     read_metadata(crawl.path)
+    files = [crawl.path, *(crawl.path.with_name(crawl.path.name + s) for s in ("-wal", "-shm"))]
 
-    # This process keeps running; another one deletes the file it read.
+    # This process keeps running; another one deletes the file it read, and its companions.
     deleted = subprocess.run(
-        [sys.executable, "-c", "import os, sys; os.remove(sys.argv[1])", str(crawl.path)],
+        [sys.executable, "-c", DELETE_FILES, *map(str, files)],
         capture_output=True,
         timeout=PROCESS_TIMEOUT,
         check=False,
     )
 
-    assert (deleted.returncode, crawl.path.exists()) == (0, False)
+    assert (deleted.returncode, [file.exists() for file in files]) == (0, [False, False, False])
 
 
 def crawl_from_a_newer_tool(temp_workspace: TempWorkspace) -> CrawlFile:
@@ -121,9 +125,9 @@ def test_file_from_a_newer_tool(temp_workspace: TempWorkspace) -> None:
 
 def test_a_refused_file_is_unchanged(temp_workspace: TempWorkspace) -> None:
     crawl = crawl_from_a_newer_tool(temp_workspace)
-    before = hashlib.sha256(crawl.path.read_bytes()).hexdigest()
+    before = sha256_of(crawl.path)
 
     with pytest.raises(SpiderError):
         read_metadata(crawl.path)
 
-    assert hashlib.sha256(crawl.path.read_bytes()).hexdigest() == before
+    assert sha256_of(crawl.path) == before

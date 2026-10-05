@@ -19,7 +19,7 @@ from spider.store.schema import SCHEMA_VERSION, crawl
 def reading(path: Path) -> Iterator[Connection]:
     try:
         with opening(path, read_only=True) as engine, engine.connect() as connection:
-            _check_schema_version(connection)
+            _check_schema_version(connection, path)
             yield connection
     except DBAPIError as error:
         if not is_busy(error):
@@ -33,13 +33,13 @@ def reading(path: Path) -> Iterator[Connection]:
         ) from error
 
 
-def _check_schema_version(connection: Connection) -> None:
+def _check_schema_version(connection: Connection, path: Path) -> None:
     # Read before any declared table: a newer file may have changed them (design D5).
     version: int = connection.exec_driver_sql("PRAGMA user_version").scalar_one()
     if version > SCHEMA_VERSION:
         raise SpiderError(
             CRAWL_SCHEMA_TOO_NEW,
-            f"The crawl file has schema version {version}, newer than this tool's "
+            f"The crawl file {path} has schema version {version}, newer than this tool's "
             f"{SCHEMA_VERSION}.",
             hint=f"Upgrade {APP_NAME} to read it.",
             details={"file_schema_version": version, "tool_schema_version": SCHEMA_VERSION},

@@ -34,7 +34,9 @@ def not_writable_name(error: BaseException) -> str | None:
 
 
 def is_busy(error: DBAPIError) -> bool:
-    return getattr(error.orig, "sqlite_errorcode", None) == sqlite3.SQLITE_BUSY
+    # Masked to the primary code, so BUSY_RECOVERY and BUSY_SNAPSHOT count too.
+    code = getattr(error.orig, "sqlite_errorcode", None)
+    return code is not None and code & 0xFF == sqlite3.SQLITE_BUSY
 
 
 def file_uri(path: PurePath) -> str:

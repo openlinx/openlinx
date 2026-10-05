@@ -127,7 +127,7 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
 Commands that only read a Crawl open its file read-only, for one operation at a time:
 - **Nothing changes.** Reading leaves the crawl file's bytes as they were, and a write through a reader fails with SQLite's read-only error.
 - **Files are released.** Each read closes its connection when it ends, so even a process that keeps running, such as the MCP server, holds no handle to the file: on Windows another process can delete it right after a read. SQLite's `-wal` and `-shm` companions may stay next to it.
-- **Reading while a Crawl is written.** In WAL mode, the default on local disks, a reader sees every committed row while another process writes, and never waits for it. In rollback-journal mode a write shuts readers out: a reader waits up to 5 seconds, then fails with `crawl_busy` (exit code 5) and `details.file`. `--crawl` resolution reads the same way.
+- **Reading while a Crawl is written.** In WAL mode, the default on local disks, a reader sees every committed row while another process writes, and is not held up by the write (only by SQLite's brief recovery after a killed writer). In rollback-journal mode a write shuts readers out: a reader waits up to 5 seconds, then fails with `crawl_busy` (exit code 5) and `details.file`. `--crawl` resolution reads the same way.
 
 ## Schema versions
 

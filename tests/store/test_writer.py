@@ -1,32 +1,30 @@
 """The transactional writer (015-add-crawl-store, crawl-store)."""
 
-import hashlib
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 
 import pytest
-from sqlalchemy import Connection, func, insert, select, update
+from sqlalchemy import Connection, func, select, update
 
 from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect
 from spider.store.schema import seeds
 from spider.store.writer import CrawlWriter, CrawlWriterClosedError
 from tests.support.clock import FakeClock
-from tests.support.crawls import crawl_without_seeds, create_any_crawl, query
+from tests.support.crawls import (
+    crawl_without_seeds,
+    create_any_crawl,
+    insert_seed,
+    query,
+    sha256_of,
+)
 from tests.support.permissions import read_only_file
 from tests.support.workspace import TempWorkspace
 
 SEEDS = "SELECT position, url FROM seeds ORDER BY position"
 COUNT = "SELECT count(*) FROM seeds"
-
-
-def insert_seed(position: int, url: str) -> Callable[[Connection], None]:
-    def unit(connection: Connection) -> None:
-        connection.execute(insert(seeds).values(position=position, url=url))
-
-    return unit
 
 
 def count_seeds(connection: Connection) -> int:
@@ -169,7 +167,7 @@ def test_a_flush_commits_at_once(temp_workspace: TempWorkspace) -> None:
 
 def test_a_read_only_crawl_file(temp_workspace: TempWorkspace) -> None:
     crawl = create_any_crawl(temp_workspace)
-    before = hashlib.sha256(crawl.path.read_bytes()).hexdigest()
+    before = sha256_of(crawl.path)
 
     with read_only_file(crawl.path), pytest.raises(SpiderError) as raised:
         CrawlWriter(crawl.path, FakeClock())
@@ -177,7 +175,7 @@ def test_a_read_only_crawl_file(temp_workspace: TempWorkspace) -> None:
     assert (
         raised.value.code,
         raised.value.diagnostic.details["file"],
-        hashlib.sha256(crawl.path.read_bytes()).hexdigest(),
+        sha256_of(crawl.path),
     ) == ("crawl_not_writable", str(crawl.path), before)
 
 
