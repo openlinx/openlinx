@@ -1,4 +1,4 @@
-"""Real folders without write permission (015-add-crawl-store, task 3.11)."""
+"""Real folders and files without write permission (015-add-crawl-store)."""
 
 import os
 import stat

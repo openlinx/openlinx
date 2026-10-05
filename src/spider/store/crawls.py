@@ -13,7 +13,7 @@ from sqlalchemy.exc import DBAPIError
 from spider import __version__
 from spider.output.codes import WORKSPACE_NOT_WRITABLE
 from spider.output.diagnostics import SpiderError
-from spider.store.connections import cannot_write, connect, opening
+from spider.store.connections import connect, not_writable_name, opening
 from spider.store.ids import Choice, new_crawl_id
 from spider.store.records import CrawlFile, CrawlState, NewCrawl
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
@@ -79,14 +79,13 @@ def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: dateti
                 platform=platform.platform(),
             )
         )
-        if request.seeds:
-            connection.execute(
-                insert(seeds),
-                [
-                    {"position": position, "url": url}
-                    for position, url in enumerate(request.seeds, start=1)
-                ],
-            )
+        connection.execute(
+            insert(seeds),
+            [
+                {"position": position, "url": url}
+                for position, url in enumerate(request.seeds, start=1)
+            ],
+        )
 
 
 @contextmanager
@@ -94,7 +93,7 @@ def _sqlite_not_writable(file: Path) -> Iterator[None]:
     try:
         yield
     except (sqlite3.Error, DBAPIError) as error:
-        name = cannot_write(error)
+        name = not_writable_name(error)
         if name is None:
             raise
         raise SpiderError(

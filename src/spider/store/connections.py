@@ -24,7 +24,7 @@ NOT_WRITABLE = {
 }
 
 
-def cannot_write(error: BaseException) -> str | None:
+def not_writable_name(error: BaseException) -> str | None:
     """SQLite's name for the error when it says a file cannot be written, otherwise None."""
     cause = error.orig if isinstance(error, DBAPIError) else error
     code = getattr(cause, "sqlite_errorcode", None)
@@ -41,7 +41,8 @@ def file_uri(path: PurePath) -> str:
 
 
 def connect(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
-    uri = file_uri(path.resolve()) + ("?mode=ro" if read_only else "")
+    # rw, not SQLite's default rwc: a missing crawl file is an error, never a new empty file.
+    uri = file_uri(path.resolve()) + ("?mode=ro" if read_only else "?mode=rw")
     # A reader gives up after 5 s (crawl_busy); the writer waits out a reader's longest wait.
     timeout = READER_BUSY_SECONDS if read_only else WRITER_BUSY_SECONDS
     connection = sqlite3.connect(uri, uri=True, timeout=timeout)
@@ -56,6 +57,7 @@ def opening(path: Path, *, read_only: bool = False) -> Iterator[Engine]:
     )
     if not read_only:
         event.listen(engine, "connect", _own_transactions)
+        event.listen(engine, "connect", _synchronous_for_the_journal)
         event.listen(engine, "begin", _begin_immediate)
     # Disposed at once, so no handle outlives the operation: Windows could not delete the file.
     try:
@@ -67,6 +69,9 @@ def opening(path: Path, *, read_only: bool = False) -> Iterator[Engine]:
 def _own_transactions(connection: sqlite3.Connection, _: Any) -> None:
     # pysqlite's implicit BEGIN would break SAVEPOINT; the begin event below issues ours.
     connection.isolation_level = None
+
+
+def _synchronous_for_the_journal(connection: sqlite3.Connection, _: Any) -> None:
     (journal_mode,) = connection.execute("PRAGMA journal_mode").fetchone()
     # WAL stays durable at NORMAL; a rollback journal needs FULL for every commit.
     synchronous = "NORMAL" if journal_mode == "wal" else "FULL"

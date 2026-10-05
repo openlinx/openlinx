@@ -1,21 +1,23 @@
 """The transactional writer: units of work on one thread (design D4 of 015-add-crawl-store)."""
 
 import asyncio
+import sqlite3
 import threading
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from queue import Empty, Full, Queue
 from types import TracebackType
-from typing import Any, Literal, Self
+from typing import Any, Self, cast
 
 from sqlalchemy import Connection, update
 
 from spider.clock import Clock
 from spider.output.codes import CRAWL_NOT_WRITABLE
 from spider.output.diagnostics import SpiderError
-from spider.store.connections import cannot_write, opening
+from spider.store.connections import not_writable_name, opening
 from spider.store.schema import crawl
 
 QUEUE_SIZE = 50_000
@@ -32,9 +34,14 @@ class CrawlWriterClosedError(RuntimeError):
     """A unit or a flush reached a writer that was closed, or whose thread ended."""
 
 
+class _Control(Enum):
+    FLUSH = "flush"
+    CLOSE = "close"
+
+
 @dataclass(frozen=True)
 class _Job:
-    unit: Callable[[Connection], Any] | Literal["flush", "close"]
+    work: Callable[[Connection], Any] | _Control
     done: Future[Any]
 
 
@@ -43,8 +50,9 @@ class CrawlWriter:
         self._path = path
         self._clock = clock
         self._queue: Queue[_Job] = Queue(maxsize=QUEUE_SIZE)
-        self._closing = threading.Lock()
+        self._lock = threading.Lock()
         self._closed = False
+        self._failure: BaseException | None = None
         # Owned by the writer thread: units and the time of the first one since the last commit.
         self._uncommitted = 0
         self._first_uncommitted_at = 0.0
@@ -77,19 +85,21 @@ class CrawlWriter:
 
     def flush(self) -> None:
         done: Future[None] = Future()
-        self._submit(_Job("flush", done))
+        self._submit(_Job(_Control.FLUSH, done))
         self._wait(done)
 
     def close(self) -> None:
-        with self._closing:
-            if self._closed:
-                return
-            self._closed = True
-        if self._thread.is_alive():
+        self._refuse_own_thread()
+        with self._lock:
+            already, self._closed = self._closed, True
+        if not already and self._thread.is_alive():
             done: Future[None] = Future()
-            self._queue.put(_Job("close", done))
+            self._queue.put(_Job(_Control.CLOSE, done))
             self._wait(done)
         self._thread.join()
+        # A commit that failed while no unit was waiting would otherwise lose units silently.
+        if self._failure is not None:
+            raise CrawlWriterClosedError(CLOSED) from self._failure
 
     def __enter__(self) -> Self:
         return self
@@ -103,9 +113,16 @@ class CrawlWriter:
         self.close()
 
     def _submit(self, job: _Job, *, block: bool = True) -> None:
-        if self._closed:
-            raise CrawlWriterClosedError(CLOSED)
+        self._refuse_own_thread()
+        with self._lock:
+            if self._closed:
+                raise CrawlWriterClosedError(CLOSED)
         self._queue.put(job, block=block)
+
+    def _refuse_own_thread(self) -> None:
+        # A unit that waited for its own writer would wait forever.
+        if threading.current_thread() is self._thread:
+            raise RuntimeError("A unit cannot submit work to the writer that runs it.")
 
     def _wait[T](self, done: Future[T]) -> T:
         while True:
@@ -126,12 +143,14 @@ class CrawlWriter:
                 started.set_result(None)
                 self._work(connection)
         except BaseException as error:
-            # Never raised on this thread: its caller already has it, and a thread's traceback
-            # would reach stderr as raw text.
-            if not started.done():
+            # Never raised on this thread, whose traceback would reach stderr as raw text.
+            if started.done():
+                self._failure = error
+            else:
                 started.set_exception(self._open_error(error))
         finally:
-            self._closed = True
+            with self._lock:
+                self._closed = True
             _fail_queued(self._queue)
 
     def _work(self, connection: Connection) -> None:
@@ -142,7 +161,7 @@ class CrawlWriter:
                 self._commit_if_due(connection)
                 continue
             try:
-                if not self._do(job, connection):
+                if not self._handle(job, connection):
                     return
             except BaseException as error:
                 # A failed commit ends the writer; the caller of the job in hand learns why.
@@ -150,15 +169,20 @@ class CrawlWriter:
                     job.done.set_exception(error)
                 raise
 
-    def _do(self, job: _Job, connection: Connection) -> bool:
-        if isinstance(job.unit, str):
+    def _handle(self, job: _Job, connection: Connection) -> bool:
+        if isinstance(job.work, _Control):
             connection.commit()
+            if job.work is _Control.CLOSE:
+                # Readers that stay open would otherwise keep the WAL from shrinking. Run on the
+                # driver's connection: through SQLAlchemy it would begin a transaction first.
+                driver = cast(sqlite3.Connection, connection.connection.driver_connection)
+                driver.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             job.done.set_result(None)
-            return job.unit != "close"
+            return job.work is _Control.FLUSH
         if not connection.in_transaction():
             connection.begin()
             self._uncommitted, self._first_uncommitted_at = 0, self._clock.monotonic()
-        result, error = _run(job.unit, connection)
+        result, error = _run(job.work, connection)
         self._uncommitted += 1
         self._commit_if_due(connection)
         # Only now: a caller that reads after its unit returns sees the commit.
@@ -176,7 +200,7 @@ class CrawlWriter:
             connection.commit()
 
     def _open_error(self, error: BaseException) -> BaseException:
-        name = cannot_write(error)
+        name = not_writable_name(error)
         if name is None:
             return error
         return SpiderError(

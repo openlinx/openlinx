@@ -1,18 +1,15 @@
 """Creating and reading Crawls in tests (015-add-crawl-store)."""
 
 import sqlite3
-from collections.abc import Callable
 from contextlib import closing
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Connection
-
 from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
-from spider.store.connections import connect, opening
+from spider.store.connections import connect
 from spider.store.records import CrawlFile, NewCrawl
 from spider.workspace.discovery import Workspace, resolve_workspace
 from tests.support.clock import FakeClock
@@ -51,9 +48,3 @@ def crawl_row(file: Path) -> dict[str, Any]:
     with closing(connect(file, read_only=True)) as connection:
         connection.row_factory = sqlite3.Row
         return dict(connection.execute("SELECT * FROM crawl").fetchone())
-
-
-def run_unit[T](file: Path, unit: Callable[[Connection], T]) -> T:
-    """Until the writer of group 4 runs units: one unit, in its own committed transaction."""
-    with opening(file) as engine, engine.begin() as connection:
-        return unit(connection)

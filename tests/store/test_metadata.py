@@ -8,9 +8,10 @@ from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
 from spider.store.crawls import set_state
 from spider.store.records import NewCrawl
+from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
-from tests.support.crawls import STARTED_AT, crawl_row, create_any_crawl, query, run_unit
+from tests.support.crawls import STARTED_AT, crawl_row, create_any_crawl, query
 from tests.support.project import project_version
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
@@ -95,7 +96,8 @@ def test_completion_time(temp_workspace: TempWorkspace) -> None:
     crawl = create_any_crawl(temp_workspace)
     completed_at = datetime(2026, 9, 27, 15, 0, 0, tzinfo=UTC)
 
-    run_unit(crawl.path, lambda connection: set_state(connection, "completed", completed_at))
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(lambda connection: set_state(connection, "completed", completed_at))
 
     assert crawl_row(crawl.path)["completed_at"] == "2026-09-27T15:00:00.000Z"
 
@@ -104,7 +106,8 @@ def test_a_stopped_crawl_has_no_completion_time(temp_workspace: TempWorkspace) -
     crawl = create_any_crawl(temp_workspace)
     stopped_at = datetime(2026, 9, 27, 15, 0, 0, tzinfo=UTC)
 
-    run_unit(crawl.path, lambda connection: set_state(connection, "stopped", stopped_at))
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(lambda connection: set_state(connection, "stopped", stopped_at))
 
     assert crawl_row(crawl.path)["completed_at"] is None
 

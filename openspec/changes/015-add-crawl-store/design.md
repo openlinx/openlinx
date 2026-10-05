@@ -78,7 +78,7 @@
   - `CrawlWriter.run(unit) -> T` is thread-safe and blocking. `await CrawlWriter.run_async(unit)` serves event-loop callers.
   - A unit is `Callable[[Connection], T]`. The writer runs units one at a time, on its own thread, in submission order, inside one open transaction.
 - **The write check:** opening the writer runs `BEGIN IMMEDIATE`, a write to the `crawl` row, and `ROLLBACK`, before it accepts units. A failure becomes `crawl_not_writable` with `details.file`, so a read-only file or folder is reported before anything is crawled.
-- **Atomic units:** each unit runs inside `SAVEPOINT unit`.
+- **Atomic units:** each unit runs inside its own SAVEPOINT (SQLAlchemy's `begin_nested()`, with pysqlite in autocommit so that `BEGIN IMMEDIATE` and the savepoints are the writer's own).
   - On success the savepoint is released.
   - On an exception the writer rolls back to the savepoint, and the exception is raised to that unit's caller. Earlier and later units are unaffected.
 - **Commits:** after 500 units, 1 s after the first uncommitted unit (measured with the injected `Clock`'s `monotonic()`, checked every 50 ms and after each unit), on `flush()`, and on `close()`.
@@ -88,9 +88,12 @@
 - **Callers and threads:** units may come from any thread, or from an event loop through `run_async`, which never blocks the loop. The writer thread alone owns the connection, runs one unit at a time and keeps each caller's order. A caller gets its unit's result only after the commit check, so a reader that runs after the 500th unit returns sees the batch.
 - **The writer's end:**
   - `close()` may be called again; the second call does nothing.
-  - A unit or flush submitted after `close()` fails at once with `CrawlWriterClosedError`, a bug in the caller (exit code 70), never a hang.
+  - A unit or flush submitted after `close()` fails with `CrawlWriterClosedError`, a bug in the caller (exit code 70), never a hang: at once, or within 0.5 s for one that raced `close()` into the queue.
+  - A unit that submits to its own writer gets a `RuntimeError` instead of waiting for itself.
   - A unit that raises any `BaseException`, `KeyboardInterrupt` included, rolls back to its savepoint, the exception reaches that unit's caller, and the writer goes on. Ctrl+C is the Crawl service's to handle (`020`), not the writer's.
-  - If the writer thread ends unexpectedly, for example on a failed commit, the caller of the unit in hand gets that error, and every other waiting or later caller gets `CrawlWriterClosedError`. Nothing is raised on the writer thread, whose traceback would reach stderr as raw text.
+  - If the writer thread ends unexpectedly, for example on a failed commit, the caller of the unit in hand gets that error, and every other waiting or later caller gets `CrawlWriterClosedError`. `close()` then raises it too, with the failure as its cause, so a commit that failed while no unit waited is never lost silently. Nothing is raised on the writer thread, whose traceback would reach stderr as raw text.
+  - Opening the writer and `close()` block (the write check can wait for a lock for up to 30 s, and `close()` commits and checkpoints). `020` calls them through `asyncio.to_thread` from its event loop.
+  - The writer opens its file with `mode=rw`, never SQLite's default `rwc`, so a missing crawl file is an error and never a new empty file.
 - **Creating a Crawl is the one write outside the writer.** The new file's tables, its `crawl` row and its Seeds are written in the file's first transaction, before any writer opens; the write check needs that row. Every later write is a unit.
 - **One writer per Crawl, by construction in v0.1:** only the process that creates a Crawl writes it, because v0.1 has no resume and no detach. `060-min` (v0.1.1) adds the writer claim when a second process can write: a detached Crawl and `status`, then `resume` in v0.2.
 - **Alternatives:**
