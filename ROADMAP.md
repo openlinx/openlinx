@@ -253,7 +253,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
   - **(v0.2)** The plugin `.mcp.json`, which comes with 080's plugin marketplace.
 - **Distribution in v0.1.1:**
   - List the MCP server on the MCP Registry, under the chosen product name.
-  - Offer the CLI as a deterministic crawler backend for popular SEO skill packs (for example claude-seo).
+  - Offer the CLI as a deterministic crawler backend for popular SEO skill packs.
 
 **Re-grounding checklist** (what to fix or design when each change is re-grounded):
 - 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
