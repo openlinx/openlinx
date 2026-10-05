@@ -13,6 +13,7 @@ from typer.core import TyperOption
 from spider.cli.click_compat import Command
 from spider.naming import DATA_DIR_NAME, GLOBAL_DATA_DIR, SETTINGS_FILE_NAME
 from spider.output.writer import Format
+from spider.store.records import LATEST
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,15 @@ WorkspaceOpt = Annotated[
         # Symbolic, not the real home path, so the self-description is the same on every OS.
         help="The Workspace folder. Without it, the nearest folder upwards that holds "
         f"{DATA_DIR_NAME}/ or {SETTINGS_FILE_NAME}, else the global Workspace {GLOBAL_DATA_DIR}.",
+    ),
+    GLOBAL,
+]
+CrawlOpt = Annotated[
+    str,
+    typer.Option(
+        "--crawl",
+        help=f"The Crawl to read: {LATEST} (the Crawl that started last), a crawl id, "
+        "or the path of a crawl file.",
     ),
     GLOBAL,
 ]

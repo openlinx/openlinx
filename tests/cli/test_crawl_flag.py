@@ -1,0 +1,15 @@
+"""The --crawl flag (015-add-crawl-store, crawl-store)."""
+
+from tests.support.app import EXAMPLE_READ_CRAWL, example_app
+from tests.support.cli import run_cli
+from tests.support.crawls import create_crawl_at
+from tests.support.workspace import TempWorkspace
+
+
+def test_the_flag_defaults_to_latest(temp_workspace: TempWorkspace) -> None:
+    create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    create_crawl_at(temp_workspace, "2026-09-27T11:00:00.000Z", "bbbb")
+
+    result = run_cli(EXAMPLE_READ_CRAWL, app=example_app())
+
+    assert (result.exit_code, result.json()) == (0, {"crawl": "20260927-110000-bbbb"})

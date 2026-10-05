@@ -11,10 +11,8 @@ from spider.output.codes import CRAWL_FILE_INVALID, CRAWL_NOT_FOUND, INVALID_VAL
 from spider.output.diagnostics import SpiderError
 from spider.store.ids import is_crawl_id
 from spider.store.reading import read_metadata
-from spider.store.records import CrawlFile
+from spider.store.records import LATEST, CrawlFile
 from spider.workspace.discovery import Workspace
-
-LATEST = "latest"
 
 
 def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFile:
