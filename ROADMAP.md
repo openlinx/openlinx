@@ -262,6 +262,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 - 015: its `design.md` (lines 13 and 86) and `proposal.md` (lines 11 and 71) say 060-min is v0.1.1. Fix the wording when 015 is archived; the one-writer-by-construction rule in 015 is unchanged until 060 lands.
 - 060: own what moved from 015 (see 060's entry): its design still calls `015`'s `check_writer`, `write_control`, reservation and `crawl_id_taken`, and its spec and tasks rely on them.
 - 060: remove the window in which a just-claimed, still-empty `<id>.sqlite` makes `--crawl latest` report crawl_file_invalid. Create the file as `<id>.sqlite.tmp` (claimed exclusively, counted as taken) and rename it after the schema is written, together with the reservations.
+- 060: `crawls rm` deletes a crawl file together with its SQLite companions (`<id>.sqlite-wal`, `<id>.sqlite-shm`), because reading a WAL crawl file may leave them behind (015 crawl-store.md).
 - 020: `--max-urls` has no default limit (was 10,000); update the spec, the `max_urls_reached` scenarios and the URL estimate. 030: raw HTML storage can no longer be decided from a default `--max-urls`; decide it again when 030 is re-grounded.
 - 020: decide four design points from the architecture review of 2026-10-05 before its tasks are written:
   - **Crawl state transitions:** 015's `set_state` writes any state from any state. A table of allowed transitions and one pure function that refuses the others, used by 020 (`running`, `completed`, `stopped`, `failed`) and later by 060 (`interrupted`, resume).
