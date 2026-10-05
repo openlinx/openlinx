@@ -41,4 +41,40 @@ Storing a Crawl needs no `spider init` first. Creating a Crawl creates whatever 
 
 - **No settings file.** Creating a Crawl never writes `spider.toml`. Only `spider init` does.
 - **The global Workspace.** When no local Workspace is found, the Crawl goes to `~/.spider/crawls/`, and `~/.spider/` is created when it is missing.
-- **An unwritable data folder** fails with `workspace_not_writable` (exit code 7) before anything is crawled. `details.path` names the path that failed, for example `~/.spider` when it is a file instead of a folder.
+- **An unwritable data folder** fails with `workspace_not_writable` (exit code 7) before anything is crawled. `details.path` names the path that failed, for example `~/.spider` when it is a file instead of a folder, or the new crawl file when `crawls/` does not allow creating files. A permissions problem never shows up as a traceback.
+
+## What a Crawl records about itself
+
+Every crawl file has a one-row table `crawl` with the Crawl's metadata and a table `seeds` with its Seeds. [schema.md](schema.md) documents every column; in short:
+
+| Recorded | Columns |
+|---|---|
+| what was crawled, and how | `crawl_mode` (`spider`, `list` or `sitemap`), `section_crawl`, and the Seeds in `seeds`, in the order given (`position` 1, 2, …) |
+| where it stands | `state`, `started_at`, `completed_at` |
+| how it was started | `command_argv`, `cwd`, `settings_file`, `config` |
+| what made the file | `tool_version`, `schema_version` (also SQLite's `user_version`), `journal_mode`, `python_version`, `platform` |
+
+- **Counts are not recorded.** No column holds the number of URLs, Pages or Issues: they are counted from the tables that hold them, so they can never disagree.
+- **`started_at`** is the same instant as the time in the crawl id, read once when the Crawl is created.
+- **`settings_file`** is the Workspace's `spider.toml` when it existed, otherwise NULL. `config` holds the settings the Crawl ran with, with every table and key, so the file says how it was made even when `spider.toml` changes later.
+- **The environment stamp** (`python_version` and `platform`) helps when a crawl file is attached to a bug report.
+
+## Crawl States
+
+`state` holds one of the Crawl States of [CONTEXT.md](../CONTEXT.md):
+
+| State | Meaning |
+|---|---|
+| `running` | a process is crawling, or was when it last wrote the file |
+| `stopped` | ended before its end, for example at a URL limit or on Ctrl+C |
+| `completed` | it ran to the end |
+| `failed` | it could not continue |
+| `interrupted` | its process died without recording an end |
+
+- A new Crawl starts as `running`.
+- `completed_at` is set when the state becomes `completed`, and is NULL in every other state. A `stopped` or `failed` Crawl has no completion time.
+- A `running` state does not prove that a process is still crawling: a process that was killed leaves it behind. Telling the two apart is `060-add-crawl-control`'s job, which records such a Crawl as `interrupted`.
+
+## Not measured is NULL
+
+A value that was not measured, or that does not apply, is stored as NULL, never as `0` or an empty string. `0` is a measured zero, and an empty string is a value that is present but empty. So `completed_at` is NULL while a Crawl runs, and `settings_file` is NULL when there was no settings file. Queries should test `IS NULL`, not `= 0` or `= ''`.
