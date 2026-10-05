@@ -50,6 +50,8 @@ The Crawl's metadata, in exactly one row.
 | `cwd` | TEXT | no | | | | The absolute folder the Command ran in. |
 | `settings_file` | TEXT | yes | | | | The absolute path of the settings file that was read, or NULL without one. |
 | `config` | TEXT | no | | `json` | | The resolved settings as an object of tables and keys, secrets redacted. |
+| `tool_version` | TEXT | no | | | | The version of the tool that created the Crawl. |
+| `schema_version` | INTEGER | no | | | | The schema version of this file, also stored as SQLite's user_version. |
 
 ## Table `seeds`
 

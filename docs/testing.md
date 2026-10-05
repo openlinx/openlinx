@@ -95,7 +95,7 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
   - `await sleep(seconds)` advances virtual time and yields once to the event loop, with no real wait.
 
   Production code takes a `Clock`, which is `SystemClock` outside tests.
-- **Crawls** (`tests/support/crawls.py`): `new_crawl(workspace)` is a `NewCrawl` request for any Spider-mode Crawl, for tests whose scenario does not name its metadata; pass it to `spider.services.crawls.create_crawl`. `crawl_row(file)` reads the `crawl` row as SQLite stores it, through a read-only connection.
+- **Crawls** (`tests/support/crawls.py`): `new_crawl(workspace)` is a `NewCrawl` request for any Spider-mode Crawl, for tests whose scenario does not name its metadata; pass it to `spider.services.crawls.create_crawl`. `crawl_row(file)` reads the `crawl` row as SQLite stores it, and `query(file, sql)` any rows, both through a read-only connection.
 - **`scripted_choice(characters)`** (`tests/support/randomness.py`): the random-source double. It stands in for `secrets.choice`, and each call returns the next of `characters`, so `scripted_choice("k3f9")` makes the crawl id suffix `k3f9`.
 
 ## Quality gates (CI)

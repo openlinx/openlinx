@@ -10,6 +10,7 @@ from spider.store.records import NewCrawl
 from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
 from tests.support.crawls import crawl_row, new_crawl, query
+from tests.support.project import project_version
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
 
@@ -72,3 +73,16 @@ def test_seeds_keep_their_order(temp_workspace: TempWorkspace) -> None:
         (1, "https://example.com/b"),
         (2, "https://example.com/a"),
     ]
+
+
+def test_version_stamp(temp_workspace: TempWorkspace) -> None:
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+
+    crawl = create_crawl(new_crawl(workspace), FakeClock(), Collected())
+
+    row = crawl_row(crawl.path)
+    assert (
+        row["tool_version"],
+        row["schema_version"],
+        query(crawl.path, "PRAGMA user_version"),
+    ) == (project_version(), 1, [(1,)])

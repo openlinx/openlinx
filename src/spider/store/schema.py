@@ -4,6 +4,8 @@ from sqlalchemy import Column, Integer, MetaData, Table, Text
 
 from spider.store.types import Flag, Json, Timestamp
 
+# Stays 1 until the first schema change after v0.1, which brings migrations (design D5).
+SCHEMA_VERSION = 1
 CRAWL_MODES = ["spider", "list", "sitemap"]
 CRAWL_STATES = ["running", "stopped", "completed", "failed", "interrupted"]
 
@@ -56,6 +58,18 @@ crawl = Table(
         Json,
         nullable=False,
         comment="The resolved settings as an object of tables and keys, secrets redacted.",
+    ),
+    Column(
+        "tool_version",
+        Text,
+        nullable=False,
+        comment="The version of the tool that created the Crawl.",
+    ),
+    Column(
+        "schema_version",
+        Integer,
+        nullable=False,
+        comment="The schema version of this file, also stored as SQLite's user_version.",
     ),
     comment="The Crawl's metadata, in exactly one row.",
     info={"change": 15},

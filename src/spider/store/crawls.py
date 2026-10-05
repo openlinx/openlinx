@@ -6,9 +6,10 @@ from datetime import datetime
 from sqlalchemy import create_engine, insert
 from sqlalchemy.pool import NullPool
 
+from spider import __version__
 from spider.store.ids import Choice, new_crawl_id
 from spider.store.records import CrawlFile, NewCrawl
-from spider.store.schema import crawl, metadata, seeds
+from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
 from spider.workspace.creation import create_data_folder
 
 
@@ -44,6 +45,7 @@ def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: dateti
     try:
         with engine.begin() as connection:
             metadata.create_all(connection)
+            connection.exec_driver_sql(f"PRAGMA user_version = {SCHEMA_VERSION}")
             connection.execute(
                 insert(crawl).values(
                     id=crawl_file.id,
@@ -55,6 +57,8 @@ def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: dateti
                     cwd=str(request.cwd),
                     settings_file=str(settings_file) if settings_file.is_file() else None,
                     config=dict(request.config),
+                    tool_version=__version__,
+                    schema_version=SCHEMA_VERSION,
                 )
             )
             connection.execute(
