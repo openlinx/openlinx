@@ -64,6 +64,13 @@ def test_only_crawl_files_are_crawls(temp_workspace: TempWorkspace) -> None:
     assert resolve_latest(temp_workspace) == "20260927-100000-aaaa"
 
 
+def test_companion_files_are_not_crawls(temp_workspace: TempWorkspace) -> None:
+    crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    (crawl.path.parent / "20260927-110000-bbbb.sqlite-wal").write_bytes(b"")
+
+    assert resolve_latest(temp_workspace) == "20260927-100000-aaaa"
+
+
 def test_no_crawls(temp_workspace: TempWorkspace) -> None:
     with pytest.raises(SpiderError) as raised:
         resolve_latest(temp_workspace)

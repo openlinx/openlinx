@@ -42,7 +42,7 @@ Every Command that reads a Crawl takes the global flag `--crawl`, next to `--wor
 - **Latest** is read from the ids, which start with the start time. Among ids of the same second, the later `crawl.started_at` wins, and then the greater id, so the choice is always the same. A `running` Crawl can be the latest.
 - **Only crawl files are Crawls.** Only files named `<id>.sqlite` in `crawls/` count; any other file there is ignored.
 - **A broken file is reported, never skipped.** The selected file is read before the Command uses it. When the newest file is not a readable crawl file, `latest` fails with `crawl_file_invalid` naming it, instead of quietly reading an older Crawl.
-- **Selecting creates nothing:** no data folder, no `crawls/` folder and no file, even in a global Workspace that has none yet.
+- **Selecting creates no folder and no crawl file:** no data folder, no `crawls/` folder and no `.sqlite` file, even in a global Workspace that has none yet. Reading an existing crawl file may leave SQLite's own `-wal` and `-shm` companions next to it, because a reader in WAL mode needs the shared-memory file. They are part of that crawl file, never Crawls of their own.
 
 | Code | Exit code | When |
 |---|---|---|
