@@ -69,7 +69,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 3.7 Drive "A stopped Crawl has no completion time".
 - [x] 3.8 **Guard:** "A running Crawl has no completion time" and "No settings file", a pair.
 - [x] 3.9 Drive "Local disk". Done when: new crawl files use WAL with `synchronous=NORMAL`, and `crawl.journal_mode` records it, with its docs row.
-- [ ] 3.10 Drive "A copied file opens by its path".
+- [x] 3.10 Drive "A copied file opens by its path".
 
   Done when: a crawl file opens read-only by its path, through a percent-encoded `mode=ro` URI and an engine disposed after the operation.
 - [ ] 3.11 Drive "Unwritable crawls folder" at seam 2, with a real folder that denies creating files (its mode on POSIX, a deny ACL on Windows, where the read-only attribute does not protect a folder).
