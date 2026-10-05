@@ -20,7 +20,7 @@ from spider.output.writer import Format
 from spider.workspace.tables import SettingsTables
 
 # Click's type names, in the words of JSON Schema where they differ.
-TYPE_NAMES = {"text": "string", "integer range": "integer", "float": "number"}
+TYPE_NAMES = {"text": "string", "int range": "integer", "float": "number"}
 
 # The only variables the tool honours: the OS's proxy settings, which 022 applies to fetching.
 ENVIRONMENT = [

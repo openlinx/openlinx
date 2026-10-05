@@ -120,3 +120,15 @@ def test_self_description_of_schema() -> None:
             "default": ["name", "kind", "description", "columns"],
         },
     )
+
+
+def test_global_flags_of_schema() -> None:
+    names = {option["name"] for option in schema_entry()["options"]}
+
+    assert ("--format" in names, "--workspace" in names, "--crawl" in names) == (True, False, False)
+
+
+def test_default_limit_of_schema() -> None:
+    limit = next(option for option in schema_entry()["options"] if option["name"] == "--limit")
+
+    assert (limit["type"], limit["default"], limit["global"]) == ("integer", 50, False)
