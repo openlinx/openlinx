@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 
 
 class FakeClock:
-    def __init__(self) -> None:
-        self._now = datetime(2026, 1, 1, tzinfo=UTC)
+    def __init__(self, start: datetime | None = None) -> None:
+        self._now = datetime(2026, 1, 1, tzinfo=UTC) if start is None else start
         self._monotonic = 0.0
 
     def now(self) -> datetime:
