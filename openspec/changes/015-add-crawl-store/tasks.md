@@ -49,7 +49,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 ## 2. New crawl ids (slice)
 
 - [x] 2.1 Drive "Id from the start time" at seam 4, with `FakeClock` and an injected random source.
-- [ ] 2.2 Drive "Character set" at seam 4, with a hypothesis property over start times and the system random source.
+- [x] 2.2 **Guard:** "Character set" at seam 4, with a hypothesis property over start times and the system random source. It passed at once: 2.1 already draws from the suffix alphabet.
 - [ ] 2.3 Drive "A taken id is drawn again" at seam 2.
 
   Done when: creating a Crawl without an id draws until `<id>.sqlite` is free, and creates the file exclusively.
