@@ -3,6 +3,8 @@
 import hashlib
 import shutil
 import sqlite3
+import subprocess
+import sys
 
 import pytest
 from sqlalchemy import select
@@ -16,6 +18,7 @@ from spider.store.records import CrawlFile
 from spider.store.schema import seeds
 from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import resolve_workspace
+from tests.support.cli import PROCESS_TIMEOUT
 from tests.support.clock import FakeClock
 from tests.support.crawls import STARTED_AT, create_any_crawl, new_crawl
 from tests.support.randomness import scripted_choice
@@ -75,3 +78,19 @@ def test_writes_through_a_reader_fail(temp_workspace: TempWorkspace) -> None:
         )
 
     assert raised.value.orig.sqlite_errorcode & 0xFF == sqlite3.SQLITE_READONLY  # type: ignore[union-attr]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows refuses to delete an open file")
+def test_deleting_after_a_read_on_windows(temp_workspace: TempWorkspace) -> None:
+    crawl = completed_crawl(temp_workspace)
+    read_metadata(crawl.path)
+
+    # This process keeps running; another one deletes the file it read.
+    deleted = subprocess.run(
+        [sys.executable, "-c", "import os, sys; os.remove(sys.argv[1])", str(crawl.path)],
+        capture_output=True,
+        timeout=PROCESS_TIMEOUT,
+        check=False,
+    )
+
+    assert (deleted.returncode, crawl.path.exists()) == (0, False)
