@@ -26,7 +26,8 @@ def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFi
                 hint=f"Check the path, or leave out --crawl to read the {LATEST} Crawl.",
                 details={"file": str(path)},
             )
-        return _open(path)
+        # Copied and renamed files are allowed: the row, not the name, says which Crawl it is.
+        return CrawlFile(_metadata(path)["id"], path)
     if reference == LATEST:
         crawl_id = _latest(workspace)
     elif is_crawl_id(reference):
@@ -45,16 +46,21 @@ def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFi
             f"No Crawl in the Workspace {workspace.root} has the id {crawl_id}.",
             hint=f"Leave out --crawl to read the {LATEST} Crawl, or give the path of a crawl file.",
         )
-    return _open(path)
+    found_id = _metadata(path)["id"]
+    if found_id != crawl_id:
+        raise SpiderError(
+            CRAWL_FILE_INVALID,
+            f"The crawl file {path} holds the Crawl {found_id}, not {crawl_id}.",
+            hint=f"Give its path to read it as {found_id}, "
+            f"or rename it to {crawl_path(path.parent, found_id).name}.",
+            details={"file": str(path), "expected_id": crawl_id, "found_id": found_id},
+        )
+    return CrawlFile(crawl_id, path)
 
 
 def _is_path(reference: str) -> bool:
     separators = {"/", os.sep, os.altsep} - {None}
     return reference.endswith(CRAWL_FILE_SUFFIX) or any(s in reference for s in separators)
-
-
-def _open(path: Path) -> CrawlFile:
-    return CrawlFile(_metadata(path)["id"], path)
 
 
 def _metadata(path: Path) -> dict[str, Any]:

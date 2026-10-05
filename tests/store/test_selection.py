@@ -1,9 +1,10 @@
 """Selecting a Crawl with --crawl (015-add-crawl-store, crawl-store)."""
 
+import shutil
 from pathlib import Path
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 
 from spider.output.diagnostics import SpiderError
 from spider.store.crawls import set_state
@@ -135,6 +136,42 @@ def test_a_missing_crawl_file_path(temp_workspace: TempWorkspace) -> None:
         raised.value.exit_code,
         raised.value.diagnostic.details["file"],
     ) == ("crawl_not_found", 4, str(missing))
+
+
+def test_a_crawl_file_that_holds_another_id(temp_workspace: TempWorkspace) -> None:
+    crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(
+            lambda connection: connection.execute(
+                update(crawl_table).values(id="20260927-090000-zzzz")
+            )
+        )
+    workspace = current_workspace(temp_workspace)
+
+    with pytest.raises(SpiderError) as raised:
+        resolve_crawl("20260927-100000-aaaa", workspace=workspace, cwd=temp_workspace.root)
+
+    assert (raised.value.code, raised.value.diagnostic.details) == (
+        "crawl_file_invalid",
+        {
+            "file": str(crawl.path),
+            "expected_id": "20260927-100000-aaaa",
+            "found_id": "20260927-090000-zzzz",
+        },
+    )
+
+
+def test_a_renamed_file_opens_by_its_path_with_the_id_it_holds(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    copy = temp_workspace.root / "c.sqlite"
+    shutil.copyfile(crawl.path, copy)
+    workspace = current_workspace(temp_workspace)
+
+    selected = resolve_crawl(str(copy), workspace=workspace, cwd=temp_workspace.root)
+
+    assert selected == CrawlFile("20260927-100000-aaaa", copy)
 
 
 def test_a_broken_newest_file_is_reported_not_skipped(temp_workspace: TempWorkspace) -> None:
