@@ -15,6 +15,7 @@ from spider.clock import Clock
 from spider.store.connections import opening
 
 QUEUE_SIZE = 50_000
+BATCH_SIZE = 500
 
 
 @dataclass(frozen=True)
@@ -62,23 +63,37 @@ class CrawlWriter:
         try:
             with opening(self._path) as engine, engine.connect() as connection:
                 started.set_result(None)
-                connection.begin()
+                uncommitted = 0
                 while True:
                     job = self._queue.get()
                     if job.unit is None:
                         connection.commit()
                         job.done.set_result(None)
                         return
-                    savepoint = connection.begin_nested()
-                    try:
-                        result = job.unit(connection)
-                    except Exception as error:
-                        savepoint.rollback()
+                    if not connection.in_transaction():
+                        connection.begin()
+                    result, error = _run(job.unit, connection)
+                    uncommitted += 1
+                    if uncommitted >= BATCH_SIZE:
+                        connection.commit()
+                        uncommitted = 0
+                    # Only now: a caller that reads after its unit returns sees the commit.
+                    if error is None:
+                        job.done.set_result(result)
+                    else:
                         job.done.set_exception(error)
-                        continue
-                    savepoint.commit()
-                    job.done.set_result(result)
         except BaseException as error:
             if not started.done():
                 started.set_exception(error)
             raise
+
+
+def _run(unit: Callable[[Connection], Any], connection: Connection) -> tuple[Any, Exception | None]:
+    savepoint = connection.begin_nested()
+    try:
+        result = unit(connection)
+    except Exception as error:
+        savepoint.rollback()
+        return None, error
+    savepoint.commit()
+    return result, None

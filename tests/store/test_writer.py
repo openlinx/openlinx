@@ -90,3 +90,28 @@ def test_closing_commits_everything(temp_workspace: TempWorkspace) -> None:
             writer.run(insert_seed(position, f"https://example.com/{position}"))
 
     assert query(crawl.path, COUNT) == [(1000,)]
+
+
+def run_inserts(writer: CrawlWriter, count: int) -> None:
+    for position in range(1, count + 1):
+        writer.run(insert_seed(position, f"https://example.com/{position}"))
+
+
+def test_units_wait_for_the_batch(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        run_inserts(writer, 499)
+        seen = query(crawl.path, COUNT)
+
+    assert seen == [(0,)]
+
+
+def test_the_500th_unit_commits_the_batch(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        run_inserts(writer, 500)
+        seen = query(crawl.path, COUNT)
+
+    assert seen == [(500,)]
