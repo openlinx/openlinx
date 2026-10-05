@@ -7,15 +7,14 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 
 import pytest
-from sqlalchemy import Connection, delete, func, insert, select, update
+from sqlalchemy import Connection, func, insert, select, update
 
 from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect
-from spider.store.records import CrawlFile
 from spider.store.schema import seeds
 from spider.store.writer import CrawlWriter, CrawlWriterClosedError
 from tests.support.clock import FakeClock
-from tests.support.crawls import create_any_crawl, query
+from tests.support.crawls import crawl_without_seeds, create_any_crawl, query
 from tests.support.permissions import read_only_file
 from tests.support.workspace import TempWorkspace
 
@@ -28,14 +27,6 @@ def insert_seed(position: int, url: str) -> Callable[[Connection], None]:
         connection.execute(insert(seeds).values(position=position, url=url))
 
     return unit
-
-
-def crawl_without_seeds(temp_workspace: TempWorkspace) -> CrawlFile:
-    """A Crawl whose seeds table each scenario fills itself."""
-    crawl = create_any_crawl(temp_workspace)
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        writer.run(lambda connection: connection.execute(delete(seeds)))
-    return crawl
 
 
 def count_seeds(connection: Connection) -> int:

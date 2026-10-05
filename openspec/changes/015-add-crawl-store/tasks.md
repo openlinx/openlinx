@@ -151,7 +151,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 ## 7. Durability and reading across processes (widening, seam 2 with real processes)
 
 - [x] 7.1 **Guard:** every declared public table has an integer `info["change"]` and a comment, and every column has a comment, checked over the declared metadata at seam 6 (group 6's review). Done when: a later change that forgets one fails at its own slice with a clear assertion, never with a `KeyError` inside `spider schema`.
-- [ ] 7.2 Drive "A killed writer keeps committed units in a sound file". Done when: `tests/support/store_worker.py` exists, a subprocess that runs units, flushes on request and waits to be killed.
+- [x] 7.2 **Guard:** "A killed writer keeps committed units in a sound file". It passed at once: the writer of group 4 commits on `flush()`. Done when: `tests/support/store_worker.py` exists, a subprocess that runs units, flushes on request and waits to be killed.
 - [ ] 7.3 Drive "A killed writer loses uncommitted units".
 - [ ] 7.4 Drive "Reading during a write in WAL mode".
 - [ ] 7.5 Drive "Busy in rollback-journal mode", with a real process that holds an exclusive lock for 8 s. Mark the test `slow`.

@@ -7,10 +7,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import delete
+
 from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
 from spider.store.connections import connect
 from spider.store.records import CrawlFile, NewCrawl
+from spider.store.schema import seeds
+from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import Workspace, resolve_workspace
 from tests.support.clock import FakeClock
 from tests.support.randomness import scripted_choice
@@ -40,6 +44,14 @@ def create_any_crawl(temp_workspace: TempWorkspace, **changes: Any) -> CrawlFile
     """`new_crawl` with `changes`, created at `STARTED_AT` where the current folder resolves."""
     request = replace(new_crawl(current_workspace(temp_workspace)), **changes)
     return create_crawl(request, FakeClock(start=STARTED_AT), Collected())
+
+
+def crawl_without_seeds(temp_workspace: TempWorkspace) -> CrawlFile:
+    """A Crawl whose seeds table each scenario fills itself."""
+    crawl = create_any_crawl(temp_workspace)
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(lambda connection: connection.execute(delete(seeds)))
+    return crawl
 
 
 def create_crawl_at(temp_workspace: TempWorkspace, started_at: str, suffix: str) -> CrawlFile:
