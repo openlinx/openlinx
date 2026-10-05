@@ -129,3 +129,14 @@ def test_the_timer_commits(temp_workspace: TempWorkspace) -> None:
         seen = query(crawl.path, COUNT)
 
     assert seen == [(3,)]
+
+
+def test_a_flush_commits_at_once(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace, seeds=[])
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        run_inserts(writer, 3)
+        writer.flush()
+        seen = query(crawl.path, COUNT)
+
+    assert seen == [(3,)]

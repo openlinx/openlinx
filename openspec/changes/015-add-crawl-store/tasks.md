@@ -87,7 +87,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.5 **Guard:** "Closing commits everything". It passed at once: 4.2 already made `close()` commit.
 - [x] 4.6 Drive "Units wait for the batch" and "The 500th unit commits the batch", a trivial pair with `FakeClock` frozen.
 - [x] 4.7 Drive "The timer commits", with `FakeClock.advance(1.0)`. Done when: the 1 s commit runs on the injected clock.
-- [ ] 4.8 Drive "A flush commits at once".
+- [x] 4.8 Drive "A flush commits at once".
 - [ ] 4.9 Drive "A read-only crawl file", with the real read-only attribute.
 
   Done when: opening the writer runs a rolled-back write first, and fails with `crawl_not_writable` (exit 7) and `details.file`, leaving the file unchanged.

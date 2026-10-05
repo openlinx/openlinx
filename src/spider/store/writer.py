@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from queue import Empty, Queue
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from sqlalchemy import Connection
 
@@ -23,8 +23,7 @@ IDLE_CHECK_SECONDS = 0.05
 
 @dataclass(frozen=True)
 class _Job:
-    # None asks the writer thread to stop.
-    unit: Callable[[Connection], Any] | None
+    unit: Callable[[Connection], Any] | Literal["flush", "close"]
     done: Future[Any]
 
 
@@ -48,9 +47,14 @@ class CrawlWriter:
         self._queue.put(_Job(unit, done))
         return done.result()
 
+    def flush(self) -> None:
+        done: Future[None] = Future()
+        self._queue.put(_Job("flush", done))
+        done.result()
+
     def close(self) -> None:
         done: Future[None] = Future()
-        self._queue.put(_Job(None, done))
+        self._queue.put(_Job("close", done))
         done.result()
         self._thread.join()
 
@@ -75,10 +79,12 @@ class CrawlWriter:
                     except Empty:
                         self._commit_if_due(connection)
                         continue
-                    if job.unit is None:
+                    if isinstance(job.unit, str):
                         connection.commit()
                         job.done.set_result(None)
-                        return
+                        if job.unit == "close":
+                            return
+                        continue
                     if not connection.in_transaction():
                         connection.begin()
                         self._uncommitted, self._first_uncommitted_at = 0, self._clock.monotonic()
