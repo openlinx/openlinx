@@ -144,7 +144,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 6.14 **Guard:** "Documentation and declaration agree", now through `spider schema --limit 1000` at seam 6.
 - [x] 6.15 **Guard:** "Self-description of schema" at seam 1. It passed at once: `@command_meta` of 010 describes every registered Command.
 - [x] 6.16 Drive "Global flags of schema" and "Default limit of schema" at seam 1, a trivial pair. The first passed at once; the second found that `spider commands` named the type of a ranged integer `int range`, not `integer`.
-- [ ] 6.17 **Guard:** the startup allowlist test passes with `schema` registered: `spider --help` and `spider commands` load no `sqlalchemy`.
+- [x] 6.17 **Guard:** the startup allowlist test passes with `schema` registered: `spider --help` and `spider commands` load no `sqlalchemy`. It passed at once, and now covers `spider schema --help` too: the schema service imports the store inside its body.
 - [ ] 6.18 Docs: add "How to add a table" to `docs/schema.md` (docs rows and the declared table in the same slice, the conventions, no migration before v0.1). Add `spider schema` to `docs/cli.md`.
 - [ ] 6.19 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
