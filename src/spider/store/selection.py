@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from spider.store.ids import is_crawl_id
 from spider.store.reading import read_metadata
 from spider.store.records import CrawlFile
 from spider.workspace.discovery import Workspace
@@ -17,7 +18,7 @@ def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFi
 
 def _latest(crawls_dir: Path) -> str:
     # The id starts with the start second, so only ids of the newest second can be latest.
-    ids = [file.stem for file in crawls_dir.glob("*.sqlite")]
+    ids = [file.stem for file in crawls_dir.glob("*.sqlite") if is_crawl_id(file.stem)]
     newest_second = _second(max(ids))
     candidates = [crawl_id for crawl_id in ids if _second(crawl_id) == newest_second]
     if len(candidates) == 1:

@@ -52,3 +52,17 @@ def test_two_crawls_in_the_same_second(temp_workspace: TempWorkspace) -> None:
     create_crawl_at(temp_workspace, "2026-09-27T10:00:00.900Z", "aaaa")
 
     assert resolve_latest(temp_workspace) == "20260927-100000-aaaa"
+
+
+def test_only_crawl_files_are_crawls(temp_workspace: TempWorkspace) -> None:
+    crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    (crawl.path.parent / "20260927-110000-bbbb.log").write_text("", encoding="utf-8")
+
+    assert resolve_latest(temp_workspace) == "20260927-100000-aaaa"
+
+
+def test_a_sqlite_file_not_named_by_an_id_is_not_a_crawl(temp_workspace: TempWorkspace) -> None:
+    crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    (crawl.path.parent / "notes.sqlite").write_text("", encoding="utf-8")
+
+    assert resolve_latest(temp_workspace) == "20260927-100000-aaaa"
