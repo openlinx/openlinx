@@ -123,6 +123,20 @@ def test_a_crawl_file_without_its_crawl_row(temp_workspace: TempWorkspace) -> No
     assert raised.value.code == "crawl_file_invalid"
 
 
+def test_a_missing_crawl_file_path(temp_workspace: TempWorkspace) -> None:
+    missing = temp_workspace.root / "none.sqlite"
+    workspace = current_workspace(temp_workspace)
+
+    with pytest.raises(SpiderError) as raised:
+        resolve_crawl(str(missing), workspace=workspace, cwd=temp_workspace.root)
+
+    assert (
+        raised.value.code,
+        raised.value.exit_code,
+        raised.value.diagnostic.details["file"],
+    ) == ("crawl_not_found", 4, str(missing))
+
+
 def test_a_broken_newest_file_is_reported_not_skipped(temp_workspace: TempWorkspace) -> None:
     crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
     (crawl.path.parent / "20260927-110000-bbbb.sqlite").write_bytes(b"")

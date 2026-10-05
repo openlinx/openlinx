@@ -17,7 +17,16 @@ from spider.workspace.discovery import Workspace
 
 def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFile:
     if _is_path(reference):
-        return _open(cwd / reference)
+        path = cwd / reference
+        # Checked first: a read-only open of a missing file fails like a broken one.
+        if not path.is_file():
+            raise SpiderError(
+                CRAWL_NOT_FOUND,
+                f"No crawl file exists at {path}.",
+                hint=f"Check the path, or leave out --crawl to read the {LATEST} Crawl.",
+                details={"file": str(path)},
+            )
+        return _open(path)
     if reference == LATEST:
         crawl_id = _latest(workspace)
     elif is_crawl_id(reference):

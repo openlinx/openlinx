@@ -127,7 +127,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions A–C) before group 6's own work.
 
 - [x] 6.1 **Guard:** "Companion files are not Crawls" at seam 2. It passed at once: only `<id>.sqlite` files are listed. Done when: `docs/crawl-store.md` says that selecting creates no folder and no crawl file, and that SQLite's `-wal` and `-shm` companions of an existing crawl file may appear (a WAL reader needs the shared-memory file; `immutable=1` stays rejected, D2). 7.6 still proves that a crawl file can be deleted after a read on Windows.
-- [ ] 6.2 Drive "A missing crawl file path" at seam 2. Done when: a path is checked for existence before the read-only open, and gives `crawl_not_found` (exit 4) with `details.file`; a file that exists but is not a crawl file stays `crawl_file_invalid`.
+- [x] 6.2 Drive "A missing crawl file path" at seam 2. Done when: a path is checked for existence before the read-only open, and gives `crawl_not_found` (exit 4) with `details.file`; a file that exists but is not a crawl file stays `crawl_file_invalid`.
 - [ ] 6.3 Drive "A crawl file that holds another id" at seam 2. Done when: a Crawl selected by id or `latest` whose `crawl` row has another id fails with `crawl_file_invalid` and `details.file`, `details.expected_id` and `details.found_id`; a Crawl selected by path keeps the id of its row, whatever the file is named, pinned by a guard through `resolve_crawl`.
 - [ ] 6.4 Drive "One table" at seam 1.
 
