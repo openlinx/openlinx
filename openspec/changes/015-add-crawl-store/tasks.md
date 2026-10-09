@@ -171,7 +171,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 8.2 Drive "UNC path" at seam 4. Done when: the journal-mode choice is a pure function, and `store_wal_unavailable` is declared as a warning.
 - [x] 8.3 Drive "Local path" at seam 4.
 - [x] 8.4 Drive "Forced WAL on a UNC path" and "Forced rollback journal on a local path" at seam 4, a trivial pair.
-- [ ] 8.5 Drive "The store setting in the template" and "An invalid store setting" at seam 1, a trivial pair.
+- [x] 8.5 Drive "The store setting in the template" and "An invalid store setting" at seam 1, a trivial pair.
 
   Done when: `[store]` is registered in `build_app` by its `"module:Class"` reference, and the table-rules test of `010` covers it.
 - [ ] 8.6 Drive "Crawl on a UNC path on Windows" at seam 2. It runs through `\\localhost\C$` and is skipped when the share is not reachable. Done when: the warning reaches the Reporter with `details.path`.

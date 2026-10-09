@@ -44,6 +44,7 @@ class AppExtra:
 def build_app(extra: AppExtra | None = None) -> typer.Typer:
     extra = extra or AppExtra()
     tables = SettingsTables()
+    tables.register("store", "spider.store.settings:StoreSettings")
     for name, reference in extra.settings_tables.items():
         tables.register(name, reference)
 
