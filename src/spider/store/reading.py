@@ -9,9 +9,9 @@ from sqlalchemy import Connection, select
 from sqlalchemy.exc import DBAPIError
 
 from spider.naming import APP_NAME
-from spider.output.codes import CRAWL_BUSY, CRAWL_SCHEMA_TOO_NEW
+from spider.output.codes import CRAWL_SCHEMA_TOO_NEW
 from spider.output.diagnostics import SpiderError
-from spider.store.connections import READER_BUSY_SECONDS, is_busy, opening
+from spider.store.connections import READER_BUSY_SECONDS, busy_error, is_busy, opening
 from spider.store.schema import SCHEMA_VERSION, crawl
 
 
@@ -24,13 +24,7 @@ def reading(path: Path) -> Iterator[Connection]:
     except DBAPIError as error:
         if not is_busy(error):
             raise
-        raise SpiderError(
-            CRAWL_BUSY,
-            f"The crawl file {path} is held by a write, and reading waited "
-            f"{READER_BUSY_SECONDS:g} seconds.",
-            hint="Try again when the write has ended.",
-            details={"file": str(path)},
-        ) from error
+        raise busy_error(path, "reading", READER_BUSY_SECONDS, error) from error
 
 
 def _check_schema_version(connection: Connection, path: Path) -> None:

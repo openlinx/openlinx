@@ -15,7 +15,7 @@ def create_crawl(
     from spider.store.crawls import create_crawl_file
     from spider.store.journal import choose_journal_mode
 
-    journal = choose_journal_mode(request.journal_mode, request.workspace.data_dir)
+    journal = choose_journal_mode(request.journal_setting, request.workspace.data_dir)
     # Read once: the id and crawl.started_at must name the same instant.
     crawl_file = create_crawl_file(request, clock.now(), choice, journal.mode)
     if journal.warning is not None:

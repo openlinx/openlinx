@@ -176,7 +176,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
   Done when: `[store]` is registered in `build_app` by its `"module:Class"` reference, and the table-rules test of `010` covers it.
 - [x] 8.6 Drive "Crawl on a UNC path on Windows" at seam 2. It runs through `\\localhost\C$` and is skipped when the share is not reachable. Done when: the warning reaches the Reporter with `details.path`.
 - [x] 8.7 Docs: add the journal mode, the UNC fallback, the `store.journal_mode` override for other network folders, the v0.2 plan for the mount table, and the writer's `crawl_busy` after 30 s to `docs/crawl-store.md`.
-- [ ] 8.8 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [x] 8.8 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
 ## 9. Redaction (widening, before `022`-min)
 

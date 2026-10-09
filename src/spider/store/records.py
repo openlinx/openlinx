@@ -26,7 +26,7 @@ class NewCrawl:
     config: Mapping[str, Any]
     settings_file: Path | None = None
     section_crawl: bool = False
-    journal_mode: JournalSetting = "auto"
+    journal_setting: JournalSetting = "auto"
 
 
 @dataclass(frozen=True)

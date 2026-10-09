@@ -15,10 +15,11 @@ from typing import Any, Self, cast
 from sqlalchemy import Connection, update
 
 from spider.clock import Clock
-from spider.output.codes import CRAWL_BUSY, CRAWL_NOT_WRITABLE
+from spider.output.codes import CRAWL_NOT_WRITABLE
 from spider.output.diagnostics import SpiderError
 from spider.store.connections import (
     WRITER_BUSY_SECONDS,
+    busy_error,
     is_busy,
     not_writable_name,
     opening,
@@ -112,7 +113,7 @@ class CrawlWriter:
             self._queue.put(_Job(_Control.CLOSE, done))
             self._wait(done)
         self._thread.join()
-        # As it is: leaving a with block after a busy unit must still exit with crawl_busy.
+        # Not wrapped: leaving a with block after a busy unit must still exit with crawl_busy.
         if isinstance(self._failure, SpiderError):
             raise self._failure
         # A commit that failed while no unit was waiting would otherwise lose units silently.
@@ -237,15 +238,7 @@ class CrawlWriter:
     def _busy_error(self, error: BaseException) -> BaseException:
         if not is_busy(error):
             return error
-        busy = SpiderError(
-            CRAWL_BUSY,
-            f"The crawl file {self._path} is held by another connection, and writing "
-            f"waited {self._busy_seconds:g} seconds.",
-            hint="Try again when the other process has ended.",
-            details={"file": str(self._path)},
-        )
-        busy.__cause__ = error
-        return busy
+        return busy_error(self._path, "writing", self._busy_seconds, error)
 
     def _open_error(self, error: BaseException) -> BaseException:
         busy = self._busy_error(error)

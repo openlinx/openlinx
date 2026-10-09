@@ -11,6 +11,9 @@ from sqlalchemy import Connection, Engine, create_engine, event
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.pool import NullPool
 
+from spider.output.codes import CRAWL_BUSY
+from spider.output.diagnostics import SpiderError
+
 READER_BUSY_SECONDS = 5.0
 WRITER_BUSY_SECONDS = 30.0
 
@@ -38,6 +41,17 @@ def is_busy(error: BaseException) -> bool:
     # Masked to the primary code, so BUSY_RECOVERY and BUSY_SNAPSHOT count too.
     code = getattr(cause, "sqlite_errorcode", None)
     return code is not None and code & 0xFF == sqlite3.SQLITE_BUSY
+
+
+def busy_error(path: Path, action: str, seconds: float, error: BaseException) -> SpiderError:
+    busy = SpiderError(
+        CRAWL_BUSY,
+        f"Another connection holds the crawl file {path}, and {action} waited {seconds:g} seconds.",
+        hint="Try again when the other process is done with the file.",
+        details={"file": str(path)},
+    )
+    busy.__cause__ = error
+    return busy
 
 
 def file_uri(path: PurePath) -> str:

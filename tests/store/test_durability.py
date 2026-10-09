@@ -1,12 +1,8 @@
 """Durability across a killed writer process (015-add-crawl-store, crawl-store)."""
 
-from contextlib import closing
-
 import pytest
 
 from spider.output.diagnostics import SpiderError
-from spider.store.connections import connect
-from spider.store.records import CrawlFile
 from spider.store.selection import resolve_crawl
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
@@ -68,9 +64,7 @@ def test_reading_during_a_write_in_wal_mode(temp_workspace: TempWorkspace) -> No
 
 
 def test_busy_in_rollback_journal_mode(temp_workspace: TempWorkspace) -> None:
-    crawl = create_any_crawl(temp_workspace)
-    with closing(connect(crawl.path)) as connection:
-        connection.execute("PRAGMA journal_mode = DELETE")
+    crawl = create_any_crawl(temp_workspace, journal_setting="delete")
     workspace = current_workspace(temp_workspace)
 
     with StoreWorker(crawl.path) as worker:
@@ -81,15 +75,8 @@ def test_busy_in_rollback_journal_mode(temp_workspace: TempWorkspace) -> None:
     assert (raised.value.code, raised.value.exit_code) == ("crawl_busy", 5)
 
 
-def delete_mode_crawl(temp_workspace: TempWorkspace) -> CrawlFile:
-    crawl = create_any_crawl(temp_workspace)
-    with closing(connect(crawl.path)) as connection:
-        connection.execute("PRAGMA journal_mode = DELETE")
-    return crawl
-
-
 def test_a_busy_writer_on_open(temp_workspace: TempWorkspace) -> None:
-    crawl = delete_mode_crawl(temp_workspace)
+    crawl = create_any_crawl(temp_workspace, journal_setting="delete")
 
     with StoreWorker(crawl.path) as worker:
         worker.lock()
@@ -104,7 +91,7 @@ def test_a_busy_writer_on_open(temp_workspace: TempWorkspace) -> None:
 
 
 def test_a_busy_writer_in_a_unit(temp_workspace: TempWorkspace) -> None:
-    crawl = delete_mode_crawl(temp_workspace)
+    crawl = create_any_crawl(temp_workspace, journal_setting="delete")
 
     def run_while_locked() -> None:
         with (
