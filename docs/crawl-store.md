@@ -120,6 +120,7 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
 - **What a crash loses.** A process that is killed, even with SIGKILL or TerminateProcess, loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound: `PRAGMA integrity_check` returns `ok`. Tests kill a real writer process to check both.
 - **The write check.** Opening the writer first runs a write that it rolls back. A crawl file that cannot be written, for example one with the read-only attribute, fails at once with `crawl_not_writable` (exit code 7) and `details.file`, before anything is crawled, and the file is left unchanged.
 - **One writer per Crawl.** In v0.1 only the process that creates a Crawl writes it, because a Crawl cannot be resumed or detached yet. `060-add-crawl-control` adds a claim on the file when a second process can write.
+- **A busy file.** When another connection holds the crawl file, the writer waits up to 30 seconds, on opening, when it starts a transaction or while a unit runs, then fails with `crawl_busy` (exit code 5) and `details.file`. In WAL mode only another writer can hold it that long; in rollback-journal mode a long read can too.
 - **After `close()`,** the writer accepts no more units: a unit submitted then fails at once. Closing twice is harmless.
 
 ## Reading a Crawl
@@ -127,7 +128,30 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
 Commands that only read a Crawl open its file read-only, for one operation at a time:
 - **Nothing changes.** Reading leaves the crawl file's bytes as they were, and a write through a reader fails with SQLite's read-only error.
 - **Files are released.** Each read closes its connection when it ends, so even a process that keeps running, such as the MCP server, holds no handle to the file: on Windows another process can delete it right after a read. SQLite's `-wal` and `-shm` companions may stay next to it.
-- **Reading while a Crawl is written.** In WAL mode, the default on local disks, a reader sees every committed row while another process writes, and is not held up by the write (only by SQLite's brief recovery after a killed writer). In rollback-journal mode a write shuts readers out: a reader waits up to 5 seconds, then fails with `crawl_busy` (exit code 5) and `details.file`. `--crawl` resolution reads the same way.
+- **Reading while a Crawl is written.** In WAL mode, the default on local disks ([the journal mode](#the-journal-mode)), a reader sees every committed row while another process writes, and is not held up by the write (only by SQLite's brief recovery after a killed writer). In rollback-journal mode a write shuts readers out: a reader waits up to 5 seconds, then fails with `crawl_busy` (exit code 5) and `details.file`. `--crawl` resolution reads the same way.
+
+## The journal mode
+
+A new crawl file gets its SQLite journal mode once, when it is created, and `crawl.journal_mode` records it. The setting `store.journal_mode` in the Workspace's `spider.toml` chooses it with the file's location:
+
+| `store.journal_mode` | Local disk | UNC path |
+|---|---|---|
+| `"auto"` (the default) | `wal` | `delete`, with the warning `store_wal_unavailable` |
+| `"wal"` | `wal` | `wal`, with no warning |
+| `"delete"` | `delete` | `delete` |
+
+- **WAL** (write-ahead logging) lets a Command read a Crawl while it is written. It relies on shared memory between processes, which network file systems do not provide safely, so SQLite advises against WAL on them.
+- **A UNC path** is a data folder whose path starts with `\\` or `//`, such as `\\fileserver\share\site\.spider`, including `\\?\UNC\…` paths. Only the path is read; nothing is asked of the system. There `"auto"` falls back to a rollback journal (`delete`) and warns with `store_wal_unavailable`, whose `details.path` names the data folder. In that mode a write shuts readers out (see [Reading a Crawl](#reading-a-crawl)).
+- **Other network folders,** such as a mapped drive (`Z:`) or an SMB or NFS mount, are not detected in v0.1, so they get WAL. Choose the rollback journal for them yourself:
+
+  ```toml
+  [store]
+  journal_mode = "delete"
+  ```
+
+  v0.2 plans to detect them from the system's mount table.
+- **`"wal"` on a UNC path** turns the fallback off, for a share known to support WAL safely.
+- **Durability:** WAL files commit with `synchronous=NORMAL`: a commit survives a killed process, and a power cut may lose the last commits but leaves the file sound. Rollback-journal files commit with `synchronous=FULL`.
 
 ## Schema versions
 
