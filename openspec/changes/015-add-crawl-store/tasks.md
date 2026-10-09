@@ -168,7 +168,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 8.1 Drive "A busy writer on open" and "A busy writer in a unit" at seam 2, a trivial pair, with a real process that holds an exclusive lock on a `delete`-mode file (the manager's ruling on group 7's open question A). Mark the tests `slow`.
 
   Done when: a writer that waits out its busy timeout, on opening, on `BEGIN IMMEDIATE` or in a unit, fails with `crawl_busy` (exit 5) and `details.file`, never a raw `DBAPIError` or `internal_error`. The timeout is a `CrawlWriter` constructor parameter, 30 s by default.
-- [ ] 8.2 Drive "UNC path" at seam 4. Done when: the journal-mode choice is a pure function, and `store_wal_unavailable` is declared as a warning.
+- [x] 8.2 Drive "UNC path" at seam 4. Done when: the journal-mode choice is a pure function, and `store_wal_unavailable` is declared as a warning.
 - [ ] 8.3 Drive "Local path" at seam 4.
 - [ ] 8.4 Drive "Forced WAL on a UNC path" and "Forced rollback journal on a local path" at seam 4, a trivial pair.
 - [ ] 8.5 Drive "The store setting in the template" and "An invalid store setting" at seam 1, a trivial pair.

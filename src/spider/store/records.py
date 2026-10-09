@@ -9,6 +9,7 @@ from spider.workspace.discovery import Workspace
 
 type CrawlMode = Literal["spider", "list", "sitemap"]
 type JournalMode = Literal["wal", "delete"]
+type JournalSetting = Literal["auto", "wal", "delete"]
 type CrawlState = Literal["running", "stopped", "completed", "failed", "interrupted"]
 
 # The --crawl value that selects the Crawl that started last.

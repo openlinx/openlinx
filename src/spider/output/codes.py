@@ -148,6 +148,13 @@ INTERRUPTED = _declare("interrupted", "error", ExitCode.INTERRUPTED, "Stopped wi
 WORKSPACE_NESTED = _declare(
     "workspace_nested", "warning", None, "The new Workspace is inside another Workspace."
 )
+STORE_WAL_UNAVAILABLE = _declare(
+    "store_wal_unavailable",
+    "warning",
+    None,
+    "The new crawl file uses a rollback journal, because WAL is unsafe or refused in its "
+    "folder; details.path names the folder.",
+)
 MORE_ITEMS = _declare(
     "more_items",
     "info",
