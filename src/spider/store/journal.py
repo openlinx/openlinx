@@ -16,6 +16,9 @@ class JournalChoice:
 
 
 def choose_journal_mode(setting: JournalSetting, location: PurePath) -> JournalChoice:
+    # \\?\UNC\host\share starts with \\ too.
+    if not str(location).startswith(("\\\\", "//")):
+        return JournalChoice("wal")
     return JournalChoice(
         "delete",
         Diagnostic.of(
