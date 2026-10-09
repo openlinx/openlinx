@@ -170,7 +170,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
   Done when: a writer that waits out its busy timeout, on opening, on `BEGIN IMMEDIATE` or in a unit, fails with `crawl_busy` (exit 5) and `details.file`, never a raw `DBAPIError` or `internal_error`. The timeout is a `CrawlWriter` constructor parameter, 30 s by default.
 - [x] 8.2 Drive "UNC path" at seam 4. Done when: the journal-mode choice is a pure function, and `store_wal_unavailable` is declared as a warning.
 - [x] 8.3 Drive "Local path" at seam 4.
-- [ ] 8.4 Drive "Forced WAL on a UNC path" and "Forced rollback journal on a local path" at seam 4, a trivial pair.
+- [x] 8.4 Drive "Forced WAL on a UNC path" and "Forced rollback journal on a local path" at seam 4, a trivial pair.
 - [ ] 8.5 Drive "The store setting in the template" and "An invalid store setting" at seam 1, a trivial pair.
 
   Done when: `[store]` is registered in `build_app` by its `"module:Class"` reference, and the table-rules test of `010` covers it.
