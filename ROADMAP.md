@@ -118,18 +118,21 @@ If a change needs something another change owns, it depends on that change inste
   - Redaction of secrets in recorded commands and config: whole values (`***`) and URL passwords (`user:***@proxy`). 022 adds the header shape (`Cookie: ***`) in v0.2.
   - Table conventions, and `docs/schema.md` as the contract: the public schema reference of [ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md), in v0.1. It is checked against the declared schema, and a new crawl file against both through `PRAGMA table_info`.
 - **020-add-crawl-core**:
-  - Spider mode (`crawl <url>`) and URL normalisation.
-  - **Scope:** `--scope host|subdomains|subfolder`, `--subdomains`, `--include/--exclude`, `--max-depth`, `--max-urls` (no limit by default; reaching an explicit limit leaves the Crawl resumable), `--strip-params`.
+  - Spider mode (`crawl <url>`) and URL normalisation, which keeps the trailing slash.
+  - **Scope:** `--scope host|subdomains|subfolder`, `--subdomains`, `--include/--exclude`, `--max-depth`, `--max-urls` (no limit by default; reaching an explicit limit leaves the Crawl resumable), `--strip-params`. An apex Seed admits its `www.` host, never the reverse, and `seed_base_mismatch` warns when a `www.` Seed's site lives on the apex.
   - **Section Crawl**, and robots.txt (obeyed by default, `--ignore-robots`, `--robots-user-agent`).
   - **The robots directives parser** (meta robots and X-Robots-Tag, used by 030 as well).
   - Politeness (`--concurrency`, `--rate`).
-  - The frontier.
+  - The frontier: the `urls` table, deduplicated by its unique URL with no in-memory URL map, dispatched depth by depth in `urls.id` order.
   - **Link discovery and the Link type table**, with `--follow-nofollow` and `--check-external`.
   - Crawl Depth.
-  - **Hooks:** a per-response writer hook for every recorded URL, and the **post-crawl passes** hook, which runs for `completed` or `stopped` Crawls and is safe to re-run.
+  - **Hooks:** a per-response hook for every recorded URL, whose handlers return rows that the store writes in the URL's unit, and the **post-crawl passes** hook, which runs for `completed` or `stopped` Crawls and is safe to re-run.
+  - **Design points of 2026-10-05:** guarded Crawl State transitions (one table and check; 060 adds `interrupted`), a `NormalizedUrl` type, writer units defined only in `spider.store.*`, and one Crawl context object.
+  - The `[crawl]` settings table, which 022 and 030 extend.
   - Progress events and the result.
   - **Ctrl+C:** the Crawl becomes `stopped` with `stop_reason: interrupt`, and the command exits 130.
   - **Unreachable Seed:** the Crawl becomes `failed` and resumable, and the command exits 8.
+  - **Robustness and backstops:** one URL never stops the Crawl (counted `parse_failed` and `handler_failed` warnings), parsers tested with hypothesis, hostile fixtures, a lost site (`site_unreachable`, exit 8, resumable), a per-request watchdog, and a stop that waits 10 seconds and then cancels.
   - Parsing runs in-process.
 - **022-add-fetch-policy** (min in v0.1):
   - Timeouts, retries with backoff, and redirects followed hop by hop, with every hop recorded.
@@ -260,16 +263,22 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 - 080: `design.md:95` and task 7.8 still name 100's release pipeline for the Skill-copy check, which is now 085's.
 - 060: re-ground for v0.1. Its proposal and the release notes in `specs/crawl-control/spec.md` still say v0.1.1 for 060-min; they become v0.1, except the command recorded for Crawls started through MCP (v0.1.1). It may not assume 022: 060-min needs only 015 and 020.
 - 015: its `design.md` (lines 13 and 86) and `proposal.md` (lines 11 and 71) say 060-min is v0.1.1. Fix the wording when 015 is archived; the one-writer-by-construction rule in 015 is unchanged until 060 lands.
+- 015: its design D6 names "020's `seq` on URLs" as the order column; 020 D1 uses `urls.id`, which already grows in insertion order. `docs/crawl-store.md` says resuming arrives with 060 in v0.2; it is v0.1 now. Fix both when 015 is archived.
 - 060: own what moved from 015 (see 060's entry): its design still calls `015`'s `check_writer`, `write_control`, reservation and `crawl_id_taken`, and its spec and tasks rely on them.
 - 060: remove the window in which a just-claimed, still-empty `<id>.sqlite` makes `--crawl latest` report crawl_file_invalid. Create the file as `<id>.sqlite.tmp` (claimed exclusively, counted as taken) and rename it after the schema is written, together with the reservations.
 - 060: `crawls rm` deletes a crawl file together with its SQLite companions (`<id>.sqlite-wal`, `<id>.sqlite-shm`), because reading a WAL crawl file may leave them behind (015 crawl-store.md).
-- 020: `--max-urls` has no default limit (was 10,000); update the spec, the `max_urls_reached` scenarios and the URL estimate. 030: raw HTML storage can no longer be decided from a default `--max-urls`; decide it again when 030 is re-grounded.
-- 020: decide four design points from the architecture review of 2026-10-05 before its tasks are written:
+- 020 (done 2026-10-10): `--max-urls` has no default limit (was 10,000); the spec, the `max_urls_reached` scenarios and the URL estimate are updated. 030: raw HTML storage can no longer be decided from a default `--max-urls`; decide it again when 030 is re-grounded.
+- 020 (done 2026-10-10, design D12–D15): decide four design points from the architecture review of 2026-10-05 before its tasks are written:
   - **Crawl state transitions:** 015's `set_state` writes any state from any state. A table of allowed transitions and one pure function that refuses the others, used by 020 (`running`, `completed`, `stopped`, `failed`) and later by 060 (`interrupted`, resume).
   - **URL types:** a `NormalizedUrl` type (a `NewType` or a small frozen class) that only URL normalisation creates, so mypy refuses a raw string wherever the frontier, Scope or Links expect a normalised URL. Decide whether crawl ids get a type too.
   - **Data access stays in the store:** writer units are defined only in `spider.store.*` modules, and the engine, extractors and Rules call them instead of writing SQL. Decide how 030 and 040 add their units under that rule.
   - **One context for a Crawl's dependencies:** the clock, the Reporter, the writer, the settings, the Fetcher and the Scope are built in one place and passed as one object, instead of growing every signature.
 - 060: `resume` is v0.1 now; its spec markers move with 060-min's.
+- 060: its "Crawl State transitions" requirement builds on 020's (020 D12): it adds `running` → `interrupted` and `interrupted` → `running` to 020's `TRANSITIONS`, and records `interrupted` through 020's `set_state`. 020's `stop_reason` now also covers `failed` (`seed_unreachable`, `site_unreachable`, `write_failed`).
+- 060: 020 dropped its kill-then-continue scenarios ("Continuing a killed Crawl completes it", "Continuing does not request fetched URLs again" after a kill, "A Crawl killed on Windows can be continued"), because continuing a killed Crawl needs `interrupted`. 060's "A killed Crawl can be resumed at once" scenarios cover them; add that the resume requests no URL that was `fetched` before the kill.
+- 060: builds the detached Crawl's `CrawlContext` (020 D15) and sets its `StopSignal` from control rows with `requested`.
+- 030 and 040: under 020 D9 and D14, handlers are pure and return store rows declared in `spider.store.*`, and post-crawl passes are store functions (030: `spider.store.pages` and `spider.store.links`; 040: `spider.store.issues`). Their drafts still describe handlers that write in the unit, and sinks; and they add their entries to 020's `default_hooks()`.
+- 024 (v0.2): decide whether 020's apex-to-www rule applies to each Seed of List and Sitemap mode.
 - 026: re-ground for v0.1; the benchmark runs on Windows, macOS and Linux runners or a stated machine, never as part of the CI gate.
 - 026: `psutil` is no longer a dependency of 015; add it as a test dependency if the pool is built.
 - 020–050: no Alembic revision per change before v0.1; tables are added to the declared schema and `docs/schema.md` in the same slice (015 D5, D6).
