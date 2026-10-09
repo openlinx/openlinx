@@ -15,12 +15,14 @@ from spider.output.codes import WORKSPACE_NOT_WRITABLE
 from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect, not_writable_name, opening
 from spider.store.ids import Choice, crawl_path, new_crawl_id
-from spider.store.records import CrawlFile, CrawlState, NewCrawl
+from spider.store.records import CrawlFile, CrawlState, JournalMode, NewCrawl
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
 from spider.workspace.creation import as_workspace_not_writable, create_data_folder
 
 
-def create_crawl_file(request: NewCrawl, started_at: datetime, choice: Choice) -> CrawlFile:
+def create_crawl_file(
+    request: NewCrawl, started_at: datetime, choice: Choice, journal_mode: JournalMode
+) -> CrawlFile:
     workspace = request.workspace
     create_data_folder(workspace)
     # A permissions problem must reach an agent as an error code, never as a traceback.
@@ -28,7 +30,7 @@ def create_crawl_file(request: NewCrawl, started_at: datetime, choice: Choice) -
         crawl_file = _claim_new_file(workspace.crawls_dir, started_at, choice)
         try:
             with _sqlite_not_writable(crawl_file.path):
-                _write_new_file(crawl_file, request, started_at)
+                _write_new_file(crawl_file, request, started_at, journal_mode)
         except BaseException:
             # A claimed file left empty would break --crawl latest in this Workspace.
             crawl_file.path.unlink()
@@ -53,10 +55,12 @@ def _claim_new_file(crawls_dir: Path, started_at: datetime, choice: Choice) -> C
         return CrawlFile(crawl_id, path)
 
 
-def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: datetime) -> None:
+def _write_new_file(
+    crawl_file: CrawlFile, request: NewCrawl, started_at: datetime, journal_mode: JournalMode
+) -> None:
     # The journal mode belongs to the file, so it is set once, outside any transaction.
     with closing(connect(crawl_file.path)) as connection:
-        (journal_mode,) = connection.execute("PRAGMA journal_mode = WAL").fetchone()
+        (granted,) = connection.execute(f"PRAGMA journal_mode = {journal_mode}").fetchone()
     settings_file = request.settings_file
     with opening(crawl_file.path) as engine, engine.begin() as connection:
         metadata.create_all(connection)
@@ -74,7 +78,7 @@ def _write_new_file(crawl_file: CrawlFile, request: NewCrawl, started_at: dateti
                 config=dict(request.config),
                 tool_version=__version__,
                 schema_version=SCHEMA_VERSION,
-                journal_mode=journal_mode,
+                journal_mode=granted,
                 python_version=platform.python_version(),
                 platform=platform.platform(),
             )

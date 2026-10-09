@@ -2,7 +2,12 @@
 
 import json
 import re
+import sys
+from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
 
 from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
@@ -11,7 +16,7 @@ from spider.store.records import NewCrawl
 from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
-from tests.support.crawls import STARTED_AT, crawl_row, create_any_crawl, query
+from tests.support.crawls import STARTED_AT, crawl_row, create_any_crawl, new_crawl, query
 from tests.support.project import project_version
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
@@ -132,3 +137,21 @@ def test_local_disk(temp_workspace: TempWorkspace) -> None:
         crawl_row(crawl.path)["journal_mode"],
         query(crawl.path, "PRAGMA journal_mode"),
     ) == ("wal", [("wal",)])
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the admin share is a Windows UNC path")
+def test_crawl_on_a_unc_path_on_windows(temp_workspace: TempWorkspace) -> None:
+    root = temp_workspace.root
+    unc_root = Path(rf"\\localhost\{root.drive[0]}$") / root.relative_to(root.anchor)
+    if not unc_root.is_dir():
+        pytest.skip(f"the admin share {unc_root.anchor} is not reachable")
+    workspace = resolve_workspace(cwd=unc_root, flag=Path(), home=temp_workspace.home)
+    reporter = Collected()
+    request = replace(new_crawl(workspace), cwd=unc_root)
+
+    crawl = create_crawl(request, FakeClock(start=STARTED_AT), reporter)
+
+    assert (
+        crawl_row(crawl.path)["journal_mode"],
+        [(warning.code, warning.details["path"]) for warning in reporter.warnings],
+    ) == ("delete", [("store_wal_unavailable", str(workspace.data_dir))])
