@@ -150,6 +150,7 @@ If a change needs something another change owns, it depends on that change inste
   - `mode_conflict` when two Crawl Modes are given.
 - **026-add-parse-pool** (the benchmark in v0.1; the pool conditional on it):
   - First, the ~500k-URL benchmark against 020's in-process parsing, run manually or nightly and not part of the CI gate. Its numbers go in `docs/benchmarks.md`.
+  - It also measures the crawl-file layout variants that the store benchmark of 2026-10-10 left out (decided 2026-10-11): `links` as a `WITHOUT ROWID` table, a 16 KB page size, a zstd dictionary for stored HTML, and the WAL size of a ~100k-Page run without a concurrent reader.
   - The maintainer then decides. Only if parsing is the bottleneck: parsing in a process pool, with bounded queues, clean shutdown of workers on interrupt, and no console windows on Windows. Otherwise 026 is archived with the benchmark alone.
 - **030-add-page-data** (min in v0.1):
   - Every Internal-tab column, added in the slice where it is first needed.
@@ -158,7 +159,7 @@ If a change needs something another change owns, it depends on that change inste
   - Inlink and outlink counts, computed in the post-crawl passes.
   - The Content Area and content metrics, and the Exact Duplicate hash.
   - Structured-data item counts, and cookie names without their values.
-  - **(v0.2)** Flesch Reading Ease and the Readability band, language detection (`--detect-language`, py3langid), SERP pixel widths, and **raw HTML storage** (zstd; automatic when the Crawl's `--max-urls` is at most 50,000; `--store-html/--no-store-html`).
+  - **(v0.2)** Flesch Reading Ease and the Readability band, language detection (`--detect-language`, py3langid), SERP pixel widths, and **raw HTML storage** (zstd). HTML is not stored by default; storing it is opt-in by a flag, whose name is decided when 030 is re-grounded (decided 2026-10-11: in the store benchmark, HTML was about 70% of the crawl file).
 - **040-add-rules** (15 Rules in v0.1):
   - The Rule model and the 15 Rules listed above; `http-url` is a Warning with High Priority. **(v0.2)** the other 27 Rules of the 42-Rule catalogue.
   - Thresholds and disabling in `spider.toml`.
@@ -267,7 +268,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 - 060: own what moved from 015 (see 060's entry): its design still calls `015`'s `check_writer`, `write_control`, reservation and `crawl_id_taken`, and its spec and tasks rely on them.
 - 060: remove the window in which a just-claimed, still-empty `<id>.sqlite` makes `--crawl latest` report crawl_file_invalid. Create the file as `<id>.sqlite.tmp` (claimed exclusively, counted as taken) and rename it after the schema is written, together with the reservations.
 - 060: `crawls rm` deletes a crawl file together with its SQLite companions (`<id>.sqlite-wal`, `<id>.sqlite-shm`), because reading a WAL crawl file may leave them behind (015 crawl-store.md).
-- 020 (done 2026-10-10): `--max-urls` has no default limit (was 10,000); the spec, the `max_urls_reached` scenarios and the URL estimate are updated. 030: raw HTML storage can no longer be decided from a default `--max-urls`; decide it again when 030 is re-grounded.
+- 020 (done 2026-10-10): `--max-urls` has no default limit (was 10,000); the spec, the `max_urls_reached` scenarios and the URL estimate are updated. 030: raw HTML storage can no longer be decided from a default `--max-urls`. Decided 2026-10-11: opt-in by a flag (see 030's entry); only the flag's name is left for the re-grounding.
 - 020 (done 2026-10-10, design D12–D15): decide four design points from the architecture review of 2026-10-05 before its tasks are written:
   - **Crawl state transitions:** 015's `set_state` writes any state from any state. A table of allowed transitions and one pure function that refuses the others, used by 020 (`running`, `completed`, `stopped`, `failed`) and later by 060 (`interrupted`, resume).
   - **URL types:** a `NormalizedUrl` type (a `NewType` or a small frozen class) that only URL normalisation creates, so mypy refuses a raw string wherever the frontier, Scope or Links expect a normalised URL. Decide whether crawl ids get a type too.
