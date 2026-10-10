@@ -84,8 +84,10 @@ def connect(
             connection.execute("PRAGMA schema_version").fetchone()
         except sqlite3.OperationalError as error:
             connection.close()
-            if not _shm_held(error) or time.monotonic() >= deadline:
+            if not _shm_held(error):
                 raise
+            if time.monotonic() >= deadline:
+                raise busy_error(path, "opening", busy_seconds, error) from error
             time.sleep(SHM_RELEASE_CHECK_SECONDS)
         else:
             return connection

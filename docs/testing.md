@@ -56,6 +56,7 @@ These fakes stand in for things outside our code. They are the only test doubles
 - **TLS trust:** a test CA (trustme) passed into the crawler's TLS setup, so the OS trust store is never touched
 - **Processes:** the OS process-spawn call (not our own launcher function)
 - **`doctor`:** network and trust-store probes
+- **SQLite's report of a held `-shm` file:** `SQLITE_IOERR_TRUNCATE`, which a just-killed writer causes on Windows only at random
 
 Never replace our own modules or our own CLI with a double. Installer tests use a real, locally built wheel.
 
@@ -99,6 +100,7 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 - **`StoreWorker(crawl_file)`** (`tests/support/store_worker.py`): a `CrawlWriter` in its own process, for the durability scenarios. `insert(*positions)` runs one unit per Seed, `flush()` flushes, and `lock()` holds `BEGIN EXCLUSIVE` on a second connection until the worker dies, which shuts readers out only in rollback-journal mode. Each call returns only when the worker has answered, so a test never sleeps, and each answer has its own `PROCESS_TIMEOUT` watchdog. Its clock is a frozen `FakeClock`, so only a flush or the 500th unit commits. `kill()` kills it (SIGKILL on POSIX, TerminateProcess on Windows). Use it as a context manager: it kills the worker on the way out, even when the test fails.
 - **`slow` marker:** a test that waits real seconds or starts a real process, such as the store worker tests and the 5 s busy read. Nothing deselects it yet; `pytest -m "not slow"` skips them locally.
 - **`unwritable_folder(folder)`** (`tests/support/permissions.py`): a context manager under which no file can be created in a real folder: its mode is `0o555` on POSIX, and a deny entry for Everyone is added with `icacls` on Windows, where the read-only attribute does not protect a folder. It restores the folder afterwards, and skips the test when it runs as root. `read_only_file(file)` in the same module sets a file's real read-only attribute (no write permission on POSIX) and restores it.
+- **`shm_held(monkeypatch, opens)`** (`tests/support/sqlite_faults.py`): the next `opens` SQLite connections (every one for `None`) fail on their first statement with `SQLITE_IOERR_TRUNCATE`, as SQLite 3.50+ does on Windows while a killed writer still holds `-shm`. It replaces `sqlite3.connect`, so create the Crawl before calling it.
 - **`scripted_choice(characters)`** (`tests/support/randomness.py`): the random-source double. It stands in for `secrets.choice`, and each call returns the next of `characters`, so `scripted_choice("k3f9")` makes the crawl id suffix `k3f9`.
 
 ## Quality gates (CI)

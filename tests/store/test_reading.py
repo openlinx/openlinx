@@ -141,3 +141,19 @@ def test_a_file_still_held_by_a_killed_writer_is_read_once_it_is_released(
     shm_held(monkeypatch, opens=2)
 
     assert read_metadata(crawl.path)["id"] == crawl.id
+
+
+def test_a_file_held_past_the_timeout_is_reported_as_crawl_busy(
+    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+    shm_held(monkeypatch, opens=None)
+
+    with pytest.raises(SpiderError) as raised:
+        CrawlWriter(crawl.path, FakeClock(), busy_seconds=0.2)
+
+    assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (
+        "crawl_busy",
+        5,
+        {"file": str(crawl.path)},
+    )
