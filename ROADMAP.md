@@ -279,6 +279,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 - 060: builds the detached Crawl's `CrawlContext` (020 D15) and sets its `StopSignal` from control rows with `requested`.
 - 030 and 040: under 020 D9 and D14, handlers are pure and return store rows declared in `spider.store.*`, and post-crawl passes are store functions (030: `spider.store.pages` and `spider.store.links`; 040: `spider.store.issues`). Their drafts still describe handlers that write in the unit, and sinks; and they add their entries to 020's `default_hooks()`.
 - 024 (v0.2): decide whether 020's apex-to-www rule applies to each Seed of List and Sitemap mode.
+- 022-min: the recorded `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` values must go through 015's URL redaction (`user:***@host`). Today it is the private `_redact_value` in `spider.store.redaction`, so 022 either makes a public `redact_url` or routes the variables through `SecretNames`.
 - 026: re-ground for v0.1; the benchmark runs on Windows, macOS and Linux runners or a stated machine, never as part of the CI gate.
 - 026: `psutil` is no longer a dependency of 015; add it as a test dependency if the pool is built.
 - 020–050: no Alembic revision per change before v0.1; tables are added to the declared schema and `docs/schema.md` in the same slice (015 D5, D6).
