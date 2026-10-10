@@ -10,7 +10,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 
 ## What Changes
 
-> **Re-grounded (2026-10-10)** against the code of `015-add-crawl-store` (groups 1–7 final, on its branch) and the archived `010-add-workspace-and-cli-contract`. It applies the ROADMAP decisions of 2026-10-05: no default `--max-urls`, the robustness rule, 060-min in v0.1, and the four design points of the architecture review (design D12–D15). Where `015`'s groups 8–10 are not built yet (the journal mode and `[store]`, redaction), this change depends on them instead of guessing their interface. The kill-then-continue scenarios moved to `060`, whose `interrupted` state and `resume` cover them.
+> **Re-grounded (2026-10-10)** against the code of `015-add-crawl-store` (groups 1–7 final, on its branch) and the archived `010-add-workspace-and-cli-contract`. It applies the ROADMAP decisions of 2026-10-05: no default `--max-urls`, the robustness rule, 060-min in v0.1, and the four design points of the architecture review (design D12–D15). It uses `015`'s group 8 (the journal mode and `[store]`) as built; where groups 9–10 are not built yet (redaction), this change depends on them instead of guessing their interface. The kill-then-continue scenarios moved to `060`, whose `interrupted` state and `resume` cover them.
 
 - **New Command `spider crawl <url>`** in Spider mode, running in the foreground. A bare host such as `site.test` becomes `https://site.test/`.
 - **URL normalisation:**
@@ -40,7 +40,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 - **Robustness (ROADMAP's rule for every change from 020 on):**
   - one URL never stops the Crawl: request, decoding, extractor and handler failures become the URL's outcome, with counted `parse_failed` and `handler_failed` warnings
   - parsing never trusts its input: the Seed parser, the normaliser, decoding, the link extractor, the directives parser and the robots.txt reader are tested with hypothesis over arbitrary input
-  - backstops: losing the site (`site_unreachable`, exit 8, resumable), a per-request watchdog, and a stop that waits 10 seconds and then cancels
+  - backstops: losing the site (`site_unreachable`, exit 8, resumable), a per-request watchdog that always outlasts the Fetcher's own deadline, and a stop that waits 10 seconds and then cancels
   - hostile fixtures on the fixture site: connection resets, deeply nested HTML, bytes invalid in their charset, 429 and 503 robots.txt
 - **Hooks for later changes:**
   - a **per-response hook**, called once for every URL that reaches a final state. Handlers return rows, and the store writes them in the URL's writer unit.
@@ -101,7 +101,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - `010-add-workspace-and-cli-contract`: the stream rules, diagnostics, partial results (`Outcome`), exit codes, `settings_invalid`, the settings registry and its precedence, `@command_meta` and `OptionMeta`.
   - `015-add-crawl-store`:
     - **groups 1–7 (built):** `create_crawl` with `NewCrawl`, the crawl ids, the `crawl` and `seeds` tables, `set_state`, `CrawlWriter` (`run_async`, `on_commit`, `crawl_busy`, `CrawlWriterClosedError`), the shared column types, `docs/schema.md` and its contract test
-    - **group 8 (not built yet):** the journal-mode choice, the `[store]` table and `store_wal_unavailable`, which the Crawl Service loads and reports with the other settings
+    - **group 8 (built):** `NewCrawl.journal_setting`, the `[store]` table (`StoreSettings.journal_mode`) and `store_wal_unavailable`; the Crawl Service sets the journal setting from `[store]` and reports the warning with the others
     - **group 9 (not built yet):** redaction of the command line and config, which the Crawl Service calls before it creates the Crawl
 - **Used by:**
   - `022` (the engine, the Fetcher interface, the per-host gate, the fake Fetcher, the DNS resolver hook, `urls` and `origins`)

@@ -807,7 +807,7 @@ The Seed parser, URL normalisation, HTML decoding, the link extractor, the robot
 
 ### Requirement: Backstops
 - **The site is lost:** when `max(8, 2 × --concurrency)` requests in a row for Internal URLs end without an HTTP response, the Crawl SHALL start no new request and end as `failed` with `stop_reason` = `site_unreachable`. URLs not requested SHALL stay `queued`, so the Crawl can be continued. A response of any status SHALL reset the count, and requests for External URLs SHALL NOT count. The Command SHALL print the result, write exactly one error diagnostic, with code `site_unreachable` and a hint that mentions network access and sandboxed agents, and exit with code 8.
-- **The watchdog:** a request that has not ended 120 seconds after it started SHALL be cancelled. Its URL SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `watchdog`, and the Crawl SHALL go on.
+- **The watchdog:** a request that has not ended within the watchdog time after it started SHALL be cancelled. The watchdog time SHALL be the longer of 120 seconds and the Fetcher's total request deadline plus 30 seconds, so it never cuts a response that the Fetcher still allows. Its URL SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `watchdog`, and the Crawl SHALL go on. A request ended by the watchdog SHALL count as a request without a response for the site-lost count.
 
 #### Scenario: Losing the site fails the Crawl
 - **WHEN** `/` links to `/p1` and to `/down/1` to `/down/20`, every `/down/<n>` resets its connection before answering, and `spider crawl {site}/ --concurrency 1` runs
@@ -822,7 +822,7 @@ The Seed parser, URL normalisation, HTML decoding, the link extractor, the robot
 - **THEN** the Crawl ends with the Crawl State `completed`
 
 #### Scenario: A stuck request is ended by the watchdog
-- **WHEN** a fake Fetcher never answers for `{site}/stuck`, `/` links to `/stuck` and `/ok`, and the Crawl runs with a fake clock that passes 120 seconds
+- **WHEN** a fake Fetcher never answers for `{site}/stuck`, `/` links to `/stuck` and `/ok`, and the Crawl runs with the default settings and a fake clock that passes 120 seconds
 - **THEN** `{site}/stuck` has `fetch_state` = `error` and `fetch_error` = `watchdog`, and the Crawl State is `completed`
 
 ### Requirement: Progress events

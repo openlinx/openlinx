@@ -84,7 +84,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - the Crawl Service's start operation creates the Crawl with `015`'s `create_crawl`, and builds the `CrawlContext` (design D15) in one place, opening and closing `CrawlWriter` through `asyncio.to_thread`
   - the `Fetcher` Protocol (design D8) has a one-hop aiohttp implementation
   - the first `urls` columns (`id`, `url`, `host`, `crawl_depth`, `discovered_via`, `fetch_state`, `status_code`) are declared, with their `docs/schema.md` rows
-  - every writer unit is defined in a `spider.store.*` module, and a guard refuses `sqlalchemy` elsewhere in `src/` (design D14)
+  - every writer unit is defined in a `spider.store.*` module, and ruff's banned-API rule (TID251) bans `sqlalchemy` in `src/`, with per-file-ignores for `src/spider/store/**` and `src/spider/services/schema.py` (design D14)
 - [ ] 4.3 **Guard:** "The Seed is kept as given in seeds", at seam 3+6. `015`'s `create_crawl` writes the Seeds as given.
 - [ ] 4.4 Drive "Pages linked from the Seed are crawled" at seam 3+6.
 
@@ -102,11 +102,14 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 4.11 Drive "The recorded config holds every registered crawl setting" at seam 2.
 
   Done when: `[crawl]` is registered in `build_app` as `"spider.crawl.settings:CrawlSettings"` and passes `010`'s table-rules test, every crawl option declares its setting with `OptionMeta(setting=...)`, `max_urls`, `max_depth` and `rate` default to `None`, and `NewCrawl.config` holds every registered table.
-- [ ] 4.12 Drive "spider.toml sets a crawl setting" and "A flag overrides spider.toml" at seam 1, a trivial pair.
-- [ ] 4.13 Drive "Response timing is recorded" at seam 3+6.
-- [ ] 4.14 Drive "The Content-Type is recorded as received" at seam 3+6.
-- [ ] 4.15 Docs: write the `spider crawl` reference in `docs/crawling.md` (the result fields, the event table, exit codes, `[crawl]` keys), and the `urls` and `crawl` columns so far in `docs/schema.md`.
-- [ ] 4.16 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [ ] 4.12 Wire `015`'s journal mode (group 8), at seam 2.
+
+  Done when: the Crawl Service sets `NewCrawl.journal_setting` from the resolved `[store] journal_mode`, so `[store] journal_mode = "delete"` gives `crawl.journal_mode` = `delete`, and a `store_wal_unavailable` warning that `create_crawl` reports reaches the result's `warnings` (and `crawl.warnings` once task 12.3 declares it).
+- [ ] 4.13 Drive "spider.toml sets a crawl setting" and "A flag overrides spider.toml" at seam 1, a trivial pair.
+- [ ] 4.14 Drive "Response timing is recorded" at seam 3+6.
+- [ ] 4.15 Drive "The Content-Type is recorded as received" at seam 3+6.
+- [ ] 4.16 Docs: write the `spider crawl` reference in `docs/crawling.md` (the result fields, the event table, exit codes, `[crawl]` keys), and the `urls` and `crawl` columns so far in `docs/schema.md`.
+- [ ] 4.17 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Hooks, and one URL never stops the Crawl (slice)
 
@@ -232,22 +235,24 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 12.1 Drive "Every stderr line is an event or a diagnostic" at seam 1.
 - [ ] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
-- [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared.
+- [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared, and holds every warning of the result, `store_wal_unavailable` included.
 - [ ] 12.4 Drive "Progress events come every 10 seconds", fake timing.
 - [ ] 12.5 Drive "Events are UTF-8 on Windows (Windows)" at seam 1, subprocess, Windows in CI.
 - [ ] 12.6 Drive "An unreachable Seed fails the Crawl" at seam 1. Done when: the `failed` end goes through `check_transition` with `seed_unreachable`, and the adapter returns the result as an `Outcome`.
 - [ ] 12.7 Drive "An unreachable Seed is reported by one error" at seam 1. Done when: `seed_unreachable` is declared, with a hint about network access and sandboxed agents.
 - [ ] 12.8 Drive "Post-crawl passes do not run for a failed Crawl" at seam 2.
-- [ ] 12.9 Dependency: wire `015`'s groups 8 and 9 once they land.
+- [ ] 12.9 Dependency: wire `015`'s redaction (group 9) once it lands.
 
-  Done when: the Crawl Service redacts the command line and config with `015`'s function before `create_crawl`, collecting secret flag names with `options_with_meta`, and a `store_wal_unavailable` warning reported while the Crawl is created reaches the result and `crawl.warnings`. Must land before `022`-min records the proxy variables.
+  Done when: the Crawl Service redacts the command line and config with `015`'s function before `create_crawl`, collecting secret flag names with `options_with_meta`. Must land before `022`-min records the proxy variables.
 - [ ] 12.10 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
 
   Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5).
 - [ ] 12.11 Drive "Losing the site fails the Crawl" at seam 1, with the reset route of task 5.11. Done when: the count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without a response.
 - [ ] 12.12 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared.
 - [ ] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
-- [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing. Done when: `watchdog` is a `fetch_error` value, and the watchdog waits on the context's `Clock`.
+- [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing.
+
+  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without a response for the site-lost count.
 - [ ] 12.15 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), and the backstops in `docs/crawling.md`.
 - [ ] 12.16 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
 
