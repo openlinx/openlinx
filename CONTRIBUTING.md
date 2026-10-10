@@ -81,7 +81,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 9. `openspec validate --all --strict`, with telemetry off.
 10. `node --test "tests/js/**/*.test.mjs"`.
 
-`uv run scripts/check.py` runs the gate commands of steps 4–6, 9 and 10 locally. Pytest runs with the `dev` hypothesis profile. Steps 9 and 10 are skipped when `openspec` or `node` is not on `PATH`.
+`uv run scripts/check.py` runs the gate commands of steps 4–6, 9 and 10 locally. It also runs mypy for Linux and macOS (`--platform linux` and `darwin`, each with its own cache), because some standard-library types differ per platform and CI's other cells would catch what a single OS misses. Pytest runs with the `dev` hypothesis profile. Steps 9 and 10 are skipped when `openspec` or `node` is not on `PATH`.
 
 ## Adding a dependency
 
