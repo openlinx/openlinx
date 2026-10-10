@@ -1,5 +1,6 @@
 """A writer in its own process, run and killed by durability tests (015-add-crawl-store)."""
 
+import os
 import subprocess
 import sys
 import threading
@@ -12,6 +13,7 @@ from spider.store.writer import CrawlWriter
 from tests.support.cli import PROCESS_TIMEOUT, REPO_ROOT
 from tests.support.clock import FakeClock
 from tests.support.crawls import insert_seed
+from tests.support.processes import python_command
 
 READY = "ok"
 
@@ -23,14 +25,17 @@ class StoreWorker:
     """
 
     def __init__(self, crawl_file: Path) -> None:
+        command = python_command("-m", "tests.support.store_worker", str(crawl_file))
         self.process = subprocess.Popen(
-            [sys.executable, "-m", "tests.support.store_worker", str(crawl_file)],
+            command.argv,
             cwd=REPO_ROOT,
+            env=command.env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             text=True,
         )
-        self._send("open")
+        # The process that holds the crawl file, which a kill must reach.
+        self.pid = int(self._ask("open"))
 
     def insert(self, *positions: int) -> None:
         """One unit per Seed, each inserting the Seed at that position."""
@@ -63,6 +68,11 @@ class StoreWorker:
             self.kill()
 
     def _send(self, command: str) -> None:
+        answer = self._ask(command)
+        if answer != READY:
+            raise RuntimeError(f"The store worker answered {answer!r} to {command!r}.")
+
+    def _ask(self, command: str) -> str:
         stdin, stdout = self.process.stdin, self.process.stdout
         assert stdin is not None
         assert stdout is not None
@@ -73,11 +83,12 @@ class StoreWorker:
         try:
             stdin.write(command + "\n")
             stdin.flush()
-            answer = stdout.readline().strip()
+            answer: str = stdout.readline().strip()
         finally:
             watchdog.cancel()
-        if answer != READY:
-            raise RuntimeError(f"The store worker answered {answer!r} to {command!r}.")
+        if not answer:
+            raise RuntimeError(f"The store worker ended before answering {command!r}.")
+        return answer
 
 
 def main(crawl_file: Path) -> None:
@@ -94,7 +105,10 @@ def main(crawl_file: Path) -> None:
                 locker.execute("BEGIN EXCLUSIVE")
             elif command == "flush":
                 writer.flush()
-            elif command != "open":
+            elif command == "open":
+                print(os.getpid(), flush=True)
+                continue
+            else:
                 print(f"unknown command {command}", flush=True)
                 continue
             print(READY, flush=True)

@@ -24,6 +24,15 @@ COUNT = "SELECT count(*) FROM seeds"
 SHORT_BUSY_SECONDS = 0.2
 
 
+def test_a_store_worker_is_the_writer_process_itself(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with StoreWorker(crawl.path) as worker:
+        writer = worker.pid
+
+    assert writer == worker.process.pid
+
+
 def test_a_killed_writer_keeps_committed_units_in_a_sound_file(
     temp_workspace: TempWorkspace,
 ) -> None:
