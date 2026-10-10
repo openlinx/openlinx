@@ -32,6 +32,27 @@ def test_forced_rollback_journal_on_a_local_path() -> None:
     assert (choice.mode, choice.warning) == ("delete", None)
 
 
+def test_a_local_extended_length_path() -> None:
+    choice = choose_journal_mode("auto", PureWindowsPath(r"\\?\C:\site\.spider"))
+
+    assert (choice.mode, choice.warning) == ("wal", None)
+
+
+def test_a_local_device_path() -> None:
+    choice = choose_journal_mode("auto", PureWindowsPath(r"\\.\C:\site\.spider"))
+
+    assert (choice.mode, choice.warning) == ("wal", None)
+
+
+def test_an_extended_length_unc_path() -> None:
+    choice = choose_journal_mode("auto", PureWindowsPath(r"\\?\UNC\fileserver\share\site\.spider"))
+
+    assert (choice.mode, choice.warning and choice.warning.code) == (
+        "delete",
+        "store_wal_unavailable",
+    )
+
+
 LOCAL = PureWindowsPath(r"C:\site\.spider")
 
 

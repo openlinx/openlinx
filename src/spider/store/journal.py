@@ -18,8 +18,7 @@ class JournalChoice:
 def choose_journal_mode(setting: JournalSetting, location: PurePath) -> JournalChoice:
     if setting != "auto":
         return JournalChoice(setting)
-    # \\?\UNC\host\share starts with \\ too.
-    if not str(location).startswith(("\\\\", "//")):
+    if not _is_unc(location):
         return JournalChoice("wal")
     return JournalChoice(
         "delete",
@@ -32,6 +31,15 @@ def choose_journal_mode(setting: JournalSetting, location: PurePath) -> JournalC
             details={"path": str(location)},
         ),
     )
+
+
+def _is_unc(location: PurePath) -> bool:
+    path = str(location).replace("/", "\\")
+    # The extended-length and device prefixes name a share only as \\?\UNC\; \\?\C:\ is local,
+    # and a false UNC answer would cost a local user WAL (design D3).
+    if path.startswith(("\\\\?\\", "\\\\.\\")):
+        return path[4:].upper().startswith("UNC\\")
+    return path.startswith("\\\\")
 
 
 def confirm_journal_mode(choice: JournalChoice, granted: str, location: PurePath) -> JournalChoice:

@@ -141,7 +141,7 @@ A new crawl file gets its SQLite journal mode once, when it is created, and `cra
 | `"delete"` | `delete` | `delete` |
 
 - **WAL** (write-ahead logging) lets a Command read a Crawl while it is written. It relies on shared memory between processes, which network file systems do not provide safely, so SQLite advises against WAL on them.
-- **A UNC path** is a data folder whose path starts with `\\` or `//`, such as `\\fileserver\share\site\.spider`, including `\\?\UNC\…` paths. Only the path is read; nothing is asked of the system. There `"auto"` falls back to a rollback journal (`delete`) and warns with `store_wal_unavailable`, whose `details.path` names the data folder. In that mode a write shuts readers out (see [Reading a Crawl](#reading-a-crawl)).
+- **A UNC path** is a data folder whose path starts with `\\` or `//`, such as `\\fileserver\share\site\.spider`, including `\\?\UNC\…` paths; the drive forms `\\?\C:\…` and `\\.\C:\…` are local. Only the path is read; nothing is asked of the system. There `"auto"` falls back to a rollback journal (`delete`) and warns with `store_wal_unavailable`, whose `details.path` names the data folder. In that mode a write shuts readers out (see [Reading a Crawl](#reading-a-crawl)).
 - **Other network folders,** such as a mapped drive (`Z:`) or an SMB or NFS mount, are not detected in v0.1, so they get WAL. Choose the rollback journal for them yourself:
 
   ```toml
