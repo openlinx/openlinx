@@ -440,7 +440,7 @@ In `delete` mode, a reader that cannot read within 5 seconds because a write is 
 
 In either mode, a writer that cannot write within 30 seconds because another connection holds the crawl file, on opening, on starting a transaction, while a unit runs or on committing, SHALL fail with `crawl_busy`. In both cases `details.file` SHALL name the crawl file.
 
-On Windows, the process of a killed writer can still hold the crawl file's `-shm` file for a moment after it has ended, and SQLite then reports `SQLITE_IOERR_TRUNCATE` when the file is opened. Opening a crawl file, for a reader or the writer, SHALL wait for such a file within the same timeout as for a lock (5 seconds for a reader, 30 for the writer) and then fail with `crawl_busy`, never with `crawl_file_invalid` or a disk I/O error.
+On Windows, while the process of a killed writer is still exiting, it can still hold the crawl file's `-shm` file, and SQLite then reports `SQLITE_IOERR_TRUNCATE` when the file is opened. Opening a crawl file, for a reader or the writer, SHALL wait for such a file within the same timeout as for a lock (5 seconds for a reader, 30 for the writer) and then fail with `crawl_busy`, never with `crawl_file_invalid` or a disk I/O error.
 
 #### Scenario: Reading during a write in WAL mode
 - **WHEN** a writer process has committed 3 Seed rows and keeps its writer open, and another process reads `seeds`
