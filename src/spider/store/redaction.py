@@ -21,7 +21,10 @@ def redact(argv: Sequence[str], config: Mapping[str, Any], secrets: SecretNames)
 
 def _redact_argv(argv: Sequence[str], flags: frozenset[str]) -> list[str]:
     redacted = list(argv)
-    for index in range(1, len(redacted)):
-        if argv[index - 1] in flags:
+    for index, argument in enumerate(argv):
+        flag, joined, _ = argument.partition("=")
+        if joined and flag in flags:
+            redacted[index] = f"{flag}={REDACTED}"
+        elif index > 0 and argv[index - 1] in flags:
             redacted[index] = REDACTED
     return redacted

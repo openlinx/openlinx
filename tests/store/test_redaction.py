@@ -13,3 +13,9 @@ def test_secret_option_with_a_separate_value() -> None:
     redacted = redact(["spider", "example-settings", "--token", "s3cret"], {}, EXAMPLE_SECRETS)
 
     assert redacted.command_argv == ["spider", "example-settings", "--token", "***"]
+
+
+def test_secret_option_with_a_joined_value() -> None:
+    redacted = redact(["spider", "example-settings", "--api-key=s3cret"], {}, EXAMPLE_SECRETS)
+
+    assert redacted.command_argv == ["spider", "example-settings", "--api-key=***"]
