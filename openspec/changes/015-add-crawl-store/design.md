@@ -62,8 +62,8 @@
 
 ### D3. Journal mode
 
-- **One pure function** chooses the mode from the setting and the location, and returns the mode and an optional warning. A location is a UNC path when it starts with `\\` or `//`, which also covers `\\?\UNC\`. No system call is made.
-- **Defensive fallback:** after asking for WAL, the store checks that `PRAGMA journal_mode=WAL` returned `wal`. If it did not, it falls back to `delete` with the same warning. No scenario covers this, because no test can make SQLite refuse.
+- **One pure function** chooses the mode from the setting and the location, and returns the mode and an optional warning. A location is a UNC path when it starts with `\\` or `//`, which also covers `\\?\UNC\`; the drive forms `\\?\C:\` and `\\.\C:\` are local, because a false UNC answer silently costs a local user WAL, and with it reading while a Crawl is written. No system call is made.
+- **Defensive fallback:** after asking for WAL, the store checks the mode `PRAGMA journal_mode` returned with a second pure function, `confirm_journal_mode(choice, granted, location)`: anything but `wal` for a `wal` request becomes `delete` with the same warning, and the store then sets `PRAGMA journal_mode = DELETE` and records the mode granted. `create_crawl_file` returns the confirmed choice, and the Crawl service reports its warning. The pure function has scenarios at seam 4; the wiring has none, because no test can make SQLite refuse WAL.
 - **The integration test** runs on Windows through the admin share `\\localhost\C$`, which is a real UNC path. It is skipped when the share is not reachable.
 - **The `[store]` settings table** is registered in `build_app` as `("store", "spider.store.settings:StoreSettings")`. It is the first real table of the registry, so the table-rules test of 010 D2 covers it.
 - **`080`'s doctor** calls the same function for its WAL check.

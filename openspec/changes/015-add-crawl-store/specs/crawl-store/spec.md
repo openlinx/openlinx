@@ -352,7 +352,7 @@ A new crawl file SHALL use the journal mode chosen from the setting `store.journ
 | `"wal"` | `wal` | `wal`, with no warning |
 | `"delete"` | `delete` | `delete`, with no warning |
 
-A UNC path is one that starts with `\\` or `//`. `crawl.journal_mode` SHALL record the mode used. When SQLite does not grant the WAL mode it was asked for, the file SHALL use `delete` with the same warning.
+A UNC path is one that starts with `\\` or `//`, such as `\\host\share`, `//host/share` and the extended-length form `\\?\UNC\host\share`. The extended-length and device forms of a drive path, `\\?\C:\` and `\\.\C:\`, are local. `crawl.journal_mode` SHALL record the mode used. When SQLite does not grant the WAL mode it was asked for, the file SHALL use `delete` with the same warning.
 
 #### Scenario: UNC path
 - **WHEN** the journal mode is chosen for `"auto"` and the location `\\fileserver\share\site\.spider`
@@ -369,6 +369,26 @@ A UNC path is one that starts with `\\` or `//`. `crawl.journal_mode` SHALL reco
 #### Scenario: Forced rollback journal on a local path
 - **WHEN** the journal mode is chosen for `"delete"` and the location `/home/ann/site/.spider`
 - **THEN** it is `delete`, with no warning
+
+#### Scenario: WAL refused by SQLite
+- **WHEN** the journal mode `wal` was asked for in the location `C:\site\.spider`, and SQLite granted `memory`
+- **THEN** it is `delete`, with the warning `store_wal_unavailable`
+
+#### Scenario: WAL granted by SQLite
+- **WHEN** the journal mode `wal` was asked for in the location `C:\site\.spider`, and SQLite granted `wal`
+- **THEN** it is `wal`, with no warning
+
+#### Scenario: A local extended-length path
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\?\C:\site\.spider`
+- **THEN** it is `wal`, with no warning
+
+#### Scenario: A local device path
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\.\C:\site\.spider`
+- **THEN** it is `wal`, with no warning
+
+#### Scenario: An extended-length UNC path
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\?\UNC\fileserver\share\site\.spider`
+- **THEN** it is `delete`, with the warning `store_wal_unavailable`
 
 #### Scenario: Local disk
 - **WHEN** a Crawl is created in a Workspace inside the test's temporary folder on the local disk
@@ -396,7 +416,7 @@ In `wal` mode, a process SHALL be able to read a Crawl while another process wri
 
 In `delete` mode, a reader that cannot read within 5 seconds because a write is in progress SHALL fail with `crawl_busy` instead of waiting longer.
 
-In either mode, a writer that cannot write within 30 seconds because another connection holds the crawl file, on opening, on starting a transaction or while a unit runs, SHALL fail with `crawl_busy`. In both cases `details.file` SHALL name the crawl file.
+In either mode, a writer that cannot write within 30 seconds because another connection holds the crawl file, on opening, on starting a transaction, while a unit runs or on committing, SHALL fail with `crawl_busy`. In both cases `details.file` SHALL name the crawl file.
 
 #### Scenario: Reading during a write in WAL mode
 - **WHEN** a writer process has committed 3 Seed rows and keeps its writer open, and another process reads `seeds`

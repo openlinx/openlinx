@@ -178,6 +178,13 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 8.7 Docs: add the journal mode, the UNC fallback, the `store.journal_mode` override for other network folders, the v0.2 plan for the mount table, and the writer's `crawl_busy` after 30 s to `docs/crawl-store.md`.
 - [x] 8.8 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
+Tasks 8.9 and 8.10 are the manager's rulings A and C on group 8's review; group 9's review covers them.
+
+- [ ] 8.9 Drive "WAL refused by SQLite" and "WAL granted by SQLite" at seam 4, a trivial pair.
+
+  Done when: the confirmation is a pure function of the choice, the granted mode and the location; `create_crawl_file` sets `delete` when it says so, records the mode SQLite granted and returns the confirmed choice, whose warning the Crawl service reports (untested wiring, D3).
+- [ ] 8.10 Drive "A local extended-length path" and "A local device path" at seam 4, a trivial pair, with "An extended-length UNC path" as a guard.
+
 ## 9. Redaction (widening, before `022`-min)
 
 - [ ] 9.1 Drive "Secret option with a separate value" at seam 4.
