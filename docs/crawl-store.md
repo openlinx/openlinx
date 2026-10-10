@@ -1,6 +1,6 @@
 # The crawl store
 
-How `spider` stores each Crawl. The spec is [openspec/changes/015-add-crawl-store/specs/crawl-store/spec.md](../openspec/changes/015-add-crawl-store/specs/crawl-store/spec.md), and the tables are documented in [schema.md](schema.md). Terms follow [CONTEXT.md](../CONTEXT.md).
+How `spider` stores each Crawl. The spec is [openspec/specs/crawl-store/spec.md](../openspec/specs/crawl-store/spec.md), and the tables are documented in [schema.md](schema.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
 ## Crawl files
 
