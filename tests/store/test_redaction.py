@@ -40,3 +40,9 @@ def test_secret_setting() -> None:
     redacted = redact([], {"example": {"level": "high", "token": "s3cret"}}, EXAMPLE_SECRETS)
 
     assert redacted.config == {"example": {"level": "high", "token": "***"}}
+
+
+def test_other_values_are_kept() -> None:
+    redacted = redact(["spider", "example-settings", "--level", "high"], {}, EXAMPLE_SECRETS)
+
+    assert redacted.command_argv == ["spider", "example-settings", "--level", "high"]
