@@ -2,7 +2,7 @@
 
 import functools
 import inspect
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -116,19 +116,7 @@ def check_command(command: Callable[..., Any]) -> CommandMeta:
     default_format = declared.get(FORMAT_PARAMETER)
     if default_format is not None and (default_format.default,) != meta.formats[:1]:
         problems.append("its --format default is not the first of its formats")
-    problems += [
-        f"{name} declares secret, which its setting {extra.setting} decides"
-        for name in declared
-        if (extra := option_meta(command, name)).setting is not None and extra.secret
-    ]
-    # The attached short form (-tVALUE) would slip past redaction (design D7 of 015).
-    problems += [
-        f"{name} is secret, so it cannot have the short name {short}"
-        for name in declared
-        if option_meta(command, name).secret
-        for short in option_names(command, name)
-        if not short.startswith("--")
-    ]
+    problems += _secret_problems(command, declared)
     if (meta.output == "document") != (meta.fields is None):
         problems.append("fields belong to list and rows Commands only")
     elif meta.fields is not None and not set(meta.fields.default) <= set(meta.fields.available):
@@ -136,6 +124,23 @@ def check_command(command: Callable[..., Any]) -> CommandMeta:
     if problems:
         raise TypeError(f"Command {command.__name__}: {'; '.join(problems)}.")
     return meta
+
+
+def _secret_problems(command: Callable[..., Any], names: Iterable[str]) -> list[str]:
+    problems = []
+    for name in names:
+        extra = option_meta(command, name)
+        if not extra.secret:
+            continue
+        if extra.setting is not None:
+            problems.append(f"{name} declares secret, which its setting {extra.setting} decides")
+        # The attached short form (-tVALUE) would slip past redaction (design D7 of 015).
+        problems += [
+            f"{name} is secret, so it cannot have the short name {short}"
+            for short in option_names(command, name)
+            if not short.startswith("--")
+        ]
+    return problems
 
 
 def formats_hint(meta: CommandMeta) -> str:

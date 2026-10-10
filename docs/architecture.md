@@ -90,7 +90,7 @@ Frontier ──► Scheduler ──► Fetcher ──► Parse pool ──► Ru
   - **`--crawl` resolution:** `spider.store.selection.resolve_crawl` turns `latest`, an id or a path into a crawl file, and `spider.store.reading.reading` opens one read-only for a single operation, refusing a file from a newer tool.
   - **The schema service:** `spider.services.schema.describe_schema` describes the public tables for `spider schema` and the MCP server.
   - **Redaction:** `spider.store.redaction.redact`, with the secret names that the adapter creating a Crawl collects through `spider.cli.options.secret_names`, from the secret settings and options already declared.
-  - `spider.store.connections` is the only code that opens a crawl file: one engine per operation, disposed after it, so no handle outlives the operation.
+  - After the exclusive create of a new file, `spider.store.connections` is the only code that opens a crawl file: one engine per operation, disposed after it, so no handle outlives the operation.
 - **Schema definition:** SQLAlchemy 2 Core tables in `spider.store.schema` are the single definition ([ADR-0003](adr/0003-sqlalchemy-core-not-orm.md)). They drive batched inserts, safe `--where` → SQL translation (only known columns), and the SQL reference (`spider schema`, the Skill).
   - Every table and column has a description, because the descriptions feed that reference.
 - **The three-way schema check,** so the documentation, the code and the files cannot drift apart:

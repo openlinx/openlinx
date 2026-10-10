@@ -32,11 +32,12 @@ class NewCrawl:
     command_argv: Sequence[str]
     cwd: Path
     config: Mapping[str, Any]
-    # No default: a creator that forgot its secrets would record them.
+    # No defaults: a creator that forgot its secrets would record them, and one that forgot the
+    # store.journal_mode setting would silently ignore it.
     secret_names: SecretNames
+    journal_setting: JournalSetting
     settings_file: Path | None = None
     section_crawl: bool = False
-    journal_setting: JournalSetting = "auto"
 
 
 @dataclass(frozen=True)

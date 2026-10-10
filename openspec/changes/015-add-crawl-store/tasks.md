@@ -214,4 +214,4 @@ Tasks 10.1 and 10.2 are the manager's addition after group 9's review: the attac
   - `docs/architecture.md`: the store's public API (creating a Crawl, the writer, `--crawl` resolution, the schema service, redaction), the three-way schema check, and that `sqlalchemy` stays off the startup path
   - `CONTRIBUTING.md`: "Changing the crawl store schema": the declared table and `docs/schema.md` in the same slice; no migration before v0.1; from v0.1 on, a migration and a test from every published schema version
   - link `docs/schema.md` and `docs/crawl-store.md` from `README.md`
-- [ ] 10.5 Review: run the code-review skill on group 10's commits and on the whole change, then refactor with the whole suite green.
+- [x] 10.5 Review: run the code-review skill on group 10's commits and on the whole change, then refactor with the whole suite green.

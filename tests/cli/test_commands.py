@@ -131,6 +131,7 @@ def test_store_codes_are_self_described() -> None:
         "crawl_schema_too_new": 6,
         "crawl_not_writable": 7,
         "unknown_table": 2,
+        "store_wal_unavailable": None,
     }
 
     assert {code: diagnostics[code]["exit_code"] for code in expected} == expected

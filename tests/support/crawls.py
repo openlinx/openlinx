@@ -40,6 +40,7 @@ def new_crawl(workspace: Workspace) -> NewCrawl:
         cwd=workspace.root,
         config={},
         secret_names=SecretNames(),
+        journal_setting="auto",
     )
 
 

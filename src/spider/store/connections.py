@@ -29,18 +29,21 @@ NOT_WRITABLE = {
 
 def not_writable_name(error: BaseException) -> str | None:
     """SQLite's name for the error when it says a file cannot be written, otherwise None."""
-    cause = error.orig if isinstance(error, DBAPIError) else error
-    code = getattr(cause, "sqlite_errorcode", None)
+    cause, code = _sqlite_code(error)
     if code is None or code & 0xFF not in NOT_WRITABLE:
         return None
     return str(getattr(cause, "sqlite_errorname", code))
 
 
 def is_busy(error: BaseException) -> bool:
-    cause = error.orig if isinstance(error, DBAPIError) else error
+    _, code = _sqlite_code(error)
     # Masked to the primary code, so BUSY_RECOVERY and BUSY_SNAPSHOT count too.
-    code = getattr(cause, "sqlite_errorcode", None)
     return code is not None and code & 0xFF == sqlite3.SQLITE_BUSY
+
+
+def _sqlite_code(error: BaseException) -> tuple[object, int | None]:
+    cause = error.orig if isinstance(error, DBAPIError) else error
+    return cause, getattr(cause, "sqlite_errorcode", None)
 
 
 def busy_error(path: Path, action: str, seconds: float, error: BaseException) -> SpiderError:
