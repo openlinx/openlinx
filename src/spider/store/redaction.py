@@ -17,7 +17,7 @@ class Redacted:
 
 
 def redact(argv: Sequence[str], config: Mapping[str, Any], secrets: SecretNames) -> Redacted:
-    return Redacted(_redact_argv(argv, secrets.flags), dict(config))
+    return Redacted(_redact_argv(argv, secrets.flags), _redact_config(config, secrets.settings))
 
 
 def _redact_argv(argv: Sequence[str], flags: frozenset[str]) -> list[str]:
@@ -29,6 +29,19 @@ def _redact_argv(argv: Sequence[str], flags: frozenset[str]) -> list[str]:
         elif index > 0 and argv[index - 1] in flags:
             redacted[index] = _redact_value(argument)
     return redacted
+
+
+def _redact_config(config: Mapping[str, Any], settings: frozenset[str]) -> dict[str, Any]:
+    # An unset secret stays None: there is nothing to hide, and *** would claim a value.
+    return {
+        table: {
+            key: _redact_value(value)
+            if value is not None and f"{table}.{key}" in settings
+            else value
+            for key, value in values.items()
+        }
+        for table, values in config.items()
+    }
 
 
 def _redact_value(value: str) -> str:

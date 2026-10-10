@@ -34,3 +34,9 @@ def test_a_url_keeps_everything_but_its_password() -> None:
         "--token",
         "http://ann:***@proxy.test:8080",
     ]
+
+
+def test_secret_setting() -> None:
+    redacted = redact([], {"example": {"level": "high", "token": "s3cret"}}, EXAMPLE_SECRETS)
+
+    assert redacted.config == {"example": {"level": "high", "token": "***"}}
