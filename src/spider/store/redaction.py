@@ -32,16 +32,20 @@ def _redact_argv(argv: Sequence[str], flags: frozenset[str]) -> list[str]:
 
 
 def _redact_config(config: Mapping[str, Any], settings: frozenset[str]) -> dict[str, Any]:
-    # An unset secret stays None: there is nothing to hide, and *** would claim a value.
     return {
         table: {
-            key: _redact_value(value)
-            if value is not None and f"{table}.{key}" in settings
-            else value
+            key: _redact_setting(value) if f"{table}.{key}" in settings else value
             for key, value in values.items()
         }
         for table, values in config.items()
     }
+
+
+def _redact_setting(value: Any) -> Any:
+    # An unset secret stays None: there is nothing to hide, and *** would claim a value.
+    if value is None:
+        return None
+    return _redact_value(value) if isinstance(value, str) else REDACTED
 
 
 def _redact_value(value: str) -> str:

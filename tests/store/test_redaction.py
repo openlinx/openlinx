@@ -75,6 +75,12 @@ def test_a_malformed_secret_url() -> None:
     assert redacted.command_argv == ["spider", "example-settings", "--token", "***"]
 
 
+def test_a_secret_setting_that_is_not_a_string() -> None:
+    redacted = redact([], {"example": {"token": 12345}}, EXAMPLE_SECRETS)
+
+    assert redacted.config == {"example": {"token": "***"}}
+
+
 def example_secret_names() -> SecretNames:
     """Read from the test app's declarations, as the adapter that creates a Crawl reads its own."""
     group = cast(SpiderGroup, typer.main.get_group(example_app()))

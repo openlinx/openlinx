@@ -201,7 +201,7 @@ Tasks 8.9 and 8.10 are the manager's rulings A and C on group 8's review; group 
 Tasks 9.9 and 9.10 come from group 9's review, before its refactor commit closes 9.8.
 
 - [x] 9.9 **Guard:** "An unset secret stays null" and "A malformed secret URL" at seam 4, a trivial pair: both branches were written in 9.3 and 9.4 without a scenario.
-- [ ] 9.10 Drive "A secret setting that is not a string" at seam 4.
+- [x] 9.10 Drive "A secret setting that is not a string" at seam 4.
 
 ## 10. Wrap-up
 
