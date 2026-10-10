@@ -59,6 +59,22 @@ def test_other_values_are_kept() -> None:
     assert redacted.command_argv == ["spider", "example-settings", "--level", "high"]
 
 
+def test_an_unset_secret_stays_null() -> None:
+    redacted = redact([], {"example": {"level": "high", "token": None}}, EXAMPLE_SECRETS)
+
+    assert redacted.config == {"example": {"level": "high", "token": None}}
+
+
+def test_a_malformed_secret_url() -> None:
+    redacted = redact(
+        ["spider", "example-settings", "--token", "http://[ann:s3cret@proxy.test"],
+        {},
+        EXAMPLE_SECRETS,
+    )
+
+    assert redacted.command_argv == ["spider", "example-settings", "--token", "***"]
+
+
 def example_secret_names() -> SecretNames:
     """Read from the test app's declarations, as the adapter that creates a Crawl reads its own."""
     group = cast(SpiderGroup, typer.main.get_group(example_app()))
