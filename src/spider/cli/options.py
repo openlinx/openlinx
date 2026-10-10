@@ -80,11 +80,11 @@ def is_secret_option(extra: OptionMeta, tables: SettingsTables) -> bool:
 
 
 def secret_names(command: Command, tables: SettingsTables) -> SecretNames:
-    """What a Crawl created by this Command redacts: its secret flags and all secret settings."""
     flags = frozenset(
         name
         for param, extra in options_with_meta(command)
         if is_secret_option(extra, tables)
         for name in param.opts
     )
+    # Every secret setting, not only this Command's: crawl.config records every table.
     return SecretNames(flags, tables.secret_settings())

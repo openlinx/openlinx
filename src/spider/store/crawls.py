@@ -31,7 +31,8 @@ def create_crawl_file(
         crawl_file = _claim_new_file(workspace.crawls_dir, started_at, choice)
         try:
             with _sqlite_not_writable(crawl_file.path):
-                journal = _write_new_file(crawl_file, request, started_at, journal)
+                journal, granted = _set_journal_mode(crawl_file.path, journal, workspace.data_dir)
+                _write_new_file(crawl_file, request, started_at, granted)
         except BaseException:
             # A claimed file left empty would break --crawl latest in this Workspace.
             crawl_file.path.unlink()
@@ -56,16 +57,23 @@ def _claim_new_file(crawls_dir: Path, started_at: datetime, choice: Choice) -> C
         return CrawlFile(crawl_id, path)
 
 
-def _write_new_file(
-    crawl_file: CrawlFile, request: NewCrawl, started_at: datetime, journal: JournalChoice
-) -> JournalChoice:
+def _set_journal_mode(
+    path: Path, journal: JournalChoice, location: Path
+) -> tuple[JournalChoice, str]:
+    """The confirmed choice, and the mode SQLite granted."""
     # The journal mode belongs to the file, so it is set once, outside any transaction.
-    with closing(connect(crawl_file.path)) as connection:
+    with closing(connect(path)) as connection:
         (granted,) = connection.execute(f"PRAGMA journal_mode = {journal.mode}").fetchone()
-        journal = confirm_journal_mode(journal, granted, request.workspace.data_dir)
-        if granted != journal.mode:
+        confirmed = confirm_journal_mode(journal, granted, location)
+        if granted != confirmed.mode:
             # SQLite refused WAL; no test can make it refuse (design D3).
             (granted,) = connection.execute("PRAGMA journal_mode = DELETE").fetchone()
+    return confirmed, granted
+
+
+def _write_new_file(
+    crawl_file: CrawlFile, request: NewCrawl, started_at: datetime, journal_mode: str
+) -> None:
     settings_file = request.settings_file
     with opening(crawl_file.path) as engine, engine.begin() as connection:
         metadata.create_all(connection)
@@ -83,7 +91,7 @@ def _write_new_file(
                 config=dict(request.config),
                 tool_version=__version__,
                 schema_version=SCHEMA_VERSION,
-                journal_mode=granted,
+                journal_mode=journal_mode,
                 python_version=platform.python_version(),
                 platform=platform.platform(),
             )
@@ -95,7 +103,6 @@ def _write_new_file(
                 for position, url in enumerate(request.seeds, start=1)
             ],
         )
-    return journal
 
 
 @contextmanager

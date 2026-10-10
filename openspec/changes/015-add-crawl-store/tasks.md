@@ -196,7 +196,7 @@ Tasks 8.9 and 8.10 are the manager's rulings A and C on group 8's review; group 
 
   Done when: creating a Crawl redacts its command line and config before anything is written, with the secret flags and settings read from `010`'s declarations, never declared again.
 - [x] 9.7 Docs: add what is secret and the two shapes of a redacted value to `docs/crawl-store.md`.
-- [ ] 9.8 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [x] 9.8 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
 
 Tasks 9.9 and 9.10 come from group 9's review, before its refactor commit closes 9.8.
 

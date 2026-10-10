@@ -94,6 +94,7 @@ def test_the_secret_is_nowhere_in_the_file(temp_workspace: TempWorkspace) -> Non
         config={"example": {"token": "s3cret"}},
         secret_names=example_secret_names(),
     )
+    # The scenario's closed writer: closing checkpoints the WAL into the file.
     with CrawlWriter(crawl.path, FakeClock()):
         pass
     files = [crawl.path, crawl.path.with_name(f"{crawl.path.name}-wal")]

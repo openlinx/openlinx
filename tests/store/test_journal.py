@@ -4,6 +4,8 @@ from pathlib import PurePosixPath, PureWindowsPath
 
 from spider.store.journal import JournalChoice, choose_journal_mode, confirm_journal_mode
 
+LOCAL = PureWindowsPath(r"C:\site\.spider")
+
 
 def test_unc_path() -> None:
     choice = choose_journal_mode("auto", PureWindowsPath(r"\\fileserver\share\site\.spider"))
@@ -51,9 +53,6 @@ def test_an_extended_length_unc_path() -> None:
         "delete",
         "store_wal_unavailable",
     )
-
-
-LOCAL = PureWindowsPath(r"C:\site\.spider")
 
 
 def test_wal_refused_by_sqlite() -> None:
