@@ -442,6 +442,8 @@ In `delete` mode, a reader that cannot read within 5 seconds because a write is 
 
 In either mode, a writer that cannot write within 30 seconds because another connection holds the crawl file, on opening, on starting a transaction, while a unit runs or on committing, SHALL fail with `crawl_busy`. In both cases `details.file` SHALL name the crawl file.
 
+On Windows, the process of a killed writer can still hold the crawl file's `-shm` file for a moment after it has ended, and SQLite then reports `SQLITE_IOERR_TRUNCATE` when the file is opened. Opening a crawl file, for a reader or the writer, SHALL wait for such a file within the same timeout as for a lock (5 seconds for a reader, 30 for the writer) and then fail with `crawl_busy`, never with `crawl_file_invalid` or a disk I/O error.
+
 #### Scenario: Reading during a write in WAL mode
 - **WHEN** a writer process has committed 3 Seed rows and keeps its writer open, and another process reads `seeds`
 - **THEN** the reader sees 3 rows
@@ -457,6 +459,14 @@ In either mode, a writer that cannot write within 30 seconds because another con
 #### Scenario: A busy writer in a unit
 - **WHEN** the writer of a crawl file in `delete` mode is open, another process then holds the file under an exclusive lock, and a unit waits out the writer's busy timeout
 - **THEN** the unit's caller receives the error code `crawl_busy`, and `details.file` is that file's path
+
+#### Scenario: A file still held by a killed writer is read once it is released
+- **WHEN** the first two attempts to open a crawl file report `SQLITE_IOERR_TRUNCATE`, and the third does not
+- **THEN** reading the file returns its `crawl` row
+
+#### Scenario: A file held past the timeout is reported as crawl_busy
+- **WHEN** every attempt to open a crawl file reports `SQLITE_IOERR_TRUNCATE` for longer than the opener's busy timeout
+- **THEN** opening fails with the error code `crawl_busy`, and `details.file` is that file's path
 
 ### Requirement: Readers never change a crawl file
 

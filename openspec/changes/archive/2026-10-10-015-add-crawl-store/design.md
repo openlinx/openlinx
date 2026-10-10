@@ -54,6 +54,7 @@
 - **Connection pragmas:**
   - `foreign_keys=ON`
   - `busy_timeout`: 30 s for the writer, 5 s for readers, after which the error is `crawl_busy`
+  - **A `-shm` still held by a killed writer** (added after the archive, for PR #3's Windows CI): since SQLite 3.50.0 the Windows VFS truncates `-shm` with `winHandleTruncate`, which fails with `SQLITE_IOERR_TRUNCATE` while a just-killed process's mapped view of it is still being torn down (`ERROR_USER_MAPPED_FILE`); up to 3.49 `winTruncate` ignored that error. `spider.store.connections.connect` treats exactly that code, while opening, like a lock: it waits within the same busy timeout and then raises `crawl_busy`. Every other I/O error stays an error. It can go once SQLite fixes the regression.
   - `synchronous`: `NORMAL` in WAL mode, `FULL` in delete mode
   - `cache_size` and `temp_store` keep SQLite's defaults until `026`'s benchmark shows a reason to change them.
 - **Alternatives:**
@@ -93,7 +94,7 @@
   - A unit that submits to its own writer gets a `RuntimeError` instead of waiting for itself.
   - A unit that raises any `BaseException`, `KeyboardInterrupt` included, rolls back to its savepoint, the exception reaches that unit's caller, and the writer goes on. Ctrl+C is the Crawl service's to handle (`020`), not the writer's.
   - If the writer thread ends unexpectedly, for example on a failed commit, the caller of the unit in hand gets that error, and every other waiting or later caller gets `CrawlWriterClosedError`. `close()` then raises it too, with the failure as its cause, so a commit that failed while no unit waited is never lost silently. Nothing is raised on the writer thread, whose traceback would reach stderr as raw text.
-  - **A busy file:** when the writer waits out its busy timeout, on opening, on `BEGIN IMMEDIATE`, in a unit or on a commit, the caller gets `crawl_busy` with `details.file`, never a raw `DBAPIError`. The timeout is the constructor parameter `busy_seconds`, 30 s by default, which tests shorten. A failure that is already a `SpiderError` is raised by `close()` as it is, so leaving a `with` block after a busy unit still exits with 5.
+  - **A busy file:** when the writer waits out its busy timeout (or a `-shm` still held by a killed writer, D2), on opening, on `BEGIN IMMEDIATE`, in a unit or on a commit, the caller gets `crawl_busy` with `details.file`, never a raw `DBAPIError`. The timeout is the constructor parameter `busy_seconds`, 30 s by default, which tests shorten. A failure that is already a `SpiderError` is raised by `close()` as it is, so leaving a `with` block after a busy unit still exits with 5.
   - Opening the writer and `close()` block (the write check can wait for a lock for up to 30 s, and `close()` commits and checkpoints). `020` calls them through `asyncio.to_thread` from its event loop.
   - The writer opens its file with `mode=rw`, never SQLite's default `rwc`, so a missing crawl file is an error and never a new empty file.
 - **Creating a Crawl is the one write outside the writer.** The new file's tables, its `crawl` row and its Seeds are written in the file's first transaction, before any writer opens; the write check needs that row. Every later write is a unit.
