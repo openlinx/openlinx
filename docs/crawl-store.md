@@ -112,7 +112,7 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 | `failed` | it could not continue, resumable |
 | `interrupted` | its process died without recording an end, resumable |
 
-Resuming arrives with `060-add-crawl-control` (v0.2).
+Resuming arrives with `060-add-crawl-control`.
 
 - A new Crawl starts as `running`.
 - `completed_at` is set when the state becomes `completed`, and is NULL in every other state. A `stopped` or `failed` Crawl has no completion time.
@@ -138,7 +138,7 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
 - **Watching commits.** An optional `on_commit` callable, given when the writer is opened, is called on the writer thread after each commit with the number of units that commit made durable, for progress and metrics. It must be quick, and an error it raises ends the writer like a failed commit.
 - **What a crash loses.** A process that is killed, even with SIGKILL or TerminateProcess, loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound: `PRAGMA integrity_check` returns `ok`. Tests kill a real writer process to check both.
 - **The write check.** Opening the writer first runs a write that it rolls back. A crawl file that cannot be written, for example one with the read-only attribute, fails at once with `crawl_not_writable` (exit code 7) and `details.file`, before anything is crawled, and the file is left unchanged.
-- **One writer per Crawl.** In v0.1 only the process that creates a Crawl writes it, because a Crawl cannot be resumed or detached yet. `060-add-crawl-control` adds a claim on the file when a second process can write.
+- **One writer per Crawl.** Until `060-add-crawl-control`, only the process that creates a Crawl writes it, because a Crawl cannot be resumed or detached yet. `060` adds a claim on the file when a second process can write.
 - **A busy file.** When another connection holds the crawl file, the writer waits up to 30 seconds, on opening, when it starts a transaction or while a unit runs, then fails with `crawl_busy` (exit code 5) and `details.file`. In WAL mode only another writer can hold it that long; in rollback-journal mode a long read can too.
 - **After `close()`,** the writer accepts no more units: a unit submitted then fails at once. Closing twice is harmless.
 

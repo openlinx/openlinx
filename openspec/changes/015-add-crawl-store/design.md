@@ -10,7 +10,7 @@
   - `spider.naming` for every name-derived string (010 D11)
   - `000-scaffold-project`: `FakeClock`, the network guard and the gates
 - **The stack is settled:** SQLite through SQLAlchemy 2 Core (ADR-0002, ADR-0003). The migration tool waits for the first schema change after v0.1 (D5).
-- **Who depends on it in v0.1:** `020` and `022` write through the writer, `030` and `040` add tables, and `050` reads through `--crawl`. In v0.1.1, `060-min` adds the writer claim and liveness, and `090` reads crawl files from a long-running process.
+- **Who depends on it in v0.1:** `020` and `022` write through the writer, `030` and `040` add tables, and `050` reads through `--crawl`. `060-min` (v0.1) adds the writer claim and liveness, and in v0.1.1 `090` reads crawl files from a long-running process.
 - **The thin slice** (ROADMAP, Build order) needs the crawl file, ids, metadata, the writer and `--crawl` first. `spider schema`, reading across processes, the journal-mode fallback and redaction can follow; tasks.md marks each group.
 - See proposal.md for why.
 
@@ -83,7 +83,7 @@
   - On an exception the writer rolls back to the savepoint, and the exception is raised to that unit's caller. Earlier and later units are unaffected.
 - **Commits:** after 500 units, 1 s after the first uncommitted unit (measured with the injected `Clock`'s `monotonic()`, checked every 50 ms and after each unit), on `flush()`, and on `close()`.
   - `close()` commits, runs `wal_checkpoint(TRUNCATE)` and joins the thread.
-  - **The commit observer:** `CrawlWriter(path, clock, on_commit=None)`. When given, `on_commit(units)` is called on the writer thread after each successful commit, with the number of units that commit made durable; it is not called when the commit made no unit durable (nothing was pending, or every pending unit failed). `020` can use it for progress and metrics; the idle-timer test waits on it. An exception it raises ends the writer like a failed commit, and reaches the caller of the unit in hand even though that unit was committed.
+  - **The commit observer:** `CrawlWriter(path, clock, on_commit=None, busy_seconds=30.0)`. When given, `on_commit(units)` is called on the writer thread after each successful commit, with the number of units that commit made durable; it is not called when the commit made no unit durable (nothing was pending, or every pending unit failed). `020` can use it for progress and metrics; the idle-timer test waits on it. An exception it raises ends the writer like a failed commit, and reaches the caller of the unit in hand even though that unit was committed.
 - **Reads inside units** see every earlier unit's effects, because they share the transaction. `020`'s frontier can therefore take the next URL and mark it in a single unit.
 - **Backpressure:** the submission queue is bounded at 50,000 units, and `run` blocks when the queue is full.
 - **Callers and threads:** units may come from any thread, or from an event loop through `run_async`, which never blocks the loop. The writer thread alone owns the connection, runs one unit at a time and keeps each caller's order. A caller gets its unit's result only after the commit check, so a reader that runs after the 500th unit returns sees the batch.
@@ -97,7 +97,7 @@
   - Opening the writer and `close()` block (the write check can wait for a lock for up to 30 s, and `close()` commits and checkpoints). `020` calls them through `asyncio.to_thread` from its event loop.
   - The writer opens its file with `mode=rw`, never SQLite's default `rwc`, so a missing crawl file is an error and never a new empty file.
 - **Creating a Crawl is the one write outside the writer.** The new file's tables, its `crawl` row and its Seeds are written in the file's first transaction, before any writer opens; the write check needs that row. Every later write is a unit.
-- **One writer per Crawl, by construction in v0.1:** only the process that creates a Crawl writes it, because v0.1 has no resume and no detach. `060-min` (v0.1.1) adds the writer claim when a second process can write: a detached Crawl and `status`, then `resume` in v0.2.
+- **One writer per Crawl, by construction in this change:** only the process that creates a Crawl writes it, because nothing detaches or resumes a Crawl before `060`. `060-min` (v0.1) adds the writer claim when a second process can write: a detached Crawl, `status` and `resume`.
 - **Alternatives:**
   - **Row batches without units.** They cannot express the frontier's read-then-update steps.
   - **One transaction per unit.** Too slow.
@@ -107,7 +107,7 @@
 ### D5. Schema versions, without migrations until the first release
 
 - **New files** are made with `metadata.create_all()`, and stamped with `crawl.schema_version` and `PRAGMA user_version`, both `1`.
-- **Opening a file** for reading reads `user_version` without the declared schema (`spider.store.reading.reading`, so every reader and `--crawl` resolution). The writer does not check it in v0.1: it only opens a file its own process just created; `060` adds the check with resume:
+- **Opening a file** for reading reads `user_version` without the declared schema (`spider.store.reading.reading`, so every reader and `--crawl` resolution). The first row of the table below is `--crawl` resolution's (`spider.store.selection`, D8), which reads the `crawl` row through `reading`. The writer does not check it in v0.1: it only opens a file its own process just created; `060` adds the check with resume:
 
   | Condition | Result |
   |---|---|
@@ -121,7 +121,7 @@
 
 ### D6. The declared schema, `spider schema` and `docs/schema.md`
 
-- **One declaration:** the Core `MetaData` in `spider.store` is the only definition of the public schema. Later changes add their tables to it.
+- **One declaration:** the Core `MetaData` in `spider.store.schema` is the only definition of the public schema. Later changes add their tables to it.
   - Descriptions come from `Table(comment=…)` and `Column(comment=…)`.
   - `values` and the adding change's number (`info={"change": 15}`) come from `info`. `values` is read from the `Literal` type that the code uses, such as `CrawlState`, so it is declared once.
   - `format` comes from the column's type: `Timestamp`, `Json` and `Flag` in `spider.store.types` each carry theirs, so a column's format cannot disagree with how it is stored.
@@ -138,7 +138,7 @@
   - Counts and statistics are derived from tables, never stored as a JSON blob on `crawl`.
   - JSON only for recorded inputs (`command_argv`, `config`) and lists without a fixed shape. A value queries filter, sort or count by gets its own column.
   - One meaning per column: two hashes or two sizes are two distinctly named columns (`022` adds `size_bytes` and `transferred_bytes`, and a body-truncated flag).
-  - A deterministic order: rows with an order carry a growing INTEGER column (`seeds.position`, `020`'s `seq` on URLs), never a timestamp tie-break.
+  - A deterministic order: rows with an order carry a growing INTEGER column (`seeds.position`, `020`'s `urls.id`, its dispatch order), never a timestamp tie-break.
 - **Alternatives:**
   - **Generating `docs/schema.md` from code.** The docs test would then be tautological, and docs/testing.md forbids auto-accepted snapshots.
   - **Table order by merge order.** It would depend on the order of parallel merges.
@@ -146,7 +146,7 @@
 ### D7. Redaction
 
 - **What is secret** comes from `010`: an option is secret when its setting is secret (`SettingsTables.is_secret`), or when it maps to no setting and declares `secret=True` on its `OptionMeta`. Settings are secret through `json_schema_extra={"secret": True}`. Nothing is declared twice.
-- **One pure function** takes the argv, the config, the secret flag names and the secret dotted keys, and returns both redacted. The adapter that creates a Crawl (`020`'s `crawl`) collects the secret flag names from its Click params with `options_with_meta`. `060` reuses the function for `crawl_runs.command_argv`.
+- **One pure function** takes the argv, the config, the secret flag names and the secret dotted keys, and returns both redacted. The adapter that creates a Crawl (`020`'s `crawl`) collects the secret names through `spider.cli.options.secret_names`, which reads its Click params with `options_with_meta`. `060` reuses the function for `crawl_runs.command_argv`.
 - **The two shapes of a secret value:**
   - a URL with a password keeps its scheme, user, host, port and path: `user:***@host`
   - any other value becomes `***`
@@ -154,7 +154,7 @@
 - **As built (group 9):**
   - `spider.store.redaction.redact(argv, config, SecretNames(flags, settings)) -> Redacted(command_argv, config)`.
   - `NewCrawl.secret_names` has no default, so a creator that forgets its secrets fails at once instead of recording them.
-  - The adapter calls `spider.cli.options.secret_names(command, tables)`: every opt of the Command's secret options (long and short), and every secret setting of every flat table, not only the Command's own, because `config` records every table.
+  - The adapter calls `spider.cli.options.secret_names(command, tables)`: every name of the Command's secret options (long names only, see below), and every secret setting of every flat table, not only the Command's own, because `config` records every table.
   - An unset secret (`null`) stays `null`; a secret that is not a string, or a URL that cannot be parsed, becomes `***`.
   - **Secret options have only long names,** so Click's attached short form (`-tVALUE`) never carries a secret (the manager's addition to group 10). `check_command` refuses a short name on an option that declares `secret` itself; options mapped to a secret setting are checked by a test over every registered Command, because `check_command` runs on the startup path, which loads no settings table.
   - **Known limit:** keyed tables (`[rules.<id>]`) are skipped: no keyed setting is secret, and `SettingsTables.is_secret` cannot name one yet. The first change that needs one adds it.
@@ -180,7 +180,7 @@
 
 ### D9. Services and the startup path
 
-- **Services:** creating a Crawl (used by `020`'s Crawl service), resolving `--crawl`, and describing the schema are plain functions with typed inputs, a `Reporter` for warnings such as `store_wal_unavailable`, and no Click.
+- **Services:** creating a Crawl (`spider.services.crawls.create_crawl`, used by `020`'s Crawl service, with a `Reporter` for warnings such as `store_wal_unavailable`) and describing the schema (`spider.services.schema.describe_schema`) are plain functions with typed inputs and no Click. Resolving `--crawl` is the store function of D8, which the query services call.
 - **Codes:** `no_crawls`, `crawl_not_found`, `crawl_busy`, `crawl_file_invalid`, `crawl_schema_too_new`, `crawl_not_writable`, `unknown_table` and `store_wal_unavailable` are declared as `DiagnosticCode` constants in `spider.output.codes`, and follow its naming-rule test.
 - **The startup path:** `sqlalchemy` is imported only inside the bodies of store-using Commands and services. `spider --help` and `spider commands` with `schema` registered still pass the allowlist test.
 
@@ -237,10 +237,10 @@ This is the first store version, so there is nothing to migrate. The migration t
   1. In the slice that first needs a table or column, add it to the declared schema and to `docs/schema.md` together. Use `info={"change": <n>}`, give every table and column a comment, and use the shared column types for timestamps, JSON and booleans.
   2. Follow the conventions (D6), with NULL for "not measured".
   3. No migration before v0.1 (D5).
-- **Creating a Crawl:** `020`'s Crawl service calls `spider.services.crawls.create_crawl` with a `NewCrawl`, including the settings file it read the settings from.
+- **Creating a Crawl:** `020`'s Crawl service calls `spider.services.crawls.create_crawl` with a `NewCrawl`, including the settings file it read the settings from, `journal_setting` from `store.journal_mode`, and `secret_names` from `spider.cli.options.secret_names`. Neither has a default, so neither can be forgotten.
 - **Writing:** all Crawl data goes through `CrawlWriter` units. `020` adds `crawl.scope`, `crawl.stop_reason` and `crawl.warnings`, and stores a row for every requested URL, including 403s, 5xx responses and network errors.
 - **States:**
-  - `020` sets `running`, then `completed` (with `completed_at`), `stopped` (with `stop_reason`: `max_urls`, or `interrupt` for Ctrl+C with exit code 130) or `failed` (an unreachable Seed, exit code 8).
+  - `020` sets them with `spider.store.crawls.set_state(connection, state, at)` in a unit: `running`, then `completed` (with `completed_at`), `stopped` (with `stop_reason`: `max_urls`, or `interrupt` for Ctrl+C with exit code 130) or `failed` (an unreachable Seed, exit code 8).
   - `060` adds the writer claim, records `interrupted`, and resumes `stopped`, `interrupted` and `failed` Crawls.
 - **Secrets:** a setting is marked secret on its field, and an option without a setting on its `OptionMeta`; the Crawl service redacts both (D7).
 - **Reading:** query Commands take `--crawl` and call the resolution function. `050` adds the crawl id to its cursor fingerprint.

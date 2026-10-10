@@ -8,7 +8,7 @@
 
 ## What Changes
 
-> **Re-grounded (2026-10-05)** against the archived `010-add-workspace-and-cli-contract`. v0.1 keeps only what the thin slice and the v0.1 Commands need. The writer claim, control writes, recording `interrupted`, reserved and chosen crawl ids, and the `.lock`/`.log` files move to `060-add-crawl-control` (v0.1.1/v0.2). Alembic and in-place upgrades wait for the first schema change after the v0.1 release.
+> **Re-grounded (2026-10-05)** against the archived `010-add-workspace-and-cli-contract`. v0.1 keeps only what the thin slice and the v0.1 Commands need. The writer claim, control writes, recording `interrupted`, reserved and chosen crawl ids, and the `.lock`/`.log` files move to `060-add-crawl-control` (min and `resume` in v0.1, the rest in v0.2). Alembic and in-place upgrades wait for the first schema change after the v0.1 release.
 
 - **Files and ids**
   - A Crawl is stored as `.spider/crawls/<crawl-id>.sqlite`.
@@ -68,7 +68,7 @@ None. This change uses `workspace` and `cli-contract` from `010-add-workspace-an
   - when each state is set, including Ctrl+C, which leaves the Crawl `stopped` with `stop_reason: interrupt` and exits 130
 - **`022-add-fetch-policy` (v0.1):** the size columns, the body-truncated flag, `response_headers`, and redacting proxy passwords from the proxy variables it records. **(v0.2)** the header form of redaction for `--header`.
 - **`050-add-query-and-segments` (v0.1):** the query Commands that use `--crawl`, `spider sql` with its SQLite authorizer, and keyset paging bound to a Crawl.
-- **`060-add-crawl-control` (v0.1.1 and v0.2):**
+- **`060-add-crawl-control` (min and `resume` in v0.1, the rest in v0.2):**
   - the writer claim (`crawl_locked`), liveness, and recording a dead Crawl as `interrupted`
   - control tables and control writes by other processes
   - chosen and reserved crawl ids (`crawl_id_taken`), and the `.lock` and `.log` files
@@ -82,10 +82,11 @@ None. This change uses `workspace` and `cli-contract` from `010-add-workspace-an
 - **New runtime dependency:** `sqlalchemy` (2.x Core), imported only by the Commands and services that use the store, never on the `--help` or `spider commands` path.
 - **Code:**
   - `src/spider/store/`: the declared schema and its column types, ids, crawl files, the writer, the journal mode, redaction and the `[store]` settings table
-  - `src/spider/services/`: the schema description behind `spider schema`, and resolving `--crawl`
+  - `src/spider/services/`: creating a Crawl, and the schema description behind `spider schema`
+  - `src/spider/store/selection.py`: resolving `--crawl`
   - `src/spider/cli/schema.py`, and `--crawl` among the global flags in `spider.cli.options`
   - the store's codes in `spider.output.codes`
-- **Docs:** new `docs/schema.md` (the public schema reference) and `docs/crawl-store.md`. Also updates to `docs/architecture.md`, `docs/cli.md` and `CONTRIBUTING.md`.
+- **Docs:** new `docs/schema.md` (the public schema reference) and `docs/crawl-store.md`. Also updates to `docs/architecture.md`, `docs/cli.md`, `docs/testing.md`, `CONTRIBUTING.md` and `README.md`.
 - **Test support:**
   - `tests/support/store_worker.py`, a subprocess that writes and gets killed
   - an example Command that reads a Crawl, on the test app
