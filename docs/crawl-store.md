@@ -81,6 +81,25 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 - **`settings_file`** is the `spider.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key, so the file says how it was made even when `spider.toml` changes later.
 - **The environment stamp** (`python_version` and `platform`) helps when a crawl file is attached to a bug report.
 
+## Secrets are never recorded
+
+`command_argv` and `config` record how a Crawl was started, so a token or a proxy password given to it would end up in a file that is meant to be shared. Creating a Crawl redacts them first, before anything is written: no part of the crawl file holds a secret.
+
+- **What is secret** is declared once, where a setting or an option is defined:
+  - a setting marked secret on its settings table, such as a token, and every option that maps to it
+  - an option that maps to no setting and is marked secret itself
+
+  `spider commands` shows `"secret": true` on such options.
+- **Where:** the value after a secret flag, in both the `--flag value` and the `--flag=value` forms, and a secret setting's value in `config`, wherever it came from: the flag, `spider.toml` (secrets are allowed there) or a default. An unset secret stays `null`.
+- **The two shapes of a redacted value:**
+
+  | Secret value | Recorded as |
+  |---|---|
+  | a URL with a password, such as `http://ann:s3cret@proxy.test:8080` | the same URL without its password: `http://ann:***@proxy.test:8080` |
+  | anything else, such as `s3cret` | `***` |
+
+  A URL keeps its scheme, user, host, port and path, so a recorded proxy still says which proxy was used.
+
 ## Crawl States
 
 `state` holds one of the Crawl States, as [CONTEXT.md](../CONTEXT.md) defines them:

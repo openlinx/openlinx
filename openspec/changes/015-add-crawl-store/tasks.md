@@ -195,7 +195,7 @@ Tasks 8.9 and 8.10 are the manager's rulings A and C on group 8's review; group 
 - [x] 9.6 Drive "The secret is nowhere in the file" at seam 2.
 
   Done when: creating a Crawl redacts its command line and config before anything is written, with the secret flags and settings read from `010`'s declarations, never declared again.
-- [ ] 9.7 Docs: add what is secret and the two shapes of a redacted value to `docs/crawl-store.md`.
+- [x] 9.7 Docs: add what is secret and the two shapes of a redacted value to `docs/crawl-store.md`.
 - [ ] 9.8 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
 
 ## 10. Wrap-up
