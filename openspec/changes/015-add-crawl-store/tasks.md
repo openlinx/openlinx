@@ -189,7 +189,7 @@ Tasks 8.9 and 8.10 are the manager's rulings A and C on group 8's review; group 
 
 - [x] 9.1 Drive "Secret option with a separate value" at seam 4.
 - [x] 9.2 Drive "Secret option with a joined value" at seam 4.
-- [ ] 9.3 Drive "A URL keeps everything but its password" at seam 4.
+- [x] 9.3 Drive "A URL keeps everything but its password" at seam 4.
 - [ ] 9.4 Drive "Secret setting" at seam 4.
 - [ ] 9.5 **Guard:** "Other values are kept", at seam 4.
 - [ ] 9.6 Drive "The secret is nowhere in the file" at seam 2.

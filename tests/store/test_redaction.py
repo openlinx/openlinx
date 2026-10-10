@@ -19,3 +19,18 @@ def test_secret_option_with_a_joined_value() -> None:
     redacted = redact(["spider", "example-settings", "--api-key=s3cret"], {}, EXAMPLE_SECRETS)
 
     assert redacted.command_argv == ["spider", "example-settings", "--api-key=***"]
+
+
+def test_a_url_keeps_everything_but_its_password() -> None:
+    redacted = redact(
+        ["spider", "example-settings", "--token", "http://ann:s3cret@proxy.test:8080"],
+        {},
+        EXAMPLE_SECRETS,
+    )
+
+    assert redacted.command_argv == [
+        "spider",
+        "example-settings",
+        "--token",
+        "http://ann:***@proxy.test:8080",
+    ]
