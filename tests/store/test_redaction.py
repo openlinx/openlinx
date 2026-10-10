@@ -1,7 +1,18 @@
 """Redacting secrets (015-add-crawl-store, crawl-store)."""
 
+from typing import cast
+
+import typer
+
+from spider.cli.options import secret_names
+from spider.cli.runner import SpiderGroup
 from spider.store.records import SecretNames
 from spider.store.redaction import redact
+from spider.store.writer import CrawlWriter
+from tests.support.app import example_app
+from tests.support.clock import FakeClock
+from tests.support.crawls import create_any_crawl
+from tests.support.workspace import TempWorkspace
 
 # What the test app's example-settings Command declares secret.
 EXAMPLE_SECRETS = SecretNames(
@@ -46,3 +57,23 @@ def test_other_values_are_kept() -> None:
     redacted = redact(["spider", "example-settings", "--level", "high"], {}, EXAMPLE_SECRETS)
 
     assert redacted.command_argv == ["spider", "example-settings", "--level", "high"]
+
+
+def example_secret_names() -> SecretNames:
+    """Read from the test app's declarations, as the adapter that creates a Crawl reads its own."""
+    group = cast(SpiderGroup, typer.main.get_group(example_app()))
+    return secret_names(group.commands["example-settings"], group.settings_tables)
+
+
+def test_the_secret_is_nowhere_in_the_file(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(
+        temp_workspace,
+        command_argv=["spider", "example-settings", "--token", "s3cret"],
+        config={"example": {"token": "s3cret"}},
+        secret_names=example_secret_names(),
+    )
+    with CrawlWriter(crawl.path, FakeClock()):
+        pass
+    files = [crawl.path, crawl.path.with_name(f"{crawl.path.name}-wal")]
+
+    assert b"s3cret" not in b"".join(file.read_bytes() for file in files if file.exists())

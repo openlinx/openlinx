@@ -14,7 +14,7 @@ from sqlalchemy import Connection, delete, insert
 from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
 from spider.store.connections import connect
-from spider.store.records import CrawlFile, NewCrawl
+from spider.store.records import CrawlFile, NewCrawl, SecretNames
 from spider.store.schema import seeds
 from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import Workspace, resolve_workspace
@@ -39,6 +39,7 @@ def new_crawl(workspace: Workspace) -> NewCrawl:
         command_argv=["spider", "crawl", "https://example.com/"],
         cwd=workspace.root,
         config={},
+        secret_names=SecretNames(),
     )
 
 

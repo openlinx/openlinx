@@ -12,7 +12,7 @@ from typer.core import TyperArgument, TyperGroup
 from spider import __version__
 from spider.cli.click_compat import Command, Parameter
 from spider.cli.meta import CommandMeta, Example, command_meta, meta_of
-from spider.cli.options import FORMAT_PARAMETER, FormatOpt, OptionMeta, options_with_meta
+from spider.cli.options import FORMAT_PARAMETER, FormatOpt, is_secret_option, options_with_meta
 from spider.cli.runner import Invocation
 from spider.naming import APP_NAME
 from spider.output.codes import DECLARED, ExitCode
@@ -123,16 +123,11 @@ def _options(command: Command, meta: CommandMeta, tables: SettingsTables) -> lis
                 "multiple": param.multiple,
                 "global": extra.is_global,
                 "setting": extra.setting,
-                "secret": _secret(extra, tables),
+                "secret": is_secret_option(extra, tables),
                 "description": param.help,
             }
         )
     return entries
-
-
-def _secret(extra: OptionMeta, tables: SettingsTables) -> bool:
-    # An option mapped to a setting inherits it; check_command refuses an option with both.
-    return extra.secret if extra.setting is None else tables.is_secret(extra.setting)
 
 
 def _type(param: Parameter) -> str:

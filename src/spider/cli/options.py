@@ -13,7 +13,8 @@ from typer.core import TyperOption
 from spider.cli.click_compat import Command
 from spider.naming import DATA_DIR_NAME, GLOBAL_DATA_DIR, SETTINGS_FILE_NAME
 from spider.output.writer import Format
-from spider.store.records import LATEST
+from spider.store.records import LATEST, SecretNames
+from spider.workspace.tables import SettingsTables
 
 
 @dataclass(frozen=True)
@@ -71,3 +72,19 @@ def options_with_meta(command: Command) -> Iterator[tuple[TyperOption, OptionMet
     for param in command.params:
         if isinstance(param, TyperOption) and command.callback is not None:
             yield param, option_meta(command.callback, str(param.name))
+
+
+def is_secret_option(extra: OptionMeta, tables: SettingsTables) -> bool:
+    # An option mapped to a setting inherits it; check_command refuses an option with both.
+    return extra.secret if extra.setting is None else tables.is_secret(extra.setting)
+
+
+def secret_names(command: Command, tables: SettingsTables) -> SecretNames:
+    """What a Crawl created by this Command redacts: its secret flags and all secret settings."""
+    flags = frozenset(
+        name
+        for param, extra in options_with_meta(command)
+        if is_secret_option(extra, tables)
+        for name in param.opts
+    )
+    return SecretNames(flags, tables.secret_settings())

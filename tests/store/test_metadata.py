@@ -12,7 +12,7 @@ import pytest
 from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
 from spider.store.crawls import set_state
-from spider.store.records import NewCrawl
+from spider.store.records import NewCrawl, SecretNames
 from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
@@ -33,6 +33,7 @@ def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
         command_argv=["spider", "crawl", "https://example.com/"],
         cwd=shop,
         config={"store": {"journal_mode": "auto"}},
+        secret_names=SecretNames(),
     )
 
     crawl = create_crawl(request, FakeClock(start=STARTED_AT), Collected(), scripted_choice("k3f9"))

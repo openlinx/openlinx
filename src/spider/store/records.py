@@ -32,6 +32,8 @@ class NewCrawl:
     command_argv: Sequence[str]
     cwd: Path
     config: Mapping[str, Any]
+    # No default: a creator that forgot its secrets would record them.
+    secret_names: SecretNames
     settings_file: Path | None = None
     section_crawl: bool = False
     journal_setting: JournalSetting = "auto"

@@ -192,7 +192,7 @@ Tasks 8.9 and 8.10 are the manager's rulings A and C on group 8's review; group 
 - [x] 9.3 Drive "A URL keeps everything but its password" at seam 4.
 - [x] 9.4 Drive "Secret setting" at seam 4.
 - [x] 9.5 **Guard:** "Other values are kept", at seam 4. It passed at once: only the values of secret flags are redacted since 9.1.
-- [ ] 9.6 Drive "The secret is nowhere in the file" at seam 2.
+- [x] 9.6 Drive "The secret is nowhere in the file" at seam 2.
 
   Done when: creating a Crawl redacts its command line and config before anything is written, with the secret flags and settings read from `010`'s declarations, never declared again.
 - [ ] 9.7 Docs: add what is secret and the two shapes of a redacted value to `docs/crawl-store.md`.

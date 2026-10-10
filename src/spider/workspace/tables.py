@@ -3,7 +3,7 @@
 import importlib
 import math
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, get_args, get_origin
+from typing import TYPE_CHECKING, Any, cast, get_args, get_origin
 
 if TYPE_CHECKING:
     # Only for typing: pydantic must stay off the CLI's startup path.
@@ -33,6 +33,15 @@ class SettingsTables:
         model: Any = _resolve(self._references[name])
         extra = model.model_fields[key].json_schema_extra
         return isinstance(extra, dict) and extra.get("secret") is True
+
+    def secret_settings(self) -> frozenset[str]:
+        return frozenset(
+            f"{name}.{key}"
+            for name, table in self.items()
+            if keyed_entry(table) is None
+            for key in cast(Any, table).model_fields
+            if self.is_secret(f"{name}.{key}")
+        )
 
 
 def _resolve(reference: str) -> Table:
