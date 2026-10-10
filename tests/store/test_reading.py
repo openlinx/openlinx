@@ -24,6 +24,7 @@ from tests.support.cli import PROCESS_TIMEOUT
 from tests.support.clock import FakeClock
 from tests.support.crawls import STARTED_AT, create_any_crawl, new_crawl, sha256_of
 from tests.support.randomness import scripted_choice
+from tests.support.sqlite_faults import shm_held
 from tests.support.workspace import TempWorkspace
 
 
@@ -131,3 +132,12 @@ def test_a_refused_file_is_unchanged(temp_workspace: TempWorkspace) -> None:
         read_metadata(crawl.path)
 
     assert sha256_of(crawl.path) == before
+
+
+def test_a_file_still_held_by_a_killed_writer_is_read_once_it_is_released(
+    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+    shm_held(monkeypatch, opens=2)
+
+    assert read_metadata(crawl.path)["id"] == crawl.id

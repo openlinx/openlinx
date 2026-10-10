@@ -1,6 +1,7 @@
 """Opening crawl files through URIs, one engine per operation (design D2 of 015-add-crawl-store)."""
 
 import sqlite3
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path, PurePath
@@ -16,6 +17,8 @@ from spider.output.diagnostics import SpiderError
 
 READER_BUSY_SECONDS = 5.0
 WRITER_BUSY_SECONDS = 30.0
+# How often opening looks again at a -shm file that a killed writer still holds.
+SHM_RELEASE_CHECK_SECONDS = 0.05
 
 # SQLite's primary result codes for a file or folder that cannot be written.
 NOT_WRITABLE = {
@@ -72,9 +75,27 @@ def connect(
     # A reader gives up after 5 s (crawl_busy); the writer waits out a reader's longest wait.
     if busy_seconds is None:
         busy_seconds = READER_BUSY_SECONDS if read_only else WRITER_BUSY_SECONDS
-    connection = sqlite3.connect(uri, uri=True, timeout=busy_seconds)
-    connection.execute("PRAGMA foreign_keys = ON")
-    return connection
+    deadline = time.monotonic() + busy_seconds
+    while True:
+        connection = sqlite3.connect(uri, uri=True, timeout=busy_seconds)
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            # The first read opens the WAL index (-shm), where a killed writer can still hold it.
+            connection.execute("PRAGMA schema_version").fetchone()
+        except sqlite3.OperationalError as error:
+            connection.close()
+            if not _shm_held(error) or time.monotonic() >= deadline:
+                raise
+            time.sleep(SHM_RELEASE_CHECK_SECONDS)
+        else:
+            return connection
+
+
+def _shm_held(error: sqlite3.Error) -> bool:
+    # SQLite 3.50.0 made Windows' winHandleTruncate fail on ERROR_USER_MAPPED_FILE, which a
+    # just-killed process's view of -shm causes until Windows tears it down; winTruncate, used up to
+    # 3.49, ignored that error. Like a lock, it ends by itself. Remove once SQLite fixes it.
+    return getattr(error, "sqlite_errorcode", None) == sqlite3.SQLITE_IOERR_TRUNCATE
 
 
 @contextmanager
