@@ -13,6 +13,7 @@ import typer
 from typer.testing import CliRunner
 
 from spider.cli.app import build_app
+from tests.support.processes import python_command
 
 
 @dataclass(frozen=True)
@@ -51,9 +52,11 @@ PROCESS_TIMEOUT = 10
 
 
 def run_example_process(*args: str) -> CliResult:
+    command = python_command("-c", RUN_EXAMPLE_APP, *args)
     completed = subprocess.run(
-        _example_command(args),
+        command.argv,
         cwd=REPO_ROOT,
+        env=command.env,
         capture_output=True,
         timeout=PROCESS_TIMEOUT,
         check=False,
@@ -62,9 +65,11 @@ def run_example_process(*args: str) -> CliResult:
 
 
 def start_example_process(*args: str) -> subprocess.Popen[bytes]:
+    command = python_command("-c", RUN_EXAMPLE_APP, *args)
     process = subprocess.Popen(
-        _example_command(args),
+        command.argv,
         cwd=REPO_ROOT,
+        env=command.env,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -74,7 +79,3 @@ def start_example_process(*args: str) -> subprocess.Popen[bytes]:
     watchdog.daemon = True
     watchdog.start()
     return process
-
-
-def _example_command(args: tuple[str, ...]) -> list[str]:
-    return [sys.executable, "-c", RUN_EXAMPLE_APP, *args]
