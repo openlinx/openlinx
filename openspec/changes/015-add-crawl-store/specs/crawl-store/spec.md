@@ -282,6 +282,18 @@ Redaction SHALL cover both the `--flag value` and the `--flag=value` forms. No p
 - **WHEN** the command line `["spider","example-settings","--level","high"]` is redacted
 - **THEN** the result is `["spider","example-settings","--level","high"]`
 
+#### Scenario: An unset secret stays null
+- **WHEN** the config `{"example":{"level":"high","token":null}}` is redacted
+- **THEN** the result is `{"example":{"level":"high","token":null}}`
+
+#### Scenario: A malformed secret URL
+- **WHEN** the command line `["spider","example-settings","--token","http://[ann:s3cret@proxy.test"]` is redacted
+- **THEN** the result is `["spider","example-settings","--token","***"]`
+
+#### Scenario: A secret setting that is not a string
+- **WHEN** the config `{"example":{"token":12345}}` is redacted
+- **THEN** the result is `{"example":{"token":"***"}}`
+
 #### Scenario: The secret is nowhere in the file
 - **WHEN** a Crawl is created with the command line `["spider","example-settings","--token","s3cret"]` and the config `{"example":{"token":"s3cret"}}`, and its writer is closed
 - **THEN** the bytes of the crawl file and of its `-wal` file do not contain `s3cret`
