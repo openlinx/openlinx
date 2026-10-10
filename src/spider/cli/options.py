@@ -9,6 +9,7 @@ from typing import Annotated, Any
 
 import typer
 from typer.core import TyperOption
+from typer.models import OptionInfo
 
 from spider.cli.click_compat import Command
 from spider.naming import DATA_DIR_NAME, GLOBAL_DATA_DIR, SETTINGS_FILE_NAME
@@ -62,10 +63,20 @@ FieldsOpt = Annotated[
 
 
 def option_meta(callback: Callable[..., Any], name: str) -> OptionMeta:
+    metadata = _annotated(callback, name)
+    return next((item for item in metadata if isinstance(item, OptionMeta)), OptionMeta())
+
+
+def option_names(callback: Callable[..., Any], name: str) -> tuple[str, ...]:
+    """The names a parameter's typer.Option declares, such as ("--api-key", "-k")."""
+    info = next((item for item in _annotated(callback, name) if isinstance(item, OptionInfo)), None)
+    return () if info is None else tuple(info.param_decls or ())
+
+
+def _annotated(callback: Callable[..., Any], name: str) -> tuple[Any, ...]:
     # Click keeps no trace of extra Annotated metadata; the Command's own hints still have it.
     hints = typing.get_type_hints(inspect.unwrap(callback), include_extras=True)
-    metadata = getattr(hints.get(name), "__metadata__", ())
-    return next((item for item in metadata if isinstance(item, OptionMeta)), OptionMeta())
+    return tuple(getattr(hints.get(name), "__metadata__", ()))
 
 
 def options_with_meta(command: Command) -> Iterator[tuple[TyperOption, OptionMeta]]:

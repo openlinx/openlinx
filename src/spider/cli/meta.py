@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from spider.cli.options import FORMAT_PARAMETER, option_meta
+from spider.cli.options import FORMAT_PARAMETER, option_meta, option_names
 from spider.output.codes import INVALID_VALUE, MORE_ITEMS
 from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
 from spider.output.paging import Fields, Page
@@ -120,6 +120,14 @@ def check_command(command: Callable[..., Any]) -> CommandMeta:
         f"{name} declares secret, which its setting {extra.setting} decides"
         for name in declared
         if (extra := option_meta(command, name)).setting is not None and extra.secret
+    ]
+    # The attached short form (-tVALUE) would slip past redaction (design D7 of 015).
+    problems += [
+        f"{name} is secret, so it cannot have the short name {short}"
+        for name in declared
+        if option_meta(command, name).secret
+        for short in option_names(command, name)
+        if not short.startswith("--")
     ]
     if (meta.output == "document") != (meta.fields is None):
         problems.append("fields belong to list and rows Commands only")

@@ -89,7 +89,7 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
   - a setting marked secret on its settings table, such as a token, and every option that maps to it
   - an option that maps to no setting and is marked secret itself
 
-  `spider commands` shows `"secret": true` on such options.
+  `spider commands` shows `"secret": true` on such options. A secret option has only long names, such as `--token`, so the attached short form `-tVALUE` never carries a secret.
 - **Where:** the value after a secret flag, in both the `--flag value` and the `--flag=value` forms, and a secret setting's value in `config`, wherever it came from: the flag, `spider.toml` (secrets are allowed there) or a default. An unset secret stays `null`.
 - **The two shapes of a redacted value:**
 
