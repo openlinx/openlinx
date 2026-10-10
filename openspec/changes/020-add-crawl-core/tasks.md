@@ -82,6 +82,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when:
   - the Crawl Service's start operation creates the Crawl with `015`'s `create_crawl`, and builds the `CrawlContext` (design D15) in one place, opening and closing `CrawlWriter` through `asyncio.to_thread`
+  - every `NewCrawl` gets both of its required fields, `secret_names` and `journal_setting`, from this first slice on; task 4.12 checks what they do
   - the `Fetcher` Protocol (design D8) has a one-hop aiohttp implementation
   - the first `urls` columns (`id`, `url`, `host`, `crawl_depth`, `discovered_via`, `fetch_state`, `status_code`) are declared, with their `docs/schema.md` rows
   - every writer unit is defined in a `spider.store.*` module, and ruff's banned-API rule (TID251) bans `sqlalchemy` in `src/`, with per-file-ignores for `src/spider/store/**` and `src/spider/services/schema.py` (design D14)
@@ -90,6 +91,8 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: the scheduler takes queued URLs depth by depth in `urls.id` order through a unit, hyperlinks are discovered in-process through the extractor in `Hooks` (design D9), and new URLs are deduplicated by the unique `urls.url` index inside the URL's unit, with no in-memory map of URLs (design D1).
 - [ ] 4.5 Drive "A discovered URL points to where it was found" at seam 3+6.
+
+  Done when: `found_on_url_id` is declared with a foreign key to `urls.id`, the first in the schema; `015`'s `describe_schema` fills `references` as `<table>.<column>` from the declared foreign key instead of always `null`, and `docs/schema.md` shows it in the Key column (`→ urls.id`), so `015`'s contract tests (docs against the declaration, and a new file's `PRAGMA foreign_key_list` against it) stay green.
 - [ ] 4.6 Drive "The result counts a small site" and "A completed Crawl exits with code 0" at seam 1, a trivial pair.
 
   Done when: the result's counts come from queries over `urls`, never from counters, and the `parsed` column exists.
@@ -104,7 +107,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: `[crawl]` is registered in `build_app` as `"spider.crawl.settings:CrawlSettings"` and passes `010`'s table-rules test, every crawl option declares its setting with `OptionMeta(setting=...)`, `max_urls`, `max_depth` and `rate` default to `None`, and `NewCrawl.config` holds every registered table.
 - [ ] 4.12 Wire `015`'s journal mode (group 8) and redaction (group 9), at seam 2.
 
-  Done when: the `crawl` adapter passes `spider.cli.options.secret_names(<its Click command>, <the settings tables>)` to the Crawl Service, which puts it in `NewCrawl.secret_names` (`create_crawl` redacts by itself); and the Crawl Service sets `NewCrawl.journal_setting` from the resolved `[store] journal_mode`, so `[store] journal_mode = "delete"` gives `crawl.journal_mode` = `delete`, and a `store_wal_unavailable` warning that `create_crawl` reports reaches the result's `warnings` (and `crawl.warnings` once task 12.3 declares it).
+  Done when: the `crawl` adapter always passes `spider.cli.options.secret_names(<its Click command>, <the settings tables>)` to the Crawl Service, which puts it in `NewCrawl.secret_names` (`create_crawl` redacts by itself); and the Crawl Service always sets `NewCrawl.journal_setting` from the resolved `[store] journal_mode`, `"auto"` included, since neither field has a default, so `[store] journal_mode = "delete"` gives `crawl.journal_mode` = `delete`, and a `store_wal_unavailable` warning that `create_crawl` reports reaches the result's `warnings` (and `crawl.warnings` once task 12.3 declares it).
 - [ ] 4.13 Drive "spider.toml sets a crawl setting" and "A flag overrides spider.toml" at seam 1, a trivial pair.
 - [ ] 4.14 Drive "Response timing is recorded" at seam 3+6.
 - [ ] 4.15 Drive "The Content-Type is recorded as received" at seam 3+6.
