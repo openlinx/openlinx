@@ -23,7 +23,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 **The robustness rule** (ROADMAP) applies to every task: a parser that a task adds gets its never-raises hypothesis property in that task or the one the group names, and a failure of one URL is recorded on that URL.
 
-**The thin slice** (ROADMAP, Build order) needs groups 1–6: normalisation, the host Scope, hyperlink discovery, a foreground Crawl recorded through the writer, the hooks `030` and `040` plug into, `fetch_error` and `is_internal`. Groups 7–15 widen the change after that. Group 12's task 12.9 must land before `022`-min records the proxy variables.
+**The thin slice** (ROADMAP, Build order) needs groups 1–6: normalisation, the host Scope, hyperlink discovery, a foreground Crawl recorded through the writer, the hooks `030` and `040` plug into, `fetch_error` and `is_internal`. Groups 7–15 widen the change after that.
 
 ## 1. URL normalisation and Seeds (slice, seam 4)
 
@@ -102,9 +102,9 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 4.11 Drive "The recorded config holds every registered crawl setting" at seam 2.
 
   Done when: `[crawl]` is registered in `build_app` as `"spider.crawl.settings:CrawlSettings"` and passes `010`'s table-rules test, every crawl option declares its setting with `OptionMeta(setting=...)`, `max_urls`, `max_depth` and `rate` default to `None`, and `NewCrawl.config` holds every registered table.
-- [ ] 4.12 Wire `015`'s journal mode (group 8), at seam 2.
+- [ ] 4.12 Wire `015`'s journal mode (group 8) and redaction (group 9), at seam 2.
 
-  Done when: the Crawl Service sets `NewCrawl.journal_setting` from the resolved `[store] journal_mode`, so `[store] journal_mode = "delete"` gives `crawl.journal_mode` = `delete`, and a `store_wal_unavailable` warning that `create_crawl` reports reaches the result's `warnings` (and `crawl.warnings` once task 12.3 declares it).
+  Done when: the `crawl` adapter passes `spider.cli.options.secret_names(<its Click command>, <the settings tables>)` to the Crawl Service, which puts it in `NewCrawl.secret_names` (`create_crawl` redacts by itself); and the Crawl Service sets `NewCrawl.journal_setting` from the resolved `[store] journal_mode`, so `[store] journal_mode = "delete"` gives `crawl.journal_mode` = `delete`, and a `store_wal_unavailable` warning that `create_crawl` reports reaches the result's `warnings` (and `crawl.warnings` once task 12.3 declares it).
 - [ ] 4.13 Drive "spider.toml sets a crawl setting" and "A flag overrides spider.toml" at seam 1, a trivial pair.
 - [ ] 4.14 Drive "Response timing is recorded" at seam 3+6.
 - [ ] 4.15 Drive "The Content-Type is recorded as received" at seam 3+6.
@@ -241,20 +241,17 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.6 Drive "An unreachable Seed fails the Crawl" at seam 1. Done when: the `failed` end goes through `check_transition` with `seed_unreachable`, and the adapter returns the result as an `Outcome`.
 - [ ] 12.7 Drive "An unreachable Seed is reported by one error" at seam 1. Done when: `seed_unreachable` is declared, with a hint about network access and sandboxed agents.
 - [ ] 12.8 Drive "Post-crawl passes do not run for a failed Crawl" at seam 2.
-- [ ] 12.9 Dependency: wire `015`'s redaction (group 9) once it lands.
-
-  Done when: the Crawl Service redacts the command line and config with `015`'s function before `create_crawl`, collecting secret flag names with `options_with_meta`. Must land before `022`-min records the proxy variables.
-- [ ] 12.10 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
+- [ ] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
 
   Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5).
-- [ ] 12.11 Drive "Losing the site fails the Crawl" at seam 1, with the reset route of task 5.11. Done when: the count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without a response.
-- [ ] 12.12 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared.
-- [ ] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
-- [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing.
+- [ ] 12.10 Drive "Losing the site fails the Crawl" at seam 1, with the reset route of task 5.11. Done when: the count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without a response.
+- [ ] 12.11 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared.
+- [ ] 12.12 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
+- [ ] 12.13 Drive "A stuck request is ended by the watchdog", fake timing.
 
   Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without a response for the site-lost count.
-- [ ] 12.15 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), and the backstops in `docs/crawling.md`.
-- [ ] 12.16 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
+- [ ] 12.14 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), and the backstops in `docs/crawling.md`.
+- [ ] 12.15 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
 
 ## 13. Stopping with an interrupt (widening)
 

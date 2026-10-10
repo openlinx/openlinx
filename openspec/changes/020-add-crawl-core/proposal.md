@@ -10,7 +10,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 
 ## What Changes
 
-> **Re-grounded (2026-10-10)** against the code of `015-add-crawl-store` (groups 1–7 final, on its branch) and the archived `010-add-workspace-and-cli-contract`. It applies the ROADMAP decisions of 2026-10-05: no default `--max-urls`, the robustness rule, 060-min in v0.1, and the four design points of the architecture review (design D12–D15). It uses `015`'s group 8 (the journal mode and `[store]`) as built; where groups 9–10 are not built yet (redaction), this change depends on them instead of guessing their interface. The kill-then-continue scenarios moved to `060`, whose `interrupted` state and `resume` cover them.
+> **Re-grounded (2026-10-10)** against the code of `015-add-crawl-store` (groups 1–9 built, on its branch) and the archived `010-add-workspace-and-cli-contract`. It applies the ROADMAP decisions of 2026-10-05: no default `--max-urls`, the robustness rule, 060-min in v0.1, and the four design points of the architecture review (design D12–D15). It uses `015`'s groups 8 (the journal mode and `[store]`) and 9 (redaction) as built. The kill-then-continue scenarios moved to `060`, whose `interrupted` state and `resume` cover them.
 
 - **New Command `spider crawl <url>`** in Spider mode, running in the foreground. A bare host such as `site.test` becomes `https://site.test/`.
 - **URL normalisation:**
@@ -102,7 +102,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - `015-add-crawl-store`:
     - **groups 1–7 (built):** `create_crawl` with `NewCrawl`, the crawl ids, the `crawl` and `seeds` tables, `set_state`, `CrawlWriter` (`run_async`, `on_commit`, `crawl_busy`, `CrawlWriterClosedError`), the shared column types, `docs/schema.md` and its contract test
     - **group 8 (built):** `NewCrawl.journal_setting`, the `[store]` table (`StoreSettings.journal_mode`) and `store_wal_unavailable`; the Crawl Service sets the journal setting from `[store]` and reports the warning with the others
-    - **group 9 (not built yet):** redaction of the command line and config, which the Crawl Service calls before it creates the Crawl
+    - **group 9 (built):** `NewCrawl.secret_names`, a required `SecretNames` that the `crawl` adapter gets from `spider.cli.options.secret_names`; `create_crawl` redacts the command line and config with it
 - **Used by:**
   - `022` (the engine, the Fetcher interface, the per-host gate, the fake Fetcher, the DNS resolver hook, `urls` and `origins`)
   - `030` (the per-response hook, the extractor registry, `DiscoveredLink`, the robots directives parser, the post-crawl passes, the decoding function)

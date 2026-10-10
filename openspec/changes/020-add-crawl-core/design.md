@@ -8,14 +8,15 @@
     - the code registry in `spider.output.codes`, with `ExitCode.USAGE` (2), `BUSY` (5), `IO` (7), `NETWORK` (8), `INTERRUPTED` (130) and the declared `interrupted` and `invalid_value` (010 D5)
     - the settings registry: tables registered in `build_app` as `"module:Class"`, one owner per table, `None` defaults, `secret` on the settings field, flag > `spider.toml` > default (010 D2)
     - `@command_meta(name=CONST, output="document", events=True)` and `OptionMeta(setting=...)` (010 D7), the startup allowlist test (010 D10), and `spider.naming` (010 D11)
-  - `015-add-crawl-store`, groups 1–8 as built on its branch:
+  - `015-add-crawl-store`, groups 1–9 as built on its branch:
     - `spider.services.crawls.create_crawl(NewCrawl, clock, reporter)` returns a `CrawlFile(id, path)`; the `crawl` row and `seeds` are written in the file's first transaction. It chooses the journal mode from `NewCrawl.journal_setting` (`JournalSetting`: `auto`, `wal` or `delete`, default `auto`) and reports `store_wal_unavailable` through the Reporter
     - the `[store]` table, `spider.store.settings:StoreSettings` with `journal_mode`, registered in `build_app`
+    - redaction: `NewCrawl.secret_names` is a required `SecretNames(flags, settings)` (in `spider.store.records`), which an adapter gets from `spider.cli.options.secret_names(command, tables)`; `create_crawl` redacts the command line and config with it before anything is written (015 D7)
     - `CrawlWriter(path, clock, on_commit=None)`: `await run_async(unit)`, a unit is `Callable[[Connection], T]` run in its own savepoint, commits every 500 units or 1 s, `close()` commits and checkpoints. Opening and `close()` block, so they run through `asyncio.to_thread`. A writer whose thread ends raises `CrawlWriterClosedError` to every later caller, and a busy file is `crawl_busy` (exit 5)
     - `set_state(connection, state, at)` in `spider.store.crawls`, which sets `completed_at` only for `completed`
     - the shared column types `Timestamp`, `Json` and `Flag`, `info={"change": <n>}` and comments on every table and column, and the contract test against `docs/schema.md`
     - `CrawlState` and `CrawlMode` as `Literal`s in `spider.store.records`, which loads no sqlalchemy
-  - `015`'s groups 9–10 are not built yet. This change depends on group 9 (redaction) and uses whatever interface it lands with; see D11.
+  - `015`'s group 10 (wrap-up docs) adds no interface this change uses.
 - **ADR-0001:** an own asyncio engine on aiohttp, whose frontier lives in the crawl store; the Fetcher sits behind an interface.
 - **ROADMAP decisions of 2026-10-05:** no default `--max-urls`, the robustness rule, 060-min in v0.1, and four design points from the architecture review (D12–D15).
 - **The split of the crawler:** this change is the core. `022` adds the fetch policy, `060`-min background Crawls and `resume`, `026` the benchmark (and a pool only if it is needed), and `024` the other Crawl Modes in v0.2. Each plugs in without reworking the core.
@@ -137,7 +138,7 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 - **Options** declare `OptionMeta(setting="crawl.<key>")`, so `spider commands` lists each option's setting and default, and the scenario "The recorded config holds every registered crawl setting" stays generic. `--subdomains` has no setting: the adapter resolves it into `scope` before loading settings.
 - **The recorded config** is the resolved value of every registered table, `[crawl]` and `015`'s `[store]` included, as `NewCrawl.config`. The Crawl Service loads settings once and builds both the `NewCrawl` and the context from them.
 - **The journal mode (`015` group 8, built):** the Crawl Service sets `NewCrawl.journal_setting` from the resolved `[store] journal_mode`, in the slice. `create_crawl` reports `store_wal_unavailable` through the Crawl Service's warning log (D10), so it reaches the result and `crawl.warnings` like any other warning.
-- **Depends on `015` group 9:** the Crawl Service redacts the command line and config with `015`'s function before `create_crawl`, collecting secret flag names with `options_with_meta`. `[crawl]` has no secret setting in v0.1, so the slice can land before group 9; the call is added when it lands, and before `022`-min records the proxy variables.
+- **Redaction (`015` group 9, built):** `NewCrawl.secret_names` has no default, so the slice passes it from the start. The `crawl` adapter calls `secret_names(<its Click command>, <the settings tables>)` and hands the result to the Crawl Service, which puts it in the `NewCrawl`; `create_crawl` redacts by itself. `[crawl]` has no secret setting in v0.1, so nothing of it is redacted yet; `022` (v0.2) adds secret ones.
 - **Validation and config resolution** are one function the adapter calls before anything is created, so `060`'s detached start and dry run reuse it and cannot disagree with a foreground Crawl.
 
 ### D12. Crawl State transitions
