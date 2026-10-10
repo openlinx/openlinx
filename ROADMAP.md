@@ -34,7 +34,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 |---|---|---|---|---|
 | 000 | `000-scaffold-project` | none (tooling only) | `spider --version` | done |
 | 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | done |
-| 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | planned |
+| 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | done |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | planned |
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned, min |
 | 030 | `030-add-page-data` | `page-data` | none (data only) | planned, min |
@@ -262,8 +262,8 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 - 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
 - 080: `design.md:95` and task 7.8 still name 100's release pipeline for the Skill-copy check, which is now 085's.
 - 060: re-ground for v0.1. Its proposal and the release notes in `specs/crawl-control/spec.md` still say v0.1.1 for 060-min; they become v0.1, except the command recorded for Crawls started through MCP (v0.1.1). It may not assume 022: 060-min needs only 015 and 020.
-- 015: its `design.md` (lines 13 and 86) and `proposal.md` (lines 11 and 71) say 060-min is v0.1.1. Fix the wording when 015 is archived; the one-writer-by-construction rule in 015 is unchanged until 060 lands.
-- 015: its design D6 names "020's `seq` on URLs" as the order column; 020 D1 uses `urls.id`, which already grows in insertion order. `docs/crawl-store.md` says resuming arrives with 060 in v0.2; it is v0.1 now. Fix both when 015 is archived.
+- 015 (done at its archive, 2026-10-10): its `design.md` (lines 13 and 86) and `proposal.md` (lines 11 and 71) say 060-min is v0.1.1. Fix the wording when 015 is archived; the one-writer-by-construction rule in 015 is unchanged until 060 lands.
+- 015 (done at its archive, 2026-10-10): its design D6 names "020's `seq` on URLs" as the order column; 020 D1 uses `urls.id`, which already grows in insertion order. `docs/crawl-store.md` says resuming arrives with 060 in v0.2; it is v0.1 now. Fix both when 015 is archived.
 - 060: own what moved from 015 (see 060's entry): its design still calls `015`'s `check_writer`, `write_control`, reservation and `crawl_id_taken`, and its spec and tasks rely on them.
 - 060: remove the window in which a just-claimed, still-empty `<id>.sqlite` makes `--crawl latest` report crawl_file_invalid. Create the file as `<id>.sqlite.tmp` (claimed exclusively, counted as taken) and rename it after the schema is written, together with the reservations.
 - 060: `crawls rm` deletes a crawl file together with its SQLite companions (`<id>.sqlite-wal`, `<id>.sqlite-shm`), because reading a WAL crawl file may leave them behind (015 crawl-store.md).
