@@ -51,7 +51,8 @@ def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFi
 
 
 def _is_path(reference: str) -> bool:
-    separators = {"/", os.sep, os.altsep} - {None}
+    # os.altsep is None off Windows; a comprehension keeps the set typed str everywhere.
+    separators = {s for s in ("/", os.sep, os.altsep) if s}
     return reference.endswith(CRAWL_FILE_SUFFIX) or any(s in reference for s in separators)
 
 
