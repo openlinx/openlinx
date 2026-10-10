@@ -94,9 +94,9 @@ def connect(
 
 
 def _shm_held(error: sqlite3.Error) -> bool:
-    # SQLite 3.50.0 made Windows' winHandleTruncate fail on ERROR_USER_MAPPED_FILE, which a
-    # just-killed process's view of -shm causes until Windows tears it down; winTruncate, used up to
-    # 3.49, ignored that error. Like a lock, it ends by itself. Remove once SQLite fixes it.
+    # SQLite 3.50.0 made Windows' winHandleTruncate fail on ERROR_USER_MAPPED_FILE, which -shm gives
+    # while a killed process that mapped it is still exiting; winTruncate, used up to 3.49, ignored
+    # that error. Like a lock, it ends by itself. Remove once SQLite fixes it.
     return getattr(error, "sqlite_errorcode", None) == sqlite3.SQLITE_IOERR_TRUNCATE
 
 
