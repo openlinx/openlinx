@@ -17,6 +17,14 @@ LATEST = "latest"
 
 
 @dataclass(frozen=True)
+class SecretNames:
+    """The secret flags, such as --token, and secret settings, such as example.token."""
+
+    flags: frozenset[str] = frozenset()
+    settings: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
 class NewCrawl:
     workspace: Workspace
     crawl_mode: CrawlMode
