@@ -121,6 +121,21 @@ def test_error_codes_of_this_change() -> None:
     assert {code: diagnostics[code]["exit_code"] for code in expected} == expected
 
 
+def test_store_codes_are_self_described() -> None:
+    diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
+    expected = {
+        "no_crawls": 4,
+        "crawl_not_found": 4,
+        "crawl_busy": 5,
+        "crawl_file_invalid": 6,
+        "crawl_schema_too_new": 6,
+        "crawl_not_writable": 7,
+        "unknown_table": 2,
+    }
+
+    assert {code: diagnostics[code]["exit_code"] for code in expected} == expected
+
+
 def test_warning_and_info_codes_of_this_change() -> None:
     diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
 

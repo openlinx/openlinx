@@ -209,7 +209,7 @@ Tasks 10.1 and 10.2 are the manager's addition after group 9's review: the attac
 
 - [x] 10.1 Drive "A secret option with a short name is refused" at seam 1. Done when: `check_command` refuses a short name on an option that declares `secret` itself, in its list of declaration problems.
 - [x] 10.2 **Guard:** "Options of secret settings have only long names", over `build_app` and the fixture app, next to the other registered-table guards. It passed at once: only `--token` maps to a secret setting.
-- [ ] 10.3 **Guard:** "Store codes are self-described", at seam 1. Every code was declared by the slice that first raised it.
+- [x] 10.3 **Guard:** "Store codes are self-described", at seam 1. It passed at once: every code was declared by the slice that first raised it.
 - [ ] 10.4 Docs:
   - `docs/architecture.md`: the store's public API (creating a Crawl, the writer, `--crawl` resolution, the schema service, redaction), the three-way schema check, and that `sqlalchemy` stays off the startup path
   - `CONTRIBUTING.md`: "Changing the crawl store schema": the declared table and `docs/schema.md` in the same slice; no migration before v0.1; from v0.1 on, a migration and a test from every published schema version
