@@ -17,7 +17,7 @@ def create_crawl(
 
     journal = choose_journal_mode(request.journal_setting, request.workspace.data_dir)
     # Read once: the id and crawl.started_at must name the same instant.
-    crawl_file = create_crawl_file(request, clock.now(), choice, journal.mode)
+    crawl_file, journal = create_crawl_file(request, clock.now(), choice, journal)
     if journal.warning is not None:
         reporter.warn(journal.warning)
     return crawl_file

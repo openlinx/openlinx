@@ -180,7 +180,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 
 Tasks 8.9 and 8.10 are the manager's rulings A and C on group 8's review; group 9's review covers them.
 
-- [ ] 8.9 Drive "WAL refused by SQLite" and "WAL granted by SQLite" at seam 4, a trivial pair.
+- [x] 8.9 Drive "WAL refused by SQLite" and "WAL granted by SQLite" at seam 4, a trivial pair.
 
   Done when: the confirmation is a pure function of the choice, the granted mode and the location; `create_crawl_file` sets `delete` when it says so, records the mode SQLite granted and returns the confirmed choice, whose warning the Crawl service reports (untested wiring, D3).
 - [ ] 8.10 Drive "A local extended-length path" and "A local device path" at seam 4, a trivial pair, with "An extended-length UNC path" as a guard.

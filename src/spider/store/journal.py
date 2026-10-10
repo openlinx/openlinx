@@ -32,3 +32,17 @@ def choose_journal_mode(setting: JournalSetting, location: PurePath) -> JournalC
             details={"path": str(location)},
         ),
     )
+
+
+def confirm_journal_mode(choice: JournalChoice, granted: str, location: PurePath) -> JournalChoice:
+    if choice.mode != "wal" or granted == "wal":
+        return choice
+    return JournalChoice(
+        "delete",
+        Diagnostic.of(
+            STORE_WAL_UNAVAILABLE,
+            f"SQLite refused WAL in {location} and gave {granted!r}, so the crawl file uses a "
+            "rollback journal.",
+            details={"path": str(location)},
+        ),
+    )
