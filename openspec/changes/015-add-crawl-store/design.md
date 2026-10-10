@@ -156,7 +156,8 @@
   - `NewCrawl.secret_names` has no default, so a creator that forgets its secrets fails at once instead of recording them.
   - The adapter calls `spider.cli.options.secret_names(command, tables)`: every opt of the Command's secret options (long and short), and every secret setting of every flat table, not only the Command's own, because `config` records every table.
   - An unset secret (`null`) stays `null`; a secret that is not a string, or a URL that cannot be parsed, becomes `***`.
-  - **Known limits:** Click's attached short form (`-tVALUE`) is not redacted, and keyed tables (`[rules.<id>]`) are skipped: no keyed setting is secret, and `SettingsTables.is_secret` cannot name one yet. The first change that needs either adds it.
+  - **Secret options have only long names,** so Click's attached short form (`-tVALUE`) never carries a secret (the manager's addition to group 10). `check_command` refuses a short name on an option that declares `secret` itself; options mapped to a secret setting are checked by a test over every registered Command, because `check_command` runs on the startup path, which loads no settings table.
+  - **Known limit:** keyed tables (`[rules.<id>]`) are skipped: no keyed setting is secret, and `SettingsTables.is_secret` cannot name one yet. The first change that needs one adds it.
 - **Later:** `022` (v0.2) adds the header shape for `--header`, which keeps the header name and redacts the value of sensitive headers only. `022` (v0.1) redacts the proxy passwords of the proxy variables it records, with the URL shape.
 - **Secrets in `spider.toml`** are allowed. They are redacted in `crawl.config` like any other secret.
 - **Alternatives:**

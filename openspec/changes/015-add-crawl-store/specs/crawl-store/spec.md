@@ -262,6 +262,8 @@ When a Crawl is created, the secrets in its recorded command line (`crawl.comman
 
 Redaction SHALL cover both the `--flag value` and the `--flag=value` forms. No part of the crawl file SHALL contain a redacted value.
 
+A secret option SHALL have only long names, so that the attached short form (`-tVALUE`) can never carry a secret. Registering a Command that declares a short name on an option that is secret on its own SHALL fail. An option that is secret through its setting SHALL be checked by a test over every registered Command, because registering a Command loads no settings table.
+
 #### Scenario: Secret option with a separate value
 - **WHEN** the command line `["spider","example-settings","--token","s3cret"]` is redacted
 - **THEN** the result is `["spider","example-settings","--token","***"]`
@@ -293,6 +295,14 @@ Redaction SHALL cover both the `--flag value` and the `--flag=value` forms. No p
 #### Scenario: A secret setting that is not a string
 - **WHEN** the config `{"example":{"token":12345}}` is redacted
 - **THEN** the result is `{"example":{"token":"***"}}`
+
+#### Scenario: A secret option with a short name is refused
+- **WHEN** a Command that declares the option `--api-key` with the short name `-k`, secret on its own, is registered
+- **THEN** registering fails with an error that names `api_key`
+
+#### Scenario: Options of secret settings have only long names
+- **WHEN** every option of every registered Command is checked against the registered settings tables
+- **THEN** no option mapped to a secret setting has a short name
 
 #### Scenario: The secret is nowhere in the file
 - **WHEN** a Crawl is created with the command line `["spider","example-settings","--token","s3cret"]` and the config `{"example":{"token":"s3cret"}}`, and its writer is closed
