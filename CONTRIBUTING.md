@@ -89,6 +89,14 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 - **Version caps:** cap the major version of a runtime dependency that a public contract rests on: `sqlalchemy` (the crawl file schema) and `typer` (the CLI, pinned to its minor version for `typer._click`). Leave the others uncapped.
 - **Development only:** `uv add --dev <name>`. The allowlist covers runtime dependencies only.
 
+## Changing the crawl store schema
+
+The schema of a crawl file is a public contract ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)): agents query it with SQL. It changes only this way:
+- **In one slice:** add the table or column to the declared schema (`spider.store.schema`) and to [docs/schema.md](docs/schema.md) in the same commit, in the slice whose scenario first needs it. The store contract test compares the two, so neither may lead. [How to add a table](docs/schema.md#how-to-add-a-table) has the details.
+- **Declared in full:** `info={"change": <n>}` on a new table, a comment on every table and column, the shared column types for timestamps, JSON and booleans, and the conventions of `docs/schema.md`. Tests check them on every declared table.
+- **Before v0.1:** no migration. Edit the declared tables directly; `schema_version` stays `1`, and crawl files from earlier development builds are not supported.
+- **From v0.1 on:** every schema change adds 1 to `schema_version`, and brings a migration and a test that upgrades a crawl file from every published schema version.
+
 ## Conventions
 
 - **Terms:** use the terms of [CONTEXT.md](CONTEXT.md) exactly, capitalised as defined there, such as Workspace, Crawl, Page, Issue and Command. This applies in code, tests, docs and commit messages. Test names use them too.

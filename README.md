@@ -53,6 +53,8 @@ It prints one JSON document with every Command, its options and output, the exit
 - [ROADMAP.md](ROADMAP.md): the changes planned for v0.1 and v0.1.1, and their build order.
 - [CONTEXT.md](CONTEXT.md): the glossary. Every doc, test and piece of code uses its terms.
 - [docs/architecture.md](docs/architecture.md): how the pieces fit together.
+- [docs/crawl-store.md](docs/crawl-store.md): how each Crawl is stored as one SQLite file, and how it is written and read.
+- [docs/schema.md](docs/schema.md): the public schema of a crawl file, for querying it with SQL.
 - [docs/adr/](docs/adr/): the decisions behind them.
 - [docs/testing.md](docs/testing.md): how everything is tested.
 - [CONTRIBUTING.md](CONTRIBUTING.md): setting up, running the checks and making a change.
