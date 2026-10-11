@@ -86,7 +86,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 3. Change check
 
-- [ ] 3.1 Verify that every `#### Scenario:` in `specs/crawl-store/spec.md` has exactly one test named after it, with a small script over the test ids.
+- [x] 3.1 Verify that every `#### Scenario:` in `specs/crawl-store/spec.md` has exactly one test named after it, with a small script over the test ids.
 - [x] 3.1a **Guard, with no scenario:** every unique rule is a named index, and every reference is one foreign key.
 
   Done when:
