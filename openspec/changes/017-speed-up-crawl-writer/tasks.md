@@ -19,7 +19,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.1 Drive "A failing unit commits the units before it".
 
   Done when: the units of a batch run with no savepoint each. When a unit raises anything, a `BaseException` included, the writer rolls back the transaction, runs the units before it again in order with a savepoint each, commits at once, and raises the unit's own error to its caller (design D6). `on_commit` gets the number of units the replay commit made durable, and a unit that fails in the replay is left out of it.
-- [ ] 1.2 **Guard:** "A unit that fails half-way after other units leaves no change".
+- [x] 1.2 **Guard:** "A unit that fails half-way after other units leaves no change".
 - [ ] 1.3 **Guard:** "A failing unit runs once".
 - [ ] 1.4 **Guard:** "An interrupted unit runs once and the writer goes on". Done when: `015`'s `test_an_interrupted_unit_rolls_back_and_the_writer_goes_on` is renamed after this scenario and also checks the Seed at position 1 and the number of runs.
 - [ ] 1.5 **Guard:** `015`'s scenarios under the optimistic batch: "A unit sees the units before it", "A unit updates a row of an earlier unit", "A failing unit leaves no change", "Other units survive a failing unit", "Units wait for the batch", "The 500th unit commits the batch", "The timer commits", "A flush commits at once" and "Closing commits everything". Done when: their `015` tests pass unchanged, and so do `015`'s tests for units from several threads, `run_async`, a busy unit, closing, and a unit that waits for its own writer.

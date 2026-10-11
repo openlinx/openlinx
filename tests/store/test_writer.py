@@ -125,6 +125,27 @@ def test_a_unit_that_fails_in_the_replay_is_left_out_of_its_commit(
     assert ([position for position, _ in seen], committed[:1], len(runs)) == ([1, 3], [2], 2)
 
 
+def test_a_unit_that_fails_half_way_after_other_units_leaves_no_change(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    def changes_an_earlier_unit_and_fails(connection: Connection) -> None:
+        insert_seed(3, "https://example.com/c")(connection)
+        connection.execute(
+            update(seeds).where(seeds.c.position == 1).values(url="https://example.com/z")
+        )
+        raise ValueError("bad")
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(insert_seed(1, "https://example.com/a"))
+        writer.run(insert_seed(2, "https://example.com/b"))
+        with pytest.raises(ValueError, match=r"^bad$"):
+            writer.run(changes_an_earlier_unit_and_fails)
+
+    assert query(crawl.path, SEEDS) == [(1, "https://example.com/a"), (2, "https://example.com/b")]
+
+
 def test_closing_commits_everything(temp_workspace: TempWorkspace) -> None:
     crawl = crawl_without_seeds(temp_workspace)
 
