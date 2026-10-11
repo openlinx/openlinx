@@ -5,7 +5,7 @@ Every Crawl is stored as its own SQLite file in the Workspace. Its schema is a d
 ## Consequences
 
 - Once v0.1 ships, every schema change needs an Alembic migration and a schema version bump. Older crawl files are migrated when opened.
-- Before v0.1 ships, migrations may be squashed. The contract starts at schema version 1.
+- Before v0.1 ships there are no migrations: a change edits the declared tables directly, and the schema version stays 1, where the contract starts.
 - `spider sql` opens crawl files read-only and rejects anything that is not a read.
 - WAL mode lets agents query while a crawl is writing. On network drives, where WAL does not work, the store falls back to rollback-journal mode and warns that queries must wait for the crawl.
 - A crawl file is self-contained, so it can be copied, archived or attached to a bug report.
