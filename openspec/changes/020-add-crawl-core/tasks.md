@@ -40,8 +40,10 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.9 Drive "Matching parameters are removed". Done when: `--strip-params` patterns apply as part of normalisation, keeping the order of the other parameters.
 - [x] 1.10 Drive "Removing every parameter removes the query" and "Parameters are kept by default", a trivial pair.
 - [x] 1.11 Drive "A bare host becomes an https Seed". Done when: the Seed parser returns a `NormalizedUrl` or a rejection that the Command reports as `invalid_url`.
-- [ ] 1.12 Docs: write the "URLs" part of `docs/crawling.md` (the normalisation rules, the kept trailing slash, and `--strip-params`).
-- [ ] 1.13 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [ ] 1.12 Fix: a URL with userinfo is an `InvalidUrl` ("userinfo"), never normalised (design D13), with a table case at seam 4.
+- [ ] 1.13 Fix: the Seed parser finds a scheme by design D13's rule (a scheme name and `:`, unless a port follows), so `mailto:`, `tel:`, `javascript:` and `ftp:` Seeds are rejected and `localhost:8080` gets `https://`, with table cases and a hypothesis property at seam 4: a Seed the parser accepts is http or https, and keeps the scheme its text names.
+- [ ] 1.14 Docs: write the "URLs" part of `docs/crawling.md` (the normalisation rules, the kept trailing slash, and `--strip-params`).
+- [ ] 1.15 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Scope decisions (slice, seam 4)
 
@@ -80,7 +82,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 4.1 Drive "An invalid Seed is rejected" at seam 1.
 
-  Done when: `spider crawl <url>` is registered with `@command_meta(name=CRAWL, output="document", events=True)`, its adapter calls the Crawl Service, `invalid_url` is declared in `spider.output.codes`, and the Workspace holds no new crawl file.
+  Done when: `spider crawl <url>` is registered with `@command_meta(name=CRAWL, output="document", events=True)`, its adapter calls the Crawl Service, `invalid_url` is declared in `spider.output.codes`, and the Workspace holds no new crawl file. A Seed rejected for its userinfo gets a hint that names `022`'s `--auth` (design D13).
 - [ ] 4.2 Drive "The Seed is fetched and recorded" at seam 3+6.
 
   Done when:

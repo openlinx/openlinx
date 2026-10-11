@@ -12,7 +12,7 @@ Scenario conventions:
 ## ADDED Requirements
 
 ### Requirement: Spider mode
-`spider crawl <url>` SHALL start a Crawl in Spider mode with the URL as its only Seed, written to `seeds` as given (`015-add-crawl-store`). It SHALL follow Links from the Seed within the Scope, and run in the foreground until the Crawl ends. A Seed given without a scheme SHALL get `https://`. A Seed that is not a valid http or https URL SHALL be rejected with exit code 2 and error code `invalid_url` before any request is made, and no Crawl SHALL be created.
+`spider crawl <url>` SHALL start a Crawl in Spider mode with the URL as its only Seed, written to `seeds` as given (`015-add-crawl-store`). It SHALL follow Links from the Seed within the Scope, and run in the foreground until the Crawl ends. A Seed given without a scheme SHALL get `https://`. A Seed has a scheme when it starts with a scheme name (RFC 3986) and `:`, unless what follows the `:` is a port number (digits, then `/`, `?`, `#` or the end), as in `site.test:8080/shop`; so `mailto:a@b.test` names the scheme `mailto`, and `localhost:8080` names none. A Seed that is not a valid http or https URL SHALL be rejected with exit code 2 and error code `invalid_url` before any request is made, and no Crawl SHALL be created.
 
 #### Scenario: The Seed is fetched and recorded
 - **WHEN** `/` returns 200 with an HTML page, and `spider crawl {site}/` runs
@@ -45,6 +45,8 @@ The Crawl SHALL identify every URL by its normalised form, and SHALL request and
 - percent-encode as UTF-8 the characters that a URL may not contain
 - keep the letter case of the path, and keep the query and its parameter order unchanged
 - keep a trailing slash: `/a` and `/a/` are two URLs, because which of them redirects to the other is itself a finding
+
+A URL with a user name or password (`user:pass@`) SHALL be rejected, not normalised, so that no credentials are recorded and no URL silently becomes another.
 
 #### Scenario: Scheme and host case, the default port and the fragment are normalised
 - **WHEN** `HTTP://Site.TEST:80/About#team` is normalised
