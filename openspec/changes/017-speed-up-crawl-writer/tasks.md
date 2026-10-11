@@ -57,7 +57,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - every Future of the batch fails with the error the job in hand gets (`crawl_busy` for a busy file)
   - every job still queued fails with `CrawlWriterClosedError`, and so does a later submit
   - a submit that waits on a full window wakes when the writer ends, from a failed commit or a dead thread, and raises `CrawlWriterClosedError`, so no caller waits forever (design D3)
-- [ ] 2.6 Drive "A full window holds the next submit".
+- [x] 2.6 Drive "A full window holds the next submit".
 
   Done when:
   - at most 2,000 submitted units are unresolved at once, and units waited for with `run()` do not count (design D3)

@@ -29,6 +29,8 @@ from spider.store.schema import crawl
 
 QUEUE_SIZE = 50_000
 BATCH_SIZE = 500
+# Submitted units unresolved at once: four batches, so the writer never waits for a submitter.
+WINDOW = 2_000
 COMMIT_AFTER_SECONDS = 1.0
 # Real time between timer checks while no unit arrives; the timer itself reads the Clock.
 IDLE_CHECK_SECONDS = 0.05
@@ -83,6 +85,9 @@ class CrawlWriter:
         self._on_commit = on_commit
         self._queue: Queue[_Job] = Queue(maxsize=QUEUE_SIZE)
         self._lock = threading.Lock()
+        # Signalled when a commit or a failing unit frees room in the window.
+        self._room = threading.Condition(self._lock)
+        self._unresolved = 0
         self._closed = False
         self._failure: BaseException | None = None
         # Owned by the writer thread: the units in the open transaction, which a failing unit makes
@@ -157,9 +162,13 @@ class CrawlWriter:
 
     def _submit(self, job: _Job, *, block: bool = True) -> None:
         self._refuse_own_thread()
-        with self._lock:
+        with self._room:
+            while job.submitted and self._unresolved >= WINDOW and not self._closed:
+                self._room.wait()
             if self._closed:
                 raise CrawlWriterClosedError(CLOSED) from self._failure
+            if job.submitted:
+                self._unresolved += 1
         self._queue.put(job, block=block)
 
     def _refuse_own_thread(self) -> None:
@@ -262,6 +271,8 @@ class CrawlWriter:
         finally:
             # Its own error even when the replay fails and ends the writer (design D6).
             failed.done.set_exception(error)
+            if failed.submitted:
+                self._free(1)
 
     def _commit_if_due(self, connection: Connection) -> None:
         if not connection.in_transaction():
@@ -275,11 +286,21 @@ class CrawlWriter:
             return
         connection.commit()
         batch, self._batch = self._batch, []
+        resolved = 0
         for ran in batch:
             if ran.future is not None:
                 ran.future.set_result(ran.result)
+                resolved += 1
+        self._free(resolved)
         if self._on_commit is not None and batch:
             self._on_commit(len(batch))
+
+    def _free(self, slots: int) -> None:
+        if not slots:
+            return
+        with self._room:
+            self._unresolved -= slots
+            self._room.notify_all()
 
     def _busy_error(self, error: BaseException) -> BaseException:
         if not is_busy(error):

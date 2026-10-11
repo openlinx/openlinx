@@ -612,3 +612,77 @@ def test_a_replay_commit_resolves_the_units_before_a_failing_one(
         results = [future.result(timeout=0) for future in submitted]
 
     assert (results, failed_at_commit) == ([1, 2, 3], [False])
+
+
+def test_a_full_window_holds_the_next_submit(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    log: list[str] = []
+    hold = threading.Event()
+    about_to_submit = threading.Event()
+
+    def held(connection: Connection) -> int:
+        hold.wait()
+        return positioned_insert(1)(connection)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        # A callback of the first Future runs before the commit frees any room in the window.
+        writer.submit(held).add_done_callback(lambda _: log.append("committed"))
+        for position in range(2, 2001):
+            writer.submit(positioned_insert(position))
+
+        def submit_one_more() -> None:
+            about_to_submit.set()
+            writer.submit(positioned_insert(2001))
+            log.append("returned")
+
+        submitter = threading.Thread(target=submit_one_more)
+        submitter.start()
+        about_to_submit.wait()
+        log.append("released")
+        hold.set()
+        submitter.join()
+
+    assert log == ["released", "committed", "returned"]
+
+
+def finishes(action: Callable[[], object]) -> bool:
+    """Runs the action on another thread, and says whether it ended within 10 s."""
+    thread = threading.Thread(target=action, daemon=True)
+    thread.start()
+    thread.join(timeout=10)
+    return not thread.is_alive()
+
+
+def test_units_waited_for_with_run_take_no_room_in_the_window(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    hold = threading.Event()
+    running = threading.Event()
+
+    def held(connection: Connection) -> None:
+        running.set()
+        hold.wait()
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        runner = threading.Thread(target=writer.run, args=(held,))
+        runner.start()
+        running.wait()
+        submitted = finishes(lambda: submit_inserts(writer, 2000))
+        hold.set()
+        runner.join()
+
+    assert submitted
+
+
+def test_a_failing_submitted_unit_frees_its_room_in_the_window(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        submitted = finishes(
+            lambda: [writer.submit(raising_insert(1, ValueError("bad"))) for _ in range(2001)]
+        )
+
+    assert submitted
