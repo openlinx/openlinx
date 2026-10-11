@@ -393,3 +393,6 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 - **Crawl operation:** scheduled or distributed Crawls.
 - **Community Skill workflow packs:** workflows such as an e-commerce audit or a migration check, contributed as Markdown through the plugin marketplace.
 - **Distribution:** signed standalone binaries and winget.
+- **Code quality checks (to weigh, nothing decided):** the aim is to stop agent-written functions and modules from growing, without a second linter as a gate.
+  - Widen ruff with complexity and design rules: `C90` and `PLR09xx` with moderate limits first, then `FBT`, `ARG` and `RET`. Other candidates: `N`, `PERF`, `FURB`, `ERA` and `SLF`.
+  - Run wemake-python-styleguide (`flake8 --select=WPS`) once as a read-only audit before a large change closes, to find complexity hotspots for its review group. Not a CI gate: its default limits push towards smaller modules and classes than the functional-core style uses.
