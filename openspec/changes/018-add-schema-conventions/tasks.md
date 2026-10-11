@@ -11,7 +11,7 @@ Scenario names are the `#### Scenario:` titles in `specs/crawl-store/spec.md`. S
 
 "Done when" says what must be true, not which helper to write. Names appear only where another change depends on them (design, Interface points).
 
-A **guard** is a test for a scenario that earlier code already satisfies. It passes on its first run, and it is kept to pin the contract. The scenarios that `015` already tests keep their tests and names. A guard over a rule that only later tables can exercise, such as references or index names, also asserts that it saw at least one table or column, so it is never vacuous by accident (design, Risks).
+A **guard** is a test for a scenario that earlier code already satisfies. It passes on its first run, and it is kept to pin the contract. The scenarios that `015` already tests keep their tests and names. A guard over a rule that only later tables can exercise ("Reference columns are declared", "Index names start with their table", "Derived and later columns may hold NULL") passes vacuously in this change. Its assertion that it saw at least one matching column or index switches on in the `020` task that adds the first foreign key or index (design, Risks).
 
 **The whole change is in the thin slice:** `020` starts after it (ROADMAP, Build order). ADR-0005 is committed with the change's planning documents, and the code follows it from the first task.
 
