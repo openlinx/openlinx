@@ -24,6 +24,7 @@ class ScopeRules:
     seed_hosts: frozenset[str]
     # Filled with --scope subdomains only: a host is internal when its registrable domain is one.
     registrable_domains: frozenset[str] = frozenset()
+    folder: str | None = None
 
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
         host = _without_trailing_dot(url_host(url))
@@ -39,7 +40,8 @@ def scope_rules(seed: NormalizedUrl, *, scope: ScopeKind = "host") -> ScopeRules
     # One way only: a www Seed never admits the apex, which the user did not name.
     www = {f"www.{host}"} if domain == host else set()
     domains = frozenset({domain}) if scope == "subdomains" and domain else frozenset()
-    return ScopeRules(frozenset({host} | www), domains)
+    folder = _folder(seed) if scope == "subfolder" else None
+    return ScopeRules(frozenset({host} | www), domains, folder)
 
 
 # Hosts repeat across a Crawl, and the Public Suffix List lookup walks the host's labels.
@@ -57,6 +59,11 @@ def _public_suffixes() -> "PublicSuffixList":
     from publicsuffixlist import PublicSuffixList  # off the startup path
 
     return PublicSuffixList()
+
+
+def _folder(url: NormalizedUrl) -> str:
+    path = "/" + url.split("/", 3)[3].partition("?")[0]
+    return path[: path.rfind("/") + 1]
 
 
 def _without_trailing_dot(host: str) -> str:

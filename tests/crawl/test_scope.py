@@ -42,6 +42,12 @@ def test_a_public_suffix_is_not_treated_as_the_site() -> None:
     assert rules.decide(NormalizedUrl("http://other.co.uk/")).is_internal is False
 
 
+def test_the_folder_of_a_seed_page_is_its_parent_folder() -> None:
+    rules = scope_rules(NormalizedUrl("http://site.test/blog/post-1"), scope="subfolder")
+
+    assert rules.folder == "/blog/"
+
+
 def _valid(url: NormalizedUrl | InvalidUrl) -> NormalizedUrl:
     if isinstance(url, InvalidUrl):
         raise TypeError(f"not a valid URL: {url.reason}")
