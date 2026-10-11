@@ -194,8 +194,8 @@ Every public table, column and index SHALL follow these conventions (ADR-0005):
 - **THEN** the unit fails with SQLite's `CHECK constraint failed` error, and `crawl.section_crawl` is unchanged
 
 #### Scenario: A value of another type is refused
-- **WHEN** a unit inserts a Seed whose `position` is the text `"first"`
-- **THEN** the unit fails with SQLite's `cannot store TEXT value in INTEGER column` error, and `seeds` has no new row
+- **WHEN** a unit sets `crawl.schema_version` to the text `"first"`
+- **THEN** the unit fails with SQLite's `cannot store TEXT value in INTEGER column` error, and `crawl.schema_version` is unchanged
 
 #### Scenario: Every table is strict
 - **WHEN** a Crawl is created, and `PRAGMA table_list` is read on its file

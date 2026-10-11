@@ -61,6 +61,7 @@
 - **Checked, as the ruling asked:** SQLAlchemy 2.1.3 renders `sqlite_strict=True` as `STRICT`, also together with `WITHOUT ROWID`. The shared types compile to their `impl` types: `Timestamp` and `Json` to `TEXT`, and `Flag` to `INTEGER`. `LargeBinary` compiles to `BLOB`.
 - **The one trap:** `Float` and `Double` compile to `FLOAT` and `DOUBLE`, which STRICT refuses. A REAL column, such as 030's `average_words_per_sentence`, is declared with `sqlalchemy.REAL`. The convention "a column's type is `INTEGER`, `REAL`, `TEXT` or `BLOB`", checked over `spider schema`, catches any other type before a file is ever created.
 - **How tables become STRICT:** the same declaration helper as D2 sets `sqlite_strict=True` on every public table. Checked by "Every table is strict" through `PRAGMA table_list`.
+- **What shows STRICT at work:** "A value of another type is refused" writes text into `crawl.schema_version`, a plain `INTEGER` column, which only STRICT refuses. An `INTEGER PRIMARY KEY` such as `seeds.position` is a rowid alias: SQLite refuses text there in any table, with `datatype mismatch`, so it would pass without STRICT.
 - **What it costs readers:** a STRICT table can be opened only by SQLite 3.37 or later (2021-11). Our own tool runs on 3.50 or later. `docs/schema.md` states the minimum for other tools, and `080`'s `doctor` reports the SQLite version.
 - *Alternative:* CHECKs on `typeof()` for every column. They are verbose and duplicate what STRICT does. Rejected.
 
