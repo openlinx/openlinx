@@ -25,6 +25,7 @@ from tests.support.crawls import (
 )
 from tests.support.permissions import read_only_file
 from tests.support.workspace import TempWorkspace
+from tests.support.writer import replay_now
 
 SEEDS = "SELECT position, url FROM seeds ORDER BY position"
 COUNT = "SELECT count(*) FROM seeds"
@@ -184,6 +185,24 @@ def test_a_unit_that_meets_a_full_file_when_it_runs_again_ends_the_writer(
         f"The unit {fills_the_file_when_run_again.__qualname__} raised when it ran again.",
         sqlite3.SQLITE_FULL,
     )
+
+
+def test_replay_now_runs_the_units_since_the_last_commit_again(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    runs: list[int] = []
+
+    def counted_insert(connection: Connection) -> None:
+        runs.append(1)
+        insert_seed(1, "https://example.com/1")(connection)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(counted_insert)
+        replay_now(writer)
+        seen = query(crawl.path, COUNT)
+
+    assert (len(runs), seen) == (2, [(1,)])
 
 
 def test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails(
