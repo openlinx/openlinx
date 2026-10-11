@@ -132,8 +132,9 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 - [ ] 10.7 Drive "Links declared in a header" at seam 4.
 - [ ] 10.8 Drive "Discovered URLs are the stored Link targets" at seam 3+6. Write Links from analysed Pages, and return the header Links of other responses from the handler.
 - [ ] 10.9 Drive "Link types are an enumeration" at seam 6 (`values` on `links.type`).
-- [ ] 10.10 Docs: add the Link columns and the boundary with `020`'s Link discovery to `docs/page-data.md`.
-- [ ] 10.11 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [ ] 10.10 Check: the writer's capacity on the chosen `links` layout (`017` D11, moved here from `017`, which records only a 5k-Page smoke run; decided 2026-10-11). Switch `scripts/writer_throughput.py` from its provisional `links` table to the declared one, with the key, layout and secondary indexes that the links benchmark chose, run it at 20,000 Pages on the maintainer's machine, and restate D11's floor (Pages/s, WAL peak, RSS) from that run, in the script and in the "Writer capacity" section of `docs/benchmarks.md`. Done when: the run passes the restated floor, and the section records the machine, the numbers and the layout. If Pages/s falls well below `017`'s 17.2–18.0 on the provisional layout, the work stops and is reported before the floor is lowered.
+- [ ] 10.11 Docs: add the Link columns and the boundary with `020`'s Link discovery to `docs/page-data.md`.
+- [ ] 10.12 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
 
 ## 11. Link counts and Folder Depth
 
