@@ -93,7 +93,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 ## 4. Prebuilt statements and the throughput check
 
 - [x] 4.1 Docs: in the "Crawl store" section of `docs/architecture.md`, document the prebuilt-statement rule of design D9: a unit that runs per URL or per Page executes statements built once at import, as `execute(stmt, params)`, never `.values(<literals>)` per unit and never `insert().values(list)`. Also document why no guard test enforces it.
-- [ ] 4.2 Check script: `scripts/writer_throughput.py`, as design D11 describes.
+- [x] 4.2 Check script: `scripts/writer_throughput.py`, as design D11 describes.
 
   Done when:
   - it prepares 20,000 Pages of ~466 Link rows and ~367 discovered targets each before the clock starts, and submits one unit per Page through `submit()` with prebuilt statements
