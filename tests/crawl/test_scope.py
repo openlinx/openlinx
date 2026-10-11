@@ -1,8 +1,10 @@
 """Scope decisions (020-add-crawl-core, crawling)."""
 
+import re
+
 import pytest
 
-from spider.crawl.scope import scope_rules
+from spider.crawl.scope import ScopeDecision, scope_rules
 from spider.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url, parse_seed
 
 
@@ -46,6 +48,18 @@ def test_the_folder_of_a_seed_page_is_its_parent_folder() -> None:
     rules = scope_rules(NormalizedUrl("http://site.test/blog/post-1"), scope="subfolder")
 
     assert rules.folder == "/blog/"
+
+
+def test_exclude_wins_over_include() -> None:
+    rules = scope_rules(
+        NormalizedUrl("http://site.test/blog/"),
+        include=(re.compile("/blog/"),),
+        exclude=(re.compile("draft"),),
+    )
+
+    assert rules.decide(NormalizedUrl("http://site.test/blog/draft-1")) == ScopeDecision(
+        is_internal=True, in_scope=False, skip_reason="excluded"
+    )
 
 
 def _valid(url: NormalizedUrl | InvalidUrl) -> NormalizedUrl:
@@ -104,3 +118,25 @@ def test_the_subdomains_scope_compares_registrable_domains(
     rules = scope_rules(_valid(parse_seed(seed)), scope="subdomains")
 
     assert rules.decide(_valid(normalize_url(url))).is_internal is internal
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("http://site.test/blog/a", ScopeDecision(is_internal=True, in_scope=True)),
+        ("http://site.test/news/n", ScopeDecision(is_internal=True, in_scope=False)),
+        ("http://other.test/blog/a", ScopeDecision(is_internal=False, in_scope=False)),
+        (
+            "http://other.test/logout",
+            ScopeDecision(is_internal=False, in_scope=False, skip_reason="excluded"),
+        ),
+    ],
+)
+def test_include_and_exclude_patterns_decide_the_scope(url: str, expected: ScopeDecision) -> None:
+    rules = scope_rules(
+        NormalizedUrl("http://site.test/blog/"),
+        include=(re.compile("/blog/"),),
+        exclude=(re.compile("/logout$"),),
+    )
+
+    assert rules.decide(NormalizedUrl(url)) == expected

@@ -11,6 +11,17 @@ type CrawlMode = Literal["spider", "list", "sitemap"]
 type JournalMode = Literal["wal", "delete"]
 type JournalSetting = Literal["auto", "wal", "delete"]
 type CrawlState = Literal["running", "stopped", "completed", "failed", "interrupted"]
+type SkipReason = Literal[
+    "excluded",
+    "blocked_by_robots_txt",
+    "robots_unreachable",
+    "nofollow",
+    "link_type_not_followed",
+    "external_not_checked",
+    "max_depth",
+    "max_redirects",
+    "url_too_long",
+]
 
 # The --crawl value that selects the Crawl that started last.
 LATEST = "latest"
