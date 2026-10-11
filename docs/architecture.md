@@ -93,6 +93,10 @@ Frontier ──► Scheduler ──► Fetcher ──► Parse pool ──► Ru
   - After the exclusive create of a new file, `spider.store.connections` is the only code that opens a crawl file: one engine per operation, disposed after it, so no handle outlives the operation.
 - **Schema definition:** SQLAlchemy 2 Core tables in `spider.store.schema` are the single definition ([ADR-0003](adr/0003-sqlalchemy-core-not-orm.md)). They drive batched inserts, safe `--where` → SQL translation (only known columns), and the SQL reference (`spider schema`, the Skill).
   - Every table and column has a description, because the descriptions feed that reference.
+- **Prebuilt statements:** a unit that runs once per URL or per Page executes statements built once at import, as `execute(stmt, params)`. It never builds `.values(<literals>)` per unit, and never uses `insert().values(list)`.
+  - In the store benchmark, a statement built per unit regenerated its cache key and coerced every value, so prebuilt statements were about twice as fast. A multi-values insert compiled per call was 60 times slower than `executemany`.
+  - Units that run a bounded number of times per Crawl, such as the write check and setting the state, may build their statements where they run.
+  - No guard test enforces the rule. A check over the source cannot tell a statement built once from one built per call: expanding bind parameters and column lists chosen at import look the same as statements built per call. The review of every task group that adds units checks it instead, and a guard is reconsidered if a review finds the rule broken twice.
 - **The three-way schema check,** so the documentation, the code and the files cannot drift apart:
   - `docs/schema.md` is compared with `spider schema --limit 1000`
   - a new crawl file is compared with the declared tables through `PRAGMA table_info` and `PRAGMA foreign_key_list`
