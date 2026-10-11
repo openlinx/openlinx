@@ -122,3 +122,13 @@ def test_matching_parameters_are_removed() -> None:
     assert normalize_url("http://site.test/p?utm_source=x&id=7&fbclid=y", strip) == (
         "http://site.test/p?id=7"
     )
+
+
+def test_removing_every_parameter_removes_the_query() -> None:
+    strip = strip_params_pattern(["*"])
+
+    assert normalize_url("http://site.test/p?a=1&b=2", strip) == "http://site.test/p"
+
+
+def test_parameters_are_kept_by_default() -> None:
+    assert normalize_url("http://site.test/p?utm_source=x") == "http://site.test/p?utm_source=x"

@@ -38,7 +38,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.7 **Guard:** "Normalising twice changes nothing", as a hypothesis property over generated http and https URLs.
 - [x] 1.8 Drive "Normalising any text gives a URL or a rejection", as a hypothesis property over arbitrary text.
 - [x] 1.9 Drive "Matching parameters are removed". Done when: `--strip-params` patterns apply as part of normalisation, keeping the order of the other parameters.
-- [ ] 1.10 Drive "Removing every parameter removes the query" and "Parameters are kept by default", a trivial pair.
+- [x] 1.10 Drive "Removing every parameter removes the query" and "Parameters are kept by default", a trivial pair.
 - [ ] 1.11 Drive "A bare host becomes an https Seed". Done when: the Seed parser returns a `NormalizedUrl` or a rejection that the Command reports as `invalid_url`.
 - [ ] 1.12 Docs: write the "URLs" part of `docs/crawling.md` (the normalisation rules, the kept trailing slash, and `--strip-params`).
 - [ ] 1.13 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
