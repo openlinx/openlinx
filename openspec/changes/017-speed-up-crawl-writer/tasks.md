@@ -77,7 +77,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: only the writer's engine, through a keyword of `opening()` that only `CrawlWriter` passes, sets `temp_store`, `cache_size` and `mmap_size` in a connect listener after the journal-mode check. Creating the file and readers keep SQLite's defaults, and no setting is added (design D8).
 - [x] 3.2 Drive "The writer's connection settings in rollback-journal mode". Done when: `mmap_size` is set to `0` explicitly, since its default is a build-time option.
-- [ ] 3.3 Drive "A new writer opens the file of a killed writer at once", at seam 2, process. If it passes on its first run, it stays as a guard of `020` D16's fresh writer.
+- [x] 3.3 Drive "A new writer opens the file of a killed writer at once", at seam 2, process. If it passes on its first run, it stays as a guard of `020` D16's fresh writer.
 - [ ] 3.4 Verify the killed-writer proof on Windows with memory mapping on (design D10).
 
   Done when:
