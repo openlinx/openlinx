@@ -100,3 +100,17 @@ def test_normalising_twice_changes_nothing(url: str) -> None:
         reject()
 
     assert normalize_url(once) == once
+
+
+_ANY_CHARACTER = st.characters(exclude_categories=[])
+
+
+@given(
+    st.one_of(
+        st.text(_ANY_CHARACTER),
+        st.text(_ANY_CHARACTER).map("http://{}".format),
+        st.text(_ANY_CHARACTER).map("https://site.test/{}".format),
+    )
+)
+def test_normalising_any_text_gives_a_url_or_a_rejection(text: str) -> None:
+    assert isinstance(normalize_url(text), (str, InvalidUrl))

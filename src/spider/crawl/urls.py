@@ -14,6 +14,7 @@ _PERCENT_ENCODED = re.compile("%([0-9A-Fa-f]{2})")
 _UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
 _NOT_ALLOWED = re.compile(r"[^A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]|%(?![0-9A-Fa-f]{2})")
 _HOST = re.compile(r"[a-z0-9\-._~]+")
+_SURROGATE = re.compile(r"[\ud800-\udfff]")
 # UTS46 deletes these silently, so "e<ZWSP>vil.test" would become "evil.test"; aiohttp's URL
 # library (yarl) refuses the same set.
 _IGNORABLE = re.compile(
@@ -29,6 +30,9 @@ class InvalidUrl:
 
 
 def normalize_url(text: str) -> NormalizedUrl | InvalidUrl:
+    # A lone surrogate, as surrogateescape decoding leaves, has no UTF-8 form to percent-encode.
+    if _SURROGATE.search(text):
+        return InvalidUrl("malformed")
     try:
         parts = urlsplit(text)
         port = parts.port
