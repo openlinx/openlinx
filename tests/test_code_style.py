@@ -78,10 +78,9 @@ def violations(sources: Mapping[str, str]) -> list[str]:
                 for name in map(_base_name, node.bases)
                 if name in own_class_names and (node.name, name) not in ALLOWED_SUBCLASSES
             ]
-    for module, tree in trees.items():
         found += [
             f"{module}: {node.name} is a memo without an explicit bound"
-            for node in ast.walk(tree)
+            for node in ast.walk(trees[module])
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
             and any(map(_is_unbounded_memo, node.decorator_list))
         ]
@@ -160,15 +159,15 @@ def _imported_modules(tree: ast.AST) -> list[str]:
     return found
 
 
-def _calls_normalized_url(tree: ast.AST) -> bool:
-    return any(
-        isinstance(node, ast.Call)
-        and (
-            (isinstance(node.func, ast.Name) and node.func.id == "NormalizedUrl")
-            or (isinstance(node.func, ast.Attribute) and node.func.attr == "NormalizedUrl")
-        )
-        for node in ast.walk(tree)
-    )
+def _makes_normalized_url(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    if _base_name(node.func) != "cast":
+        return _base_name(node.func) == "NormalizedUrl"
+    target = node.args[0] if node.args else None
+    if isinstance(target, ast.Constant):
+        return target.value == "NormalizedUrl"
+    return target is not None and _base_name(target) == "NormalizedUrl"
 
 
 def url_type_violations(sources: Mapping[str, str]) -> list[str]:
@@ -182,7 +181,7 @@ def url_type_violations(sources: Mapping[str, str]) -> list[str]:
                 for name in _imported_modules(tree)
                 if name == "spider" or name.startswith(("spider.", "."))
             ]
-        if module not in NORMALIZED_URL_MAKERS and _calls_normalized_url(tree):
+        if module not in NORMALIZED_URL_MAKERS and any(map(_makes_normalized_url, ast.walk(tree))):
             found.append(f"{module} makes a NormalizedUrl")
     return found
 
@@ -220,12 +219,17 @@ def test_a_normalized_url_made_outside_its_makers_is_named() -> None:
         URL_MODULE: "NormalizedUrl('http://site.test/')\n",
         "spider/crawl/scope.py": "urls.NormalizedUrl('http://site.test/')\n",
         "spider/crawl/engine.py": "url = NormalizedUrl('http://site.test/')\n",
+        "spider/store/urls.py": "url = cast(NormalizedUrl, row.url)\n",
+        "spider/store/origins.py": "url = typing.cast('NormalizedUrl', row.url)\n",
         "spider/crawl/frontier.py": "def f(url: NormalizedUrl) -> None: ...\n",
+        "spider/crawl/links.py": "n = cast(int, row.n)\n",
     }
 
     assert url_type_violations(sources) == [
         "spider/crawl/scope.py makes a NormalizedUrl",
         "spider/crawl/engine.py makes a NormalizedUrl",
+        "spider/store/urls.py makes a NormalizedUrl",
+        "spider/store/origins.py makes a NormalizedUrl",
     ]
 
 

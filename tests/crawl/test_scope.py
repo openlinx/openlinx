@@ -140,3 +140,19 @@ def test_include_and_exclude_patterns_decide_the_scope(url: str, expected: Scope
     )
 
     assert rules.decide(NormalizedUrl(url)) == expected
+
+
+@pytest.mark.parametrize(
+    ("url", "in_scope"),
+    [
+        ("http://site.test/blog/post", True),
+        ("http://site.test/blog/", True),
+        ("http://site.test/shop/", False),
+        ("http://site.test/blogroll", False),
+        ("http://www.site.test/blog/a", True),
+    ],
+)
+def test_the_subfolder_scope_keeps_urls_inside_the_folder(url: str, in_scope: bool) -> None:
+    rules = scope_rules(NormalizedUrl("http://site.test/blog/"), scope="subfolder")
+
+    assert rules.decide(NormalizedUrl(url)).in_scope is in_scope

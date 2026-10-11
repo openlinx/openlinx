@@ -10,9 +10,7 @@ from typing import Literal, NewType
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 NormalizedUrl = NewType("NormalizedUrl", str)
-# A URL that normalisation leaves as it is: http(s), a lower-case ASCII host without a port,
-# a path of allowed characters without % or dot segments, an optional non-empty query
-# without %, and no fragment. Most resolved Links are already in this form.
+# URLs that normalisation would leave unchanged; most resolved Links are already in this form.
 NORMAL_FORM = re.compile(
     r"https?://[a-z0-9\-._~]+"
     r"(?:/(?!\.\.?(?:/|\?|$))[A-Za-z0-9\-._~:@!$&'()*+,;=]*)+"
@@ -193,3 +191,7 @@ def url_host(url: NormalizedUrl) -> str:
     if authority.startswith("["):
         return authority.partition("]")[0] + "]"
     return authority.partition(":")[0]
+
+
+def url_path(url: NormalizedUrl) -> str:
+    return "/" + url.split("/", 3)[3].partition("?")[0]

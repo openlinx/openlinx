@@ -6,7 +6,7 @@ from functools import lru_cache
 from ipaddress import IPv4Address
 from typing import TYPE_CHECKING, Literal
 
-from spider.crawl.urls import NormalizedUrl, url_host
+from spider.crawl.urls import NormalizedUrl, url_host, url_path
 from spider.store.records import SkipReason
 
 if TYPE_CHECKING:
@@ -24,7 +24,8 @@ class ScopeDecision:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ScopeRules:
-    seed_hosts: frozenset[str]
+    # In order: the Seed's host, then its www host, as the recorded Scope lists them.
+    seed_hosts: tuple[str, ...]
     # Filled with --scope subdomains only: a host is internal when its registrable domain is one.
     registrable_domains: frozenset[str] = frozenset()
     folder: str | None = None
@@ -34,12 +35,15 @@ class ScopeRules:
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
         host = _without_trailing_dot(url_host(url))
         is_internal = host in self.seed_hosts or (
-            bool(self.registrable_domains) and registrable_domain(host) in self.registrable_domains
+            bool(self.registrable_domains) and _registrable_domain(host) in self.registrable_domains
         )
         if any(pattern.search(url) for pattern in self.exclude):
             return ScopeDecision(is_internal=is_internal, in_scope=False, skip_reason="excluded")
+        in_folder = self.folder is None or url_path(url).startswith(self.folder)
         included = not self.include or any(pattern.search(url) for pattern in self.include)
-        return ScopeDecision(is_internal=is_internal, in_scope=is_internal and included)
+        return ScopeDecision(
+            is_internal=is_internal, in_scope=is_internal and in_folder and included
+        )
 
 
 def scope_rules(
@@ -50,15 +54,16 @@ def scope_rules(
     exclude: tuple[re.Pattern[str], ...] = (),
 ) -> ScopeRules:
     host = _without_trailing_dot(url_host(seed))
-    domain = registrable_domain(host)
+    domain = _registrable_domain(host)
     # One way only: a www Seed never admits the apex, which the user did not name.
-    www = {f"www.{host}"} if domain == host else set()
-    domains = frozenset({domain}) if scope == "subdomains" and domain else frozenset()
-    folder = _folder(seed) if scope == "subfolder" else None
+    www = (f"www.{host}",) if domain == host else ()
+    path = url_path(seed)
     return ScopeRules(
-        seed_hosts=frozenset({host} | www),
-        registrable_domains=domains,
-        folder=folder,
+        seed_hosts=(host, *www),
+        registrable_domains=frozenset({domain})
+        if scope == "subdomains" and domain
+        else frozenset(),
+        folder=path[: path.rfind("/") + 1] if scope == "subfolder" else None,
         include=include,
         exclude=exclude,
     )
@@ -66,9 +71,10 @@ def scope_rules(
 
 # Hosts repeat across a Crawl, and the Public Suffix List lookup walks the host's labels.
 @lru_cache(maxsize=1024)
-def registrable_domain(host: str) -> str | None:
-    """The host's registrable domain, or None for an IP address or a single-label host."""
-    if host.startswith("[") or "." not in host.strip(".") or _is_ipv4(host):
+def _registrable_domain(host: str) -> str | None:
+    # The list would call "0.1" the registrable domain of 127.0.0.1, and a single label has none.
+    bare = host.strip(".")
+    if host.startswith("[") or "." not in bare or _is_ipv4(bare):
         return None
     return _public_suffixes().privatesuffix(host)
 
@@ -79,11 +85,6 @@ def _public_suffixes() -> "PublicSuffixList":
     from publicsuffixlist import PublicSuffixList  # off the startup path
 
     return PublicSuffixList()
-
-
-def _folder(url: NormalizedUrl) -> str:
-    path = "/" + url.split("/", 3)[3].partition("?")[0]
-    return path[: path.rfind("/") + 1]
 
 
 def _without_trailing_dot(host: str) -> str:
