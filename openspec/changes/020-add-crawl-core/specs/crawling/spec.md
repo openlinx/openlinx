@@ -813,7 +813,7 @@ A failure while one URL is fetched, decoded, parsed, extracted or handled SHALL 
 - **Handlers:** when a per-response handler raises an error, the URL SHALL be recorded without that handler's rows.
 - **Recording:** when the writer unit that records a URL fails on its first run with an error of one row, the URL SHALL be recorded by a fallback unit with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs discovered from it and without its handler rows. An error of one row is a value that the file refuses (a constraint, a value too big, or a value that cannot be bound), or an error that the tool's own row code raises. Each of these SHALL instead fail the Crawl as a write failure (see "Result of a Crawl"):
   - any other error that SQLite reports, such as a full disk, an I/O error, or a read-only, corrupt or busy file
-  - a unit that fails, or gives another result, when the writer runs it again (`015-add-crawl-store`)
+  - a unit that fails, or gives another result, when the writer runs it again (`017-speed-up-crawl-writer`)
   - a fallback unit that fails, a commit that fails, and a writer that has ended
   - 100 URL units in a row that fail on their first run, with no URL unit committed in between
 - **Counted warnings:** each kind of failure SHALL be reported by one warning, `parse_failed` for extractors, `handler_failed` for handlers and `record_failed` for recording. It SHALL be written to stderr when it first occurs, and kept once in the result and `crawl.warnings`, with `details.count` (the number of URLs it affected) and `details.first_url`.

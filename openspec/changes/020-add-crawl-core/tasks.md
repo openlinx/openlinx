@@ -15,7 +15,7 @@ Scenario names are the `#### Scenario:` titles in `specs/crawling/spec.md`. Seam
 
 "Done when" says what must be true, not which helper to write. Names appear only where another change depends on them (design, Interface points).
 
-**No schema-first slices:** a table, column or index is added in the slice whose scenario first needs it, through `018`'s declaration helper, with its description and `docs/schema.md` row in the same commit, so the contract test (`015`'s, extended by `018`) is never red between commits. HTTP slices add the fixture pages they need.
+**No schema-first slices:** a table, column or index is added in the slice whose scenario first needs it, through `018`'s `public_table()` (an index as a named `Index` with `info["description"]`), with its description and its `docs/schema.md` row (in the table section's Columns or Indexes table) in the same commit, so the contract test (`015`'s, extended by `018`) is never red between commits. HTTP slices add the fixture pages they need.
 
 **Dependencies:** a new runtime dependency (`aiohttp`, `protego`, `selectolax`, `msgspec`, `publicsuffixlist`) is added in the slice that first needs it, with its line in `tests/dependency_allowlist.txt`, and the startup allowlist test (`tests/cli/test_startup.py`) must still pass without allowing it.
 
@@ -84,13 +84,13 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - the Crawl Service's start operation creates the Crawl with `015`'s `create_crawl`, and builds the `CrawlContext` (design D15) in one place, opening and closing `CrawlWriter` through `asyncio.to_thread`, and submits each URL's unit with `017`'s `submit_async()`, so the URL's task ends at the submit (design D2)
   - every `NewCrawl` gets both of its required fields, `secret_names` and `journal_setting`, from this first slice on; task 4.12 checks what they do
   - the `Fetcher` Protocol (design D8) has a one-hop aiohttp implementation
-  - the first `urls` columns (`id`, `url`, `host`, `crawl_depth`, `discovered_via`, `fetch_state`, `status_code`) and the unique index `urls_url` are declared through `018`'s declaration helper, each enumeration with every value of design D18, with their `docs/schema.md` rows; `018`'s guard over index names switches on its assertion that it saw an index
-  - every writer unit is defined in a `spider.store.*` module, follows `017` D7 (deterministic given the file's state, values as results), and its seam-2 test forces a replay with `017`'s `replay_now(writer)` (design D14); ruff's banned-API rule (TID251) bans `sqlalchemy` in `src/`, with per-file-ignores for `src/spider/store/**` and `src/spider/services/schema.py` (design D14)
+  - the first `urls` columns (`id`, `url`, `host`, `crawl_depth`, `discovered_via`, `fetch_state`, `status_code`) and the unique index `urls_url` are declared with `018`'s `public_table(..., change=20)`, each enumeration with every value of design D18, with their `docs/schema.md` rows; `018`'s guard over index names switches on its assertion that it saw an index
+  - every writer unit is defined in a `spider.store.*` module, follows `017` D7 (deterministic given the file's state, values as results), and its seam-2 test forces a replay with `017`'s `replay_now(writer)` from `tests/support/writer.py` (design D14); a guard in `tests/test_code_style.py` fails, naming the module, when a module of `src/spider` outside `spider/store/` and `spider/services/schema.py` imports `sqlalchemy`, at module level or inside a function, with cases that feed it source strings to show it is sharp (design D14)
 - [ ] 4.3 **Guard:** "The Seed is kept as given in seeds" (seam 3+6) and "The ways a URL is found are an enumeration" (seam 1), a pair. `015`'s `create_crawl` writes the Seeds as given, and task 4.2 declared `discovered_via` from the `LinkType` `Literal` (design D5).
 - [ ] 4.4 Drive "Pages linked from the Seed are crawled" at seam 3+6, and "Indexes of urls" at seam 1, a pair.
 
   Done when:
-  - the scheduler takes queued URLs depth by depth in `urls.id` order through a writer unit that only reads and commits nothing, above a per-depth cursor of the run, over the partial index `urls_crawl_depth_id`, declared with its description (design D1)
+  - the scheduler takes queued URLs depth by depth in `urls.id` order through a writer unit that only reads, run with `run_async()` and committing nothing, above a per-depth cursor of the run, over the partial index `urls_crawl_depth_id`, declared with its description (design D1)
   - hyperlinks are discovered by the page preparation function, called through the in-process executor of the `CrawlContext`, and each `DiscoveredLink` carries `is_internal` from the `ScopeRules` in its settings snapshot (design D5, D9)
   - new URLs are deduplicated by `urls_url` inside the URL's unit, with no in-memory map of URLs (design D1)
 - [ ] 4.5 Drive "A discovered URL points to where it was found" at seam 3+6.
@@ -115,7 +115,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 4.14 Drive "Response timing is recorded" at seam 3+6.
 - [ ] 4.15 Drive "The Content-Type is recorded as received" at seam 3+6.
 - [ ] 4.16 Docs: write the `spider crawl` reference in `docs/crawling.md` (the result fields, the event table, exit codes, `[crawl]` keys), and the `urls` and `crawl` columns and indexes so far in `docs/schema.md`.
-- [ ] 4.17 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) and prebuilt statements (D9) and ADR-0005's naming rules, then refactor with the whole suite green.
+- [ ] 4.17 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) and prebuilt statements (D9), ADR-0005's naming rules and ADR-0006 (slots on per-URL and per-Link records, `kw_only` above three fields), then refactor with the whole suite green.
 
 ## 5. Hooks, and one URL never stops the Crawl (slice)
 
@@ -139,7 +139,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when:
   - a failed unit gets a fallback unit that records only the URL's state (`fetch_state` = `error`, `fetch_error` = `record_failed`, the error in `fetch_error_message`), and `record_failed` is declared as a value and as a counted warning
-  - only design D2's allowlist (after unwrapping `DBAPIError.orig`: `sqlite3.IntegrityError`, `DataError`, `InterfaceError`, and non-database exceptions of our row code) leads to `record_failed`; every other `sqlite3.DatabaseError`, a unit that fails or differs in `017`'s replay, a failing fallback, a failed commit or `CrawlWriterClosedError` sets the stop flag with `write_failed` instead
+  - only design D2's allowlist (after unwrapping `DBAPIError.orig`: `sqlite3.IntegrityError`, `DataError`, `InterfaceError`, and non-database exceptions of our row code, checked after the writer's own errors `CrawlWriterClosedError`, `CrawlWriterReplayError` and the `SpiderError` `crawl_busy`, which are never one row's) leads to `record_failed`; every other `sqlite3.DatabaseError`, a unit that fails or differs in `017`'s replay, a failing fallback, a failed commit or `CrawlWriterClosedError` sets the stop flag with `write_failed` instead
 - [ ] 5.14 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes in `docs/crawling.md`.
 - [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
@@ -147,7 +147,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 6.1 Fixture: a second fixture site instance and the DNS resolver hook, which maps `site.test` and `www.site.test` to the first instance and `other.test` to the second, and fails every other name, test-first. Done when: the hook goes into the Crawl through the context builder (design D15).
 - [ ] 6.2 Drive "An External URL is checked" at seam 3+6. Done when: `is_internal` and `in_scope` are declared.
-- [ ] 6.3 Drive "An External origin gets its own row" at seam 3+6. Done when: the `origins` table is declared with `id`, `origin` (with the unique index `origins_origin`), `host` and `is_internal`, with its `docs/schema.md` section; `urls.origin_id` is declared NOT NULL with a foreign key to `origins.id`; and the unit that records a URL records its origin (design D18).
+- [ ] 6.3 Drive "An External origin gets its own row" at seam 3+6. Done when: the `origins` table is declared with `public_table(..., change=20)`: `id`, `origin` (with the named unique index `origins_origin`, never `unique=True`), `host` and `is_internal`, with its `docs/schema.md` section; `urls.origin_id` is declared NOT NULL with a foreign key to `origins.id`; and the unit that records a URL records its origin (design D18).
 - [ ] 6.4 Drive "External checks can be turned off" at seam 3.
 - [ ] 6.5 Drive "An unknown host is a DNS error" at seam 3+6.
 - [ ] 6.6 Docs: document External URL checks and the `fetch_error` codes in `docs/crawling.md`.
@@ -299,4 +299,4 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 15.2 **Guard:** every code this change declares is listed by `spider commands` with its level and exit code, at seam 1.
 - [ ] 15.3 Docs: the crawl pipeline section of `docs/architecture.md` says what is built (the context, the hooks, store-only units, page preparation behind the in-process executor), and `docs/schema.md` documents `urls`, `origins` and the new `crawl` columns, with their indexes and the values listed for later changes.
 - [ ] 15.4 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
-- [ ] 15.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md`, then refactor with the whole suite green.
+- [ ] 15.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md` and ADR-0006, then refactor with the whole suite green.

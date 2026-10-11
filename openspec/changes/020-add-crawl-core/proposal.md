@@ -19,6 +19,8 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 > - page preparation behind an executor seam, which `026`'s pool uses (D9)
 > - progress counts from counters (D10)
 
+> **Re-grounded again (2026-10-11)** on main after `017` (PR #4) and `018` (PR #5) were merged: their interfaces as built (`public_table()`, the guards that switch on with this change's first foreign key and first index, the Indexes table of `docs/schema.md`, the writer's own errors, and `run_async()` for reads), ADR-0006 (slots and `kw_only` on this change's records), and a guard test instead of a lint rule that keeps `sqlalchemy` in the store (design D14).
+
 - **New Command `spider crawl <url>`** in Spider mode, running in the foreground. A bare host such as `site.test` becomes `https://site.test/`.
 - **URL normalisation:**
   - It strips fragments and default ports.
@@ -84,7 +86,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - The per-response and post-crawl hooks, progress events, the result, and how a foreground Crawl ends.
 
 ### Modified Capabilities
-- None. `crawl-store`, as `015-add-crawl-store` built it and `018-add-schema-conventions` extends it, is used as it is: this change adds tables, columns and indexes under its conventions, which its spec allows, and replaces nothing.
+- None. `crawl-store`, as `015-add-crawl-store` built it and `017-speed-up-crawl-writer` and `018-add-schema-conventions` extended it, is used as it is: this change adds tables, columns and indexes under its conventions, which its spec allows, and replaces nothing.
 
 ## Non-goals
 
@@ -109,12 +111,12 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 - **Depends on:**
   - `000-scaffold-project`: the package, CI, the loop wiring, `FakeClock`, the network guard, and the plain-HTTP fixture site with its request log.
   - `010-add-workspace-and-cli-contract`: the stream rules, diagnostics, partial results (`Outcome`), exit codes, `settings_invalid`, the settings registry and its precedence, `@command_meta` and `OptionMeta`.
-  - `015-add-crawl-store`:
-    - **groups 1–7 (built):** `create_crawl` with `NewCrawl`, the crawl ids, the `crawl` and `seeds` tables, `set_state`, `CrawlWriter` (`run_async`, `on_commit`, `crawl_busy`, `CrawlWriterClosedError`), the shared column types, `docs/schema.md` and its contract test
-    - **group 8 (built):** `NewCrawl.journal_setting`, the `[store]` table (`StoreSettings.journal_mode`) and `store_wal_unavailable`; the Crawl Service sets the journal setting from `[store]` and reports the warning with the others
-    - **group 9 (built):** `NewCrawl.secret_names`, a required `SecretNames` that the `crawl` adapter gets from `spider.cli.options.secret_names`; `create_crawl` redacts the command line and config with it
-  - `017-speed-up-crawl-writer`: `submit()` and `submit_async()` with their outcome at the commit and their window, reads through the writer that commit nothing, the optimistic batch with its unit contract, and prebuilt statements.
-  - `018-add-schema-conventions`: the declaration helper (STRICT, and CHECKs from `values` and `Flag`), `references` and `indexes` in `spider schema`, and the contract test over indexes. Its guards' non-vacuity assertions switch on with this change's first index and foreign key.
+  - `015-add-crawl-store`, as merged:
+    - **the store:** `create_crawl` with `NewCrawl`, the crawl ids, the `crawl` and `seeds` tables, `set_state`, `CrawlWriter` (`run_async`, `on_commit`, `crawl_busy`, `CrawlWriterClosedError`), the shared column types, `docs/schema.md` and its contract test
+    - **the journal mode:** `NewCrawl.journal_setting`, the `[store]` table (`StoreSettings.journal_mode`) and `store_wal_unavailable`; the Crawl Service sets the journal setting from `[store]` and reports the warning with the others
+    - **redaction:** `NewCrawl.secret_names`, a required `SecretNames` that the `crawl` adapter gets from `spider.cli.options.secret_names`; `create_crawl` redacts the command line and config with it
+  - `017-speed-up-crawl-writer`, as merged (PR #4): `submit()` and `submit_async()` with their outcome at the commit and their window, reads through the writer that commit nothing, the optimistic batch with its unit contract and `CrawlWriterReplayError`, prebuilt statements, `ConnectionRole`, and the `replay_now` test helper.
+  - `018-add-schema-conventions`, as merged (PR #5): `public_table()` (STRICT, and CHECKs from `values` and `Flag`), `references` and `indexes` in `spider schema`, the Indexes table of `docs/schema.md`, and the contract test over indexes. Its guards' non-vacuity assertions switch on with this change's first index and foreign key, and its ADR-0006 guard covers this change's code.
 - **Used by:**
   - `022` (the engine, the Fetcher interface, the per-host gate, the fake Fetcher, the DNS resolver hook, `urls` and `origins`)
   - `030` (the per-response hook, the extractor registry, `DiscoveredLink`, the robots directives parser, the post-crawl passes, the decoding function)

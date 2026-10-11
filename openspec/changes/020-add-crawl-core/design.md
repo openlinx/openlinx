@@ -8,26 +8,31 @@
     - the code registry in `spider.output.codes`, with `ExitCode.USAGE` (2), `BUSY` (5), `IO` (7), `NETWORK` (8), `INTERRUPTED` (130) and the declared `interrupted` and `invalid_value` (010 D5)
     - the settings registry: tables registered in `build_app` as `"module:Class"`, one owner per table, `None` defaults, `secret` on the settings field, flag > `spider.toml` > default (010 D2)
     - `@command_meta(name=CONST, output="document", events=True)` and `OptionMeta(setting=...)` (010 D7), the startup allowlist test (010 D10), and `spider.naming` (010 D11)
-  - `015-add-crawl-store`, groups 1–9 as built on its branch:
+  - `015-add-crawl-store`, as merged on main (its spec is `openspec/specs/crawl-store`):
     - `spider.services.crawls.create_crawl(NewCrawl, clock, reporter)` returns a `CrawlFile(id, path)`; the `crawl` row and `seeds` are written in the file's first transaction. It chooses the journal mode from `NewCrawl.journal_setting` (`JournalSetting`: `auto`, `wal` or `delete`, default `auto`) and reports `store_wal_unavailable` through the Reporter
     - the `[store]` table, `spider.store.settings:StoreSettings` with `journal_mode`, registered in `build_app`
     - redaction: `NewCrawl.secret_names` is a required `SecretNames(flags, settings)` (in `spider.store.records`), which an adapter gets from `spider.cli.options.secret_names(command, tables)`; `create_crawl` redacts the command line and config with it before anything is written (015 D7)
-    - `CrawlWriter(path, clock, on_commit=None)`: `await run_async(unit)`, a unit is `Callable[[Connection], T]`, commits every 500 units or 1 s, `close()` commits and checkpoints. Opening and `close()` block, so they run through `asyncio.to_thread`. A writer whose thread ends raises `CrawlWriterClosedError` to every later caller, and a busy file is `crawl_busy` (exit 5)
+    - `CrawlWriter(path, clock, on_commit=None)`: `run(unit)` and `await run_async(unit)` return the unit's result once it has run, without waiting for the commit; a unit is `Callable[[Connection], T]`; the writer commits every 500 units or 1 s, `flush()` commits at once, and `close()` commits and checkpoints. Opening and `close()` block, so they run through `asyncio.to_thread`. A writer whose thread ends raises `CrawlWriterClosedError` to every later caller, and a busy file reaches the caller as the `SpiderError` `crawl_busy` (exit 5)
     - `set_state(connection, state, at)` in `spider.store.crawls`, which sets `completed_at` only for `completed`
     - the shared column types `Timestamp`, `Json` and `Flag`, `info={"change": <n>}` and comments on every table and column, and the contract test against `docs/schema.md`
     - `CrawlState` and `CrawlMode` as `Literal`s in `spider.store.records`, which loads no sqlalchemy
-  - `015`'s group 10 (wrap-up docs) adds no interface this change uses.
-- **`017-speed-up-crawl-writer`,** before this change in the build order:
+- **`017-speed-up-crawl-writer`,** as merged (PR #4, merge f5abc9e):
   - `submit(unit)` and `await submit_async(unit)` return a Future resolved at the commit that holds the unit, on the caller's loop for `submit_async`, with a window of 2,000 unresolved units. Cancelling a Future never withdraws its unit.
   - A unit that only reads runs in the open transaction and commits nothing (`017` D5).
   - The optimistic batch may run a unit twice, so every unit follows `017` D7, and a unit that runs once per URL executes statements built once (`017` D9).
+  - A unit that fails rolls the batch back; the writer runs the batch's earlier units again and commits them at once, and the failing unit's Future gets its own error (`017` D6). A unit that fails, or returns another result, when it runs again ends the writer: the Futures of that batch get `CrawlWriterReplayError`, and every later caller `CrawlWriterClosedError`, caused by it.
+  - A unit run with `run_async()` takes no room in the window, so the frontier reads (D1) never wait behind submitted units.
+  - `opening(path, *, role=...)` takes a `ConnectionRole`: `create` for `create_crawl`, `write` for the writer and `read` for readers (`017` D8).
+  - The test helper `replay_now(writer)` in `tests/support/writer.py` forces a replay (docs/testing.md).
   - The writer's connection settings (temporary store in memory, 64 MiB cache, memory mapping in WAL mode).
   - `on_commit(units)` counts every unit a commit made durable, read-only units included, so this change never uses it for progress (D10).
-- **`018-add-schema-conventions` and ADR-0005,** before this change in the build order (015 → 017 → 018 → 020):
-  - every public table is declared through `018`'s declaration helper, which makes it `STRICT` and adds the CHECKs of its listed values and flags
-  - `spider schema` reads `references` from declared foreign keys, and lists each index with the query it serves
-  - the contract test also compares indexes, STRICT and `WITHOUT ROWID`
+- **`018-add-schema-conventions`,** as merged (PR #5, merge 89da89a), **and ADR-0005:**
+  - every public table is declared with `public_table(name, *columns, comment=..., change=20)` in `spider.store.schema`, which makes it `STRICT` and adds a CHECK named `<table>_<column>_values` for each column with `info["values"]` and `<table>_<column>_flag` for each `Flag` column; `public_tables()` is the one filter of internal tables
+  - an index is a named `Index` whose `info["description"]` says the query it serves; `spider schema` lists it (name, description, columns, unique, where), and reads `references` from declared foreign keys
+  - `docs/schema.md` gives each table a section with a Columns table and an Indexes table, which `spider.services.schema_doc.parse_tables` reads; the contract test compares it with the declaration and a new file, indexes, STRICT, `WITHOUT ROWID` and CHECKs included
+  - the guards over the declaration (`tests/contract/test_conventions.py`): every `_id` column is a reference, every index is named `<table>_...` and described, no public table has a `UniqueConstraint` or `unique=True` (a unique rule is a named unique index), and no column has two foreign keys. The first two pass vacuously until this change's first foreign key (task 4.5) and first index (task 4.2), whose tasks add an assertion that one was seen.
   - the schema blueprint of 2026-10-11 and its rulings decide this change's tables (D18)
+- **ADR-0006 and CONTRIBUTING's Code style:** pure functions over frozen dataclasses; `slots=True` on every record made per URL or per Link (`Request`, `FetchResult`, `InvalidUrl`, `UrlResult` and the store rows); `kw_only=True` on every record of more than three fields (`CrawlContext`, the result); dependencies as Protocol-typed parameters (the `Fetcher`, the `Clock`, the `Reporter`) carried by one `CrawlContext` (D15); no class hierarchy of our own; and a broken contract inside our code raises a built-in error. `018`'s guard (`tests/test_code_style.py`) refuses a dataclass that is not frozen and a subclass of our own class; the review checks the rest.
 - **ADR-0001:** an own asyncio engine on aiohttp, whose frontier lives in the crawl store; the Fetcher sits behind an interface.
 - **ROADMAP decisions of 2026-10-05:** no default `--max-urls`, the robustness rule, 060-min in v0.1, and four design points from the architecture review (D12–D15).
 - **The split of the crawler:** this change is the core. `022` adds the fetch policy, `060`-min background Crawls and `resume`, `026` the parse pool and its benchmark, and `024` the other Crawl Modes in v0.2. Each plugs in without reworking the core.
@@ -54,7 +59,7 @@
 Each distinct normalised URL has one row, and its `fetch_state` (`queued` → `fetched` | `error` | `skipped`) is the queue.
 - **No in-flight state:** there is no separate frontier table and no persisted "in flight" state. A URL leaves `queued` only in the writer unit that stores its response and the URLs discovered from it, or in that unit's fallback unit (D2). After a crash, anything in flight is still `queued`.
 - **No in-memory URL map:** discovered URLs are inserted with `INSERT … ON CONFLICT (url) DO NOTHING` inside the URL's unit, and the unit reads back the ids it needs. The unique index `urls_url` is the only dedup, so memory does not grow with the site. What the process keeps in memory is bounded by the site's shape, not its size: the URLs in flight (at most the global cap of D7), one robots.txt verdict cache and one politeness gate per origin, the 60-second rate window, and the warnings.
-- **Dispatch order:** the scheduler takes queued URLs of the open Crawl Depth in batches, ordered by `urls.id`, through a writer unit that only reads. It runs after every unit submitted before it, so it sees their URLs, and it commits nothing (`017` D5).
+- **Dispatch order:** the scheduler takes queued URLs of the open Crawl Depth in batches, ordered by `urls.id`, through a writer unit that only reads, with `await writer.run_async(read)`. It runs after every unit submitted before it, so it sees their URLs; it returns once it has run, never waiting for a commit or for room in the window; and it commits nothing (`017` D5).
   - The batch read is `fetch_state = 'queued' AND crawl_depth = :depth AND id > :after ORDER BY id LIMIT :n` over the partial index `urls_crawl_depth_id` (D18). `:after` is the last id taken at that depth in this run, so a URL in flight is never taken twice.
   - The cursor starts again with each run, after a continue has re-queued URLs, so re-queued URLs with small ids are found. A cursor over the whole table, without the depth and the index, would miss them. The store benchmark measured the read flat at 1–2 ms.
   - The count of anything left at a deeper depth is such a unit too.
@@ -76,16 +81,17 @@ The unit is one completed URL, submitted with `await writer.submit_async(unit)` 
     - `sqlite3.IntegrityError`: a CHECK, NOT NULL, UNIQUE or foreign key
     - `sqlite3.DataError`: one value too big (`SQLITE_TOOBIG`)
     - `sqlite3.InterfaceError`: a value that cannot be bound
-    - any exception that is not a database error, raised by our own row code
+    - any exception that is not a database error, raised by our own row code. The writer's own errors are checked first and never count as one row's: `CrawlWriterClosedError`, `CrawlWriterReplayError` and the `SpiderError` `crawl_busy`, none of which is a database error.
   - The URLs discovered from it and its handler rows are lost. A continue re-queues it with the other `error` URLs (D1).
   - It is counted in one `record_failed` warning, and in the record-failure count of D16.
   - A unit that fails on its first run never ends the Crawl by itself.
 - **Not a URL's failure,** but `write_failed` (D16):
-  - every other `sqlite3.DatabaseError`, `ProgrammingError` included: the file or the connection failed, not one row. A full disk, an I/O error, or a read-only, corrupt or busy file are such errors. A full disk usually shows inside a unit, when SQLite allocates a page, not at the commit.
+  - every other `sqlite3.DatabaseError`, `ProgrammingError` included: the file or the connection failed, not one row. A full disk, an I/O error, or a read-only or corrupt file are such errors. A full disk usually shows inside a unit, when SQLite allocates a page, not at the commit.
   - a unit that fails, or gives another result, when `017` replays it (`017` D6): the writer ends
   - a fallback unit that fails
   - a commit that fails, which fails every Future of its batch
-  - `CrawlWriterClosedError`, including a writer that `017`'s replay check ended (`CrawlWriterReplayError`): when a unit run again does not reproduce its first run, the writer ends without a commit. A file-level error inside a unit, such as a full disk, usually ends the writer this way rather than failing only that unit.
+  - `CrawlWriterReplayError` and `CrawlWriterClosedError`: when a unit run again does not reproduce its first run, `017`'s replay check ends the writer without a commit; the Futures of the open batch get `CrawlWriterReplayError`, and every later submit `CrawlWriterClosedError`. A file-level error inside a unit, such as a full disk, usually ends the writer this way rather than failing only that unit.
+  - a busy file, which the writer raises as the `SpiderError` `crawl_busy`; the result reports it as it is (exit 5, D10)
 - **Units may run twice** (`017` D6): a unit runs again when a later unit of its batch fails. So it follows `017` D7: it has no effect outside the writer's connection, and it writes the frozen records built before it (D14). Its statements are built once (`017` D9).
 - **Cancelling:** a stop cancels the URLs' tasks (D16). A task cancelled after its submit does not withdraw its unit (`017`), so a URL whose response reached the writer is recorded. A task cancelled before its submit leaves its URL `queued`.
 
@@ -160,7 +166,7 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 - `022` adds retry backoff and `Retry-After` pauses on the same per-host gate.
 
 ### D8. The minimal Fetcher
-- **The interface:** a `Fetcher` Protocol, `async def fetch(self, request: Request) -> FetchResult`, over frozen dataclasses. It makes exactly one hop and never follows redirects. `022` replaces the implementation without changing the Protocol.
+- **The interface:** a `Fetcher` Protocol, `async def fetch(self, request: Request) -> FetchResult`, over frozen dataclasses with `slots=True`, made once per request, and `kw_only=True` above three fields (ADR-0006). It makes exactly one hop and never follows redirects. `022` replaces the implementation without changing the Protocol.
 - **The aiohttp implementation in this change:**
   - raw response headers in order and letter case
   - a fixed 20-second total timeout, which `022` makes configurable
@@ -179,7 +185,7 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 - **The executor seam:** the engine calls page preparation through an executor in the `CrawlContext` (D15), `await prepare(response)`.
   - This change ships the in-process executor.
   - `026` (v0.1, unconditional) plugs a process pool in behind the same seam without touching the engine. msgspec records cross the process boundary as they are.
-- **Per-response handlers** are pure too: a name and a function from a `UrlResult` (the URL's row values, and for a `fetched` URL its status, headers and extractor outputs) to a sequence of store rows (D14). They run for every URL that reaches a final state, including `error` and `skipped`, so `030` can record cookies on any status.
+- **Per-response handlers** are pure too: a name and a function from a `UrlResult`, a frozen dataclass with slots (the URL's row values, and for a `fetched` URL its status, headers and extractor outputs) to a sequence of store rows (D14). They run for every URL that reaches a final state, including `error` and `skipped`, so `030` can record cookies on any status.
 - **Post-crawl passes** run when a Crawl ends as `completed` or `stopped`, before its final Crawl State is written. A pass is a store function (D14) that submits its own units, so a pass over 500k Pages can write in batches. `030` computes inlink counts there, and `040` materialises its Rules' Issues by their queries. `040` also relies on the passes running before `completed` or `stopped` is written: those two states tell it that a Crawl's Issues are materialised. Passes run again after every continued run, so they must be safe to re-run, and they never run for a `failed` Crawl or a killed process.
 - *Alternative:* module-level registries, as the draft had. Tests that register into them leak into each other. Rejected.
 - *Alternative:* "sinks" that turn extractor structs into rows. They are handlers by another name. Merged into handlers.
@@ -187,7 +193,7 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 
 ### D10. Events, result, exit codes and interrupts
 - **Events and diagnostics** go through the context's `Reporter`. The Crawl Service wraps it in a warning log that writes each warning once per code and host, keeps it for the result and `crawl.warnings`, and adds `details.count` and `details.first_url` to counted warnings (D16). `progress` is fixed at every 10 seconds. Its `urls` counts come from counters that the callbacks of D2 update as units commit. Progress never uses the writer's `on_commit`, which counts read-only units too: the frontier reads (D1) are writer units that join the batch. They are seeded once per run by a counting query over `urls`, so a continued Crawl starts from its earlier counts. No count over `urls` runs for each event, because a `GROUP BY fetch_state` scans the table (ruling Q1, D18).
-- **The result** is a frozen dataclass with `to_json()`, built at the end from counting queries over `urls`, never from in-memory counters. The adapter returns it, or `Outcome(result, SpiderError)` for a failed outcome, so `010`'s runner prints it before the one error:
+- **The result** is a frozen dataclass with `kw_only=True` and `to_json()`, built at the end from counting queries over `urls`, never from in-memory counters. The adapter returns it, or `Outcome(result, SpiderError)` for a failed outcome, so `010`'s runner prints it before the one error:
   - `interrupted` (declared by `010`) → exit 130
   - `seed_unreachable` and `site_unreachable` → exit 8
   - `crawl_write_failed` → exit 7, or `015`'s `crawl_busy` → exit 5, as the writer raised it
@@ -206,28 +212,29 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 
 ### D12. Crawl State transitions
 - **The table:** `TRANSITIONS` maps each allowed `(from, to)` pair to the `stop_reason` values it allows: `running` → `completed` (none), `running` → `stopped` (`max_urls`, `interrupt`, `requested`), `running` → `failed` (`seed_unreachable`, `site_unreachable`, `write_failed`), and `stopped` | `failed` → `running` (none). `StopReason` is a `Literal` next to `CrawlState` in `spider.store.records`, so `015`'s `values` mechanism documents the column from it.
-- **The check:** one pure function, `check_transition(current, target, stop_reason)`, raises `CrawlStateError` for anything else. It is a bug in the caller, so it reaches the agent as `internal_error` (exit 70), never as a quiet wrong state.
+- **The check:** one pure function, `check_transition(current, target, stop_reason)`, raises `CrawlStateError`, a `RuntimeError`, for anything else. It is a bug in the caller (CONTRIBUTING, Code style), so it reaches the agent as `internal_error` (exit 70), never as a quiet wrong state.
 - **One writer of the end of a Crawl:** `015`'s `set_state(connection, state, at)` gains the `stop_reason`, reads the current state on the same connection, inside the caller's unit, runs the check, and writes `state`, `stop_reason` and `completed_at` together. Nothing else writes those columns.
 - **`060`** adds `running` → `interrupted` and `interrupted` → `running` to the table, and records `interrupted` from another process through the same unit.
 - *Alternative:* a state-machine library. One dict and one function are enough, and stay readable in `docs/crawling.md`. Rejected.
 
 ### D13. URL types
 - **`NormalizedUrl = NewType("NormalizedUrl", str)`** in `spider.crawl.urls`, a leaf module that imports nothing else of `spider`, so the store's row types can use it too. Only the normaliser returns it; the store's reads of `urls.url` cast to it, in one place each. mypy then refuses a raw `str` wherever the frontier, `ScopeRules`, `DiscoveredLink` or the store rows expect a normalised URL.
-- **The normaliser never raises:** it returns `NormalizedUrl | InvalidUrl`, where `InvalidUrl` is a frozen dataclass with the reason. The Seed parser maps it to `invalid_url`; the link extractor drops the reference (030 keeps the raw value).
+- **The normaliser never raises:** it returns `NormalizedUrl | InvalidUrl`, where `InvalidUrl` is a frozen dataclass with slots (ADR-0006) and the reason. The Seed parser maps it to `invalid_url`; the link extractor drops the reference (030 keeps the raw value).
 - *Alternative:* a frozen class with parsed parts. It allocates per URL on the hottest path (every Link of every Page), and every SQL boundary would convert it back to text. Rejected; the host and origin are derived with small pure functions where they are needed.
 - **Crawl ids stay `str`.** They are created and validated in one place each (`015`'s `new_crawl_id` and `is_crawl_id`), flow through `CrawlFile`, and are never mixed with URLs. A `CrawlId` type is worth it when `060` accepts ids from users; that change decides it.
 
 ### D14. Data access stays in the store
-- **The rule:** writer units are defined only in `spider.store.*` modules. The engine, the extractors and the Rules build frozen values and call store functions that return units; they never write SQL. ruff's banned-API rule (TID251) bans `sqlalchemy` in `src/`, with per-file-ignores for `src/spider/store/**` and `src/spider/services/schema.py`, which imports it lazily. A lint rule is checked on every commit and costs no new test; `010`'s startup allowlist test stays as it is.
+- **The rule:** writer units are defined only in `spider.store.*` modules. The engine, the extractors and the Rules build frozen values and call store functions that return units; they never write SQL. A guard in `tests/test_code_style.py`, next to `018`'s ADR-0006 guard, reads every module of `src/spider` with `ast` and names each one outside `spider/store/` and `spider/services/schema.py` (which imports it lazily) that imports `sqlalchemy`, at module level or inside a function. `010`'s startup allowlist test stays as it is.
+  - *Alternative:* ruff's banned-API rule (`TID251`) on `sqlalchemy`, with per-file ignores. It applies to the whole repository, and the tests and `scripts/writer_throughput.py` import `sqlalchemy`. A per-file ignore of `TID251` for them would also lift the bans that `TID251` already carries there: asyncio's loop policies and Typer's vendored Click (CONTRIBUTING, Code style). Rejected.
 - **This change's store modules:** `spider.store.urls` (the table, recording a Seed, the next batch, recording a completed URL with its discovered URLs and handler rows, re-queueing on continue, and the counts), `spider.store.origins` (an origin's row, recorded in the unit of its first URL, and its robots.txt), and `spider.store.crawls` (`set_state`, the Scope and the warnings).
-- **Units follow `017` D7:** a unit is deterministic given the file's state and its frozen input, so running it again after a later unit fails gives the same result and changes the same rows. It has no effect outside the writer's connection, and it returns values only (ints, tuples, frozen dataclasses), never live objects. `017`'s replay check ends the writer when a unit breaks this (D2). Seam-2 tests of each store module check it with `017`'s `replay_now(writer)` test helper, which forces a replay.
+- **Units follow `017` D7:** a unit is deterministic given the file's state and its frozen input, so running it again after a later unit fails gives the same result and changes the same rows. It has no effect outside the writer's connection, and it returns values only (ints, tuples, frozen dataclasses), never live objects. `017`'s replay check ends the writer when a unit breaks this (D2). Seam-2 tests of each store module check it with `017`'s `replay_now(writer)` test helper (`tests/support/writer.py`), which forces a replay.
 - **How `030` and `040` add theirs:**
-  - **Rows:** a handler returns store rows: frozen dataclasses declared in a module of `spider.store` that loads no sqlalchemy, as `spider.store.records` does today. The store module that owns the table registers the function that writes each row type, and the URL's unit writes the rows it is given through those functions. So `030` adds `spider.store.pages` and `spider.store.links`, and `040` adds `spider.store.issues`.
+  - **Rows:** a handler returns store rows: frozen dataclasses with `slots=True` (ADR-0006: one or more per URL) declared in a module of `spider.store` that loads no sqlalchemy, as `spider.store.records` does today. The store module that owns the table registers the function that writes each row type, and the URL's unit writes the rows it is given through those functions. So `030` adds `spider.store.pages` and `spider.store.links`, and `040` adds `spider.store.issues`.
   - **Passes:** a post-crawl pass is itself a store function, for example `030`'s inlink counts in `spider.store.links` and `040`'s query Rules in `spider.store.issues`.
 - *Alternative:* handlers that get the `Connection`. Every later change would then write SQL from extractors and Rules, which this rule exists to prevent. Rejected.
 
 ### D15. One context for a Crawl's dependencies
-- **`CrawlContext`** is a frozen dataclass: the `CrawlFile`, the resolved `CrawlSettings`, the `ScopeRules`, the `Clock`, the `Reporter` (the warning log of D10), the `CrawlWriter`, the `Fetcher`, the page executor (D9), the `Hooks` and the `StopSignal`.
+- **`CrawlContext`** is a frozen dataclass with `kw_only=True` (ADR-0006): the `CrawlFile`, the resolved `CrawlSettings`, the `ScopeRules`, the `Clock`, the `Reporter` (the warning log of D10), the `CrawlWriter`, the `Fetcher`, the page executor (D9), the `Hooks` and the `StopSignal`.
 - **Built in one place:** an async context manager in the Crawl Service opens the writer, the Fetcher's session and the page executor, yields the context, and closes them, the writer through `asyncio.to_thread`. The start and continue operations use it; `060` uses it for detached Crawls.
 - **Who takes it:** only the imperative shell (the engine, the scheduler, the robots.txt loader and the service). The pure modules (normalisation, Scope, robots, directives, extraction, transitions) take plain values, so they stay table-testable at seam 4.
 - **Boundary doubles go in through it:** tests pass a fake Fetcher, `FakeClock` or the DNS resolver hook to the builder. Nothing else of ours is replaced.
@@ -256,8 +263,8 @@ Declared as `DiagnosticCode` constants in `spider.output.codes`, each by the sli
 `interrupted` and `invalid_value` come from `010`, and `crawl_busy` from `015`. Hints that name a Command use `spider.naming`.
 
 ### D18. The tables under ADR-0005
-The schema blueprint of 2026-10-11 and its rulings decide `urls`, `origins` and the new `crawl` columns before they are built. `018`'s helper and contract test enforce what a test can; the review checks the rest of ADR-0005.
-- **Declaration:** each table goes through `018`'s declaration helper, so it is `STRICT`, and its enumerations and flags get CHECKs from `info["values"]` and the `Flag` type. No column of this change is derived or filled by a later release, so none carries the `Derived: ` or `Filled from ` prefix.
+The schema blueprint of 2026-10-11 and its rulings decide `urls`, `origins` and the new `crawl` columns before they are built. `018`'s `public_table()`, its guards and its contract test enforce what a test can; the review checks the rest of ADR-0005.
+- **Declaration:** each table is declared with `public_table(..., change=20)` (`018`), so it is `STRICT`, and its enumerations and flags get CHECKs from `info["values"]` and the `Flag` type. No column of this change is derived or filled by a later release, so none carries the `Derived: ` or `Filled from ` prefix.
 - **Every value from v0.1:** each enumeration lists the values that `022`, `024` (v0.2) and `026` will write (spec, "The urls table").
   - A CHECK that changes after v0.1 is a schema change with a migration. One that changes inside v0.1 would still make three other changes modify this change's spec.
   - The lists are `Literal`s in `spider.store.records`, so the code, the CHECK and `values` cannot disagree.
@@ -268,8 +275,8 @@ The schema blueprint of 2026-10-11 and its rulings decide `urls`, `origins` and 
   - `origins` therefore holds the origin of every recorded URL, not only of requested ones. The unit that records a URL inserts its origin with `ON CONFLICT (origin) DO NOTHING` and reads back the id, as it does for URLs (D1).
   - An origin none of whose URLs was requested has no robots.txt yet, so `robots_state` and `robots_sitemaps` are nullable.
 - **`urls.host` stays:** the politeness limits and the Scope work per host, not per origin (one host serves both http and https), and the scheduler needs the host of every URL it takes.
-- **Indexes,** each named `<table>_<columns>` and described by the query it serves:
-  - `urls_url` and `origins_origin`, unique, for `ON CONFLICT` and lookups. They are declared as named unique indexes, not as UNIQUE column constraints, because SQLite's automatic indexes for those have no name or description of ours.
+- **Indexes,** each a named `Index` called `<table>_<columns>`, whose `info["description"]` and its row in the table's Indexes table of `docs/schema.md` say the query it serves:
+  - `urls_url` and `origins_origin`, unique, for `ON CONFLICT` and lookups. They are declared as named unique indexes, not as UNIQUE column constraints, because SQLite's automatic indexes for those have no name or description of ours. `018`'s guard refuses a `UniqueConstraint` or `unique=True` on a public table.
   - `urls_crawl_depth_id` on `(crawl_depth, id) WHERE fetch_state = 'queued'`, for the frontier read (D1). Only queued rows are in it, so the unit that records a URL removes its entry.
   - Not indexed, by the rulings:
     - `fetch_state` for counts (Q1): a composite index would add an entry for every URL that is no longer queued. Progress comes from counters (D10), and an agent's `GROUP BY fetch_state` scans, which `080` documents.
@@ -297,7 +304,7 @@ Seams from docs/testing.md:
   - Exit codes, stdout and stderr JSON, through `run_cli`.
   - Real subprocess runs on each OS (`run_cli_process`): SIGINT on POSIX, CTRL_BREAK_EVENT to a new process group on Windows, kill/TerminateProcess, and UTF-8 bytes on Windows.
 - **Services and store API (2):** the Crawl Service's start and continue operations with a real crawl store in `temp_workspace`. Test handlers, passes and extractors are added to `default_hooks()` and passed in, which is using the extension point, not replacing our code.
-- **Store contract (6):** `docs/schema.md` gains every column and index in the same commit as the slice that adds it, so the contract test (`015`'s, which `018` extends to indexes and STRICT) never goes red.
+- **Store contract (6):** `docs/schema.md` gains every column and index in the same commit as the slice that adds it, a column in its table section's Columns table and an index in its Indexes table, so the contract test (`015`'s, which `018` extends to indexes, STRICT, `WITHOUT ROWID` and CHECKs) never goes red.
 
 Boundary doubles used, all from the approved list:
 - **The fake Fetcher and `FakeClock`:** for rate spacing, Crawl-delay, the progress interval, the watchdog and the stop grace period only.
