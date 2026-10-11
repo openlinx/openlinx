@@ -172,6 +172,9 @@ Boundary doubles used: `FakeClock` only.
 - [A busy `BEGIN` in the replay ends the writer, and no test covers it] → The code takes the same path as any failed replay. A deterministic test would need a lock taken between the rollback and the `BEGIN`. Deferred.
 - [A busy error inside a unit that runs again is raised as it is, so the writer ends with `crawl_busy`, and no test covers it] → It needs a cache spill in `delete` mode while a reader holds the file. Deferred.
 - [The row-change count is masked to 32 bits, because SQLite's `total_changes` is a C int that wraps, and no test covers the wrap] → A test would need 2^31 changes. Deferred.
+- [A submit that waits for room is woken when the writer thread ends for a reason other than a failed commit, and no test covers that] → Every end of the thread goes through the same `finally` that wakes the waiters, which the failed-commit test covers. Deferred.
+- [A job queued just after the writer drained its queue on the way out is failed by its submitter, and no test covers it] → It needs the thread to end between a submit's closed check and its `put`; a deterministic test would need a hook inside the writer. Deferred.
+- [`submit_async` gives its window slot back when the 50,000-job queue is full, and no test covers it] → A test would need the queue full while the window has room. Deferred.
 
 ## Migration Plan
 
