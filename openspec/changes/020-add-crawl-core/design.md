@@ -17,6 +17,11 @@
     - the shared column types `Timestamp`, `Json` and `Flag`, `info={"change": <n>}` and comments on every table and column, and the contract test against `docs/schema.md`
     - `CrawlState` and `CrawlMode` as `Literal`s in `spider.store.records`, which loads no sqlalchemy
   - `015`'s group 10 (wrap-up docs) adds no interface this change uses.
+- **`018-add-schema-conventions` and ADR-0005,** before this change in the build order (015 → 017 → 018 → 020):
+  - every public table is declared through `018`'s declaration helper, which makes it `STRICT` and adds the CHECKs of its listed values and flags
+  - `spider schema` reads `references` from declared foreign keys, and lists each index with the query it serves
+  - the contract test also compares indexes, STRICT and `WITHOUT ROWID`
+  - the schema blueprint of 2026-10-11 and its rulings decide this change's tables (D18)
 - **ADR-0001:** an own asyncio engine on aiohttp, whose frontier lives in the crawl store; the Fetcher sits behind an interface.
 - **ROADMAP decisions of 2026-10-05:** no default `--max-urls`, the robustness rule, 060-min in v0.1, and four design points from the architecture review (D12–D15).
 - **The split of the crawler:** this change is the core. `022` adds the fetch policy, `060`-min background Crawls and `resume`, `026` the benchmark (and a pool only if it is needed), and `024` the other Crawl Modes in v0.2. Each plugs in without reworking the core.
@@ -42,7 +47,7 @@
 ### D1. The `urls` table is the frontier
 Each distinct normalised URL has one row, and its `fetch_state` (`queued` → `fetched` | `error` | `skipped`) is the queue.
 - **No in-flight state:** there is no separate frontier table and no persisted "in flight" state. A URL leaves `queued` only in the writer unit that stores its response and the URLs discovered from it. After a crash, anything in flight is still `queued`.
-- **No in-memory URL map:** discovered URLs are inserted with `INSERT … ON CONFLICT (url) DO NOTHING` inside the URL's unit, and the unit reads back the ids it needs. The unique index on `urls.url` is the only dedup, so memory does not grow with the site. What the process keeps in memory is bounded by the site's shape, not its size: the URLs in flight (at most the global cap of D7), one robots.txt verdict cache and one politeness gate per origin, the 60-second rate window, and the warnings.
+- **No in-memory URL map:** discovered URLs are inserted with `INSERT … ON CONFLICT (url) DO NOTHING` inside the URL's unit, and the unit reads back the ids it needs. The unique index `urls_url` is the only dedup, so memory does not grow with the site. What the process keeps in memory is bounded by the site's shape, not its size: the URLs in flight (at most the global cap of D7), one robots.txt verdict cache and one politeness gate per origin, the 60-second rate window, and the warnings.
 - **Dispatch order:** the scheduler takes queued URLs of the open Crawl Depth in batches, through a unit, ordered by `urls.id`. SQLite gives an `INTEGER PRIMARY KEY` the next larger value and URLs are never deleted, so `id` grows in the order URLs are first recorded. It is the explicit insertion sequence that 015's conventions ask for, so no separate `seq` column is added and no timestamp is ever a tie-break.
 - **Continuing:** the continue operation first re-queues URLs that ended with no response (`error`) or were blocked by an unreachable robots.txt. Those outcomes are usually transient, and this is what makes a `failed` Crawl resumable. It also inserts the `urls` row of any Seed that has none, because a process can die between creating the Crawl and recording its first unit.
 - *Alternative:* a separate `frontier` table. It duplicates URL identity and needs two writes per URL. Rejected.
@@ -156,7 +161,7 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 
 ### D14. Data access stays in the store
 - **The rule:** writer units are defined only in `spider.store.*` modules. The engine, the extractors and the Rules build frozen values and call store functions that return units; they never write SQL. ruff's banned-API rule (TID251) bans `sqlalchemy` in `src/`, with per-file-ignores for `src/spider/store/**` and `src/spider/services/schema.py`, which imports it lazily. A lint rule is checked on every commit and costs no new test; `010`'s startup allowlist test stays as it is.
-- **This change's store modules:** `spider.store.urls` (the table, recording a Seed, the next batch, recording a completed URL with its discovered URLs and handler rows, re-queueing on continue, and the counts), `spider.store.origins`, and `spider.store.crawls` (`set_state`, the Scope and the warnings).
+- **This change's store modules:** `spider.store.urls` (the table, recording a Seed, the next batch, recording a completed URL with its discovered URLs and handler rows, re-queueing on continue, and the counts), `spider.store.origins` (an origin's row, recorded in the unit of its first URL, and its robots.txt), and `spider.store.crawls` (`set_state`, the Scope and the warnings).
 - **How `030` and `040` add theirs:**
   - **Rows:** a handler returns store rows: frozen dataclasses declared in a module of `spider.store` that loads no sqlalchemy, as `spider.store.records` does today. The store module that owns the table registers the function that writes each row type, and the URL's unit writes the rows it is given through those functions. So `030` adds `spider.store.pages` and `spider.store.links`, and `040` adds `spider.store.issues`.
   - **Passes:** a post-crawl pass is itself a store function, for example `030`'s inlink counts in `spider.store.links` and `040`'s query Rules in `spider.store.issues`.
@@ -171,7 +176,7 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 
 ### D16. Robustness and backstops
 - **Parsers never raise:** the Seed parser, the normaliser, decoding, the link extractor, the directives parser and the robots.txt reader return their result or their own rejection type. Each has a hypothesis property over arbitrary input (bytes, text, malformed HTML) that it never raises, next to its table tests.
-- **The engine still contains** an extractor or handler that raises: the extractor's failure becomes `parse_error` = `extractor_error:<name>: <type>`, the handler's drops only its rows, and each is counted in one warning (`parse_failed`, `handler_failed`).
+- **The engine still contains** an extractor or handler that raises: the extractor's failure becomes `parse_error` = `extractor_error`, with `<name>: <type>` in `parse_error_message`, the handler's drops only its rows, and each is counted in one warning (`parse_failed`, `handler_failed`).
 - **The site is lost:** a counter of consecutive Internal requests without a response; any response resets it. At `max(8, 2 × concurrency)` the stop flag is set with `site_unreachable`. It generalises the zero-success breaker of the architecture review: at the start of a Crawl it trips when nothing has answered yet, and later it trips when the network goes away, instead of recording the rest of a 500k-URL site as errors. `failed` stays resumable, and continuing re-queues the `error` URLs (D1).
 - **The watchdog:** each request races `clock.sleep(watchdog_seconds)`; the loser is cancelled, and a cancelled request is recorded as `fetch_error` = `watchdog`. One pure function computes `watchdog_seconds` from the settings: `max(120, the Fetcher's total request deadline + 30)`. In this change the deadline is the fixed 20 seconds of D8, so the watchdog is 120 seconds; `022`-min's timeout settings feed the same function, so a watchdog never cuts a slow response that the Fetcher still allows. It is a backstop behind the Fetcher's own timeout, for a hang that the timeout does not cover. A request ended by the watchdog counts as one without a response for the site-lost count.
 - **Stop:** grace then cancellation. After the stop flag is set, no request starts; requests in flight get 10 seconds of clock time, then are cancelled without a unit, so their URLs stay `queued`.
@@ -183,9 +188,36 @@ Declared as `DiagnosticCode` constants in `spider.output.codes`, each by the sli
 - errors, exit 2: `invalid_url`, `option_conflict`, `subfolder_is_root`, `invalid_pattern`, `seed_out_of_scope`
 - errors, exit 8: `seed_unreachable`, `site_unreachable`
 - error, exit 7: `crawl_write_failed`
-- warnings: `seed_blocked_by_robots`, `robots_unreachable`, `possible_blocking`, `max_urls_reached`, `seed_base_mismatch`, `parse_failed`, `handler_failed`
+- warnings: `seed_blocked_by_robots_txt`, `robots_unreachable`, `possible_blocking`, `max_urls_reached`, `seed_base_mismatch`, `parse_failed`, `handler_failed`
 
 `interrupted` and `invalid_value` come from `010`, and `crawl_busy` from `015`. Hints that name a Command use `spider.naming`.
+
+### D18. The tables under ADR-0005
+The schema blueprint of 2026-10-11 and its rulings decide `urls`, `origins` and the new `crawl` columns before they are built. `018`'s helper and contract test enforce what a test can; the review checks the rest of ADR-0005.
+- **Declaration:** each table goes through `018`'s declaration helper, so it is `STRICT`, and its enumerations and flags get CHECKs from `info["values"]` and the `Flag` type. No column of this change is derived or filled by a later release, so none carries the `Derived: ` or `Filled from ` prefix.
+- **Every value from v0.1:** each enumeration lists the values that `022`, `024` (v0.2) and `026` will write (spec, "The urls table").
+  - A CHECK that changes after v0.1 is a schema change with a migration. One that changes inside v0.1 would still make three other changes modify this change's spec.
+  - The lists are `Literal`s in `spider.store.records`, so the code, the CHECK and `values` cannot disagree.
+- **Names** (ADR-0005 rules 9 and 10):
+  - "Blocked by robots.txt" is `blocked_by_robots_txt` in the flag, in `skip_reason` and in the warning `seed_blocked_by_robots_txt`, as in `030`'s Indexability Status and `040`'s Rule id.
+  - `parse_error` is a code, with its text in `parse_error_message`, like `fetch_error`.
+- **`urls.origin_id`** (ruling Q4) is a declared reference, NOT NULL, so every `urls` row joins `origins`.
+  - `origins` therefore holds the origin of every recorded URL, not only of requested ones. The unit that records a URL inserts its origin with `ON CONFLICT (origin) DO NOTHING` and reads back the id, as it does for URLs (D1).
+  - An origin none of whose URLs was requested has no robots.txt yet, so `robots_state` and `robots_sitemaps` are nullable.
+- **`urls.host` stays:** the politeness limits and the Scope work per host, not per origin (one host serves both http and https), and the scheduler needs the host of every URL it takes.
+- **Indexes,** each named `<table>_<columns>` and described by the query it serves:
+  - `urls_url` and `origins_origin`, unique, for `ON CONFLICT` and lookups. They are declared as named unique indexes, not as UNIQUE column constraints, because SQLite's automatic indexes for those have no name or description of ours.
+  - `urls_crawl_depth_id` on `(crawl_depth, id) WHERE fetch_state = 'queued'`, for the frontier read (D1). Only queued rows are in it, so the unit that records a URL removes its entry.
+  - Not indexed, by the rulings:
+    - `fetch_state` for counts (Q1): a composite index would add an entry for every URL that is no longer queued. Progress comes from counters (D10), and an agent's `GROUP BY fetch_state` scans, which `080` documents.
+    - `fetched_at` (Q2): `060`'s rate comes from its heartbeat's counters.
+    - `response_time_ms` (Q3): `050` sorts once.
+  - `022` adds `urls_redirect_url_id` on `(redirect_url_id) WHERE redirect_url_id IS NOT NULL`, together with its column.
+- **The `crawl` columns:**
+  - `scope` is NOT NULL. `create_crawl` writes it with the row, from a `scope` field that this change adds to `015`'s `NewCrawl`.
+  - `warnings` is NOT NULL, and `[]` at creation.
+  - `stop_reason` takes its values from `StopReason` (D12), the one value set that `060`'s `crawl_runs` shares (ADR-0005 rule 7).
+- *Alternative:* `origins` only for requested origins, with a nullable `origin_id`. Every join to `origins` would then need an outer join, and a URL's origin would depend on whether it was requested. Rejected.
 
 ## Test seams
 
@@ -202,7 +234,7 @@ Seams from docs/testing.md:
   - Exit codes, stdout and stderr JSON, through `run_cli`.
   - Real subprocess runs on each OS (`run_cli_process`): SIGINT on POSIX, CTRL_BREAK_EVENT to a new process group on Windows, kill/TerminateProcess, and UTF-8 bytes on Windows.
 - **Services and store API (2):** the Crawl Service's start and continue operations with a real crawl store in `temp_workspace`. Test handlers, passes and extractors are added to `default_hooks()` and passed in, which is using the extension point, not replacing our code.
-- **Store contract (6):** `docs/schema.md` gains every column in the same commit as the slice that adds it, so `015`'s contract test never goes red.
+- **Store contract (6):** `docs/schema.md` gains every column and index in the same commit as the slice that adds it, so the contract test (`015`'s, which `018` extends to indexes and STRICT) never goes red.
 
 Boundary doubles used, all from the approved list:
 - **The fake Fetcher and `FakeClock`:** for rate spacing, Crawl-delay, the progress interval, the watchdog and the stop grace period only.
@@ -226,11 +258,11 @@ None. Before v0.1 the schema is not yet public: this change adds its tables and 
 
 ## Interface points for later changes
 
-- **`022`:** its timeout settings feed the watchdog function of D16, which keeps the watchdog at least 30 seconds longer than the Fetcher's total request deadline. It replaces the Fetcher implementation behind the Protocol of D8; uses the per-host gate of D7, `ScopeRules.is_internal`, the fake Fetcher and the DNS resolver hook; adds `fetch_error` values and `urls` columns in its slices, and its keys to `CrawlSettings`.
-- **`026`:** benchmarks the engine as built; may move extractors into a pool without changing their signatures; uses the stop flag's grace period.
+- **`022`:** its timeout settings feed the watchdog function of D16, which keeps the watchdog at least 30 seconds longer than the Fetcher's total request deadline. It replaces the Fetcher implementation behind the Protocol of D8; uses the per-host gate of D7, `ScopeRules.is_internal`, the fake Fetcher and the DNS resolver hook; adds `urls` columns in its slices (`redirect_url_id` with its index `urls_redirect_url_id`), writes the `discovered_via`, `skip_reason`, `fetch_error` and `parse_error` values that this change already lists (D18), and adds its keys to `CrawlSettings`.
+- **`026`:** writes `parse_error` = `worker_crashed`, already listed (D18); benchmarks the engine as built; may move extractors into a pool without changing their signatures; uses the stop flag's grace period.
 - **`030`:** adds its extractor, handler and pass to `default_hooks()`, with its row types and writers in `spider.store.pages` and `spider.store.links`; imports the robots directives parser, `DiscoveredLink` and the decoding function; adds its keys to `CrawlSettings`.
 - **`040`:** adds its per-URL handler and its post-crawl pass of query Rules, with the writers in `spider.store.issues`.
-- **`060`:** adds `interrupted` to `TRANSITIONS`; calls the continue operation for `resume`, with its kill-then-resume scenarios; sets the `StopSignal` from control rows (`requested`); builds the `CrawlContext` in the detached process; reuses validation and config resolution (D11).
+- **`060`:** adds `interrupted` to `TRANSITIONS`; uses `StopReason` for `crawl_runs.stop_reason` (D18); calls the continue operation for `resume`, with its kill-then-resume scenarios; sets the `StopSignal` from control rows (`requested`); builds the `CrawlContext` in the detached process; reuses validation and config resolution (D11).
 
 ## Open Questions
 

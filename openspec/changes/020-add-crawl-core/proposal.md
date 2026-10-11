@@ -12,6 +12,8 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 
 > **Re-grounded (2026-10-10)** against the code of `015-add-crawl-store` (groups 1–9 built, on its branch) and the archived `010-add-workspace-and-cli-contract`. It applies the ROADMAP decisions of 2026-10-05: no default `--max-urls`, the robustness rule, 060-min in v0.1, and the four design points of the architecture review (design D12–D15). It uses `015`'s groups 8 (the journal mode and `[store]`) and 9 (redaction) as built. The kill-then-continue scenarios moved to `060`, whose `interrupted` state and `resume` cover them.
 
+> **Re-grounded (2026-10-11)** against ADR-0005, `018-add-schema-conventions` and the rulings on the schema blueprint: the `urls`, `origins` and `crawl` columns, their CHECKs and their indexes (design D18).
+
 - **New Command `spider crawl <url>`** in Spider mode, running in the foreground. A bare host such as `site.test` becomes `https://site.test/`.
 - **URL normalisation:**
   - It strips fragments and default ports.
@@ -57,8 +59,11 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - a write failure → `failed` with `write_failed` when it can still be recorded: `crawl_write_failed`, exit 7, or `015`'s `crawl_busy`, exit 5
 - **Settings:** this change registers the `[crawl]` table of `spider.toml`, under `010`'s naming rule. Later changes add their keys to its model. The recorded config holds every registered setting.
 - **Store:**
-  - The `urls` and `origins` tables, and the `crawl` columns `scope`, `stop_reason` and `warnings`.
-  - Each column is added in the slice whose scenario first needs it, with its `docs/schema.md` row.
+  - The `urls` and `origins` tables, and the `crawl` columns `scope`, `stop_reason` and `warnings`, under ADR-0005 through `018`'s declaration helper:
+    - `STRICT`, with CHECKs that list every value that later changes write
+    - `urls.origin_id`, referencing `origins`
+    - the indexes `urls_url`, `urls_crawl_depth_id` (the partial frontier index) and `origins_origin`
+  - Each column and index is added in the slice whose scenario first needs it, with its `docs/schema.md` row.
   - Writer units are defined only in `spider.store.*` modules.
 - **Flags that go beyond the wording of ROADMAP.md.** Both are small and plainly needed: `--robots-user-agent` and `--check-external/--no-check-external`.
 - **MCP tools:** none in this change. `090-add-mcp-server` (v0.1.1) wraps `crawl` through `060`'s detached start.
@@ -74,7 +79,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - The per-response and post-crawl hooks, progress events, the result, and how a foreground Crawl ends.
 
 ### Modified Capabilities
-- None. `crawl-store` from `015-add-crawl-store` is used as built: this change adds tables and columns under its conventions, which its spec allows, and replaces nothing.
+- None. `crawl-store`, as `015-add-crawl-store` built it and `018-add-schema-conventions` extends it, is used as it is: this change adds tables, columns and indexes under its conventions, which its spec allows, and replaces nothing.
 
 ## Non-goals
 
@@ -103,6 +108,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
     - **groups 1–7 (built):** `create_crawl` with `NewCrawl`, the crawl ids, the `crawl` and `seeds` tables, `set_state`, `CrawlWriter` (`run_async`, `on_commit`, `crawl_busy`, `CrawlWriterClosedError`), the shared column types, `docs/schema.md` and its contract test
     - **group 8 (built):** `NewCrawl.journal_setting`, the `[store]` table (`StoreSettings.journal_mode`) and `store_wal_unavailable`; the Crawl Service sets the journal setting from `[store]` and reports the warning with the others
     - **group 9 (built):** `NewCrawl.secret_names`, a required `SecretNames` that the `crawl` adapter gets from `spider.cli.options.secret_names`; `create_crawl` redacts the command line and config with it
+  - `018-add-schema-conventions`: the declaration helper (STRICT, and CHECKs from `values` and `Flag`), `references` and `indexes` in `spider schema`, and the contract test over indexes. Its guards' non-vacuity assertions switch on with this change's first index and foreign key.
 - **Used by:**
   - `022` (the engine, the Fetcher interface, the per-host gate, the fake Fetcher, the DNS resolver hook, `urls` and `origins`)
   - `030` (the per-response hook, the extractor registry, `DiscoveredLink`, the robots directives parser, the post-crawl passes, the decoding function)
