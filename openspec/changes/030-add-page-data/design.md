@@ -16,10 +16,11 @@ The motivation is in proposal.md. The exact column definitions are in `specs/pag
   - the injectable clock
 - **`022-add-fetch-policy`:**
   - redirects hop by hop (`redirect_url_id`) and sizes (`size_bytes`, `transferred_bytes`, `content_encoding`)
-  - `origins.http_version` (`http_1_1` / `http_2`)
+  - `origins.http_version` (`http_1_1` / `http_2`), filled from v0.2
   - `response_headers`, where cookie values are stored as `***`
   - the gzip fixture support
 - **`026-add-parse-pool`:** page preparation runs in its process pool in v0.1, so this change's extractor must stay a pure, module-level function of its input, with a msgspec result that crosses the process boundary.
+- **v0.1 scope (ROADMAP.md):** syllables and readability (D8), SERP pixel widths (D9), raw HTML storage (D11) and language detection (D12) arrive in v0.2. Their columns, and the `page_sources` table, exist in v0.1 and stay NULL or empty (ADR-0005), so v0.2 changes no table.
 - **Scale target:** about 500k URLs and tens of millions of Link rows in one SQLite file ([ADR-0003](../../../docs/adr/0003-sqlalchemy-core-not-orm.md)).
 
 ## Goals / Non-Goals
@@ -81,7 +82,7 @@ Indexability is stored only for Pages. `040`'s `canonical-to-non-indexable` Rule
 
 ### D8. Words, sentences and syllables
 - **Words** are Unicode letter, mark and number runs, joined across a single `'`, `-`, `.` or `,`. Han, Hiragana and Katakana count one word per character. Scripts written without spaces between words (Thai, Lao, Khmer, Myanmar) are undercounted; this is documented as a limitation.
-- **Syllables** are counted with our own rule-based counters per readability language, with no dictionary:
+- **Syllables** (v0.2) are counted with our own rule-based counters per readability language, with no dictionary:
   - The base is groups of consecutive vowels, using each language's vowel set (including `y` for en and nl).
   - `en`: a final `e` is subtracted unless it ends a consonant + `le` or is the word's only vowel group.
   - `fr`: a final `e` or `es` is subtracted when the word has another vowel group.
@@ -89,9 +90,9 @@ Indexability is stored only for Pages. `040`'s `canonical-to-non-indexable` Rule
   - Every word counts at least 1 syllable.
   - `syllable_count` is stored so scores can be audited.
   - *Alternatives:* pyphen, which counts hyphenation points (not syllables, and it skips short words) and uses LGPL/MPL dictionaries; and CMUdict, which covers English only and is large. Both rejected.
-- **Readability languages.** Spanish uses Szigriszt-Pazos (1993), because Fernández Huerta's (1959) published form is widely misquoted. Italian is left out until the Flesch–Vacca coefficients are verified, since two versions are in circulation.
+- **Readability languages** (v0.2). Spanish uses Szigriszt-Pazos (1993), because Fernández Huerta's (1959) published form is widely misquoted. Italian is left out until the Flesch–Vacca coefficients are verified, since two versions are in circulation.
 
-### D9. SERP pixel widths
+### D9. SERP pixel widths (v0.2)
 - **Data.** Widths come from a generated table of advance widths taken from **Liberation Sans Regular** (SIL OFL 1.1), which is metric-compatible with Arial. We avoid redistributing data taken from Arial's proprietary font files. The table ships as package data with the OFL notice.
 - **Coverage.** Basic Latin, Latin-1, Latin Extended-A/B, Greek, Cyrillic and General Punctuation. Other characters use the fallback rules in the spec.
 - **Font sizes.** 20 px for titles and 14 px for descriptions, the sizes Google uses on desktop results. The 561 px and 985 px limits are thresholds of `040`.
@@ -100,21 +101,22 @@ Indexability is stored only for Pages. `040`'s `canonical-to-non-indexable` Rule
 ### D10. Exact Duplicate hash
 SHA-256 over the NFC-normalised Content Area text, stored as hex. It is in the standard library, stable across versions and collision-safe. The hash is NULL for Pages without words, so empty shells, such as client-rendered pages before v1.1, are not reported as one big duplicate group.
 
-### D11. Raw HTML storage is decided when the Crawl starts
-- **The decision.** It is made once, at start. The flags and `[crawl] store_html` win. Otherwise storage is on when `max_urls` is from 1 to 50,000, which includes the default of 10,000. The maintainer confirmed this rule on 2026-09-27.
-- **Recording.** The decision is stored in the recorded config as `store_html` = `true` or `false`, and `resume` keeps it, even with a higher `--max-urls`. Coverage is therefore all or nothing per Crawl: `page_sources` has a row for every Page or for none, and no per-Page flag is needed.
+### D11. Raw HTML storage is opt-in, decided when the Crawl starts (v0.2)
+- **The decision.** It is made once, at start. `--store-html` and `--no-store-html`, then `[crawl] store_html`, decide; when none is set, HTML is not stored (decided 2026-10-11: in the store benchmark, HTML was about 70% of the crawl file).
+  - *Alternative: store HTML automatically when `--max-urls` is from 1 to 50,000,* as an earlier draft had. Rejected: `--max-urls` has no default limit since 2026-10-10, so the rule stored nothing by default, and storage then depended on a limit chosen for another reason.
+- **The table exists from v0.1** (ruling Q10 of the schema blueprint) and stays empty, so turning storage on changes no table and no contract.
+- **Recording.** The decision is stored in the recorded config as `store_html` = `true` or `false`, and `resume` keeps it. Coverage is therefore all or nothing per Crawl: `page_sources` has a row for every Page or for none, and no per-Page flag is needed.
   - *Alternative: store the first 50,000 Pages.* This was an earlier draft. Rejected, because partial coverage makes `page --html` unpredictable.
-  - *Alternative: store everything and delete it all when the Crawl passes 50k.* Rejected as wasted work.
 - **Compression.** Each Page is one independent zstd frame at level 3, using `zstandard` (also used by `022` for content decoding).
 - **What is stored.** The bytes after content decoding, not a re-encoded string, so charset problems stay visible. `encoding` records the decoding result.
 - **Name.** The table is called `page_sources`, a plural noun as `015` requires.
 
-### D12. Language detection
+### D12. Language detection (v0.2)
 `--detect-language` uses **py3langid** (BSD-3). It runs offline and is deterministic, covers about 97 languages, and its model is a few MB. It is imported only when the setting is on.
 - *Alternatives:* lingua, whose wheels are very large; fastText lid.176, whose model is CC BY-SA and would put share-alike terms on redistribution; and langdetect, which is non-deterministic unless seeded.
 
 ### D13. Settings
-- `store_html` and `detect_language` go under `[crawl]`, following `010`'s flag-mirroring rule. `020`'s generic recorded config therefore includes them.
+- From v0.2, `store_html` and `detect_language` go under `[crawl]`, following `010`'s flag-mirroring rule. `020`'s generic recorded config therefore includes them.
 - The new `[content_area]` table (`include`, `exclude`) is added to the settings model. Its effective values are recorded under `content_area`.
 - Selectors are compiled when the settings are validated. An invalid one is a `settings_invalid` problem with the key `content_area.include` or `content_area.exclude`.
 - `060`'s equivalent command warns that `[content_area]` cannot be written as flags.
@@ -123,7 +125,7 @@ SHA-256 over the NFC-normalised Content Area text, stored as hex. It is in the s
 `cookies` stores only names and attributes, whatever the Page's status: `020` calls the handler for every URL that reaches a final state, and the handler returns the cookie rows of every Page. `022` stores cookie values in `response_headers` as `***`, so no cookie value exists anywhere in a crawl file.
 
 ### D15. Columns grow with their behaviours
-There are no schema-first slices. Each column and table is added in the TDD slice whose scenario first needs it, with its `docs/schema.md` entry in the same commit, so `015`'s contract test is never red between commits. Scenarios are written so that every column is driven by a behaviour; for example, the second-title columns are asserted by "Second title element". The last slice adds the eight columns measured by later releases, and pins the full column set with "Schema lists exactly the Page record columns".
+There are no schema-first slices. Each column and table is added in the TDD slice whose scenario first needs it, with its `docs/schema.md` entry in the same commit, so `015`'s contract test is never red between commits. Scenarios are written so that every column is driven by a behaviour; for example, the second-title columns are asserted by "Second title element". The last v0.1 slice adds the 17 columns that later releases fill, and pins the full column set with "Schema lists exactly the Page record columns".
 
 ## Test seams
 
@@ -142,7 +144,7 @@ The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is 
 - [The `links` table grows large on big Crawls] → URL ids instead of text, a natural composite key, no raw `href`, and indexes limited to the two the post-crawl passes need. `026`'s benchmark includes the Link attributes.
 - [Heuristic syllable counts are approximate] → Scores are documented as approximate, per-language word lists pin the rules, and `syllable_count` is stored for audit.
 - [Excluding every `<header>` also drops article headers inside `<article>`] → This is the settled default. It can be changed with `exclude`, and the docs show how.
-- [A resumed Crawl with a much higher `--max-urls` keeps storing HTML] → That is the documented consequence of deciding at start. `--no-store-html` cannot be changed on resume, so the docs recommend choosing it up front for large Crawls.
+- [A Crawl started without `--store-html` has no HTML for `page --html` (v0.2)] → The decision is made at start and kept on resume, so the docs say to choose it up front.
 - [Our directive reading follows `020`'s parser, which can differ from Google's in edge cases] → Documented in `020`, with bot-specific directives listed under Open Questions.
 - [Language detection is unreliable on short texts] → Detection is opt-in and returns NULL when there are no words. Readability never uses it.
 

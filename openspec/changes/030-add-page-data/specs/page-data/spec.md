@@ -58,7 +58,9 @@ For an analysed Page, following the table conventions of `015-add-crawl-store`:
 - A count column SHALL be 0 or more.
 - A flag column SHALL be 0 or 1.
 - A text column SHALL be NULL when its element or header is absent, and the empty string when the element is present but empty.
-- A length or width column SHALL be NULL exactly when its text column is NULL.
+- A length column SHALL be NULL exactly when its text column is NULL, and so SHALL a width column from v0.2.
+
+The columns that a later release fills stay NULL in every Page until then (see "Columns measured by later releases stay NULL").
 
 #### Scenario: Error Page keeps response data
 - **WHEN** `{site}/missing` responds 404 with `Content-Type: text/html` and the body `<title>Not found</title>`
@@ -113,7 +115,7 @@ Each Page row SHALL store these columns. All of them come from the Page's own re
 | `status` | the reason phrase the server sent; when it sent none, the standard reason phrase for the status code from RFC 9110; NULL when neither exists |
 | `response_time_ms` | `urls.response_time_ms` |
 | `last_modified` | the `Last-Modified` header parsed as an HTTP-date, as a `timestamp` (`YYYY-MM-DDTHH:MM:SS.sssZ`); NULL when absent or invalid |
-| `http_version` | `origins.http_version` for the Page's origin (`http_1_1` or `http_2`) |
+| `http_version` | `origins.http_version` for the Page's origin (`http_1_1` or `http_2`); filled from v0.2, as the origin's column is, and NULL until then |
 | `crawl_timestamp` | `urls.fetched_at` |
 
 #### Scenario: Last-Modified is normalised to a timestamp
@@ -252,7 +254,7 @@ Titles SHALL be extracted from HTML-namespace `<title>` elements anywhere in the
 
 #### Scenario: Second title element
 - **WHEN** an analysed Page's HTML is `<head><title>One</title><title>Two</title></head>`
-- **THEN** `title_count` is 2, `title_2` is `Two`, `title_2_length` is 3 and `title_2_width_px` is 38
+- **THEN** `title_count` is 2, `title_2` is `Two` and `title_2_length` is 3
 
 #### Scenario: Missing title
 - **WHEN** an analysed Page's HTML has no `<title>` element
@@ -273,7 +275,7 @@ Meta descriptions SHALL be extracted from `<meta>` elements anywhere in the docu
 
 #### Scenario: Multiple meta descriptions
 - **WHEN** an analysed Page's HTML contains `<meta name="description" content="A">` followed by `<meta name="description" content="B">`
-- **THEN** `meta_description_count` is 2, `meta_description_2` is `B`, `meta_description_2_length` is 1 and `meta_description_2_width_px` is 9
+- **THEN** `meta_description_count` is 2, `meta_description_2` is `B` and `meta_description_2_length` is 1
 
 #### Scenario: Meta keywords
 - **WHEN** an analysed Page's HTML contains `<meta name="keywords" content="shoes, boots">`
@@ -297,7 +299,8 @@ Headings SHALL be extracted from `<h1>` and `<h2>` elements anywhere in the docu
   - `h2_2` and `h2_2_length` are NULL
 
 ### Requirement: SERP pixel widths
-Pixel widths SHALL be computed for titles and meta descriptions:
+From v0.2, pixel widths SHALL be computed for titles and meta descriptions. In v0.1 the four width columns exist and are NULL (see "Columns measured by later releases stay NULL").
+
 
 - `title_1_width_px` and `title_2_width_px` are the widths of the texts in Arial regular at 20 px.
 - `meta_description_1_width_px` and `meta_description_2_width_px` are the widths in Arial regular at 14 px.
@@ -325,6 +328,10 @@ The result SHALL NOT depend on the fonts installed on the machine.
 #### Scenario: Realistic long title
 - **WHEN** an analysed Page's title is `Buy running shoes, trail boots and sandals online at low cost`
 - **THEN** `title_1_length` is 61 and `title_1_width_px` is 536
+
+#### Scenario: Widths of second elements
+- **WHEN** an analysed Page's HTML is `<head><title>One</title><title>Two</title><meta name="description" content="A"><meta name="description" content="B"></head>`
+- **THEN** `title_2_width_px` is 38 and `meta_description_2_width_px` is 9
 
 ### Requirement: Meta robots and X-Robots-Tag
 An analysed Page SHALL store the robots directives found in its HTML and in its headers:
@@ -493,7 +500,7 @@ These counts SHALL be taken over the Content Area text.
 
 **Average.** `average_words_per_sentence` is `word_count` ÷ `sentence_count`, rounded to 2 decimals, or NULL when `sentence_count` is 0.
 
-**Syllables.** `syllable_count` is the sum of the words' syllables, counted with the syllable rules of the Page's readability language (see "Flesch Reading Ease and Readability"). Every word counts at least 1 syllable. It is NULL when the Page has no readability language.
+**Syllables (from v0.2).** `syllable_count` is the sum of the words' syllables, counted with the syllable rules of the Page's readability language (see "Flesch Reading Ease and Readability"). Every word counts at least 1 syllable. It is NULL when the Page has no readability language, and in every Page in v0.1.
 
 #### Scenario: Words with apostrophes, hyphens and dots
 - **WHEN** the Content Area text is `Don't stop — it's state-of-the-art, v2.0!`
@@ -509,14 +516,14 @@ These counts SHALL be taken over the Content Area text.
 
 #### Scenario: Counts for fixture A
 - **WHEN** fixture A is analysed with the default settings
-- **THEN** `sentence_count` is 3, `average_words_per_sentence` is 2.33 and `syllable_count` is 10
+- **THEN** `sentence_count` is 3 and `average_words_per_sentence` is 2.33
 
 #### Scenario: Syllables per language
 - **WHEN** the Content Area text and declared language are, in turn: `make table beautiful rhythm queue` (en), `Wasser Haus Bäume` (de) and `молоко очень вкусное` (ru)
 - **THEN** `syllable_count` is 8, 5 and 8 respectively
 
 ### Requirement: Flesch Reading Ease and Readability
-The *readability language* of a Page SHALL be the primary subtag of its `declared_language`, lowercased. The primary subtag is the text before the first `-` or `_`. When that language has a formula below, `flesch_reading_ease` SHALL be computed with it and rounded to 1 decimal. ASL is `word_count` ÷ `sentence_count` and ASW is `syllable_count` ÷ `word_count`.
+`flesch_reading_ease` and `readability` SHALL be filled from v0.2, and SHALL be NULL in every Page in v0.1. The *readability language* of a Page SHALL be the primary subtag of its `declared_language`, lowercased. The primary subtag is the text before the first `-` or `_`. When that language has a formula below, `flesch_reading_ease` SHALL be computed with it and rounded to 1 decimal. ASL is `word_count` ÷ `sentence_count` and ASW is `syllable_count` ÷ `word_count`.
 
 | Language | Formula | Source |
 |---|---|---|
@@ -550,7 +557,7 @@ The detected language SHALL NOT be used.
 
 #### Scenario: English score for fixture A
 - **WHEN** fixture A is analysed with the default settings
-- **THEN** `flesch_reading_ease` is 83.6 and `readability` is `easy`
+- **THEN** `syllable_count` is 10, `flesch_reading_ease` is 83.6 and `readability` is `easy`
 
 #### Scenario: Scores in German, Dutch and Russian
 - **WHEN** a Page's Content Area text and `<html lang>` are, in turn: `Der Hund ist gut.` (de), `Het huis is groot.` (nl) and `Молоко очень вкусное.` (ru)
@@ -587,7 +594,7 @@ The detected language SHALL NOT be used.
 The two languages SHALL be stored separately:
 
 - **`declared_language`** is the trimmed `lang` attribute of the root `<html>` element. It is the empty string when the attribute is present but empty, and NULL when it is absent.
-- **`detected_language`** SHALL be NULL unless the Crawl was started with `--detect-language`, or with `detect_language = true` under `[crawl]` in `spider.toml`. In that case it is the ISO 639-1 code of the language detected offline from the Content Area text. It is NULL when that text has no words.
+- **`detected_language`** is filled from v0.2, and SHALL be NULL in every Page in v0.1. From v0.2 it SHALL be NULL unless the Crawl was started with `--detect-language`, or with `detect_language = true` under `[crawl]` in `spider.toml`. In that case it is the ISO 639-1 code of the language detected offline from the Content Area text. It is NULL when that text has no words.
 
 #### Scenario: Declared language is trimmed, not normalised
 - **WHEN** an analysed Page's HTML starts with `<html lang=" en-GB ">`
@@ -751,14 +758,16 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 - **THEN** `{site}/l2` has `crawl_depth` 2
 
 ### Requirement: Raw HTML storage
-Whether a Crawl stores the HTML of its Pages SHALL be decided once, when the Crawl starts:
+The crawl store SHALL have the table `page_sources` from v0.1, so that storing HTML later changes no table. In v0.1 it SHALL hold no rows, and its description SHALL start with `Filled from v0.2. `.
+
+From v0.2, storing the HTML of a Crawl's Pages SHALL be opt-in, and SHALL be decided once, when the Crawl starts:
 
 - `--store-html`, or `store_html = true` under `[crawl]` in `spider.toml`, turns storage on.
 - `--no-store-html`, or `store_html = false`, turns it off.
 - A flag overrides `spider.toml`, as `010-add-workspace-and-cli-contract` defines.
-- When neither is set, storage is on exactly when the Crawl's `max_urls` is from 1 to 50,000. The default of 10,000 turns it on. 0, which means no limit, turns it off.
+- When neither is set, HTML is not stored, whatever the Crawl's `max_urls`.
 
-The Crawl's recorded config SHALL hold the decision as `store_html` = `true` or `false`, and a resumed Crawl SHALL keep it, even when it is resumed with a higher `--max-urls`.
+The Crawl's recorded config SHALL hold the decision as `store_html` = `true` or `false`, and a resumed Crawl SHALL keep it.
 
 When storage is on, each Page SHALL have one `page_sources` row with these columns:
 
@@ -768,17 +777,17 @@ When storage is on, each Page SHALL have one `page_sources` row with these colum
 
 When storage is off, `page_sources` SHALL hold no rows.
 
-#### Scenario: The automatic decision follows the URL limit
-- **WHEN** the storage decision is made without `--store-html`, `--no-store-html` or `store_html`, for `max_urls` 10000, 50000, 50001 and 0 in turn
-- **THEN** storage is on, on, off and off respectively
-
-#### Scenario: Default limit stores HTML automatically
+#### Scenario: HTML is not stored by default
 - **WHEN** a Crawl of a 3-Page fixture site runs with the default settings
-- **THEN** `page_sources` holds 3 rows
-
-#### Scenario: Large limit turns automatic storage off
-- **WHEN** a Crawl of a 3-Page fixture site runs with `--max-urls 60000`
 - **THEN** `page_sources` holds 0 rows
+
+#### Scenario: The storage decision follows the flags
+- **WHEN** the storage decision is made with `--store-html`, with `--no-store-html`, and with neither a flag nor `store_html`, in turn
+- **THEN** storage is on, off and off respectively
+
+#### Scenario: The flag stores every Page's HTML
+- **WHEN** a Crawl of a 3-Page fixture site runs with `--store-html`
+- **THEN** `page_sources` holds 3 rows and the recorded `store_html` is `true`
 
 #### Scenario: Stored HTML is byte-identical
 - **WHEN** the stored `html` of `{site}/about` is decompressed as a zstd frame
@@ -797,22 +806,21 @@ When storage is off, `page_sources` SHALL hold no rows.
 - **THEN** its `page_sources.encoding` is `windows-1251`
 
 ### Requirement: Columns measured by later releases stay NULL
-These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0:
+These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0, until the release that fills them:
 
-- `link_score` (measured from v0.2)
-- `closest_similarity_pct` and `near_duplicate_count` (v0.3)
-- `structured_data_errors` and `structured_data_warnings` (v0.3)
-- `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count` (v1.1)
+- from v0.2: the SERP pixel widths `title_1_width_px`, `title_2_width_px`, `meta_description_1_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, which follows `022-add-fetch-policy`'s `origins.http_version`
+- from v0.3: `closest_similarity_pct` and `near_duplicate_count`; `structured_data_errors` and `structured_data_warnings`
+- from v1.1: `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count`
 
-Their column descriptions SHALL name the release that fills them.
+The description of each SHALL start with `Filled from v<major>.<minor>. `, naming that release, as the conventions of `018-add-schema-conventions` require.
 
 #### Scenario: Deferred columns are NULL after a completed Crawl
 - **WHEN** a Crawl of the fixture site ends as `completed` and its post-crawl passes have run
-- **THEN** 0 Pages have a non-NULL value in any of the eight deferred columns
+- **THEN** 0 Pages have a non-NULL value in any of the 17 columns listed above
 
 #### Scenario: Deferred columns are described with their release
 - **WHEN** `spider schema pages` runs
-- **THEN** the description of `link_score` contains `v0.2` and the description of `unique_js_inlinks` contains `v1.1`
+- **THEN** the description of `link_score` starts with `Filled from v0.2. `, the description of `near_duplicate_count` starts with `Filled from v0.3. ` and the description of `unique_js_inlinks` starts with `Filled from v1.1. `
 
 ### Requirement: Documented Page data tables
 `spider schema` SHALL list the tables `pages`, `links`, `cookies` and `page_sources`, following the table conventions of `015-add-crawl-store`:

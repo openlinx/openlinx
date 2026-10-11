@@ -4,22 +4,22 @@
 
 ## What Changes
 
-> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the minimum. **Deferred to v0.2:** Flesch Reading Ease, the Readability band and the syllable count; `--detect-language` and py3langid; SERP pixel widths; and raw HTML storage (`page_sources`, zstd, `--store-html/--no-store-html`).
+> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the minimum. **Deferred to v0.2:** Flesch Reading Ease, the Readability band and the syllable count; `--detect-language` and py3langid; SERP pixel widths; and raw HTML storage (`page_sources`, zstd, `--store-html/--no-store-html`). Their columns and the `page_sources` table exist in v0.1 and stay empty, so v0.2 fills them without a migration (ADR-0005). HTML storage is opt-in when it arrives (decided 2026-10-11: in the store benchmark, HTML was about 70% of the crawl file).
 
 - **New crawl-store tables.** Each follows the table conventions of `015-add-crawl-store`, is described column by column in `spider schema` and is documented in `docs/schema.md`. Every table and column is added in the TDD slice whose scenario first needs it.
   - `pages`: one row per Page. This is the flat Page record with all 94 Internal-tab columns: identity and response, titles and headings, directives, size, content, links and structured data.
   - `links`: one row per Link that `020-add-crawl-core` discovers, enriched with what analysis needs: the element and attribute, anchor or alt text, `rel` flags, the internal/external flag and the Content Area flag. The Link types are those of 020's Link type table.
   - `cookies`: one row per `Set-Cookie` header on a Page's response, whatever its status, with the name and attributes. The value is never stored.
-  - `page_sources`: the HTML of Pages, stored as zstd frames.
+  - `page_sources`: the HTML of Pages, stored as zstd frames when HTML storage is turned on (v0.2). The table exists and is empty in v0.1.
 - **Indexability and Indexability Status** for every Page, using fixed status codes: `blocked_by_robots_txt`, `redirected`, `client_error`, `server_error`, `noindex` and `canonicalised`.
 - **Robots directives.** The directive columns store the raw text plus the noindex/nofollow verdicts of `020-add-crawl-core`'s robots directives parser. This change adds no parsing rules of its own.
 - **Content Area.** By default it excludes `nav`, `header` and `footer`. It can be configured in a new `[content_area]` table in `spider.toml`, with `include` and `exclude` lists of CSS selectors.
 - **Content metrics over the Content Area:**
-  - Word Count, Sentence Count, Average Words per Sentence and syllable count
-  - Flesch Reading Ease and a Readability band, for Pages that declare one of seven languages (en, de, es, fr, nl, pt, ru)
+  - Word Count, Sentence Count and Average Words per Sentence; **(v0.2)** the syllable count
+  - **(v0.2)** Flesch Reading Ease and a Readability band, for Pages that declare one of seven languages (en, de, es, fr, nl, pt, ru)
   - Text Ratio
   - the Exact Duplicate hash
-- **SERP pixel widths** for titles (Arial 20 px) and meta descriptions (Arial 14 px), from a bundled table of Arial-metric character widths.
+- **(v0.2) SERP pixel widths** for titles (Arial 20 px) and meta descriptions (Arial 14 px), from a bundled table of Arial-metric character widths.
 - **Structured data:** item counts and types for JSON-LD and Microdata, plus a count of JSON-LD blocks that fail to parse.
 - **Link data:**
   - Inlink and outlink counts, including % of Total (`linking_pages_pct`). The inlink counts are computed in the post-crawl passes.
@@ -31,11 +31,11 @@
   - per-source noindex/nofollow flags
   - `syllable_count`
   - `jsonld_parse_errors`
-- **New `crawl` flags and their `spider.toml` equivalents under `[crawl]`:**
-  - `--store-html` / `--no-store-html` (`store_html = true | false`). When unset, HTML is stored when the Crawl's `--max-urls` is from 1 to 50,000. The decision is made when the Crawl starts, recorded, and kept on resume.
+- **New `crawl` flags and their `spider.toml` equivalents under `[crawl]`, both from v0.2:**
+  - `--store-html` / `--no-store-html` (`store_html = true | false`). HTML is not stored unless storage is turned on. The decision is made when the Crawl starts, recorded, and kept on resume.
   - `--detect-language` (`detect_language = false`) also stores the language detected from the Content Area text.
 - **Columns measured by later releases** exist now and stay NULL:
-  - `link_score` (v0.2)
+  - the four SERP pixel widths, `syllable_count`, `flesch_reading_ease`, `readability`, `detected_language`, `link_score` and `http_version` (v0.2)
   - `closest_similarity_pct` and `near_duplicate_count` (v0.3)
   - `structured_data_errors` and `structured_data_warnings` (v0.3)
   - `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count` (v1.1)
@@ -88,6 +88,6 @@ _None._ This change builds on requirements of `010`, `015`, `017`, `018`, `020` 
   - `080` generates the Skill's column reference from the column descriptions.
 - **Code:** `src/spider/extract/` (the Page extractor, content, readability, pixel widths, structured data, Link attributes), `src/spider/store/` (`spider.store.pages` and `spider.store.links`: the tables, their row values and writers, and the inlink pass) and `docs/schema.md`.
 - **Dependencies:**
-  - `zstandard`, shared with `022-add-fetch-policy`
-  - `py3langid`, imported only when `--detect-language` is set
-  - a bundled character-width table derived from Liberation Sans (SIL OFL 1.1), which has the same advance widths as Arial
+  - `zstandard` (v0.2), shared with `022-add-fetch-policy`
+  - `py3langid` (v0.2), imported only when `--detect-language` is set
+  - (v0.2) a bundled character-width table derived from Liberation Sans (SIL OFL 1.1), which has the same advance widths as Arial
