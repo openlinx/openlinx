@@ -593,3 +593,22 @@ def test_a_failing_submitted_unit_fails_its_future(temp_workspace: TempWorkspace
         error = failing.exception(timeout=0)
 
     assert (type(error), str(error)) == (ValueError, "bad")
+
+
+def test_a_replay_commit_resolves_the_units_before_a_failing_one(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    failing: list[Future[None]] = []
+    failed_at_commit: list[bool] = []
+
+    def on_commit(units: int) -> None:
+        failed_at_commit.append(failing[0].done())
+
+    with CrawlWriter(crawl.path, FakeClock(), on_commit=on_commit) as writer:
+        submitted = submit_inserts(writer, 3)
+        failing.append(writer.submit(raising_insert(4, ValueError("bad"))))
+        failing[0].exception(timeout=10)
+        results = [future.result(timeout=0) for future in submitted]
+
+    assert (results, failed_at_commit) == ([1, 2, 3], [False])

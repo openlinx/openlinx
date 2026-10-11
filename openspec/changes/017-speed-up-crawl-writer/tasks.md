@@ -49,7 +49,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: `CrawlWriter.submit(unit)` returns a `concurrent.futures.Future` that is still pending after the unit has run, and units submitted and units waited for with `run()` run in one order (design D2).
 - [x] 2.2 Drive "A flush resolves the submitted units". Done when: right after each successful commit, before `on_commit`, the writer resolves the Futures of the units that commit made durable, with their results.
 - [x] 2.3 Drive "A failing submitted unit fails its Future".
-- [ ] 2.4 Drive "A replay commit resolves the units before a failing one".
+- [x] 2.4 Drive "A replay commit resolves the units before a failing one".
 - [ ] 2.5 Drive "A failed commit fails every Future of its batch".
 
   Done when:
