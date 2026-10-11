@@ -27,7 +27,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 1. URL normalisation and Seeds (slice, seam 4)
 
-- [ ] 1.1 Drive "Scheme and host case, the default port and the fragment are normalised" and "A non-default port is kept", a trivial pair.
+- [x] 1.1 Drive "Scheme and host case, the default port and the fragment are normalised" and "A non-default port is kept", a trivial pair.
 
   Done when: the normaliser returns a `NormalizedUrl` (design D13), the only producer of that type, or its own rejection type, and never raises.
 - [ ] 1.2 Drive "Dot segments are resolved" and "An empty path becomes a slash", a trivial pair.
