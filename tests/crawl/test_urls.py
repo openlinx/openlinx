@@ -58,6 +58,7 @@ def test_an_internationalised_host_becomes_ascii() -> None:
         ("http://My_Host.test/", NormalizedUrl("http://my_host.test/")),
         ("http://[2001:DB8:0:0::1]:8080/", NormalizedUrl("http://[2001:db8::1]:8080/")),
         ("http://exa mple.test/", InvalidUrl("invalid_host")),
+        ("http://[v1.x]/", InvalidUrl("invalid_host")),
         ("http://e\u200bvil.test/", InvalidUrl("invalid_host")),
     ],
 )
@@ -186,3 +187,16 @@ def test_an_accepted_seed_keeps_the_scheme_its_text_names(scheme: str, rest: str
     result = parse_seed(f"{scheme}:{rest}")
 
     assert isinstance(result, InvalidUrl) or urlsplit(result).scheme == scheme.lower()
+
+
+def test_brackets_outside_the_host_are_percent_encoded() -> None:
+    assert normalize_url("http://site.test/[x]?b=[1]") == "http://site.test/%5Bx%5D?b=%5B1%5D"
+
+
+@given(st.lists(st.text(_ANY_CHARACTER)), st.text(_ANY_CHARACTER))
+def test_normalising_with_any_strip_params_gives_a_url_or_a_rejection(
+    values: list[str], text: str
+) -> None:
+    result = normalize_url(f"http://site.test/p?{text}", strip_params_pattern(values))
+
+    assert isinstance(result, (str, InvalidUrl))

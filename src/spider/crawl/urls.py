@@ -4,16 +4,20 @@ import re
 import string
 from collections.abc import Sequence
 from dataclasses import dataclass
-from ipaddress import ip_address
-from typing import NewType
+from ipaddress import IPv4Address, IPv6Address
+from typing import Literal, NewType
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 NormalizedUrl = NewType("NormalizedUrl", str)
+type InvalidUrlReason = Literal[
+    "malformed", "unsupported_scheme", "userinfo", "missing_host", "invalid_host"
+]
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 _PERCENT_ENCODED = re.compile("%([0-9A-Fa-f]{2})")
 _UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
-_NOT_ALLOWED = re.compile(r"[^A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]|%(?![0-9A-Fa-f]{2})")
+# "[" and "]" belong to an IPv6 host only, so the path and the query encode them.
+_NOT_ALLOWED = re.compile(r"[^A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]|%(?![0-9A-Fa-f]{2})")
 _HOST = re.compile(r"[a-z0-9\-._~]+")
 # "localhost:8080" is a host and a port; "mailto:a@b.test" names the scheme mailto.
 _SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:(?![0-9]+(?:[/?#]|$))")
@@ -30,7 +34,7 @@ _IGNORABLE = re.compile(
 
 @dataclass(frozen=True, slots=True)
 class InvalidUrl:
-    reason: str
+    reason: InvalidUrlReason
 
 
 def strip_params_pattern(values: Sequence[str]) -> re.Pattern[str] | None:
@@ -45,7 +49,9 @@ def _glob_regex(glob: str) -> str:
     return "".join(_GLOB_WILDCARDS.get(character, re.escape(character)) for character in glob)
 
 
-def normalize_url(text: str, strip: re.Pattern[str] | None = None) -> NormalizedUrl | InvalidUrl:
+def normalize_url(
+    text: str, strip_params: re.Pattern[str] | None = None
+) -> NormalizedUrl | InvalidUrl:
     # A lone surrogate, as surrogateescape decoding leaves, has no UTF-8 form to percent-encode.
     if _SURROGATE.search(text):
         return InvalidUrl("malformed")
@@ -63,7 +69,7 @@ def normalize_url(text: str, strip: re.Pattern[str] | None = None) -> Normalized
     host = _ascii_host(_raw_host(parts.netloc))
     if host is None:
         return InvalidUrl("invalid_host")
-    return NormalizedUrl(urlunsplit(_normalized_parts(parts, host, port, strip)))
+    return NormalizedUrl(urlunsplit(_normalized_parts(parts, host, port, strip_params)))
 
 
 def parse_seed(text: str) -> NormalizedUrl | InvalidUrl:
@@ -72,23 +78,30 @@ def parse_seed(text: str) -> NormalizedUrl | InvalidUrl:
 
 
 def _raw_host(netloc: str) -> str:
-    before, bracket, bracketed = netloc.partition("[")
-    if bracket:
-        return bracketed.partition("]")[0]
-    return before.partition(":")[0]
+    if netloc.startswith("["):
+        return netloc.partition("]")[0] + "]"
+    return netloc.partition(":")[0]
 
 
 def _ascii_host(host: str) -> str | None:
-    """The host as aiohttp requests it, so the host recorded is the host requested."""
-    if host[-1].isdigit() or ":" in host:
+    """Encoded as aiohttp encodes it, so that the host recorded is the host requested."""
+    if host.startswith("["):
+        return _ipv6_host(host[1:-1])
+    if host[-1].isdigit():
         try:
-            address = ip_address(host)
+            return str(IPv4Address(host))
         except ValueError:
             pass
-        else:
-            return f"[{address.compressed}]" if address.version == 6 else address.compressed
     encoded = host.lower() if host.isascii() else _idna_encoded(host)
     return encoded if encoded is not None and _HOST.fullmatch(encoded) else None
+
+
+def _ipv6_host(address: str) -> str | None:
+    # A bracketed host that is not IPv6 (IPvFuture, "[v1.x]") must not become the name "v1.x".
+    try:
+        return f"[{IPv6Address(address).compressed}]"
+    except ValueError:
+        return None
 
 
 def _idna_encoded(host: str) -> str | None:
@@ -108,21 +121,25 @@ def _idna_encoded(host: str) -> str | None:
 
 
 def _normalized_parts(
-    parts: SplitResult, host: str, port: int | None, strip: re.Pattern[str] | None
+    parts: SplitResult, host: str, port: int | None, strip_params: re.Pattern[str] | None
 ) -> SplitResult:
     netloc = host
     if port is not None and port != _DEFAULT_PORTS[parts.scheme]:
         netloc = f"{netloc}:{port}"
     path = _without_dot_segments(_percent_normalized(parts.path))
     query = _percent_normalized(parts.query)
-    if strip is not None:
-        query = _without_params(query, strip)
+    if strip_params is not None:
+        query = _without_params(query, strip_params)
     return parts._replace(netloc=netloc, path=path, query=query, fragment="")
 
 
-def _without_params(query: str, strip: re.Pattern[str]) -> str:
-    kept = (param for param in query.split("&") if not strip.fullmatch(param.partition("=")[0]))
-    return "&".join(kept)
+def _without_params(query: str, strip_params: re.Pattern[str]) -> str:
+    params = query.split("&")
+    return "&".join(param for param in params if not strip_params.fullmatch(_name(param)))
+
+
+def _name(param: str) -> str:
+    return param.partition("=")[0]
 
 
 def _percent_normalized(text: str) -> str:

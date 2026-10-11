@@ -16,7 +16,7 @@ Every URL is identified by its normalised form. The Crawl requests that form and
 | `.` and `..` path segments are resolved | `https://site.test/a/./b/../c` | `https://site.test/a/c` |
 | An empty path is `/` | `https://site.test` | `https://site.test/` |
 | Percent-encodings get upper-case hex digits, and those of unreserved characters (letters, digits, `-`, `.`, `_`, `~`) are decoded | `http://site.test/%7euser/a%2fb` | `http://site.test/~user/a%2Fb` |
-| Characters a URL may not hold are percent-encoded as UTF-8, a space and a stray `%` included | `http://site.test/café?q=ü` | `http://site.test/caf%C3%A9?q=%C3%BC` |
+| Characters a URL may not hold are percent-encoded as UTF-8: a space, a stray `%`, and `[` or `]` outside an IPv6 host included | `http://site.test/café?q=ü` | `http://site.test/caf%C3%A9?q=%C3%BC` |
 | An internationalised host becomes ASCII | `http://bücher.test/` | `http://xn--bcher-kva.test/` |
 | An IPv6 address takes its short form | `http://[2001:DB8:0:0::1]/` | `http://[2001:db8::1]/` |
 
@@ -27,7 +27,7 @@ What normalisation never changes:
 
 **Hosts** are encoded the way aiohttp, the HTTP client, encodes them, so the host recorded is always the host requested. A host that is not ASCII goes through IDNA's UTS46 mapping, as browsers do: `faß.test` is `xn--fa-hia.test`, never `fass.test`. A host with characters that UTS46 would delete without a trace, such as a zero-width space, is refused, so `e<U+200B>vil.test` cannot pass for `evil.test`.
 
-**Rejected:** a URL that is not http or https, that has no host, or whose host or port is not valid (`http://exa mple.test/`, `http://site.test:99999/`). So is a URL with a user name or password (`https://user:pass@site.test/`): kept, the credentials would be recorded in the crawl file and sent with every request; dropped, the URL would silently become another one. A rejected Seed fails the Command with `invalid_url` before any request is made; a rejected Link target is not requested.
+**Rejected:** a URL that is not http or https, that has no host, whose port is not a number up to 65535 (`http://site.test:99999/`), whose host holds a character a host name may not (`http://exa mple.test/`), or whose bracketed host is not an IPv6 address (`http://[v1.x]/`). A host that only cannot resolve, such as `a..b.test`, is not rejected: it is requested, and its DNS error is recorded. So is a URL with a user name or password (`https://user:pass@site.test/`): kept, the credentials would be recorded in the crawl file and sent with every request; dropped, the URL would silently become another one. A rejected Seed fails the Command with `invalid_url` before any request is made; a rejected Link target is not requested.
 
 ### Seeds
 
