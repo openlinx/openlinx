@@ -620,21 +620,36 @@ def test_a_replay_commit_resolves_the_units_before_a_failing_one(
     assert (results, failed_at_commit) == ([1, 2, 3], [False])
 
 
+def waits_for[T](
+    hold: threading.Event, unit: Callable[[Connection], T]
+) -> Callable[[Connection], T]:
+    """Holds the writer inside the unit until the event is set."""
+
+    def held(connection: Connection) -> T:
+        hold.wait()
+        return unit(connection)
+
+    return held
+
+
+def fill_the_window(
+    writer: CrawlWriter, first: Callable[[Connection], object]
+) -> list[Future[Any]]:
+    """Submits the first unit, then units that insert the Seeds 2 to 2,000."""
+    rest = (writer.submit(positioned_insert(position)) for position in range(2, 2001))
+    return [writer.submit(first), *rest]
+
+
 def test_a_full_window_holds_the_next_submit(temp_workspace: TempWorkspace) -> None:
     crawl = crawl_without_seeds(temp_workspace)
     log: list[str] = []
     hold = threading.Event()
     about_to_submit = threading.Event()
 
-    def held(connection: Connection) -> int:
-        hold.wait()
-        return positioned_insert(1)(connection)
-
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        # A callback of the first Future runs before the commit frees any room in the window.
-        writer.submit(held).add_done_callback(lambda _: log.append("committed"))
-        for position in range(2, 2001):
-            writer.submit(positioned_insert(position))
+        first = fill_the_window(writer, waits_for(hold, positioned_insert(1)))[0]
+        # Runs before the commit frees any room in the window, unlike on_commit.
+        first.add_done_callback(lambda _: log.append("committed"))
 
         def submit_one_more() -> None:
             about_to_submit.set()
@@ -704,12 +719,15 @@ def test_a_failed_commit_fails_every_future_of_its_batch(temp_workspace: TempWor
     ]
     with pytest.raises(IntegrityError, match=r"FOREIGN KEY constraint failed") as flushed:
         writer.flush()
-    with pytest.raises(CrawlWriterClosedError, match=r"^The crawl writer is closed\.$"):
+    with pytest.raises(CrawlWriterClosedError) as later:
         writer.submit(count_seeds)
     with pytest.raises(CrawlWriterClosedError):
         writer.close()
 
-    assert [future.exception(timeout=0) is flushed.value for future in submitted] == [True] * 3
+    assert (
+        [future.exception(timeout=0) is flushed.value for future in submitted],
+        str(later.value),
+    ) == ([True, True, True], "The crawl writer is closed.")
 
 
 def test_a_submit_that_waits_for_room_wakes_when_the_writer_ends(
@@ -720,15 +738,9 @@ def test_a_submit_that_waits_for_room_wakes_when_the_writer_ends(
     hold = threading.Event()
     about_to_submit = threading.Event()
     raised: list[BaseException] = []
-
-    def held(connection: Connection) -> None:
-        hold.wait()
-        breaks_a_deferred_reference(connection)
-
     writer = CrawlWriter(crawl.path, FakeClock())
     # The 500th unit's commit fails while units 501 to 2,000 are still queued.
-    first = writer.submit(held)
-    rest = submit_inserts(writer, 1999)
+    submitted = fill_the_window(writer, waits_for(hold, breaks_a_deferred_reference))
 
     def submit_one_more() -> None:
         about_to_submit.set()
@@ -746,8 +758,8 @@ def test_a_submit_that_waits_for_room_wakes_when_the_writer_ends(
         writer.close()
 
     assert (
-        type(first.exception()),
-        type(rest[-1].exception()),
+        type(submitted[0].exception()),
+        type(submitted[-1].exception()),
         [type(error) for error in raised],
     ) == (IntegrityError, CrawlWriterClosedError, [CrawlWriterClosedError])
 
@@ -814,24 +826,22 @@ async def test_a_submit_from_an_event_loop_waits_for_room_without_blocking_it(
 ) -> None:
     crawl = crawl_without_seeds(temp_workspace)
     hold = threading.Event()
-
-    def held(connection: Connection) -> int:
-        hold.wait()
-        return positioned_insert(1)(connection)
+    # Releases the writer if the loop is blocked, so that case fails instead of hanging.
+    fallback = threading.Timer(10, hold.set)
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        writer.submit(held)
-        for position in range(2, 2001):
-            writer.submit(positioned_insert(position))
+        fill_the_window(writer, waits_for(hold, positioned_insert(1)))
+        fallback.start()
         waiting = asyncio.create_task(writer.submit_async(positioned_insert(2001)))
         await asyncio.sleep(0)
-        # Reached only if the waiting submit left the loop free.
+        released_by_the_loop = not hold.is_set()
         hold.set()
+        fallback.cancel()
         submitted = await waiting
         writer.flush()
         result = await submitted
 
-    assert result == 2001
+    assert (released_by_the_loop, result) == (True, 2001)
 
 
 def test_cancelling_a_submitted_unit_s_future_does_not_withdraw_it(
@@ -868,3 +878,24 @@ async def test_cancelling_a_submit_from_an_event_loop_only_drops_its_outcome(
         seen = query(crawl.path, SEEDS)
 
     assert (first.cancelled(), [position for position, _ in seen], result) == (True, [1, 2], 2)
+
+
+def test_a_submit_after_close_fails_at_once(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    writer = CrawlWriter(crawl.path, FakeClock())
+    writer.close()
+
+    with pytest.raises(CrawlWriterClosedError, match=r"^The crawl writer is closed\.$"):
+        writer.submit(count_seeds)
+
+
+def test_a_unit_cannot_submit_to_its_own_writer(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with (
+        CrawlWriter(crawl.path, FakeClock()) as writer,
+        pytest.raises(
+            RuntimeError, match=r"^A unit cannot submit work to the writer that runs it\.$"
+        ),
+    ):
+        writer.run(lambda connection: writer.submit(count_seeds))

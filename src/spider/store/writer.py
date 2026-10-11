@@ -1,4 +1,4 @@
-"""The transactional writer (design D4 of 015-add-crawl-store, D6 of 017-speed-up-crawl-writer)."""
+"""The transactional writer (015-add-crawl-store D4; 017-speed-up-crawl-writer D2, D3, D6)."""
 
 import asyncio
 import sqlite3
@@ -67,7 +67,6 @@ class _Ran:
     unit: Callable[[Connection], Any]
     result: Any
     changes: int
-    # A submitted unit's, resolved at the commit that holds it.
     future: Future[Any] | None = None
 
 
@@ -110,12 +109,7 @@ class CrawlWriter:
 
     async def run_async[T](self, unit: Callable[[Connection], T]) -> T:
         done: Future[T] = Future()
-        job = _Job(unit, done)
-        try:
-            self._submit(job, block=False)
-        except Full:
-            # Backpressure without blocking the event loop.
-            await asyncio.to_thread(self._submit, job)
+        await self._submit_without_blocking(_Job(unit, done))
         waiting = asyncio.wrap_future(done)
         while True:
             try:
@@ -124,18 +118,13 @@ class CrawlWriter:
                 self._check_alive(done)
 
     def submit[T](self, unit: Callable[[Connection], T]) -> Future[T]:
-        done: Future[T] = _running()
+        done: Future[T] = _uncancellable()
         self._submit(_Job(unit, done, submitted=True))
         return done
 
     async def submit_async[T](self, unit: Callable[[Connection], T]) -> asyncio.Future[T]:
-        done: Future[T] = _running()
-        job = _Job(unit, done, submitted=True)
-        try:
-            self._submit(job, block=False)
-        except Full:
-            # Waits for room in the window or the queue without blocking the event loop.
-            await asyncio.to_thread(self._submit, job)
+        done: Future[T] = _uncancellable()
+        await self._submit_without_blocking(_Job(unit, done, submitted=True))
         # Bound to this loop, so its callbacks run here and never on the writer thread.
         return asyncio.wrap_future(done)
 
@@ -196,6 +185,13 @@ class CrawlWriter:
         if ended:
             _fail_queued(self._queue, self._failure)
 
+    async def _submit_without_blocking(self, job: _Job) -> None:
+        try:
+            self._submit(job, block=False)
+        except Full:
+            # Waits for room in the window or the queue without blocking the event loop.
+            await asyncio.to_thread(self._submit, job)
+
     def _refuse_own_thread(self) -> None:
         # A unit that waited for its own writer would wait forever.
         if threading.current_thread() is self._thread:
@@ -248,20 +244,23 @@ class CrawlWriter:
                     return
             except BaseException as error:
                 failure = self._busy_error(error)
-                # Closed first, so a submit after anyone learns of the failure fails at once.
-                with self._lock:
-                    self._failure, self._closed = failure, True
-                # A failed commit ends the writer: the caller of the job in hand and every
-                # submitted unit of the open transaction learn why.
-                waiting = [ran.future for ran in self._batch if ran.future is not None]
-                if job is not None:
-                    waiting.append(job.done)
-                for done in waiting:
-                    if not done.done():
-                        done.set_exception(failure)
+                self._end(failure, job)
                 if failure is error:
                     raise
                 raise failure from error
+
+    def _end(self, failure: BaseException, job: _Job | None) -> None:
+        # Closed first, so a submit after anyone learns of the failure fails at once.
+        with self._lock:
+            self._failure, self._closed = failure, True
+        # A failed commit ends the writer: the caller of the job in hand and every submitted
+        # unit of the open transaction learn why.
+        waiting = [ran.future for ran in self._batch if ran.future is not None]
+        if job is not None:
+            waiting.append(job.done)
+        for done in waiting:
+            if not done.done():
+                done.set_exception(failure)
 
     def _handle(self, job: _Job, connection: Connection) -> bool:
         if isinstance(job.work, _Control):
@@ -356,7 +355,7 @@ class CrawlWriter:
         )
 
 
-def _running[T]() -> Future[T]:
+def _uncancellable[T]() -> Future[T]:
     done: Future[T] = Future()
     # So cancel() returns False: a cancelled Future would end the writer at its commit, for
     # every caller, and the unit is never withdrawn anyway (design D2).

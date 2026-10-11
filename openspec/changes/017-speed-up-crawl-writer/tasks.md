@@ -69,7 +69,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: the writer marks each Future running at submit, so `cancel()` returns `False` and the writer thread never meets a cancelled Future. Cancelling `submit_async`'s `asyncio.Future` only drops the outcome, and the test checks that too (design D2).
 - [x] 2.9 Docs: in "Writing a Crawl" of `docs/crawl-store.md`, document submitting, the window, cancelling, and what each outcome means: `run()` means the unit ran, `flush()` and a submitted unit's Future mean it is committed.
-- [ ] 2.10 Review: run the code-review skill on group 2's commits against the "Submitting units with their outcome at the commit" requirement, then refactor with the whole suite green.
+- [x] 2.10 Review: run the code-review skill on group 2's commits against the "Submitting units with their outcome at the commit" requirement, then refactor with the whole suite green.
 
 ## 3. The writer's connection settings and the killed writer (seam 2)
 
