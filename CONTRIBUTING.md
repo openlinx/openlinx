@@ -8,6 +8,8 @@ You need [uv](https://docs.astral.sh/uv/). It installs the Python version from `
 uv sync
 ```
 
+`.python-version` is the newest supported Python, 3.14, because some problems show only on newer Pythons: since 3.13, an unclosed SQLite connection is reported, and the tests treat that as an error. mypy checks against 3.12, the oldest, and CI runs all three.
+
 ## How a change is made
 
 ### OpenSpec
@@ -72,7 +74,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 
 1. Check out the code, and install uv with the cell's Python.
 2. `uv sync --locked`, which fails if `uv.lock` is out of date.
-3. Check that the cell really runs its matrix Python, since `.python-version` pins 3.12.
+3. Check that the cell really runs its matrix Python, since `.python-version` pins 3.14.
 4. `ruff check .`, then `ruff format --check .`.
 5. `mypy` (strict).
 6. `pytest`, with the 90% coverage gate and the hypothesis `ci` profile.

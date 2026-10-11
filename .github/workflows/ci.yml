@@ -45,7 +45,7 @@ jobs:
       - name: Install the locked dependencies
         run: uv sync --locked
 
-      # .python-version pins 3.12; without this check a cell could silently test 3.12.
+      # .python-version pins 3.14; without this check a cell could silently test 3.14.
       - name: Check the cell runs the matrix Python
         env:
           EXPECTED_PYTHON: ${{ matrix.python }}
