@@ -1,4 +1,4 @@
-"""Opening crawl files through URIs, one engine per operation (design D2 of 015-add-crawl-store)."""
+"""One engine per crawl-file operation (015-add-crawl-store D2; 017-speed-up-crawl-writer D8)."""
 
 import sqlite3
 import time
@@ -19,6 +19,7 @@ READER_BUSY_SECONDS = 5.0
 WRITER_BUSY_SECONDS = 30.0
 # How often opening looks again at a -shm file that a killed writer still holds.
 SHM_RELEASE_CHECK_SECONDS = 0.05
+
 WRITER_CACHE_KIB = 65_536
 WRITER_MMAP_BYTES = 268_435_456
 
@@ -131,20 +132,23 @@ def _own_transactions(connection: sqlite3.Connection, _: Any) -> None:
     connection.isolation_level = None
 
 
+def _in_wal(connection: sqlite3.Connection) -> bool:
+    journal_mode: str = connection.execute("PRAGMA journal_mode").fetchone()[0]
+    return journal_mode == "wal"
+
+
 def _synchronous_for_the_journal(connection: sqlite3.Connection, _: Any) -> None:
-    (journal_mode,) = connection.execute("PRAGMA journal_mode").fetchone()
     # WAL stays durable at NORMAL; a rollback journal needs FULL for every commit.
-    synchronous = "NORMAL" if journal_mode == "wal" else "FULL"
+    synchronous = "NORMAL" if _in_wal(connection) else "FULL"
     connection.execute(f"PRAGMA synchronous = {synchronous}")
 
 
 def _writer_settings(connection: sqlite3.Connection, _: Any) -> None:
     connection.execute("PRAGMA temp_store = MEMORY")
     connection.execute(f"PRAGMA cache_size = -{WRITER_CACHE_KIB}")
-    (journal_mode,) = connection.execute("PRAGMA journal_mode").fetchone()
     # delete mode is chosen for network shares, where a mapping is only as coherent as the
     # share's client cache. Set to 0, not left alone: the default is a build-time option.
-    mmap_size = WRITER_MMAP_BYTES if journal_mode == "wal" else 0
+    mmap_size = WRITER_MMAP_BYTES if _in_wal(connection) else 0
     connection.execute(f"PRAGMA mmap_size = {mmap_size}")
 
 

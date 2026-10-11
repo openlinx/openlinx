@@ -87,7 +87,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - the PR description records the Windows and SQLite versions
   - if a run fails with a new SQLite error at open or a lost commit, the work stops and is reported. The fallback (`mmap_size = 0` on Windows only) is decided with the maintainer.
 - [x] 3.5 Docs: in `docs/crawl-store.md`, document the writer's connection settings, and why `delete` mode maps no memory.
-- [ ] 3.6 Review: run the code-review skill on group 3's commits against "The writer's connection settings" and the durability scenarios, then refactor with the whole suite green.
+- [x] 3.6 Review: run the code-review skill on group 3's commits against "The writer's connection settings" and the durability scenarios, then refactor with the whole suite green.
 
 ## 4. Prebuilt statements and the throughput check
 

@@ -903,22 +903,19 @@ def test_a_unit_cannot_submit_to_its_own_writer(temp_workspace: TempWorkspace) -
         writer.run(lambda connection: writer.submit(count_seeds))
 
 
-def connection_settings(connection: Connection) -> tuple[int, int, int]:
-    """A unit that reads temp_store, cache_size and mmap_size."""
-    return (
-        connection.exec_driver_sql("PRAGMA temp_store").scalar_one(),
-        connection.exec_driver_sql("PRAGMA cache_size").scalar_one(),
-        connection.exec_driver_sql("PRAGMA mmap_size").scalar_one(),
-    )
+def journal_mode(connection: Connection) -> str:
+    return connection.exec_driver_sql("PRAGMA journal_mode").scalar_one()
+
+
+def connection_settings(connection: Connection) -> tuple[int, ...]:
+    return tuple(connection.exec_driver_sql(f"PRAGMA {name}").scalar_one() for name in SETTINGS)
 
 
 def test_the_writer_s_connection_settings_in_wal_mode(temp_workspace: TempWorkspace) -> None:
     crawl = crawl_without_seeds(temp_workspace)
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        journal: str = writer.run(
-            lambda connection: connection.exec_driver_sql("PRAGMA journal_mode").scalar_one()
-        )
+        journal = writer.run(journal_mode)
         settings = writer.run(connection_settings)
 
     assert (journal, settings) == ("wal", (2, -65536, 268435456))
@@ -941,9 +938,7 @@ def test_the_writer_s_connection_settings_in_rollback_journal_mode(
     crawl = create_any_crawl(temp_workspace, journal_setting="delete")
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        journal: str = writer.run(
-            lambda connection: connection.exec_driver_sql("PRAGMA journal_mode").scalar_one()
-        )
+        journal = writer.run(journal_mode)
         settings = writer.run(connection_settings)
 
     assert (journal, settings) == ("delete", (2, -65536, 0))
