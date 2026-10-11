@@ -1,4 +1,4 @@
-"""The schema service behind `spider schema` (design D6 of 015-add-crawl-store)."""
+"""The service behind `spider schema` (015-add-crawl-store D6; 018-add-schema-conventions D4)."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -8,7 +8,7 @@ from spider.output.codes import UNKNOWN_TABLE
 from spider.output.diagnostics import SpiderError
 
 if TYPE_CHECKING:
-    from sqlalchemy import Column
+    from sqlalchemy import Column, Index
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,11 @@ def describe_schema(table: str | None = None) -> SchemaDescription:
             "kind": "table",
             "description": candidate.comment,
             "columns": [_column(column) for column in candidate.columns],
-            "indexes": [],
+            # SQLite's own indexes for keys are not declared, so only secondary ones are listed.
+            "indexes": [
+                _index(index)
+                for index in sorted(candidate.indexes, key=lambda index: str(index.name))
+            ],
         }
         for candidate in declared
         if table is None or candidate.name == table
@@ -62,3 +66,24 @@ def _column(column: "Column[Any]") -> dict[str, Any]:
         "format": getattr(column.type, "format", None),
         "values": column.info.get("values"),
     }
+
+
+def _index(index: "Index") -> dict[str, Any]:
+    return {
+        "name": index.name,
+        "description": index.info.get("description"),
+        "columns": [column.name for column in index.columns],
+        "unique": index.unique,
+        "where": _condition(index),
+    }
+
+
+def _condition(index: "Index") -> str | None:
+    from sqlalchemy.dialects import sqlite
+
+    where = index.dialect_options["sqlite"]["where"]
+    if where is None:
+        return None
+    # As CREATE INDEX writes it: bare column names and literal values.
+    options = {"include_table": False, "literal_binds": True}
+    return str(where.compile(dialect=sqlite.dialect(), compile_kwargs=options))

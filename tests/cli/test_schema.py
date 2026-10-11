@@ -1,9 +1,12 @@
 """`spider schema` (015-add-crawl-store, 018-add-schema-conventions, crawl-store)."""
 
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from sqlalchemy import Column, Index, Integer, Text
 
+from spider.store.schema import metadata, public_table
 from tests.support.cli import run_cli
 from tests.support.workspace import TempWorkspace
 
@@ -100,6 +103,64 @@ def test_no_workspace_needed(
     result = run_cli("schema")
 
     assert (result.exit_code, (temp_workspace.home / ".spider").exists()) == (0, False)
+
+
+def test_a_table_without_secondary_indexes_lists_none() -> None:
+    assert run_cli("schema", "seeds", "--fields", "name,indexes").json()["items"] == [
+        {"name": "seeds", "indexes": []}
+    ]
+
+
+@pytest.fixture
+def indexed_table() -> Iterator[None]:
+    """Declared the way 020's urls will be. Safe because the tests run serially."""
+    table = public_table(
+        "indexed_rows",
+        Column("id", Integer, primary_key=True, comment="The row id."),
+        Column("url", Text, nullable=False, comment="A URL."),
+        Column("state", Text, nullable=False, comment="A state."),
+        comment="Rows with secondary indexes.",
+        change=99,
+    )
+    Index(
+        "indexed_rows_url",
+        table.c.url,
+        unique=True,
+        info={"description": "Finds a row by its URL."},
+    )
+    Index(
+        "indexed_rows_state_id",
+        table.c.state,
+        table.c.id,
+        sqlite_where=table.c.state == "queued",
+        info={"description": "Lists queued rows in id order."},
+    )
+    yield
+    metadata.remove(table)
+
+
+@pytest.mark.usefixtures("indexed_table")
+def test_secondary_indexes_are_listed_in_name_order() -> None:
+    assert run_cli("schema", "indexed_rows", "--fields", "indexes").json()["items"] == [
+        {
+            "indexes": [
+                {
+                    "name": "indexed_rows_state_id",
+                    "description": "Lists queued rows in id order.",
+                    "columns": ["state", "id"],
+                    "unique": False,
+                    "where": "state = 'queued'",
+                },
+                {
+                    "name": "indexed_rows_url",
+                    "description": "Finds a row by its URL.",
+                    "columns": ["url"],
+                    "unique": True,
+                    "where": None,
+                },
+            ]
+        }
+    ]
 
 
 def schema_entry() -> dict[str, Any]:
