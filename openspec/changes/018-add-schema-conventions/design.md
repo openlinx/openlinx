@@ -68,7 +68,7 @@
   - Each index gives `name`, `description` (the index's `info["description"]`, which names the query it serves), `columns`, `unique`, and `where` (the compiled condition of a partial index, or `null`).
   - `spider schema` lists `indexes` as an available and default field.
 - **`docs/schema.md`:** under each table's column table, an "Indexes" table with the same five values. A table with no secondary index has none.
-- **The contract test** parses that table too. The file check reads `PRAGMA index_list` and `PRAGMA index_xinfo` for the columns, and `sqlite_master.sql` for a partial index's condition.
+- **The contract test** parses that table too. The parser of the table sections lives in one importable module, `spider.services.schema_doc.parse_tables(text)`, not inside the test file, because `080` reads its generated reference back with it. The file check reads `PRAGMA index_list` and `PRAGMA index_xinfo` for the columns, and `sqlite_master.sql` for a partial index's condition.
 - *Alternative:* indexes kept out of the contract, as today. The inventory found that 060's design relied on an index that no change declares. Rejected.
 
 ### D5. Derived and later columns
@@ -116,7 +116,7 @@ None. Before v0.1 the schema is not yet public, and `schema_version` stays `1` (
   - `urls_url` (unique) is the first index with a description, and `urls_crawl_depth_id` (`(crawl_depth, id) WHERE fetch_state = 'queued'`, the frontier) the first partial one.
 - **`022`:** adds `urls.redirect_url_id` with its partial index `urls_redirect_url_id` (`WHERE redirect_url_id IS NOT NULL`).
 - **`022`, `030`, `040` and `060`:** their tables follow ADR-0005 from their first slice. `030` takes the links layout from the links benchmark, and `040`'s `health_*` columns are derived.
-- **`080`:** the agent documentation of the schema builds on `spider schema`'s `references` and `indexes`, and on the two description prefixes.
+- **`080`:** the agent documentation of the schema builds on `spider schema`'s `references` and `indexes`, and on the two description prefixes. It adds `render_tables(items, compact=...)` next to `spider.services.schema_doc.parse_tables`, renders its `sql-schema.md` in the table-section layout of `docs/schema.md`, and reads it back with `parse_tables`. `docs/schema.md` stays written by hand; a change to its layout changes the parser, and so `080`'s renderer with it.
 
 ## Open Questions
 
