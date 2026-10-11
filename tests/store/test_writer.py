@@ -921,7 +921,7 @@ def test_the_writer_s_connection_settings_in_wal_mode(temp_workspace: TempWorksp
     assert (journal, settings) == ("wal", (2, -65536, 268435456))
 
 
-def test_readers_keep_sqlite_s_defaults(temp_workspace: TempWorkspace) -> None:
+def test_a_reader_keeps_sqlite_s_defaults(temp_workspace: TempWorkspace) -> None:
     crawl = crawl_without_seeds(temp_workspace)
 
     with reading(crawl.path) as connection:
