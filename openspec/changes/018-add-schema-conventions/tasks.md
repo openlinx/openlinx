@@ -37,8 +37,26 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - the same test keeps the check sharp: the other file, rewritten with CRLF, is still an offender
 
   *No scenario, because* the check is `000`'s repository tooling (design D16 of `000-scaffold-project`), which has no capability spec, and a scenario in `crawl-store` would put it under a requirement it does not belong to. It is here because `018` is the next change built after it was found.
-- [ ] 1.8 Docs: in `docs/schema.md`, replace "Conventions" with ADR-0005's rules as the spec states them (D1): STRICT, CHECKs, keys and references, `_at`, the units with `_seconds` and `_count`, errors, the two description prefixes, indexes. State that reading a crawl file needs SQLite 3.37 or later. In "How to add a table", add the declaration helper, `REAL`, and an index's `info["description"]`. Link ADR-0005.
-- [ ] 1.9 Review: run the code-review skill on group 1's commits against "Public schema conventions" and ADR-0005, then refactor with the whole suite green.
+- [ ] 1.8 **Guard, with no scenario:** the decidable rules of ADR-0006 hold over `src/spider`.
+
+  Done when:
+  - an `ast` test over every module of `src/spider` fails, naming the module and the class, when a `@dataclass` (bare, called, or as `dataclasses.dataclass`) is not `frozen=True`
+  - the same test fails when a class subclasses a class defined in `src/spider`, a subscripted base included, except `AppGroup`, which `build_app` makes of `SpiderGroup` because Typer takes a class (ADR-0006)
+  - it passes on today's code, and a mutation check shows it is sharp: a non-frozen dataclass, and a subclass of an own class, each make it red, as cases that feed the checker a source string
+
+  *No scenario, because* ADR-0006 is a code-style decision with no capability spec, like the line-endings check of 1.7. It is here so that `020`, the largest change, starts with it.
+- [ ] 1.9 **Fix, with no scenario:** the four `# noqa` and `# type: ignore` uses that break CONTRIBUTING's "Code style" rule (each names its code, is used only when the fault is not ours, and gives a short reason).
+
+  Done when:
+  - `src/spider/cli/meta.py`: the `# type: ignore[attr-defined]` on `run.command_meta = meta` is gone, because the fault is ours. A Protocol for a Command function that carries `command_meta` types it, and `meta_of` reads it through that Protocol. A registry would not do: it would be module-level mutable state, which ADR-0006 rules out.
+  - `tests/store/test_ids.py`, lines 23 and 24: each `# noqa: DTZ001` gives its reason, that hypothesis's `datetimes()` takes naive bounds.
+  - `tests/store/test_reading.py`, line 83: the `# type: ignore[union-attr]` gives way to `assert isinstance(raised.value.orig, sqlite3.Error)`.
+  - `scripts/check.py`, line 31: the `# noqa: TID251` gives its reason on the line, that the check script's own messages are not `spider`'s output. A per-file ignore of `TID251` for `scripts/**` would also lift the ban on importing Typer's vendored Click there, so the narrow form is kept.
+  - `uv run scripts/check.py` passes, and a grep finds no `# noqa` or `# type: ignore` without its code and reason.
+
+  *No scenario, because* it changes no behaviour: it brings the code to the "Code style" rule that came with ADR-0006.
+- [ ] 1.10 Docs: in `docs/schema.md`, replace "Conventions" with ADR-0005's rules as the spec states them (D1): STRICT, CHECKs, keys and references, `_at`, the units with `_seconds` and `_count`, errors, the two description prefixes, indexes. State that reading a crawl file needs SQLite 3.37 or later. In "How to add a table", add the declaration helper, `REAL`, and an index's `info["description"]`. Link ADR-0005.
+- [ ] 1.11 Review: run the code-review skill on group 1's commits against "Public schema conventions" and ADR-0005, then refactor with the whole suite green.
 
 ## 2. The schema description: references, indexes and markers (seam 1, seam 6)
 
