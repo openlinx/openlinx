@@ -832,3 +832,39 @@ async def test_a_submit_from_an_event_loop_waits_for_room_without_blocking_it(
         result = await submitted
 
     assert result == 2001
+
+
+def test_cancelling_a_submitted_unit_s_future_does_not_withdraw_it(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        cancelled = writer.submit(positioned_insert(1)).cancel()
+        second = writer.submit(positioned_insert(2))
+        writer.flush()
+        seen = query(crawl.path, SEEDS)
+
+    assert (cancelled, [position for position, _ in seen], second.result(timeout=0)) == (
+        False,
+        [1, 2],
+        2,
+    )
+
+
+async def test_cancelling_a_submit_from_an_event_loop_only_drops_its_outcome(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        first = await writer.submit_async(positioned_insert(1))
+        first.cancel()
+        # The cancel reaches the writer's own Future on the loop's next turn.
+        await asyncio.sleep(0)
+        second = await writer.submit_async(positioned_insert(2))
+        writer.flush()
+        result = await second
+        seen = query(crawl.path, SEEDS)
+
+    assert (first.cancelled(), [position for position, _ in seen], result) == (True, [1, 2], 2)

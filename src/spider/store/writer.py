@@ -124,12 +124,12 @@ class CrawlWriter:
                 self._check_alive(done)
 
     def submit[T](self, unit: Callable[[Connection], T]) -> Future[T]:
-        done: Future[T] = Future()
+        done: Future[T] = _running()
         self._submit(_Job(unit, done, submitted=True))
         return done
 
     async def submit_async[T](self, unit: Callable[[Connection], T]) -> asyncio.Future[T]:
-        done: Future[T] = Future()
+        done: Future[T] = _running()
         job = _Job(unit, done, submitted=True)
         try:
             self._submit(job, block=False)
@@ -354,6 +354,14 @@ class CrawlWriter:
             hint="Check that the file and its folder are writable, and not read-only.",
             details={"file": str(self._path), "error": name},
         )
+
+
+def _running[T]() -> Future[T]:
+    done: Future[T] = Future()
+    # So cancel() returns False: a cancelled Future would end the writer at its commit, for
+    # every caller, and the unit is never withdrawn anyway (design D2).
+    done.set_running_or_notify_cancel()
+    return done
 
 
 def _check_writable(connection: Connection) -> None:

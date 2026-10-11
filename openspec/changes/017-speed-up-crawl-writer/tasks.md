@@ -65,7 +65,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 2.7 Drive "A unit submitted from an event loop is resolved at its commit".
 
   Done when: `await submit_async(unit)` waits for room in the window without blocking the loop, and returns an `asyncio.Future` bound to the caller's loop, whose callbacks run on that loop.
-- [ ] 2.8 Drive "Cancelling a submitted unit's Future does not withdraw it".
+- [x] 2.8 Drive "Cancelling a submitted unit's Future does not withdraw it".
 
   Done when: the writer marks each Future running at submit, so `cancel()` returns `False` and the writer thread never meets a cancelled Future. Cancelling `submit_async`'s `asyncio.Future` only drops the outcome, and the test checks that too (design D2).
 - [ ] 2.9 Docs: in "Writing a Crawl" of `docs/crawl-store.md`, document submitting, the window, cancelling, and what each outcome means: `run()` means the unit ran, `flush()` and a submitted unit's Future mean it is committed.
