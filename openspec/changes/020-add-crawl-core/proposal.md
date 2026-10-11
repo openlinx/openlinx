@@ -47,7 +47,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 - **Robustness (ROADMAP's rule for every change from 020 on):**
   - one URL never stops the Crawl: request, decoding, extractor, handler and recording failures become the URL's outcome, with counted `parse_failed`, `handler_failed` and `record_failed` warnings
   - parsing never trusts its input: the Seed parser, the normaliser, decoding, the link extractor, the directives parser and the robots.txt reader are tested with hypothesis over arbitrary input
-  - backstops: losing the site (`site_unreachable`, exit 8, resumable), a per-request watchdog that always outlasts the Fetcher's own deadline, and a stop that waits 10 seconds and then cancels
+  - backstops: losing the site (`site_unreachable`, exit 8, resumable), a per-request watchdog that always outlasts the Fetcher's own deadline, recording that fails for 100 URLs in a row (`write_failed`, exit 7), and a stop that waits 10 seconds and then cancels
   - hostile fixtures on the fixture site: connection resets, deeply nested HTML, bytes invalid in their charset, 429 and 503 robots.txt
 - **Hooks for later changes:**
   - a **per-response hook**, called once for every URL that reaches a final state. Handlers return rows, and the store writes them in the URL's writer unit.

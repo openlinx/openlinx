@@ -70,12 +70,18 @@ The unit is one completed URL, submitted with `await writer.submit_async(unit)` 
 
 **The URL's task ends at the submit.** `017`'s window (2,000 unresolved units) holds a submit when the writer falls behind, so a slow writer slows the fetchers and memory stays bounded. The unit's outcome arrives at its commit, on the event loop, through the Future's callback:
 - **Committed:** the callback updates the progress counters (D10).
-- **The unit failed:** the callback submits a fallback unit that records only the URL's state: `fetch_state` = `error`, `fetch_error` = `record_failed`, and the error's type and message in `fetch_error_message`.
+- **The unit failed on its first run with an error of one row:** the callback submits a fallback unit that records only the URL's state: `fetch_state` = `error`, `fetch_error` = `record_failed`, and the error's type and message in `fetch_error_message`.
+  - The errors of one row, after unwrapping SQLAlchemy's `DBAPIError.orig`, are an allowlist:
+    - `sqlite3.IntegrityError`: a CHECK, NOT NULL, UNIQUE or foreign key
+    - `sqlite3.DataError`: one value too big (`SQLITE_TOOBIG`)
+    - `sqlite3.InterfaceError`: a value that cannot be bound
+    - any exception that is not a database error, raised by our own row code
   - The URLs discovered from it and its handler rows are lost. A continue re-queues it with the other `error` URLs (D1).
-  - It is counted in one `record_failed` warning (D16).
-  - A unit that fails never ends the Crawl, even when it fails in `017`'s replay.
+  - It is counted in one `record_failed` warning, and in the record-failure count of D16.
+  - A unit that fails on its first run never ends the Crawl by itself.
 - **Not a URL's failure,** but `write_failed` (D16):
-  - a unit that fails because the crawl file itself cannot be written: an SQLite error whose primary code is `SQLITE_FULL`, `SQLITE_IOERR`, `SQLITE_READONLY`, `SQLITE_CORRUPT`, `SQLITE_NOTADB` or `SQLITE_BUSY`. A full disk usually shows inside a unit, when SQLite allocates a page, not at the commit.
+  - every other `sqlite3.DatabaseError`, `ProgrammingError` included: the file or the connection failed, not one row. A full disk, an I/O error, or a read-only, corrupt or busy file are such errors. A full disk usually shows inside a unit, when SQLite allocates a page, not at the commit.
+  - a unit that fails, or gives another result, when `017` replays it (`017` D6): the writer ends
   - a fallback unit that fails
   - a commit that fails, which fails every Future of its batch
   - `CrawlWriterClosedError`, including a writer that `017`'s replay check ended (`CrawlWriterReplayError`): when a unit run again does not reproduce its first run, the writer ends without a commit. A file-level error inside a unit, such as a full disk, usually ends the writer this way rather than failing only that unit.
@@ -85,6 +91,7 @@ The unit is one completed URL, submitted with `await writer.submit_async(unit)` 
 The writer commits every 500 units or 1 second (`015` D4), and after `017`'s replay, so a killed process loses at most about a second of work, and those URLs are still `queued`. The engine opens the writer, and closes it at the end, through `asyncio.to_thread`. No count is stored on `crawl` while the Crawl runs (`018` D6).
 - *Alternative:* `await writer.run_async(unit)` per URL, as `015` offered. The URL's task would wait until its unit ran, and the result would still say nothing about the commit. Rejected.
 - *Alternative:* any unit that fails ends the Crawl with `write_failed`. One bad row, for example a value that a CHECK refuses, would stop a 500k-URL Crawl. Rejected by the robustness rule.
+- *Alternative:* a denylist of the SQLite codes of a failing file (FULL, IOERR, READONLY, CORRUPT, NOTADB, BUSY). An unlisted code, such as NOMEM or CANTOPEN, would pass as one URL's failure, and the Crawl would record every remaining URL as `error`. Rejected for the allowlist. The replay check of `017` already ends the writer on most file errors, but not on one in the first unit of a batch, where there is nothing to replay.
 
 ### D3. Followed URLs are dispatched depth by depth
 No followed URL (an Internal URL in the Scope) at depth d+1 starts until every followed URL at depth ≤ d has been processed. Checks, meaning External URLs, URLs outside the Scope and Resources, never block that barrier. Crawl Depth is then exact however responses interleave.
@@ -225,11 +232,15 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 
 ### D16. Robustness and backstops
 - **Parsers never raise:** the Seed parser, the normaliser, decoding, the link extractor, the directives parser and the robots.txt reader return their result or their own rejection type. Each has a hypothesis property over arbitrary input (bytes, text, malformed HTML) that it never raises, next to its table tests.
-- **The engine still contains** an extractor or handler that raises: the extractor's failure becomes `parse_error` = `extractor_error`, with `<name>: <type>` in `parse_error_message`, the handler's drops only its rows, and each is counted in one warning (`parse_failed`, `handler_failed`). A unit that fails is recorded through a fallback unit as `record_failed`, counted in one `record_failed` warning (D2).
+- **The engine still contains** an extractor or handler that raises: the extractor's failure becomes `parse_error` = `extractor_error`, with `<name>: <type>` in `parse_error_message`, the handler's drops only its rows, and each is counted in one warning (`parse_failed`, `handler_failed`). A unit that fails on its first run with an error of one row is recorded through a fallback unit as `record_failed`, counted in one `record_failed` warning (D2).
+- **Recording keeps failing:** a count of URL units in a row that failed on their first run with an error of one row (D2). A URL unit that commits resets it, and fallback units do not count. At `RECORD_FAILURE_LIMIT` (100), a named constant, the stop flag is set with `write_failed`.
+  - Why: D2's allowlist cannot tell one bad row from a bug in our own row code that fails for every Page, such as a `TypeError`. That bug would turn a 500k-URL Crawl into `error` rows.
+  - Why 100: real bad rows are rare and independent of each other, so 100 in a row with no success between them is a bug. 100 URLs are also little to lose next to a Crawl.
+  - It has the shape of the site-lost count below.
 - **The site is lost:** a counter of consecutive Internal requests without a response; any response resets it. At `max(8, 2 × concurrency)` the stop flag is set with `site_unreachable`. It generalises the zero-success breaker of the architecture review: at the start of a Crawl it trips when nothing has answered yet, and later it trips when the network goes away, instead of recording the rest of a 500k-URL site as errors. `failed` stays resumable, and continuing re-queues the `error` URLs (D1).
 - **The watchdog:** each request races `clock.sleep(watchdog_seconds)`; the loser is cancelled, and a cancelled request is recorded as `fetch_error` = `watchdog`. One pure function computes `watchdog_seconds` from the settings: `max(120, the Fetcher's total request deadline + 30)`. In this change the deadline is the fixed 20 seconds of D8, so the watchdog is 120 seconds; `022`-min's timeout settings feed the same function, so a watchdog never cuts a slow response that the Fetcher still allows. It is a backstop behind the Fetcher's own timeout, for a hang that the timeout does not cover. A request ended by the watchdog counts as one without a response for the site-lost count.
 - **Stop:** grace then cancellation. After the stop flag is set, no request starts; requests in flight get 10 seconds of clock time, then are cancelled before their submit, so their URLs stay `queued`. A URL whose unit was already submitted is recorded, because cancelling never withdraws a unit (`017`).
-- **Writing fails:** the crawl file itself fails in a unit, a fallback unit fails, a commit fails, or the writer has ended, also through `017`'s replay check (D2). The engine sets the stop flag with `write_failed`, and the service tries once to record the end through a fresh writer. A second failure leaves the file `running`, which `060` reports as `interrupted`.
+- **Writing fails:** a unit fails with an error that is not of one row, a unit fails or differs in `017`'s replay, a fallback unit fails, a commit fails, the writer has ended, or recording keeps failing (D2, above). The engine sets the stop flag with `write_failed`, and the service tries once to record the end through a fresh writer. A second failure leaves the file `running`, which `060` reports as `interrupted`.
 - **Hostile fixtures** added by this change: a connection reset in the body, deeply nested HTML, bytes invalid in their declared charset, and 429 and 503 robots.txt. `022` adds the stalled, trickling, huge and compressed ones with its limits.
 
 ### D17. Codes

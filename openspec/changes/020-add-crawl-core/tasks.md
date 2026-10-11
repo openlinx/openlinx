@@ -139,7 +139,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when:
   - a failed unit gets a fallback unit that records only the URL's state (`fetch_state` = `error`, `fetch_error` = `record_failed`, the error in `fetch_error_message`), and `record_failed` is declared as a value and as a counted warning
-  - a failure of the crawl file itself (SQLite's FULL, IOERR, READONLY, CORRUPT, NOTADB or BUSY), a failing fallback, a failed commit or `CrawlWriterClosedError` sets the stop flag with `write_failed` instead (design D2)
+  - only design D2's allowlist (after unwrapping `DBAPIError.orig`: `sqlite3.IntegrityError`, `DataError`, `InterfaceError`, and non-database exceptions of our row code) leads to `record_failed`; every other `sqlite3.DatabaseError`, a unit that fails or differs in `017`'s replay, a failing fallback, a failed commit or `CrawlWriterClosedError` sets the stop flag with `write_failed` instead
 - [ ] 5.14 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes in `docs/crawling.md`.
 - [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
@@ -254,15 +254,18 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.8 Drive "Post-crawl passes do not run for a failed Crawl" at seam 2.
 - [ ] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
 
-  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit; it is a failure of the file itself, never `record_failed` (design D2).
-- [ ] 12.10 Drive "Losing the site fails the Crawl" at seam 1, with the reset route of task 5.11. Done when: the count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without a response.
-- [ ] 12.11 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared.
-- [ ] 12.12 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
-- [ ] 12.13 Drive "A stuck request is ended by the watchdog", fake timing.
+  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`.
+- [ ] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 1, with a handler and a row writer registered for the test. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
+
+  Done when: the record-failure count of design D16 trips at `RECORD_FAILURE_LIMIT` (100) URL units in a row that failed on their first run, a URL unit that commits resets it, fallback units do not count, and the constant's comment says why.
+- [ ] 12.11 Drive "Losing the site fails the Crawl" at seam 1, with the reset route of task 5.11. Done when: the count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without a response.
+- [ ] 12.12 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared.
+- [ ] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
+- [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing.
 
   Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without a response for the site-lost count.
-- [ ] 12.14 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), and the backstops in `docs/crawling.md`.
-- [ ] 12.15 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
+- [ ] 12.15 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), and the backstops in `docs/crawling.md`.
+- [ ] 12.16 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
 
 ## 13. Stopping with an interrupt (widening)
 

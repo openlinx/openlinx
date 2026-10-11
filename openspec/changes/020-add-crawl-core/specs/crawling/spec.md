@@ -811,7 +811,11 @@ A failure while one URL is fetched, decoded, parsed, extracted or handled SHALL 
 - **Decoding:** bytes that are invalid in the response's character encoding SHALL be decoded with replacement characters.
 - **Extractors:** when an extractor raises an error, the URL SHALL be recorded with `parsed` = 0, `parse_error` = `extractor_error`, and a `parse_error_message` that names the extractor and the error's type.
 - **Handlers:** when a per-response handler raises an error, the URL SHALL be recorded without that handler's rows.
-- **Recording:** when the writer unit that records a URL fails, the URL SHALL be recorded by a fallback unit with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs discovered from it and without its handler rows. A failure of the crawl file itself, which SQLite reports as a full disk, an I/O error, or a read-only, corrupt or busy file, SHALL instead fail the Crawl as a write failure (see "Result of a Crawl"), as SHALL a fallback unit that fails, a commit that fails, and a writer that has ended.
+- **Recording:** when the writer unit that records a URL fails on its first run with an error of one row, the URL SHALL be recorded by a fallback unit with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs discovered from it and without its handler rows. An error of one row is a value that the file refuses (a constraint, a value too big, or a value that cannot be bound), or an error that the tool's own row code raises. Each of these SHALL instead fail the Crawl as a write failure (see "Result of a Crawl"):
+  - any other error that SQLite reports, such as a full disk, an I/O error, or a read-only, corrupt or busy file
+  - a unit that fails, or gives another result, when the writer runs it again (`015-add-crawl-store`)
+  - a fallback unit that fails, a commit that fails, and a writer that has ended
+  - 100 URL units in a row that fail on their first run, with no URL unit committed in between
 - **Counted warnings:** each kind of failure SHALL be reported by one warning, `parse_failed` for extractors, `handler_failed` for handlers and `record_failed` for recording. It SHALL be written to stderr when it first occurs, and kept once in the result and `crawl.warnings`, with `details.count` (the number of URLs it affected) and `details.first_url`.
 
 Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, and a crawl file that cannot be written. Page preparation (decoding, parsing, the extractors and the robots directives) SHALL be one function of the response, called through an executor: in this change it runs in the crawl process, and `026-add-parse-pool` runs it in worker processes.
@@ -835,6 +839,10 @@ Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, an
 #### Scenario: A URL whose rows cannot be written is recorded as an error
 - **WHEN** a handler registered for the test returns, for `{site}/boom`, a row whose store writer, registered for the test, raises an error, `/` links to `/boom` and `/ok`, and `spider crawl {site}/` ends
 - **THEN** `{site}/boom` has `fetch_state` = `error` and `fetch_error` = `record_failed`, `{site}/ok` has `fetch_state` = `fetched`, the Crawl State is `completed`, and the result's `warnings` hold one entry with code `record_failed` whose `details.count` is 1
+
+#### Scenario: Recording that fails for every URL fails the Crawl
+- **WHEN** a handler registered for the test returns, for every URL other than `{site}/`, a row whose store writer, registered for the test, raises an error, `/` links to `/p1` to `/p120`, and `spider crawl {site}/` runs
+- **THEN** the Command exits with code 7, stdout holds the result with `"state": "failed"` and `"stop_reason": "write_failed"`, and the last stderr line is an error with `code` = `crawl_write_failed`
 
 #### Scenario: Deeply nested HTML does not stop the Crawl
 - **WHEN** `/` links to `/deep`, whose body nests 100,000 `<div>` elements around a link to `/after`, and `spider crawl {site}/` ends
