@@ -172,7 +172,7 @@ Boundary doubles used: `FakeClock` only.
 - [In `delete` mode, a unit that waits out the busy timeout fails, and the replay may wait again for each unit before it] → A busy file in `delete` mode already fails the Crawl with `crawl_busy` (`020`'s risks), and the 64 MiB cache makes spills inside a unit rarer.
 - [The throughput floor is set on a provisional links layout, and `017` never runs the check at 20,000 Pages] → The check is marked provisional, and `017` records a 5,000-Page smoke run. The first run against the floor happens at `030`'s re-grounding, on the chosen links layout, which restates the floor.
 - [No test shows that creating a crawl file keeps SQLite's defaults] → The settings belong to a connection, so a test would have to observe the creating connection from inside `create_crawl_file`. The code gives that connection the `create` role, which gets no writer settings. Deferred.
-- [A unit that only reads joins the batch, so `on_commit` counts it among the units made durable] → It commits nothing (D5), but `020`'s frontier reads are writer units, and its progress counts come from `on_commit`. `020` counts its Pages from the units it submits, not from `on_commit`'s total, or `on_commit` learns to skip reads. Decided in `020`.
+- [A unit that only reads joins the batch, so `on_commit` counts it among the units made durable] → `020` counts progress from its units' Futures, never from `on_commit` (`020` D10, decided 2026-10-11).
 - [A busy `BEGIN` in the replay ends the writer, and no test covers it] → The code takes the same path as any failed replay. A deterministic test would need a lock taken between the rollback and the `BEGIN`. Deferred.
 - [A busy error inside a unit that runs again is raised as it is, so the writer ends with `crawl_busy`, and no test covers it] → It needs a cache spill in `delete` mode while a reader holds the file. Deferred.
 - [The row-change count is masked to 32 bits, because SQLite's `total_changes` is a C int that wraps, and no test covers the wrap] → A test would need 2^31 changes. Deferred.
@@ -192,7 +192,7 @@ None. No schema change. `015`'s callers keep `run()`, `run_async()`, `flush()` a
   - Its per-URL unit uses `await writer.submit_async(unit)`. The URL's task ends at the submit, and the unit's outcome arrives at the commit.
   - A failed unit gets a fallback unit that records the URL as `error`. A failed commit, or `CrawlWriterClosedError`, is `write_failed` (D16).
   - Frontier reads are writer units (D5), with the partial index from its checklist.
-  - Its store modules follow the statement rule (D9) and the unit contract (D7). Progress counts come from `on_commit`.
+  - Its store modules follow the statement rule (D9) and the unit contract (D7). Progress never comes from `on_commit`, which counts read-only units too; `020` counts from its units' Futures (`020` D10).
 - **`026`:** the writer must never be short of CPU. 6 workers (physical cores minus 2) on the hybrid laptop still starved it, so `026`'s benchmark sweeps the worker count up to that bound and records machine-wide CPU and clock frequency. It also measures the GIL effect of D1's caveat.
 - **`030` and `040`:** their units follow D7 and D9.
 - **`060`:** the writer is a thread of the Crawl's process, so the claim belongs to that process. A detached Crawl needs no second spawn for the writer.

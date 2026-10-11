@@ -33,7 +33,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - the batch keeps each unit with its first result and its row-change count (the delta of the driver's `total_changes`)
   - in the replay, a unit that raises, returns a different result or changes a different number of rows ends the writer with no commit, through the path of a failed commit, with `CrawlWriterReplayError` naming the unit's `__qualname__` and what differed; the failing unit's caller still gets its own error first, and later callers and `close()` get `CrawlWriterClosedError`
   - tests also cover a unit that meets `SQLITE_FULL` when it runs again (it lowers `PRAGMA max_page_count` on its second run), and a unit whose change count differs
-  - `test_a_unit_that_fails_in_the_replay_is_left_out_of_its_commit` is gone, its behaviour with it; `test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails` is the test of its new scenario
+  - `test_a_unit_that_fails_in_the_replay_is_left_out_of_its_commit` is gone, its behaviour with it; `test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails` is the test of its new scenario, "The failing unit gets its own error when the replay commit fails"
   - the two test units that return a SQLAlchemy result return `None`
   - "Writing a Crawl" in `docs/crawl-store.md` states the stricter contract of design D7 and what a replay that differs does
 - [x] 1.10 Test support: `replay_now(writer)` in `tests/support`, which makes the writer replay every unit since the last commit, so a change's own tests can check that its units run again the same (design D7). Done when: a test uses it, and docs/testing.md lists it under Helpers.
@@ -75,7 +75,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [x] 3.1 Drive "The writer's connection settings in WAL mode".
 
-  Done when: only the writer's engine, through a keyword of `opening()` that only `CrawlWriter` passes, sets `temp_store`, `cache_size` and `mmap_size` in a connect listener after the journal-mode check. Creating the file and readers keep SQLite's defaults, and no setting is added (design D8).
+  Done when: only the writer's engine, through a keyword of `opening()` that only `CrawlWriter` passes, sets `temp_store`, `cache_size` and `mmap_size` in a connect listener after the journal-mode check. Creating the file and readers keep SQLite's defaults, and no setting is added (design D8). "A reader keeps SQLite's defaults" guards the readers' half.
 - [x] 3.2 Drive "The writer's connection settings in rollback-journal mode". Done when: `mmap_size` is set to `0` explicitly, since its default is a build-time option.
 - [x] 3.3 Drive "A new writer opens the file of a killed writer at once", at seam 2, process. If it passes on its first run, it stays as a guard of `020` D16's fresh writer.
 - [x] 3.4 Verify the killed-writer proof on Windows with memory mapping on (design D10).
