@@ -112,4 +112,5 @@ Seams (docs/testing.md):
 
 - [ ] 8.1 Verify that every `#### Scenario:` in `specs/fetching/spec.md` has exactly one test named after it. Use a small script over the test ids.
 - [ ] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
-- [ ] 8.3 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.
+- [ ] 8.3 **Guard:** every code this change declares (design D11) is listed by `spider commands` with its level and exit code [CLI].
+- [ ] 8.4 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.

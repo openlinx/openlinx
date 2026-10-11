@@ -115,6 +115,12 @@ This change adds to `020`'s tables and adds one of its own, all through `018`'s 
   - A URL without a response has no row.
 - *Alternative:* one row per header. That is about 7.5M rows at 500k URLs, for a filter that no Rule or documented query needs in v0.1. Rejected by ruling Q5.
 
+### D11. Codes
+Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 does, by the slice that first raises them:
+- warning: `seed_redirected_off_site` (a Seed's redirect chain ends on another registrable domain; the Scope does not change)
+
+Argument errors, such as `--header` without a colon, use `010`'s `invalid_value` (exit 2). The values that this change writes to `urls.fetch_error`, `skip_reason` and `parse_error` (`timeout`, `tls_error`, `max_redirects`, `url_too_long`, `body_too_large`) are enumeration values that `020` lists, not diagnostic codes.
+
 ## Test seams
 
 - **HTTP (local fixture site) (3):** everything network-related. The real aiohttp runs against the fixture site's HTTP and HTTPS listeners, with virtual hosts behind `020`'s DNS resolver hook.

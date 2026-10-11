@@ -128,7 +128,11 @@ The Crawl SHALL retry a request attempt, robots.txt included, that gets no respo
 - **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start.
 - **Other 4xx statuses** SHALL NOT be retried.
 
-The URL SHALL record the last attempt's response. This change adds the column `urls.attempt_count`: INTEGER, not null, the number of requests made for the URL, and 0 when it was not requested.
+The URL SHALL record the last attempt's response. This change adds this column to `urls`, under the conventions of `018-add-schema-conventions`:
+
+| Column | Type | Null | Format / values | Description |
+|---|---|---|---|---|
+| `attempt_count` | INTEGER | no | | The number of requests made for the URL; 0 when it was not requested |
 
 #### Scenario: A temporary 503 is retried
 - **WHEN** `/flaky` returns 503 once and 200 after that
@@ -159,10 +163,17 @@ The Crawl SHALL NOT follow redirects within one request. For a 3xx response with
 A 3xx response without a usable `Location` SHALL have `redirect_url_id` NULL.
 
 `redirect` is a value of `urls.discovered_via` that `020-add-crawl-core` lists. This change adds these columns to `urls`, under the conventions of `018-add-schema-conventions`:
-- `redirect_location`: TEXT, nullable, the raw `Location` header
-- `redirect_url_id`: INTEGER, nullable, a declared reference to `urls.id`
 
-It also adds the index `urls_redirect_url_id` on `redirect_url_id`, partial with the condition `redirect_url_id IS NOT NULL`, built while the Crawl writes. It serves finding the URLs that redirect to a URL: the reverse walk of a Redirect Chain.
+| Column | Type | Null | Format / values | Description |
+|---|---|---|---|---|
+| `redirect_location` | TEXT | yes | | The raw `Location` header of a 3xx response |
+| `redirect_url_id` | INTEGER, references `urls.id` | yes | | The redirect's target, resolved against the URL and normalised; NULL without a usable `Location` |
+
+It also adds this index to `urls`, built while the Crawl writes:
+
+| Index | Columns | Unique | Where | Query it serves |
+|---|---|---|---|---|
+| `urls_redirect_url_id` | `redirect_url_id` | no | `redirect_url_id IS NOT NULL` | Finding the URLs that redirect to a URL: the reverse walk of a Redirect Chain |
 
 #### Scenario: Every hop of a Redirect Chain is recorded
 - **WHEN** `/` links to `/a`, `/a` returns 301 to `/b`, `/b` returns 302 to `/c`, and `/c` returns 200
@@ -212,7 +223,13 @@ The Crawl SHALL NOT follow a redirect that would be more than `--max-redirects` 
 - **THEN** `{site}/r11` has `fetch_state` = `fetched` and `{site}/r12` has `skip_reason` = `max_redirects`
 
 ### Requirement: Redirect loops
-The Crawl SHALL request each URL at most once in a run, so every redirect loop ends. This change adds the column `urls.in_redirect_loop`: INTEGER, `boolean`, nullable.
+The Crawl SHALL request each URL at most once in a run, so every redirect loop ends. This change adds this column to `urls`:
+
+| Column | Type | Null | Format / values | Description |
+|---|---|---|---|---|
+| `in_redirect_loop` | INTEGER | yes | boolean | 1 when the URL is in a redirect loop |
+
+Its values are:
 - It is 1 for every URL in a loop.
 - It is 0 for other 3xx responses.
 - It is NULL for URLs without a 3xx response.
@@ -233,7 +250,13 @@ A `<meta http-equiv="refresh">` SHALL stay a Link of type `meta_refresh` (`020-a
 - **THEN** `{site}/old` has `status_code` = 200 and `redirect_url_id` NULL
 
 ### Requirement: Response size limit
-The Crawl SHALL read at most 20,971,520 bytes (20 MiB) of a response body. This change adds the column `urls.body_truncated`: INTEGER, `boolean`, nullable, 1 when the body was larger and not read in full. A URL with a larger body SHALL have `body_truncated` = 1 and `parsed` = 0. If it would otherwise have been parsed, it SHALL have `parse_error` = `body_too_large`, a value that `020-add-crawl-core` lists.
+The Crawl SHALL read at most 20,971,520 bytes (20 MiB) of a response body. This change adds this column to `urls`:
+
+| Column | Type | Null | Format / values | Description |
+|---|---|---|---|---|
+| `body_truncated` | INTEGER | yes | boolean | 1 when the body was larger and not read in full |
+
+A URL with a larger body SHALL have `body_truncated` = 1 and `parsed` = 0. If it would otherwise have been parsed, it SHALL have `parse_error` = `body_too_large`, a value that `020-add-crawl-core` lists.
 
 #### Scenario: A huge page is not parsed
 - **WHEN** `/` links to `/huge.html`, a 26,214,400-byte (25 MiB) HTML page
@@ -248,9 +271,12 @@ URLs longer than 2,000 characters SHALL NOT be requested, and SHALL be recorded 
 
 ### Requirement: Compression
 Every request SHALL send `Accept-Encoding: gzip, deflate, br, zstd`, and the Crawl SHALL decode those encodings itself. This change adds these columns to `urls`:
-- `content_encoding`: TEXT, nullable, the `Content-Encoding` header as received
-- `size_bytes`: INTEGER, nullable, the body size after content decoding
-- `transferred_bytes`: INTEGER, nullable, the body size as transferred, before decoding
+
+| Column | Type | Null | Format / values | Description |
+|---|---|---|---|---|
+| `content_encoding` | TEXT | yes | | The `Content-Encoding` header as received |
+| `size_bytes` | INTEGER | yes | | The body size after content decoding |
+| `transferred_bytes` | INTEGER | yes | | The body size as transferred, before decoding |
 
 #### Scenario: Requests accept compressed bodies
 - **WHEN** `spider crawl {site}/` runs
@@ -279,7 +305,11 @@ HTTPS requests SHALL verify the server certificate and its host name against the
 - **THEN** that URL has `fetch_error` = `tls_error`
 
 ### Requirement: HTTP version per origin
-This change adds the column `origins.http_version` in v0.1: TEXT, nullable, with the values `http_2` and `http_1_1`. Its description SHALL start with `Filled from v0.2. `, and it SHALL be NULL in every row until then.
+This change adds this column to `origins` in v0.1. Its description SHALL start with `Filled from v0.2. `, and it SHALL be NULL in every row until then.
+
+| Column | Type | Null | Format / values | Description |
+|---|---|---|---|---|
+| `http_version` | TEXT | yes | `http_2`, `http_1_1` | Filled from v0.2. The HTTP version that the origin's requests use |
 
 From v0.2, for every https origin it requests, the Crawl SHALL make one TLS handshake that offers the ALPN protocols `h2` and `http/1.1`. It SHALL record `origins.http_version` as `http_2` when `h2` is selected, and `http_1_1` otherwise. For http origins it SHALL record `http_1_1`. When the handshake fails, `http_version` SHALL be NULL and the Crawl SHALL go on.
 
@@ -301,8 +331,11 @@ From v0.2, for every https origin it requests, the Crawl SHALL make one TLS hand
 
 ### Requirement: The response_headers table
 The crawl store SHALL keep the response headers of each requested URL's last attempt in a table `response_headers`, under the conventions of `018-add-schema-conventions`, with one row for each URL that received a response, and two columns:
-- `url_id`: INTEGER, primary key, a declared reference to `urls.id`
-- `headers`: TEXT in the `json` format, not null, holding a JSON array of `[name, value]` pairs in the order and letter case they were received
+
+| Column | Type | Null | Format / values | Description |
+|---|---|---|---|---|
+| `url_id` | INTEGER, primary key, references `urls.id` | no | | The URL whose response the headers are |
+| `headers` | TEXT | no | json | A JSON array of `[name, value]` pairs in the order and letter case they were received |
 
 The table SHALL have no secondary index: its rows are read by `url_id`, its primary key. A query that filters by a header reads `headers` with `json_each`.
 
