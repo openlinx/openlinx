@@ -9,6 +9,14 @@ from typing import Literal, NewType
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 NormalizedUrl = NewType("NormalizedUrl", str)
+# A URL that normalisation leaves as it is: http(s), a lower-case ASCII host without a port,
+# a path of allowed characters without % or dot segments, an optional non-empty query
+# without %, and no fragment. Most resolved Links are already in this form.
+NORMAL_FORM = re.compile(
+    r"https?://[a-z0-9\-._~]+"
+    r"(?:/(?!\.\.?(?:/|\?|$))[A-Za-z0-9\-._~:@!$&'()*+,;=]*)+"
+    r"(?:\?[A-Za-z0-9\-._~:@!$&'()*+,;=/?]+)?"
+)
 type InvalidUrlReason = Literal[
     "malformed", "unsupported_scheme", "userinfo", "missing_host", "invalid_host"
 ]
@@ -54,6 +62,8 @@ def _glob_regex(glob: str) -> str:
 def normalize_url(
     text: str, strip_params: re.Pattern[str] | None = None
 ) -> NormalizedUrl | InvalidUrl:
+    if NORMAL_FORM.fullmatch(text) and (strip_params is None or "?" not in text):
+        return NormalizedUrl(text)
     # A lone surrogate, as surrogateescape decoding leaves, has no UTF-8 form to percent-encode.
     if _SURROGATE.search(text):
         return InvalidUrl("malformed")

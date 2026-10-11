@@ -9,6 +9,7 @@ from hypothesis import strategies as st
 from yarl import URL
 
 from spider.crawl.urls import (
+    NORMAL_FORM,
     InvalidUrl,
     NormalizedUrl,
     normalize_url,
@@ -204,3 +205,43 @@ def test_normalising_with_any_strip_params_gives_a_url_or_a_rejection(
 
 def test_a_stray_percent_is_encoded_before_escapes_are_decoded() -> None:
     assert normalize_url("http://site.test/%2%41") == "http://site.test/%252A"
+
+
+@given(st.from_regex(NORMAL_FORM, fullmatch=True))
+def test_a_url_in_normal_form_is_returned_as_it_is(url: str) -> None:
+    # A fragment keeps the URL off the fast path, and the full normalisation drops it.
+    assert normalize_url(f"{url}#f") == url
+
+
+_NEAR_MISSES = st.builds(
+    "{}://{}{}{}{}{}".format,
+    st.sampled_from(["http", "https", "HTTP", "Https"]),
+    st.sampled_from(
+        [
+            "site.test",
+            "Site.test",
+            "127.0.0.1",
+            "127.01",
+            "0127.0.0.1",
+            "xn--bcher-kva.test",
+            "XN--bcher-kva.test",
+            "bücher.test",
+            "site.test.",
+        ]
+    ),
+    st.sampled_from(["", ":80", ":443", ":8080", ":080", ":99999"]),
+    st.lists(
+        st.one_of(
+            st.sampled_from([".", "..", "", "a", "%41", "%7e", "%2F", "A b", "[x]", "café"]),
+            st.text("abc-._~:@!$&'()*+,;=", max_size=4),
+        ),
+        min_size=1,
+    ).map(lambda segments: "/" + "/".join(segments)),
+    st.sampled_from(["", "?", "?a=1", "?a=%41", "?a=[1]", "?a=1/b?c"]),
+    st.sampled_from(["", "#", "#x"]),
+)
+
+
+@given(_NEAR_MISSES)
+def test_the_fast_path_agrees_with_the_full_normalisation(url: str) -> None:
+    assert normalize_url(url) == normalize_url(f"{url}#f")
