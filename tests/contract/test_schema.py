@@ -12,7 +12,7 @@ from spider.services.schema import describe_schema
 from spider.workspace.discovery import resolve_workspace
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
-from tests.support.crawls import new_crawl
+from tests.support.crawls import create_any_crawl, new_crawl
 from tests.support.workspace import TempWorkspace
 
 SCHEMA_DOC = Path(__file__).resolve().parents[2] / "docs" / "schema.md"
@@ -111,3 +111,15 @@ def test_a_new_file_matches_the_declaration(temp_workspace: TempWorkspace) -> No
     }
 
     assert file_schema(file) == declared
+
+
+def test_every_table_is_strict(temp_workspace: TempWorkspace) -> None:
+    file = create_any_crawl(temp_workspace).path
+    with closing(sqlite3.connect(f"{file.as_uri()}?mode=ro", uri=True)) as connection:
+        strict = {
+            name: flag
+            for schema, name, kind, _, _, flag in connection.execute("PRAGMA table_list")
+            if schema == "main" and kind == "table" and not name.startswith(("sqlite_", "_"))
+        }
+
+    assert strict == {table["name"]: 1 for table in describe_schema().tables}

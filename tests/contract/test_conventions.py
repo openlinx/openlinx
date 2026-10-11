@@ -66,3 +66,12 @@ def test_every_declared_table_names_its_change_and_describes_itself() -> None:
         missing += [f"{table.name}.{c.name}: comment" for c in table.columns if not c.comment]
 
     assert missing == []
+
+
+def test_column_types_are_those_strict_allows() -> None:
+    # Before any file is created: a Float column would declare FLOAT, which STRICT refuses.
+    assert [
+        column["name"]
+        for column in all_columns()
+        if column["type"] not in {"INTEGER", "REAL", "TEXT", "BLOB"}
+    ] == []

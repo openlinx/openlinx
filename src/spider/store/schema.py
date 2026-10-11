@@ -1,4 +1,4 @@
-"""The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2)."""
+"""The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2, D3)."""
 
 from typing import Any, get_args
 
@@ -29,9 +29,18 @@ def _checks(table: str, columns: tuple[Column[Any], ...]) -> list[CheckConstrain
 
 
 def public_table(name: str, *columns: Column[Any], comment: str, change: int) -> Table:
-    """The one way to declare a public table: it adds the CHECKs its columns' values call for."""
+    """The one way to declare a public table: STRICT, with the CHECKs its columns' values call for.
+
+    STRICT refuses the FLOAT and DOUBLE that `Float` and `Double` declare: a real number is `REAL`.
+    """
     return Table(
-        name, metadata, *columns, *_checks(name, columns), comment=comment, info={"change": change}
+        name,
+        metadata,
+        *columns,
+        *_checks(name, columns),
+        comment=comment,
+        info={"change": change},
+        sqlite_strict=True,
     )
 
 
