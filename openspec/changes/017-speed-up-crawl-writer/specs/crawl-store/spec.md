@@ -94,7 +94,9 @@ A caller SHALL be able to submit a unit without waiting for it to run. Submittin
 
 Submitted units follow the order, atomicity and commit rules of the transactional writer, in one order with the units whose callers wait for them.
 
-**Window:** at most 2,000 submitted units SHALL be unresolved at once. A submit beyond that SHALL wait until a commit resolves some of them. A submit from an event loop SHALL wait without blocking the loop, and its Future SHALL be completed on that loop.
+**Window:** at most 2,000 submitted units SHALL be unresolved at once. A submit beyond that SHALL wait until a commit resolves some of them. A submit from an event loop SHALL wait without blocking the loop, and its Future SHALL be completed on that loop. A submit that waits for room when the writer ends SHALL fail with the error that the writer is closed.
+
+**Cancelling:** cancelling a submitted unit's Future SHALL NOT withdraw the unit. The unit runs and is committed as if nothing had been cancelled, the writer goes on, and the unit's window slot is freed at its commit. Cancelling the Future of a submit from an event loop only drops the outcome.
 
 #### Scenario: A submitted unit waits for its commit
 - **WHEN** 3 units that each insert one Seed are submitted, a fourth unit that counts the rows of `seeds` then runs and returns `3`, the clock has not moved, and there has been no flush
@@ -123,6 +125,10 @@ Submitted units follow the order, atomicity and commit rules of the transactiona
 #### Scenario: A unit submitted from an event loop is resolved at its commit
 - **WHEN** on an event loop a unit that inserts one Seed and returns `1` is submitted, and the writer is then flushed
 - **THEN** awaiting the unit's Future on that loop returns `1`
+
+#### Scenario: Cancelling a submitted unit's Future does not withdraw it
+- **WHEN** a unit that inserts the Seed at position 1 is submitted, its Future is cancelled before any commit, a second unit that inserts the Seed at position 2 is submitted, and a flush is requested
+- **THEN** cancelling returned `False`, a separate reader sees the positions 1 and 2 in `seeds`, and the second unit's Future holds its result
 
 ### Requirement: The writer's connection settings
 

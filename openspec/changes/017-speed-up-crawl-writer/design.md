@@ -52,12 +52,17 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - **`await submit_async(unit) -> asyncio.Future[T]`** waits for room in the window without blocking the loop, as `run_async` waits for queue room. The Future it returns is bound to the caller's loop, so its callbacks run on the loop, never on the writer thread. `020`'s engine can then end a URL's task at the submit and handle the outcome in a callback.
 - **The writer keeps the Futures of its open batch** in submission order. Right after each successful commit, before `on_commit`, it resolves them and frees their window slots.
 - Submitting after `close()`, or from the writer's own thread, fails at once, exactly as `run()` does.
+- **Cancelling never withdraws a unit.**
+  - The writer marks each Future running when it is submitted (`set_running_or_notify_cancel()`), so `cancel()` returns `False`. The unit runs and is committed, and its window slot is freed at the commit.
+  - The `asyncio.Future` of `submit_async` is a wrapper: cancelling it only drops the outcome.
+  - Why: `020`'s TaskGroup cancels its tasks on a stop. A cancelled, still-pending Future would make the writer thread hit `InvalidStateError` when it resolves it. That would end the writer for every caller.
 - *Alternative:* resolve every `run()` at the commit, as the prototype did. Rejected:
   - With the frozen `FakeClock` of `015`'s tests, the 499 units of "Units wait for the batch" would never return.
   - "A unit sees the units before it" and `run_async` need a return value at once.
   - The 015 gap stays documented instead: `run()` means ran, `flush()` means committed, and `submit()` gives the outcome at the commit.
 
 ### D3. The window
+- **A waiting submit never waits forever:** when the writer ends, from a failed commit or a dead thread, it wakes every submit that waits for room, and each one raises `CrawlWriterClosedError`.
 - At most 2,000 submitted units are unresolved at once; a submit beyond that waits on a condition that each commit signals.
 - 2,000 is four commits of 500, so the writer never waits for a caller while the window has room. In the prototype, a Page unit without HTML was about 18 KB of rows, which puts the window at about 36 MB.
 - Units waited for with `run()` do not count: their caller already waits for each one. The 50,000-job queue of `015` still bounds both kinds.
@@ -81,6 +86,9 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
   3. It commits at once. This is the replay commit, and `on_commit` gets the number of units it made durable.
   4. The failing unit's caller gets the error the unit raised. The failing unit never runs again: its error is already known, and running it again would run its code twice. Above all, it would run code again after a `KeyboardInterrupt`.
   5. The next unit starts a new optimistic batch.
+- **When the failing unit's caller learns its outcome:** only after the replay commit. Its Future fails and its window slot is freed at that point.
+  - If the replay commit itself fails, the failing unit's caller still gets its own error. The replayed units' Futures fail with the commit's error, and the writer ends.
+  - A busy file at the replay's `BEGIN` ends the writer, as a busy `BEGIN` does in `015`.
 - **A unit that fails in the replay** behaves like any failing unit under savepoints: its savepoint is rolled back, its Future fails, and the rest of the replay goes on. Only a unit that broke the contract of D7 can fail in the replay, so a `run()` caller may already hold that unit's result. The Future of a submitted unit is always right, and the `on_commit` count leaves the unit out.
 - **The evidence:** back-to-back runs on the clean path, thread host, writer-only, 20k Pages:
 
@@ -103,7 +111,10 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - `docs/crawl-store.md` states the contract, and every code review of a change that adds units checks it. A test cannot prove it for every unit. `020` D14 helps: its units write frozen records that handlers built before the unit.
 
 ### D8. The writer's connection settings
-- **What changes:** the writer's engine gets one more connect listener, after the journal-mode check: `temp_store = MEMORY`, `cache_size = -65536` (64 MiB) and, only when the journal mode is `wal`, `mmap_size = 268435456` (256 MiB). Readers keep SQLite's defaults.
+- **What changes:** `opening()` gets a keyword that only `CrawlWriter` passes. With it, the engine gets one more connect listener, after the journal-mode check: `temp_store = MEMORY`, `cache_size = -65536` (64 MiB), and `mmap_size`.
+  - `mmap_size` is `268435456` (256 MiB) when the journal mode is `wal`.
+  - It is set explicitly to `0` in `delete` mode, because `SQLITE_DEFAULT_MMAP_SIZE` is a build-time option and may not be 0 in every build.
+  - Creating the file and reading it keep SQLite's defaults.
 - **The evidence:** at 2k Pages in the store benchmark, the whole run took 41.7 s as built, 34.3 s with `temp_store`, and 27.8 s with the cache and `mmap_size` too (−33%). Kernel time fell from 18.6 to 7.2 s.
 - **Why no memory mapping in `delete` mode:** that mode is chosen for UNC paths (`015` D3), and a memory-mapped file on a network share is only as coherent as the share's client cache. The gain does not justify that risk on the path we already treat as fragile.
 - **No setting:** the values are safe on every supported OS, and a setting would add a contract to keep. The cache is a ceiling, not an allocation.
@@ -118,7 +129,10 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 
 ### D10. The killed-writer proof with memory mapping, on Windows
 - Memory-mapped views caused `015`'s `-shm` trouble on Windows: a killed process that is still exiting keeps its mapped views. With `mmap_size` on, the crawl file itself is mapped too.
-- `015`'s durability tests already use `CrawlWriter`, so after D8 they run with the new settings. Group 3 runs them, plus the new scenario "A new writer opens the file of a killed writer at once" (`020` D16's fresh writer), as `015`'s proof did: 200 times in a row on Windows on each of SQLite 3.50.x (the python.org Python 3.14) and 3.53.x (the uv-managed Python), under parallel load, with 0 failures, then in CI on all three OSes. Fewer runs could not catch a race that fails 1–2% of the time, like the one `015` hit.
+- `015`'s durability tests already use `CrawlWriter`, so after D8 they run with the new settings. Group 3 runs them, plus the new scenario "A new writer opens the file of a killed writer at once" (`020` D16's fresh writer), as `015`'s proof did, and with one stricter condition:
+  - 200 times in a row on Windows on each of SQLite 3.50.x (the python.org Python 3.14) and 3.53.x (the uv-managed Python), with 0 failures, then in CI on all three OSes. Fewer runs could not catch a race that fails 1–2% of the time, like the one `015` hit.
+  - **Under parallel load:** for the whole proof, a second process runs the full test suite (`pytest --no-cov`) in a loop. The two proof configurations run one at a time.
+  - `015`'s held `-shm` reading tests are not part of it: they inject the fault, so repeating them proves nothing about memory mapping.
 - **If one fails** with a new SQLite error at open or a lost commit, the fallback is `mmap_size = 0` on Windows only. It is decided with the maintainer, and `docs/crawl-store.md` records why.
 
 ### D11. The throughput check

@@ -41,6 +41,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - the test creates its own table in the crawl file with a `DEFERRABLE INITIALLY DEFERRED` foreign key, so `COMMIT` itself fails as SQLite reports it, with no mock (design, Test seams)
   - every Future of the batch fails with the error the job in hand gets (`crawl_busy` for a busy file)
   - every job still queued fails with `CrawlWriterClosedError`, and so does a later submit
+  - a submit that waits on a full window wakes when the writer ends, from a failed commit or a dead thread, and raises `CrawlWriterClosedError`, so no caller waits forever (design D3)
 - [ ] 2.6 Drive "A full window holds the next submit".
 
   Done when:
@@ -49,20 +50,24 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 2.7 Drive "A unit submitted from an event loop is resolved at its commit".
 
   Done when: `await submit_async(unit)` waits for room in the window without blocking the loop, and returns an `asyncio.Future` bound to the caller's loop, whose callbacks run on that loop.
-- [ ] 2.8 Docs: in "Writing a Crawl" of `docs/crawl-store.md`, document submitting, the window, and what each outcome means: `run()` means the unit ran, `flush()` and a submitted unit's Future mean it is committed.
-- [ ] 2.9 Review: run the code-review skill on group 2's commits against the "Submitting units with their outcome at the commit" requirement, then refactor with the whole suite green.
+- [ ] 2.8 Drive "Cancelling a submitted unit's Future does not withdraw it".
+
+  Done when: the writer marks each Future running at submit, so `cancel()` returns `False` and the writer thread never meets a cancelled Future. Cancelling `submit_async`'s `asyncio.Future` only drops the outcome, and the test checks that too (design D2).
+- [ ] 2.9 Docs: in "Writing a Crawl" of `docs/crawl-store.md`, document submitting, the window, cancelling, and what each outcome means: `run()` means the unit ran, `flush()` and a submitted unit's Future mean it is committed.
+- [ ] 2.10 Review: run the code-review skill on group 2's commits against the "Submitting units with their outcome at the commit" requirement, then refactor with the whole suite green.
 
 ## 3. The writer's connection settings and the killed writer (seam 2)
 
 - [ ] 3.1 Drive "The writer's connection settings in WAL mode".
 
-  Done when: the writer's engine sets `temp_store`, `cache_size` and `mmap_size` in a connect listener after the journal-mode check. Readers keep SQLite's defaults, and no setting is added (design D8).
-- [ ] 3.2 Drive "The writer's connection settings in rollback-journal mode".
+  Done when: only the writer's engine, through a keyword of `opening()` that only `CrawlWriter` passes, sets `temp_store`, `cache_size` and `mmap_size` in a connect listener after the journal-mode check. Creating the file and readers keep SQLite's defaults, and no setting is added (design D8).
+- [ ] 3.2 Drive "The writer's connection settings in rollback-journal mode". Done when: `mmap_size` is set to `0` explicitly, since its default is a build-time option.
 - [ ] 3.3 Drive "A new writer opens the file of a killed writer at once", at seam 2, process. If it passes on its first run, it stays as a guard of `020` D16's fresh writer.
 - [ ] 3.4 Verify the killed-writer proof on Windows with memory mapping on (design D10).
 
   Done when:
-  - "A killed writer keeps committed units in a sound file", "A killed writer loses uncommitted units" and "A new writer opens the file of a killed writer at once", with the rest of `tests/store/test_durability.py` and `015`'s held `-shm` reading tests, pass 200 times in a row on Windows on each of SQLite 3.50.x (the python.org Python 3.14) and SQLite 3.53.x (the uv-managed Python), while other runs load the machine in parallel, with 0 failures. That is `015`'s proof: 20 runs cannot catch a race that fails 1–2% of the time.
+  - "A killed writer keeps committed units in a sound file", "A killed writer loses uncommitted units" and "A new writer opens the file of a killed writer at once", with the rest of `tests/store/test_durability.py`, pass 200 times in a row on Windows on each of SQLite 3.50.x (the python.org Python 3.14) and SQLite 3.53.x (the uv-managed Python), with 0 failures. That is `015`'s proof: 20 runs cannot catch a race that fails 1–2% of the time.
+  - throughout the proof, a second process runs the full test suite (`pytest --no-cov`) in a loop, and the two configurations run one at a time (design D10). `015`'s held `-shm` reading tests are left out, because they inject the fault.
   - they pass in CI on Windows, macOS and Linux
   - the PR description records the Windows and SQLite versions
   - if a run fails with a new SQLite error at open or a lost commit, the work stops and is reported. The fallback (`mmap_size = 0` on Windows only) is decided with the maintainer.
