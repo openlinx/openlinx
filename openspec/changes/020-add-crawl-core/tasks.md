@@ -85,7 +85,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - every `NewCrawl` gets both of its required fields, `secret_names` and `journal_setting`, from this first slice on; task 4.12 checks what they do
   - the `Fetcher` Protocol (design D8) has a one-hop aiohttp implementation
   - the first `urls` columns (`id`, `url`, `host`, `crawl_depth`, `discovered_via`, `fetch_state`, `status_code`) and the unique index `urls_url` are declared through `018`'s declaration helper, each enumeration with every value of design D18, with their `docs/schema.md` rows; `018`'s guard over index names switches on its assertion that it saw an index
-  - every writer unit is defined in a `spider.store.*` module, and ruff's banned-API rule (TID251) bans `sqlalchemy` in `src/`, with per-file-ignores for `src/spider/store/**` and `src/spider/services/schema.py` (design D14)
+  - every writer unit is defined in a `spider.store.*` module, follows `017` D7 (deterministic given the file's state, values as results), and its seam-2 test forces a replay with `017`'s `replay_now(writer)` (design D14); ruff's banned-API rule (TID251) bans `sqlalchemy` in `src/`, with per-file-ignores for `src/spider/store/**` and `src/spider/services/schema.py` (design D14)
 - [ ] 4.3 **Guard:** "The Seed is kept as given in seeds" (seam 3+6) and "The ways a URL is found are an enumeration" (seam 1), a pair. `015`'s `create_crawl` writes the Seeds as given, and task 4.2 declared `discovered_via` from the `LinkType` `Literal` (design D5).
 - [ ] 4.4 Drive "Pages linked from the Seed are crawled" at seam 3+6, and "Indexes of urls" at seam 1, a pair.
 
