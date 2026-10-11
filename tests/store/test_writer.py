@@ -192,6 +192,17 @@ def test_units_wait_for_the_batch(temp_workspace: TempWorkspace) -> None:
     assert seen == [(0,)]
 
 
+def test_a_read_through_the_writer_commits_nothing(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        run_inserts(writer, 3)
+        count = writer.run(count_seeds)
+        seen = query(crawl.path, COUNT)
+
+    assert (count, seen) == (3, [(0,)])
+
+
 def test_the_500th_unit_commits_the_batch(temp_workspace: TempWorkspace) -> None:
     crawl = crawl_without_seeds(temp_workspace)
 
