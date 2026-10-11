@@ -486,6 +486,10 @@ When an operation on a Crawl finishes, the process SHALL hold no open handle to 
 - **WHEN** on Windows a process reads the metadata of a completed Crawl and then keeps running
 - **THEN** another process can delete the crawl file
 
+#### Scenario: Deleting after a failed read on Windows
+- **WHEN** on Windows a process fails to read a file that is not a database as a crawl file, and then keeps running
+- **THEN** another process can delete that file
+
 ### Requirement: Crawl files from a newer tool are refused
 
 A crawl file whose schema version is newer than the tool's SHALL be refused with `crawl_schema_too_new`, without changing the file:
