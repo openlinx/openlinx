@@ -57,6 +57,7 @@ It prints one JSON document with every Command, its options and output, the exit
 - [docs/schema.md](docs/schema.md): the public schema of a crawl file, for querying it with SQL.
 - [docs/adr/](docs/adr/): the decisions behind them.
 - [docs/testing.md](docs/testing.md): how everything is tested.
+- [docs/benchmarks.md](docs/benchmarks.md): measured capacity, and the machine it was measured on.
 - [CONTRIBUTING.md](CONTRIBUTING.md): setting up, running the checks and making a change.
 
 ## License
