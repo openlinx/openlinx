@@ -8,7 +8,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules (including the Page
 
 There are no schema-first slices. A table or column is added in the slice whose scenario first needs it, through `018`'s declaration helper (`STRICT`, and CHECKs from the declared values and flags), with its description and its `docs/schema.md` entry in the same commit, so the contract test (`015`'s, extended by `018`) is never red between commits. A seam-4 slice that adds an extractor field also adds its column.
 
-**The thin slice** (ROADMAP, Build order) is groups 1–3 and task 7.1. Groups 1–3 give the Page rows, titles, meta descriptions and headings that `040`-min's first Rules read (`title-missing` and `h1-missing`; its response-code Rules read only `urls`). Task 7.1 runs in the slice, before groups 4–6, and adds Indexability for the status and robots.txt steps; the noindex, refresh and canonical steps join its order in groups 6 and 7. Groups 4–12 widen the change after `022`-min, whose size and redirect columns group 4 copies.
+**The thin slice** (ROADMAP, Build order) is groups 1–3: the Page rows, titles, meta descriptions and headings that `040`-min's first Rules read (`title-missing` and `h1-missing`; its response-code Rules read only `urls`). None of them reads Indexability, so group 7 widens with the rest. Groups 4–12 widen the change after `022`-min, whose size and redirect columns group 4 copies.
 
 Rows and units follow `020` D9 and D14: the handler returns frozen row values declared in `spider.store`, and `spider.store.pages` and `spider.store.links` write them with statements built once (`017` D9). Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
 
@@ -85,7 +85,7 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 
 ## 7. Indexability
 
-- [ ] 7.1 (slice) Drive "Plain 200 Page is indexable" at seam 4, and add `indexability` and `indexability_status`.
+- [ ] 7.1 Drive "Plain 200 Page is indexable" at seam 4, and add `indexability` and `indexability_status`.
 - [ ] 7.2 Drive "Noindex wins over a canonical" at seam 4.
 - [ ] 7.3 Drive "Self-referencing canonical stays indexable" and "Canonical to another URL" at seam 4. This is a trivial pair: the same comparison, with the same URL and with a different one.
 - [ ] 7.4 Drive "Server error" at seam 4.
