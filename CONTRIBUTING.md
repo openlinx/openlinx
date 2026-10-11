@@ -109,7 +109,7 @@ The schema of a crawl file is a public contract ([ADR-0002](docs/adr/0002-sqlite
 
 - Write a comment only for a non-obvious *why*. Don't add a docstring to a function or method whose name and types already say what it does, and don't add a comment that restates the code.
 - Each module starts with a one-line docstring that names the design decision it implements, such as "design D7 of 000-scaffold-project". An empty `__init__.py` that only marks a test package needs none.
-- **The paradigm** is [ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md): logic in pure functions, data in frozen dataclasses, dependencies as parameters typed by a Protocol, state only where it is inherent, no class hierarchies of our own, and pydantic only at the boundary.
+- **The paradigm** is [ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md): logic in pure functions, data in frozen dataclasses (frozen `msgspec.Struct`s for records that cross the parse pool or define a JSON document), dependencies as parameters typed by a Protocol, state only where it is inherent, no class hierarchies of our own, and pydantic only at the boundary.
 - **Errors:**
   - An error that a user or an agent sees is a `SpiderError` with a `DiagnosticCode` from the registry in `spider.output.codes`. A warning is a `Diagnostic` made with `Diagnostic.of(code, ...)` and given to the `Reporter`. Never report a bare message without a code.
   - A broken contract inside our own code, such as a settings table registered twice, raises a built-in `TypeError` or `RuntimeError`. It is a bug, not a diagnostic.
