@@ -123,18 +123,19 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 
 ## 10. Link attributes
 
-- [ ] 10.1 Drive "Hyperlink with rel flags" at seam 4. Enrich `020-add-crawl-core`'s `DiscoveredLink` values. Create `spider.store.links` with the Link row's writer, and `links` with `source_url_id`, `ordinal`, `target_url_id`, `type`, `declared_in`, `anchor_text`, `rel` and the three `rel_*` flags, keyed by `(source_url_id, ordinal)`. Its layout and secondary indexes follow the links benchmark.
-- [ ] 10.2 Drive "Image alt attribute absent or empty" at seam 4, and add `element`, `attribute` and `alt_text`.
-- [ ] 10.3 Drive "Image-only anchor takes the alt text" at seam 4.
-- [ ] 10.4 Drive "Every occurrence is stored" at seam 4.
-- [ ] 10.5 Drive "Link positions come from the enclosing element" at seam 4, and add `link_position`.
-- [ ] 10.6 Drive "Hreflang and mobile alternate Links" at seam 4, and add `hreflang` and `media`.
-- [ ] 10.7 Drive "Links declared in a header" at seam 4.
-- [ ] 10.8 Drive "Discovered URLs are the stored Link targets" at seam 3+6. Write Links from analysed Pages, and return the header Links of other responses from the handler.
-- [ ] 10.9 Drive "Link types are an enumeration" at seam 6 (`values` on `links.type`).
-- [ ] 10.10 Check: the writer's capacity on the chosen `links` layout (`017` D11, moved here from `017`, which records only a 5k-Page smoke run; decided 2026-10-11). Switch `scripts/writer_throughput.py` from its provisional `links` table to the declared one, with the key, layout and secondary indexes that the links benchmark chose, run it at 20,000 Pages on the maintainer's machine, and restate D11's floor (Pages/s, WAL peak, RSS) from that run, in the script and in the "Writer capacity" section of `docs/benchmarks.md`. Done when: the run passes the restated floor, and the section records the machine, the numbers and the layout. If Pages/s falls well below `017`'s 17.2–18.0 on the provisional layout, the work stops and is reported before the floor is lowered.
-- [ ] 10.11 Docs: add the Link columns and the boundary with `020`'s Link discovery to `docs/page-data.md`.
-- [ ] 10.12 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [ ] 10.1 Check: the links benchmark, before `links` is declared. Run four layouts at 20,000 Pages, interleaved A B C D D C B A: A, a rowid table with indexes on `target_url_id` and `(type, target_url_id)`; B, `WITHOUT ROWID` with the same indexes; C, `WITHOUT ROWID` with one index on `(target_url_id, type)`; D, narrow rows with a `link_attributes` dictionary keyed by a 64-bit blake2b hash, read through a `links` view. Choose by the rule recorded before the runs: D wins only with at least 30% fewer link bytes, at most 10% fewer Pages/s, and an inlink query p95 under 100 ms while the Crawl writes; otherwise the fastest of A, B and C within 5% wins, and the smaller file on a tie. Done when: the "Links layout" section of `docs/benchmarks.md` records the machine, the runs and the choice, and design D4's Storage bullet names the chosen layout. If D wins, 10.2 also verifies the 8-byte key on insert and clears D's attribute cache on rollback, through a writer hook that this change adds to `017`'s writer.
+- [ ] 10.2 Drive "Hyperlink with rel flags" at seam 4. Enrich `020-add-crawl-core`'s `DiscoveredLink` values. Create `spider.store.links` with the Link row's writer, and `links` with `source_url_id`, `ordinal`, `target_url_id`, `type`, `declared_in`, `anchor_text`, `rel` and the three `rel_*` flags, keyed by `(source_url_id, ordinal)`. Its layout and secondary indexes follow the links benchmark (task 10.1).
+- [ ] 10.3 Drive "Image alt attribute absent or empty" at seam 4, and add `element`, `attribute` and `alt_text`.
+- [ ] 10.4 Drive "Image-only anchor takes the alt text" at seam 4.
+- [ ] 10.5 Drive "Every occurrence is stored" at seam 4.
+- [ ] 10.6 Drive "Link positions come from the enclosing element" at seam 4, and add `link_position`.
+- [ ] 10.7 Drive "Hreflang and mobile alternate Links" at seam 4, and add `hreflang` and `media`.
+- [ ] 10.8 Drive "Links declared in a header" at seam 4.
+- [ ] 10.9 Drive "Discovered URLs are the stored Link targets" at seam 3+6. Write Links from analysed Pages, and return the header Links of other responses from the handler.
+- [ ] 10.10 Drive "Link types are an enumeration" at seam 6 (`values` on `links.type`).
+- [ ] 10.11 Check: the writer's capacity on the chosen `links` layout (`017` D11, moved here from `017`, which records only a 5k-Page smoke run; decided 2026-10-11). Switch `scripts/writer_throughput.py` from its provisional `links` table to the declaration in `spider.store.links`, imported with its key, layout and secondary indexes and never copied into the script, so the check cannot drift from the declared layout; run it at 20,000 Pages on the maintainer's machine, and restate D11's floor (Pages/s, WAL peak, RSS) from that run, in the script and in the "Writer capacity" section of `docs/benchmarks.md`. Done when: the run passes the restated floor, and the section records the machine, the numbers and the layout. If Pages/s falls well below `017`'s 17.2–18.0 on the provisional layout, the work stops and is reported before the floor is lowered.
+- [ ] 10.12 Docs: add the Link columns and the boundary with `020`'s Link discovery to `docs/page-data.md`.
+- [ ] 10.13 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
 
 ## 11. Link counts and Folder Depth
 
