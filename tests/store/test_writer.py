@@ -146,6 +146,28 @@ def test_a_unit_that_fails_half_way_after_other_units_leaves_no_change(
     assert query(crawl.path, SEEDS) == [(1, "https://example.com/a"), (2, "https://example.com/b")]
 
 
+def counted_raising_insert(
+    position: int, error: BaseException, runs: list[int]
+) -> Callable[[Connection], None]:
+    def unit(connection: Connection) -> None:
+        runs.append(position)
+        raising_insert(position, error)(connection)
+
+    return unit
+
+
+def test_a_failing_unit_runs_once(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    runs: list[int] = []
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(insert_seed(1, "https://example.com/1"))
+        with pytest.raises(ValueError, match=r"^bad$"):
+            writer.run(counted_raising_insert(2, ValueError("bad"), runs))
+
+    assert runs == [2]
+
+
 def test_closing_commits_everything(temp_workspace: TempWorkspace) -> None:
     crawl = crawl_without_seeds(temp_workspace)
 
