@@ -19,6 +19,8 @@ READER_BUSY_SECONDS = 5.0
 WRITER_BUSY_SECONDS = 30.0
 # How often opening looks again at a -shm file that a killed writer still holds.
 SHM_RELEASE_CHECK_SECONDS = 0.05
+WRITER_CACHE_KIB = 65_536
+WRITER_MMAP_BYTES = 268_435_456
 
 # SQLite's primary result codes for a file or folder that cannot be written.
 NOT_WRITABLE = {
@@ -103,7 +105,7 @@ def _shm_held(error: sqlite3.Error) -> bool:
 
 @contextmanager
 def opening(
-    path: Path, *, read_only: bool = False, busy_seconds: float | None = None
+    path: Path, *, read_only: bool = False, busy_seconds: float | None = None, writer: bool = False
 ) -> Iterator[Engine]:
     engine = create_engine(
         "sqlite://",
@@ -114,6 +116,9 @@ def opening(
         event.listen(engine, "connect", _own_transactions)
         event.listen(engine, "connect", _synchronous_for_the_journal)
         event.listen(engine, "begin", _begin_immediate)
+    # Only the writer's: creating the file and reading it keep SQLite's defaults (design D8).
+    if writer:
+        event.listen(engine, "connect", _writer_settings)
     # Disposed at once, so no handle outlives the operation: Windows could not delete the file.
     try:
         yield engine
@@ -131,6 +136,12 @@ def _synchronous_for_the_journal(connection: sqlite3.Connection, _: Any) -> None
     # WAL stays durable at NORMAL; a rollback journal needs FULL for every commit.
     synchronous = "NORMAL" if journal_mode == "wal" else "FULL"
     connection.execute(f"PRAGMA synchronous = {synchronous}")
+
+
+def _writer_settings(connection: sqlite3.Connection, _: Any) -> None:
+    connection.execute("PRAGMA temp_store = MEMORY")
+    connection.execute(f"PRAGMA cache_size = -{WRITER_CACHE_KIB}")
+    connection.execute(f"PRAGMA mmap_size = {WRITER_MMAP_BYTES}")
 
 
 def _begin_immediate(connection: Connection) -> None:

@@ -212,7 +212,7 @@ class CrawlWriter:
     def _serve(self, started: Future[None]) -> None:
         try:
             with (
-                opening(self._path, busy_seconds=self._busy_seconds) as engine,
+                opening(self._path, busy_seconds=self._busy_seconds, writer=True) as engine,
                 engine.connect() as connection,
             ):
                 _check_writable(connection)
