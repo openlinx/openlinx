@@ -15,13 +15,17 @@ Both need five things:
 
 ## What Changes
 
-> **Scope (2026-10-05, see ROADMAP.md):** **v0.1.1** ships 060-min: `crawl --detach`, `status` (with dead-process detection) and `stop` (`--wait`), for Spider mode only, with the recorded runs, the control requests and the command recorded for Crawls started through MCP. **Deferred to v0.2:** `resume`, `crawl --dry-run` with its URL estimate and equivalent command, `crawls list|show|rm`, and detached List mode (`024` is v0.2). Each requirement in the spec is marked with its release.
+> **Scope (2026-10-05, see ROADMAP.md):** **v0.1** ships 060-min and `resume`: `crawl --detach`, `status` (with dead-process detection) and `stop` (`--wait`), for Spider mode only, with the recorded runs and the control requests. **v0.1.1:** the command recorded for Crawls started through MCP. **Deferred to v0.2:** `resume`'s credential overrides (`022`'s flags), `crawl --dry-run` with its URL estimate and equivalent command, `crawls list|show|rm`, and detached List mode (`024` is v0.2). Each requirement in the spec is marked with its release.
+>
+> **Moved from 015 (2026-10-05):** the writer claim (`crawl_locked`), control writes by processes without the claim, recording a dead Crawl as `interrupted`, and reserved and chosen crawl ids (`crawl_id_taken`). `015` did not build them, so this change does (design D12).
+>
+> **Schema blueprint (2026-10-11):** `crawl_runs.id` and `control_requests.handled_by_run_id` follow ADR-0005, `crawl_runs.stop_reason` shares `crawl.stop_reason`'s six values, and the heartbeat records the progress counters, so `status` never counts over `urls` while a Crawl runs.
 
 - **`spider crawl … --detach`**:
   - It validates like a foreground `crawl`, reserves the crawl id, and starts a separate background process that creates the Crawl.
   - Within 10 seconds it prints `{crawl_id, state, run, pid, crawl_file, log_file, warnings, hint}`.
   - The background process survives closing the terminal:
-    - Windows: CREATE_NO_WINDOW (approved) in a new process group, so it opens no window (nor do 026's parse workers, if that pool is built), breaking away from the caller's job object when the job allows it.
+    - Windows: CREATE_NO_WINDOW (approved) in a new process group, so it opens no window (nor do 026's parse workers), breaking away from the caller's job object when the job allows it.
     - macOS and Linux: a new session.
   - Progress events and diagnostics go to `<crawl-id>.log`. Secrets are passed through the environment, never on the command line.
   - In List mode, the detaching Command reads and checks the list and stores the Seeds before the background process starts, so `--list -` works and list errors come back at once.
@@ -35,7 +39,7 @@ Both need five things:
   - It reports:
     - the Crawl State and whether a stop request is pending
     - `urls` counts, `status_classes`, `seed_count`
-    - rate, ETA (and whether it is a lower bound), heartbeat age and PID
+    - rate (from the heartbeat), average rate over all runs, ETA (and whether it is a lower bound), heartbeat age and PID
     - the error of a failed Crawl, the log file, warnings and a next-step hint
   - It detects a dead crawl process and records `interrupted`.
 - **`spider stop [--crawl] [--wait <s>]`:** it writes a stop request row, and the Crawl stops gracefully and stays resumable.
@@ -47,7 +51,7 @@ Both need five things:
   - `show` includes the recorded command, every run and a re-run command.
   - `rm` also deletes the Crawl's reports folder and its Report Notes, and lists the removed paths.
 - **Crawls started without a command line,** such as by the MCP server, record a synthesised equivalent argv.
-- **New tables:** `crawl_runs` (one row per run) and `control_requests` (a control table).
+- **New tables:** `crawl_runs` (one row per run, with its heartbeat and progress counters) and `control_requests` (a control table).
 - **Flags that go beyond the wording of ROADMAP.md.** All are small and plainly needed: `--no-estimate`, `stop --wait`, `crawls list --state`, and `resume --detach` together with the `resume` override flags.
 - **MCP tools:** none in this change. `090-add-mcp-server` mirrors these Commands through the same Crawl Service.
 
@@ -62,7 +66,7 @@ Both need five things:
   - `crawls list|show|rm`, and the `crawl_runs` and `control_requests` tables.
 
 ### Modified Capabilities
-- None. There are no main specs yet. `crawling`, `fetching` and `crawl-modes` come from `020`, `022` and `024`, which are being drafted in parallel.
+- `crawl-store`: "Crawl ids" counts the writer claim's file and the log file as taking an id, and adds reserved and chosen ids with `crawl_id_taken`.
 
 ## Non-goals
 
@@ -78,19 +82,18 @@ Both need five things:
   - `010-add-workspace-and-cli-contract`:
     - the result on stdout, events and diagnostics on stderr, and partial results
     - the paging envelope, and the exit codes and settings
-  - `015-add-crawl-store`:
-    - the Crawl States, caller-chosen reserved ids, and the writer claim (`crawl_locked`)
-    - its rules for control writes by other processes and for recording a dead Crawl as interrupted
-    - redaction and `--crawl`
+  - `015-add-crawl-store`: the crawl file, crawl ids, the Crawl State values, the writer, redaction and `--crawl`
+  - `017-speed-up-crawl-writer` and `018-add-schema-conventions`: the contract of a unit, and the schema conventions with the declaration helper
   - `020-add-crawl-core`:
-    - the Crawl Service start and continue operations, the stop flag and the events
+    - the Crawl Service start and continue operations, the transition table, the stop flag, the events and the progress counters
     - config resolution and the settings registry, and the post-crawl passes
-  - `022-add-fetch-policy`: `--auth`, `--header` and `--proxy`.
+  - `022-add-fetch-policy`: the proxy variables in v0.1, and `--auth`, `--header` and `--proxy` in v0.2.
   - `024-add-list-and-sitemap-modes`: List mode, and the list and sitemap readers used by the estimate.
 - **Edits this change makes to others' areas:**
-  - **In `015`'s store:** it adds `crawl_runs` and the control table `control_requests`, following `015`'s conventions.
+  - **In `015`'s store:** it adds the writer claim, control writes, recording `interrupted` and reserved ids, which moved from `015`, and the tables `crawl_runs` and `control_requests`, following ADR-0005.
   - **In `020`'s engine:**
-    - it writes a `crawl_runs` row per run, with a heartbeat every 5 seconds
+    - it adds `running` → `interrupted` and `interrupted` → `running` to `020`'s transition table
+    - it writes a `crawl_runs` row per run, with a heartbeat every 5 seconds that records the progress counters
     - it checks `control_requests` every second and sets the stop flag with `stop_reason` = `requested`
     - it records synthesised argv for callers without a command line
 - **Used by:**

@@ -6,7 +6,7 @@ Each task below is one vertical TDD slice and one commit. It is done when:
 3. ruff, the strict type checker and the full suite (with the coverage gate) pass
 4. the commit message names the scenario
 
-A slice that needs a new table or column adds it, with its description, and updates `docs/schema.md` in the same commit, so `015`'s contract test never goes red. "The slow fixture site" is the one defined in the spec.
+A slice that needs a new table or column adds it through `018`'s declaration helper, with its description, and updates `docs/schema.md` in the same commit, so the contract test never goes red. "The slow fixture site" is the one defined in the spec.
 
 Seams (docs/testing.md):
 - **[CLI]**: seam 1, `CliRunner`
@@ -22,48 +22,52 @@ Seams (docs/testing.md):
 
 - [ ] 1.1 [Subprocess] Drive "A foreground Crawl in another terminal is stopped". It covers:
   - the `stop` Command
-  - the `control_requests` table (`id`, `kind`, `requested_at`, `requested_by_pid`) declared with `info={"control": True}` and written through `015`'s `write_control`
+  - the `control_requests` table (`id`, `kind`, `requested_at`, `requested_by_pid`) declared with `info={"control": True}`, and `write_control` in `spider.store.control` (design D12)
   - the engine checking for requests every second and setting `020`'s stop flag with `stop_reason` = `requested`
-- [ ] 1.2 [3+6] Drive "A stop request is recorded as handled": the `handled_at` column.
-- [ ] 1.3 [3+6] Drive "A stop request names who wrote it and which run handled it": the `crawl_runs` table (`run`, `started_at`, `command_argv`, `detached`, `pid`), and `handled_by_run`.
-- [ ] 1.4 [Subprocess] Drive "Stop waits for the Crawl to stop": `--wait`, with a default of 60 seconds.
-- [ ] 1.5 [Subprocess] Drive "Stop can return at once": `--wait 0` and `stop_requested`.
-- [ ] 1.6 [Subprocess] Drive "A request that outlasts the grace period stays queued".
-- [ ] 1.7 [CLI] Drive "Stopping a completed Crawl changes nothing".
-- [ ] 1.8 Docs: start `docs/crawl-control.md` with the Crawl State transitions, `stop_requested` and `spider stop`.
-- [ ] 1.9 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [ ] 1.2 [Services] Drive "A control write cannot change other tables": the authorizer of `write_control`.
+- [ ] 1.3 [3+6] Drive "A stop request is recorded as handled": the `handled_at` column.
+- [ ] 1.4 [3+6] Drive "A stop request names who wrote it and which run handled it": the `crawl_runs` table (`id`, `started_at`, `command_argv`, `detached`, `pid`), and `handled_by_run_id`.
+- [ ] 1.5 [CLI] Drive "A stop request refers to its run".
+- [ ] 1.6 [Subprocess] Drive "Stop waits for the Crawl to stop": `--wait`, with a default of 60 seconds.
+- [ ] 1.7 [Subprocess] Drive "Stop can return at once": `--wait 0` and `stop_requested`.
+- [ ] 1.8 [Subprocess] Drive "A request that outlasts the grace period stays queued".
+- [ ] 1.9 [CLI] Drive "Stopping a completed Crawl changes nothing".
+- [ ] 1.10 Docs: start `docs/crawl-control.md` with the Crawl State transitions, `stop_requested` and `spider stop`.
+- [ ] 1.11 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Status, rate and ETA
 
-- [ ] 2.1 [CLI] Drive "Status of a completed Crawl": the `status` Command, with counts from `urls`, `seed_count`, `status_classes` and `completed_at`.
+- [ ] 2.1 [CLI] Drive "Status of a completed Crawl": the `status` Command, with counts over `urls` for a Crawl that is not running, `seed_count`, `status_classes` and `completed_at`.
 - [ ] 2.2 [CLI] Drive "Status defaults to the latest Crawl".
-- [ ] 2.3 [Services + Fake clock] Drive "Rate and ETA from recent progress": the 60-second window on `fetched_at`.
-- [ ] 2.4 [Pure] Drive "The URL limit caps the ETA".
-- [ ] 2.5 [Pure] Drive "The ETA of a Spider-mode Crawl is a lower bound" and "The ETA of a List-mode Crawl is not a lower bound".
-- [ ] 2.6 [Subprocess] Drive "A running Crawl hints how to stop it": the next-step hints per Crawl State.
-- [ ] 2.7 [CLI] Drive "A Crawl stopped by the URL limit hints at a higher limit".
-- [ ] 2.8 [Subprocess] Drive "A pending stop request is reported".
-- [ ] 2.9 [CLI] Drive "Status of a failed Crawl shows its error": the `crawl_runs.error` column.
-- [ ] 2.10 Docs: document every `status` field, the rate window and ETA semantics in `docs/crawl-control.md`.
-- [ ] 2.11 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
+- [ ] 2.3 [Services + Fake clock] Drive "The heartbeat records the progress counters": a heartbeat every 5 seconds writing `heartbeat_at`, `020`'s progress counters with the status classes added, and `urls_per_second` (design D7).
+- [ ] 2.4 [Services] Drive "Rate and ETA from recent progress": `rate` and the counts of a running Crawl from its last heartbeat.
+- [ ] 2.5 [Pure] Drive "The average rate covers every run".
+- [ ] 2.6 [Pure] Drive "The URL limit caps the ETA".
+- [ ] 2.7 [Pure] Drive "The ETA of a Spider-mode Crawl is a lower bound" and "The ETA of a List-mode Crawl is not a lower bound".
+- [ ] 2.8 [Subprocess] Drive "A running Crawl hints how to stop it": the next-step hints per Crawl State.
+- [ ] 2.9 [CLI] Drive "A Crawl stopped by the URL limit hints at a higher limit".
+- [ ] 2.10 [Subprocess] Drive "A pending stop request is reported".
+- [ ] 2.11 [CLI] Drive "Status of a failed Crawl shows its error": the `crawl_runs.error` column.
+- [ ] 2.12 Docs: document every `status` field, where its counts come from, the rate window, the average rate and ETA semantics in `docs/crawl-control.md`.
+- [ ] 2.13 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. Dead processes
 
-- [ ] 3.1 [Subprocess] Drive "A killed Crawl is reported as interrupted", through `015`'s `check_writer`.
+- [ ] 3.1 [Subprocess] Drive "A killed Crawl is reported as interrupted". Add the writer claim in `spider.store.claim`, taken by every process that creates or runs a Crawl before the crawl file is written, and `check_writer`, which records `interrupted` under the claim through `020`'s `set_state` with `running` → `interrupted` added to `TRANSITIONS` (design D12).
 - [ ] 3.2 [Subprocess, Windows in CI] Drive "A Crawl ended with TerminateProcess is reported as interrupted (Windows)".
 - [ ] 3.3 [3+6] Drive "The interrupted state is recorded": the `crawl_runs.end_state` column.
-- [ ] 3.4 [Services + Fake clock] Drive "A stale heartbeat is reported as a warning": the `heartbeat_at` column, a heartbeat every 5 seconds, and the test process holding the claim through `015`'s API.
+- [ ] 3.4 [Services + Fake clock] Drive "A stale heartbeat is reported as a warning", with the test process holding the claim through `spider.store.claim`.
 - [ ] 3.5 Docs: document dead-process detection and `heartbeat_stale` in `docs/crawl-control.md`.
 - [ ] 3.6 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. Resume
 
-- [ ] 4.1 [Subprocess] Drive "A stopped Crawl is completed by resume": the `resume` Command on `020`'s continue operation, with a new run row and the `run` field.
+- [ ] 4.1 [Subprocess] Drive "A stopped Crawl is completed by resume": the `resume` Command on `020`'s continue operation, with a new run row and the `run` field, and `interrupted` → `running` added to `TRANSITIONS`.
 - [ ] 4.2 [HTTP] Drive "Fetched URLs are not requested again".
 - [ ] 4.3 [HTTP] Drive "robots.txt is fetched again on resume".
 - [ ] 4.4 [Subprocess] Drive "A failed Crawl can be resumed".
 - [ ] 4.5 [CLI] Drive "A completed Crawl cannot be resumed": `crawl_completed` with the re-run hint.
-- [ ] 4.6 [Subprocess] Drive "A running Crawl cannot be resumed": `crawl_locked`.
+- [ ] 4.6 [Subprocess] Drive "A running Crawl cannot be resumed": `crawl_locked`, declared by this change.
 - [ ] 4.7 [CLI] Drive "Other settings cannot change on resume": `override_not_allowed`.
 - [ ] 4.8 [CLI] Drive "A Crawl stopped by the URL limit needs a higher limit": `limit_reached`.
 - [ ] 4.9 [HTTP] Drive "A higher URL limit continues the Crawl".
@@ -73,33 +77,36 @@ Seams (docs/testing.md):
 - [ ] 4.13 [3+6] Drive "A politeness override is recorded".
 - [ ] 4.14 [HTTP] Drive "Proxy variables are read again on resume", with `022`'s local test proxy.
 - [ ] 4.15 [3+6] Drive "Each run is recorded": the `ended_at` and `stop_reason` columns of `crawl_runs`.
-- [ ] 4.16 [Subprocess] Drive "Two resumes at the same time": claim acquisition with a 2-second retry.
-- [ ] 4.17 [Subprocess, Windows in CI] Drive "A killed Crawl can be resumed at once (Windows)".
-- [ ] 4.18 [Subprocess, POSIX in CI] Drive "A killed Crawl can be resumed at once (macOS and Linux)".
-- [ ] 4.19 Docs: document `spider resume` (the Crawl States it accepts, what may change, secrets, the URL limit) in `docs/crawl-control.md`.
-- [ ] 4.20 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [ ] 4.16 [CLI] Drive "Runs share the stop reasons of the Crawl": `stop_reason` from `020`'s `StopReason`.
+- [ ] 4.17 [Subprocess] Drive "Two resumes at the same time": claim acquisition with a 2-second retry.
+- [ ] 4.18 [Subprocess, Windows in CI] Drive "A killed Crawl can be resumed at once (Windows)".
+- [ ] 4.19 [Subprocess, POSIX in CI] Drive "A killed Crawl can be resumed at once (macOS and Linux)".
+- [ ] 4.20 Docs: document `spider resume` (the Crawl States it accepts, what may change, secrets, the URL limit) in `docs/crawl-control.md`.
+- [ ] 4.21 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Background Crawls
 
-- [ ] 5.1 [Subprocess] Drive "Detach returns while the Crawl runs": spawn the hidden `--_run-detached` entry point, have the child create the Crawl with the id the parent chose, and wait for its run row.
-- [ ] 5.2 [Subprocess] Drive "The background Crawl runs to its end".
-- [ ] 5.3 [Subprocess] Drive "The log file holds the progress events": reserve the id by creating `<id>.log`, and send the child's stdout and stderr to it.
-- [ ] 5.4 [3+6] Drive "A detached run is marked".
-- [ ] 5.5 [Subprocess] Drive "A secret is not on the background command line": secrets handed over in one environment variable, which the child removes after reading.
-- [ ] 5.6 [Subprocess, Windows in CI] Drive "Detach prints absolute Windows paths (Windows)".
-- [ ] 5.7 [CLI + Spawn double] Drive "A background process that dies at start is reported": `detach_failed`.
-- [ ] 5.8 [CLI + Spawn double + Fake clock] Drive "A slow start is reported, not hidden": `detach_unconfirmed`.
-- [ ] 5.9 [Subprocess] Drive "A detached Crawl reads its list from standard input": the parent reads the list and writes the Seed hand-over file.
-- [ ] 5.10 [CLI] Drive "A bad list fails before anything starts".
-- [ ] 5.11 [Subprocess, Windows in CI] Drive "Closing the console does not end the Crawl (Windows)": `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP`.
-- [ ] 5.12 [Subprocess, Windows in CI] Drive "No console window appears (Windows)".
-- [ ] 5.13 [Subprocess, Windows in CI] Drive "A job that would end the Crawl is reported (Windows)": `CREATE_BREAKAWAY_FROM_JOB` with its fallback, and the job-object query.
-- [ ] 5.14 [Subprocess, POSIX in CI] Drive "Hanging up the terminal does not end the Crawl (macOS and Linux)": `start_new_session`, stdin from `/dev/null`.
-- [ ] 5.15 [Subprocess] Drive "Resume can run in the background": `resume --detach`.
-- [ ] 5.16 [Subprocess] Drive "A resumed Crawl is running again".
-- [ ] 5.17 [Subprocess] Drive "A Crawl that reaches its end is completed".
-- [ ] 5.18 Docs: document background Crawls, log files, detached List mode, agent sandboxes and Windows job objects, and the Hand-off flow, in `docs/crawl-control.md`.
-- [ ] 5.19 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [ ] 5.1 [Services] Drive "A reserved id is drawn again" (`crawl-store`): the id draw counts `<id>.lock` and `<id>.log` as taken.
+- [ ] 5.2 [Services] Drive "A chosen id is created once" (`crawl-store`): `create_crawl` with a chosen id, and `crawl_id_taken`.
+- [ ] 5.3 [Subprocess] Drive "Detach returns while the Crawl runs": spawn the hidden `--_run-detached` entry point, have the child create the Crawl with the id the parent chose, and wait for its run row.
+- [ ] 5.4 [Subprocess] Drive "The background Crawl runs to its end".
+- [ ] 5.5 [Subprocess] Drive "The log file holds the progress events": reserve the id by creating `<id>.log` exclusively, and send the child's stdout and stderr to it.
+- [ ] 5.6 [3+6] Drive "A detached run is marked".
+- [ ] 5.7 [Subprocess] Drive "A secret is not on the background command line": secrets handed over in one environment variable, which the child removes after reading.
+- [ ] 5.8 [Subprocess, Windows in CI] Drive "Detach prints absolute Windows paths (Windows)".
+- [ ] 5.9 [CLI + Spawn double] Drive "A background process that dies at start is reported": `detach_failed`.
+- [ ] 5.10 [CLI + Spawn double + Fake clock] Drive "A slow start is reported, not hidden": `detach_unconfirmed`.
+- [ ] 5.11 [Subprocess] Drive "A detached Crawl reads its list from standard input": the parent reads the list and writes the Seed hand-over file.
+- [ ] 5.12 [CLI] Drive "A bad list fails before anything starts".
+- [ ] 5.13 [Subprocess, Windows in CI] Drive "Closing the console does not end the Crawl (Windows)": `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP`.
+- [ ] 5.14 [Subprocess, Windows in CI] Drive "No console window appears (Windows)".
+- [ ] 5.15 [Subprocess, Windows in CI] Drive "A job that would end the Crawl is reported (Windows)": `CREATE_BREAKAWAY_FROM_JOB` with its fallback, and the job-object query.
+- [ ] 5.16 [Subprocess, POSIX in CI] Drive "Hanging up the terminal does not end the Crawl (macOS and Linux)": `start_new_session`, stdin from `/dev/null`.
+- [ ] 5.17 [Subprocess] Drive "Resume can run in the background": `resume --detach`.
+- [ ] 5.18 [Subprocess] Drive "A resumed Crawl is running again".
+- [ ] 5.19 [Subprocess] Drive "A Crawl that reaches its end is completed".
+- [ ] 5.20 Docs: document background Crawls, log files, detached List mode, agent sandboxes and Windows job objects, and the Hand-off flow, in `docs/crawl-control.md`.
+- [ ] 5.21 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Dry run, estimate and equivalent command
 
@@ -147,6 +154,6 @@ Seams (docs/testing.md):
 
 ## 8. Change check
 
-- [ ] 8.1 Verify that every `#### Scenario:` in `specs/crawl-control/spec.md` has exactly one test named after it. Use a small script over the test ids.
+- [ ] 8.1 Verify that every `#### Scenario:` in `specs/crawl-control/spec.md`, and the two new ones in `specs/crawl-store/spec.md`, has exactly one test named after it. Use a small script over the test ids.
 - [ ] 8.2 Verify that the whole suite, including the subprocess scenarios, passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
 - [ ] 8.3 Review: run the code-review skill on the whole change against `specs/crawl-control/spec.md`, then refactor with the whole suite green.
