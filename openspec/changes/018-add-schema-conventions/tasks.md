@@ -20,7 +20,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.1 Drive "An unknown enumeration value is refused".
 
   Done when: one declaration helper in `spider.store.schema` adds a CHECK, named `<table>_<column>_values`, for every column with `info["values"]`. It allows NULL for a nullable column. No table writes a CHECK by hand (design D2).
-- [ ] 1.2 Drive "A flag outside 0 and 1 is refused". Done when: the same helper adds `<table>_<column>_flag` for every `Flag` column.
+- [x] 1.2 Drive "A flag outside 0 and 1 is refused". Done when: the same helper adds `<table>_<column>_flag` for every `Flag` column.
 - [ ] 1.3 Drive "Every table is strict", at seam 6.
 
   Done when: the helper declares every public table with `sqlite_strict=True`, and a real number is declared with `sqlalchemy.REAL`, never `Float` or `Double` (design D3).

@@ -23,6 +23,8 @@ def _checks(table: str, columns: tuple[Column[Any], ...]) -> list[CheckConstrain
             allowed = column.in_(column.info["values"])
             condition = or_(column.is_(None), allowed) if column.nullable else allowed
             checks.append(CheckConstraint(condition, name=f"{table}_{column.name}_values"))
+        if isinstance(column.type, Flag):
+            checks.append(CheckConstraint(column.in_([0, 1]), name=f"{table}_{column.name}_flag"))
     return checks
 
 
