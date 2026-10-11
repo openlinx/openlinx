@@ -4,6 +4,7 @@ import re
 import string
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from ipaddress import IPv4Address, IPv6Address
 from typing import Literal, NewType
 from urllib.parse import SplitResult, urlsplit, urlunsplit
@@ -95,6 +96,8 @@ def _raw_host(netloc: str) -> str:
     return netloc.partition(":")[0]
 
 
+# A site's hosts repeat, and IDNA takes about 40 us a host: every Link of a .рф site would pay it.
+@lru_cache(maxsize=1024)
 def _ascii_host(host: str) -> str | None:
     """Encoded as aiohttp encodes it, so that the host recorded is the host requested."""
     if host.startswith("["):

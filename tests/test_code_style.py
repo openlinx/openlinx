@@ -40,6 +40,23 @@ def _base_name(base: ast.expr) -> str | None:
     return None
 
 
+def _decorator_name(decorator: ast.expr) -> str | None:
+    target = decorator.func if isinstance(decorator, ast.Call) else decorator
+    return _base_name(target)
+
+
+def _is_unbounded_memo(decorator: ast.expr) -> bool:
+    name = _decorator_name(decorator)
+    if name == "cache":
+        return True
+    if name != "lru_cache":
+        return False
+    if not isinstance(decorator, ast.Call):
+        return True
+    sizes = decorator.args[:1] + [k.value for k in decorator.keywords if k.arg == "maxsize"]
+    return not sizes or any(isinstance(s, ast.Constant) and s.value is None for s in sizes)
+
+
 def violations(sources: Mapping[str, str]) -> list[str]:
     """Each module's breaches of ADR-0006, given every module's source by its path."""
     trees = {module: ast.parse(source) for module, source in sources.items()}
@@ -61,6 +78,13 @@ def violations(sources: Mapping[str, str]) -> list[str]:
                 for name in map(_base_name, node.bases)
                 if name in own_class_names and (node.name, name) not in ALLOWED_SUBCLASSES
             ]
+    for module, tree in trees.items():
+        found += [
+            f"{module}: {node.name} is a memo without an explicit bound"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+            and any(map(_is_unbounded_memo, node.decorator_list))
+        ]
     return found
 
 
@@ -202,4 +226,44 @@ def test_a_normalized_url_made_outside_its_makers_is_named() -> None:
     assert url_type_violations(sources) == [
         "spider/crawl/scope.py makes a NormalizedUrl",
         "spider/crawl/engine.py makes a NormalizedUrl",
+    ]
+
+
+def test_a_memo_without_an_explicit_bound_is_named() -> None:
+    source = """
+import functools
+from functools import cache, lru_cache
+
+@cache
+def bare_cache(x): ...
+
+@functools.cache
+def qualified_cache(x): ...
+
+@lru_cache
+def bare_lru(x): ...
+
+@lru_cache()
+def called_lru(x): ...
+
+@functools.lru_cache(maxsize=None)
+def unbounded_lru(x): ...
+
+@lru_cache(None)
+def positional_none(x): ...
+
+@lru_cache(maxsize=1024)
+def bounded(x): ...
+
+@functools.lru_cache(256)
+def positional_bound(x): ...
+"""
+
+    assert violations({"m.py": source}) == [
+        "m.py: bare_cache is a memo without an explicit bound",
+        "m.py: qualified_cache is a memo without an explicit bound",
+        "m.py: bare_lru is a memo without an explicit bound",
+        "m.py: called_lru is a memo without an explicit bound",
+        "m.py: unbounded_lru is a memo without an explicit bound",
+        "m.py: positional_none is a memo without an explicit bound",
     ]
