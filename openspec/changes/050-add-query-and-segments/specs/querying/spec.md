@@ -6,7 +6,7 @@ Lets agents and people read a Crawl through stable, token-efficient Commands: an
 
 ### Requirement: Query Commands read the selected Crawl without changing it
 
-The `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands SHALL read the Crawl that the `--crawl` option selects. That option, `latest|<id>|<path>` with the default `latest`, is defined by `015-add-crawl-store`. The Commands SHALL NOT modify the crawl store, they SHALL work while the selected Crawl is still running, and each invocation SHALL read one consistent snapshot of the store.
+The `summary`, `pages`, `page`, `issues`, `sql` and, from v0.2, `export` Commands SHALL read the Crawl that the `--crawl` option selects. That option, `latest|<id>|<path>` with the default `latest`, is defined by `015-add-crawl-store`. The Commands SHALL NOT modify the crawl store, they SHALL work while the selected Crawl is still running, and each invocation SHALL read one consistent snapshot of the store.
 
 #### Scenario: The latest Crawl is used by default
 - **WHEN** the Workspace holds Crawl A, started first and `completed`, and Crawl B, started second
@@ -24,7 +24,7 @@ The `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands SHALL read
 - **THEN** the output has `"state": "running"` in `crawl` and `"pages": 4` in `totals`
 
 #### Scenario: Queries leave the store unchanged
-- **WHEN** `spider summary`, `spider pages`, `spider page https://example.com/`, `spider issues`, `spider sql "SELECT 1"` and `spider export pages` each run once against a `completed` Crawl
+- **WHEN** `spider summary`, `spider pages`, `spider page https://example.com/`, `spider issues` and `spider sql "SELECT 1"` each run once against a `completed` Crawl
 - **THEN** a SQL dump of the crawl store taken afterwards is identical to one taken before they ran
 
 ### Requirement: Query Commands are self-described
@@ -32,15 +32,15 @@ The `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands SHALL read
 `spider commands --format json`, the self-description defined by `010-add-workspace-and-cli-contract`, SHALL describe the `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands. The description SHALL include each Command's output kind, every flag this capability defines for it, and every diagnostic code it can emit. The output kinds SHALL be:
 - `document` for `summary`, `page` and `sql`
 - `list` for `pages` and `issues`
-- `rows` for `export`
+- `rows` for `export` (v0.2)
 
 #### Scenario: The flags of pages are listed
 - **WHEN** `spider commands --format json` runs
-- **THEN** the entry for `pages` lists the flags `--where`, `--fields`, `--sort`, `--limit`, `--cursor` and `--segment`
+- **THEN** the entry for `pages` lists the flags `--where`, `--fields`, `--sort`, `--limit` and `--cursor`
 
 #### Scenario: Output kinds
 - **WHEN** `spider commands --format json` runs
-- **THEN** the entries for `summary`, `pages` and `export` have the output kinds `document`, `list` and `rows`
+- **THEN** the entries for `summary`, `pages` and `sql` have the output kinds `document`, `list` and `document`
 
 #### Scenario: The diagnostic codes of sql are listed
 - **WHEN** `spider commands --format json` runs
@@ -57,7 +57,7 @@ The `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands SHALL read
 | `seed_count` | the number of Seeds |
 | `crawl_mode` | `spider`, `list` or `sitemap` |
 | `state` | the Crawl State: `running`, `stopped`, `completed`, `failed` or `interrupted` |
-| `stop_reason` | why a `stopped` Crawl stopped, for example `interrupt`; otherwise `null` |
+| `stop_reason` | why a `stopped` or `failed` Crawl ended, one of the six values of `020-add-crawl-core` (for example `interrupt` or `site_unreachable`); otherwise `null` |
 | `started_at`, `completed_at` | ISO 8601 UTC timestamps; `completed_at` is the time the Crawl State became `completed`, and `null` in every other state |
 | `section_crawl` | `true` when the Crawl is a Section Crawl |
 | `link_metrics` | `"partial"` for a Section Crawl, otherwise `"complete"` |
@@ -87,27 +87,27 @@ The `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands SHALL read
 
 The summary SHALL include these members:
 
-- `totals`: `urls` (URLs with a recorded outcome: a response, a failed request, or a robots.txt block), `internal_urls`, `external_urls`, `pages` and `resources`. Resources are defined as for the `resources` export view.
-- `status_classes`: two objects, `internal` and `external`. Each always has exactly the keys `2xx`, `3xx`, `4xx`, `5xx`, `other` (any other status code), `no_response` (the request failed without an HTTP response) and `blocked_by_robots` (not requested because robots.txt disallows it). Each URL is counted once, by its own status code.
-- `indexability`: `indexable`, `non_indexable`, and `by_status`, a list of `{status, count}` for the Indexability Statuses of Non-Indexable URLs, ordered by count descending and then by status. It covers the Internal URLs whose Indexability is recorded.
-- `content_types`: a list of `{content_type, count}` for Internal URLs that returned a response. The media type is lowercased and its parameters are removed, and it is `null` when there was no Content-Type header. The list is ordered by count descending and then by content type, with `null` last.
+- `totals`: `encountered` (every URL the Crawl recorded, queued and skipped ones included), `crawled` (URLs that were requested: `fetch_state` `fetched` or `error`), `urls` (URLs with a recorded outcome: the crawled ones and those not requested because robots.txt disallows them), `internal_urls` and `external_urls` (the Internal and External URLs among `urls`), `pages` and `resources`. Resources are defined as for the `resources` export view.
+- `status_classes`: two objects, `internal` and `external`. Each always has exactly the keys `2xx`, `3xx`, `4xx`, `5xx`, `other` (any other status code), `no_response` (the request failed without an HTTP response), `record_failed` (the Crawl got a response but could not record it, `020-add-crawl-core`'s `fetch_error` `record_failed`, which is the tool's failure, never the site's) and `blocked_by_robots_txt` (not requested because robots.txt disallows it). Each URL is counted once, by its own status code; a URL fetched under `--ignore-robots` is counted by its status code.
+- `indexability`: `indexable`, `non_indexable`, and `by_status`, a list of `{status, count}` for the Indexability Statuses of Non-Indexable URLs, ordered by count descending and then by status. It covers the Pages, because `030-add-page-data` records Indexability only for Pages.
+- `content_types`: a list of `{content_type, count, share_pct}` for Internal URLs that returned a response. The media type is lowercased and its parameters are removed, and it is `null` when there was no Content-Type header. `share_pct` is 100 × `count` ÷ the number of those URLs, rounded to 2 decimals. The list is ordered by count descending and then by content type, with `null` last.
 - `crawl_depth`: `{partial, max, distribution}`, where `distribution` has one `{depth, count}` entry for every depth from 0 to `max`, zeros included. It covers the Internal URLs whose Crawl Depth is recorded. When there are none, `max` is `null` and `distribution` is empty.
 
 #### Scenario: Totals
-- **WHEN** a Crawl recorded 6 Internal URLs (4 Pages and 2 Resources) and 3 External URLs that are not Resources
-- **THEN** `totals` is `{"urls": 9, "internal_urls": 6, "external_urls": 3, "pages": 4, "resources": 2}`
+- **WHEN** a Crawl requested 6 Internal URLs (4 Pages and 2 Resources) and 3 External URLs that are not Resources, did not request 1 Internal URL that robots.txt disallows, and still has 2 discovered URLs queued
+- **THEN** `totals` is `{"encountered": 12, "crawled": 9, "urls": 10, "internal_urls": 7, "external_urls": 3, "pages": 4, "resources": 2}`
 
 #### Scenario: Status classes
-- **WHEN** a Crawl recorded Internal URLs with the status codes 200, 200, 301, 404, 503 and 999, one Internal URL whose request timed out, one Internal URL blocked by robots.txt, and one External URL with status code 404
-- **THEN** `status_classes` is `{"internal": {"2xx": 2, "3xx": 1, "4xx": 1, "5xx": 1, "other": 1, "no_response": 1, "blocked_by_robots": 1}, "external": {"2xx": 0, "3xx": 0, "4xx": 1, "5xx": 0, "other": 0, "no_response": 0, "blocked_by_robots": 0}}`
+- **WHEN** a Crawl recorded Internal URLs with the status codes 200, 200, 301, 404, 503 and 999, one Internal URL whose request timed out, one Internal URL whose response could not be recorded (`record_failed`), one Internal URL blocked by robots.txt, and one External URL with status code 404
+- **THEN** `status_classes` is `{"internal": {"2xx": 2, "3xx": 1, "4xx": 1, "5xx": 1, "other": 1, "no_response": 1, "record_failed": 1, "blocked_by_robots_txt": 1}, "external": {"2xx": 0, "3xx": 0, "4xx": 1, "5xx": 0, "other": 0, "no_response": 0, "record_failed": 0, "blocked_by_robots_txt": 0}}`
 
 #### Scenario: Indexability
-- **WHEN** a Crawl recorded 3 Indexable Internal URLs, 1 Non-Indexable Internal URL with Indexability Status `noindex` and 1 with Indexability Status `canonicalised`
+- **WHEN** a Crawl recorded 3 Indexable Pages, 1 Non-Indexable Page with Indexability Status `noindex` and 1 with Indexability Status `canonicalised`
 - **THEN** `indexability` is `{"indexable": 3, "non_indexable": 2, "by_status": [{"status": "canonicalised", "count": 1}, {"status": "noindex", "count": 1}]}`
 
 #### Scenario: Content types
 - **WHEN** four Internal URLs responded with the Content-Type headers `text/html; charset=utf-8` and `text/HTML`, `image/png`, and no Content-Type header
-- **THEN** `content_types` is `[{"content_type": "text/html", "count": 2}, {"content_type": "image/png", "count": 1}, {"content_type": null, "count": 1}]`
+- **THEN** `content_types` is `[{"content_type": "text/html", "count": 2, "share_pct": 50.00}, {"content_type": "image/png", "count": 1, "share_pct": 25.00}, {"content_type": null, "count": 1, "share_pct": 25.00}]`
 
 #### Scenario: Crawl Depth distribution
 - **WHEN** a Crawl recorded Internal URLs with the Crawl Depths 0, 1, 1 and 3
@@ -131,10 +131,16 @@ The summary's `response_time_ms` member SHALL cover the Internal URLs that retur
 
 ### Requirement: Summary Health Score and Issues
 
-The summary's `health_score` member SHALL be `{score, internal_pages, affected_pages}`, computed with the Health Score function of `040-add-rules` at query time:
+The summary's `health_score` member SHALL be `{score, internal_pages, affected_pages}`:
 - `internal_pages` is the number of Internal Pages.
 - `affected_pages` is the number of those that are an Affected URL of at least one *Issue*-type Issue.
 - `score` is the Health Score, or `null` when `internal_pages` is 0.
+
+Where the values come from SHALL follow the Crawl State, as the Issues of `040-add-rules` do:
+- `completed` or `stopped`: the derived fields of the `crawl` row that `040-add-rules`' post-crawl pass wrote, `health_score` as `score`, `health_internal_page_count` as `internal_pages` and `health_affected_page_count` as `affected_pages`.
+- every other state (`running`, `failed` or `interrupted`): computed at query time with the Health Score function of `040-add-rules`, over the Affected URLs that its Issues reader computes live.
+
+The `issues` member, and every Issue that `issues`, `issues <rule-id>` and `page <url>` show, SHALL be read through the Issues reader of `040-add-rules`, which reads the materialised Issues of a `completed` or `stopped` Crawl and computes them live in every other Crawl State.
 
 The `issues` member SHALL be `{total, by_type_priority, top}`:
 - `total` is the number of Issues.
@@ -142,8 +148,12 @@ The `issues` member SHALL be `{total, by_type_priority, top}`:
 - `top` holds the first N Issues in the order of the `issues` Command, each with the fields of an `issues` item. N is set by `--top` (0 to 100, default 10).
 
 #### Scenario: Health Score components
-- **WHEN** a Crawl has 10 Internal Pages, 2 of them are Affected URLs of an *Issue*-type Issue, and 3 others are Affected URLs of Warning-type Issues only
+- **WHEN** a `running` Crawl has 10 Internal Pages, the live queries of *Issue*-type Rules affect 2 of them, and those of Warning-type Rules only affect 3 others
 - **THEN** `health_score` is `{"score": 80, "internal_pages": 10, "affected_pages": 2}`
+
+#### Scenario: A finished Crawl's Health Score is the stored one
+- **WHEN** a `completed` Crawl's `crawl` row has `health_score` 70, `health_internal_page_count` 10 and `health_affected_page_count` 3
+- **THEN** `health_score` is `{"score": 70, "internal_pages": 10, "affected_pages": 3}`
 
 #### Scenario: No Internal Pages
 - **WHEN** a Crawl has no Internal Pages
@@ -164,7 +174,7 @@ The `issues` member SHALL be `{total, by_type_priority, top}`:
 
 ### Requirement: Summary JSON contract
 
-The summary SHALL always have exactly these top-level members: `summary_version`, `crawl`, `segment`, `totals`, `status_classes`, `indexability`, `content_types`, `crawl_depth`, `response_time_ms`, `health_score`, `issues`, `segments` and `unsegmented`. A member that has no value is `null` or empty, never left out. `summary_version` SHALL be `1`. Adding a member SHALL NOT change it. Removing or renaming a member, or changing its meaning, SHALL increase it. The Report (`070-add-html-report`) SHALL be built from this same model. The `segment`, `segments` and `unsegmented` members are specified by the `segments` capability.
+The summary SHALL always have exactly these top-level members: `summary_version`, `crawl`, `segment`, `totals`, `status_classes`, `indexability`, `content_types`, `crawl_depth`, `response_time_ms`, `health_score`, `issues`, `segments` and `unsegmented`. A member that has no value is `null` or empty, never left out. `summary_version` SHALL be `1`. Adding a member SHALL NOT change it. Removing or renaming a member, or changing its meaning, SHALL increase it. The Report (`070-add-html-report`) SHALL be built from this same model. The `segment`, `segments` and `unsegmented` members are specified by the `segments` capability; until Segments arrive in v0.2 they are always `null`, `[]` and `null`.
 
 #### Scenario: Top-level members
 - **WHEN** `spider summary` runs against a `completed` Crawl that recorded no URLs, in a Workspace with no Segments defined
@@ -222,9 +232,15 @@ column     = letter { letter | digit | "_" }
 - `~`, `!~` and `contains` apply to the text form of any column.
 - `true` and `false` compare with boolean columns only.
 
+In v0.1 the language SHALL be the `and` of predicates of three forms: `column compare literal`, `column contains string` and `column is [not] null`. `or`, `not`, parentheses, `~`, `!~`, `in` and `not contains` arrive in v0.2; until then they are syntax errors (`invalid_where`).
+
 #### Scenario: Comparison
 - **WHEN** Pages A (status_code 200), B (404) and C (500) are filtered with `status_code >= 400`
 - **THEN** the matching Pages are B and C
+
+#### Scenario: and requires both
+- **WHEN** Pages A (status_code 404, crawl_depth 1), B (404, 5) and C (200, 5) are filtered with `status_code = 404 and crawl_depth > 3`
+- **THEN** the only matching Page is B
 
 #### Scenario: and binds tighter than or
 - **WHEN** Pages A (status_code 404, crawl_depth 1), B (200, 5) and C (200, 1) are filtered with `status_code = 404 or status_code = 200 and crawl_depth > 3`
@@ -382,7 +398,7 @@ A column name in `--where` or `--sort` that the queried view does not have SHALL
 
 `spider pages` SHALL return the paging envelope of `010-add-workspace-and-cli-contract` (`{total, items, next_cursor}`, with `--fields`, `--limit` and `--cursor`), with one item per Page of the Crawl that matches `--where` and `--segment`. `total` counts every matching Page.
 - Without `--fields`, each item SHALL hold exactly the default fields `address`, `status_code`, `indexability`, `indexability_status`, `title_1` and `crawl_depth`.
-- The available fields SHALL be the columns of the `pages` table (`030-add-page-data`) in the order `spider schema` lists them, followed by `segment`. `--fields all` selects all of them.
+- The available fields SHALL be the columns of the `pages` table (`030-add-page-data`) in the order `spider schema` lists them, followed, from v0.2, by `segment`. `--fields all` selects all of them.
 
 #### Scenario: Default fields
 - **WHEN** `spider pages` runs against a Crawl with one Page
@@ -398,7 +414,7 @@ A column name in `--where` or `--sort` that the queried view does not have SHALL
 
 #### Scenario: All fields
 - **WHEN** `spider pages --fields all` runs
-- **THEN** the keys of each item are every `pages` column that `spider schema` lists, in that order, followed by `segment`
+- **THEN** the keys of each item are every `pages` column that `spider schema` lists, in that order
 
 #### Scenario: Filtered listing
 - **WHEN** `spider pages --where "status_code = 404"` runs against a Crawl with 5 Pages, 2 of which have status code 404
@@ -410,7 +426,7 @@ A column name in `--where` or `--sort` that the queried view does not have SHALL
 
 ### Requirement: Sorting
 
-`--sort` SHALL take a comma-separated list of keys and SHALL be repeatable, each repetition adding further keys in the order given. Each key is a column name or `segment`, and a leading `-` sorts that key descending. The default order SHALL be `address` ascending. Null values SHALL sort last in both directions, and text SHALL sort by Unicode code point. Ties SHALL be broken by `address`, so walking the pages through `next_cursor` returns every Page that existed at the first call exactly once, even when the Crawl stores more Pages in between. A malformed `--sort` value SHALL be rejected with the error code `invalid_sort`.
+`--sort` SHALL take a comma-separated list of keys and SHALL be repeatable, each repetition adding further keys in the order given. Each key is a column name or, from v0.2, `segment`, and a leading `-` sorts that key descending. The default order SHALL be `address` ascending. Null values SHALL sort last in both directions, and text SHALL sort by Unicode code point. Ties SHALL be broken by `address`, so walking the pages through `next_cursor` returns every Page that existed at the first call exactly once, even when the Crawl stores more Pages in between. A malformed `--sort` value SHALL be rejected with the error code `invalid_sort`.
 
 #### Scenario: Several keys, one descending
 - **WHEN** Pages A (crawl_depth 2, word_count 100), B (1, 50) and C (2, 300) are listed with `--sort crawl_depth,-word_count`
@@ -457,14 +473,14 @@ Cursors returned by `pages` and `issues <rule-id>` SHALL follow the cursor rule 
 
 `spider page <url>` SHALL return a JSON object with these members:
 - `url`: the recorded address.
-- `segment`: the name of the URL's Segment, or `null`.
+- `segment`: the name of the URL's Segment, or `null`; always `null` until Segments arrive in v0.2.
 - `columns`: every column of the URL's `pages` row, named as `spider schema` names it.
-- `issues`: every Issue that has this URL as an Affected URL, as `{rule_id, category, issue_type, priority, description, detail}`, in the order of the `issues` Command.
+- `issues`: every Issue that has this URL as an Affected URL, read through the Issues reader of `040-add-rules`, as `{rule_id, category, issue_type, priority, description, detail}`, in the order of the `issues` Command.
 - `redirect_chain`: the hops of the URL's Redirect Chain as `022-add-fetch-policy` records them, as `{url, status_code}` in order, ending with the final destination. It is empty when the URL did not redirect.
 - `link_counts`: the URL's `inlinks`, `unique_inlinks`, `outlinks`, `unique_outlinks` and `external_outlinks`, as defined by `030-add-page-data`, plus `partial`, which is `true` for a Section Crawl.
-- `html_stored`: whether raw HTML is stored for the URL.
+- `html_stored`: whether raw HTML is stored for the URL; always `false` until HTML storage arrives in v0.2.
 
-The given URL SHALL be matched after its fragment is removed, with the scheme and host compared case-insensitively. A URL without a `pages` row in the Crawl SHALL be rejected with the error code `url_not_found`. `details.suggestions` SHALL list up to five recorded addresses closest to it.
+The given URL SHALL be normalised with the URL normalisation of `020-add-crawl-core`, which removes the fragment and lowercases the scheme and host, and then matched against the recorded URLs. A URL without a `pages` row in the Crawl SHALL be rejected with the error code `url_not_found`. `details.suggestions` SHALL list up to five recorded addresses closest to it.
 
 #### Scenario: Redirect Chain
 - **WHEN** `https://example.com/old` answered 301 to `https://example.com/mid`, which answered 302 to `https://example.com/new`, which answered 200
@@ -494,7 +510,7 @@ The given URL SHALL be matched after its fragment is removed, with the scheme an
 
 ### Requirement: Raw HTML of a Page
 
-`spider page <url> --html` SHALL add two members to the output: `html`, the stored HTML of the Page (`030-add-page-data`) decoded as text, and `encoding`, the character encoding it was decoded with. Without `--html`, the output SHALL have neither member. When no raw HTML is stored for the URL, the command SHALL fail with the error code `html_not_stored`. The hint SHALL explain that raw HTML is stored automatically when the Crawl's `--max-urls` is at most 50,000, and that `crawl --store-html` stores it for every Page. `--html` and `--headers` SHALL combine.
+`spider page <url> --html` SHALL add two members to the output: `html`, the stored HTML of the Page (`030-add-page-data`) decoded as text, and `encoding`, the character encoding it was decoded with. Without `--html`, the output SHALL have neither member. When no raw HTML is stored for the URL, the command SHALL fail with the error code `html_not_stored`. The hint SHALL explain that raw HTML is stored only for Crawls started with `crawl --store-html`. `--html` and `--headers` SHALL combine.
 
 #### Scenario: Stored HTML
 - **WHEN** the stored HTML of `https://example.com/` is `<html><body>Hi</body></html>`, decoded as `utf-8`
@@ -519,7 +535,7 @@ The given URL SHALL be matched after its fragment is removed, with the scheme an
 - **THEN** stdout is valid UTF-8 and decodes to JSON whose `html` is `<p>Привет</p>`
 
 #### Scenario: HTML not stored
-- **WHEN** a Crawl was run with `--no-store-html` and `spider page https://example.com/ --html` runs
+- **WHEN** a Crawl was run without `--store-html` and `spider page https://example.com/ --html` runs
 - **THEN** the exit code is 4, and the error has the code `html_not_stored` and a hint that contains `--store-html`
 
 ### Requirement: Response headers of a URL
@@ -551,7 +567,7 @@ The given URL SHALL be matched after its fragment is removed, with the scheme an
 - `affected_count` is the number of the Issue's Affected URLs.
 - `description` is the Rule's description.
 
-Only Rules with at least one Affected URL SHALL appear. The order SHALL be by Issue Type (issue, warning, opportunity), then by Priority (high, medium, low), then by `affected_count` descending, then by `rule_id`.
+The Issues SHALL be read through the Issues reader of `040-add-rules`, so a Crawl that is still `running`, or ended without its post-crawl pass, shows the Issues its stored rows give now. Only Rules with at least one Affected URL SHALL appear. The order SHALL be by Issue Type (issue, warning, opportunity), then by Priority (high, medium, low), then by `affected_count` descending, then by `rule_id`.
 
 `--type`, `--priority` and `--category` SHALL each take comma-separated values, case-insensitively, and SHALL be repeatable. The values of one flag are alternatives, and different flags must all match. An unknown value SHALL be rejected with the error code `invalid_value`, whose `details.accepted` lists the accepted values.
 
@@ -575,6 +591,16 @@ Only Rules with at least one Affected URL SHALL appear. The order SHALL be by Is
 - **AND** `spider issues --category headings` runs
 - **THEN** the only item has the `rule_id` `h1-missing`
 
+#### Scenario: Issues of a running Crawl are computed live
+- **WHEN** a `running` Crawl has stored the analysed Page `https://example.com/a` without a `<title>`, and its `affected_urls` holds no rows
+- **AND** `spider issues` runs
+- **THEN** an item has the `rule_id` `title-missing` and `"affected_count": 1`
+
+#### Scenario: Issues of a fixture Crawl on every OS
+- **WHEN** on Windows, macOS and Linux, `spider crawl {site}/e2e/` runs as a real subprocess, where `/e2e/` has a title and an `<h1>` and links to `/e2e/notitle`, which has an `<h1>` and no `<title>`, and to `/e2e/gone`, which responds 404
+- **AND** `spider issues` then runs as a real subprocess
+- **THEN** its items include `internal-4xx` and `title-missing`, each with `"affected_count": 1`
+
 #### Scenario: Unknown Issue Type
 - **WHEN** `spider issues --type critical` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value` and `details.accepted` `["issue", "warning", "opportunity"]`
@@ -582,8 +608,8 @@ Only Rules with at least one Affected URL SHALL appear. The order SHALL be by Is
 ### Requirement: Issue detail
 
 `spider issues <rule-id>` SHALL return `{rule, total, items, next_cursor}`:
-- `rule` is `{rule_id, category, issue_type, priority, description, why_it_matters, how_to_fix, thresholds}`, taken from the Crawl's `rules` table (`040-add-rules`). `thresholds` maps each threshold name to the value that applied to the Crawl.
-- The items are the Issue's Affected URLs. Without `--fields`, each item SHALL be `{url, detail}`, where `detail` is the JSON object of measured values that `040-add-rules` recorded for that Affected URL, or `null`. The available fields are `url`, `detail`, the `pages` columns and `segment`. Page columns and `segment` are `null` for an Affected URL without a `pages` row.
+- `rule` is `{rule_id, category, issue_type, priority, description, why_it_matters, how_to_fix, thresholds, reproduce_sql}`, taken from the Crawl's `rules` table (`040-add-rules`). `thresholds` maps each threshold name to the value that applied to the Crawl, and `reproduce_sql` is the Rule's query, which `spider sql` runs.
+- The items are the Issue's Affected URLs, read through the Issues reader of `040-add-rules`. Without `--fields`, each item SHALL be `{url, detail}`, where `detail` is the JSON object of measured values that `040-add-rules` recorded for that Affected URL, or `null`. The available fields are `url`, `detail`, the `pages` columns and `segment`. Page columns and `segment` are `null` for an Affected URL without a `pages` row.
 - The default order SHALL be `unique_inlinks` descending, then `url`. `--where`, `--sort`, `--limit`, `--cursor` and `--segment` SHALL work as they do for `pages`.
 
 A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `items`. An unknown rule id SHALL be rejected with the error code `rule_not_found` of `040-add-rules`. The hint SHALL mention `spider rules list`, and `details.suggestions` SHALL list the closest rule ids.
@@ -594,18 +620,22 @@ A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `i
 - **THEN** the `url` values of the items are B, A and C, in that order
 
 #### Scenario: Thresholds recorded for the Crawl
-- **WHEN** a Crawl ran with the threshold `max_chars` of the Rule `title-too-long` set to 70
-- **AND** `spider issues title-too-long` runs
-- **THEN** `rule.thresholds` is `{"max_chars": 70, "max_pixels": 561}`
+- **WHEN** a Crawl ran with the threshold `max_hops` of the Rule `redirect-chain` set to 3
+- **AND** `spider issues redirect-chain` runs
+- **THEN** `rule.thresholds` is `{"max_hops": 3}`
 
 #### Scenario: Guidance of the Rule
 - **WHEN** `spider issues title-too-long` runs
 - **THEN** `rule.how_to_fix` equals the `how_to_fix` text that `spider rules show title-too-long` prints
 
+#### Scenario: The reproducing query of the Rule
+- **WHEN** `spider issues title-missing` runs
+- **THEN** `rule.reproduce_sql` equals the `reproduce_sql` of the Crawl's `rules` row for `title-missing`
+
 #### Scenario: Detail of an Affected URL
-- **WHEN** the Issue `title-too-long` has the single Affected URL `https://example.com/a`, recorded with `detail` `{"length": 61, "width_px": 536}`
+- **WHEN** the Issue `title-too-long` has the single Affected URL `https://example.com/a`, recorded with `detail` `{"length": 61}`
 - **AND** `spider issues title-too-long` runs
-- **THEN** `items` is `[{"url": "https://example.com/a", "detail": {"length": 61, "width_px": 536}}]`
+- **THEN** `items` is `[{"url": "https://example.com/a", "detail": {"length": 61}}]`
 
 #### Scenario: Page columns for Affected URLs
 - **WHEN** the Issue `title-too-long` has the single Affected URL `https://example.com/a`, whose title_1_length is 81
@@ -720,7 +750,7 @@ A query that SQLite rejects SHALL fail with the error code `sql_error`, and the 
 | `affected-urls` | Issue and Affected URL pair | `rule_id`, `category`, `issue_type`, `priority`, `url`, `detail`, `segment` |
 
 A Resource is a row of the `urls` table (`020-add-crawl-core`) that meets both conditions:
-- it is the target of at least one `links` row whose `type` is `image`, `css`, `javascript` or `media`
+- it is the target of at least one `links` row whose `type` is `image`, `css`, `javascript`, `video`, `audio` or `media`
 - it has no `pages` row
 
 Its columns come from its `urls` row, except two:
@@ -801,6 +831,10 @@ Any other format SHALL be rejected with the `invalid_value` error of `010-add-wo
 - **AND** `spider export pages --fields address,title_1 --format csv` runs
 - **THEN** stdout is the UTF-8 bytes of a byte-order mark followed by `address,title_1\r\nhttps://example.com/,"Café, ""best"""\r\n`
 
+#### Scenario: Export is a rows Command
+- **WHEN** `spider commands --format json` runs
+- **THEN** the entry for `export` has the output kind `rows`
+
 #### Scenario: Unsupported format
 - **WHEN** `spider export pages --format table` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value` and a hint that contains `jsonl` and `csv`
@@ -816,6 +850,10 @@ Any other format SHALL be rejected with the `invalid_value` error of `010-add-wo
 #### Scenario: Bounded memory
 - **WHEN** a Crawl with 200,000 Pages and a Crawl with 1,000 Pages are each exported with `spider export pages --format csv`
 - **THEN** the larger export's peak memory is no more than 50 MB above the smaller one's
+
+#### Scenario: Export leaves the store unchanged
+- **WHEN** `spider export pages` runs against a `completed` Crawl
+- **THEN** a SQL dump of the crawl store taken afterwards is identical to one taken before it ran
 
 #### Scenario: No doubled carriage returns on the Windows console
 - **WHEN** on Windows, `spider export pages --format csv` runs as a real subprocess writing to a pipe

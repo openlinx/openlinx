@@ -111,9 +111,17 @@ Segment membership SHALL be computed from the current `spider.toml` every time a
 - **AND** `spider summary --segment blog` runs
 - **THEN** the error has the code `unknown_segment` and a hint that contains `[segments]` and `spider.toml`
 
+#### Scenario: Commands list the --segment flag
+- **WHEN** `spider commands --format json` runs
+- **THEN** the entries for `summary`, `pages`, `issues` and `export` each list the flag `--segment`
+
 ### Requirement: The segment field
 
 `pages` and `export pages` SHALL offer a `segment` field, the name of the Page's Segment or `null`, through `--fields` and `--fields all`. `page <url>` SHALL always include `segment`. `--sort` SHALL accept `segment`. `segment` SHALL NOT be usable in `--where`: there it SHALL be rejected with the error code `unknown_column`, and the hint SHALL mention `--segment`.
+
+#### Scenario: All fields include the Segment
+- **WHEN** `spider.toml` defines `blog = "address ~ '/blog/'"` and `spider pages --fields all` runs
+- **THEN** the last key of each item is `segment`
 
 #### Scenario: Sorting by Segment
 - **WHEN** the Pages `https://example.com/about` (no Segment), `https://example.com/shop/c` (Segment `shop`) and `https://example.com/blog/a` (Segment `blog`) are listed with `spider pages --sort segment --fields address`
@@ -192,7 +200,7 @@ When no Segment is defined, `segments` SHALL be `[]` and `unsegmented` SHALL be 
 
 `spider summary --segment <name>` SHALL compute every summary member over the Pages of that Segment only, and SHALL set `segment` to the name.
 - `segments` SHALL be `[]` and `unsegmented` SHALL be `null`.
-- A Segment contains only Pages, so `totals.urls`, `totals.internal_urls` and `totals.pages` SHALL all equal the number of the Segment's Pages.
+- A Segment contains only Pages, so `totals.encountered`, `totals.crawled`, `totals.urls`, `totals.internal_urls` and `totals.pages` SHALL all equal the number of the Segment's Pages.
 - `totals.external_urls`, `totals.resources` and `status_classes.external` SHALL be `null`.
 
 Without `--segment`, `segment` SHALL be `null`.
@@ -200,7 +208,7 @@ Without `--segment`, `segment` SHALL be `null`.
 #### Scenario: Totals of one Segment
 - **WHEN** the Segment `blog` holds 2 Pages, and the Crawl also recorded 3 External URLs and 4 Resources
 - **AND** `spider summary --segment blog` runs
-- **THEN** `totals` is `{"urls": 2, "internal_urls": 2, "external_urls": null, "pages": 2, "resources": null}`
+- **THEN** `totals` is `{"encountered": 2, "crawled": 2, "urls": 2, "internal_urls": 2, "external_urls": null, "pages": 2, "resources": null}`
 
 #### Scenario: Segment members of a one-Segment summary
 - **WHEN** `spider.toml` defines `blog` and `shop`, and `spider summary --segment blog` runs
