@@ -137,6 +137,7 @@ At about 500k URLs, what an index serves decides whether a call takes millisecon
 - **`issues <rule-id>`:** materialised, the Rule's key prefix in `affected_urls`, joined to `pages` by key and sorted by `unique_inlinks`: the cost grows with the Issue's size, not the Crawl's. Live, the Rule's query on every call.
 - **`page <url>`:** `urls_url` for the URL, then keys: `pages`, `response_headers`, the `redirect_url_id` hops, and `affected_urls_url_id` for its Issues when materialised. Live, every Rule's query for one URL, which `026`'s 500k run must keep under 1 s (`040` D16).
 - **`summary`:** scans `urls` and `pages` (status classes, content types, Crawl Depth, Indexability) and sorts `response_time_ms` once (D8). No count over `urls` is stored, so this is seconds at 500k URLs, paid on every call.
+  - *Hint:* the reads of `urls` (the totals, status classes, content types, Crawl Depth, and the count, min, max, mean and histogram of D8) can be one `GROUP BY` pass with conditional aggregates (`SUM(CASE …)`, `COUNT(*) FILTER (WHERE …)`) instead of one scan each. The breakdowns use different keys, so the pass may group by their combination and fold the small result in Python. The implementer measures it against the separate scans at 500k and keeps the faster. The percentile sort of D8 and the read of `pages` stay separate.
 - **Suggestions:** `url_not_found` takes its candidates from `pages_address` around the given address (D18), never from a scan.
 
 ### D16. `summary` against Screaming Frog's Overview
