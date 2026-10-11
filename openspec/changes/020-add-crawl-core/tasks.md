@@ -81,7 +81,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 4.2 Drive "The Seed is fetched and recorded" at seam 3+6.
 
   Done when:
-  - the Crawl Service's start operation creates the Crawl with `015`'s `create_crawl`, and builds the `CrawlContext` (design D15) in one place, opening and closing `CrawlWriter` through `asyncio.to_thread`
+  - the Crawl Service's start operation creates the Crawl with `015`'s `create_crawl`, and builds the `CrawlContext` (design D15) in one place, opening and closing `CrawlWriter` through `asyncio.to_thread`, and submits each URL's unit with `017`'s `submit_async()`, so the URL's task ends at the submit (design D2)
   - every `NewCrawl` gets both of its required fields, `secret_names` and `journal_setting`, from this first slice on; task 4.12 checks what they do
   - the `Fetcher` Protocol (design D8) has a one-hop aiohttp implementation
   - the first `urls` columns (`id`, `url`, `host`, `crawl_depth`, `discovered_via`, `fetch_state`, `status_code`) and the unique index `urls_url` are declared through `018`'s declaration helper, each enumeration with every value of design D18, with their `docs/schema.md` rows; `018`'s guard over index names switches on its assertion that it saw an index
@@ -90,8 +90,8 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 4.4 Drive "Pages linked from the Seed are crawled" at seam 3+6, and "Indexes of urls" at seam 1, a pair.
 
   Done when:
-  - the scheduler takes queued URLs depth by depth in `urls.id` order through a unit that reads the partial index `urls_crawl_depth_id`, declared with its description
-  - hyperlinks are discovered in-process through the extractor in `Hooks` (design D9)
+  - the scheduler takes queued URLs depth by depth in `urls.id` order through a writer unit that only reads and commits nothing, above a per-depth cursor of the run, over the partial index `urls_crawl_depth_id`, declared with its description (design D1)
+  - hyperlinks are discovered by the page preparation function, called through the in-process executor of the `CrawlContext` (design D9)
   - new URLs are deduplicated by `urls_url` inside the URL's unit, with no in-memory map of URLs (design D1)
 - [ ] 4.5 Drive "A discovered URL points to where it was found" at seam 3+6.
 
@@ -115,7 +115,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 4.14 Drive "Response timing is recorded" at seam 3+6.
 - [ ] 4.15 Drive "The Content-Type is recorded as received" at seam 3+6.
 - [ ] 4.16 Docs: write the `spider crawl` reference in `docs/crawling.md` (the result fields, the event table, exit codes, `[crawl]` keys), and the `urls` and `crawl` columns and indexes so far in `docs/schema.md`.
-- [ ] 4.17 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [ ] 4.17 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) and prebuilt statements (D9) and ADR-0005's naming rules, then refactor with the whole suite green.
 
 ## 5. Hooks, and one URL never stops the Crawl (slice)
 
@@ -135,8 +135,13 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 5.10 Drive "A closed port is a refused connection" at seam 3+6. Done when: `fetch_error` and `fetch_error_message` are declared, and the Fetcher returns every request failure in its result, never as an exception (design D8).
 - [ ] 5.11 Fixture: a route option that resets the connection after part of the body, test-first.
 - [ ] 5.12 Drive "A connection reset in the body is a connection error" at seam 3+6.
-- [ ] 5.13 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes in `docs/crawling.md`.
-- [ ] 5.14 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [ ] 5.13 Drive "A URL whose rows cannot be written is recorded as an error" at seam 2.
+
+  Done when:
+  - a failed unit gets a fallback unit that records only the URL's state (`fetch_state` = `error`, `fetch_error` = `record_failed`, the error in `fetch_error_message`), and `record_failed` is declared as a value and as a counted warning
+  - a failure of the crawl file itself (SQLite's FULL, IOERR, READONLY, CORRUPT, NOTADB or BUSY), a failing fallback, a failed commit or `CrawlWriterClosedError` sets the stop flag with `write_failed` instead (design D2)
+- [ ] 5.14 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes in `docs/crawling.md`.
+- [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Internal and External URLs over HTTP (slice)
 
@@ -242,14 +247,14 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.1 Drive "Every stderr line is an event or a diagnostic" at seam 1.
 - [ ] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
 - [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
-- [ ] 12.4 Drive "Progress events come every 10 seconds", fake timing.
+- [ ] 12.4 Drive "Progress events come every 10 seconds", fake timing. Done when: the `urls` counts of `progress` come from counters that the outcomes of committed units update, seeded once by a counting query when the run starts, and no count over `urls` runs for each event (design D10).
 - [ ] 12.5 Drive "Events are UTF-8 on Windows (Windows)" at seam 1, subprocess, Windows in CI.
 - [ ] 12.6 Drive "An unreachable Seed fails the Crawl" at seam 1. Done when: the `failed` end goes through `check_transition` with `seed_unreachable`, and the adapter returns the result as an `Outcome`.
 - [ ] 12.7 Drive "An unreachable Seed is reported by one error" at seam 1. Done when: `seed_unreachable` is declared, with a hint about network access and sandboxed agents.
 - [ ] 12.8 Drive "Post-crawl passes do not run for a failed Crawl" at seam 2.
 - [ ] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
 
-  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5).
+  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit; it is a failure of the file itself, never `record_failed` (design D2).
 - [ ] 12.10 Drive "Losing the site fails the Crawl" at seam 1, with the reset route of task 5.11. Done when: the count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without a response.
 - [ ] 12.11 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared.
 - [ ] 12.12 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
@@ -267,7 +272,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 13.2 Drive "Ctrl+Break stops a Crawl on Windows (Windows)" at seam 1, subprocess, Windows in CI.
 - [ ] 13.3 Drive "An interrupt is reported by one error" at seam 1, subprocess. Done when: `010`'s `interrupted` is the one error, with exit code 130.
 - [ ] 13.4 **Guard:** "An interrupted Crawl keeps its queue", at seam 1, subprocess.
-- [ ] 13.5 Drive "A request still running after the grace period is cancelled", fake timing. Done when: after the stop flag, requests in flight get 10 seconds of clock time and are then cancelled without a unit.
+- [ ] 13.5 Drive "A request still running after the grace period is cancelled", fake timing. Done when: after the stop flag, requests in flight get 10 seconds of clock time and are then cancelled before their submit, so no unit is written for them.
 - [ ] 13.6 Drive "A second interrupt ends the process at once" at seam 1, subprocess.
 - [ ] 13.7 Docs: document interrupts, the grace period and the second interrupt in `docs/crawling.md`.
 - [ ] 13.8 Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
@@ -289,6 +294,6 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 15.1 Verify that every `#### Scenario:` in `specs/crawling/spec.md` has exactly one test named after it, with a small script over the test ids.
 - [ ] 15.2 **Guard:** every code this change declares is listed by `spider commands` with its level and exit code, at seam 1.
-- [ ] 15.3 Docs: the crawl pipeline section of `docs/architecture.md` says what is built (the context, the hooks, store-only units, in-process parsing), and `docs/schema.md` documents `urls`, `origins` and the new `crawl` columns, with their indexes and the values listed for later changes.
+- [ ] 15.3 Docs: the crawl pipeline section of `docs/architecture.md` says what is built (the context, the hooks, store-only units, page preparation behind the in-process executor), and `docs/schema.md` documents `urls`, `origins` and the new `crawl` columns, with their indexes and the values listed for later changes.
 - [ ] 15.4 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
 - [ ] 15.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md`, then refactor with the whole suite green.

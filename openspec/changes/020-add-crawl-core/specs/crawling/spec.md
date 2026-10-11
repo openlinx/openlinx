@@ -516,7 +516,7 @@ A request that gets no HTTP response SHALL be recorded with:
 - a `fetch_error` code
 - a non-empty `fetch_error_message`
 
-This capability SHALL use the codes `dns_error`, `connection_refused`, `connection_error`, `invalid_response` and `watchdog` (see Backstops). `022-add-fetch-policy` adds `timeout` and `tls_error`.
+This capability SHALL use the codes `dns_error`, `connection_refused`, `connection_error`, `invalid_response` and `watchdog` (see Backstops). `022-add-fetch-policy` writes `timeout` and `tls_error`. A URL whose response could not be recorded has `record_failed` (see "One URL never stops the Crawl").
 
 #### Scenario: An unknown host is a DNS error
 - **WHEN** `http://site.test/` links to `http://nowhere.test/`, and `spider crawl http://site.test/` runs
@@ -634,7 +634,7 @@ The crawl store SHALL hold one row for each distinct normalised URL of the Crawl
 The listed values SHALL include, from v0.1, the values that later changes write, so that no later change adds one:
 - `discovered_via`: `seed`; every Link type, the later ones included (see "Link discovery"); `redirect`, for a redirect target (`022-add-fetch-policy`); `list`, `sitemap_input` and `sitemap_index`, for a listed URL and for sitemap files (`024-add-list-and-sitemap-modes`, v0.2). A URL listed in a sitemap has the Link type `xml_sitemap`; there is no separate `sitemap` value.
 - `skip_reason`: `excluded`, `blocked_by_robots_txt`, `robots_unreachable`, `nofollow`, `link_type_not_followed`, `external_not_checked`, `max_depth`; `max_redirects` and `url_too_long` (`022`)
-- `fetch_error`: `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`; `timeout` and `tls_error` (`022`)
+- `fetch_error`: `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`, `record_failed`; `timeout` and `tls_error` (`022`)
 - `parse_error`: `extractor_error`; `body_too_large` (`022`); `worker_crashed` (`026-add-parse-pool`)
 
 This change SHALL add these indexes to `urls`, built while the Crawl writes:
@@ -758,7 +758,7 @@ Secret settings SHALL be allowed in `spider.toml`. `015-add-crawl-store` redacts
 
 ### Requirement: Persistent frontier
 The `urls` table SHALL be the Crawl's frontier:
-- A URL SHALL be recorded as `fetched` or `error` only in the writer unit (`015-add-crawl-store`) that also records its response data and every URL discovered from it.
+- A URL SHALL be recorded as `fetched` or `error` only in the writer unit (`015-add-crawl-store`) that also records its response data and every URL discovered from it, or as `error` by the fallback unit of a unit that failed (see "One URL never stops the Crawl").
 - URLs whose request has not completed SHALL stay `queued`.
 
 The Crawl Service SHALL be able to continue a Crawl from its store when its Crawl State is `stopped` or `failed`. `spider resume` in `060-add-crawl-control` exposes this operation, and adds `interrupted` Crawls, including those whose process was killed. Continuing SHALL:
@@ -811,9 +811,10 @@ A failure while one URL is fetched, decoded, parsed, extracted or handled SHALL 
 - **Decoding:** bytes that are invalid in the response's character encoding SHALL be decoded with replacement characters.
 - **Extractors:** when an extractor raises an error, the URL SHALL be recorded with `parsed` = 0, `parse_error` = `extractor_error`, and a `parse_error_message` that names the extractor and the error's type.
 - **Handlers:** when a per-response handler raises an error, the URL SHALL be recorded without that handler's rows.
-- **Counted warnings:** each kind of failure SHALL be reported by one warning, `parse_failed` for extractors and `handler_failed` for handlers. It SHALL be written to stderr when it first occurs, and kept once in the result and `crawl.warnings`, with `details.count` (the number of URLs it affected) and `details.first_url`.
+- **Recording:** when the writer unit that records a URL fails, the URL SHALL be recorded by a fallback unit with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs discovered from it and without its handler rows. A failure of the crawl file itself, which SQLite reports as a full disk, an I/O error, or a read-only, corrupt or busy file, SHALL instead fail the Crawl as a write failure (see "Result of a Crawl"), as SHALL a fallback unit that fails, a commit that fails, and a writer that has ended.
+- **Counted warnings:** each kind of failure SHALL be reported by one warning, `parse_failed` for extractors, `handler_failed` for handlers and `record_failed` for recording. It SHALL be written to stderr when it first occurs, and kept once in the result and `crawl.warnings`, with `details.count` (the number of URLs it affected) and `details.first_url`.
 
-Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, and a crawl file that cannot be written. In this change, extractors run in the crawl process; `026-add-parse-pool` may move them into worker processes.
+Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, and a crawl file that cannot be written. Page preparation (decoding, parsing, the extractors and the robots directives) SHALL be one function of the response, called through an executor: in this change it runs in the crawl process, and `026-add-parse-pool` runs it in worker processes.
 
 #### Scenario: An extractor error is recorded
 - **WHEN** an extractor registered for the test raises an error on `{site}/boom`, `/` links to `/boom` and `/ok`, and `spider crawl {site}/` runs
@@ -830,6 +831,10 @@ Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, an
 #### Scenario: A failing handler does not stop the Crawl
 - **WHEN** a handler registered for the test raises an error on `{site}/boom`, `/` links to `/boom` and `/ok`, and `spider crawl {site}/` ends
 - **THEN** the Crawl State is `completed`, and the result's `warnings` hold one entry with code `handler_failed` whose `details.count` is 1
+
+#### Scenario: A URL whose rows cannot be written is recorded as an error
+- **WHEN** a handler registered for the test returns, for `{site}/boom`, a row whose store writer, registered for the test, raises an error, `/` links to `/boom` and `/ok`, and `spider crawl {site}/` ends
+- **THEN** `{site}/boom` has `fetch_state` = `error` and `fetch_error` = `record_failed`, `{site}/ok` has `fetch_state` = `fetched`, the Crawl State is `completed`, and the result's `warnings` hold one entry with code `record_failed` whose `details.count` is 1
 
 #### Scenario: Deeply nested HTML does not stop the Crawl
 - **WHEN** `/` links to `/deep`, whose body nests 100,000 `<div>` elements around a link to `/after`, and `spider crawl {site}/` ends
@@ -886,6 +891,8 @@ While a foreground Crawl runs, the Command SHALL write progress events to stderr
 | `crawl_started` | once, before any other event | `crawl_id`, `crawl_mode`, `seed_count`, `crawl_file` |
 | `progress` | every 10 seconds | `crawl_id`, `elapsed_s`, `urls` (`discovered`, `fetched`, `errors`, `skipped`, `queued`), `rate` (URLs requested per second over the last 60 seconds) |
 | `stopping` | when the Crawl starts to stop before its frontier is empty | `crawl_id`, `reason` (the `stop_reason` it will end with) |
+
+The `urls` counts of a `progress` event SHALL be those of the URLs that committed units recorded, kept as counters while the Crawl runs.
 
 A warning SHALL be written to stderr when it first occurs for a host, as a diagnostic line of `010`. It SHALL also be kept for the result and `crawl.warnings`.
 
@@ -970,7 +977,7 @@ This lets an agent tell a site that is down, or a blocked network, from an empty
 ### Requirement: Stopping with an interrupt
 The first interrupt SHALL stop a foreground Crawl gracefully. An interrupt is Ctrl+C; on Windows also Ctrl+Break; on macOS and Linux also SIGTERM and SIGHUP. After the first interrupt, the Command SHALL:
 1. write a `stopping` event and start no new request
-2. give requests in flight up to 10 seconds, then cancel those still running, whose URLs stay `queued`
+2. give requests in flight up to 10 seconds, then cancel those still running, whose URLs stay `queued`; a URL whose response was already handed to the writer SHALL still be recorded
 3. store everything received and run the post-crawl passes
 4. end the Crawl with the Crawl State `stopped` and `stop_reason` = `interrupt`
 5. print the result, write exactly one error diagnostic with code `interrupted`, and exit with code 130
