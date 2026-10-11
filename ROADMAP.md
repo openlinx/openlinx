@@ -35,7 +35,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 000 | `000-scaffold-project` | none (tooling only) | `spider --version` | done |
 | 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | done |
 | 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | done |
-| 017 | `017-speed-up-crawl-writer` | `crawl-store` (modified) | none | planned |
+| 017 | `017-speed-up-crawl-writer` | `crawl-store` (modified) | none | done |
 | 018 | `018-add-schema-conventions` | `crawl-store` (modified) | `schema` (`indexes`) | planned |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | planned |
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned, min |
@@ -64,6 +64,7 @@ widen:                                        ├─► 022-min ─┐
                                               └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 sql, summary/pages/page ─► 080 ─┴─► 026 benchmark re-run (sizes the pool) ─► 085 ─► v0.1 tag
 ```
 
+- **Where the build is:** 000, 010, 015 and 017 are done (017: PR #4, merge f5abc9e, 2026-10-11). Next: 018.
 - **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies (settled at 030's re-grounding, 2026-10-11). 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test (settled at 050's re-grounding, 2026-10-11); 040's slice and widening task groups are still to be marked in its tasks.
 - **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts once 020's slice is in and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
@@ -119,7 +120,7 @@ If a change needs something another change owns, it depends on that change inste
   - The `--crawl latest|<id>|<path>` option used by every query Command.
   - Redaction of secrets in recorded commands and config: whole values (`***`) and URL passwords (`user:***@proxy`). 022 adds the header shape (`Cookie: ***`) in v0.2.
   - Table conventions, and `docs/schema.md` as the contract: the public schema reference of [ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md), in v0.1. It is checked against the declared schema, and a new crawl file against both through `PRAGMA table_info`.
-- **017-speed-up-crawl-writer** (v0.1, decided 2026-10-11 from the writer prototype; the store layer only):
+- **017-speed-up-crawl-writer** (v0.1, decided 2026-10-11 from the writer prototype; the store layer only; done 2026-10-11, PR #4, merge f5abc9e):
   - It modifies `crawl-store` and builds on 015's `CrawlWriter` as built. It comes after 015 and before 020, whose per-URL unit uses it.
   - **The writer stays a thread.** A writer process is out: it tied the thread under the parse pool (40.1 against 40.4 Pages/s) and writer-only at ~466 Link rows per Page (17.6 against 17.2), its WAL peaked at 402 MB against 212 MB, and it would need units as records with a registry, errors sent over a pipe and a slow test group.
   - **`run()` and `run_async()` are unchanged:** their result means the unit ran, and `flush()` means it is durable.
