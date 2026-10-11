@@ -54,7 +54,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 2.1 Drive "The other scheme of the Seed host is internal" and "Another host is external by default", a trivial pair.
 
   Done when: `ScopeRules` (design D4) is a frozen value built from the Seed and the settings, whose decision on a `NormalizedUrl` is a pure function.
-- [ ] 2.2 Drive "The www host of an apex Seed is internal".
+- [x] 2.2 Drive "The www host of an apex Seed is internal".
 
   Done when: registrable domains come from the bundled `publicsuffixlist`, and a table test of about 20 Seed/URL cases passes: apex and `www.` both ways, other subdomains, ports, IDN hosts, public suffixes such as `co.uk`, IP addresses, single-label hosts and upper case.
 - [ ] 2.3 **Guard:** "The apex of a www Seed is external".
