@@ -30,7 +30,7 @@
   - `rules`: the Rules as configured for this Crawl, including their guidance and reproducing queries, so a crawl file stays self-contained
   - `affected_urls`: one row per Rule and URL, with a JSON `detail` of the measured values
   - `issues`: a view with one row per Rule that fired and its `affected_count`, counted from `affected_urls`
-- **New derived fields** on the `crawl` row of `015-add-crawl-store`, written only by the post-crawl pass: `health_score`, `health_internal_pages`, `health_affected_pages` and `health_calculated_at`.
+- **New derived fields** on the `crawl` row of `015-add-crawl-store`, written only by the post-crawl pass: `health_score`, `health_internal_page_count`, `health_affected_page_count` and `health_calculated_at`.
 - **The Health Score.** `floor(100 × (Internal Pages − affected Internal Pages) ÷ Internal Pages)` is calculated at the end of the post-crawl passes. A Page counts as affected when it is an Affected URL of any Rule whose Issue Type is `issue`. `050` and `070` call the same function for Segments.
 - **New Command `spider rules [list | show <id>]`.**
   - It prints JSON with each Rule's id, category, Issue Type, Priority, what it applies to, evaluation timing, enabled state, effective thresholds (value, default, unit), guidance texts and reproducing query.

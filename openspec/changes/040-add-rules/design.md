@@ -97,10 +97,10 @@ No count of Affected URLs is stored: a count that only repeats the rows of anoth
 
 ### D8. The Health Score
 - **Formula.** `floor(100 × (N − A) ÷ N)`. Rounding down means 100 is shown only when no Page has an Issue-type Issue.
-- **Storage.** The score is stored as four crawl metadata fields on the one-row `crawl` table (`health_score`, `health_internal_pages`, `health_affected_pages`, `health_calculated_at`).
+- **Storage.** The score is stored as four crawl metadata fields on the one-row `crawl` table (`health_score`, `health_internal_page_count`, `health_affected_page_count`, `health_calculated_at`).
   - *Alternative: a one-row `health_score` table.* Rejected. ADR-0005 requires table names to be plural nouns, with `crawl` as the only one-row exception.
   - They are derived (ADR-0005): only the post-crawl pass writes them, after the `post_crawl` Rules, and each description starts with `Derived: `. They stay NULL until the pass runs.
-  - `health_score` has no unit suffix, because a score is not a share (ADR-0005 rule 5; it was `health_score_pct` until ruling Q9). The other names follow `050`'s summary shape `{score, internal_pages, affected_pages}`.
+  - `health_score` has no unit suffix, because a score is not a share (ADR-0005 rule 5; it was `health_score_pct` until ruling Q9). The two counts end in `_count` (rule 5); `050`'s summary shape `{score, internal_pages, affected_pages}` maps them to its own member names.
   - `health_calculated_at` comes from the injectable clock.
 - **Subsets.** The formula is exposed as one pure function taking the set of Internal Pages and the set of URLs affected by Issue-type Rules. `050` (Segments) and `070` (health per Segment) call it, rather than re-implementing it.
 - **Which Issue Types count.** They are read from the Crawl's `rules` table, never from the installed tool.
@@ -146,6 +146,7 @@ Every Rule ships one SQL query over the public schema that reproduces its Affect
 - **`post_crawl` Rules are evaluated by it:** the pass's unit runs `INSERT INTO affected_urls (rule_id, url_id, detail) SELECT :rule_id, url_id, detail FROM (<query>)`. Each statement is built once, at import (`017` D9). The unit reads only the file, so it is deterministic when it runs again (`017` D7).
 - **`during_crawl` Rules stay in Python,** in the per-response handler, so their Issues appear while the Crawl runs. One test at seam 3+6 runs every enabled Rule's query over a fixture Crawl and compares the rows with the stored ones, so the two forms of a Rule cannot drift apart unnoticed.
 - **Where it is read:** `rules.reproduce_sql` in the file, and `spider rules list` and `show`.
+- **Exclusions are explained in the query:** an agent reads the query, not this design, so a condition that leaves a value out carries an SQL comment with the reason. `internal-no-response` and `image-broken` leave out `fetch_error = 'record_failed'`: the Crawl got a response and failed to record it, which is the tool's failure, reported by `020`'s `record_failed` warning, not the site's.
 - *Alternative: per-Rule Python for `post_crawl` Rules too,* as the draft had (grouping, the chain walk and target Indexability as pure functions). Each Rule would then exist twice. Rejected: `020` D9 already runs these Rules by their queries.
 
 ## Test seams

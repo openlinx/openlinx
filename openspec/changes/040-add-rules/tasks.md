@@ -88,13 +88,14 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 6.4 Drive "A Rule's query returns its stored Affected URLs" at seam 3+6, over every enabled Rule. It comes after 6.3, because URL Rules are evaluated during the Crawl only from there. From here on it checks the query of every Rule registered later, so each Rule's slice writes its query together with its condition.
 - [ ] 6.5 Drive "Server error" at seam 4, and register `internal-5xx`.
 - [ ] 6.6 Drive "No response" at seam 4, and register `internal-no-response`.
-- [ ] 6.7 Drive "Blocked even when crawled anyway" at seam 4, and register `internal-blocked-by-robots-txt`.
-- [ ] 6.8 Drive "Internal redirect" at seam 4, and register `internal-3xx`.
-- [ ] 6.9 Drive "Two-hop chain" and "One hop is not a chain" at seam 2. This is a trivial pair: the walk along `redirect_url_id` and its boundary. Register `redirect-chain`.
-- [ ] 6.10 Drive "Loop" at seam 2, using `in_redirect_loop`. Register `redirect-loop`.
-- [ ] 6.11 Drive "Content served over HTTP" and "HTTP URL that redirects to HTTPS" at seam 4. This is a trivial pair. Register `http-url` as Warning/High.
-- [ ] 6.12 Docs: add the 7 response code Rules and `http-url` to the catalogue in `docs/rules.md`.
-- [ ] 6.13 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
+- [ ] 6.7 Drive "A URL that failed to be recorded is no Issue" at seam 4, with the reason in the query's SQL comment (design D15).
+- [ ] 6.8 Drive "Blocked even when crawled anyway" at seam 4, and register `internal-blocked-by-robots-txt`.
+- [ ] 6.9 Drive "Internal redirect" at seam 4, and register `internal-3xx`.
+- [ ] 6.10 Drive "Two-hop chain" and "One hop is not a chain" at seam 2. This is a trivial pair: the walk along `redirect_url_id` and its boundary. Register `redirect-chain`.
+- [ ] 6.11 Drive "Loop" at seam 2, using `in_redirect_loop`. Register `redirect-loop`.
+- [ ] 6.12 Drive "Content served over HTTP" and "HTTP URL that redirects to HTTPS" at seam 4. This is a trivial pair. Register `http-url` as Warning/High.
+- [ ] 6.13 Docs: add the 7 response code Rules and `http-url` to the catalogue in `docs/rules.md`.
+- [ ] 6.14 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Canonical and directive Rules
 
@@ -129,8 +130,9 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 8.12 Drive "All images described" at seam 4.
 - [ ] 8.13 Drive "Image over the size limit" and "Image at the size limit" at seam 2. This is a trivial pair: one boundary. Register `image-too-large`.
 - [ ] 8.14 Drive "Broken external image" at seam 2 by registering `image-broken`, the 42nd Rule. In the same red step, write "Catalogue size" and "Rule ids are unique kebab-case" at seam 1, which fail until this Rule exists.
-- [ ] 8.15 Docs: add the 2 content Rules, 5 URL Rules and 3 image Rules to the catalogue in `docs/rules.md`, and check that the catalogue lists exactly the 42 ids that `spider rules list` returns.
-- [ ] 8.16 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [ ] 8.15 Drive "An image that failed to be recorded is not broken" at seam 2, with the reason in the query's SQL comment.
+- [ ] 8.16 Docs: add the 2 content Rules, 5 URL Rules and 3 image Rules to the catalogue in `docs/rules.md`, and check that the catalogue lists exactly the 42 ids that `spider rules list` returns.
+- [ ] 8.17 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
 ## 9. Health Score and per-Crawl configuration
 

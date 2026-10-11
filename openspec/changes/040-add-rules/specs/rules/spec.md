@@ -60,13 +60,15 @@ The `response_codes` category SHALL contain these Rules, all over `internal_urls
 |---|---|---|---|---|---|
 | `internal-4xx` | issue | high | during | has a `status_code` from 400 to 499 | `status_code` |
 | `internal-5xx` | issue | high | during | has a `status_code` from 500 to 599 | `status_code` |
-| `internal-no-response` | issue | high | during | has `fetch_state` `error` | `error`: the URL's `fetch_error` |
+| `internal-no-response` | issue | high | during | has `fetch_state` `error` and a `fetch_error` other than `record_failed` | `error`: the URL's `fetch_error` |
 | `internal-blocked-by-robots-txt` | warning | medium | during | has `blocked_by_robots_txt` = 1, whether or not it was fetched under `--ignore-robots` | none |
 | `internal-3xx` | warning | low | during | has a `status_code` from 300 to 399 | `status_code`, `redirect_url` (the URL that `redirect_url_id` points to, or null) |
 | `redirect-chain` | warning | medium | post | has a Redirect Chain of more than `max_hops` redirects (default 1) | `hops`, `final_url` |
 | `redirect-loop` | issue | high | post | has `in_redirect_loop` = 1 | `hops`: the number of URLs in the loop |
 
 A URL's *Redirect Chain length* is the number of 3xx responses met when following `redirect_url_id` from the URL. The walk stops at the first URL that is not a 3xx response, has no `redirect_url_id`, was not requested or was already visited. `final_url` is the URL where the walk stops.
+
+`fetch_error` `record_failed` means that the Crawl received a response but could not record it (`020-add-crawl-core`). That is the tool's failure, not the site's, so it is no Issue: the `record_failed` warning reports it, and a continue requests the URL again. `image-broken` excludes it the same way.
 
 #### Scenario: Client error
 - **WHEN** the Internal URL `https://example.test/gone` has `status_code` 404
@@ -83,6 +85,10 @@ A URL's *Redirect Chain length* is the number of 3xx responses met when followin
 #### Scenario: No response
 - **WHEN** the Internal URL `https://example.test/slow` has `fetch_state` `error` and `fetch_error` `timeout`
 - **THEN** `internal-no-response` fires for it with `detail` `{"error": "timeout"}`
+
+#### Scenario: A URL that failed to be recorded is no Issue
+- **WHEN** the Internal URL `https://example.test/odd` has `fetch_state` `error` and `fetch_error` `record_failed`
+- **THEN** `internal-no-response` has no Affected URL for it
 
 #### Scenario: Blocked even when crawled anyway
 - **WHEN** the Internal URL `https://example.test/private/a` has `blocked_by_robots_txt` 1 and was fetched under `--ignore-robots`
@@ -418,7 +424,7 @@ The `images` category SHALL contain these Rules:
 |---|---|---|---|---|---|---|---|
 | `image-missing-alt-text` | opportunity | low | `internal_pages` | during | a Page with at least one `image` Link whose `element` is `img`, `attribute` is `src`, and `alt_text` is NULL or the empty string | none | `missing_alt_attribute` (count of NULL), `empty_alt` (count of empty) |
 | `image-too-large` | opportunity | medium | `resources` | post | an image Resource whose `urls.size_bytes` is more than `max_kb` × 1024 | `max_kb` 100 (kilobytes of 1024 bytes) | `size_bytes` |
-| `image-broken` | issue | medium | `resources` | post | an image Resource with a `status_code` from 400 to 599, or with `fetch_state` `error` | none | `status_code` or `error` (the `fetch_error`) |
+| `image-broken` | issue | medium | `resources` | post | an image Resource with a `status_code` from 400 to 599, or with `fetch_state` `error` and a `fetch_error` other than `record_failed` | none | `status_code` or `error` (the `fetch_error`) |
 
 #### Scenario: Images without alt text
 - **WHEN** an analysed Page has one `img`/`src` `image` Link with `alt_text` NULL and one with `alt_text` equal to the empty string
@@ -443,6 +449,10 @@ The `images` category SHALL contain these Rules:
 #### Scenario: Broken external image
 - **WHEN** a Page links the External image `https://cdn.other.test/x.png`, which has `status_code` 404
 - **THEN** `image-broken` fires for it with `detail` `{"status_code": 404}`
+
+#### Scenario: An image that failed to be recorded is not broken
+- **WHEN** a Page links the image `https://example.test/odd.png`, which has `fetch_state` `error` and `fetch_error` `record_failed`
+- **THEN** `image-broken` has no Affected URL for it
 
 ### Requirement: Threshold overrides and disabling Rules
 A table `[rules.<id>]` in the Workspace's `spider.toml` SHALL be able to set:
@@ -549,6 +559,7 @@ Every Rule SHALL have a reproducing query: one read-only SQL `SELECT` over the p
 
 - `post_crawl` Rules are evaluated by it.
 - For `during_crawl` Rules, which are evaluated in Python, the query over the stored Crawl SHALL return the same rows that the Crawl stored.
+- A query that leaves out a value the Rule's condition would otherwise match SHALL say why in an SQL comment, as the queries of `internal-no-response` and `image-broken` do for `record_failed`.
 
 #### Scenario: A Rule's query returns its stored Affected URLs
 - **WHEN** a Crawl of the fixture pages under `{site}/rules/` ends as `completed`, and the `reproduce_sql` of each enabled Rule in its `rules` table is run over its file through a read-only connection
@@ -606,15 +617,15 @@ At the end of the post-crawl passes, the Crawl SHALL record these crawl metadata
 | Column | Type | Null | Format | Description |
 |---|---|---|---|---|
 | `health_score` | INTEGER | yes | | The Health Score, from 0 to 100; NULL when N is 0 |
-| `health_internal_pages` | INTEGER | yes | | N |
-| `health_affected_pages` | INTEGER | yes | | A |
+| `health_internal_page_count` | INTEGER | yes | | N |
+| `health_affected_page_count` | INTEGER | yes | | A |
 | `health_calculated_at` | TEXT | yes | timestamp | When the post-crawl pass calculated the score |
 
 Until the post-crawl passes have run, all four fields SHALL be NULL. The Health Score of any subset of Internal Pages, such as a Segment, SHALL use the same formula restricted to that subset, through one function that `050-add-query-and-segments` and `070-add-html-report` call at query time.
 
 #### Scenario: Pages with Issue-type Issues lower the score
 - **WHEN** a Crawl has 10 Internal Pages, 3 of which are Affected URLs of Rules whose Issue Type is `issue`
-- **THEN** `health_score` is 70, `health_internal_pages` is 10 and `health_affected_pages` is 3
+- **THEN** `health_score` is 70, `health_internal_page_count` is 10 and `health_affected_page_count` is 3
 
 #### Scenario: Score is rounded down
 - **WHEN** a Crawl has 3 Internal Pages and 1 of them is an Affected URL of `title-missing`
@@ -634,7 +645,7 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. The Health 
 
 #### Scenario: No Pages means no score
 - **WHEN** a Crawl ends as `completed` with 0 Internal Pages
-- **THEN** `health_score` is NULL and `health_internal_pages` is 0
+- **THEN** `health_score` is NULL and `health_internal_page_count` is 0
 
 #### Scenario: Score before the passes
 - **WHEN** a Crawl is still `running`
@@ -642,7 +653,7 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. The Health 
 
 #### Scenario: Health fields are derived
 - **WHEN** `spider schema crawl` runs
-- **THEN** the columns `health_score`, `health_internal_pages`, `health_affected_pages` and `health_calculated_at` have `nullable` `true` and a `description` that starts with `Derived: `
+- **THEN** the columns `health_score`, `health_internal_page_count`, `health_affected_page_count` and `health_calculated_at` have `nullable` `true` and a `description` that starts with `Derived: `
 
 #### Scenario: Health Score of a Segment
 - **WHEN** the Health Score function is called with a subset of 4 Internal Pages, 1 of which is an Affected URL of an Issue-type Rule
