@@ -118,7 +118,7 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 
 ### D10. The killed-writer proof with memory mapping, on Windows
 - Memory-mapped views caused `015`'s `-shm` trouble on Windows: a killed process that is still exiting keeps its mapped views. With `mmap_size` on, the crawl file itself is mapped too.
-- `015`'s durability tests already use `CrawlWriter`, so after D8 they run with the new settings. Group 3 runs them, plus the new scenario "A new writer opens the file of a killed writer at once" (`020` D16's fresh writer), 20 times in a row on Windows, then in CI on all three OSes.
+- `015`'s durability tests already use `CrawlWriter`, so after D8 they run with the new settings. Group 3 runs them, plus the new scenario "A new writer opens the file of a killed writer at once" (`020` D16's fresh writer), as `015`'s proof did: 200 times in a row on Windows on each of SQLite 3.50.x (the python.org Python 3.14) and 3.53.x (the uv-managed Python), under parallel load, with 0 failures, then in CI on all three OSes. Fewer runs could not catch a race that fails 1–2% of the time, like the one `015` hit.
 - **If one fails** with a new SQLite error at open or a lost commit, the fallback is `mmap_size = 0` on Windows only. It is decided with the maintainer, and `docs/crawl-store.md` records why.
 
 ### D11. The throughput check

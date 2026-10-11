@@ -62,7 +62,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 3.4 Verify the killed-writer proof on Windows with memory mapping on (design D10).
 
   Done when:
-  - "A killed writer keeps committed units in a sound file", "A killed writer loses uncommitted units" and "A new writer opens the file of a killed writer at once", with the rest of `tests/store/test_durability.py` and `015`'s held `-shm` reading tests, pass 20 times in a row on Windows
+  - "A killed writer keeps committed units in a sound file", "A killed writer loses uncommitted units" and "A new writer opens the file of a killed writer at once", with the rest of `tests/store/test_durability.py` and `015`'s held `-shm` reading tests, pass 200 times in a row on Windows on each of SQLite 3.50.x (the python.org Python 3.14) and SQLite 3.53.x (the uv-managed Python), while other runs load the machine in parallel, with 0 failures. That is `015`'s proof: 20 runs cannot catch a race that fails 1–2% of the time.
   - they pass in CI on Windows, macOS and Linux
   - the PR description records the Windows and SQLite versions
   - if a run fails with a new SQLite error at open or a lost commit, the work stops and is reported. The fallback (`mmap_size = 0` on Windows only) is decided with the maintainer.
