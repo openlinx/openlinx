@@ -66,7 +66,7 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - At most 2,000 submitted units are unresolved at once; a submit beyond that waits on a condition that each commit signals.
 - 2,000 is four commits of 500, so the writer never waits for a caller while the window has room. In the prototype, a Page unit without HTML was about 18 KB of rows, which puts the window at about 36 MB.
 - Units waited for with `run()` do not count: their caller already waits for each one. The 50,000-job queue of `015` still bounds both kinds.
-- **The test** holds the writer inside the first submitted unit, on an `Event`. A second thread signals that it is about to submit the 2,001st unit, and the test then releases the held unit. Each step appends to an ordered log: released, committed (from `on_commit`), returned. With no fixed sleep, a broken window could still pass only if the second thread were slower than a whole commit of 500 units. It can never fail falsely.
+- **The test** holds the writer inside the first submitted unit, on an `Event`. A second thread signals that it is about to submit the 2,001st unit, and the test then releases the held unit. Each step appends to an ordered log: released, committed (from a done callback of the first unit's Future, which runs after the commit and before it frees any room, where `on_commit` would race the submit), returned. With no fixed sleep, a broken window could still pass only if the second thread were slower than a whole commit of 500 units. It can never fail falsely.
 
 ### D4. Units stay closures
 - A unit stays `Callable[[Connection], T]`, defined in a `spider.store.*` module (`020` D14).
@@ -175,6 +175,7 @@ Boundary doubles used: `FakeClock` only.
 - [A submit that waits for room is woken when the writer thread ends for a reason other than a failed commit, and no test covers that] → Every end of the thread goes through the same `finally` that wakes the waiters, which the failed-commit test covers. Deferred.
 - [A job queued just after the writer drained its queue on the way out is failed by its submitter, and no test covers it] → It needs the thread to end between a submit's closed check and its `put`; a deterministic test would need a hook inside the writer. Deferred.
 - [`submit_async` gives its window slot back when the 50,000-job queue is full, and no test covers it] → A test would need the queue full while the window has room. Deferred.
+- [Callers that wait still poll every 0.5 s that the writer thread is alive, though the check after each `put` now fails a job queued after the final drain] → Considered and kept (ruling of 2026-10-11): dropping the polling would make that untested check load-bearing for `run()`, `flush()` and `run_async()`, to save a wakeup that costs nothing. Revisited only if that race becomes testable through a seam.
 
 ## Migration Plan
 
