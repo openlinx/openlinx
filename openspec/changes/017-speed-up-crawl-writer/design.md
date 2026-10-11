@@ -89,7 +89,12 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - **When the failing unit's caller learns its outcome:** only after the replay commit. Its Future fails and its window slot is freed at that point.
   - If the replay commit itself fails, the failing unit's caller still gets its own error. The replayed units' Futures fail with the commit's error, and the writer ends.
   - A busy file at the replay's `BEGIN` ends the writer, as a busy `BEGIN` does in `015`.
-- **A unit that fails in the replay** behaves like any failing unit under savepoints: its savepoint is rolled back, its Future fails, and the rest of the replay goes on. Only a unit that broke the contract of D7 can fail in the replay, so a `run()` caller may already hold that unit's result. The Future of a submitted unit is always right, and the `on_commit` count leaves the unit out.
+- **The replay must reproduce the first run** (ruling of 2026-10-11). For each unit the batch keeps its first result and its row-change count, the delta of the driver's `total_changes`. In the replay, a unit that raises, returns a different result or changes a different number of rows ends the writer with no commit, through the path of a failed commit:
+  - The failing unit's caller still gets its own error first.
+  - The writer fails with `CrawlWriterReplayError`, which names the unit's `__qualname__` and what differed: it raised, its result or its change count. It is chained from the replay's exception, if any.
+  - Later callers, and `close()`, get `CrawlWriterClosedError` from it, as after any failed commit.
+  - Why not drop the unit and commit the rest: `run()` callers already hold the results of the first run, and may have built later units on them. A silent hole in the file would surface far from its cause.
+  - A file-level error inside a unit (`SQLITE_FULL`, an I/O error, a busy spill in `delete` mode) usually meets the replay again, so it now ends the writer, where in `015` only that unit failed. A full disk stops the Crawl loudly.
 - **The evidence:** back-to-back runs on the clean path, thread host, writer-only, 20k Pages:
 
   | Link rows per Page | Savepoint per unit | Optimistic | Gain | Per-Page overhead of the savepoints |
@@ -107,8 +112,9 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - A unit runs a second time when a later unit of its batch fails. A unit therefore:
   - has no effect outside the writer's connection: no I/O, no shared state, and nothing reported from inside the unit
   - does not change its input
-  - computes its writes from its input and what it reads on the connection, so its second run writes what its first run wrote
-- `docs/crawl-store.md` states the contract, and every code review of a change that adds units checks it. A test cannot prove it for every unit. `020` D14 helps: its units write frozen records that handlers built before the unit.
+  - computes its writes from its input and what it reads on the connection, so its second run writes what its first run wrote: it is deterministic given the file's state, with no clock, randomness or counter of its own
+  - returns a value: `None`, a number, a `str`, a tuple of these, or a frozen dataclass, so that the replay can compare its results. A float `NaN` never equals itself, so a unit does not return one.
+- `docs/crawl-store.md` states the contract, and every code review of a change that adds units checks it. A test cannot prove it for every unit, so the replay checks what it can (D6), and `replay_now(writer)` in `tests/support` lets a change's own tests replay its units. `020` D14 helps: its units write frozen records that handlers built before the unit.
 
 ### D8. The writer's connection settings
 - **What changes:** `opening()` gets a keyword that only `CrawlWriter` passes. With it, the engine gets one more connect listener, after the journal-mode check: `temp_store = MEMORY`, `cache_size = -65536` (64 MiB), and `mmap_size`.
@@ -163,6 +169,7 @@ Boundary doubles used: `FakeClock` only.
 - [The +14–15% is close to the noise of the machine it was measured on] → Every window of 5k Pages agreed, and the overhead grows with the rows per unit. The throughput check pins the floor, not the gain.
 - [In `delete` mode, a unit that waits out the busy timeout fails, and the replay may wait again for each unit before it] → A busy file in `delete` mode already fails the Crawl with `crawl_busy` (`020`'s risks), and the 64 MiB cache makes spills inside a unit rarer.
 - [The throughput floor is set on a provisional links layout] → The check is marked provisional, and the schema blueprint restates it.
+- [A busy `BEGIN` in the replay ends the writer, and no test covers it] → The code takes the same path as any failed replay. A deterministic test would need a lock taken between the rollback and the `BEGIN`. Deferred.
 
 ## Migration Plan
 

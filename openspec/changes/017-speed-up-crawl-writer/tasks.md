@@ -27,6 +27,18 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.7 Docs: in "Writing a Crawl" of `docs/crawl-store.md`, document the replay commit and the unit contract of design D7: a unit may run again before its commit, so it has no effect outside its connection and does not change its input.
 - [x] 1.8 Review: run the code-review skill on group 1's commits against the "Transactional writer" requirement, then refactor with the whole suite green.
 
+- [ ] 1.9 Drive "A unit that fails or returns differently when it runs again ends the writer" (the ruling on design D6 of 2026-10-11).
+
+  Done when:
+  - the batch keeps each unit with its first result and its row-change count (the delta of the driver's `total_changes`)
+  - in the replay, a unit that raises, returns a different result or changes a different number of rows ends the writer with no commit, through the path of a failed commit, with `CrawlWriterReplayError` naming the unit's `__qualname__` and what differed; the failing unit's caller still gets its own error first, and later callers and `close()` get `CrawlWriterClosedError`
+  - tests also cover a unit that meets `SQLITE_FULL` when it runs again (it lowers `PRAGMA max_page_count` on its second run), and a unit whose change count differs
+  - `test_a_unit_that_fails_in_the_replay_is_left_out_of_its_commit` is gone, its behaviour with it; `test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails` is the test of its new scenario
+  - the two test units that return a SQLAlchemy result return `None`
+  - "Writing a Crawl" in `docs/crawl-store.md` states the stricter contract of design D7 and what a replay that differs does
+- [ ] 1.10 Test support: `replay_now(writer)` in `tests/support`, which makes the writer replay every unit since the last commit, so a change's own tests can check that its units run again the same (design D7). Done when: a test uses it, and docs/testing.md lists it under Helpers.
+- [ ] 1.11 Review: run the code-review skill on 1.9 and 1.10 against the "Transactional writer" requirement, then refactor with the whole suite green.
+
 ## 2. Submitting units with their outcome at the commit (seam 2)
 
 - [ ] 2.1 Drive "A submitted unit waits for its commit".
