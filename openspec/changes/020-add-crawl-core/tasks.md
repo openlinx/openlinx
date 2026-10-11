@@ -63,7 +63,10 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 3.1 Drive "A relative link is resolved against the base href".
 
-  Done when: the link extractor takes HTML bytes, their Content-Type and the response URL, parses once with `selectolax.lexbor.LexborHTMLParser`, and returns `DiscoveredLink` values (design D5), which `030` enriches.
+  Done when:
+  - the link extractor takes HTML bytes, their Content-Type and the response URL, parses once with `selectolax.lexbor.LexborHTMLParser`, and returns `DiscoveredLink` values (design D5), which `030` enriches.
+  - `DiscoveredLink` is a `msgspec.Struct` with `frozen=True` and `kw_only=True` (ADR-0006), and `msgspec` comes in with this slice.
+  - `018`'s ADR-0006 guard in `tests/test_code_style.py` also refuses a class whose base is `Struct` or `msgspec.Struct` without `frozen=True` among its class keywords, naming the module and the class. A breach case feeds it a source string with such a class and sees it red, and the guard passes on the code.
 - [ ] 3.2 Drive "Every srcset candidate is an image Link" and "Video and audio sources are video and audio Links", a pair.
 - [ ] 3.3 Drive "rel previous is a pagination Link" and "A link element of another rel is a misc Link", a pair.
 - [ ] 3.4 Drive "References that are not http or https are ignored" and "A malformed reference is ignored", a trivial pair.
