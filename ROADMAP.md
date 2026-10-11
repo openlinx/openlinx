@@ -187,10 +187,9 @@ If a change needs something another change owns, it depends on that change inste
 - **040-add-rules** (15 Rules in v0.1):
   - The Rule model and the 15 Rules listed above; `http-url` is a Warning with High Priority. **(v0.2)** the other 27 Rules of the 42-Rule catalogue.
   - Thresholds and disabling in `spider.toml`.
-  - Evaluation per URL (through the per-response hook) and in the post-crawl passes.
-  - **Every Rule ships a reproducing SQL query** over the public schema, the foundation of v0.3's User SQL Rules:
-    - post-crawl Rules are evaluated by that query
-    - per-URL Rules may still be evaluated in Python during the Crawl, but a test checks, for each of them, that the Python result equals its SQL query over the stored Crawl
+  - **Every Rule is one reproducing SQL query** over the public schema, the foundation of v0.3's User SQL Rules, and it is the Rule's only form (user decision, 2026-10-11):
+    - a running Crawl writes no Issue; while a Crawl has no final pass (`running`, `failed` or `interrupted`), the Issues reader runs the queries live, read-only, and returns the shape of the stored Issues
+    - when a Crawl ends as `completed` or `stopped`, the post-crawl pass materialises each Rule's rows into `affected_urls`, then the Health Score; 050's Commands read Issues through the same reader
     - `rules show <id>` prints the query, and an Issue can point to it ("reproduce with `spider sql`")
   - Issues and Affected URLs. `issues` is a view whose `affected_count` counts each Rule's Affected URLs, so no count is stored (decided 2026-10-11).
   - The Health Score.
@@ -311,14 +310,15 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 - 060: any `OSError` on a pipe between the Crawl's processes means end of input: on Windows a closed pipe can surface as `BrokenPipeError` at `poll()`, not as `EOFError`.
 - 060: `status` reports the average rate over the whole Crawl next to `rate`.
 - 050: check `summary` against Screaming Frog's Overview counts: URLs encountered, blocked by robots.txt and crawled; Internal and External; Indexable and non-Indexable; and content types with their shares.
-- 030 and 040: under 020 D9 and D14, handlers are pure and return store rows declared in `spider.store.*`, and post-crawl passes are store functions (030: `spider.store.pages` and `spider.store.links`; 040: `spider.store.issues`). Their drafts still describe handlers that write in the unit, and sinks; and they add their entries to 020's `default_hooks()`.
+- 030 and 040: under 020 D9 and D14, handlers are pure and return store rows declared in `spider.store.*`, and post-crawl passes are store functions (030: `spider.store.pages` and `spider.store.links`; 040: `spider.store.issues`). 030's draft still describes handlers that write in the unit, and sinks; 030 adds its entries to 020's `default_hooks()`. 040 (done 2026-10-11): it registers only its post-crawl pass, because its Rules are SQL queries.
 - 024 (v0.2): decide whether 020's apex-to-www rule applies to each Seed of List and Sitemap mode.
 - 022-min: the recorded `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` values must go through 015's URL redaction (`user:***@host`). Today it is the private `_redact_value` in `spider.store.redaction`, so 022 either makes a public `redact_url` or routes the variables through `SecretNames`.
 - 026: re-ground for v0.1; the benchmark runs on Windows, macOS and Linux runners or a stated machine, never as part of the CI gate.
 - 026: `psutil` is no longer a dependency of 015; add it as a test dependency for the pool's benchmark.
 - 026: the 500k run reports `response_headers`' share of the crawl file; if it exceeds 10%, the table stores Internal URLs only (decided 2026-10-11).
+- 026: the 500k run measures the latency of 040's live `issues` (every Rule's query over the stored rows) during the Crawl, and its effect on WAL checkpoints, because a long read keeps the WAL from being reset. If the full live list takes over 30 s at 500k URLs, 040's live path is revisited: per-Rule reads, or materialising at intervals (decided 2026-10-11).
 - 020–050: no Alembic revision per change before v0.1; tables are added to the declared schema and `docs/schema.md` in the same slice (015 D5, D6).
-- 040: every v0.1 Rule ships a reproducing SQL query over the public schema. Post-crawl Rules are evaluated by it; for per-URL Rules evaluated in Python, a test checks that the Python result equals the query over the stored Crawl. `rules show <id>` prints the query, and an Issue can point to it.
+- 040 (done 2026-10-11): every Rule is its reproducing SQL query over the public schema, stored in `rules.reproduce_sql`. Issues are read live while a Crawl has no final pass, and the post-crawl pass materialises them. `rules show <id>` prints the query, and an Issue can point to it.
 
 **From a code review of a peer open-source crawler (2026-10-05),** to weigh when each change is re-grounded. Points our drafts already cover are left out.
 - 020:
