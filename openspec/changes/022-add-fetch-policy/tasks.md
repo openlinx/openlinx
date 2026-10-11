@@ -6,7 +6,7 @@ Each task below is one vertical TDD slice and one commit. It is done when:
 3. ruff, the strict type checker and the full suite (with the coverage gate) pass
 4. the commit message names the scenario
 
-A slice that needs a new column, enumeration value or table adds it, with its description, and updates `docs/schema.md` in the same commit.
+A slice that needs a new column, index or table adds it through `018`'s declaration helper (STRICT, and CHECKs from the declared values), with its description, and updates `docs/schema.md` in the same commit. The enumeration values this change writes are already listed by `020` (design D10).
 
 Seams (docs/testing.md):
 - **[Pure]**: seam 4, pure-logic modules
@@ -48,9 +48,9 @@ Seams (docs/testing.md):
 
 ## 3. Timeouts and retries
 
-- [ ] 3.1 [3+6] Drive "A hanging response times out": `--timeout`, and the value `timeout` of `fetch_error`.
+- [ ] 3.1 [3+6] Drive "A hanging response times out": `--timeout`, writing the value `timeout` of `fetch_error`.
 - [ ] 3.2 [Fixture] Add response sequences to the fixture site (for example 503 once, then 200).
-- [ ] 3.3 [3+6] Drive "A temporary 503 is retried": `--retries`, and the `attempts` column.
+- [ ] 3.3 [3+6] Drive "A temporary 503 is retried": `--retries`, and the `attempt_count` column.
 - [ ] 3.4 [3+6] Drive "A persistent 500 is recorded after the retries".
 - [ ] 3.5 [3+6] Drive "A 404 is not retried".
 - [ ] 3.6 [Fake timing] Drive "Retries wait one and then two seconds".
@@ -60,7 +60,7 @@ Seams (docs/testing.md):
 
 ## 4. Redirects
 
-- [ ] 4.1 [3+6] Drive "Every hop of a Redirect Chain is recorded": `allow_redirects=False`, hops as URL rows, the `redirect_location`/`redirect_url_id` columns and the value `redirect`.
+- [ ] 4.1 [3+6] Drive "Every hop of a Redirect Chain is recorded", and [CLI] "Index of redirect targets", a pair: `allow_redirects=False`, hops as URL rows, the `redirect_location` column, `redirect_url_id` as a declared reference with the partial index `urls_redirect_url_id`, and writing the value `redirect`.
 - [ ] 4.2 [3+6] Drive "A relative Location is resolved".
 - [ ] 4.3 [3+6] Drive "A redirect without Location has no target".
 - [ ] 4.4 [3+6] Drive "A redirect target keeps the depth".
@@ -69,17 +69,17 @@ Seams (docs/testing.md):
 - [ ] 4.7 [Fixture] Add named virtual hosts (routing by `Host` header) to the fixture site, mapped through `020`'s DNS resolver hook.
 - [ ] 4.8 [3+6] Drive "A redirect to the www host stays inside the Scope".
 - [ ] 4.9 [CLI] Drive "A redirect to another site is reported".
-- [ ] 4.10 [3+6] Drive "The eleventh redirect is not followed": `--max-redirects`, and the value `max_redirects`.
-- [ ] 4.11 [3+6] Drive "A loop of two URLs is marked": the `redirect_loop` column.
+- [ ] 4.10 [3+6] Drive "The eleventh redirect is not followed": `--max-redirects`, writing the value `max_redirects`.
+- [ ] 4.11 [3+6] Drive "A loop of two URLs is marked": the `in_redirect_loop` column.
 - [ ] 4.12 [HTTP] Drive "A looping URL is requested once".
 - [ ] 4.13 [3+6] Drive "A meta refresh is not recorded as a redirect".
 - [ ] 4.14 Docs: document Redirect Chains, hop limits, loops, Seed redirects and the meta refresh boundary in `docs/crawling.md`.
-- [ ] 4.15 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [ ] 4.15 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) for the redirect and loop units, then refactor with the whole suite green.
 
 ## 5. Limits, compression and Resource sizes
 
 - [ ] 5.1 [3+6] Drive "A huge page is not parsed": the 20 MiB cap, and the `body_truncated` column.
-- [ ] 5.2 [3+6] Drive "A very long URL is skipped": the value `url_too_long`.
+- [ ] 5.2 [3+6] Drive "A very long URL is skipped": writing the value `url_too_long`.
 - [ ] 5.3 [HTTP] Drive "Requests accept compressed bodies".
 - [ ] 5.4 [Fixture] Add a raw-bytes route to the fixture site (exact body bytes and headers, for example a precompressed gzip body).
 - [ ] 5.5 [3+6] Drive "A compressed Resource records both sizes": decoding in the tool, and the `content_encoding`, `size_bytes` and `transferred_bytes` columns.
@@ -90,18 +90,19 @@ Seams (docs/testing.md):
 ## 6. TLS and HTTP version
 
 - [ ] 6.1 [Fixture] Add HTTPS listeners with a `trustme` CA to the fixture site, and extra trust anchors to the crawler's TLS setup for the test CA. There are four listeners: one selects `h2`, one offers only `http/1.1`, one has a certificate for `other.test` served as `badcert.test`, and one has a certificate from an untrusted CA.
-- [ ] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback, and the value `tls_error`.
+- [ ] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback, writing the value `tls_error`.
 - [ ] 6.3 [3+6] Drive "A certificate from an unknown CA is a TLS error".
 - [ ] 6.4 Speed test: measure TLS handshake time with truststore and with certifi on Windows, macOS and Linux. Record the results in `docs/crawling.md`, and change the default path only if truststore is measurably slower (design D5).
-- [ ] 6.5 [3+6] Drive "A plain http origin": the `origins.http_version` column.
-- [ ] 6.6 [3+6] Drive "An origin that selects HTTP/2": the ALPN handshake.
-- [ ] 6.7 [3+6] Drive "An origin that offers only HTTP/1.1".
-- [ ] 6.8 Docs: document TLS trust, the speed-test result and `http_version` in `docs/crawling.md`.
-- [ ] 6.9 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
+- [ ] 6.5 [CLI] Drive "The HTTP version is a later column" (v0.1): `origins.http_version` declared NULL in every row, with its values and a description that starts with `Filled from v0.2. `. If it is the first later column in the schema, `018`'s guard over derived and later columns switches on its assertion that it saw one.
+- [ ] 6.6 (v0.2) [3+6] Drive "A plain http origin": filling `origins.http_version`.
+- [ ] 6.7 (v0.2) [3+6] Drive "An origin that selects HTTP/2": the ALPN handshake.
+- [ ] 6.8 (v0.2) [3+6] Drive "An origin that offers only HTTP/1.1".
+- [ ] 6.9 Docs: document TLS trust, the speed-test result and `http_version` (NULL in v0.1) in `docs/crawling.md`.
+- [ ] 6.10 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Response headers
 
-- [ ] 7.1 [3+6] Drive "Response headers are stored as received": the `response_headers` table.
+- [ ] 7.1 [3+6] Drive "Response headers are stored as received", and [CLI] "Columns of response_headers", a pair: the `response_headers` table, declared through `018`'s helper with `url_id` as its primary key and a declared reference, and no secondary index.
 - [ ] 7.2 [3+6] Drive "A cookie value is not stored": `Set-Cookie` values become `***` before storage.
 - [ ] 7.3 [Pure] Drive "A Cookie header is redacted pair by pair".
 - [ ] 7.4 Docs: document `response_headers` and the cookie redaction format in `docs/crawling.md`.
@@ -111,4 +112,5 @@ Seams (docs/testing.md):
 
 - [ ] 8.1 Verify that every `#### Scenario:` in `specs/fetching/spec.md` has exactly one test named after it. Use a small script over the test ids.
 - [ ] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
-- [ ] 8.3 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.
+- [ ] 8.3 **Guard:** every code this change declares (design D11) is listed by `spider commands` with its level and exit code [CLI].
+- [ ] 8.4 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.

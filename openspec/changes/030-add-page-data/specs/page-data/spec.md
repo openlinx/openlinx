@@ -58,7 +58,9 @@ For an analysed Page, following the table conventions of `015-add-crawl-store`:
 - A count column SHALL be 0 or more.
 - A flag column SHALL be 0 or 1.
 - A text column SHALL be NULL when its element or header is absent, and the empty string when the element is present but empty.
-- A length or width column SHALL be NULL exactly when its text column is NULL.
+- A length column SHALL be NULL exactly when its text column is NULL, and so SHALL a width column from v0.2.
+
+The columns that a later release fills stay NULL in every Page until then (see "Columns measured by later releases stay NULL").
 
 #### Scenario: Error Page keeps response data
 - **WHEN** `{site}/missing` responds 404 with `Content-Type: text/html` and the body `<title>Not found</title>`
@@ -69,24 +71,126 @@ For an analysed Page, following the table conventions of `015-add-crawl-store`:
 - **THEN** `title_1` is the empty string, `title_1_length` is 0 and `h1_1` is NULL
 
 ### Requirement: Page record columns
-The `pages` table SHALL have exactly the columns below, grouped as in the Screaming Frog "Internal" tab. A later requirement defines each column's value. Names, types, formats and allowed values SHALL follow the table conventions of `015-add-crawl-store`: widths end in `_px`, percentages in `_pct`, times in `_ms` and sizes in `_bytes`.
+The `pages` table SHALL have exactly the columns below, grouped as in the Screaming Frog "Internal" tab, with the types and nullability shown. A later requirement defines each column's value. Names, formats and allowed values SHALL follow the schema conventions of `018-add-schema-conventions` (ADR-0005): widths end in `_px`, percentages in `_pct`, times in `_ms` and sizes in `_bytes`, and every column keeps its Screaming Frog name.
 
-| Group | Columns |
-|---|---|
-| Identity and response | `url_id`, `address`, `url_encoded_address`, `content_type`, `status_code`, `status`, `indexability`, `indexability_status`, `response_time_ms`, `last_modified`, `redirect_url`, `redirect_type`, `set_cookie_count`, `js_cookie_count`, `http_version`, `crawl_timestamp` |
-| Titles and headings | `title_1`, `title_1_length`, `title_1_width_px`, `title_2`, `title_2_length`, `title_2_width_px`, `title_count`, `meta_description_1`, `meta_description_1_length`, `meta_description_1_width_px`, `meta_description_2`, `meta_description_2_length`, `meta_description_2_width_px`, `meta_description_count`, `meta_keywords_1`, `meta_keywords_1_length`, `h1_1`, `h1_1_length`, `h1_2`, `h1_2_length`, `h1_count`, `h2_1`, `h2_1_length`, `h2_2`, `h2_2_length`, `h2_count` |
-| Directives | `meta_robots`, `meta_robots_noindex`, `meta_robots_nofollow`, `x_robots_tag`, `x_robots_tag_noindex`, `x_robots_tag_nofollow`, `meta_refresh`, `canonical_url`, `canonical_link_element_1`, `canonical_link_element_2`, `http_canonical`, `canonical_count`, `canonical_relative`, `rel_next_1`, `rel_prev_1`, `http_rel_next_1`, `http_rel_prev_1`, `amphtml_link_element`, `mobile_alternate_link` |
-| Size | `size_bytes`, `transferred_bytes`, `content_encoding` |
-| Content | `word_count`, `sentence_count`, `average_words_per_sentence`, `syllable_count`, `flesch_reading_ease`, `readability`, `text_ratio_pct`, `declared_language`, `detected_language`, `content_hash`, `closest_similarity_pct`, `near_duplicate_count` |
-| Links | `crawl_depth`, `folder_depth`, `link_score`, `inlinks`, `unique_inlinks`, `unique_js_inlinks`, `linking_pages_pct`, `outlinks`, `unique_outlinks`, `unique_js_outlinks`, `external_outlinks`, `unique_external_outlinks` |
-| Structured data | `jsonld_items`, `microdata_items`, `jsonld_parse_errors`, `structured_data_types`, `structured_data_errors`, `structured_data_warnings` |
+The Kind column marks how a column is filled:
+
+- **D (derived):** written only by a post-crawl pass. Its description starts with `Derived: `.
+- **N2, N3, N11:** filled from v0.2, v0.3 or v1.1, and NULL until then. Its description starts with `Filled from v0.2. `, `Filled from v0.3. ` or `Filled from v1.1. `.
+- **W (written with the Page):** a value that other stored rows already determine: a copy of a `urls` or `origins` value, or a value computed from them, from the Page's other columns, its Links or its cookies. It is written in the Page's unit, from the same response.
+- No mark: measured from the Page's response.
+
+| Group | Column | Type | Null | Kind | Format / values |
+|---|---|---|---|---|---|
+| Identity and response | `url_id` | INTEGER, primary key, references `urls.id` | no |  |  |
+| Identity and response | `address` | TEXT | no | W |  |
+| Identity and response | `url_encoded_address` | TEXT | no | W |  |
+| Identity and response | `url_path` | TEXT | no | W |  |
+| Identity and response | `url_query` | TEXT | yes | W |  |
+| Identity and response | `content_type` | TEXT | no | W |  |
+| Identity and response | `status_code` | INTEGER | no | W |  |
+| Identity and response | `status` | TEXT | yes |  |  |
+| Identity and response | `indexability` | TEXT | no | W | `indexable`, `non_indexable` |
+| Identity and response | `indexability_status` | TEXT | yes | W | `blocked_by_robots_txt`, `redirected`, `client_error`, `server_error`, `noindex`, `canonicalised` |
+| Identity and response | `response_time_ms` | INTEGER | no | W |  |
+| Identity and response | `last_modified` | TEXT | yes |  | timestamp |
+| Identity and response | `redirect_url` | TEXT | yes | W |  |
+| Identity and response | `redirect_type` | TEXT | yes | W | `http_redirect`, `http_refresh`, `meta_refresh`, `javascript_redirect` |
+| Identity and response | `set_cookie_count` | INTEGER | no | W |  |
+| Identity and response | `js_cookie_count` | INTEGER | yes | N11 |  |
+| Identity and response | `http_version` | TEXT | yes | N2 | `http_2`, `http_1_1` |
+| Identity and response | `crawl_timestamp` | TEXT | no | W | timestamp |
+| Titles and headings | `title_1` | TEXT | yes |  |  |
+| Titles and headings | `title_1_length` | INTEGER | yes |  |  |
+| Titles and headings | `title_1_width_px` | INTEGER | yes | N2 |  |
+| Titles and headings | `title_2` | TEXT | yes |  |  |
+| Titles and headings | `title_2_length` | INTEGER | yes |  |  |
+| Titles and headings | `title_2_width_px` | INTEGER | yes | N2 |  |
+| Titles and headings | `title_count` | INTEGER | yes |  |  |
+| Titles and headings | `meta_description_1` | TEXT | yes |  |  |
+| Titles and headings | `meta_description_1_length` | INTEGER | yes |  |  |
+| Titles and headings | `meta_description_1_width_px` | INTEGER | yes | N2 |  |
+| Titles and headings | `meta_description_2` | TEXT | yes |  |  |
+| Titles and headings | `meta_description_2_length` | INTEGER | yes |  |  |
+| Titles and headings | `meta_description_2_width_px` | INTEGER | yes | N2 |  |
+| Titles and headings | `meta_description_count` | INTEGER | yes |  |  |
+| Titles and headings | `meta_keywords_1` | TEXT | yes |  |  |
+| Titles and headings | `meta_keywords_1_length` | INTEGER | yes |  |  |
+| Titles and headings | `h1_1` | TEXT | yes |  |  |
+| Titles and headings | `h1_1_length` | INTEGER | yes |  |  |
+| Titles and headings | `h1_2` | TEXT | yes |  |  |
+| Titles and headings | `h1_2_length` | INTEGER | yes |  |  |
+| Titles and headings | `h1_count` | INTEGER | yes |  |  |
+| Titles and headings | `h2_1` | TEXT | yes |  |  |
+| Titles and headings | `h2_1_length` | INTEGER | yes |  |  |
+| Titles and headings | `h2_2` | TEXT | yes |  |  |
+| Titles and headings | `h2_2_length` | INTEGER | yes |  |  |
+| Titles and headings | `h2_count` | INTEGER | yes |  |  |
+| Directives | `meta_robots` | TEXT | yes |  |  |
+| Directives | `meta_robots_noindex` | INTEGER | yes |  | boolean |
+| Directives | `meta_robots_nofollow` | INTEGER | yes |  | boolean |
+| Directives | `x_robots_tag` | TEXT | yes |  |  |
+| Directives | `x_robots_tag_noindex` | INTEGER | yes |  | boolean |
+| Directives | `x_robots_tag_nofollow` | INTEGER | yes |  | boolean |
+| Directives | `meta_refresh` | TEXT | yes |  |  |
+| Directives | `canonical_url` | TEXT | yes |  |  |
+| Directives | `canonical_link_element_1` | TEXT | yes |  |  |
+| Directives | `canonical_link_element_2` | TEXT | yes |  |  |
+| Directives | `http_canonical` | TEXT | yes |  |  |
+| Directives | `canonical_count` | INTEGER | yes |  |  |
+| Directives | `canonical_relative` | INTEGER | yes |  | boolean |
+| Directives | `rel_next_1` | TEXT | yes |  |  |
+| Directives | `rel_prev_1` | TEXT | yes |  |  |
+| Directives | `http_rel_next_1` | TEXT | yes |  |  |
+| Directives | `http_rel_prev_1` | TEXT | yes |  |  |
+| Directives | `amphtml_link_element` | TEXT | yes |  |  |
+| Directives | `mobile_alternate_link` | TEXT | yes |  |  |
+| Size | `size_bytes` | INTEGER | yes | W |  |
+| Size | `transferred_bytes` | INTEGER | yes | W |  |
+| Size | `content_encoding` | TEXT | yes | W |  |
+| Content | `word_count` | INTEGER | yes |  |  |
+| Content | `sentence_count` | INTEGER | yes |  |  |
+| Content | `average_words_per_sentence` | REAL | yes |  |  |
+| Content | `syllable_count` | INTEGER | yes | N2 |  |
+| Content | `flesch_reading_ease` | REAL | yes | N2 |  |
+| Content | `readability` | TEXT | yes | N2 | `very_easy`, `easy`, `fairly_easy`, `normal`, `fairly_difficult`, `difficult`, `very_difficult` |
+| Content | `text_ratio_pct` | REAL | yes |  |  |
+| Content | `declared_language` | TEXT | yes |  |  |
+| Content | `detected_language` | TEXT | yes | N2 |  |
+| Content | `content_hash` | TEXT | yes |  |  |
+| Content | `closest_similarity_pct` | REAL | yes | N3 |  |
+| Content | `near_duplicate_count` | INTEGER | yes | N3 |  |
+| Links | `crawl_depth` | INTEGER | no | W |  |
+| Links | `folder_depth` | INTEGER | no | W |  |
+| Links | `link_score` | REAL | yes | N2 |  |
+| Links | `inlinks` | INTEGER | yes | D |  |
+| Links | `unique_inlinks` | INTEGER | yes | D |  |
+| Links | `unique_js_inlinks` | INTEGER | yes | N11 |  |
+| Links | `linking_pages_pct` | REAL | yes | D |  |
+| Links | `outlinks` | INTEGER | yes | W |  |
+| Links | `unique_outlinks` | INTEGER | yes | W |  |
+| Links | `unique_js_outlinks` | INTEGER | yes | N11 |  |
+| Links | `external_outlinks` | INTEGER | yes | W |  |
+| Links | `unique_external_outlinks` | INTEGER | yes | W |  |
+| Structured data | `jsonld_items` | INTEGER | yes |  |  |
+| Structured data | `microdata_items` | INTEGER | yes |  |  |
+| Structured data | `jsonld_parse_errors` | INTEGER | yes |  |  |
+| Structured data | `structured_data_types` | TEXT | yes |  | json |
+| Structured data | `structured_data_errors` | INTEGER | yes | N3 |  |
+| Structured data | `structured_data_warnings` | INTEGER | yes | N3 |  |
+
+`url_id` SHALL be the primary key. `pages` SHALL have one secondary index, `pages_address`, unique over `address`, which serves finding a Page by its display address and is the tie-breaker of the keyset paging of `050-add-query-and-segments`. Other sorts and filters over `pages` scan the table.
 
 #### Scenario: Schema lists exactly the Page record columns
 - **WHEN** `spider schema pages` runs
-- **THEN** the set of the item's column names equals the 94 names of the table above
+- **THEN** the item's columns, reduced to `name`, `type` and `nullable`, are the 96 rows of the table above, as a set
+
+#### Scenario: Indexes of pages
+- **WHEN** `spider schema pages --fields indexes` runs
+- **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"pages_address","columns":["address"],"unique":true,"where":null}`
 
 ### Requirement: Address columns
-Each Page row SHALL store two forms of the Page's URL:
+Each Page row SHALL store two forms of the Page's URL, and the path and query of the display form:
 
 - **`url_encoded_address`** is the URL as the Crawl requested it, equal to `urls.url`. The host is in IDNA (punycode) form, and every non-ASCII character is percent-encoded as UTF-8.
 - **`address`** is `url_encoded_address` with two changes:
@@ -94,6 +198,8 @@ Each Page row SHALL store two forms of the Page's URL:
   - every percent-encoded byte sequence that decodes as UTF-8 to a non-ASCII character is replaced by that character
   
   Percent-encoded ASCII characters SHALL stay encoded.
+- **`url_path`** is the path of `address`: from the first `/` after the host up to the first `?`, or to the end.
+- **`url_query`** is the query of `address`: the text after the first `?`. It is NULL when `address` has no `?`, and the empty string when nothing follows it.
 
 #### Scenario: Non-ASCII path is decoded for display
 - **WHEN** the Page's `url_encoded_address` is `https://example.test/%C3%BCber%20uns`
@@ -102,6 +208,10 @@ Each Page row SHALL store two forms of the Page's URL:
 #### Scenario: Punycode host is shown in Unicode
 - **WHEN** the Page's `url_encoded_address` is `https://xn--bcher-kva.test/`
 - **THEN** its `address` is `https://bücher.test/`
+
+#### Scenario: Path and query of the address
+- **WHEN** Pages have the `url_encoded_address` values `https://example.test/%D0%9A%D0%B0%D1%82/a%2Fb?x=1&y=%C3%BC`, `https://example.test/a?` and `https://example.test/a`
+- **THEN** the first has `url_path` `/Кат/a%2Fb` and `url_query` `x=1&y=ü`, the second has `url_path` `/a` and `url_query` equal to the empty string, and the third has `url_query` NULL
 
 ### Requirement: Response columns
 Each Page row SHALL store these columns. All of them come from the Page's own response, never from a redirect target. Where a column repeats a value of the `urls` table (`020-add-crawl-core`, including the columns that `022-add-fetch-policy` adds) or of the `origins` table, it SHALL be equal to that value.
@@ -113,7 +223,7 @@ Each Page row SHALL store these columns. All of them come from the Page's own re
 | `status` | the reason phrase the server sent; when it sent none, the standard reason phrase for the status code from RFC 9110; NULL when neither exists |
 | `response_time_ms` | `urls.response_time_ms` |
 | `last_modified` | the `Last-Modified` header parsed as an HTTP-date, as a `timestamp` (`YYYY-MM-DDTHH:MM:SS.sssZ`); NULL when absent or invalid |
-| `http_version` | `origins.http_version` for the Page's origin (`http_1_1` or `http_2`) |
+| `http_version` | `origins.http_version` for the Page's origin (`http_1_1` or `http_2`); filled from v0.2, as the origin's column is, and NULL until then |
 | `crawl_timestamp` | `urls.fetched_at` |
 
 #### Scenario: Last-Modified is normalised to a timestamp
@@ -159,25 +269,37 @@ Each Page row SHALL store these size columns, repeating the values that `022-add
 A Page SHALL have `redirect_url` and `redirect_type` set in these cases:
 
 - **HTTP redirect.** A Page with a 3xx status code has `redirect_type` `http_redirect`. Its `redirect_url` is the URL that `urls.redirect_url_id` (`022-add-fetch-policy`) points to, or NULL when that is null.
-- **Meta refresh.** An analysed Page whose meta refresh names a URL different from its own `address` has `redirect_type` `meta_refresh` and `redirect_url` set to that URL (see "Meta refresh").
+- **HTTP Refresh.** A Page with a 2xx status code whose `Refresh` header names a URL different from its own `address`, the target of the `http_refresh` Link that `020-add-crawl-core` discovers, has `redirect_type` `http_refresh` and `redirect_url` set to that URL.
+- **Meta refresh.** An analysed Page without an HTTP Refresh redirect, whose meta refresh names a URL different from its own `address`, has `redirect_type` `meta_refresh` and `redirect_url` set to that URL (see "Meta refresh").
 
-In every other case both columns SHALL be NULL.
+In every other case both columns SHALL be NULL. `redirect_type` also lists `javascript_redirect`, which JavaScript rendering fills from v1.1.
 
 #### Scenario: HTTP redirect with an HTML body
 - **WHEN** `{site}/old` responds 301 with `Content-Type: text/html` and `Location: /new`
 - **THEN** its row has `redirect_type` `http_redirect` and `redirect_url` `{site}/new`
 
+#### Scenario: HTTP Refresh header is a redirect
+- **WHEN** the Page `https://example.test/old` responds 200 with `Content-Type: text/html` and the header `Refresh: 0; url=/new`
+- **THEN** its row has `redirect_type` `http_refresh` and `redirect_url` `https://example.test/new`
+
 ### Requirement: Cookies from Set-Cookie headers
 The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` header on a Page's response, whatever the Page's status code. Its columns are:
 
-- `url_id` and `ordinal`: the header's position among the response's `Set-Cookie` headers, from 1
-- `name`: the text before the first `=`, trimmed
-- `domain`: the `Domain` attribute, lowercased with any leading dot removed, or NULL
-- `path`: the `Path` attribute, or NULL
-- `expires`: the `Expires` attribute as a `timestamp`, or NULL when absent or invalid
-- `max_age`: the `Max-Age` attribute as an integer number of seconds, or NULL
-- `secure`, `http_only` and `partitioned`: flags, 0 or 1
-- `same_site`: `strict`, `lax` or `none`, or NULL when absent
+| Column | Type | Null | Format / values | Value |
+|---|---|---|---|---|
+| `url_id` | INTEGER, references `urls.id` | no | | the Page |
+| `ordinal` | INTEGER | no | | the header's position among the response's `Set-Cookie` headers, from 1 |
+| `name` | TEXT | no | | the text before the first `=`, trimmed |
+| `domain` | TEXT | yes | | the `Domain` attribute, lowercased with any leading dot removed |
+| `path` | TEXT | yes | | the `Path` attribute |
+| `expires` | TEXT | yes | timestamp | the `Expires` attribute as a timestamp; NULL when absent or invalid |
+| `max_age` | INTEGER | yes | | the `Max-Age` attribute, in seconds |
+| `secure` | INTEGER | no | boolean | 1 when the `Secure` attribute is present |
+| `http_only` | INTEGER | no | boolean | 1 when the `HttpOnly` attribute is present |
+| `partitioned` | INTEGER | no | boolean | 1 when the `Partitioned` attribute is present |
+| `same_site` | TEXT | yes | `strict`, `lax`, `none` | the `SameSite` attribute, lowercased; NULL when absent or another value |
+
+`(url_id, ordinal)` SHALL be the primary key, and the table SHALL be `WITHOUT ROWID`. `expires` and `max_age` keep their Screaming Frog names; their descriptions give their units.
 
 Attribute names SHALL be matched case-insensitively. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
 
@@ -252,7 +374,7 @@ Titles SHALL be extracted from HTML-namespace `<title>` elements anywhere in the
 
 #### Scenario: Second title element
 - **WHEN** an analysed Page's HTML is `<head><title>One</title><title>Two</title></head>`
-- **THEN** `title_count` is 2, `title_2` is `Two`, `title_2_length` is 3 and `title_2_width_px` is 38
+- **THEN** `title_count` is 2, `title_2` is `Two` and `title_2_length` is 3
 
 #### Scenario: Missing title
 - **WHEN** an analysed Page's HTML has no `<title>` element
@@ -273,7 +395,7 @@ Meta descriptions SHALL be extracted from `<meta>` elements anywhere in the docu
 
 #### Scenario: Multiple meta descriptions
 - **WHEN** an analysed Page's HTML contains `<meta name="description" content="A">` followed by `<meta name="description" content="B">`
-- **THEN** `meta_description_count` is 2, `meta_description_2` is `B`, `meta_description_2_length` is 1 and `meta_description_2_width_px` is 9
+- **THEN** `meta_description_count` is 2, `meta_description_2` is `B` and `meta_description_2_length` is 1
 
 #### Scenario: Meta keywords
 - **WHEN** an analysed Page's HTML contains `<meta name="keywords" content="shoes, boots">`
@@ -297,7 +419,8 @@ Headings SHALL be extracted from `<h1>` and `<h2>` elements anywhere in the docu
   - `h2_2` and `h2_2_length` are NULL
 
 ### Requirement: SERP pixel widths
-Pixel widths SHALL be computed for titles and meta descriptions:
+From v0.2, pixel widths SHALL be computed for titles and meta descriptions. In v0.1 the four width columns exist and are NULL (see "Columns measured by later releases stay NULL").
+
 
 - `title_1_width_px` and `title_2_width_px` are the widths of the texts in Arial regular at 20 px.
 - `meta_description_1_width_px` and `meta_description_2_width_px` are the widths in Arial regular at 14 px.
@@ -325,6 +448,10 @@ The result SHALL NOT depend on the fonts installed on the machine.
 #### Scenario: Realistic long title
 - **WHEN** an analysed Page's title is `Buy running shoes, trail boots and sandals online at low cost`
 - **THEN** `title_1_length` is 61 and `title_1_width_px` is 536
+
+#### Scenario: Widths of second elements
+- **WHEN** an analysed Page's HTML is `<head><title>One</title><title>Two</title><meta name="description" content="A"><meta name="description" content="B"></head>`
+- **THEN** `title_2_width_px` is 38 and `meta_description_2_width_px` is 9
 
 ### Requirement: Meta robots and X-Robots-Tag
 An analysed Page SHALL store the robots directives found in its HTML and in its headers:
@@ -399,12 +526,12 @@ These columns SHALL each hold the target URL of a Link that `020-add-crawl-core`
 ### Requirement: Indexability
 Every Page SHALL have `indexability` set to `indexable` or `non_indexable`. When it is `non_indexable`, `indexability_status` SHALL be the first reason that applies, checked in this order:
 
-1. `blocked_by_robots_txt`: `urls.blocked_by_robots` is 1. This applies to a Page fetched under `--ignore-robots`.
+1. `blocked_by_robots_txt`: `urls.blocked_by_robots_txt` is 1. This applies to a Page fetched under `--ignore-robots`.
 2. `redirected`: the status code is 3xx.
 3. `client_error`: the status code is 4xx.
 4. `server_error`: the status code is 5xx.
 5. `noindex`: `meta_robots_noindex` or `x_robots_tag_noindex` is 1.
-6. `redirected`: `redirect_type` is `meta_refresh`.
+6. `redirected`: `redirect_type` is `meta_refresh` or `http_refresh`.
 7. `canonicalised`: `canonical_url` is not NULL and differs from the Page's URL after normalisation.
 
 When no reason applies, `indexability` SHALL be `indexable` and `indexability_status` NULL. Indexability SHALL NOT be stored for URLs that are not Pages.
@@ -430,11 +557,15 @@ When no reason applies, `indexability` SHALL be `indexable` and `indexability_st
 - **THEN** `indexability_status` is `server_error`
 
 #### Scenario: Robots.txt beats the status code
-- **WHEN** a Page with `urls.blocked_by_robots` 1 was fetched under `--ignore-robots` and responded 404
+- **WHEN** a Page with `urls.blocked_by_robots_txt` 1 was fetched under `--ignore-robots` and responded 404
 - **THEN** `indexability_status` is `blocked_by_robots_txt`
 
 #### Scenario: Meta refresh redirect is not indexable
 - **WHEN** a 200 Page has `redirect_type` `meta_refresh`
+- **THEN** `indexability_status` is `redirected`
+
+#### Scenario: HTTP Refresh redirect is not indexable
+- **WHEN** a 200 Page has `redirect_type` `http_refresh`
 - **THEN** `indexability_status` is `redirected`
 
 ### Requirement: Content Area
@@ -493,7 +624,7 @@ These counts SHALL be taken over the Content Area text.
 
 **Average.** `average_words_per_sentence` is `word_count` ÷ `sentence_count`, rounded to 2 decimals, or NULL when `sentence_count` is 0.
 
-**Syllables.** `syllable_count` is the sum of the words' syllables, counted with the syllable rules of the Page's readability language (see "Flesch Reading Ease and Readability"). Every word counts at least 1 syllable. It is NULL when the Page has no readability language.
+**Syllables (from v0.2).** `syllable_count` is the sum of the words' syllables, counted with the syllable rules of the Page's readability language (see "Flesch Reading Ease and Readability"). Every word counts at least 1 syllable. It is NULL when the Page has no readability language, and in every Page in v0.1.
 
 #### Scenario: Words with apostrophes, hyphens and dots
 - **WHEN** the Content Area text is `Don't stop — it's state-of-the-art, v2.0!`
@@ -509,14 +640,14 @@ These counts SHALL be taken over the Content Area text.
 
 #### Scenario: Counts for fixture A
 - **WHEN** fixture A is analysed with the default settings
-- **THEN** `sentence_count` is 3, `average_words_per_sentence` is 2.33 and `syllable_count` is 10
+- **THEN** `sentence_count` is 3 and `average_words_per_sentence` is 2.33
 
 #### Scenario: Syllables per language
 - **WHEN** the Content Area text and declared language are, in turn: `make table beautiful rhythm queue` (en), `Wasser Haus Bäume` (de) and `молоко очень вкусное` (ru)
 - **THEN** `syllable_count` is 8, 5 and 8 respectively
 
 ### Requirement: Flesch Reading Ease and Readability
-The *readability language* of a Page SHALL be the primary subtag of its `declared_language`, lowercased. The primary subtag is the text before the first `-` or `_`. When that language has a formula below, `flesch_reading_ease` SHALL be computed with it and rounded to 1 decimal. ASL is `word_count` ÷ `sentence_count` and ASW is `syllable_count` ÷ `word_count`.
+`flesch_reading_ease` and `readability` SHALL be filled from v0.2, and SHALL be NULL in every Page in v0.1. The *readability language* of a Page SHALL be the primary subtag of its `declared_language`, lowercased. The primary subtag is the text before the first `-` or `_`. When that language has a formula below, `flesch_reading_ease` SHALL be computed with it and rounded to 1 decimal. ASL is `word_count` ÷ `sentence_count` and ASW is `syllable_count` ÷ `word_count`.
 
 | Language | Formula | Source |
 |---|---|---|
@@ -550,7 +681,7 @@ The detected language SHALL NOT be used.
 
 #### Scenario: English score for fixture A
 - **WHEN** fixture A is analysed with the default settings
-- **THEN** `flesch_reading_ease` is 83.6 and `readability` is `easy`
+- **THEN** `syllable_count` is 10, `flesch_reading_ease` is 83.6 and `readability` is `easy`
 
 #### Scenario: Scores in German, Dutch and Russian
 - **WHEN** a Page's Content Area text and `<html lang>` are, in turn: `Der Hund ist gut.` (de), `Het huis is groot.` (nl) and `Молоко очень вкусное.` (ru)
@@ -587,7 +718,7 @@ The detected language SHALL NOT be used.
 The two languages SHALL be stored separately:
 
 - **`declared_language`** is the trimmed `lang` attribute of the root `<html>` element. It is the empty string when the attribute is present but empty, and NULL when it is absent.
-- **`detected_language`** SHALL be NULL unless the Crawl was started with `--detect-language`, or with `detect_language = true` under `[crawl]` in `spider.toml`. In that case it is the ISO 639-1 code of the language detected offline from the Content Area text. It is NULL when that text has no words.
+- **`detected_language`** is filled from v0.2, and SHALL be NULL in every Page in v0.1. From v0.2 it SHALL be NULL unless the Crawl was started with `--detect-language`, or with `detect_language = true` under `[crawl]` in `spider.toml`. In that case it is the ISO 639-1 code of the language detected offline from the Content Area text. It is NULL when that text has no words.
 
 #### Scenario: Declared language is trimmed, not normalised
 - **WHEN** an analysed Page's HTML starts with `<html lang=" en-GB ">`
@@ -655,28 +786,31 @@ The crawl store SHALL hold one row in the `links` table for each Link that the L
 
 This change stores each discovered Link together with the attributes that analysis needs:
 
-| Column | Value |
-|---|---|
-| `source_url_id` | the `urls.id` of the URL whose response contains the Link |
-| `ordinal` | the Link's position in that response, from 1: header Links first in the order received, then HTML Links in document order |
-| `target_url_id` | the `urls.id` of the Link's normalised target |
-| `type` | the Link type from the Link type table of `020-add-crawl-core` |
-| `origin` | `html` or `http_header` |
-| `element`, `attribute` | the HTML element and attribute the Link came from (for example `img` and `srcset`); NULL for header Links |
-| `anchor_text` | for `hyperlink`, the element text. When that is empty, the `alt` texts of the `<img>` elements inside, joined with a space. For `<area>`, its `alt`. NULL for other types. |
-| `alt_text` | for `image` Links from an `<img>` element, the normalised `alt` attribute: NULL when absent, the empty string when empty. NULL otherwise. |
-| `rel` | the `rel` value with tokens lowercased and single-spaced, or NULL |
-| `rel_nofollow`, `rel_ugc`, `rel_sponsored` | 1 when `rel` contains that token, otherwise 0 |
-| `hreflang` | the trimmed `hreflang` value for `hreflang` Links, otherwise NULL |
-| `media` | the trimmed `media` value for `mobile_alternate` Links, otherwise NULL |
-| `target_is_internal` | the target's `urls.is_internal` |
-| `in_content_area` | 1 when the element is inside the Content Area of an analysed Page; 0 otherwise, including Links in `<head>` and in headers |
+| Column | Type | Null | Format / values | Value |
+|---|---|---|---|---|
+| `source_url_id` | INTEGER, references `urls.id` | no | | the URL whose response contains the Link |
+| `ordinal` | INTEGER | no | | the Link's position in that response, from 1: header Links first in the order received, then HTML Links in document order |
+| `target_url_id` | INTEGER, references `urls.id` | no | | the URL of the Link's normalised target |
+| `type` | TEXT | no | the Link types of `020-add-crawl-core` | the Link type |
+| `declared_in` | TEXT | no | `html`, `http_header` | where the Link was declared |
+| `element` | TEXT | yes | `a`, `area`, `link`, `iframe`, `frame`, `meta`, `img`, `source`, `video`, `audio`, `track`, `embed`, `object`, `script` | the HTML element the Link came from; NULL for header Links |
+| `attribute` | TEXT | yes | `href`, `src`, `srcset`, `poster`, `data`, `content` | the attribute the Link came from (for example `img` and `srcset`); NULL for header Links |
+| `anchor_text` | TEXT | yes | | for `hyperlink`, the element text. When that is empty, the `alt` texts of the `<img>` elements inside, joined with a space. For `<area>`, its `alt`. NULL for other types. |
+| `alt_text` | TEXT | yes | | for `image` Links from an `<img>` element, the normalised `alt` attribute: NULL when absent, the empty string when empty. NULL otherwise. |
+| `rel` | TEXT | yes | | the `rel` value with tokens lowercased and single-spaced, or NULL |
+| `rel_nofollow`, `rel_ugc`, `rel_sponsored` | INTEGER | no | boolean | 1 when `rel` contains that token, otherwise 0 |
+| `hreflang` | TEXT | yes | | the trimmed `hreflang` value for `hreflang` Links, otherwise NULL |
+| `media` | TEXT | yes | | the trimmed `media` value for `mobile_alternate` Links, otherwise NULL |
+| `link_position` | TEXT | yes | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | where on the Page the Link is (see below) |
+| `html_source` | TEXT | yes | `raw`, `rendered` | whether the Link came from the raw or the rendered HTML; filled from v1.1, with JavaScript rendering, and NULL until then |
 
-`(source_url_id, ordinal)` SHALL be the primary key.
+`(source_url_id, ordinal)` SHALL be the primary key. How the rows are laid out on disk, and the indexes of `links`, are chosen by the links benchmark (ADR-0005); they change none of these columns.
+
+**Link position.** For a Link from an element that the HTML parser places inside `<head>`, `link_position` SHALL be `head`. For a Link from an element inside `<body>`, it SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element, and SHALL be `content` when there is none. It SHALL be NULL only for a Link declared in an HTTP header. The `[content_area]` settings do not change it.
 
 #### Scenario: Hyperlink with rel flags
 - **WHEN** the analysed Page `https://example.test/a` contains `<main><a href="/b" rel="nofollow UGC">Read  more</a></main>`
-- **THEN** one `links` row has `type` `hyperlink`, `anchor_text` `Read more`, `rel` `nofollow ugc`, `rel_nofollow` 1, `rel_ugc` 1, `rel_sponsored` 0 and `target_is_internal` 1
+- **THEN** one `links` row has `type` `hyperlink`, `anchor_text` `Read more`, `rel` `nofollow ugc`, `rel_nofollow` 1, `rel_ugc` 1, `rel_sponsored` 0, `declared_in` `html` and `link_position` `content`
 
 #### Scenario: Image alt attribute absent or empty
 - **WHEN** an analysed Page contains `<img src="/a.png">` and `<img src="/b.png" alt="">`
@@ -690,13 +824,21 @@ This change stores each discovered Link together with the attributes that analys
 - **WHEN** an analysed Page contains `<a href="/b">1</a><a href="/b">2</a>`
 - **THEN** `links` holds 2 `hyperlink` rows from that Page to `/b`
 
-#### Scenario: Navigation Links are outside the Content Area
-- **WHEN** fixture A is analysed with the default settings
-- **THEN** its `hyperlink` Link to `/` has `in_content_area` 0
+#### Scenario: Link positions come from the enclosing element
+- **WHEN** an analysed Page's HTML is `<head><link rel="canonical" href="/x"></head><body><header><a href="/h">H</a></header><nav><a href="/n">N</a></nav><main><a href="/c">C</a></main><aside><a href="/s">S</a></aside><footer><nav><a href="/f">F</a></nav></footer></body>`
+- **THEN** its `hyperlink` Links to `/h`, `/n`, `/c`, `/s` and `/f` have `link_position` `header`, `navigation`, `content`, `sidebar` and `navigation` respectively, and its `canonical` Link has `link_position` `head`
 
 #### Scenario: Hreflang and mobile alternate Links
 - **WHEN** an analysed Page has `<link rel="alternate" hreflang="de" href="/de/">` and `<link rel="alternate" media="only screen and (max-width: 640px)" href="https://m.example.test/">` in its head
 - **THEN** its `hreflang` Link has `hreflang` `de` and `media` NULL, and its `mobile_alternate` Link has `media` `only screen and (max-width: 640px)` and `hreflang` NULL
+
+#### Scenario: Links declared in a header
+- **WHEN** the analysed Page `https://example.test/p2` has the header `Link: </p3>; rel="next"`
+- **THEN** its `pagination` Link to `https://example.test/p3` has `ordinal` 1, `declared_in` `http_header`, and `element`, `attribute` and `link_position` NULL
+
+#### Scenario: Columns of links
+- **WHEN** `spider schema links` runs
+- **THEN** the item's columns, reduced to `name`, `type` and `nullable`, are the rows of the table above, as a set, with each `rel_*` flag as a row of its own
 
 ### Requirement: Stored Links match discovery
 The distinct targets of the Links stored for a response SHALL be exactly the URLs that the Link discovery of `020-add-crawl-core` found in that response. That change still decides which of those URLs are requested. Every `links.target_url_id` SHALL refer to a `urls` row, whether or not that URL was requested.
@@ -715,7 +857,7 @@ The link count columns SHALL count only `hyperlink` Links whose source is a Page
 - `external_outlinks`: its Links to External URLs
 - `unique_external_outlinks`: the distinct External targets of those Links
 
-**Inlinks.** These SHALL be NULL until the post-crawl passes have run, and then filled for every Page:
+**Inlinks.** These are derived columns, whose descriptions start with `Derived: `. They SHALL be NULL until the post-crawl passes have run, and then filled for every Page:
 
 - `inlinks`: the Links from any Page to this Page
 - `unique_inlinks`: the distinct source Pages of those Links
@@ -739,6 +881,10 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 - **WHEN** a Crawl is still `running`
 - **THEN** every stored Page has `inlinks` NULL
 
+#### Scenario: Inlink columns are derived
+- **WHEN** `spider schema pages` runs
+- **THEN** the descriptions of `inlinks`, `unique_inlinks` and `linking_pages_pct` start with `Derived: `
+
 ### Requirement: Crawl Depth and Folder Depth
 `crawl_depth` SHALL equal `urls.crawl_depth` for the Page. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, and a trailing slash does not add a segment.
 
@@ -751,14 +897,16 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 - **THEN** `{site}/l2` has `crawl_depth` 2
 
 ### Requirement: Raw HTML storage
-Whether a Crawl stores the HTML of its Pages SHALL be decided once, when the Crawl starts:
+The crawl store SHALL have the table `page_sources` from v0.1, so that storing HTML later changes no table. In v0.1 it SHALL hold no rows, and its description SHALL start with `Filled from v0.2. `.
+
+From v0.2, storing the HTML of a Crawl's Pages SHALL be opt-in, and SHALL be decided once, when the Crawl starts:
 
 - `--store-html`, or `store_html = true` under `[crawl]` in `spider.toml`, turns storage on.
 - `--no-store-html`, or `store_html = false`, turns it off.
 - A flag overrides `spider.toml`, as `010-add-workspace-and-cli-contract` defines.
-- When neither is set, storage is on exactly when the Crawl's `max_urls` is from 1 to 50,000. The default of 10,000 turns it on. 0, which means no limit, turns it off.
+- When neither is set, HTML is not stored, whatever the Crawl's `max_urls`.
 
-The Crawl's recorded config SHALL hold the decision as `store_html` = `true` or `false`, and a resumed Crawl SHALL keep it, even when it is resumed with a higher `--max-urls`.
+The Crawl's recorded config SHALL hold the decision as `store_html` = `true` or `false`, and a resumed Crawl SHALL keep it.
 
 When storage is on, each Page SHALL have one `page_sources` row with these columns:
 
@@ -768,17 +916,17 @@ When storage is on, each Page SHALL have one `page_sources` row with these colum
 
 When storage is off, `page_sources` SHALL hold no rows.
 
-#### Scenario: The automatic decision follows the URL limit
-- **WHEN** the storage decision is made without `--store-html`, `--no-store-html` or `store_html`, for `max_urls` 10000, 50000, 50001 and 0 in turn
-- **THEN** storage is on, on, off and off respectively
-
-#### Scenario: Default limit stores HTML automatically
+#### Scenario: HTML is not stored by default
 - **WHEN** a Crawl of a 3-Page fixture site runs with the default settings
-- **THEN** `page_sources` holds 3 rows
-
-#### Scenario: Large limit turns automatic storage off
-- **WHEN** a Crawl of a 3-Page fixture site runs with `--max-urls 60000`
 - **THEN** `page_sources` holds 0 rows
+
+#### Scenario: The storage decision follows the flags
+- **WHEN** the storage decision is made with `--store-html`, with `--no-store-html`, and with neither a flag nor `store_html`, in turn
+- **THEN** storage is on, off and off respectively
+
+#### Scenario: The flag stores every Page's HTML
+- **WHEN** a Crawl of a 3-Page fixture site runs with `--store-html`
+- **THEN** `page_sources` holds 3 rows and the recorded `store_html` is `true`
 
 #### Scenario: Stored HTML is byte-identical
 - **WHEN** the stored `html` of `{site}/about` is decompressed as a zstd frame
@@ -797,35 +945,36 @@ When storage is off, `page_sources` SHALL hold no rows.
 - **THEN** its `page_sources.encoding` is `windows-1251`
 
 ### Requirement: Columns measured by later releases stay NULL
-These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0:
+These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0, until the release that fills them:
 
-- `link_score` (measured from v0.2)
-- `closest_similarity_pct` and `near_duplicate_count` (v0.3)
-- `structured_data_errors` and `structured_data_warnings` (v0.3)
-- `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count` (v1.1)
+- from v0.2: the SERP pixel widths `title_1_width_px`, `title_2_width_px`, `meta_description_1_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, which follows `022-add-fetch-policy`'s `origins.http_version`
+- from v0.3: `closest_similarity_pct` and `near_duplicate_count`; `structured_data_errors` and `structured_data_warnings`
+- from v1.1: `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count`
 
-Their column descriptions SHALL name the release that fills them.
+`links.html_source` SHALL likewise be NULL in every `links` row until v1.1. The description of each SHALL start with `Filled from v<major>.<minor>. `, naming that release, as the conventions of `018-add-schema-conventions` require.
 
 #### Scenario: Deferred columns are NULL after a completed Crawl
 - **WHEN** a Crawl of the fixture site ends as `completed` and its post-crawl passes have run
-- **THEN** 0 Pages have a non-NULL value in any of the eight deferred columns
+- **THEN** 0 Pages have a non-NULL value in any of the 17 columns listed above, and 0 `links` rows have a non-NULL `html_source`
 
 #### Scenario: Deferred columns are described with their release
 - **WHEN** `spider schema pages` runs
-- **THEN** the description of `link_score` contains `v0.2` and the description of `unique_js_inlinks` contains `v1.1`
+- **THEN** the description of `link_score` starts with `Filled from v0.2. `, the description of `near_duplicate_count` starts with `Filled from v0.3. ` and the description of `unique_js_inlinks` starts with `Filled from v1.1. `
 
 ### Requirement: Documented Page data tables
-`spider schema` SHALL list the tables `pages`, `links`, `cookies` and `page_sources`, following the table conventions of `015-add-crawl-store`:
+`spider schema` SHALL list the tables `pages`, `links`, `cookies` and `page_sources`, following the schema conventions of `018-add-schema-conventions`:
 
+- every table is `STRICT`, and the file refuses a value outside an enumeration's `values` or a flag other than 0 and 1
 - `references` for every id column
 - the `timestamp`, `boolean` and `json` formats
 - `values` for every enumeration
+- `indexes`, each with the query it serves
 
 `docs/schema.md` SHALL document these tables as `015-add-crawl-store` requires.
 
 #### Scenario: Link types are an enumeration
 - **WHEN** `spider schema links` runs
-- **THEN** the `values` of the column `type` are `["hyperlink","canonical","pagination","hreflang","iframe","meta_refresh","image","css","javascript","media","amphtml","mobile_alternate"]`
+- **THEN** the `values` of the column `type` are `["hyperlink","canonical","pagination","hreflang","iframe","meta_refresh","http_refresh","image","css","javascript","video","audio","media","amphtml","mobile_alternate","misc","xml_sitemap","sitemap_hreflang","javascript_redirect"]`
 
 ### Requirement: Same values on every operating system
 The same fixture Crawl SHALL store identical Page data on Windows, macOS and Linux, whatever the console code page, locale or installed fonts.

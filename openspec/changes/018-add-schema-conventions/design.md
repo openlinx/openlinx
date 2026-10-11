@@ -11,7 +11,7 @@
   - The user's four schema decisions of 2026-10-10 (inventory).
   - The blueprint outline of 2026-10-11 and the rulings on it (the user decided Q7, Q8, Q9 and Q14).
   - ADR-0005 holds the rules. This change makes the testable ones part of the spec.
-- **Its place in the build order:** 015 → 017 → 018 → 020 (slice). `020` adds the first foreign key (`urls.found_on_url_id`) and the first secondary index (the partial frontier index), both under these rules.
+- **Its place in the build order:** 015 → 017 → 018 → 020 (slice). `020` adds the first foreign key (`urls.found_on_url_id`) and the first secondary indexes (the unique `urls_url` and the partial frontier index `urls_crawl_depth_id`), both under these rules.
 
 ## Goals / Non-Goals
 
@@ -68,7 +68,7 @@
   - Each index gives `name`, `description` (the index's `info["description"]`, which names the query it serves), `columns`, `unique`, and `where` (the compiled condition of a partial index, or `null`).
   - `spider schema` lists `indexes` as an available and default field.
 - **`docs/schema.md`:** under each table's column table, an "Indexes" table with the same five values. A table with no secondary index has none.
-- **The contract test** parses that table too. The file check reads `PRAGMA index_list` and `PRAGMA index_xinfo` for the columns, and `sqlite_master.sql` for a partial index's condition.
+- **The contract test** parses that table too. The parser of the table sections lives in one importable module, `spider.services.schema_doc.parse_tables(text)`, not inside the test file, because `080` reads its generated reference back with it. The file check reads `PRAGMA index_list` and `PRAGMA index_xinfo` for the columns, and `sqlite_master.sql` for a partial index's condition.
 - *Alternative:* indexes kept out of the contract, as today. The inventory found that 060's design relied on an index that no change declares. Rejected.
 
 ### D5. Derived and later columns
@@ -102,7 +102,7 @@ No boundary double is used.
 
 - [A tool built on SQLite older than 3.37 cannot open a crawl file] → `docs/schema.md` states the minimum, and `080`'s `doctor` reports the version. Python 3.12+ on our supported platforms ships 3.40 or later through uv.
 - [A CHECK refuses a value that a later change adds without listing it] → The rule lists later values from v0.1. A missed value fails loudly at the first write, in that change's tests.
-- [Guards that pass trivially today could hide a broken check] → In this change they pass vacuously, because `crawl` and `seeds` have no foreign key, secondary index, or derived or later column. Each guard's assertion that it saw at least one match switches on in the `020` task that adds the first foreign key (`found_on_url_id`) or the first index (`urls_frontier`). A later change does the same for the first derived or later column (`030` or `040`).
+- [Guards that pass trivially today could hide a broken check] → In this change they pass vacuously, because `crawl` and `seeds` have no foreign key, secondary index, or derived or later column. Each guard's assertion that it saw at least one match switches on in the `020` task that adds the first foreign key (`found_on_url_id`) or the first index (`urls_url`). A later change does the same for the first derived or later column: `022`'s `origins.http_version` (filled from v0.2) or `030`'s later `pages` columns, whichever lands first.
 
 ## Migration Plan
 
@@ -112,10 +112,11 @@ None. Before v0.1 the schema is not yet public, and `schema_version` stays `1` (
 
 - **`020`:**
   - Declares `urls` and `origins` through the D2 helper: CHECKs, STRICT, and `REAL` for real numbers.
-  - Its `found_on_url_id` and `redirect_url_id` are the first declared references.
-  - `urls_frontier` (`(crawl_depth, id) WHERE fetch_state = 'queued'`) is the first index with a description.
+  - Its `found_on_url_id` is the first declared reference, and `origin_id` the second.
+  - `urls_url` (unique) is the first index with a description, and `urls_crawl_depth_id` (`(crawl_depth, id) WHERE fetch_state = 'queued'`, the frontier) the first partial one.
+- **`022`:** adds `urls.redirect_url_id` with its partial index `urls_redirect_url_id` (`WHERE redirect_url_id IS NOT NULL`).
 - **`022`, `030`, `040` and `060`:** their tables follow ADR-0005 from their first slice. `030` takes the links layout from the links benchmark, and `040`'s `health_*` columns are derived.
-- **`080`:** the agent documentation of the schema builds on `spider schema`'s `references` and `indexes`, and on the two description prefixes.
+- **`080`:** the agent documentation of the schema builds on `spider schema`'s `references` and `indexes`, and on the two description prefixes. It adds `render_tables(items, compact=...)` next to `spider.services.schema_doc.parse_tables`, renders its `sql-schema.md` in the table-section layout of `docs/schema.md`, and reads it back with `parse_tables`. `docs/schema.md` stays written by hand; a change to its layout changes the parser, and so `080`'s renderer with it.
 
 ## Open Questions
 

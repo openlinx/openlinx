@@ -61,7 +61,7 @@ Every task is one red → green slice and one commit whose message names its sce
 - [ ] 4.3 Drive "Hand-off uses the dry run's command" (CLI seam), using the `command.sh` and `command.powershell` of `060-add-crawl-control`.
 - [ ] 4.4 Drive "Codex network and Workspace" (CLI seam).
 - [ ] 4.5 Drive "Untrusted crawled text and the notice" (CLI seam).
-- [ ] 4.6 Drive "Hygiene section" (CLI seam).
+- [ ] 4.6 Drive "Hygiene section" (CLI seam), with the advice to follow a running Crawl with `spider status`, not `spider summary`.
 - [ ] 4.7 Drive "Line budget" and "Reference links resolve" (CLI seam). This is a trivial pair: both read the structure of the whole SKILL.md.
 - [ ] 4.8 Drive "All command lines parse" (CLI seam). The lint extracts every `spider …` line from the fenced blocks of all installed files, replaces each `<placeholder>` with a sample value, and checks the result against `spider commands --format json`.
 - [ ] 4.9 Docs: describe the Guardrails and output hygiene in `docs/skill.md`.
@@ -74,12 +74,19 @@ Every task is one red → green slice and one commit whose message names its sce
 - [ ] 5.3 Drive "Every Page data column is listed" (CLI seam) for `references/columns.md`, from `spider schema pages`.
 - [ ] 5.4 Drive "Null-until release is shown" (CLI seam).
 - [ ] 5.5 Drive "Every Rule is documented" (CLI seam) for `references/rules.md`, including thresholds with their `spider.toml` keys.
-- [ ] 5.6 Drive "Every column is documented" (CLI seam) for `references/sql-schema.md`.
-- [ ] 5.7 Drive "Schema version is stated" (CLI seam, with a Crawl of the local fixture site).
-- [ ] 5.8 Drive "Recipe SQL runs" (CLI seam, with a Crawl of the local fixture site made once per test session). Run each fenced `sql` block with `spider sql`, then write the recipes.
-- [ ] 5.9 Drive "Segment recipe is valid" (CLI seam, with a Crawl of the local fixture site), using the `blog` and `shop` Segments in the `[segments]` table of `050-add-query-and-segments`.
-- [ ] 5.10 Docs: list the five reference files and where each comes from in `docs/skill.md`.
-- [ ] 5.11 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [ ] 5.6 Drive "Every column is documented" (CLI seam) for `references/sql-schema.md`, generated from `spider schema --limit 1000 --format json` with each column's type, nullability, primary key, reference, format, allowed values and description (design D12). Add `render_tables(items, compact=...)` to `spider.services.schema_doc`, next to `018`'s `parse_tables`, with a pure-logic round-trip test (`parse_tables(render_tables(items)) == items`, for both modes), and read the installed file back with `parse_tables`.
+- [ ] 5.7 Drive "Every index is documented" (CLI seam), with `no secondary index` for a table whose `indexes` is empty.
+- [ ] 5.8 Drive "Every reference is in the joins section" (CLI seam): one `## Joins` line per column with a non-null `references`.
+- [ ] 5.9 Drive "Schema version is stated" (CLI seam, with a Crawl of the local fixture site).
+- [ ] 5.10 Drive "Minimum SQLite version is stated" (CLI seam).
+- [ ] 5.11 Drive "URL and address section" (CLI seam), a written section of the template (design D12).
+- [ ] 5.12 Drive "Pages and Resources section" (CLI seam), a written section of the template.
+- [ ] 5.13 Drive "Cost of queries section" (CLI seam), a written section of the template. It names no index, because the generated lists carry them and the `links` indexes wait for `030`'s links benchmark.
+- [ ] 5.14 Drive "Recipe SQL returns the expected rows" (CLI seam, with a Crawl of the local fixture site made once per test session). Write each recipe's expected rows by hand from the fixture's pages first, then run each fenced `sql` block with `spider sql` and compare the rows. A recipe without expected rows, or whose expected rows are empty, fails the test (design D13). Then write the recipes.
+- [ ] 5.15 Drive "Header recipe reads response_headers" (CLI seam, with the same Crawl): add `/noindex-header` with `X-Robots-Tag: noindex` to the fixture site when it has no such page, and write the `json_each` recipe of design D13.
+- [ ] 5.16 (v0.2) Drive "Segment recipe is valid" (CLI seam, with a Crawl of the local fixture site), using the `blog` and `shop` Segments in the `[segments]` table of `050-add-query-and-segments`.
+- [ ] 5.17 Docs: list the five reference files and where each comes from in `docs/skill.md`, with which parts of `sql-schema.md` are generated and which are written, and how the recipes are checked.
+- [ ] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Outdated-Skill notice
 
@@ -102,7 +109,7 @@ Every task is one red → green slice and one commit whose message names its sce
 - [ ] 7.5 Drive "Plugin manifest" (install-and-packaging seam) by adding `.claude-plugin/plugin.json` with the `OWNER/REPO` placeholders.
 - [ ] 7.6 Drive "Marketplace manifest" (install-and-packaging seam) by adding `.claude-plugin/marketplace.json`.
 - [ ] 7.7 Drive "Copy and plugin share one version" (install-and-packaging seam).
-- [ ] 7.8 Drive "Copy matches the generator at a release tag" (install-and-packaging seam) with a test marked `release`, which the release pipeline of `100-add-installers` runs. Check it on a commit whose copy was just regenerated, and again after changing one byte of the copy, when it must fail.
+- [ ] 7.8 Drive "Copy matches the generator at a release tag" (install-and-packaging seam) with a test marked `release`, which the release workflow of `085-add-release` runs. Check it on a commit whose copy was just regenerated, and again after changing one byte of the copy, when it must fail.
 - [ ] 7.9 Docs: write README sections for the Claude Code plugin (`claude plugin marketplace add OWNER/REPO`, `claude plugin install spider@spider`), the Codex plugin (`codex plugin marketplace add OWNER/REPO`) and other agents (`npx skills add OWNER/REPO --skill spider`). Check each by hand against a local clone and record the results in the PR.
 - [ ] 7.10 Docs: in `RELEASING.md`, add the release-commit steps: run `scripts/generate_skill.py skills/spider` and bump `plugin.json`.
 - [ ] 7.11 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
@@ -118,12 +125,14 @@ Every task is one red → green slice and one commit whose message names its sce
 - [ ] 8.7 Drive "The running interpreter" (CLI seam).
 - [ ] 8.8 Drive "Version of the installed package" (CLI seam).
 - [ ] 8.9 Drive "Missing compiled dependency" (pure-logic seam), with the package check's decision over literal import results.
-- [ ] 8.10 Drive "Not on PATH" (CLI seam).
-- [ ] 8.11 Drive "A different spider comes first" (pure-logic seam), with the path check's decision over a literal command path and version.
-- [ ] 8.12 Drive "Windows executable" (CLI seam, as a real subprocess in the Windows CI job).
-- [ ] 8.13 Drive "Doctor does not print the notice" (CLI seam). `doctor` skips the outdated-Skill check.
-- [ ] 8.14 Docs: create `docs/doctor.md` with every check id, what each status means, and the fixes.
-- [ ] 8.15 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [ ] 8.10 Drive "SQLite version is reported" (CLI seam), from `sqlite3.sqlite_version`.
+- [ ] 8.11 Drive "SQLite older than 3.37" (pure-logic seam), with the package check's decision over a literal SQLite version.
+- [ ] 8.12 Drive "Not on PATH" (CLI seam).
+- [ ] 8.13 Drive "A different spider comes first" (pure-logic seam), with the path check's decision over a literal command path and version.
+- [ ] 8.14 Drive "Windows executable" (CLI seam, as a real subprocess in the Windows CI job).
+- [ ] 8.15 Drive "Doctor does not print the notice" (CLI seam). `doctor` skips the outdated-Skill check.
+- [ ] 8.16 Docs: create `docs/doctor.md` with every check id, what each status means, and the fixes, including the SQLite minimum of the `package` check and why crawl files need it.
+- [ ] 8.17 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
 ## 9. Doctor Workspace and WAL checks
 

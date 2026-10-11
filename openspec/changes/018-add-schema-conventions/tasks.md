@@ -51,6 +51,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when:
   - `docs/schema.md` has an "Indexes" table under each table section that has secondary indexes, with Name, Columns, Unique, Where and Description, and its "How to read a table section" explains it
   - the contract test's parser reads that table and compares it with `spider schema --limit 1000`
+  - the parser lives in `spider.services.schema_doc.parse_tables(text)`, which the test imports, so that `080` can read its generated reference back with it
 - [ ] 2.8 **Guard:** `015`'s other scenarios of "Listing the schema with spider schema", with `indexes` in the items: "One table", "First tables", "Columns of seeds", "Column formats", "The next page", "Unknown table", "Internal tables are hidden", "No Workspace needed", "Global flags of schema" and "Default limit of schema".
 - [ ] 2.9 Docs: in `docs/crawl-store.md`, say that `spider schema` describes references and indexes, that a derived column is written only by a post-crawl pass, and that a later column is NULL until its release.
 - [ ] 2.10 Review: run the code-review skill on group 2's commits against "Listing the schema with spider schema" and "The documented schema, the declared schema and the file agree", then refactor with the whole suite green.

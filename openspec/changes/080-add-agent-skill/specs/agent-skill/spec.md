@@ -188,10 +188,11 @@ SKILL.md SHALL also contain a `## Section Crawl or Segments?` section with this 
 - answer long-tail questions with `spider sql`, using aggregates and `LIMIT`.
 - write large outputs to a file with `-o`.
 - avoid `spider page --html` unless the raw HTML is needed.
+- while a Crawl runs, follow its progress with `spider status`, which reads counters, and not with `spider summary`, which counts the stored rows on every call.
 
 #### Scenario: Hygiene section
 - **WHEN** the `## Output hygiene` section of the installed `SKILL.md` is read
-- **THEN** it contains `--fields`, `--limit`, `--cursor`, `spider sql`, `LIMIT` and `-o`
+- **THEN** it contains `--fields`, `--limit`, `--cursor`, `spider sql`, `LIMIT`, `-o`, `spider status` and `spider summary`
 
 ### Requirement: SKILL.md size and reference links
 `SKILL.md` SHALL have at most 500 lines. It SHALL link each reference file by its relative path and say when to read it. The reference files are `references/commands.md`, `references/columns.md`, `references/rules.md`, `references/sql-schema.md` and `references/recipes.md`.
@@ -240,31 +241,79 @@ SKILL.md SHALL also contain a `## Section Crawl or Segments?` section with this 
 - **THEN** the two sets are equal
 
 ### Requirement: SQL schema reference
-`references/sql-schema.md` SHALL state the crawl store schema version of the CLI as `Schema version: <n>`. It SHALL list every table and column that `spider schema --limit 1000 --format json` reports, each column with its type and description. It SHALL remind the agent that `spider sql` is read-only and accepts only `SELECT` and `WITH` statements.
+`references/sql-schema.md` SHALL describe the crawl file for an agent that queries it with `spider sql`. It SHALL state:
+- the crawl store schema version of the CLI, as `Schema version: <n>`
+- that a crawl file needs SQLite 3.37 or later to be read, because every table is `STRICT`
+- that `spider sql` is read-only and accepts only `SELECT` and `WITH` statements
+
+It SHALL be generated from what `spider schema --limit 1000 --format json` reports, and SHALL list:
+- every table and view, with its kind and description
+- every column, with its type, whether it is nullable, whether it is part of the primary key, its reference, its format, its allowed values and its description
+- every secondary index, with its columns, whether it is unique, its condition and the query it serves. A table without a secondary index SHALL say `no secondary index`.
+- a `## Joins` section with one line `<table>.<column> -> <references>` for each column whose `references` is not null
+
+It SHALL also contain three written sections:
+- `## URL and address`: `urls.url` is the normalised form that the Crawl records and looks URLs up by, `pages.address` is the form shown to people, `pages.url_encoded_address` equals `urls.url`, and `url_path` and `url_query` are cut from `address`. To find one URL, use `spider page <url>`, which normalises its argument the way the Crawl does.
+- `## Pages and Resources`: a Page has a `pages` row. A Resource is a `urls` row that is the target of an `image`, `css`, `javascript`, `video`, `audio` or `media` Link and has no `pages` row.
+- `## Cost of queries`:
+  - The `issues` view and `affected_urls` hold the last pass's result, which is valid only when `crawl.state` is `completed` or `stopped`. In any other state they are empty or stale: `spider issues` then runs every Rule's query on each call, and in SQL the agent runs the Rule's `rules.reproduce_sql` instead.
+  - While a Crawl runs, progress is read with `spider status`, not `spider summary`.
+  - A filter or sort on a column that no index of its table starts with scans the whole table, which takes seconds at about 500k URLs. Aggregates with `GROUP BY` and a `LIMIT` cost one scan, and paging through such a query costs one scan per page.
 
 #### Scenario: Every column is documented
 - **WHEN** each table and column pair reported by `spider schema --limit 1000 --format json` is looked up in the installed `references/sql-schema.md`
-- **THEN** every pair is present
+- **THEN** every pair is present, and its entry shows the column's type, whether it is nullable, its reference when it has one, and each of its allowed values
+
+#### Scenario: Every index is documented
+- **WHEN** each table reported by `spider schema --limit 1000 --format json` is looked up in the installed `references/sql-schema.md`
+- **THEN** each of its indexes is present with its columns, and a table whose `indexes` is empty shows `no secondary index`
+
+#### Scenario: Every reference is in the joins section
+- **WHEN** each column with a non-null `references` in `spider schema --limit 1000 --format json` is looked up in the `## Joins` section of the installed `references/sql-schema.md`
+- **THEN** each is present as `<table>.<column> -> <references>`
 
 #### Scenario: Schema version is stated
 - **WHEN** a Crawl of the local fixture site has been made by the same CLI and the installed `references/sql-schema.md` is read
 - **THEN** it contains `Schema version: <n>`, where `<n>` is that Crawl's `crawl.schema_version`
 
+#### Scenario: Minimum SQLite version is stated
+- **WHEN** the installed `references/sql-schema.md` is read
+- **THEN** it contains `SQLite 3.37` and `STRICT`
+
+#### Scenario: URL and address section
+- **WHEN** the `## URL and address` section of the installed `references/sql-schema.md` is read
+- **THEN** it contains `urls.url`, `pages.address`, `url_encoded_address`, `url_path`, `url_query` and `spider page`
+
+#### Scenario: Pages and Resources section
+- **WHEN** the `## Pages and Resources` section of the installed `references/sql-schema.md` is read
+- **THEN** it contains `pages`, `urls`, `image`, `css`, `javascript`, `video`, `audio` and `media`
+
+#### Scenario: Cost of queries section
+- **WHEN** the `## Cost of queries` section of the installed `references/sql-schema.md` is read
+- **THEN** it contains `crawl.state`, `completed`, `stopped`, `affected_urls`, `reproduce_sql`, `spider status`, `spider summary` and `scans`
+
 ### Requirement: Recipes reference
-`references/recipes.md` SHALL give worked examples for at least these questions, each with the Commands or SQL to run:
+`references/recipes.md` SHALL give one worked example for each of these questions, each with the Commands or SQL to run:
 - which Pages return a 4xx or 5xx status, and which Pages link to them
 - which Indexable Pages have no title or no meta description
 - which Pages are Non-Indexable, and why
 - which Pages are the largest
-- which Issues affect one Segment
-- how to define the Segments `blog` and `shop` in `spider.toml`
-- how to prepare a Hand-off
+- which Internal URLs redirect, and where to
+- which URLs returned a given response header, read from `response_headers` with `json_each`
+- which URLs a Rule affects in a Crawl that is still running, through the Rule's `rules.reproduce_sql`
+- (v0.2) which Issues affect one Segment
+- (v0.2) how to define the Segments `blog` and `shop` in `spider.toml`
+- (v0.2) how to prepare a Hand-off
 
-Every SQL query in the recipes SHALL run under `spider sql`.
+Every SQL query in the recipes SHALL run under `spider sql`, and SHALL return, for a completed Crawl of the local fixture site, the rows that the recipe test expects for it, which are not empty.
 
-#### Scenario: Recipe SQL runs
+#### Scenario: Recipe SQL returns the expected rows
 - **WHEN** each fenced `sql` block of the installed `references/recipes.md` is run with `spider sql` against a completed Crawl of the local fixture site
-- **THEN** every run exits with code 0
+- **THEN** every run exits with code 0, and its rows equal the non-empty rows that the recipe test holds for that recipe
+
+#### Scenario: Header recipe reads response_headers
+- **WHEN** the fixture site's `/noindex-header` returns `X-Robots-Tag: noindex`, and the response-header recipe of the installed `references/recipes.md` runs with `spider sql` against a completed Crawl of the local fixture site
+- **THEN** its query reads `response_headers` with `json_each`, and its rows include the URL of `/noindex-header` with the value `noindex`
 
 #### Scenario: Segment recipe is valid
 - **WHEN** the fenced `toml` block of the Segment recipe is used as the Workspace's `spider.toml`, and `spider summary --segment blog` then runs against a completed Crawl of the local fixture site

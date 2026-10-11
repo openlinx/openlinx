@@ -92,7 +92,7 @@ The `python` check SHALL report the running Python version and interpreter path 
 - **THEN** `details.version` of the `python` check equals that interpreter's `platform.python_version()`
 
 ### Requirement: Package check
-The `package` check SHALL report the installed package version and install location in `details.version` and `details.location`. It SHALL try to import the compiled dependencies that a Crawl needs: at least aiohttp, selectolax, msgspec and zstandard. Its status SHALL be `ok` when all of them import. Otherwise its status SHALL be `fail`, its message SHALL name each dependency that failed to import, and its hint SHALL be `uv tool install --python 3.14 --reinstall spider`.
+The `package` check SHALL report the installed package version and install location in `details.version` and `details.location`. It SHALL try to import the compiled dependencies that a Crawl needs: at least aiohttp, selectolax, msgspec and zstandard. It SHALL also report the version of the SQLite library that the running Python links, in `details.sqlite_version`: every table of a crawl file is `STRICT`, which SQLite 3.37 or later is needed to create and read. Its status SHALL be `ok` when all of the dependencies import and SQLite is 3.37 or later. Otherwise its status SHALL be `fail`, its message SHALL name each dependency that failed to import, and an older SQLite with its version, and its hint SHALL be `uv tool install --python 3.14 --reinstall spider`.
 
 #### Scenario: Version of the installed package
 - **WHEN** `spider doctor` runs in the test environment
@@ -101,6 +101,14 @@ The `package` check SHALL report the installed package version and install locat
 #### Scenario: Missing compiled dependency
 - **WHEN** the `package` check is evaluated for import results in which `selectolax` failed with `ImportError: DLL load failed` and the other dependencies imported
 - **THEN** its status is `fail` and its message contains `selectolax`
+
+#### Scenario: SQLite version is reported
+- **WHEN** `spider doctor` runs in the test environment
+- **THEN** `details.sqlite_version` of the `package` check equals the test interpreter's `sqlite3.sqlite_version`
+
+#### Scenario: SQLite older than 3.37
+- **WHEN** the `package` check is evaluated with every dependency imported, once for SQLite `3.36.0` and once for SQLite `3.37.0`
+- **THEN** the statuses are `fail` and `ok`, and the message of the `fail` contains `SQLite 3.36.0`
 
 ### Requirement: PATH check
 The `path` check SHALL look up the `spider` command on PATH (`spider.exe` on Windows), run it with `--version`, and report the result in `details.command_path` and `details.command_version`. Its status SHALL be:

@@ -6,17 +6,17 @@ The motivation is in proposal.md, and the catalogue and behaviour are in `specs/
 
 - the `urls` table of `020-add-crawl-core`, with the fetch columns of `022-add-fetch-policy`:
   - Internal/External, `status_code`, `fetch_state` and `fetch_error`
-  - `blocked_by_robots`, `redirect_url_id` and `redirect_loop`
+  - `blocked_by_robots_txt`, `redirect_url_id` and `in_redirect_loop`
   - `size_bytes` and `parsed`
 - the `pages` and `links` tables, the stored Indexability and the link counts of `030-add-page-data`
 - the Workspace settings loaded and validated by `010-add-workspace-and-cli-contract`
 
-`020-add-crawl-core` provides:
+`020-add-crawl-core` provides (its D9 and D14):
 
-- a **per-response hook**, which runs for every recorded URL inside that URL's writer unit
-- a **post-crawl passes** hook, which runs when a Crawl ends as `completed` or `stopped` and is safe to re-run
+- a **per-response hook** of pure handlers, which this change does not use (D1)
+- a **post-crawl passes** hook of store functions, which runs when a Crawl ends as `completed` or `stopped`, before its final Crawl State is written, and again after every continued run, so a pass must be safe to re-run
 
-`015-add-crawl-store` provides the transactional writer, the `crawl` row and the table conventions. Issues must be queryable while a Crawl runs. Crawls can reach about 500k URLs.
+`015-add-crawl-store` provides the `crawl` row and the writer. `017-speed-up-crawl-writer` sets the contract of a unit (its D7): a unit may run again before its commit, so it is deterministic, has no effect outside its connection and returns values only. `018-add-schema-conventions` sets the schema conventions of [ADR-0005](../../../docs/adr/0005-crawl-file-schema-conventions.md) and the declaration helper every table goes through. Issues must be queryable while a Crawl runs. Crawls can reach about 500k URLs.
 
 ## Goals / Non-Goals
 
@@ -33,14 +33,16 @@ The motivation is in proposal.md, and the catalogue and behaviour are in `specs/
 
 ## Decisions
 
-### D1. Rules are a code registry
-Each Rule is a registered object with its metadata (the spec's Rule model) and one condition.
-- **`during_crawl` Rules** are pure functions. They take one Page record with its Links, or one `urls` row, plus the effective thresholds, and return zero or one Affected URL with its `detail`.
-- **`post_crawl` Rules** run over the store:
-  - `GROUP BY` for duplicates
-  - joins against `urls` and `pages` for canonical targets and image Resources
-  - a walk along `redirect_url_id` for Redirect Chains
-  - `022`'s `redirect_loop` flag for loops
+### D1. Rules are a code registry of SQL queries
+Each Rule is a registered object with its metadata (the spec's Rule model) and its reproducing query, which is the only form of its condition (the user's decision of 2026-10-11). The queries do the work that Python conditions did in the draft:
+- column conditions on one `urls` or `pages` row
+- `GROUP BY` for duplicates
+- joins against `urls` and `pages` for canonical targets and image Resources
+- a recursive walk along `redirect_url_id` for Redirect Chains
+- `022`'s `in_redirect_loop` flag for loops
+
+No Rule runs while a URL is recorded: the Crawl's writer, the bottleneck of a Crawl, writes no Affected URL, and each Rule exists once.
+- *Alternative: Python conditions in a per-response handler, with the query checked against them,* as the 2026-10-11 blueprint had. Each Rule existed twice, an equality test kept them together, and every Issue added rows and index entries to the writer's units. Rejected by the user on 2026-10-11.
 - *Alternative: declarative YAML/JSON conditions.* Rejected. Conditions combine several columns, other URLs' outcomes and, for duplicates, grouping. A condition language would duplicate the `--where` language of `050`, and would still need code for Redirect Chains. The YAML approach stays for v0.3's structured-data validators, where the data is naturally declarative.
 
 ### D2. Populations and whose URL is affected
@@ -68,32 +70,34 @@ Anything that can be intentional, or that the maintainer does not want to lower 
 The maintainer approved keeping all 42 Rules on 2026-09-27. Noindex and nofollow each combine meta robots and X-Robots-Tag: the problem is the same, and `detail.sources` tells the agent where to fix it. Every Rule has a distinct fix. The low-value Rules (`title-same-as-h1`, `h1-too-long`, `url-underscores`, `url-parameters`, `meta-description-too-short`) are `opportunity`/`low`, so they do not touch the Health Score and sort last in Reports. Each one can be disabled with `enabled = false`.
 
 ### D5. When Rules run
-- **During the Crawl.** URL Rules run in `020`'s per-response hook for every recorded URL. Page Rules run with the Page's data from `030`, in the same hook, for analysed Pages. Results are written in the URL's writer unit, which inserts `affected_urls` and increments `issues.affected_count`. Partial Crawls therefore show consistent Issues.
-- **In the post-crawl passes.** Rules that need other records wait for the passes:
-  - duplicates
-  - canonical targets, which may be fetched later
-  - Redirect Chains and loops, which are complete only when every hop has been fetched
-  - image Resources, whose checks may finish after the Page
+- **During the Crawl,** nothing is written. The Issues reader computes the Issues live from the queries (D16), so a running Crawl shows its Issues so far.
+- **In the post-crawl passes,** this change's pass materialises them. The pass is a store function in `spider.store.issues`. It submits one writer unit per enabled Rule, which deletes the Rule's rows and inserts what its query returns, and then one unit that writes the Health Score. A second run replaces the first.
 - **Order.** Through `020`'s hook, the passes run in this order:
   1. `030` link counts
-  2. `040` `post_crawl` Rules
-  3. the Health Score
-- **When they run.** They run for Crawls that end as `completed` or `stopped`, and again when a resumed Crawl ends. Each run deletes the rows of `post_crawl` Rules, recomputes them and recounts `issues` in one writer unit. `failed` and `interrupted` Crawls get the passes only once they are resumed and end.
+  2. `040` Rules, then the Health Score
+- **When they run.** They run for Crawls that end as `completed` or `stopped`, before the final Crawl State is written, and again when a resumed Crawl ends. `failed` and `interrupted` Crawls get the pass only once they are resumed and end, and are read live until then.
 
 ### D6. Each Crawl records its Rule configuration
-When the Crawl starts, the `rules` table records every Rule's type, priority, enabled state, effective thresholds and guidance texts.
+When the Crawl starts, the `rules` table records every Rule's type, priority, enabled state, effective thresholds, guidance texts and reproducing query.
 - *Why:* crawl files stay self-contained ([ADR-0002](../../../docs/adr/0002-sqlite-crawl-store-public-schema.md)). A resumed Crawl keeps the configuration it started with. A Report built later shows the thresholds that produced its Issues, and the guidance texts are available even to a reader without the same tool version.
 - *Alternative: store only the Rule ids and read metadata from the installed tool.* Rejected. The thresholds used would be lost, and texts could silently change.
 
-### D7. `issues` is a real table, updated with `affected_urls`
-- *Alternative: a SQL view that groups `affected_urls`.* Rejected so that `spider schema`, `--where` and exports never depend on views.
-- *Alternative: build `issues` only at the end.* Rejected, because partial Crawls would show Affected URLs without Issues.
+### D7. `issues` is a view over `affected_urls`
+No count of Affected URLs is stored: a count that only repeats the rows of another table is not stored (ADR-0005), so `issues.affected_count` was dropped. `issues` is a view that joins `rules` with the count of each Rule's rows in `affected_urls`, read over the primary key's `rule_id` prefix (ruling Q12).
+- It cannot disagree with `affected_urls`, and the post-crawl pass has nothing to recount.
+- It holds the last pass's result. For a Crawl without a final pass the Issues reader computes the same shape live instead (D16).
+- It keeps the name and columns that `050`'s `issues` Command and export and `070`'s Report read, `affected_count` included.
+- *Cost:* each read of `issues` counts the rows of `affected_urls`, a scan of its primary key.
+- **The first view of the schema.** `018`'s `spider schema` already lists a `kind` of `table` or `view`. This change declares the view in `spider.store.issues`, next to its description, column descriptions and `values`, and extends `018`'s contract test to views: the file must have the view, with its column names in order. SQLite reports no `NOT NULL` and its own type names for a view's computed columns (`INT` for a `CAST(… AS INTEGER)`), so a view's types and nullability come from the declaration only, and `STRICT` is checked for tables only.
+- *Alternative: a real table, updated with `affected_urls`,* as the draft had. It stores a count of other rows, and every write and every pass must keep it right. Rejected by ADR-0005.
+- *Alternative: no `issues` object in the file,* only `050`'s query. Agents writing SQL would have to know the join. Rejected.
 
 ### D8. The Health Score
 - **Formula.** `floor(100 × (N − A) ÷ N)`. Rounding down means 100 is shown only when no Page has an Issue-type Issue.
-- **Storage.** The score is stored as four crawl metadata fields on the one-row `crawl` table (`health_score_pct`, `health_internal_pages`, `health_affected_pages`, `health_calculated_at`).
-  - *Alternative: a one-row `health_score` table.* Rejected. `015` requires table names to be plural nouns, with `crawl` as the only one-row exception.
-  - The names follow `015`'s unit suffix (`_pct`) and `050`'s summary shape `{score, internal_pages, affected_pages}`.
+- **Storage.** The score is stored as four crawl metadata fields on the one-row `crawl` table (`health_score`, `health_internal_page_count`, `health_affected_page_count`, `health_calculated_at`).
+  - *Alternative: a one-row `health_score` table.* Rejected. ADR-0005 requires table names to be plural nouns, with `crawl` as the only one-row exception.
+  - They are derived (ADR-0005): only the post-crawl pass writes them, after the Rules' rows, and each description starts with `Derived: `. They stay NULL until the pass runs.
+  - `health_score` has no unit suffix, because a score is not a share (ADR-0005 rule 5; it was `health_score_pct` until ruling Q9). The two counts end in `_count` (rule 5); `050`'s summary shape `{score, internal_pages, affected_pages}` maps them to its own member names.
   - `health_calculated_at` comes from the injectable clock.
 - **Subsets.** The formula is exposed as one pure function taking the set of Internal Pages and the set of URLs affected by Issue-type Rules. `050` (Segments) and `070` (health per Segment) call it, rather than re-implementing it.
 - **Which Issue Types count.** They are read from the Crawl's `rules` table, never from the installed tool.
@@ -117,22 +121,61 @@ Categories are stored enumeration values, and `015` requires enumeration values 
 `canonical-to-non-indexable` fires when the target's Indexability is non-indexable, not on "any non-200":
 - **When the target is a Page,** that is the stored `indexability` of `030`.
 - **When the target is not a Page,** `030` stores no Indexability, so the Rule applies steps 1–4 of `030`'s order (robots.txt, 3xx, 4xx, 5xx) to its `urls` row, plus `no_response` for a request that got no response.
+- **The detail key is `target_reason`:** its values are `030`'s six `indexability_status` values plus `no_response`. Naming it `indexability_status` would give one name two value sets (ADR-0005 rule 7), because `no_response` is not a value of that column.
 
 A 2xx non-HTML target, such as a PDF, therefore counts as indexable, as it would for `030`. A target that was never requested is not judged.
-- *Alternative: store Indexability for every Internal URL.* It would add columns to `020`'s `urls` table, whose column list is pinned by `020`'s own contract scenario. It is left to `030`'s Open Questions.
+- *Alternative: store Indexability for every Internal URL.* It would add Indexability columns to `020`'s `urls` table, which the v0.1 schema blueprint does not have. It is left to `030`'s Open Questions.
+
+### D14. The tables under ADR-0005
+The schema blueprint of 2026-10-11 and its rulings decide these tables before they are built. Each goes through `018`'s declaration helper, so it is `STRICT`, and its enumerations and flags get CHECKs from the declared values.
+- **`rules`:** keyed by `id`, the Rule id, as TEXT: a public identifier that a user types (ADR-0005 rule 2). It is `WITHOUT ROWID`, because the Rule id is its natural key and it holds about 42 rows.
+  - `category`, `issue_type`, `priority` and `applies_to` are enumerations whose values are `Literal`s in `spider.store.records`, as `020`'s are, so the code, the CHECK and `values` cannot disagree.
+  - `reproduce_sql` holds the Rule's query (ruling Q11, D15).
+  - **When it is written:** in the transaction that creates the `crawl` row. This change adds a `rules` field to `015`'s `NewCrawl`, as `020` added `scope`, and `create_crawl` writes its rows. A Crawl that dies before its first unit still records its configuration, which the live path reads.
+- **`affected_urls`:** keyed by `(rule_id, url_id)`, `WITHOUT ROWID`, as a table of pairs with narrow rows (rule 15). Both columns are declared references.
+  - `affected_urls_url_id` on `url_id`: it serves the Issues of one URL (`050`'s `page <url>`) and the Health Score's count of affected Pages. A query by Rule uses the primary key's prefix and needs no index.
+  - `detail` is JSON, nullable: nothing filters on it in v0.1 (rule 11).
+- **`issues`:** a view (D7).
+- **The `crawl` fields:** D8.
+
+### D15. Reproducing queries
+Every Rule is one SQL query over the public schema that reproduces its Affected URLs (ROADMAP, 2026-10-05; the only form of a Rule since 2026-10-11). It is what lets an agent that reads only the crawl file check an Issue, and it is the base of v0.3's User SQL Rules.
+- **Shape:** a read-only `SELECT` that returns `url_id` and `detail`. It reads the effective thresholds from the Crawl's `rules` row, for example `json_extract((SELECT thresholds FROM rules WHERE id = 'low-word-count'), '$.min_words')`. Its text is then a constant of the Rule: the same in every Workspace and Crawl, and still right under overrides.
+- **Only stored columns:** a condition that needs a value the file does not hold needs a column first, which is a schema change (ADR-0005). Every v0.1 Rule finds its data in `urls`, `pages` and `links`.
+- **The pass's unit** runs `INSERT INTO affected_urls (rule_id, url_id, detail) SELECT :rule_id, url_id, detail FROM (<query>)`. Each statement is built once, at import (`017` D9). The unit reads only the file, so it is deterministic when it runs again (`017` D7).
+- **Where it is read:** `rules.reproduce_sql` in the file, and `spider rules list` and `show`.
+- **Exclusions are explained in the query:** an agent reads the query, not this design, so a condition that leaves a value out carries an SQL comment with the reason. `internal-no-response` and `image-broken` leave out `fetch_error = 'record_failed'`: the Crawl got a response and failed to record it, which is the tool's failure, reported by `020`'s `record_failed` warning, not the site's.
+
+### D16. Issues of a Crawl without a final pass
+The Issues reader in `spider.store.issues` is the one way `050`'s `issues`, `issues <rule-id>`, `summary` and `page <url>` read Issues.
+- **Which path:** materialised when `crawl.state` is `completed` or `stopped`, live otherwise. The Crawl State is the marker because `020` writes those two states only after the post-crawl passes, in the unit that ends the Crawl, so they imply a finished pass over the current rows.
+  - A resume sets `running` first, so its Crawl is read live at once, without clearing anything.
+  - A process killed during the pass leaves `running`, which `060` records as `interrupted`, and that is read live.
+  - `failed` gets no pass from `020`, and is read live.
+  - *Alternative: a `Derived: ` column such as `issues_materialised_at`.* A resume would have to clear it in the unit that sets `running`, and it could disagree with the Crawl State. Rejected: the state already says it.
+- **The live path** runs each enabled Rule's query on a read-only connection, as one read, and returns the shape of the `issues` view, or of `affected_urls` for one Rule or one URL. `affected_urls` is ignored, because after a resume it holds the previous pass's rows.
+- **Cost:** live Issues cost one evaluation of every Rule per read, on rows that are still growing. `026`'s run of about 500k URLs measures the latency of a full live list during a Crawl and its effect on WAL checkpoints, because a long read holds the WAL from being reset. If the full list takes more than 30 seconds at 500k URLs, the design is revisited: per-Rule reads, or materialising at intervals. The same run measures `page <url>`, which runs every Rule's query for one URL: over 1 second at 500k URLs, the reader gets per-URL forms of the queries.
+- **Interface points:** `050`'s Commands call the reader and never query `affected_urls` themselves, so both paths give them one shape. `080`'s documentation tells agents that Issues of a running Crawl are computed on each read and cost more than those of a finished Crawl, and that `affected_urls` and `issues` in the file hold the last pass's result, valid when `crawl.state` is `completed` or `stopped`.
+
+### D17. Codes
+Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 does, by the slice that first raises them:
+- error, exit 4: `rule_not_found` (`spider rules show` with an unknown id), under `010`'s rule that a code ending in `_not_found` maps to 4
+
+`settings_invalid` (exit 3) comes from `010`, and the `record_failed` warning that the Rule queries leave out is `020`'s.
 
 ## Test seams
 
 The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is introduced:
 
 - **Seam 4, pure-logic modules.**
-  - Every catalogue scenario is tested here as a table-driven case: a Page record with its Links, or a `urls` row, in; fires or not, with the literal `detail`, out.
-  - `post_crawl` Rules are tested through pure functions over lists of records: duplicate grouping, canonical target Indexability, the Redirect Chain walk and the image Resource checks.
-  - The Health Score function is tested here as well.
-  - Test-data builders for Page records and `urls` rows are builders, not test doubles.
-- **Seam 2, services and store API.** A direct call runs the post-crawl passes twice on a real crawl store in a temporary Workspace, to test idempotency. "Later edits do not change a completed Crawl" is tested the same way.
-- **Seam 3+6, fixture site plus store contract.** End-to-end slices crawl fixture pages under `/rules/` and read `rules`, `issues`, `affected_urls` and the `crawl` row through the documented tables, read-only. `http-url` is a Warning, so the plain-HTTP fixture site does not lower the Health Score in these slices.
-- **Seam 6, store contract.** `spider schema` is compared with hand-written `values` lists.
+  - The Health Score function, with table-driven cases.
+- **Seam 2, services and store API.**
+  - Every catalogue scenario is tested here: rows written through the store's writers into a real crawl store in a temporary Workspace, then the Rule's query, run by the evaluation entry point; fires or not, with the literal `detail`, out. Test-data builders for `urls`, `pages` and `links` rows are builders, not test doubles.
+  - The post-crawl pass is called directly, twice, to test idempotency. "Later edits do not change a completed Crawl" is tested the same way.
+  - The Issues reader's two paths, on crawl files in each Crawl State.
+  - The store units are checked with `017`'s `replay_now(writer)`, which makes the writer run them again.
+- **Seam 3+6, fixture site plus store contract.** End-to-end slices crawl fixture pages under `/rules/` and read `rules`, `issues`, `affected_urls` and the `crawl` row through the documented tables, read-only. One of them runs every Rule's reproducing query against the stored rows, and one compares the live and materialised paths (D16). `http-url` is a Warning, so the plain-HTTP fixture site does not lower the Health Score in these slices.
+- **Seam 6, store contract.** `spider schema` is compared with hand-written `values` lists, keys and indexes, and `018`'s contract test covers the new tables and the view.
 - **Seam 1, CLI.** This covers `spider rules list` and `show`, the `settings_invalid` and `rule_not_found` errors and their exit codes, and one real subprocess run on Windows with console code page 1251.
 - **Boundary doubles.** Only the injectable clock, for `health_calculated_at`. Our own modules are never mocked.
 
@@ -142,11 +185,15 @@ The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is 
 - [Broken internal images are reported by both `internal-4xx` and `image-broken`] → Accepted, as in Screaming Frog. One is about the URL and one about its use as an image. The fixes point to the same file.
 - [Resource and non-Page URL Issues, such as no response or blocked, do not lower the Health Score] → This follows the glossary definition, which is Page-centric. It is documented, and listed under Open Questions.
 - [Duplicate grouping on about 500k Pages] → Plain `GROUP BY` over non-NULL values, which is O(n log n) in SQLite with no extra index. The passes run once per Crawl end.
+- [Each read of `issues` counts `affected_urls`] → A scan of its primary key, which a Crawl of about 500k URLs keeps to a few million narrow rows. `050` reads it once per Command.
+- [Live Issues of a running Crawl of about 500k URLs are slow, or hold back WAL checkpoints] → `026`'s 500k run measures both. Over 30 seconds for the full list, the design is revisited; over 1 second for `page <url>`, the queries get per-URL forms (D16).
+- [`url-uppercase` (v0.2) names Unicode category Lu, which portable SQL cannot test: SQLite's `upper()` and `lower()` change ASCII letters only unless it is built with ICU, and a Rule's query uses no function of ours] → Its definition is settled with the v0.2 URL Rules, over `030`'s `url_path` and `url_query`. A candidate: A–Z plus GLOB ranges of Latin-1, Greek and Cyrillic capitals, skipping A–F inside `%XX` escapes. Ranges on letters work only on those two columns: `020`'s normalisation percent-encodes every non-ASCII character as UTF-8 (`café` becomes `caf%C3%A9`), so `urls.url` and `url_encoded_address` hold Cyrillic capitals only as escapes, while `030`'s `address`, from which `url_path` and `url_query` are cut, decodes the escapes of non-ASCII characters and keeps ASCII escapes encoded.
+- [A Rule cannot be written over the stored columns] → It needs a column first, a schema change; the v0.1 Rules need none (D15).
 - [Some Priorities differ from Screaming Frog's] → The documented principle (D3) applies, and `docs/rules.md` lists every Rule's type and priority.
 
 ## Migration Plan
 
-`rules`, `issues`, `affected_urls` and the four `health_*` crawl fields are part of the squashed schema version 1 (before v0.1). There is no data to migrate.
+None. Before v0.1 the schema is not yet public: this change adds `rules`, `affected_urls`, the `issues` view and the four `health_*` fields of `crawl` to the declared schema and `docs/schema.md`, each in the slice that needs it, and `schema_version` stays `1` (`015` D5).
 
 ## Open Questions
 
