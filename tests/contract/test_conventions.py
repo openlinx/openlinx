@@ -3,6 +3,8 @@
 import re
 from typing import Any
 
+from sqlalchemy import UniqueConstraint
+
 from spider.store.schema import metadata
 from tests.support.cli import run_cli
 
@@ -108,3 +110,23 @@ def test_derived_and_later_columns_may_hold_null() -> None:
         for column in all_columns()
         if LATER_OR_DERIVED.match(column["description"]) and not column["nullable"]
     ] == []
+
+
+def test_every_unique_rule_is_an_index_and_every_reference_one_key() -> None:
+    # SQLite names a UNIQUE constraint's index itself, and spider schema lists only declared ones.
+    problems = []
+    for table in metadata.tables.values():
+        if table.name.startswith("_"):
+            continue
+        problems += [
+            f"{table.name}: UNIQUE constraint on {', '.join(column.name for column in unique)}"
+            for unique in table.constraints
+            if isinstance(unique, UniqueConstraint)
+        ]
+        problems += [
+            f"{table.name}.{column.name}: {len(column.foreign_keys)} foreign keys"
+            for column in table.columns
+            if len(column.foreign_keys) > 1
+        ]
+
+    assert problems == []

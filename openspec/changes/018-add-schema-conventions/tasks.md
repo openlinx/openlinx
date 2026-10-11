@@ -87,7 +87,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 ## 3. Change check
 
 - [ ] 3.1 Verify that every `#### Scenario:` in `specs/crawl-store/spec.md` has exactly one test named after it, with a small script over the test ids.
-- [ ] 3.1a **Guard, with no scenario:** every unique rule is a named index, and every reference is one foreign key.
+- [x] 3.1a **Guard, with no scenario:** every unique rule is a named index, and every reference is one foreign key.
 
   Done when:
   - a test in `tests/contract/test_conventions.py`, over the declared `MetaData`, fails naming the table when a public table declares a `UniqueConstraint` or a `Column(unique=True)`, whose index SQLite names itself and `spider schema` never lists, so every unique rule is an `Index(unique=True)` with a description
