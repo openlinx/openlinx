@@ -304,7 +304,6 @@ def _run_counted[T](unit: Callable[[Connection], T], connection: Connection) -> 
 
 
 def _run_again(ran: _Ran, connection: Connection) -> None:
-    savepoint = connection.begin_nested()
     # A unit that does not do the same again ends the writer, never just its own changes: its
     # caller holds the first run's result, and may have built later units on it (design D6).
     try:
@@ -318,7 +317,6 @@ def _run_again(ran: _Ran, connection: Connection) -> None:
         raise _replay_error(ran, "returned a different result")
     if changes != ran.changes:
         raise _replay_error(ran, f"changed {changes} rows instead of {ran.changes}")
-    savepoint.commit()
 
 
 def _replay_error(ran: _Ran, what: str) -> CrawlWriterReplayError:

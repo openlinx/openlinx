@@ -6,6 +6,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
+from typing import cast
 
 import pytest
 from sqlalchemy import Connection, func, select, update
@@ -239,6 +240,24 @@ def test_replay_now_fails_at_a_unit_that_runs_again_differently(
         writer.close()
 
     assert type(raised.value.__cause__) is CrawlWriterReplayError
+
+
+def test_the_replay_runs_units_without_a_savepoint(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    statements: list[str] = []
+
+    def traces_the_writer(connection: Connection) -> None:
+        driver = cast(sqlite3.Connection, connection.connection.driver_connection)
+        driver.set_trace_callback(statements.append)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(traces_the_writer)
+        writer.run(insert_seed(1, "https://example.com/1"))
+        replay_now(writer)
+
+    inserts = [statement for statement in statements if statement.startswith("INSERT")]
+    savepoints = [statement for statement in statements if "SAVEPOINT" in statement.upper()]
+    assert (len(inserts), savepoints) == (2, [])
 
 
 def test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails(
