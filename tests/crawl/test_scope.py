@@ -36,6 +36,12 @@ def test_subdomains_are_internal_with_the_subdomains_scope() -> None:
     assert rules.decide(NormalizedUrl("http://blog.site.test/")).is_internal is True
 
 
+def test_a_public_suffix_is_not_treated_as_the_site() -> None:
+    rules = scope_rules(NormalizedUrl("http://www.shop.co.uk/"), scope="subdomains")
+
+    assert rules.decide(NormalizedUrl("http://other.co.uk/")).is_internal is False
+
+
 def _valid(url: NormalizedUrl | InvalidUrl) -> NormalizedUrl:
     if isinstance(url, InvalidUrl):
         raise TypeError(f"not a valid URL: {url.reason}")

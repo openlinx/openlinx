@@ -59,7 +59,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: registrable domains come from the bundled `publicsuffixlist`, and a table test of about 20 Seed/URL cases passes: apex and `www.` both ways, other subdomains, ports, IDN hosts, public suffixes such as `co.uk`, IP addresses, single-label hosts and upper case.
 - [x] 2.3 **Guard:** "The apex of a www Seed is external".
 - [x] 2.4 Drive "Subdomains are internal with the subdomains Scope".
-- [ ] 2.5 **Guard:** "A public suffix is not treated as the site".
+- [x] 2.5 **Guard:** "A public suffix is not treated as the site".
 - [ ] 2.6 Drive "The folder of a Seed page is its parent folder".
 - [ ] 2.7 Drive "Exclude wins over include".
 - [ ] 2.8 Docs: write the "Scope" part of `docs/crawling.md` (host rules, the apex-to-www rule and why it goes one way, `--scope`, subfolder folders, include and exclude, and a warning about slow regexes).
