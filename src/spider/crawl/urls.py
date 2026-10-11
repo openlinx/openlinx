@@ -15,7 +15,8 @@ _PERCENT_ENCODED = re.compile("%([0-9A-Fa-f]{2})")
 _UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
 _NOT_ALLOWED = re.compile(r"[^A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]|%(?![0-9A-Fa-f]{2})")
 _HOST = re.compile(r"[a-z0-9\-._~]+")
-_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://")
+# "localhost:8080" is a host and a port; "mailto:a@b.test" names the scheme mailto.
+_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:(?![0-9]+(?:[/?#]|$))")
 _GLOB_WILDCARDS = {"*": ".*", "?": "."}
 _SURROGATE = re.compile(r"[\ud800-\udfff]")
 # UTS46 deletes these silently, so "e<ZWSP>vil.test" would become "evil.test"; aiohttp's URL

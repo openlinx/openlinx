@@ -1,5 +1,6 @@
 """URL normalisation (020-add-crawl-core, crawling)."""
 
+import re
 from urllib.parse import urlsplit
 
 import pytest
@@ -154,3 +155,34 @@ def test_the_seed_parser_accepts_any_text(text: str) -> None:
 )
 def test_a_url_with_userinfo_is_rejected(text: str) -> None:
     assert normalize_url(text) == InvalidUrl("userinfo")
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("mailto:a@b.test", InvalidUrl("unsupported_scheme")),
+        ("tel:+1-555-0100", InvalidUrl("unsupported_scheme")),
+        ("javascript:alert(1)", InvalidUrl("unsupported_scheme")),
+        ("ftp:x", InvalidUrl("unsupported_scheme")),
+        ("localhost:8080", NormalizedUrl("https://localhost:8080/")),
+        ("site.test:8080/x", NormalizedUrl("https://site.test:8080/x")),
+    ],
+)
+def test_a_seed_has_a_scheme_unless_a_port_follows_its_colon(
+    text: str, expected: NormalizedUrl | InvalidUrl
+) -> None:
+    assert parse_seed(text) == expected
+
+
+@given(
+    st.one_of(
+        st.sampled_from(["http", "HTTPS", "mailto", "tel", "javascript", "data", "ftp", "x"]),
+        st.from_regex(r"[A-Za-z][A-Za-z0-9+.\-]*", fullmatch=True),
+    ),
+    # The Seed is stripped first, so "80 " after the colon is a port too.
+    st.text(_ANY_CHARACTER).filter(lambda rest: not re.match(r"[0-9]+(?:[/?#]|$)", rest.rstrip())),
+)
+def test_an_accepted_seed_keeps_the_scheme_its_text_names(scheme: str, rest: str) -> None:
+    result = parse_seed(f"{scheme}:{rest}")
+
+    assert isinstance(result, InvalidUrl) or urlsplit(result).scheme == scheme.lower()
