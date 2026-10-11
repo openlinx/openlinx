@@ -7,7 +7,13 @@ from hypothesis import given, reject
 from hypothesis import strategies as st
 from yarl import URL
 
-from spider.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url, strip_params_pattern
+from spider.crawl.urls import (
+    InvalidUrl,
+    NormalizedUrl,
+    normalize_url,
+    parse_seed,
+    strip_params_pattern,
+)
 
 # Sharp cases first: UTS46 and IDNA 2003 differ on ß, ς and the joiners, and drop the ignorables.
 _HOST_CHARACTERS = st.one_of(
@@ -132,3 +138,12 @@ def test_removing_every_parameter_removes_the_query() -> None:
 
 def test_parameters_are_kept_by_default() -> None:
     assert normalize_url("http://site.test/p?utm_source=x") == "http://site.test/p?utm_source=x"
+
+
+def test_a_bare_host_becomes_an_https_seed() -> None:
+    assert parse_seed("site.test/shop") == "https://site.test/shop"
+
+
+@given(st.text(_ANY_CHARACTER))
+def test_the_seed_parser_accepts_any_text(text: str) -> None:
+    assert isinstance(parse_seed(text), (str, InvalidUrl))

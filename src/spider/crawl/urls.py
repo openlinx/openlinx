@@ -15,6 +15,7 @@ _PERCENT_ENCODED = re.compile("%([0-9A-Fa-f]{2})")
 _UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
 _NOT_ALLOWED = re.compile(r"[^A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]|%(?![0-9A-Fa-f]{2})")
 _HOST = re.compile(r"[a-z0-9\-._~]+")
+_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://")
 _GLOB_WILDCARDS = {"*": ".*", "?": "."}
 _SURROGATE = re.compile(r"[\ud800-\udfff]")
 # UTS46 deletes these silently, so "e<ZWSP>vil.test" would become "evil.test"; aiohttp's URL
@@ -60,6 +61,11 @@ def normalize_url(text: str, strip: re.Pattern[str] | None = None) -> Normalized
     if host is None:
         return InvalidUrl("invalid_host")
     return NormalizedUrl(urlunsplit(_normalized_parts(parts, host, port, strip)))
+
+
+def parse_seed(text: str) -> NormalizedUrl | InvalidUrl:
+    seed = text.strip()
+    return normalize_url(seed if _SCHEME.match(seed) else f"https://{seed}")
 
 
 def _raw_host(netloc: str) -> str:
