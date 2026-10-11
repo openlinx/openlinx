@@ -7,7 +7,7 @@
 > **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the minimum. **Deferred to v0.2:** Flesch Reading Ease, the Readability band and the syllable count; `--detect-language` and py3langid; SERP pixel widths; and raw HTML storage (`page_sources`, zstd, `--store-html/--no-store-html`). Their columns and the `page_sources` table exist in v0.1 and stay empty, so v0.2 fills them without a migration (ADR-0005). HTML storage is opt-in when it arrives (decided 2026-10-11: in the store benchmark, HTML was about 70% of the crawl file).
 
 - **New crawl-store tables.** Each follows the schema conventions of `018-add-schema-conventions` (ADR-0005: a `STRICT` table, with CHECKs on its enumerations and flags), is described column by column in `spider schema` and is documented in `docs/schema.md`. Every table and column is added in the TDD slice whose scenario first needs it.
-  - `pages`: one row per Page, keyed by `url_id`, with one unique index on `address`. This is the flat Page record with all 94 Internal-tab columns: identity and response, titles and headings, directives, size, content, links and structured data.
+  - `pages`: one row per Page, keyed by `url_id`, with one unique index on `address`. This is the flat Page record of 96 columns, the Internal-tab columns and the small additions below: identity and response, titles and headings, directives, size, content, links and structured data.
   - `links`: one row per Link that `020-add-crawl-core` discovers, enriched with what analysis needs: the element and attribute, anchor or alt text, `rel` flags, where the Link was declared, its position on the Page (navigation, header, footer, sidebar or content) and, from v1.1, whether it came from the raw or the rendered HTML. The Link types are `020`'s `LinkType` list. A target's Internal flag is read from `urls`.
   - `cookies`: one row per `Set-Cookie` header on a Page's response, whatever its status, with the name and attributes. The value is never stored.
   - `page_sources`: the HTML of Pages, stored as zstd frames when HTML storage is turned on (v0.2). The table exists and is empty in v0.1.
@@ -27,6 +27,7 @@
   - Crawl Depth, copied from `urls`
 - **Small additions beyond the Internal-tab list,** needed by Rules and agents:
   - `title_count`, `meta_description_count`, `h1_count`, `h2_count` and `canonical_count`
+  - `url_path` and `url_query`, the path and query of `address`
   - `canonical_url`, the URL that all canonical declarations agree on, and `canonical_relative`
   - per-source noindex/nofollow flags
   - `syllable_count`

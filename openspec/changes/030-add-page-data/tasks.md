@@ -8,9 +8,11 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules (including the Page
 
 There are no schema-first slices. A table or column is added in the slice whose scenario first needs it, through `018`'s declaration helper (`STRICT`, and CHECKs from the declared values and flags), with its description and its `docs/schema.md` entry in the same commit, so the contract test (`015`'s, extended by `018`) is never red between commits. A seam-4 slice that adds an extractor field also adds its column.
 
+**The thin slice** (ROADMAP, Build order) is groups 1–3 and task 7.1. Groups 1–3 give the Page rows, titles, meta descriptions and headings that `040`-min's first Rules read (`title-missing` and `h1-missing`; its response-code Rules read only `urls`). Task 7.1 runs in the slice, before groups 4–6, and adds Indexability for the status and robots.txt steps; the noindex, refresh and canonical steps join its order in groups 6 and 7. Groups 4–12 widen the change after `022`-min, whose size and redirect columns group 4 copies.
+
 Rows and units follow `020` D9 and D14: the handler returns frozen row values declared in `spider.store`, and `spider.store.pages` and `spider.store.links` write them with statements built once (`017` D9). Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
 
-## 1. Page rows end to end
+## 1. Page rows end to end (slice)
 
 - [ ] 1.1 Drive "HTML response becomes a Page" at seam 3+6. Add the Page handler to `default_hooks()`: a pure function from `020-add-crawl-core`'s `UrlResult` to a Page row. Create `spider.store.pages`, which declares `pages` with `url_id` (references `urls.id`) and `address`, and registers the Page row's writer.
 - [ ] 1.2 Drive "Indexes of pages" at seam 6, and add the unique index `pages_address` with the query it serves.
@@ -19,7 +21,7 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 - [ ] 1.5 Docs: create `docs/page-data.md` covering what a Page is, analysed vs non-analysed Pages and the NULL conventions, with a link from `docs/architecture.md`.
 - [ ] 1.6 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
-## 2. Decoding, text and titles
+## 2. Decoding, text and titles (slice)
 
 - [ ] 2.1 Drive "Charset declared in a meta element" at seam 4. Create the Page extractor entry point, registered on `020-add-crawl-core`'s extractor seam, with charset decoding. Add `title_1`.
 - [ ] 2.2 Drive "Whitespace is collapsed before measuring" at seam 4. Add the element-text algorithm and whitespace normalisation, and `title_1_length`.
@@ -29,7 +31,7 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 - [ ] 2.6 Docs: add the decoding order, the text model and the title columns to `docs/page-data.md`.
 - [ ] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
-## 3. Meta descriptions and headings
+## 3. Meta descriptions and headings (slice)
 
 - [ ] 3.1 Drive "Meta description is normalised" at seam 4, and add `meta_description_1` and `meta_description_1_length`.
 - [ ] 3.2 Drive "Multiple meta descriptions" at seam 4, and add `meta_description_count`, `meta_description_2` and `meta_description_2_length`.
@@ -43,18 +45,19 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 ## 4. Identity, response, size and redirects
 
 - [ ] 4.1 Drive "Non-ASCII path is decoded for display" and "Punycode host is shown in Unicode" at seam 4. This is a trivial pair: two cases of one display-form function. Add `url_encoded_address`.
-- [ ] 4.2 Drive "Last-Modified is normalised to a timestamp" and "Invalid Last-Modified is NULL" at seam 4. This is a trivial pair: valid and invalid input. Add `last_modified`.
-- [ ] 4.3 Drive "Reason phrase falls back to the standard phrase" at seam 4, and add `status`.
-- [ ] 4.4 Drive "Error Page keeps response data" at seam 3+6. The handler builds Pages that are not analysed with NULL HTML columns. Add `status_code`.
-- [ ] 4.5 Drive "Crawl timestamp repeats fetched_at" at seam 3+6, with the injectable clock. Add `crawl_timestamp`.
-- [ ] 4.6 Drive "Compressed Page sizes" at seam 3+6, using `022-add-fetch-policy`'s gzip fixture support with a stored 46-byte blob. Add `size_bytes`, `transferred_bytes` and `content_encoding`.
-- [ ] 4.7 Drive "Uncompressed Page sizes" at seam 3+6.
-- [ ] 4.8 Drive "Crawl Depth is copied from the crawl engine" at seam 3+6, and add `crawl_depth`.
-- [ ] 4.9 Drive "Repeated values equal the urls row" at seam 3+6, and add `content_type` and `response_time_ms`.
-- [ ] 4.10 Drive "HTTP redirect with an HTML body" at seam 3+6, and add `redirect_url` and `redirect_type`.
-- [ ] 4.11 Drive "HTTP Refresh header is a redirect" at seam 4, from `020`'s `http_refresh` Link.
-- [ ] 4.12 Docs: add the identity, response, size and redirect column definitions to `docs/page-data.md`.
-- [ ] 4.13 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [ ] 4.2 Drive "Path and query of the address" at seam 4, and add `url_path` and `url_query`.
+- [ ] 4.3 Drive "Last-Modified is normalised to a timestamp" and "Invalid Last-Modified is NULL" at seam 4. This is a trivial pair: valid and invalid input. Add `last_modified`.
+- [ ] 4.4 Drive "Reason phrase falls back to the standard phrase" at seam 4, and add `status`.
+- [ ] 4.5 Drive "Error Page keeps response data" at seam 3+6. The handler builds Pages that are not analysed with NULL HTML columns. Add `status_code`.
+- [ ] 4.6 Drive "Crawl timestamp repeats fetched_at" at seam 3+6, with the injectable clock. Add `crawl_timestamp`.
+- [ ] 4.7 Drive "Compressed Page sizes" at seam 3+6, using `022-add-fetch-policy`'s gzip fixture support with a stored 46-byte blob. Add `size_bytes`, `transferred_bytes` and `content_encoding`.
+- [ ] 4.8 Drive "Uncompressed Page sizes" at seam 3+6.
+- [ ] 4.9 Drive "Crawl Depth is copied from the crawl engine" at seam 3+6, and add `crawl_depth`.
+- [ ] 4.10 Drive "Repeated values equal the urls row" at seam 3+6, and add `content_type` and `response_time_ms`.
+- [ ] 4.11 Drive "HTTP redirect with an HTML body" at seam 3+6, and add `redirect_url` and `redirect_type`.
+- [ ] 4.12 Drive "HTTP Refresh header is a redirect" at seam 4, from `020`'s `http_refresh` Link.
+- [ ] 4.13 Docs: add the identity, response, size and redirect column definitions to `docs/page-data.md`.
+- [ ] 4.14 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Cookies
 
@@ -82,7 +85,7 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 
 ## 7. Indexability
 
-- [ ] 7.1 Drive "Plain 200 Page is indexable" at seam 4, and add `indexability` and `indexability_status`.
+- [ ] 7.1 (slice) Drive "Plain 200 Page is indexable" at seam 4, and add `indexability` and `indexability_status`.
 - [ ] 7.2 Drive "Noindex wins over a canonical" at seam 4.
 - [ ] 7.3 Drive "Self-referencing canonical stays indexable" and "Canonical to another URL" at seam 4. This is a trivial pair: the same comparison, with the same URL and with a different one.
 - [ ] 7.4 Drive "Server error" at seam 4.

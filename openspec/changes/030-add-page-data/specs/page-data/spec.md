@@ -85,6 +85,8 @@ The Kind column marks how a column is filled:
 | Identity and response | `url_id` | INTEGER, primary key, references `urls.id` | no |  |  |
 | Identity and response | `address` | TEXT | no | W |  |
 | Identity and response | `url_encoded_address` | TEXT | no | W |  |
+| Identity and response | `url_path` | TEXT | no | W |  |
+| Identity and response | `url_query` | TEXT | yes | W |  |
 | Identity and response | `content_type` | TEXT | no | W |  |
 | Identity and response | `status_code` | INTEGER | no | W |  |
 | Identity and response | `status` | TEXT | yes |  |  |
@@ -181,14 +183,14 @@ The Kind column marks how a column is filled:
 
 #### Scenario: Schema lists exactly the Page record columns
 - **WHEN** `spider schema pages` runs
-- **THEN** the item's columns, reduced to `name`, `type` and `nullable`, are the 94 rows of the table above, as a set
+- **THEN** the item's columns, reduced to `name`, `type` and `nullable`, are the 96 rows of the table above, as a set
 
 #### Scenario: Indexes of pages
 - **WHEN** `spider schema pages --fields indexes` runs
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"pages_address","columns":["address"],"unique":true,"where":null}`
 
 ### Requirement: Address columns
-Each Page row SHALL store two forms of the Page's URL:
+Each Page row SHALL store two forms of the Page's URL, and the path and query of the display form:
 
 - **`url_encoded_address`** is the URL as the Crawl requested it, equal to `urls.url`. The host is in IDNA (punycode) form, and every non-ASCII character is percent-encoded as UTF-8.
 - **`address`** is `url_encoded_address` with two changes:
@@ -196,6 +198,8 @@ Each Page row SHALL store two forms of the Page's URL:
   - every percent-encoded byte sequence that decodes as UTF-8 to a non-ASCII character is replaced by that character
   
   Percent-encoded ASCII characters SHALL stay encoded.
+- **`url_path`** is the path of `address`: from the first `/` after the host up to the first `?`, or to the end.
+- **`url_query`** is the query of `address`: the text after the first `?`. It is NULL when `address` has no `?`, and the empty string when nothing follows it.
 
 #### Scenario: Non-ASCII path is decoded for display
 - **WHEN** the Page's `url_encoded_address` is `https://example.test/%C3%BCber%20uns`
@@ -204,6 +208,10 @@ Each Page row SHALL store two forms of the Page's URL:
 #### Scenario: Punycode host is shown in Unicode
 - **WHEN** the Page's `url_encoded_address` is `https://xn--bcher-kva.test/`
 - **THEN** its `address` is `https://bücher.test/`
+
+#### Scenario: Path and query of the address
+- **WHEN** Pages have the `url_encoded_address` values `https://example.test/%D0%9A%D0%B0%D1%82/a%2Fb?x=1&y=%C3%BC`, `https://example.test/a?` and `https://example.test/a`
+- **THEN** the first has `url_path` `/Кат/a%2Fb` and `url_query` `x=1&y=ü`, the second has `url_path` `/a` and `url_query` equal to the empty string, and the third has `url_query` NULL
 
 ### Requirement: Response columns
 Each Page row SHALL store these columns. All of them come from the Page's own response, never from a redirect target. Where a column repeats a value of the `urls` table (`020-add-crawl-core`, including the columns that `022-add-fetch-policy` adds) or of the `origins` table, it SHALL be equal to that value.
@@ -793,12 +801,12 @@ This change stores each discovered Link together with the attributes that analys
 | `rel_nofollow`, `rel_ugc`, `rel_sponsored` | INTEGER | no | boolean | 1 when `rel` contains that token, otherwise 0 |
 | `hreflang` | TEXT | yes | | the trimmed `hreflang` value for `hreflang` Links, otherwise NULL |
 | `media` | TEXT | yes | | the trimmed `media` value for `mobile_alternate` Links, otherwise NULL |
-| `link_position` | TEXT | yes | `navigation`, `header`, `footer`, `sidebar`, `content` | where on the Page the Link is (see below) |
+| `link_position` | TEXT | yes | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | where on the Page the Link is (see below) |
 | `html_source` | TEXT | yes | `raw`, `rendered` | whether the Link came from the raw or the rendered HTML; filled from v1.1, with JavaScript rendering, and NULL until then |
 
 `(source_url_id, ordinal)` SHALL be the primary key. How the rows are laid out on disk, and the indexes of `links`, are chosen by the links benchmark (ADR-0005); they change none of these columns.
 
-**Link position.** For a Link from an element inside `<body>`, `link_position` SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element. It SHALL be `content` when there is none, and NULL for a Link declared in an HTTP header or outside `<body>`. The `[content_area]` settings do not change it.
+**Link position.** For a Link from an element that the HTML parser places inside `<head>`, `link_position` SHALL be `head`. For a Link from an element inside `<body>`, it SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element, and SHALL be `content` when there is none. It SHALL be NULL only for a Link declared in an HTTP header. The `[content_area]` settings do not change it.
 
 #### Scenario: Hyperlink with rel flags
 - **WHEN** the analysed Page `https://example.test/a` contains `<main><a href="/b" rel="nofollow UGC">Read  more</a></main>`
@@ -818,7 +826,7 @@ This change stores each discovered Link together with the attributes that analys
 
 #### Scenario: Link positions come from the enclosing element
 - **WHEN** an analysed Page's HTML is `<head><link rel="canonical" href="/x"></head><body><header><a href="/h">H</a></header><nav><a href="/n">N</a></nav><main><a href="/c">C</a></main><aside><a href="/s">S</a></aside><footer><nav><a href="/f">F</a></nav></footer></body>`
-- **THEN** its `hyperlink` Links to `/h`, `/n`, `/c`, `/s` and `/f` have `link_position` `header`, `navigation`, `content`, `sidebar` and `navigation` respectively, and its `canonical` Link has `link_position` NULL
+- **THEN** its `hyperlink` Links to `/h`, `/n`, `/c`, `/s` and `/f` have `link_position` `header`, `navigation`, `content`, `sidebar` and `navigation` respectively, and its `canonical` Link has `link_position` `head`
 
 #### Scenario: Hreflang and mobile alternate Links
 - **WHEN** an analysed Page has `<link rel="alternate" hreflang="de" href="/de/">` and `<link rel="alternate" media="only screen and (max-width: 640px)" href="https://m.example.test/">` in its head
