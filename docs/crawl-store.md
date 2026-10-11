@@ -125,16 +125,24 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
 - **A unit** is a function that gets a database connection and may insert, update and read rows. It returns a value to its caller, for example the next URL to fetch.
 - **One at a time, in order.** The writer runs units on its own thread, one at a time, in the order they were submitted. Units can come from several threads, or from an event loop without blocking it.
 - **One open transaction.** Every unit sees what the units before it wrote, committed or not, so a unit can read a row and update it in one step.
-- **Atomic units.** A unit that fails leaves no change: its writes are rolled back, its error reaches its caller, and the units before and after it are unaffected. That holds for Ctrl+C inside a unit too.
+- **Atomic units.** A unit that fails leaves no change: its writes are rolled back, its error reaches its caller, and the units before and after it are unaffected. That holds for Ctrl+C inside a unit too. A unit that fails never runs again.
 - **When it commits:**
 
   | Trigger | |
   |---|---|
   | 500 units since the last commit | the batch |
   | 1 second after the first unit since the last commit | the timer, checked after each unit and every 50 ms while idle |
+  | a unit failed | the replay commit, described below |
   | `flush()` | at once, before `flush()` returns |
   | `close()` | everything still open |
 
+- **The replay commit.** Units run without a savepoint each, which makes a batch faster. When a unit fails, the writer rolls back the whole open transaction, runs the units before it again, in order and each in its own savepoint, and commits them at once. Only then does the failing unit's caller get its error.
+- **Units may run again.** Because of the replay, a unit may run a second time before it is committed. A unit therefore:
+  - has no effect outside the writer's connection: no I/O, no shared state, and nothing reported from inside the unit
+  - does not change its input
+  - computes its writes from its input and what it reads on the connection, so its second run writes what its first run wrote
+
+  No test can check this for every unit, so the review of every change that adds units checks it.
 - **Watching commits.** An optional `on_commit` callable, given when the writer is opened, is called on the writer thread after each commit with the number of units that commit made durable, for progress and metrics. It must be quick, and an error it raises ends the writer like a failed commit.
 - **What a crash loses.** A process that is killed, even with SIGKILL or TerminateProcess, loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound: `PRAGMA integrity_check` returns `ok`. Tests kill a real writer process to check both.
 - **The write check.** Opening the writer first runs a write that it rolls back. A crawl file that cannot be written, for example one with the read-only attribute, fails at once with `crawl_not_writable` (exit code 7) and `details.file`, before anything is crawled, and the file is left unchanged.

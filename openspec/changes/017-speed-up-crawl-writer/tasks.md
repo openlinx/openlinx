@@ -24,7 +24,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.4 **Guard:** "An interrupted unit runs once and the writer goes on". Done when: `015`'s `test_an_interrupted_unit_rolls_back_and_the_writer_goes_on` is renamed after this scenario and also checks the Seed at position 1 and the number of runs.
 - [x] 1.5 **Guard:** `015`'s scenarios under the optimistic batch: "A unit sees the units before it", "A unit updates a row of an earlier unit", "A failing unit leaves no change", "Other units survive a failing unit", "Units wait for the batch", "The 500th unit commits the batch", "The timer commits", "A flush commits at once" and "Closing commits everything". Done when: their `015` tests pass unchanged, and so do `015`'s tests for units from several threads, `run_async`, a busy unit, closing, and a unit that waits for its own writer.
 - [x] 1.6 **Guard:** "A read through the writer commits nothing".
-- [ ] 1.7 Docs: in "Writing a Crawl" of `docs/crawl-store.md`, document the replay commit and the unit contract of design D7: a unit may run again before its commit, so it has no effect outside its connection and does not change its input.
+- [x] 1.7 Docs: in "Writing a Crawl" of `docs/crawl-store.md`, document the replay commit and the unit contract of design D7: a unit may run again before its commit, so it has no effect outside its connection and does not change its input.
 - [ ] 1.8 Review: run the code-review skill on group 1's commits against the "Transactional writer" requirement, then refactor with the whole suite green.
 
 ## 2. Submitting units with their outcome at the commit (seam 2)
