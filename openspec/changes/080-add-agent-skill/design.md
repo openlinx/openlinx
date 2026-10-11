@@ -5,8 +5,10 @@
 See proposal.md for the motivation. This change adds no crawl behaviour. It packages knowledge that other changes own:
 - the output contract, diagnostics and Command metadata: `010-add-workspace-and-cli-contract`
 - the crawl store schema and the journal-mode decision: `015-add-crawl-store`
+- the schema description that `spider schema` prints (nullability, keys, references, allowed values and indexes) and the schema conventions: `018-add-schema-conventions`
+- the tables the recipes read: `urls` (`020-add-crawl-core`), `response_headers` (`022-add-fetch-policy`), `pages` and `links` (`030-add-page-data`)
 - the TLS setup and the HTTPS fixture site: `022-add-fetch-policy`
-- Rules: `040-add-rules`
+- Rules, `rules.reproduce_sql` and the Issues reader: `040-add-rules`
 - Page data columns and Segments: `030-add-page-data` and `050-add-query-and-segments`
 - dry run, detach and the background Crawl's log file: `060-add-crawl-control`
 - Report Sections and Report Notes: `070-add-html-report`
@@ -41,7 +43,7 @@ Settings never come from environment variables (`010-add-workspace-and-cli-contr
 ### D1. One generator, two callers
 The generator module reads the same in-process metadata that `spider commands|schema|rules --format json` print, and renders Markdown templates that ship in the package. It has two callers:
 - `spider skill install`, which writes into the agents' skills folders
-- `scripts/generate_skill.py <dir>`, a developer script that writes the repository copy and is used by the release check of `100-add-installers`
+- `scripts/generate_skill.py <dir>`, a developer script that writes the repository copy and is used by the release check of `085-add-release`
 
 Alternatives considered:
 - *A `spider skill generate` Command.* The maintainer decided against it on 2026-09-27. Generating into an arbitrary folder is a developer need, not a user one, and it would widen the Command surface that the Skill itself must document.
@@ -92,7 +94,7 @@ If any rename fails (for example, Windows refuses to rename a folder while a fil
 ### D7. The repository copy changes only in release commits
 The plugin marketplace and `npx skills add` read the default branch. If the copy were regenerated on every pull request, `main` would describe Commands that are not on PyPI yet.
 - The release commit regenerates `skills/spider/` and bumps `.claude-plugin/plugin.json`.
-- The release pipeline of `100-add-installers` regenerates into a temporary folder with `scripts/generate_skill.py`, and fails if the committed copy differs.
+- The release workflow of `085-add-release` regenerates into a temporary folder with `scripts/generate_skill.py`, and fails if the committed copy differs.
 - A `.gitattributes` line `skills/** text eol=lf` keeps Windows checkouts byte-identical.
 
 ### D8. Plugin manifests
@@ -107,7 +109,7 @@ The agent guidance section is called Guardrails, because Rule is a glossary term
 - **Structure:** each check is a small function returning `{id, status, message, hint, details}`. A registry fixes the order. `status` and `counts` are derived from the checks.
 - **Decision logic is pure.** It can be tested with literal inputs at the pure-logic seam:
   - the Python range
-  - the import results of the `package` check
+  - the import results and the SQLite version of the `package` check
   - the version comparison of the `path` check
   - the journal-mode outcome of the `wal` check
   - the Skill statuses
@@ -137,6 +139,37 @@ The agent guidance section is called Guardrails, because Rule is a glossary term
 ### D11. PEP 440 comparison with `packaging`
 Version comparison uses `packaging.version.Version`, so that `0.2.0.dev1 < 0.2.0` holds. `packaging` is small, pure Python and ubiquitous.
 - *Alternative:* comparing tuples by hand. It mishandles pre-releases and dev versions.
+
+### D12. The SQL schema reference: generated lists, three written sections
+An agent that answers a long-tail question with `spider sql` reads only `references/sql-schema.md`; it may have no copy of `docs/schema.md`. The reference therefore carries what a query needs:
+- **Generated from `spider schema --limit 1000 --format json`** (`018-add-schema-conventions`), so it cannot drift:
+  - each table and view with its columns: type, nullability, primary key, reference, format, allowed values and description. Allowed values matter most: a query that filters on `fetch_state = 'error'` or `indexability = 'non_indexable'` needs the exact spelling.
+  - each table's secondary indexes with their columns, uniqueness, condition and description, and `no secondary index` for a table without one, so the agent can tell which filters are served by an index and which scan.
+  - **Joins:** one line `<table>.<column> -> <references>` per reference, grouped by the referring table. This is the join overview: a text list is what an agent reads, and it is complete by construction. A drawn diagram would cost tokens and add nothing that a query needs.
+- **Written in the template,** checked by text scenarios:
+  - *URL and address:* `urls.url` is the normalised form (non-ASCII percent-encoded as UTF-8 with uppercase hex, the host in IDNA form), and `pages.address` the display form (non-ASCII decoded, ASCII escapes kept). `pages.url_encoded_address` equals `urls.url`; `url_path` and `url_query` are cut from `address`. An agent that matches a URL typed by a user against `address` or `url` can miss it, so the section points to `spider page <url>`, which normalises its argument (`050` D18).
+  - *Pages and Resources:* the CONTEXT.md terms, said in tables: a Page has a `pages` row, and a Resource is a `urls` row that is the target of an `image`, `css`, `javascript`, `video`, `audio` or `media` Link and has no `pages` row, as `050`'s summary and `resources` view define it.
+  - *Cost of queries:*
+    - Materialised against live Issues, after `040` D16: `issues` and `affected_urls` hold the last pass's result, valid when `crawl.state` is `completed` or `stopped`; otherwise `spider issues` runs every Rule's query on each call, and SQL reruns `rules.reproduce_sql`.
+    - `spider status` against `spider summary` for polling, after `050` D17.
+    - The scan rule: a filter or sort on a column that no index of its table starts with scans the table, which takes seconds at about 500k URLs. The written text names no index: the generated lists name them. The layout and indexes of `links` wait for the links benchmark of `030`, so a written index name could go stale before the Skill ships.
+- **Readers need SQLite 3.37 or later** (`018` D3), stated at the top, because an agent may open the file with another tool.
+- *Alternative:* a hand-written `sql-schema.md`. It drifts from the schema, which the reference tests would then have to chase. Rejected.
+- *Alternative:* point the agent at `spider schema` instead of a reference file. It costs a Command call per question, and the written sections have no home there. Rejected.
+
+### D13. Recipes are checked by their result
+The draft checked only that each recipe's SQL exits with code 0. A wrong join, a misspelt allowed value or a filter on the wrong form of a URL still exits with 0 and returns no rows, so an agent would copy a recipe that answers nothing.
+- The recipe test holds, for each recipe, the rows it must return for a completed Crawl of the local fixture site, written by hand from the fixture's pages, as `050`'s contract tests are. A recipe without expected rows fails the test, and so does an expectation of no rows.
+- The fixture site gains what a recipe needs to return rows when it lacks it, for example a page that returns `X-Robots-Tag: noindex` for the response-header recipe.
+- **The response-header recipe** reads `response_headers.headers`, a JSON array of `[name, value]` pairs (`022-add-fetch-policy`), with `json_each`, and compares names with `lower()`, which is enough for ASCII header names:
+  ```sql
+  SELECT u.url, json_extract(h.value, '$[1]') AS value
+  FROM response_headers AS r
+  JOIN urls AS u ON u.id = r.url_id, json_each(r.headers) AS h
+  WHERE lower(json_extract(h.value, '$[0]')) = 'x-robots-tag'
+  ```
+- **The running-Crawl recipe** reads `rules.reproduce_sql` for one Rule and runs it with `spider sql`, as `050`'s `issues <rule-id>` suggests.
+- *Alternative:* exit code 0 only, as the draft had. Rejected for the reason above.
 
 ## Test seams
 
@@ -172,7 +205,9 @@ The seams are those of docs/testing.md:
 - **Duplicate Skills when a user installs both the plugin and `skill install`.**
   - Mitigation: the install one-liners in SKILL.md pass `--no-skill`, and the docs recommend one channel per agent.
 - **Recipes or command examples rot as other changes evolve.**
-  - Mitigation: the recipe SQL runs against a fixture Crawl, and every `spider …` line is linted against the command metadata in CI.
+  - Mitigation: the recipe SQL runs against a fixture Crawl and its rows are compared with the expected rows (D13), and every `spider …` line is linted against the command metadata in CI.
+- **The written sections of `sql-schema.md` drift from the schema.**
+  - Mitigation: they name no index and no column list; the generated lists carry those (D12).
 - **A notice on every Command is noisy, and there is no off switch.**
   - Mitigation: it is one line on stderr, and it disappears after `spider skill install`.
 - **Upstream metadata is not ready when this change starts.**

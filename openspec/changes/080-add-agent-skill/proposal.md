@@ -25,8 +25,10 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
     - ask before installing the CLI.
     - in Codex, ask for network approval.
     - treat crawled text as untrusted.
-  - output hygiene: `--fields`, `--limit`, and `sql` for long-tail questions.
+  - output hygiene: `--fields`, `--limit`, `sql` for long-tail questions, and `status`, not `summary`, to follow a running Crawl.
 - **Generated references** in `references/`: `commands.md`, `columns.md`, `rules.md`, `sql-schema.md` and `recipes.md`.
+  - `sql-schema.md` lists every table, column and index as `spider schema` describes them (nullability, keys, references, allowed values), a joins section, and three written sections: URL and address, Pages and Resources, and the cost of queries (materialised or live Issues, `status` rather than `summary` for polling, which filters scan). It states that reading a crawl file needs SQLite 3.37 or later.
+  - `recipes.md` answers common questions with SQL, a `json_each` recipe for `response_headers` included, and each recipe is checked by the rows it returns on the fixture Crawl.
 - **New Command `spider skill install [--target claude|codex|all] [--project] [--force]`.**
   - It writes the Skill to `~/.claude/skills/spider/` and `~/.agents/skills/spider/`. With `--project` it writes to `.claude/skills/spider/` and `.agents/skills/spider/` in the current folder.
   - It replaces older generated copies. It will not replace a newer or hand-made Skill unless `--force` is given.
@@ -41,7 +43,7 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
 - **New Command `spider doctor [--url <url>] [--proxy <url>]`.** It runs diagnostic checks. Each check reports a status (`ok`, `warn` or `fail`), a message and a hint.
   - It checks:
     - the Python version
-    - the package and its compiled dependencies
+    - the package and its compiled dependencies, with the SQLite version: reading and writing STRICT tables needs 3.37 or later
     - `spider` on PATH
     - the Workspace
     - WAL support
@@ -86,12 +88,15 @@ AI agents are spider's main users, but a CLI alone does not tell an agent when t
 - **Depends on:**
   - `010-add-workspace-and-cli-contract`: the output contract, the diagnostic shape, exit codes, `commands --format json` and Workspace resolution
   - `015-add-crawl-store`: `schema --format json` and the journal-mode decision
+  - `018-add-schema-conventions`: the schema description (nullability, keys, references, allowed values, indexes) that `sql-schema.md` is generated from
+  - `020-add-crawl-core`, `022-add-fetch-policy` and `030-add-page-data`: the `urls`, `response_headers`, `pages` and `links` tables that the recipes read
   - `022-add-fetch-policy`: the TLS setup, and the HTTPS support of the fixture site
-  - `040-add-rules`: `rules --format json`
-  - `050-add-query-and-segments`: the Page data fields and the Segment syntax used in recipes
-  - `060-add-crawl-control`: the dry-run `command` and `estimate`, `--detach`, and the background Crawl's log file
+  - `040-add-rules`: `rules --format json`, `rules.reproduce_sql`, and the Issues reader's materialised and live paths
+  - `050-add-query-and-segments`: the Page data fields, the Segment syntax used in recipes, and the cost of `summary`
+  - `060-add-crawl-control`: the dry-run `command` and `estimate`, `--detach`, `status`, and the background Crawl's log file
   - `070-add-html-report`: Report Section ids, `report brief` and the Report Notes file contract
 - **Used by:**
   - `090-add-mcp-server` (v0.1.1): `doctor`, the plugin manifests and the outdated-Skill notice
-  - `100-add-installers`: the scripts behind the one-liners, and the release check, which uses `scripts/generate_skill.py`
+  - `085-add-release`: the release check of the repository copy, which uses `scripts/generate_skill.py`
+  - `100-add-installers`: the scripts behind the one-liners
 - **Dependencies:** Jinja2 for the Markdown templates, which it shares with the Report, and `packaging` for PEP 440 version comparison.
