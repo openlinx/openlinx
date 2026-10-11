@@ -1,8 +1,8 @@
-"""The declared public schema of a crawl file (design D6 of 015-add-crawl-store)."""
+"""The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2)."""
 
-from typing import get_args
+from typing import Any, get_args
 
-from sqlalchemy import Column, Integer, MetaData, Table, Text
+from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, Text, or_
 
 from spider.store.records import CrawlMode, CrawlState, JournalMode
 from spider.store.types import Flag, Json, Timestamp
@@ -15,9 +15,26 @@ JOURNAL_MODES = list(get_args(JournalMode.__value__))
 
 metadata = MetaData()
 
-crawl = Table(
+
+def _checks(table: str, columns: tuple[Column[Any], ...]) -> list[CheckConstraint]:
+    checks = []
+    for column in columns:
+        if "values" in column.info:
+            allowed = column.in_(column.info["values"])
+            condition = or_(column.is_(None), allowed) if column.nullable else allowed
+            checks.append(CheckConstraint(condition, name=f"{table}_{column.name}_values"))
+    return checks
+
+
+def public_table(name: str, *columns: Column[Any], comment: str, change: int) -> Table:
+    """The one way to declare a public table: it adds the CHECKs its columns' values call for."""
+    return Table(
+        name, metadata, *columns, *_checks(name, columns), comment=comment, info={"change": change}
+    )
+
+
+crawl = public_table(
     "crawl",
-    metadata,
     Column("id", Text, primary_key=True, comment="The crawl id."),
     Column(
         "crawl_mode",
@@ -95,12 +112,11 @@ crawl = Table(
         comment="The operating system that created the Crawl, as Python describes it.",
     ),
     comment="The Crawl's metadata, in exactly one row.",
-    info={"change": 15},
+    change=15,
 )
 
-seeds = Table(
+seeds = public_table(
     "seeds",
-    metadata,
     Column(
         "position",
         Integer,
@@ -110,5 +126,5 @@ seeds = Table(
     ),
     Column("url", Text, nullable=False, comment="The Seed URL as given."),
     comment="The Seeds the Crawl started from, in the order they were given.",
-    info={"change": 15},
+    change=15,
 )

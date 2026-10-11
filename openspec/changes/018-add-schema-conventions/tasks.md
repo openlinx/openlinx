@@ -17,7 +17,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 1. The file refuses bad values (seam 2, seam 6)
 
-- [ ] 1.1 Drive "An unknown enumeration value is refused".
+- [x] 1.1 Drive "An unknown enumeration value is refused".
 
   Done when: one declaration helper in `spider.store.schema` adds a CHECK, named `<table>_<column>_values`, for every column with `info["values"]`. It allows NULL for a nullable column. No table writes a CHECK by hand (design D2).
 - [ ] 1.2 Drive "A flag outside 0 and 1 is refused". Done when: the same helper adds `<table>_<column>_flag` for every `Flag` column.
