@@ -6,7 +6,7 @@ The user decided on one schema blueprint before `020` is built (2026-10-10), and
 
 ## What Changes
 
-> **Re-grounded (2026-10-11)** against the code of `015-add-crawl-store` as built on its branch (`spider.store.schema`, `spider.store.types`, `spider.services.schema`, `docs/schema.md` and `tests/contract/test_schema.py`), the archived `crawl-store` spec on that branch, the schema inventory of 2026-10-10 and the blueprint outline of 2026-10-11 with its rulings.
+> **Re-grounded (2026-10-11)** against the code of `015-add-crawl-store` as built on its branch (`spider.store.schema`, `spider.store.types`, `spider.services.schema`, `docs/schema.md` and `tests/contract/test_schema.py`), the archived `crawl-store` spec on that branch, the schema inventory of 2026-10-10 and the blueprint outline of 2026-10-11 with its rulings. **Re-grounded again (2026-10-11)** on `main` after `017`'s merge (PR #4): `opening(role=...)` and `ConnectionRole`, the writer's connect listeners and its optimistic batch, and the `crawl-store` spec on `main`, against which this change's modified requirements still differ only by its own additions.
 
 - **ADR-0005,** "The crawl file's schema conventions":
   - the user's four schema decisions of 2026-10-10
@@ -58,8 +58,7 @@ The user decided on one schema blueprint before `020` is built (2026-10-10), and
 
 - **Depends on:**
   - `015-add-crawl-store` as built: the declared `MetaData` with `info={"change": n}`, the `Timestamp`, `Json` and `Flag` types, `describe_schema`, `docs/schema.md` and its contract test.
-  - `017-speed-up-crawl-writer`: it comes first in the build order, and neither change touches the other's requirements.
-  - PR #3 must be merged first, so that `openspec/specs/crawl-store` exists on `main`.
+  - `017-speed-up-crawl-writer` as merged (PR #4): `CrawlWriter`'s optimistic batch, through which a refused unit fails alone, and `opening(role=...)`. The requirements that `017` modified ("Transactional writer") or added are not touched here.
 - **Used by:** every change that adds a table: `020`, `022`, `030`, `040`, `060` and later ones.
 - **Code:** `src/spider/store/schema.py`, `src/spider/store/types.py`, `src/spider/services/schema.py`, and the `schema` Command's fields.
 - **Tests:** `tests/contract/test_schema.py`, the `spider schema` tests and the store tests.

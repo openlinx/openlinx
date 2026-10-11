@@ -1,12 +1,15 @@
 ## Context
 
-- **What this change builds on:** `015-add-crawl-store` as built on its branch, and its archived `crawl-store` spec:
+- **What this change builds on:** `015-add-crawl-store` and `017-speed-up-crawl-writer` as merged on `main`, and the `crawl-store` spec they archived:
   - The public schema is declared once, in `spider.store.schema.metadata`, as SQLAlchemy Core tables (015 D6).
   - Each table carries `info={"change": n}` and a `comment`. Each column carries a `comment`, and an enumeration column carries `info={"values": [...]}`, read from the `Literal` the code uses.
   - The shared column types `Timestamp` and `Json` are `TypeDecorator`s over `Text`, and `Flag` is one over `Integer`. Each has a `format` class attribute.
   - `spider.services.schema.describe_schema()` builds the `spider schema` items from the declaration. It sets `references` to `None` for every column today, because no table has a foreign key yet.
   - `docs/schema.md` has one section per table. `tests/contract/test_schema.py` parses it and compares it with `spider schema --limit 1000`, and checks a new file through `PRAGMA table_info` and `PRAGMA foreign_key_list`.
   - SQLAlchemy is 2.1.3. Python's SQLite is 3.50.x (python.org 3.14) or 3.53.x (uv-managed).
+  - `spider.store.connections.opening(path, role=...)` takes a required `ConnectionRole`: `create`, `read` or `write` (`017` D8). `spider.store.crawls` creates a file under `create`, with `metadata.create_all` in its first transaction, so the CHECKs and STRICT of D2 and D3 reach every new file through the declaration alone, with no change to the connection code.
+  - Every connection sets `PRAGMA foreign_keys = ON`, so a reference that D4 describes is also enforced. The connect listeners of the `create` and `write` roles (transactions, `synchronous` for the journal, and the writer's `temp_store`, `cache_size` and `mmap_size`) set no schema option.
+  - `CrawlWriter` runs units in `017`'s optimistic batch: when a unit fails, the batch is rolled back, the units before it run again and are committed, and the failing unit's own error reaches its caller (`017` D6). So a refused value fails only its unit, which is what the scenarios of D2 and D3 check.
 - **The decisions it records:**
   - The user's four schema decisions of 2026-10-10 (inventory).
   - The blueprint outline of 2026-10-11 and the rulings on it (the user decided Q7, Q8, Q9 and Q14).
@@ -81,7 +84,7 @@
 
 ### D6. Counts in the `crawl` row
 - 015's rule "the `crawl` row holds no counts or statistics" becomes: no counts or statistics are written while the Crawl runs, and a derived value over the stored rows may be stored only when a post-crawl pass writes it. 040's Health Score columns are the first such values.
-- Counts during the Crawl still come from the tables, or from the writer's counters for progress (017, 020).
+- Counts during the Crawl still come from the tables, or, for progress, from `020`'s counters, which the Futures of its submitted units update (`020` D10). Progress never uses the writer's `on_commit`, which counts read-only units too.
 
 ### D7. 015's tables follow at once
 - `crawl` and `seeds` become `STRICT`.
@@ -92,7 +95,7 @@
 
 Seams from docs/testing.md:
 - **CLI (1):** `spider schema` output and `spider commands`, through `run_cli`.
-- **Services and store API (2):** units that write refused values, through `CrawlWriter`, with a real crawl file in `temp_workspace`.
+- **Services and store API (2):** units that write refused values, through `CrawlWriter.run()`, with a real crawl file in `temp_workspace`. The unit's own SQLite error reaches the test, and the units committed before it stay (`017` D6).
 - **Store contract (6):** `docs/schema.md` against `spider schema --limit 1000`, and a new file through `PRAGMA table_list`, `table_info`, `foreign_key_list`, `index_list` and `index_xinfo`.
 - Scenarios that only `crawl` and `seeds` exercise today, such as reference columns and index names, are guards. They pass at once, and they bind every table that later changes add.
 
