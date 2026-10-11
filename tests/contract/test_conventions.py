@@ -96,3 +96,15 @@ def test_index_names_start_with_their_table() -> None:
         or not isinstance(index["description"], str)
         or not index["description"].strip()
     ] == []
+
+
+LATER_OR_DERIVED = re.compile(r"Derived: |Filled from v[0-9]+\.[0-9]+\. ")
+
+
+def test_derived_and_later_columns_may_hold_null() -> None:
+    # Vacuous until 022's or 030's first later column, whose task adds an assertion one was seen.
+    assert [
+        column["name"]
+        for column in all_columns()
+        if LATER_OR_DERIVED.match(column["description"]) and not column["nullable"]
+    ] == []
