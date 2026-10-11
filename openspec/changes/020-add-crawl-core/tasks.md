@@ -51,7 +51,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 2. Scope decisions (slice, seam 4)
 
-- [ ] 2.1 Drive "The other scheme of the Seed host is internal" and "Another host is external by default", a trivial pair.
+- [x] 2.1 Drive "The other scheme of the Seed host is internal" and "Another host is external by default", a trivial pair.
 
   Done when: `ScopeRules` (design D4) is a frozen value built from the Seed and the settings, whose decision on a `NormalizedUrl` is a pure function.
 - [ ] 2.2 Drive "The www host of an apex Seed is internal".

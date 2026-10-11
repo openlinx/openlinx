@@ -186,3 +186,10 @@ def _without_dot_segments(path: str) -> str:
     if path.endswith(("/.", "/..")):
         segments.append("")
     return "/" + "/".join(segments)
+
+
+def url_host(url: NormalizedUrl) -> str:
+    authority = url.split("/", 3)[2]
+    if authority.startswith("["):
+        return authority.partition("]")[0] + "]"
+    return authority.partition(":")[0]
