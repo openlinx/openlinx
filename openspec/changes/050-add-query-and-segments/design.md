@@ -89,7 +89,7 @@ Rows are read with `fetchmany(limit + 1)` to set `truncated`, and BLOBs are mapp
 One read transaction iterates the view's rows with `fetchmany(1000)` and hands each row to the row serialisers of `spider.output`: 010's NDJSON for `jsonl`, and the CSV writer of D12 for `csv`. Each row is written as soon as it is read, to `sys.stdout.buffer` or to the `-o` target of D13: the file receives exactly the stdout bytes, it is replaced only on success, and a locked target is reported as `output_not_writable`.
 
 The `resources` view is one SQL query:
-- the `urls` rows that are targets of `image`, `css`, `javascript` or `media` Links and have no `pages` row
+- the `urls` rows that are targets of `image`, `css`, `javascript`, `video`, `audio` or `media` Links and have no `pages` row
 - `type` from the first such Link, by source row and `ordinal`
 - `inlinks` from a count over `links`
 - *Alternatives:* pandas `to_csv` is a dependency and holds the data in memory. A second CSV writer for `export` would duplicate the policy of D12 (G5).
