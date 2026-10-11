@@ -325,6 +325,7 @@ Boundary doubles used, all from the approved list:
 - [Protego differs from Google's parser on edge cases] → The status mapping is ours and tested, and matching edge cases are pinned in pure-logic tests.
 - [The Public Suffix List snapshot goes stale] → `publicsuffixlist` releases often, and the pin is updated with every release.
 - [Windows delivers console control events to every process on the console] → CTRL_BREAK tests start the crawler in a new process group.
+- [`docs/crawling.md` links the change's delta spec, `openspec/changes/020-add-crawl-core/specs/crawling/spec.md`, which the archive moves] → The archive commit points the link at `openspec/specs/crawling/spec.md`; `tests/test_docs_links.py` fails until it does.
 
 ## Migration Plan
 
