@@ -48,7 +48,7 @@
 
 ### D2. CHECKs come from the declaration
 - **The source of each CHECK:** the declaration already says what is allowed.
-  - A column with `info["values"]` gets `CHECK (<column> IN (...))`, or `<column> IS NULL OR …` when it is nullable.
+  - A column with `info["values"]` gets `CHECK (<column> IN (...))`, nullable or not. SQLite refuses a row only when a CHECK is false, and `NULL IN (...)` is NULL, so a CHECK passes on NULL: `NOT NULL` is what refuses NULL.
   - A `Flag` column gets `CHECK (<column> IN (0, 1))`.
 - **One helper in `spider.store.schema` adds them:** it runs over each table as the table is declared. Each change's tables call it, and nothing writes a CHECK by hand.
   - The constraints are named `<table>_<column>_values` and `<table>_<column>_flag`, so a failure names its column.
@@ -61,7 +61,8 @@
 - **Checked, as the ruling asked:** SQLAlchemy 2.1.3 renders `sqlite_strict=True` as `STRICT`, also together with `WITHOUT ROWID`. The shared types compile to their `impl` types: `Timestamp` and `Json` to `TEXT`, and `Flag` to `INTEGER`. `LargeBinary` compiles to `BLOB`.
 - **The one trap:** `Float` and `Double` compile to `FLOAT` and `DOUBLE`, which STRICT refuses. A REAL column, such as 030's `average_words_per_sentence`, is declared with `sqlalchemy.REAL`. The convention "a column's type is `INTEGER`, `REAL`, `TEXT` or `BLOB`", checked over `spider schema`, catches any other type before a file is ever created.
 - **How tables become STRICT:** the same declaration helper as D2 sets `sqlite_strict=True` on every public table. Checked by "Every table is strict" through `PRAGMA table_list`.
-- **What it costs readers:** a STRICT table can be opened only by SQLite 3.37 or later (2021-11). Our own tool runs on 3.50 or later. `docs/schema.md` states the minimum for other tools, and `080`'s `doctor` reports the SQLite version.
+- **What shows STRICT at work:** "A value of another type is refused" writes text into `crawl.schema_version`, a plain `INTEGER` column, which only STRICT refuses. An `INTEGER PRIMARY KEY` such as `seeds.position` is a rowid alias: SQLite refuses text there in any table, with `datatype mismatch`, so it would pass without STRICT.
+- **What it costs readers:** a STRICT table can be opened only by SQLite 3.37 or later (2021-11). Our own tool uses the SQLite of the Python it runs on, which is 3.50 or later in the uv-managed and python.org builds. `docs/schema.md` states the minimum for other tools, and `080`'s `doctor` reports the SQLite version.
 - *Alternative:* CHECKs on `typeof()` for every column. They are verbose and duplicate what STRICT does. Rejected.
 
 ### D4. References and indexes in the schema description
@@ -106,6 +107,15 @@ No boundary double is used.
 - [A tool built on SQLite older than 3.37 cannot open a crawl file] → `docs/schema.md` states the minimum, and `080`'s `doctor` reports the version. Python 3.12+ on our supported platforms ships 3.40 or later through uv.
 - [A CHECK refuses a value that a later change adds without listing it] → The rule lists later values from v0.1. A missed value fails loudly at the first write, in that change's tests.
 - [Guards that pass trivially today could hide a broken check] → In this change they pass vacuously, because `crawl` and `seeds` have no foreign key, secondary index, or derived or later column. Each guard's assertion that it saw at least one match switches on in the `020` task that adds the first foreign key (`found_on_url_id`) or the first index (`urls_url`). A later change does the same for the first derived or later column: `022`'s `origins.http_version` (filled from v0.2) or `030`'s later `pages` columns, whichever lands first.
+- [Group 1's review: what stays unexercised or open] → Recorded at task 1.11:
+  - Retired by the ruling on the review's "Better ways": a value CHECK has no `IS NULL OR` branch, because a CHECK passes on NULL (D2).
+  - The CHECKs on `crawl.crawl_mode` and `crawl.journal_mode` come from the same helper as the tested `crawl.state`, and no scenario writes a bad value to them. Ruled: the file check of task 2.6 compares every declared CHECK by name with `sqlite_master.sql`, which covers them.
+  - `public_table` takes only columns. `020`'s first `WITHOUT ROWID` table (ADR-0005 rule 15) adds `sqlite_with_rowid` and any table-level constraint to it, in that slice.
+  - The ADR-0006 guard of task 1.8 matches `dataclass` and own base classes by name, so an aliased import (`import dataclasses as dc`, `from spider.x import Base as B`) escapes it. CONTRIBUTING's import rule writes our code without such aliases, and review catches the rest.
+- [Group 2's review: what stays open] → Recorded at task 2.10:
+  - A `UniqueConstraint` or `Column(unique=True)` makes an index that SQLite names itself. Neither `spider schema` nor the file check lists it, because the spec lists only declared secondary indexes. `docs/schema.md`'s "How to add a table" says to declare a unique rule as an `Index` with `unique=True`, as `020`'s `urls_url` is. Ruled: task 3.1a's guard refuses a UNIQUE constraint on a public table now.
+  - `references` takes the first of a column's foreign keys. A column with two would give an arbitrary one. Ruled: task 3.1a's guard refuses a public column with more than one foreign key.
+  - Six tests carry no scenario title. Four make done-whens non-vacuous before `020`'s tables exist: `test_secondary_indexes_are_listed_in_name_order` (2.2), `test_a_reference_names_its_target_column` (2.3), `test_a_new_file_matches_a_declared_reference_and_indexes` (2.6) and `test_a_documented_indexes_table_is_parsed` (2.7). Two are guards of conventions the spec implies: `test_column_types_are_those_strict_allows` (1.3, D3) and `test_every_unique_rule_is_an_index_and_every_reference_one_key` (3.1a). Task 3.1 counts only tests named after scenarios.
 
 ## Migration Plan
 

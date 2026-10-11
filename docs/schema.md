@@ -18,28 +18,50 @@ Each table has a section headed ``## Table `<name>` ``, with a description and o
 | Values | the allowed values of an enumeration, otherwise empty |
 | Description | what the column holds |
 
+A table with secondary indexes has a ``### Indexes`` table after its columns, with one row per index, in name order. The indexes SQLite makes for primary keys are not listed.
+
+| Heading | Meaning |
+|---|---|
+| Name | the index name, `<table>_<columns>` |
+| Columns | the indexed columns, in index order, each in backticks and separated by commas |
+| Unique | `yes` when no two rows may share the indexed values, otherwise `no` |
+| Where | the condition of a partial index, which holds only the rows that meet it, in backticks as `CREATE INDEX` writes it, with bare column names and literal values, such as `` `fetch_state = 'queued'` ``; otherwise empty |
+| Description | the query the index serves |
+
 Tables are listed in the order of the change that added them, and within a change in the order it added them.
 
 ## Conventions
 
-Every public table and column follows these conventions:
+Every public table, column and index follows the conventions of [ADR-0005](adr/0005-crawl-file-schema-conventions.md), which gives all the naming rules and their reasons. The file enforces the ones it can, tests over `spider schema` and the declaration check some others, and review checks the rest:
+- **STRICT tables:** every table is `STRICT`, so a column's type is `INTEGER`, `REAL`, `TEXT` or `BLOB`, and the file refuses a value of another type. Reading a crawl file needs SQLite 3.37 or later.
 - **Names:** lowercase snake_case. Table names are plural nouns, except the one-row `crawl`.
-- **Descriptions:** every table and every column has one.
-- **Timestamps:** TEXT in the form `YYYY-MM-DDTHH:MM:SS.sssZ`, in UTC, with the format `timestamp`. They sort as text.
-- **Booleans:** INTEGER `0` or `1`, with the format `boolean`.
+- **Descriptions:** every table, column and index has one. Two prefixes mark a column that stays NULL for a while:
+  - `Derived: `: only a post-crawl pass writes it, and it is NULL until the pass has run.
+  - `Filled from v<major>.<minor>. `: a later release fills it, and it is NULL in every row until then.
+- **Keys and references:**
+  - An entity's own key is `id`, INTEGER. Only the public identifiers that a user types, the crawl id and Rule ids, are TEXT. A table with a natural key uses it.
+  - A column that refers to another table is named `<table singular>_id`, with a role prefix when a table refers to the same table twice, such as `source_url_id` and `target_url_id`. It is declared as a foreign key.
+- **Timestamps:** TEXT in the form `YYYY-MM-DDTHH:MM:SS.sssZ`, in UTC, with the format `timestamp`, in a column whose name ends with `_at`. They sort as text. A header's raw value keeps the header's name and its text.
+- **Booleans:** INTEGER `0` or `1`, with the format `boolean`. The file refuses any other value, through a CHECK named `<table>_<column>_flag`. The name reads as yes or no, such as `is_*` or `has_*`, and is never negated.
 - **JSON:** TEXT holding valid JSON, with the format `json`, only for recorded inputs and for lists without a fixed shape. A value that queries filter, sort or count by is a column of its own.
-- **Enumerations:** TEXT whose allowed values are lowercase snake_case, listed under Values.
-- **Measured quantities:** the column name ends with its unit: `_ms`, `_bytes`, `_px` or `_pct`. Each column has one meaning, so two different measures, such as two hashes or two sizes, are two distinctly named columns.
+- **Enumerations:** TEXT whose allowed values are lowercase snake_case, listed under Values. The file refuses any other value, through a CHECK named `<table>_<column>_values`. A CHECK passes on NULL: `NOT NULL` is what refuses NULL. Values that a later release adds are listed from v0.1, and one enumeration has one value set in every table that holds it.
+- **Errors:** an error is a code column whose values are listed, and its text is in a column named `<code column>_message`. A code is never a prefix inside free text.
+- **Measured quantities:** the column name ends with its unit: `_ms`, `_seconds`, `_bytes`, `_px` or `_pct` (a share from 0 to 100). A count ends with `_count`. Each column has one meaning, so two different measures, such as two hashes or two sizes, are two distinctly named columns. A column named after a Screaming Frog column keeps that name.
+- **Indexes:** each is named `<table>_<columns>`, and its description names the query it serves. An index is built while the Crawl writes, never after it, so its queries are fast on a running Crawl too.
 - **Order:** a table whose rows have an order carries it in an INTEGER column that grows in insert order. List rows in order by that column, never by a timestamp.
-- **Counts** are derived from the tables that hold the rows they count. No table stores them.
-- **Not measured is NULL.** A value that was not measured, or that does not apply, is NULL, never `0` or an empty string. `0` is a measured zero, and an empty string is a value that is present but empty.
+- **Counts:** no count or statistic is written while the Crawl runs. Counts are derived from the tables that hold the rows they count. A derived value over the stored rows, such as a score, is stored only by a post-crawl pass, in a `Derived: ` column.
+- **Not measured is NULL.** A value that was not measured, or that does not apply, is NULL, never `0` or an empty string. `0` is a measured zero, and an empty string is a value that is present but empty. A later or derived column is NULL until it is filled.
 
 ## How to add a table
 
 A change that stores new data adds its tables and columns in the slice whose scenario first needs them:
-1. **Declare it** in the store's SQLAlchemy Core `MetaData`, the only definition of the schema. Give the table and every column a `comment`, the table `info={"change": <n>}` with the change's number, and use the shared column types for timestamps (`Timestamp`), JSON (`Json`) and booleans (`Flag`). Read an enumeration's `values` from the `Literal` the code uses.
-2. **Document it here, in the same commit:** a ``## Table `<name>` `` section, placed in change order, with the same description and one row per column. The contract test compares this page with `spider schema --limit 1000`, so it is never red between commits.
-3. **Follow the [conventions](#conventions).** Tests over `spider schema` check names, descriptions, booleans and enumeration values for every table, including new ones.
+1. **Declare it** with `public_table(name, *columns, comment=..., change=<n>)` in `spider.store.schema`, the only definition of the schema, with the change's number as `change`. It makes the table `STRICT` and adds the CHECKs of its enumerations and flags, so no CHECK is written by hand.
+   - Give every column a `comment`, and use the shared column types for timestamps (`Timestamp`), JSON (`Json`) and booleans (`Flag`).
+   - Declare a real number with `sqlalchemy.REAL`: `Float` and `Double` declare `FLOAT` and `DOUBLE`, which STRICT refuses.
+   - Read an enumeration's `values` from the `Literal` the code uses.
+   - Declare each index with `info={"description": ...}`, naming the query it serves. Declare a unique rule as an index with `unique=True`, never as a `UNIQUE` constraint, whose index SQLite makes and nothing lists.
+2. **Document it here, in the same commit:** a ``## Table `<name>` `` section, placed in change order, with the same description, one row per column, and an Indexes table when it has secondary indexes. The contract test compares this page with `spider schema --limit 1000`, so it is never red between commits.
+3. **Follow the [conventions](#conventions).** Tests over `spider schema` and the declaration check names, descriptions, types, booleans, enumeration values, references, index names, unique rules declared as indexes, and that derived and later columns may hold NULL, for every table, including new ones.
 4. **No migration before v0.1.** Until the first release the schema is not yet public: a change edits the declared tables directly, and `schema_version` stays `1`. From v0.1 on, a schema change adds 1 to `schema_version` and brings a migration, with a test from every published schema version.
 
 A table whose name starts with `_` is internal: it is left out of `spider schema` and of this page.

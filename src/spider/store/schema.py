@@ -1,8 +1,8 @@
-"""The declared public schema of a crawl file (design D6 of 015-add-crawl-store)."""
+"""The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2, D3)."""
 
-from typing import get_args
+from typing import Any, get_args
 
-from sqlalchemy import Column, Integer, MetaData, Table, Text
+from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, Text
 
 from spider.store.records import CrawlMode, CrawlState, JournalMode
 from spider.store.types import Flag, Json, Timestamp
@@ -15,9 +15,46 @@ JOURNAL_MODES = list(get_args(JournalMode.__value__))
 
 metadata = MetaData()
 
-crawl = Table(
+
+def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckConstraint]:
+    checks = []
+    for column in columns:
+        if "values" in column.info:
+            checks.append(
+                CheckConstraint(
+                    column.in_(column.info["values"]), name=f"{table_name}_{column.name}_values"
+                )
+            )
+        if isinstance(column.type, Flag):
+            checks.append(
+                CheckConstraint(column.in_([0, 1]), name=f"{table_name}_{column.name}_flag")
+            )
+    return checks
+
+
+def public_tables() -> list[Table]:
+    """The declared tables but the internal ones, whose names start with an underscore."""
+    return [table for table in metadata.tables.values() if not table.name.startswith("_")]
+
+
+def public_table(name: str, *columns: Column[Any], comment: str, change: int) -> Table:
+    """The one way to declare a public table: STRICT, with the CHECKs its columns' values call for.
+
+    STRICT refuses the FLOAT and DOUBLE that `Float` and `Double` declare: a real number is `REAL`.
+    """
+    return Table(
+        name,
+        metadata,
+        *columns,
+        *_checks(name, columns),
+        comment=comment,
+        info={"change": change},
+        sqlite_strict=True,
+    )
+
+
+crawl = public_table(
     "crawl",
-    metadata,
     Column("id", Text, primary_key=True, comment="The crawl id."),
     Column(
         "crawl_mode",
@@ -95,12 +132,11 @@ crawl = Table(
         comment="The operating system that created the Crawl, as Python describes it.",
     ),
     comment="The Crawl's metadata, in exactly one row.",
-    info={"change": 15},
+    change=15,
 )
 
-seeds = Table(
+seeds = public_table(
     "seeds",
-    metadata,
     Column(
         "position",
         Integer,
@@ -110,5 +146,5 @@ seeds = Table(
     ),
     Column("url", Text, nullable=False, comment="The Seed URL as given."),
     comment="The Seeds the Crawl started from, in the order they were given.",
-    info={"change": 15},
+    change=15,
 )

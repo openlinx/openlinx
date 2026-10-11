@@ -80,7 +80,8 @@ def test_writes_through_a_reader_fail(temp_workspace: TempWorkspace) -> None:
             "INSERT INTO seeds (position, url) VALUES (9, 'https://example.com/x')"
         )
 
-    assert raised.value.orig.sqlite_errorcode & 0xFF == sqlite3.SQLITE_READONLY  # type: ignore[union-attr]
+    assert isinstance(raised.value.orig, sqlite3.Error)
+    assert raised.value.orig.sqlite_errorcode & 0xFF == sqlite3.SQLITE_READONLY
 
 
 DELETE_FILES = "import pathlib, sys\nfor f in sys.argv[1:]: pathlib.Path(f).unlink(missing_ok=True)"

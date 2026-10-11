@@ -91,23 +91,25 @@ Frontier ──► Scheduler ──► Fetcher ──► Parse pool ──► Ru
     - **Waiting or submitting:** `run()` and `run_async()` return a unit's result once it has run. `submit()` and `submit_async()` return a Future that resolves at the commit that holds the unit, with its result or the error of a failed commit. At most 2,000 submitted units are unresolved at once, and a submit waits for room.
     - **Its connection settings:** temporary tables in memory, a 64 MiB page cache and, in WAL mode, 256 MiB of memory-mapped I/O. Creating a file and reading it keep SQLite's defaults.
   - **`--crawl` resolution:** `spider.store.selection.resolve_crawl` turns `latest`, an id or a path into a crawl file, and `spider.store.reading.reading` opens one read-only for a single operation, refusing a file from a newer tool.
-  - **The schema service:** `spider.services.schema.describe_schema` describes the public tables for `spider schema` and the MCP server.
+  - **The schema service:** `spider.services.schema.describe_schema` describes the public tables for `spider schema` and the MCP server: columns with their references, and secondary indexes. `spider.services.schema_doc.parse_tables` reads the table sections of `docs/schema.md` back.
   - **Redaction:** `spider.store.redaction.redact`, with the secret names that the adapter creating a Crawl collects through `spider.cli.options.secret_names`, from the secret settings and options already declared.
   - After the exclusive create of a new file, `spider.store.connections` is the only code that opens a crawl file: one engine per operation, disposed after it, so no handle outlives the operation.
 - **Schema definition:** SQLAlchemy 2 Core tables in `spider.store.schema` are the single definition ([ADR-0003](adr/0003-sqlalchemy-core-not-orm.md)). They drive batched inserts, safe `--where` → SQL translation (only known columns), and the SQL reference (`spider schema`, the Skill).
-  - Every table and column has a description, because the descriptions feed that reference.
+  - **The conventions** are [ADR-0005](adr/0005-crawl-file-schema-conventions.md): names, keys and references, units, flags, enumerations, errors, indexes, and derived and later columns.
+  - **The one way to declare a public table** is `public_table(name, *columns, comment=..., change=<n>)` in `spider.store.schema`. It makes the table `STRICT` and adds a CHECK for every enumeration and flag column, so the file refuses a value of another type or outside its list, whatever writes it. No CHECK is written by hand.
+  - Every table, column and index has a description, because the descriptions feed that reference.
 - **Prebuilt statements:** a unit that runs once per URL or per Page executes statements built once at import, as `execute(stmt, params)`. It never builds `.values(<literals>)` per unit, and never uses `insert().values(list)`.
   - In the store benchmark, a statement built per unit regenerated its cache key and coerced every value, so prebuilt statements were about twice as fast. A multi-values insert compiled per call was 60 times slower than `executemany`.
   - Units that run a bounded number of times per Crawl, such as the write check and setting the state, may build their statements where they run.
   - No guard test enforces the rule. A check over the source cannot tell a statement built once from one built per call: expanding bind parameters and column lists chosen at import look the same as statements built per call. The review of every task group that adds units checks it instead, and a guard is reconsidered if a review finds the rule broken twice.
 - **The three-way schema check,** so the documentation, the code and the files cannot drift apart:
   - `docs/schema.md` is compared with `spider schema --limit 1000`
-  - a new crawl file is compared with the declared tables through `PRAGMA table_info` and `PRAGMA foreign_key_list`
+  - a new crawl file is compared with the declared tables through `PRAGMA table_list`, `table_info`, `foreign_key_list`, `index_list` and `index_xinfo`, and the CHECK names and partial-index conditions in `sqlite_master`
   - the table conventions are checked over every declared table
 - **Tables:** each change adds its own tables and columns to the declaration and to `docs/schema.md` in the same slice ([CONTRIBUTING.md](../CONTRIBUTING.md#changing-the-crawl-store-schema)). There are no migrations before v0.1, and schema version 1 is the first public contract; Alembic arrives with the first schema change after it.
 - **The startup path:** `sqlalchemy` is imported only inside the bodies of the Commands and services that use the store, so `spider --help` and `spider commands` never load it.
 - **Read-only access:** `spider sql` opens the file with a read-only URI plus the SQLite authorizer.
-- **Missing values:** a value that is not measured yet is `NULL`, never 0 ("not measured" differs from "zero").
+- **Missing values:** a value that is not measured yet is `NULL`, never 0 ("not measured" differs from "zero"). A derived column is `NULL` until its post-crawl pass, and a later column until its release.
 
 ## Page data (Screaming Frog "Internal" tab parity)
 

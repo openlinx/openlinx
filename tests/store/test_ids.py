@@ -20,8 +20,8 @@ def test_id_from_the_start_time() -> None:
 @given(
     # Hypothesis takes naive bounds; timezones= makes every drawn start time UTC.
     st.datetimes(
-        min_value=datetime(2000, 1, 1),  # noqa: DTZ001
-        max_value=datetime(2099, 12, 31, 23, 59, 59, 999000),  # noqa: DTZ001
+        min_value=datetime(2000, 1, 1),  # noqa: DTZ001 - naive bound
+        max_value=datetime(2099, 12, 31, 23, 59, 59, 999000),  # noqa: DTZ001 - naive bound
         timezones=st.just(UTC),
     )
 )

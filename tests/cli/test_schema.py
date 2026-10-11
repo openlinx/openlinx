@@ -1,10 +1,12 @@
-"""`spider schema` (015-add-crawl-store, crawl-store)."""
+"""`spider schema` (015-add-crawl-store, 018-add-schema-conventions, crawl-store)."""
 
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
 from tests.support.cli import run_cli
+from tests.support.schema import indexed_rows_declared
 from tests.support.workspace import TempWorkspace
 
 
@@ -102,6 +104,42 @@ def test_no_workspace_needed(
     assert (result.exit_code, (temp_workspace.home / ".spider").exists()) == (0, False)
 
 
+def test_a_table_without_secondary_indexes_lists_none() -> None:
+    assert run_cli("schema", "seeds", "--fields", "name,indexes").json()["items"] == [
+        {"name": "seeds", "indexes": []}
+    ]
+
+
+@pytest.fixture
+def indexed_table() -> Iterator[None]:
+    with indexed_rows_declared():
+        yield
+
+
+@pytest.mark.usefixtures("indexed_table")
+def test_secondary_indexes_are_listed_in_name_order() -> None:
+    assert run_cli("schema", "indexed_rows", "--fields", "indexes").json()["items"] == [
+        {
+            "indexes": [
+                {
+                    "name": "indexed_rows_state_id",
+                    "description": "Lists queued rows in id order.",
+                    "columns": ["state", "id"],
+                    "unique": False,
+                    "where": "state = 'queued'",
+                },
+                {
+                    "name": "indexed_rows_url",
+                    "description": "Finds a row by its URL.",
+                    "columns": ["url"],
+                    "unique": True,
+                    "where": None,
+                },
+            ]
+        }
+    ]
+
+
 def schema_entry() -> dict[str, Any]:
     entry: dict[str, Any] = next(
         command for command in run_cli("commands").json()["commands"] if command["name"] == "schema"
@@ -116,8 +154,8 @@ def test_self_description_of_schema() -> None:
         "list",
         ["json", "jsonl", "table"],
         {
-            "available": ["name", "kind", "description", "columns"],
-            "default": ["name", "kind", "description", "columns"],
+            "available": ["name", "kind", "description", "columns", "indexes"],
+            "default": ["name", "kind", "description", "columns", "indexes"],
         },
     )
 
@@ -132,3 +170,8 @@ def test_default_limit_of_schema() -> None:
     limit = next(option for option in schema_entry()["options"] if option["name"] == "--limit")
 
     assert (limit["type"], limit["default"], limit["global"]) == ("integer", 50, False)
+
+
+@pytest.mark.usefixtures("indexed_table")
+def test_a_reference_names_its_target_column() -> None:
+    assert columns_of("indexed_rows")["found_on_row_id"]["references"] == "indexed_rows.id"

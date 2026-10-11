@@ -204,7 +204,7 @@ Every crawl file SHALL hold the table `crawl`, with exactly one row, and the tab
 | `seeds.position` | the 1-based order in which the Seed was given |
 | `seeds.url` | the Seed URL as given |
 
-The `crawl` row SHALL hold no counts or statistics. Counts are derived from the tables that hold the rows they count.
+The `crawl` row SHALL hold no counts or statistics that are written while the Crawl runs. Counts are derived from the tables that hold the rows they count. A derived value over the stored rows, such as a score, MAY be stored only when a post-crawl pass writes it, and its column is marked as derived (see "Public schema conventions").
 
 #### Scenario: Metadata of a new Crawl
 - **WHEN** a Spider-mode Crawl is created with:
@@ -548,13 +548,19 @@ A crawl file whose schema version is newer than the tool's SHALL be refused with
 - Its items are the public tables. They are ordered by the number of the change that added them, and within a change in the order it added them. So `crawl` and `seeds` (from `015`) come first.
 - With TABLE, it SHALL list only that table.
 
-Each item SHALL have `name`, `kind` (`table` or `view`), `description` and `columns`. Each column, in table order, SHALL have:
+Each item SHALL have `name`, `kind` (`table` or `view`), `description`, `columns` and `indexes`. Each column, in table order, SHALL have:
 - `name` and `description`
 - `type`: `INTEGER`, `REAL`, `TEXT` or `BLOB`
 - `nullable` and `primary_key`
 - `references`: `<table>.<column>` or `null`
 - `format`: `timestamp`, `boolean`, `json` or `null`
 - `values`: the allowed values, or `null`
+
+`indexes` SHALL list the table's secondary indexes in name order, without the indexes SQLite makes for primary keys. Each index SHALL have:
+- `name` and `description`, the query it serves
+- `columns`: its column names, in index order
+- `unique`: `true` or `false`
+- `where`: the condition of a partial index as SQL text, or `null`
 
 An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists the table names. Tables whose names start with `_` are internal and SHALL NOT be listed. The Command SHALL NOT need a Workspace or a Crawl.
 
@@ -592,7 +598,7 @@ An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists t
 
 #### Scenario: Self-description of schema
 - **WHEN** `spider commands` runs
-- **THEN** the `schema` entry has `"output":"list"`, `"formats":["json","jsonl","table"]` and `"fields":{"available":["name","kind","description","columns"],"default":["name","kind","description","columns"]}`
+- **THEN** the `schema` entry has `"output":"list"`, `"formats":["json","jsonl","table"]` and `"fields":{"available":["name","kind","description","columns","indexes"],"default":["name","kind","description","columns","indexes"]}`
 
 #### Scenario: Global flags of schema
 - **WHEN** `spider commands` runs
@@ -602,30 +608,41 @@ An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists t
 - **WHEN** `spider commands` runs
 - **THEN** the `--limit` option of the `schema` entry has `"type":"integer"`, `"default":50` and `"global":false`
 
+#### Scenario: A table without secondary indexes lists none
+- **WHEN** `spider schema seeds --fields name,indexes` runs
+- **THEN** `items` is `[{"name":"seeds","indexes":[]}]`
+
 ### Requirement: The documented schema, the declared schema and the file agree
 
 The public schema SHALL be declared once, as the store's table definitions, and the two other places that show it SHALL agree with them:
-- **`docs/schema.md`,** the public schema reference, SHALL document every public table and column with the same name, type, nullability, key, reference, format, values and description as the declared schema, and SHALL document nothing else.
-- **A new crawl file** SHALL have exactly the declared tables and columns, with the same types, nullability, primary keys and foreign keys, as SQLite reports them.
+- **`docs/schema.md`,** the public schema reference, SHALL document every public table, column and index with the same name, type, nullability, key, reference, format, values, index columns, uniqueness, condition and description as the declared schema, and SHALL document nothing else.
+- **A new crawl file** SHALL have exactly the declared tables, columns and indexes, with the same types, nullability, primary keys, foreign keys, index columns, uniqueness and conditions, as SQLite reports them. Every public table SHALL be `STRICT`, and every table the schema declares `WITHOUT ROWID` SHALL be so in the file.
 
 #### Scenario: Documentation and declaration agree
 - **WHEN** the tables parsed from `docs/schema.md` are compared with the description of the declared schema, which `spider schema --limit 1000` prints
 - **THEN** they are equal
 
 #### Scenario: A new file matches the declaration
-- **WHEN** a Crawl is created, and `PRAGMA table_info` and `PRAGMA foreign_key_list` are read for each table of its file
-- **THEN** every public table and column of the declared schema is there, with the declared type, nullability, primary key and reference, and the file has no other public table or column
+- **WHEN** a Crawl is created, and `PRAGMA table_list`, `PRAGMA table_info`, `PRAGMA foreign_key_list` and `PRAGMA index_list` are read for each table of its file
+- **THEN** every public table, column and index of the declared schema is there, with the declared type, nullability, primary key, reference, index columns, uniqueness and condition, every public table is `STRICT`, and the file has no other public table, column or index
 
 ### Requirement: Public schema conventions
 
-Every public table and column SHALL follow these conventions:
+Every public table, column and index SHALL follow these conventions (ADR-0005):
 - **Names:** lowercase snake_case. Table names are plural nouns, except the one-row `crawl`.
-- **Descriptions:** every table and every column has a non-empty description.
-- **Timestamps:** TEXT in the form `YYYY-MM-DDTHH:MM:SS.sssZ`, in UTC, with the format `timestamp`.
-- **Booleans:** INTEGER `0` or `1`, with the format `boolean`.
+- **Descriptions:** every table, column and index has a non-empty description.
+- **Derived and later columns:** a column that only a post-crawl pass writes is derived. Its description starts with `Derived: `, and it may hold NULL until the pass runs. A column that a later release fills exists from v0.1, holds NULL until then, and its description starts with `Filled from v<major>.<minor>. `.
+- **Keys and references:**
+  - An entity's own key is `id`, INTEGER, except the public identifiers that a user types (the crawl id and Rule ids), which are TEXT. A table with a natural key uses it.
+  - A column that refers to another table is named `<table singular>_id`, with a role prefix when a table refers to the same table twice, and SHALL be declared as a foreign key.
+- **Types:** every table is `STRICT`, so a column's type is `INTEGER`, `REAL`, `TEXT` or `BLOB`, and the file refuses a value of another type.
+- **Timestamps:** TEXT in the form `YYYY-MM-DDTHH:MM:SS.sssZ`, in UTC, with the format `timestamp`, in a column whose name ends with `_at`. A header's raw value keeps the header's name and text.
+- **Booleans:** INTEGER `0` or `1`, with the format `boolean`. The file SHALL refuse any other value. The name reads as yes or no, and is never negated.
 - **JSON:** TEXT holding valid JSON, with the format `json`, only for recorded inputs and for lists without a fixed shape. A value that queries filter, sort or count by SHALL be a column of its own.
-- **Enumerations:** TEXT whose allowed values are lowercase snake_case, listed in `values`.
-- **Measured quantities:** the column name ends with its unit: `_ms`, `_bytes`, `_px` or `_pct`. Each column has one meaning, so two different measures, such as two hashes or two sizes, are two distinctly named columns.
+- **Enumerations:** TEXT whose allowed values are lowercase snake_case, listed in `values`. The file SHALL refuse any other value. Values that a later release adds are listed from v0.1, and one enumeration has one value set in every table that holds it.
+- **Errors:** an error is a code column whose values are listed, and its text is in a column named `<code column>_message`.
+- **Measured quantities:** the column name ends with its unit: `_ms`, `_seconds`, `_bytes`, `_px` or `_pct` (a share from 0 to 100). A count ends with `_count`. Each column has one meaning, so two different measures, such as two hashes or two sizes, are two distinctly named columns. A column named after a Screaming Frog column keeps that name.
+- **Indexes:** each is named `<table>_<columns>`, and its description names the query it serves. An index is built while the Crawl writes, never after it.
 - **Order:** a table whose rows have an order SHALL carry it in an INTEGER column that grows in insert order, such as `seeds.position`. Queries that list rows in order SHALL use that column, never a timestamp.
 
 #### Scenario: Names are snake_case
@@ -648,9 +665,37 @@ Every public table and column SHALL follow these conventions:
 - **WHEN** the `crawl` row of a Crawl created at `2026-09-27T14:03:12.345Z` is read
 - **THEN** `started_at` is the 24-character text `2026-09-27T14:03:12.345Z`
 
+#### Scenario: An unknown enumeration value is refused
+- **WHEN** a unit sets `crawl.state` to `"paused"`
+- **THEN** the unit fails with SQLite's `CHECK constraint failed` error, and `crawl.state` is unchanged
+
+#### Scenario: A flag outside 0 and 1 is refused
+- **WHEN** a unit sets `crawl.section_crawl` to `2`
+- **THEN** the unit fails with SQLite's `CHECK constraint failed` error, and `crawl.section_crawl` is unchanged
+
+#### Scenario: A value of another type is refused
+- **WHEN** a unit sets `crawl.schema_version` to the text `"first"`
+- **THEN** the unit fails with SQLite's `cannot store TEXT value in INTEGER column` error, and `crawl.schema_version` is unchanged
+
+#### Scenario: Every table is strict
+- **WHEN** a Crawl is created, and `PRAGMA table_list` is read on its file
+- **THEN** every public table has `strict` = `1`
+
+#### Scenario: Reference columns are declared
+- **WHEN** `spider schema --limit 1000` runs
+- **THEN** every column whose name ends with `_id` has a non-null `references`
+
+#### Scenario: Index names start with their table
+- **WHEN** `spider schema --limit 1000` runs
+- **THEN** every index name starts with its table's name followed by `_`, and every index has a non-empty `description`
+
+#### Scenario: Derived and later columns may hold NULL
+- **WHEN** `spider schema --limit 1000` runs
+- **THEN** every column whose description starts with `Derived: ` or matches `^Filled from v[0-9]+\.[0-9]+\. ` has `nullable` `true`
+
 ### Requirement: Unmeasured values are NULL
 
-A value that was not measured, or that does not apply, SHALL be stored as NULL. It SHALL never be stored as `0` or as an empty string. `0` SHALL mean a measured zero, and an empty string SHALL mean a value that is present but empty.
+A value that was not measured, or that does not apply, SHALL be stored as NULL. It SHALL never be stored as `0` or as an empty string. `0` SHALL mean a measured zero, and an empty string SHALL mean a value that is present but empty. A column that a later release measures SHALL be NULL in every row until then, and a derived column SHALL be NULL until its post-crawl pass has run.
 
 #### Scenario: A running Crawl has no completion time
 - **WHEN** the `crawl` row of a running Crawl is read
