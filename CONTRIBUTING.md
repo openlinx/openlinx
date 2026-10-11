@@ -8,6 +8,8 @@ You need [uv](https://docs.astral.sh/uv/). It installs the Python version from `
 uv sync
 ```
 
+`.python-version` is the newest supported Python, 3.14, because some problems show only on newer Pythons: since 3.13, an unclosed SQLite connection is reported, and the tests treat that as an error. mypy checks against 3.12, the oldest, and CI runs all three.
+
 ## How a change is made
 
 ### OpenSpec
@@ -72,7 +74,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 
 1. Check out the code, and install uv with the cell's Python.
 2. `uv sync --locked`, which fails if `uv.lock` is out of date.
-3. Check that the cell really runs its matrix Python, since `.python-version` pins 3.12.
+3. Check that the cell really runs its matrix Python, since `.python-version` pins 3.14.
 4. `ruff check .`, then `ruff format --check .`.
 5. `mypy` (strict).
 6. `pytest`, with the 90% coverage gate and the hypothesis `ci` profile.
@@ -81,12 +83,21 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 9. `openspec validate --all --strict`, with telemetry off.
 10. `node --test "tests/js/**/*.test.mjs"`.
 
-`uv run scripts/check.py` runs the gate commands of steps 4–6, 9 and 10 locally. Pytest runs with the `dev` hypothesis profile. Steps 9 and 10 are skipped when `openspec` or `node` is not on `PATH`.
+`uv run scripts/check.py` runs the gate commands of steps 4–6, 9 and 10 locally. It also runs mypy for Linux and macOS (`--platform linux` and `darwin`, each with its own cache), because some standard-library types differ per platform and CI's other cells would catch what a single OS misses. Pytest runs with the `dev` hypothesis profile. Steps 9 and 10 are skipped when `openspec` or `node` is not on `PATH`.
 
 ## Adding a dependency
 
 - **Runtime:** `uv add <name>`. In the same commit, add the new package and everything it pulls in to `tests/dependency_allowlist.txt`, one name per line with a short reason. `uv run pytest tests/test_dependencies.py --no-cov` names whatever is missing. Telemetry and LLM SDKs are refused even when allowlisted.
+- **Version caps:** cap the major version of a runtime dependency that a public contract rests on: `sqlalchemy` (the crawl file schema) and `typer` (the CLI, pinned to its minor version for `typer._click`). Leave the others uncapped.
 - **Development only:** `uv add --dev <name>`. The allowlist covers runtime dependencies only.
+
+## Changing the crawl store schema
+
+The schema of a crawl file is a public contract ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)): agents query it with SQL. It changes only this way:
+- **In one slice:** add the table or column to the declared schema (`spider.store.schema`) and to [docs/schema.md](docs/schema.md) in the same commit, in the slice whose scenario first needs it. The store contract test compares the two, so neither may lead. [How to add a table](docs/schema.md#how-to-add-a-table) has the details.
+- **Declared in full:** `info={"change": <n>}` on a new table, a comment on every table and column, the shared column types for timestamps, JSON and booleans, and the conventions of `docs/schema.md`. Tests check them on every declared table.
+- **Before v0.1:** no migration. Edit the declared tables directly; `schema_version` stays `1`, and crawl files from earlier development builds are not supported.
+- **From v0.1 on:** every schema change adds 1 to `schema_version`, and brings a migration and a test that upgrades a crawl file from every published schema version.
 
 ## Conventions
 

@@ -9,10 +9,13 @@ from typing import Annotated, Any
 
 import typer
 from typer.core import TyperOption
+from typer.models import OptionInfo
 
 from spider.cli.click_compat import Command
 from spider.naming import DATA_DIR_NAME, GLOBAL_DATA_DIR, SETTINGS_FILE_NAME
 from spider.output.writer import Format
+from spider.store.records import LATEST, SecretNames
+from spider.workspace.tables import SettingsTables
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,15 @@ WorkspaceOpt = Annotated[
     ),
     GLOBAL,
 ]
+CrawlOpt = Annotated[
+    str,
+    typer.Option(
+        "--crawl",
+        help=f"The Crawl to read: {LATEST} (the Crawl that started last), a crawl id, "
+        "or the path of a crawl file.",
+    ),
+    GLOBAL,
+]
 LimitOpt = Annotated[
     int, typer.Option("--limit", min=0, max=1000, help="The most items to print, from 0 to 1000.")
 ]
@@ -51,13 +63,39 @@ FieldsOpt = Annotated[
 
 
 def option_meta(callback: Callable[..., Any], name: str) -> OptionMeta:
+    metadata = _annotated(callback, name)
+    return next((item for item in metadata if isinstance(item, OptionMeta)), OptionMeta())
+
+
+def option_names(callback: Callable[..., Any], name: str) -> tuple[str, ...]:
+    """The names a parameter's typer.Option declares, such as ("--api-key", "-k")."""
+    info = next((item for item in _annotated(callback, name) if isinstance(item, OptionInfo)), None)
+    return () if info is None else tuple(info.param_decls or ())
+
+
+def _annotated(callback: Callable[..., Any], name: str) -> tuple[Any, ...]:
     # Click keeps no trace of extra Annotated metadata; the Command's own hints still have it.
     hints = typing.get_type_hints(inspect.unwrap(callback), include_extras=True)
-    metadata = getattr(hints.get(name), "__metadata__", ())
-    return next((item for item in metadata if isinstance(item, OptionMeta)), OptionMeta())
+    return tuple(getattr(hints.get(name), "__metadata__", ()))
 
 
 def options_with_meta(command: Command) -> Iterator[tuple[TyperOption, OptionMeta]]:
     for param in command.params:
         if isinstance(param, TyperOption) and command.callback is not None:
             yield param, option_meta(command.callback, str(param.name))
+
+
+def is_secret_option(extra: OptionMeta, tables: SettingsTables) -> bool:
+    # An option mapped to a setting inherits it; check_command refuses an option with both.
+    return extra.secret if extra.setting is None else tables.is_secret(extra.setting)
+
+
+def secret_names(command: Command, tables: SettingsTables) -> SecretNames:
+    flags = frozenset(
+        name
+        for param, extra in options_with_meta(command)
+        if is_secret_option(extra, tables)
+        for name in param.opts
+    )
+    # Every secret setting, not only this Command's: crawl.config records every table.
+    return SecretNames(flags, tables.secret_settings())

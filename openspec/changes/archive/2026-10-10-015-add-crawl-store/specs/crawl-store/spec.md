@@ -64,6 +64,10 @@ Creating a Crawl SHALL create the Workspace's data folder, its `.gitignore` and 
 - **WHEN** a Crawl is created in the global Workspace, and `H/.spider` is a file
 - **THEN** creation fails with the error code `workspace_not_writable`, and `details.path` starts with `H/.spider`
 
+#### Scenario: Unwritable crawls folder
+- **WHEN** a Crawl is created in the local Workspace `H/work/shop`, and no new file can be created in `H/work/shop/.spider/crawls/`
+- **THEN** creation fails with the error code `workspace_not_writable`, and `details.path` starts with `H/work/shop/.spider/crawls`
+
 ### Requirement: The writer checks that it can write
 
 Opening a Crawl's writer SHALL first run a write inside a transaction that it rolls back. When that fails, opening SHALL fail with `crawl_not_writable`, whose `details.file` is the crawl file, before any unit of work runs. The file SHALL be left unchanged.
@@ -81,15 +85,17 @@ A Command that reads a Crawl SHALL take the global flag `--crawl` with one of th
 
 `latest` SHALL be the Crawl that started most recently, whatever its state. The start time is taken from the id. Among ids of the same second, the later `crawl.started_at` wins, and then the greater id, so the choice is always the same.
 
-Only files named `<id>.sqlite` SHALL count as Crawls. Selecting a Crawl SHALL NOT create any file or folder.
+Only files named `<id>.sqlite` SHALL count as Crawls. Selecting a Crawl SHALL NOT create any folder or crawl file. SQLite's own `-wal` and `-shm` companions of an existing crawl file MAY appear, because a reader in WAL mode needs the shared-memory file; they never count as Crawls.
+
+A Crawl selected by id or by `latest` SHALL be the Crawl of that id: its file is named after its id, so a `crawl` row with another id makes the file invalid. A Crawl selected by path SHALL have the id of its `crawl` row, whatever the file is named.
 
 Failures SHALL use these error codes:
 
 | Code | When |
 |---|---|
 | `no_crawls` | the Workspace has no Crawl; the hint names `spider crawl` |
-| `crawl_not_found` | no Crawl has the given id |
-| `crawl_file_invalid` | the selected file is not a readable crawl file; `details.file` names it |
+| `crawl_not_found` | no Crawl has the given id, or no file exists at the given path |
+| `crawl_file_invalid` | the selected file is not a readable crawl file, or a file selected by id or `latest` holds another id; `details.file` names it |
 | `invalid_value` | any other value |
 
 #### Scenario: Latest is the most recent start
@@ -127,6 +133,18 @@ Failures SHALL use these error codes:
 #### Scenario: Not a crawl file
 - **WHEN** `H/work/notes.sqlite`, a text file containing `hello`, is resolved
 - **THEN** resolution fails with the error code `crawl_file_invalid`
+
+#### Scenario: A missing crawl file path
+- **WHEN** `H/work/none.sqlite` is resolved, and no such file exists
+- **THEN** resolution fails with the error code `crawl_not_found`
+
+#### Scenario: A crawl file that holds another id
+- **WHEN** `20260927-100000-aaaa` is resolved, and the `crawl` row of `20260927-100000-aaaa.sqlite` has the id `20260927-090000-zzzz`
+- **THEN** resolution fails with the error code `crawl_file_invalid`, and `details` has `expected_id` `"20260927-100000-aaaa"` and `found_id` `"20260927-090000-zzzz"`
+
+#### Scenario: Companion files are not Crawls
+- **WHEN** `latest` is resolved in a Workspace holding `20260927-100000-aaaa.sqlite` and only `20260927-110000-bbbb.sqlite-wal` for the later id
+- **THEN** the Crawl `20260927-100000-aaaa` is selected
 
 #### Scenario: A broken newest file is reported, not skipped
 - **WHEN** `latest` is resolved in a Workspace holding a valid `20260927-100000-aaaa` and an empty file `20260927-110000-bbbb.sqlite`
@@ -244,6 +262,8 @@ When a Crawl is created, the secrets in its recorded command line (`crawl.comman
 
 Redaction SHALL cover both the `--flag value` and the `--flag=value` forms. No part of the crawl file SHALL contain a redacted value.
 
+A secret option SHALL have only long names, so that the attached short form (`-tVALUE`) can never carry a secret. Registering a Command that declares a short name on an option that is secret on its own SHALL fail. An option that is secret through its setting SHALL be checked by a test over every registered Command, because registering a Command loads no settings table.
+
 #### Scenario: Secret option with a separate value
 - **WHEN** the command line `["spider","example-settings","--token","s3cret"]` is redacted
 - **THEN** the result is `["spider","example-settings","--token","***"]`
@@ -263,6 +283,26 @@ Redaction SHALL cover both the `--flag value` and the `--flag=value` forms. No p
 #### Scenario: Other values are kept
 - **WHEN** the command line `["spider","example-settings","--level","high"]` is redacted
 - **THEN** the result is `["spider","example-settings","--level","high"]`
+
+#### Scenario: An unset secret stays null
+- **WHEN** the config `{"example":{"level":"high","token":null}}` is redacted
+- **THEN** the result is `{"example":{"level":"high","token":null}}`
+
+#### Scenario: A malformed secret URL
+- **WHEN** the command line `["spider","example-settings","--token","http://[ann:s3cret@proxy.test"]` is redacted
+- **THEN** the result is `["spider","example-settings","--token","***"]`
+
+#### Scenario: A secret setting that is not a string
+- **WHEN** the config `{"example":{"token":12345}}` is redacted
+- **THEN** the result is `{"example":{"token":"***"}}`
+
+#### Scenario: A secret option with a short name is refused
+- **WHEN** a Command that declares the option `--api-key` with the short name `-k`, secret on its own, is registered
+- **THEN** registering fails with an error that names `api_key`
+
+#### Scenario: Options of secret settings have only long names
+- **WHEN** every option of every registered Command is checked against the registered settings tables
+- **THEN** no option mapped to a secret setting has a short name
 
 #### Scenario: The secret is nowhere in the file
 - **WHEN** a Crawl is created with the command line `["spider","example-settings","--token","s3cret"]` and the config `{"example":{"token":"s3cret"}}`, and its writer is closed
@@ -334,7 +374,7 @@ A new crawl file SHALL use the journal mode chosen from the setting `store.journ
 | `"wal"` | `wal` | `wal`, with no warning |
 | `"delete"` | `delete` | `delete`, with no warning |
 
-A UNC path is one that starts with `\\` or `//`. `crawl.journal_mode` SHALL record the mode used. When SQLite does not grant the WAL mode it was asked for, the file SHALL use `delete` with the same warning.
+A UNC path is one that starts with `\\` or `//`, such as `\\host\share`, `//host/share` and the extended-length form `\\?\UNC\host\share`. The extended-length and device forms of a drive path, `\\?\C:\` and `\\.\C:\`, are local. `crawl.journal_mode` SHALL record the mode used. When SQLite does not grant the WAL mode it was asked for, the file SHALL use `delete` with the same warning.
 
 #### Scenario: UNC path
 - **WHEN** the journal mode is chosen for `"auto"` and the location `\\fileserver\share\site\.spider`
@@ -351,6 +391,26 @@ A UNC path is one that starts with `\\` or `//`. `crawl.journal_mode` SHALL reco
 #### Scenario: Forced rollback journal on a local path
 - **WHEN** the journal mode is chosen for `"delete"` and the location `/home/ann/site/.spider`
 - **THEN** it is `delete`, with no warning
+
+#### Scenario: WAL refused by SQLite
+- **WHEN** the journal mode `wal` was asked for in the location `C:\site\.spider`, and SQLite granted `memory`
+- **THEN** it is `delete`, with the warning `store_wal_unavailable`
+
+#### Scenario: WAL granted by SQLite
+- **WHEN** the journal mode `wal` was asked for in the location `C:\site\.spider`, and SQLite granted `wal`
+- **THEN** it is `wal`, with no warning
+
+#### Scenario: A local extended-length path
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\?\C:\site\.spider`
+- **THEN** it is `wal`, with no warning
+
+#### Scenario: A local device path
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\.\C:\site\.spider`
+- **THEN** it is `wal`, with no warning
+
+#### Scenario: An extended-length UNC path
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\?\UNC\fileserver\share\site\.spider`
+- **THEN** it is `delete`, with the warning `store_wal_unavailable`
 
 #### Scenario: Local disk
 - **WHEN** a Crawl is created in a Workspace inside the test's temporary folder on the local disk
@@ -372,11 +432,15 @@ This change SHALL register the `spider.toml` table `[store]`, with the setting `
 - **WHEN** `spider init` runs in `H/work/shop`, whose `spider.toml` contains `[store]\njournal_mode = "fast"\n`
 - **THEN** the exit code is 3, and the error has the code `settings_invalid` and `details.errors[0].key` `"store.journal_mode"`
 
-### Requirement: Reading while a Crawl is written
+### Requirement: Reading while a Crawl is written, and waiting for a lock
 
 In `wal` mode, a process SHALL be able to read a Crawl while another process writes it, and it SHALL see every committed row.
 
 In `delete` mode, a reader that cannot read within 5 seconds because a write is in progress SHALL fail with `crawl_busy` instead of waiting longer.
+
+In either mode, a writer that cannot write within 30 seconds because another connection holds the crawl file, on opening, on starting a transaction, while a unit runs or on committing, SHALL fail with `crawl_busy`. In both cases `details.file` SHALL name the crawl file.
+
+On Windows, while the process of a killed writer is still exiting, it can still hold the crawl file's `-shm` file, and SQLite then reports `SQLITE_IOERR_TRUNCATE` when the file is opened. Opening a crawl file, for a reader or the writer, SHALL wait for such a file within the same timeout as for a lock (5 seconds for a reader, 30 for the writer) and then fail with `crawl_busy`, never with `crawl_file_invalid` or a disk I/O error.
 
 #### Scenario: Reading during a write in WAL mode
 - **WHEN** a writer process has committed 3 Seed rows and keeps its writer open, and another process reads `seeds`
@@ -385,6 +449,22 @@ In `delete` mode, a reader that cannot read within 5 seconds because a write is 
 #### Scenario: Busy in rollback-journal mode
 - **WHEN** a crawl file in `delete` mode is held under an exclusive write lock for 8 seconds, and another process reads it during that time
 - **THEN** the reader fails with the error code `crawl_busy`
+
+#### Scenario: A busy writer on open
+- **WHEN** a crawl file in `delete` mode is held under an exclusive lock by another process, and its writer is opened and waits out its busy timeout
+- **THEN** opening fails with the error code `crawl_busy`, and `details.file` is that file's path
+
+#### Scenario: A busy writer in a unit
+- **WHEN** the writer of a crawl file in `delete` mode is open, another process then holds the file under an exclusive lock, and a unit waits out the writer's busy timeout
+- **THEN** the unit's caller receives the error code `crawl_busy`, and `details.file` is that file's path
+
+#### Scenario: A file still held by a killed writer is read once it is released
+- **WHEN** the first two attempts to open a crawl file report `SQLITE_IOERR_TRUNCATE`, and the third does not
+- **THEN** reading the file returns its `crawl` row
+
+#### Scenario: A file held past the timeout is reported as crawl_busy
+- **WHEN** every attempt to open a crawl file reports `SQLITE_IOERR_TRUNCATE` for longer than the opener's busy timeout
+- **THEN** opening fails with the error code `crawl_busy`, and `details.file` is that file's path
 
 ### Requirement: Readers never change a crawl file
 
@@ -405,6 +485,10 @@ When an operation on a Crawl finishes, the process SHALL hold no open handle to 
 #### Scenario: Deleting after a read on Windows
 - **WHEN** on Windows a process reads the metadata of a completed Crawl and then keeps running
 - **THEN** another process can delete the crawl file
+
+#### Scenario: Deleting after a failed read on Windows
+- **WHEN** on Windows a process fails to read a file that is not a database as a crawl file, and then keeps running
+- **THEN** another process can delete that file
 
 ### Requirement: Crawl files from a newer tool are refused
 

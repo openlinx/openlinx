@@ -155,6 +155,24 @@ Some failures still have a result worth reading, such as a Crawl that stopped pa
 
 Every other failing document or list Command leaves stdout empty, so for those an agent can rely on this: a non-zero exit code with a JSON result on stdout means a partial result, and the error on stderr says what went wrong. A rows Command is different: the rows written before a failure stay on stdout.
 
+## The schema of a crawl file
+
+`spider schema [TABLE]` lists the public tables of a crawl file, with their columns. It is a list Command (`json`, `jsonl` and `table`, `--limit` 50 by default), and it needs no Workspace and no Crawl. Its JSON result starts with `schema_version`, the tool's schema version, before `total`:
+
+```
+spider schema seeds --fields name
+```
+
+```json
+{"schema_version":1,"total":1,"items":[{"name":"seeds"}],"next_cursor":null}
+```
+
+`jsonl` and `table` print the items only, so an agent that needs `schema_version` reads the `json` result. Each item has `name`, `kind`, `description` and `columns`; each column has `name`, `description`, `type`, `nullable`, `primary_key`, `references`, `format` and `values`. Tables are listed in the order of the change that added them. An unknown TABLE fails with `unknown_table` (exit code 2), whose `details.tables` lists the tables. [schema.md](schema.md) documents the same tables for people.
+
+## Selecting a Crawl
+
+Every Command that reads a Crawl takes the global flag `--crawl latest|<id>|<path>`, with the default `latest`. `spider commands` describes it with `"global":true` and `"default":"latest"`. What each value selects, and its errors (`no_crawls`, `crawl_not_found`, `crawl_file_invalid` and `invalid_value`), are in [crawl-store.md](crawl-store.md). The first Commands that read a Crawl arrive with `050-add-query-and-segments`.
+
 ## Exit codes
 
 The meaning of a code never changes. Codes 9 to 63 are reserved.

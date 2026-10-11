@@ -94,6 +94,21 @@ def test_every_option_setting_names_a_setting_of_a_registered_table(
     ] == []
 
 
+@pytest.mark.parametrize("app", [build_app, example_app])
+def test_options_of_secret_settings_have_only_long_names(app: Callable[[], typer.Typer]) -> None:
+    group = cast(SpiderGroup, typer.main.get_group(app()))
+    tables = group.settings_tables
+
+    assert [
+        (command.name, name)
+        for command in group.commands.values()
+        for option, extra in options_with_meta(command)
+        if extra.setting is not None and tables.is_secret(extra.setting)
+        for name in option.opts
+        if not name.startswith("--")
+    ] == []
+
+
 def _names_a_flat_setting(tables: dict[str, Table], name: str, key: str) -> bool:
     table = tables.get(name)
     # A keyed table has no model_fields: its settings sit inside named entries.

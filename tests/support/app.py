@@ -2,18 +2,29 @@
 
 import sys
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Annotated, Any
 
 import typer
 
 from spider.cli.app import AppExtra, build_app
 from spider.cli.meta import command_meta
-from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt, OptionMeta
+from spider.cli.options import (
+    CrawlOpt,
+    CursorOpt,
+    FieldsOpt,
+    FormatOpt,
+    LimitOpt,
+    OptionMeta,
+    WorkspaceOpt,
+)
 from spider.cli.runner import Invocation
 from spider.output.codes import DiagnosticCode, ExitCode
 from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
+from spider.store.records import LATEST
+from spider.workspace.discovery import resolve_workspace
 
 # Declared here, not in spider.output.codes: the tool never lists the fixture app's codes.
 EXAMPLE_FAILED = DiagnosticCode("example_failed", "error", ExitCode.FAILED, "The example failed.")
@@ -24,6 +35,7 @@ EXAMPLE_TABLE = "tests.support.settings:ExampleSettings"
 GROUPS_TABLE = "tests.support.settings:GroupsTable"
 EXAMPLE_LIST = "example-list"
 EXAMPLE_LONG_LIST = "example-long-list"
+EXAMPLE_READ_CRAWL = "example-read-crawl"
 EXAMPLE_FIELDS = Fields(available=("n", "sq"), default=("n",))
 
 
@@ -186,6 +198,20 @@ def example_settings(
     return {"level": level}
 
 
+@command_meta(name=EXAMPLE_READ_CRAWL, output="document", formats=[Format.JSON, Format.TABLE])
+def example_read_crawl(
+    workspace_dir: WorkspaceOpt = None,
+    crawl: CrawlOpt = LATEST,
+    output_format: FormatOpt = Format.JSON,
+) -> Any:
+    """Reads the --crawl Crawl and reports its id, as the Commands of 050 will."""
+    # Imported here, as in every Command that reads a Crawl: sqlalchemy stays off --help.
+    from spider.store.selection import resolve_crawl
+
+    workspace = resolve_workspace(cwd=Path.cwd(), flag=workspace_dir, home=Path.home())
+    return {"crawl": resolve_crawl(crawl, workspace=workspace, cwd=Path.cwd()).id}
+
+
 def example_app() -> typer.Typer:
     return build_app(
         extra=AppExtra(
@@ -206,6 +232,7 @@ def example_app() -> typer.Typer:
                 example_interrupted,
                 example_aborted,
                 example_settings,
+                example_read_crawl,
             ],
         )
     )

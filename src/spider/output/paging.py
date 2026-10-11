@@ -4,7 +4,7 @@ import base64
 import hashlib
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import orjson
@@ -31,6 +31,8 @@ class Page:
     items: Sequence[Mapping[str, Any]]
     total: int
     next_cursor: str | None
+    # Keys that the JSON result puts before total, such as a version of what is listed.
+    header: Mapping[str, Any] = field(default_factory=dict)
 
 
 def paginate(

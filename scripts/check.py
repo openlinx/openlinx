@@ -16,6 +16,10 @@ PYTHON_GATES: list[list[str]] = [
     ["ruff", "check", "."],
     ["ruff", "format", "--check", "."],
     ["mypy"],
+    # typeshed types some stdlib names per platform (os.altsep is None off Windows), so one OS
+    # alone misses the others' errors. A cache per platform keeps the passes warm.
+    ["mypy", "--platform", "linux", "--cache-dir", ".mypy_cache/linux"],
+    ["mypy", "--platform", "darwin", "--cache-dir", ".mypy_cache/darwin"],
     ["pytest"],
 ]
 

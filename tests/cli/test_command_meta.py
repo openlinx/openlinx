@@ -89,3 +89,20 @@ def secret_twice(
 def test_an_option_mapped_to_a_setting_does_not_declare_secret() -> None:
     with pytest.raises(TypeError, match=r"example\.token"):
         build_app(extra=AppExtra(commands=[secret_twice]))
+
+
+@command_meta(output="document", formats=[Format.JSON, Format.TABLE])
+def short_secret(
+    output_format: FormatOpt = Format.JSON,
+    api_key: Annotated[
+        str | None,
+        typer.Option("--api-key", "-k", help="A key."),
+        OptionMeta(secret=True),
+    ] = None,
+) -> dict[str, Any]:
+    return {}
+
+
+def test_a_secret_option_with_a_short_name_is_refused() -> None:
+    with pytest.raises(TypeError, match="api_key"):
+        build_app(extra=AppExtra(commands=[short_secret]))

@@ -81,12 +81,24 @@ Frontier ──► Scheduler ──► Fetcher ──► Parse pool ──► Ru
 
 ## Crawl store
 
-- **Files:** one SQLite file per Crawl inside the Workspace.
-  - WAL mode lets agents query while the writer works. On network drives it falls back to rollback-journal mode and warns.
-  - The schema is a public, versioned contract ([ADR-0002](adr/0002-sqlite-crawl-store-public-schema.md)).
-- **Schema definition:** SQLAlchemy 2 Core tables are the single definition ([ADR-0003](adr/0003-sqlalchemy-core-not-orm.md)). They drive batched inserts, safe `--where` → SQL translation (only known columns), Alembic migrations, and the generated SQL reference (`spider schema`, the Skill).
-  - Every column has a description, because the descriptions feed that reference.
-- **Tables:** each change adds its own tables and columns through a migration. Migrations are squashed before v0.1, and schema version 1 is the first public contract.
+- **Files:** one SQLite file per Crawl, `<data folder>/crawls/<crawl-id>.sqlite` ([crawl-store.md](crawl-store.md)).
+  - WAL mode lets agents query while the writer works. On a UNC path it falls back to rollback-journal mode and warns with `store_wal_unavailable`; the setting `store.journal_mode` covers other network folders.
+  - The schema is a public, versioned contract ([ADR-0002](adr/0002-sqlite-crawl-store-public-schema.md)), documented in [schema.md](schema.md).
+- **The public API,** which every change that stores or reads Crawl data builds on:
+  - **Creating a Crawl:** `spider.services.crawls.create_crawl(NewCrawl, clock, reporter)` draws the crawl id, creates the file exclusively, chooses the journal mode, redacts secrets, and writes the `crawl` row and the Seeds in one transaction.
+  - **The writer:** `spider.store.writer.CrawlWriter` runs units of work on its own thread inside one open transaction. It commits every 500 units, every second, on `flush()` and on `close()`, refuses an unwritable file before anything is crawled, and is the only writer after creation.
+  - **`--crawl` resolution:** `spider.store.selection.resolve_crawl` turns `latest`, an id or a path into a crawl file, and `spider.store.reading.reading` opens one read-only for a single operation, refusing a file from a newer tool.
+  - **The schema service:** `spider.services.schema.describe_schema` describes the public tables for `spider schema` and the MCP server.
+  - **Redaction:** `spider.store.redaction.redact`, with the secret names that the adapter creating a Crawl collects through `spider.cli.options.secret_names`, from the secret settings and options already declared.
+  - After the exclusive create of a new file, `spider.store.connections` is the only code that opens a crawl file: one engine per operation, disposed after it, so no handle outlives the operation.
+- **Schema definition:** SQLAlchemy 2 Core tables in `spider.store.schema` are the single definition ([ADR-0003](adr/0003-sqlalchemy-core-not-orm.md)). They drive batched inserts, safe `--where` → SQL translation (only known columns), and the SQL reference (`spider schema`, the Skill).
+  - Every table and column has a description, because the descriptions feed that reference.
+- **The three-way schema check,** so the documentation, the code and the files cannot drift apart:
+  - `docs/schema.md` is compared with `spider schema --limit 1000`
+  - a new crawl file is compared with the declared tables through `PRAGMA table_info` and `PRAGMA foreign_key_list`
+  - the table conventions are checked over every declared table
+- **Tables:** each change adds its own tables and columns to the declaration and to `docs/schema.md` in the same slice ([CONTRIBUTING.md](../CONTRIBUTING.md#changing-the-crawl-store-schema)). There are no migrations before v0.1, and schema version 1 is the first public contract; Alembic arrives with the first schema change after it.
+- **The startup path:** `sqlalchemy` is imported only inside the bodies of the Commands and services that use the store, so `spider --help` and `spider commands` never load it.
 - **Read-only access:** `spider sql` opens the file with a read-only URI plus the SQLite authorizer.
 - **Missing values:** a value that is not measured yet is `NULL`, never 0 ("not measured" differs from "zero").
 

@@ -97,6 +97,47 @@ WORKSPACE_NOT_WRITABLE = _declare(
     ExitCode.IO,
     "The Workspace folder or its data folder cannot be created or written.",
 )
+NO_CRAWLS = _declare(
+    "no_crawls", "error", ExitCode.NOT_FOUND, "The Workspace has no Crawl to read yet."
+)
+UNKNOWN_TABLE = _declare(
+    "unknown_table",
+    "error",
+    ExitCode.USAGE,
+    "A table name the public schema does not have; details.tables lists the tables.",
+)
+CRAWL_NOT_FOUND = _declare(
+    "crawl_not_found",
+    "error",
+    ExitCode.NOT_FOUND,
+    "No Crawl in the Workspace has the --crawl id, or no file exists at the --crawl path.",
+)
+CRAWL_BUSY = _declare(
+    "crawl_busy",
+    "error",
+    ExitCode.BUSY,
+    "Another connection held the crawl file for longer than a reader or the writer waits; "
+    "details.file names it.",
+)
+CRAWL_FILE_INVALID = _declare(
+    "crawl_file_invalid",
+    "error",
+    ExitCode.INCOMPATIBLE,
+    "The selected file is not a readable crawl file, or a file selected by id or latest holds "
+    "another id; details.file names it.",
+)
+CRAWL_SCHEMA_TOO_NEW = _declare(
+    "crawl_schema_too_new",
+    "error",
+    ExitCode.INCOMPATIBLE,
+    "The crawl file was made by a newer tool; details give both schema versions.",
+)
+CRAWL_NOT_WRITABLE = _declare(
+    "crawl_not_writable",
+    "error",
+    ExitCode.IO,
+    "The crawl file cannot be written; details.file names it.",
+)
 INTERNAL_ERROR = _declare(
     "internal_error",
     "error",
@@ -106,6 +147,13 @@ INTERNAL_ERROR = _declare(
 INTERRUPTED = _declare("interrupted", "error", ExitCode.INTERRUPTED, "Stopped with Ctrl+C.")
 WORKSPACE_NESTED = _declare(
     "workspace_nested", "warning", None, "The new Workspace is inside another Workspace."
+)
+STORE_WAL_UNAVAILABLE = _declare(
+    "store_wal_unavailable",
+    "warning",
+    None,
+    "The new crawl file uses a rollback journal, because WAL is unsafe or refused in its "
+    "folder; details.path names the folder.",
 )
 MORE_ITEMS = _declare(
     "more_items",

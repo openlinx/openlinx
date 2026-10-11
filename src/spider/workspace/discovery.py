@@ -15,6 +15,10 @@ class Workspace:
     settings_file: Path
     is_global: bool
 
+    @property
+    def crawls_dir(self) -> Path:
+        return self.data_dir / "crawls"
+
 
 def resolve_workspace(*, cwd: Path, flag: Path | None, home: Path) -> Workspace:
     if flag is not None:
