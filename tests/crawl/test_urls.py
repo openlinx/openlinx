@@ -17,3 +17,7 @@ def test_dot_segments_are_resolved() -> None:
 
 def test_an_empty_path_becomes_a_slash() -> None:
     assert normalize_url("https://site.test") == "https://site.test/"
+
+
+def test_percent_encodings_are_normalised() -> None:
+    assert normalize_url("http://site.test/%7euser/a%2fb") == "http://site.test/~user/a%2Fb"
