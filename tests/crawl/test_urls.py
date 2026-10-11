@@ -78,3 +78,25 @@ def test_a_trailing_slash_is_kept() -> None:
     results = (normalize_url("http://site.test/a"), normalize_url("http://site.test/a/"))
 
     assert results == ("http://site.test/a", "http://site.test/a/")
+
+
+_TEXT = st.text(st.characters(exclude_categories=["Cs"], exclude_characters="/?#"), max_size=8)
+_SEGMENTS = st.lists(st.one_of(st.sampled_from([".", "..", "", "%2e", "%7E", "%zz"]), _TEXT))
+_URLS = st.builds(
+    "{}://{}{}/{}{}{}".format,
+    st.sampled_from(["http", "https", "HTTP"]),
+    st.sampled_from(["site.test", "Site.TEST", "bücher.test", "faß.test", "127.0.0.1"]),
+    st.sampled_from(["", ":80", ":443", ":8443"]),
+    _SEGMENTS.map("/".join),
+    st.one_of(st.just(""), _TEXT.map("?{}".format)),
+    st.one_of(st.just(""), _TEXT.map("#{}".format)),
+)
+
+
+@given(_URLS)
+def test_normalising_twice_changes_nothing(url: str) -> None:
+    once = normalize_url(url)
+    if isinstance(once, InvalidUrl):
+        reject()
+
+    assert normalize_url(once) == once
