@@ -196,6 +196,8 @@ A new crawl file gets its SQLite journal mode once, when it is created, and `cra
   v0.2 plans to detect them from the system's mount table.
 - **`"wal"` on a UNC path** turns the fallback off, for a share known to support WAL safely.
 - **Durability:** WAL files commit with `synchronous=NORMAL`: a commit survives a killed process, and a power cut may lose the last commits but leaves the file sound. Rollback-journal files commit with `synchronous=FULL`.
+- **The writer's connection settings.** The writer's connection keeps temporary tables and indexes in memory (`temp_store = MEMORY`) and uses a page cache of up to 64 MiB (`cache_size = -65536`), a ceiling rather than an allocation. In WAL mode it also maps up to 256 MiB of the crawl file into memory (`mmap_size = 268435456`). In the store benchmark the three together cut a 2,000-Page write by a third. Creating a file and reading it keep SQLite's defaults, and no setting changes these values.
+- **No memory mapping in rollback-journal mode.** That mode is chosen for network shares, where a mapped file is only as coherent as the share's client cache, so the writer sets `mmap_size = 0` there. It sets it explicitly, because the default is a build-time option of SQLite and is not 0 in every build.
 
 ## Schema versions
 
