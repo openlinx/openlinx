@@ -45,7 +45,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - it passes on today's code, and a mutation check shows it is sharp: a non-frozen dataclass, and a subclass of an own class, each make it red, as cases that feed the checker a source string
 
   *No scenario, because* ADR-0006 is a code-style decision with no capability spec, like the line-endings check of 1.7. It is here so that `020`, the largest change, starts with it.
-- [ ] 1.9 **Fix, with no scenario:** the four `# noqa` and `# type: ignore` uses that break CONTRIBUTING's "Code style" rule (each names its code, is used only when the fault is not ours, and gives a short reason).
+- [x] 1.9 **Fix, with no scenario:** the four `# noqa` and `# type: ignore` uses that break CONTRIBUTING's "Code style" rule (each names its code, is used only when the fault is not ours, and gives a short reason).
 
   Done when:
   - `src/spider/cli/meta.py`: the `# type: ignore[attr-defined]` on `run.command_meta = meta` is gone, because the fault is ours. A Protocol for a Command function that carries `command_meta` types it, and `meta_of` reads it through that Protocol. A registry would not do: it would be module-level mutable state, which ADR-0006 rules out.

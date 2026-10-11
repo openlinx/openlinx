@@ -4,7 +4,7 @@ import functools
 import inspect
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, cast
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 
 from spider.cli.options import FORMAT_PARAMETER, option_meta, option_names
 from spider.output.codes import INVALID_VALUE, MORE_ITEMS
@@ -34,6 +34,13 @@ class CommandMeta:
     examples: tuple[Example, ...]
 
 
+@runtime_checkable
+class CommandWithMeta[**P](Protocol):
+    command_meta: CommandMeta
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> Document | Rows: ...
+
+
 # What each output kind can serve, and the parameters every Command of the kind declares.
 KIND_FORMATS: Mapping[OutputKind, frozenset[Format]] = {
     "document": frozenset({Format.JSON, Format.TABLE}),
@@ -55,8 +62,8 @@ def command_meta[**P](
     events: bool = False,
     name: str | None = None,
     examples: Sequence[Example] = (),
-) -> Callable[[Callable[P, Any]], Callable[P, Document | Rows]]:
-    def decorate(command: Callable[P, Any]) -> Callable[P, Document | Rows]:
+) -> Callable[[Callable[P, Any]], CommandWithMeta[P]]:
+    def decorate(command: Callable[P, Any]) -> CommandWithMeta[P]:
         # The one name of the Command: registration, spider commands, cursors and MCP use it.
         meta = CommandMeta(
             name or command.__name__.replace("_", "-"),
@@ -87,15 +94,15 @@ def command_meta[**P](
                 _envelope(result), output_format, "list", _more_items(result, output_format)
             )
 
-        run.command_meta = meta  # type: ignore[attr-defined]
-        return run
+        described = cast(CommandWithMeta[P], run)
+        described.command_meta = meta
+        return described
 
     return decorate
 
 
 def meta_of(command: Callable[..., Any]) -> CommandMeta | None:
-    meta: CommandMeta | None = getattr(command, "command_meta", None)
-    return meta
+    return command.command_meta if isinstance(command, CommandWithMeta) else None
 
 
 def check_command(command: Callable[..., Any]) -> CommandMeta:
