@@ -3,12 +3,14 @@
 from dataclasses import dataclass
 from functools import lru_cache
 from ipaddress import IPv4Address
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from spider.crawl.urls import NormalizedUrl, url_host
 
 if TYPE_CHECKING:
     from publicsuffixlist import PublicSuffixList
+
+type ScopeKind = Literal["host", "subdomains", "subfolder"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,17 +22,24 @@ class ScopeDecision:
 @dataclass(frozen=True, slots=True)
 class ScopeRules:
     seed_hosts: frozenset[str]
+    # Filled with --scope subdomains only: a host is internal when its registrable domain is one.
+    registrable_domains: frozenset[str] = frozenset()
 
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
-        is_internal = _without_trailing_dot(url_host(url)) in self.seed_hosts
+        host = _without_trailing_dot(url_host(url))
+        is_internal = host in self.seed_hosts or (
+            bool(self.registrable_domains) and registrable_domain(host) in self.registrable_domains
+        )
         return ScopeDecision(is_internal=is_internal, in_scope=is_internal)
 
 
-def scope_rules(seed: NormalizedUrl) -> ScopeRules:
+def scope_rules(seed: NormalizedUrl, *, scope: ScopeKind = "host") -> ScopeRules:
     host = _without_trailing_dot(url_host(seed))
+    domain = registrable_domain(host)
     # One way only: a www Seed never admits the apex, which the user did not name.
-    www = {f"www.{host}"} if registrable_domain(host) == host else set()
-    return ScopeRules(frozenset({host} | www))
+    www = {f"www.{host}"} if domain == host else set()
+    domains = frozenset({domain}) if scope == "subdomains" and domain else frozenset()
+    return ScopeRules(frozenset({host} | www), domains)
 
 
 # Hosts repeat across a Crawl, and the Public Suffix List lookup walks the host's labels.

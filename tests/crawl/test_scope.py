@@ -30,6 +30,12 @@ def test_the_apex_of_a_www_seed_is_external() -> None:
     assert rules.decide(NormalizedUrl("http://site.test/x")).is_internal is False
 
 
+def test_subdomains_are_internal_with_the_subdomains_scope() -> None:
+    rules = scope_rules(NormalizedUrl("http://www.site.test/"), scope="subdomains")
+
+    assert rules.decide(NormalizedUrl("http://blog.site.test/")).is_internal is True
+
+
 def _valid(url: NormalizedUrl | InvalidUrl) -> NormalizedUrl:
     if isinstance(url, InvalidUrl):
         raise TypeError(f"not a valid URL: {url.reason}")
@@ -65,5 +71,24 @@ def _valid(url: NormalizedUrl | InvalidUrl) -> NormalizedUrl:
 )
 def test_seed_hosts_decide_what_is_internal(seed: str, url: str, internal: bool) -> None:
     rules = scope_rules(_valid(parse_seed(seed)))
+
+    assert rules.decide(_valid(normalize_url(url))).is_internal is internal
+
+
+@pytest.mark.parametrize(
+    ("seed", "url", "internal"),
+    [
+        ("www.site.test", "https://a.b.site.test/", True),
+        ("site.test.", "https://blog.site.test/", True),
+        ("site.test", "https://othersite.test/", False),
+        ("www.amazonaws.com", "https://bucket.s3.amazonaws.com/", False),
+        ("127.0.0.1", "http://127.0.0.2/", False),
+        ("localhost", "http://other.localhost/", False),
+    ],
+)
+def test_the_subdomains_scope_compares_registrable_domains(
+    seed: str, url: str, internal: bool
+) -> None:
+    rules = scope_rules(_valid(parse_seed(seed)), scope="subdomains")
 
     assert rules.decide(_valid(normalize_url(url))).is_internal is internal
