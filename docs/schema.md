@@ -18,6 +18,16 @@ Each table has a section headed ``## Table `<name>` ``, with a description and o
 | Values | the allowed values of an enumeration, otherwise empty |
 | Description | what the column holds |
 
+A table with secondary indexes has a ``### Indexes`` table after its columns, with one row per index, in name order. The indexes SQLite makes for primary keys are not listed.
+
+| Heading | Meaning |
+|---|---|
+| Name | the index name, `<table>_<columns>` |
+| Columns | the indexed columns, in index order |
+| Unique | `yes` when no two rows may share the indexed values, otherwise `no` |
+| Where | the condition of a partial index, which holds only the rows that meet it, otherwise empty |
+| Description | the query the index serves |
+
 Tables are listed in the order of the change that added them, and within a change in the order it added them.
 
 ## Conventions
@@ -50,7 +60,7 @@ A change that stores new data adds its tables and columns in the slice whose sce
    - Declare a real number with `sqlalchemy.REAL`: `Float` and `Double` declare `FLOAT` and `DOUBLE`, which STRICT refuses.
    - Read an enumeration's `values` from the `Literal` the code uses.
    - Declare each index with `info={"description": ...}`, naming the query it serves.
-2. **Document it here, in the same commit:** a ``## Table `<name>` `` section, placed in change order, with the same description and one row per column. The contract test compares this page with `spider schema --limit 1000`, so it is never red between commits.
+2. **Document it here, in the same commit:** a ``## Table `<name>` `` section, placed in change order, with the same description, one row per column, and an Indexes table when it has secondary indexes. The contract test compares this page with `spider schema --limit 1000`, so it is never red between commits.
 3. **Follow the [conventions](#conventions).** Tests over `spider schema` check names, descriptions, types, booleans and enumeration values for every table, including new ones.
 4. **No migration before v0.1.** Until the first release the schema is not yet public: a change edits the declared tables directly, and `schema_version` stays `1`. From v0.1 on, a schema change adds 1 to `schema_version` and brings a migration, with a test from every published schema version.
 
