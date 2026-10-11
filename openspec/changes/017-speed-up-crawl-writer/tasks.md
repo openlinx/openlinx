@@ -83,7 +83,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when:
   - "A killed writer keeps committed units in a sound file", "A killed writer loses uncommitted units" and "A new writer opens the file of a killed writer at once", with the rest of `tests/store/test_durability.py`, pass 200 times in a row on Windows on each of SQLite 3.50.x (the python.org Python 3.14) and SQLite 3.53.x (the uv-managed Python), with 0 failures. That is `015`'s proof: 20 runs cannot catch a race that fails 1–2% of the time.
   - throughout the proof, a second process runs the full test suite (`pytest --no-cov`) in a loop, and the two configurations run one at a time (design D10). `015`'s held `-shm` reading tests are left out, because they inject the fault.
-  - they pass in CI on Windows, macOS and Linux
+  - they pass in CI on Windows, macOS and Linux (checked by task 5.3)
   - the PR description records the Windows and SQLite versions
   - if a run fails with a new SQLite error at open or a lost commit, the work stops and is reported. The fallback (`mmap_size = 0` on Windows only) is decided with the maintainer.
 - [x] 3.5 Docs: in `docs/crawl-store.md`, document the writer's connection settings, and why `delete` mode maps no memory.
@@ -111,4 +111,4 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.1 Verify that every `#### Scenario:` in `specs/crawl-store/spec.md` has exactly one test named after it, with a small script over the test ids.
 - [x] 5.2 Docs: the writer bullet in the "Crawl store" section of `docs/architecture.md` describes the writer as built: one thread, the optimistic batch, `submit()` and its window, and the connection settings.
 - [ ] 5.3 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
-- [ ] 5.4 Review: run the code-review skill on the whole change against `specs/crawl-store/spec.md`, then refactor with the whole suite green.
+- [x] 5.4 Review: run the code-review skill on the whole change against `specs/crawl-store/spec.md`, then refactor with the whole suite green.

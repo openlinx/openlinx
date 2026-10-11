@@ -108,6 +108,17 @@ def test_a_failing_unit_commits_the_units_before_it(temp_workspace: TempWorkspac
     assert ([position for position, _ in seen], committed) == ([1, 2, 3], [3])
 
 
+def counting_its_runs() -> Callable[[Connection], int]:
+    """A unit that returns how many times it has run, so it returns differently when run again."""
+    runs: list[int] = []
+
+    def counts_its_runs(connection: Connection) -> int:
+        runs.append(1)
+        return len(runs)
+
+    return counts_its_runs
+
+
 def close_after_a_replay(
     crawl_file: Path, unit: Callable[[Connection], object]
 ) -> CrawlWriterClosedError:
@@ -189,11 +200,7 @@ def test_a_unit_after_a_replay_that_differs_learns_why_the_writer_ended(
     temp_workspace: TempWorkspace,
 ) -> None:
     crawl = crawl_without_seeds(temp_workspace)
-    runs: list[int] = []
-
-    def counts_its_runs(connection: Connection) -> int:
-        runs.append(1)
-        return len(runs)
+    counts_its_runs = counting_its_runs()
 
     writer = CrawlWriter(crawl.path, FakeClock())
     writer.run(counts_its_runs)
@@ -229,11 +236,7 @@ def test_replay_now_fails_at_a_unit_that_runs_again_differently(
     temp_workspace: TempWorkspace,
 ) -> None:
     crawl = crawl_without_seeds(temp_workspace)
-    runs: list[int] = []
-
-    def counts_its_runs(connection: Connection) -> int:
-        runs.append(1)
-        return len(runs)
+    counts_its_runs = counting_its_runs()
 
     writer = CrawlWriter(crawl.path, FakeClock())
     writer.run(counts_its_runs)
@@ -289,6 +292,40 @@ def test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails(
         [(0,)],
         IntegrityError,
     )
+
+
+def test_a_submit_made_as_the_failing_unit_learns_its_error_fails_at_once(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    add_a_deferred_reference(crawl.path)
+    hold = threading.Event()
+    submits: list[str] = []
+    submitted = threading.Event()
+
+    def submit() -> None:
+        try:
+            writer.submit(count_seeds)
+            submits.append("queued")
+        except CrawlWriterClosedError:
+            submits.append("refused")
+
+    def submits_again(_: Future[Any]) -> None:
+        # The writer thread may not submit, so another thread does while this callback waits.
+        finishes(submit)
+        submitted.set()
+
+    writer = CrawlWriter(crawl.path, FakeClock())
+    writer.submit(waits_for(hold, breaks_a_deferred_reference))
+    failing = writer.submit(raising_insert(9, ValueError("bad")))
+    failing.add_done_callback(submits_again)
+    hold.set()
+    # Closing marks the writer closed at once, so it waits for the submit.
+    submitted.wait(timeout=10)
+    with pytest.raises(CrawlWriterClosedError, match=r"^The crawl writer is closed\.$"):
+        writer.close()
+
+    assert (type(failing.exception()), submits) == (ValueError, ["refused"])
 
 
 def test_a_unit_that_fails_half_way_after_other_units_leaves_no_change(
@@ -788,11 +825,7 @@ def test_a_failed_replay_fails_the_futures_of_the_units_that_ran_again(
     temp_workspace: TempWorkspace,
 ) -> None:
     crawl = crawl_without_seeds(temp_workspace)
-    runs: list[int] = []
-
-    def counts_its_runs(connection: Connection) -> int:
-        runs.append(1)
-        return len(runs)
+    counts_its_runs = counting_its_runs()
 
     writer = CrawlWriter(crawl.path, FakeClock())
     replayed = writer.submit(counts_its_runs)

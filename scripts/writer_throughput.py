@@ -48,11 +48,11 @@ from spider.services.crawls import create_crawl
 from spider.store.reading import reading
 from spider.store.records import NewCrawl, SecretNames
 from spider.store.types import Flag, Timestamp
-from spider.store.writer import CrawlWriter
+from spider.store.writer import CrawlWriter, CrawlWriterClosedError
 from spider.workspace.discovery import resolve_workspace
 
 PAGES = 20_000
-WINDOW_PAGES = 5_000
+RATE_WINDOW_PAGES = 5_000
 POISON_EVERY = 997
 HOST = "https://www.site.test"
 EXTERNALS = 5_000
@@ -64,8 +64,8 @@ TEMPLATE_REPEATS = 80
 INTERNAL_TARGETS = 104
 EXTERNAL_TARGETS = 13
 OWN_REPEATS = 19
-# Prime: a Page's internal targets are distinct when the Page count is above INTERNAL_TARGETS
-# and not a multiple of it.
+# A prime, so a Page's internal targets are distinct when the Page count is above
+# INTERNAL_TARGETS and is not a multiple of INTERNAL_STRIDE.
 INTERNAL_STRIDE = 191
 LINK_ROWS_PER_PAGE = (
     TEMPLATE_TARGETS + TEMPLATE_REPEATS + INTERNAL_TARGETS + EXTERNAL_TARGETS + OWN_REPEATS
@@ -375,9 +375,9 @@ def check_atomicity(path: Path, pages: list[Page], failed: set[int]) -> dict[str
 def window_rates(started: float, resolved_at: list[float]) -> list[float]:
     rates = []
     previous = started
-    for start in range(0, len(resolved_at) - WINDOW_PAGES + 1, WINDOW_PAGES):
-        ended = max(resolved_at[start : start + WINDOW_PAGES])
-        rates.append(round(WINDOW_PAGES / (ended - previous), 1))
+    for start in range(0, len(resolved_at) - RATE_WINDOW_PAGES + 1, RATE_WINDOW_PAGES):
+        ended = max(resolved_at[start : start + RATE_WINDOW_PAGES])
+        rates.append(round(RATE_WINDOW_PAGES / (ended - previous), 1))
         previous = ended
     return rates
 
@@ -422,22 +422,36 @@ def measure(folder: Path, page_count: int) -> dict[str, Any]:
     spawn = multiprocessing.get_context("spawn")
     stop = spawn.Event()
     reader_result = folder / "reader.json"
-    with CrawlWriter(crawl.path, SystemClock()) as writer:
-        writer.run(partial(seed_pages, site, page_count))
-        writer.flush()
-        reader = spawn.Process(
-            target=read_while_written, args=(crawl.path, page_count, stop, reader_result)
-        )
-        reader.start()
-        with Peaks(crawl.path.with_name(crawl.path.name + "-wal")) as peaks:
-            started = time.perf_counter()
-            for page in pages:
-                future: Future[None] = writer.submit(partial(write_page, site, page))
-                future.add_done_callback(partial(resolved, page))
+    reader = spawn.Process(
+        target=read_while_written, args=(crawl.path, page_count, stop, reader_result)
+    )
+    try:
+        with CrawlWriter(crawl.path, SystemClock()) as writer:
+            writer.run(partial(seed_pages, site, page_count))
             writer.flush()
-            elapsed = time.perf_counter() - started
+            reader.start()
+            with Peaks(crawl.path.with_name(crawl.path.name + "-wal")) as peaks:
+                started = time.perf_counter()
+                for page in pages:
+                    future: Future[None] = writer.submit(partial(write_page, site, page))
+                    future.add_done_callback(partial(resolved, page))
+                writer.flush()
+                elapsed = time.perf_counter() - started
+    # A writer that ends is a failure the check exists to report: a later call raises that the
+    # writer is closed, and a flush raises the failure itself.
+    except Exception as error:
+        cause = error.__cause__ if isinstance(error, CrawlWriterClosedError) else error
+        failure = f"{type(cause).__name__}: {cause}"
+        return {
+            "machine": machine(),
+            "pages": page_count,
+            "run_failed": failure,
+            "below_floor": [f"the run failed: {failure}"],
+        }
+    finally:
         stop.set()
-        reader.join()
+        if reader.pid is not None:
+            reader.join()
     atomicity = check_atomicity(crawl.path, pages, failed)
     reader_counts = (
         json.loads(reader_result.read_text(encoding="utf-8")) if reader_result.exists() else {}
@@ -450,8 +464,8 @@ def measure(folder: Path, page_count: int) -> dict[str, Any]:
         "pages_per_s": round(page_count / elapsed, 1),
         "pages_per_s_per_5k_window": window_rates(started, resolved_at),
         "link_rows_per_s": round(atomicity["link_rows"] / elapsed),
-        "wal_peak_mb": round(peaks.wal_bytes / MIB, 1),
-        "rss_peak_mb": round(peaks.rss_bytes / MIB, 1),
+        "wal_peak_mib": round(peaks.wal_bytes / MIB, 1),
+        "rss_peak_mib": round(peaks.rss_bytes / MIB, 1),
         "reader": {**reader_counts, "exit_code": reader.exitcode},
         "atomicity": atomicity,
         "below_floor": below_floor(
@@ -469,9 +483,9 @@ def below_floor(pages_per_s: float, peaks: Peaks, reader_read: bool, atomic: boo
     if pages_per_s < MIN_PAGES_PER_S:
         failures.append(f"below {MIN_PAGES_PER_S} Pages/s")
     if peaks.wal_bytes > MAX_WAL_MIB * MIB:
-        failures.append(f"WAL peak above {MAX_WAL_MIB} MB")
+        failures.append(f"WAL peak above {MAX_WAL_MIB} MiB")
     if peaks.rss_bytes > MAX_RSS_MIB * MIB:
-        failures.append(f"RSS peak above {MAX_RSS_MIB} MB")
+        failures.append(f"RSS peak above {MAX_RSS_MIB} MiB")
     if not reader_read:
         failures.append("the reader process failed or made no read, so the run had no reader")
     if not atomic:

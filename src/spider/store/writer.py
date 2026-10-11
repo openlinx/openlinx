@@ -268,8 +268,7 @@ class CrawlWriter:
             if job.work is _Control.CLOSE:
                 # Readers that stay open would otherwise keep the WAL from shrinking. Run on the
                 # driver's connection: through SQLAlchemy it would begin a transaction first.
-                driver = cast(sqlite3.Connection, connection.connection.driver_connection)
-                driver.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                _driver(connection).execute("PRAGMA wal_checkpoint(TRUNCATE)")
             job.done.set_result(None)
             return job.work is _Control.FLUSH
         if not connection.in_transaction():
@@ -301,6 +300,14 @@ class CrawlWriter:
                 for ran in self._batch:
                     _run_again(ran, connection)
                 self._commit(connection)
+        except BaseException as replay_error:
+            failure = self._busy_error(replay_error)
+            # Ended before the failing unit's caller learns its error, so a submit it then makes
+            # fails at once.
+            self._end(failure, None)
+            if failure is replay_error:
+                raise
+            raise failure from replay_error
         finally:
             # Its own error even when the replay fails and ends the writer (design D6).
             failed.done.set_exception(error)
@@ -370,8 +377,12 @@ def _check_writable(connection: Connection) -> None:
     transaction.rollback()
 
 
+def _driver(connection: Connection) -> sqlite3.Connection:
+    return cast(sqlite3.Connection, connection.connection.driver_connection)
+
+
 def _run_counted[T](unit: Callable[[Connection], T], connection: Connection) -> tuple[T, int]:
-    driver = cast(sqlite3.Connection, connection.connection.driver_connection)
+    driver = _driver(connection)
     before = driver.total_changes
     result = unit(connection)
     # SQLite's count is a C int, which wraps on a long Crawl.
