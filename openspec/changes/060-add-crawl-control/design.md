@@ -162,7 +162,8 @@ Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 do
   - warnings: `estimate_unavailable`, `estimate_exceeds_max_urls`, `secrets_redacted`, `list_from_stdin`, `settings_not_in_command`
 
 From other changes: `empty_list` (`024`, reported by the detaching parent), `crawl_file_invalid`, `crawl_busy` and `crawl_not_found` (`015`), `seed_unreachable` and the other Crawl codes (`020` D17), and `invalid_value` and `settings_invalid` (`010`).
-- *Why `crawl_id_taken` is 5:* `010`'s naming rule covers only `invalid_`, `unknown_` and `_not_found`. A chosen id is taken only when another process created that Crawl between the reservation and the create, which is the `busy` class: another process holds the Crawl.
+- *Why `crawl_id_taken` is 5:* `010`'s naming rule covers only `invalid_`, `unknown_` and `_not_found`. In v0.1 the chosen id is always the tool's own, reserved by the detaching parent, so it is taken only when another process created that Crawl between the reservation and the create. Running the same command again draws a new id and succeeds, so retrying is the right advice, which is what the `busy` class (5) tells an agent.
+- *If a later release lets the user choose an id:* a user-chosen id that is taken is not transient, because running the same command again fails again. It then needs a code of its own with exit 2 (fix the argument), decided in that release.
 
 ## Test seams
 
