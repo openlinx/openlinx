@@ -82,9 +82,10 @@ def connect(
             connection.execute("PRAGMA foreign_keys = ON")
             # The first read opens the WAL index (-shm), where a killed writer can still hold it.
             connection.execute("PRAGMA schema_version").fetchone()
-        except sqlite3.OperationalError as error:
+        except BaseException as error:
+            # On any error, as for a file that is not a database: left to the GC, it holds the file.
             connection.close()
-            if not _shm_held(error):
+            if not isinstance(error, sqlite3.OperationalError) or not _shm_held(error):
                 raise
             if time.monotonic() >= deadline:
                 raise busy_error(path, "opening", busy_seconds, error) from error

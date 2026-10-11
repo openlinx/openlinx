@@ -104,6 +104,24 @@ def test_deleting_after_a_read_on_windows(temp_workspace: TempWorkspace) -> None
     assert (deleted.returncode, [file.exists() for file in files]) == (0, [False, False, False])
 
 
+@pytest.mark.slow
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows refuses to delete an open file")
+def test_deleting_after_a_failed_read_on_windows(temp_workspace: TempWorkspace) -> None:
+    notes = temp_workspace.root / "notes.sqlite"
+    notes.write_text("hello", encoding="utf-8")
+    with pytest.raises(DBAPIError):
+        read_metadata(notes)
+
+    deleted = subprocess.run(
+        [sys.executable, "-c", DELETE_FILES, str(notes)],
+        capture_output=True,
+        timeout=PROCESS_TIMEOUT,
+        check=False,
+    )
+
+    assert (deleted.returncode, notes.exists()) == (0, False)
+
+
 def crawl_from_a_newer_tool(temp_workspace: TempWorkspace) -> CrawlFile:
     crawl = create_any_crawl(temp_workspace)
     with closing(connect(crawl.path)) as connection:
