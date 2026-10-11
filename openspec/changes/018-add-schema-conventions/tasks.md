@@ -56,7 +56,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   *No scenario, because* it changes no behaviour: it brings the code to the "Code style" rule that came with ADR-0006.
 - [x] 1.10 Docs: in `docs/schema.md`, replace "Conventions" with ADR-0005's rules as the spec states them (D1): STRICT, CHECKs, keys and references, `_at`, the units with `_seconds` and `_count`, errors, the two description prefixes, indexes. State that reading a crawl file needs SQLite 3.37 or later. In "How to add a table", add the declaration helper, `REAL`, and an index's `info["description"]`. Link ADR-0005.
-- [ ] 1.11 Review: run the code-review skill on group 1's commits against "Public schema conventions" and ADR-0005, then refactor with the whole suite green.
+- [x] 1.11 Review: run the code-review skill on group 1's commits against "Public schema conventions" and ADR-0005, then refactor with the whole suite green.
 
 ## 2. The schema description: references, indexes and markers (seam 1, seam 6)
 

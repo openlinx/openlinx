@@ -1,4 +1,4 @@
-"""The documented, the declared and the stored schema agree (015-add-crawl-store, crawl-store)."""
+"""Docs, schema and file agree (015-add-crawl-store, 018-add-schema-conventions, crawl-store)."""
 
 import re
 import sqlite3

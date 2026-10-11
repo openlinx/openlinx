@@ -47,7 +47,7 @@ def violations(sources: Mapping[str, str]) -> list[str]:
         module: [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
         for module, tree in trees.items()
     }
-    own = {node.name for nodes in classes.values() for node in nodes}
+    own_class_names = {node.name for nodes in classes.values() for node in nodes}
     found = []
     for module, nodes in classes.items():
         for node in nodes:
@@ -59,7 +59,7 @@ def violations(sources: Mapping[str, str]) -> list[str]:
             found += [
                 f"{module}: {node.name} subclasses {name}"
                 for name in map(_base_name, node.bases)
-                if name in own and (node.name, name) not in ALLOWED_SUBCLASSES
+                if name in own_class_names and (node.name, name) not in ALLOWED_SUBCLASSES
             ]
     return found
 

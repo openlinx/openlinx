@@ -16,15 +16,17 @@ JOURNAL_MODES = list(get_args(JournalMode.__value__))
 metadata = MetaData()
 
 
-def _checks(table: str, columns: tuple[Column[Any], ...]) -> list[CheckConstraint]:
+def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckConstraint]:
     checks = []
     for column in columns:
         if "values" in column.info:
             allowed = column.in_(column.info["values"])
             condition = or_(column.is_(None), allowed) if column.nullable else allowed
-            checks.append(CheckConstraint(condition, name=f"{table}_{column.name}_values"))
+            checks.append(CheckConstraint(condition, name=f"{table_name}_{column.name}_values"))
         if isinstance(column.type, Flag):
-            checks.append(CheckConstraint(column.in_([0, 1]), name=f"{table}_{column.name}_flag"))
+            checks.append(
+                CheckConstraint(column.in_([0, 1]), name=f"{table_name}_{column.name}_flag")
+            )
     return checks
 
 

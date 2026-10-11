@@ -22,10 +22,10 @@ Tables are listed in the order of the change that added them, and within a chang
 
 ## Conventions
 
-Every public table, column and index follows the conventions of [ADR-0005](adr/0005-crawl-file-schema-conventions.md), which gives all the naming rules and their reasons. The file enforces the ones it can, and tests over `spider schema` check most of the others:
+Every public table, column and index follows the conventions of [ADR-0005](adr/0005-crawl-file-schema-conventions.md), which gives all the naming rules and their reasons. The file enforces the ones it can, tests over `spider schema` check some others, and review checks the rest:
 - **STRICT tables:** every table is `STRICT`, so a column's type is `INTEGER`, `REAL`, `TEXT` or `BLOB`, and the file refuses a value of another type. Reading a crawl file needs SQLite 3.37 or later.
 - **Names:** lowercase snake_case. Table names are plural nouns, except the one-row `crawl`.
-- **Descriptions:** every table, column and index has one. Two prefixes mark a column that the Crawl itself does not write:
+- **Descriptions:** every table, column and index has one. Two prefixes mark a column that stays NULL for a while:
   - `Derived: `: only a post-crawl pass writes it, and it is NULL until the pass has run.
   - `Filled from v<major>.<minor>. `: a later release fills it, and it is NULL in every row until then.
 - **Keys and references:**

@@ -1,4 +1,4 @@
-"""Every public table follows the schema conventions (015-add-crawl-store, crawl-store)."""
+"""Tables follow the conventions (015-add-crawl-store, 018-add-schema-conventions, crawl-store)."""
 
 import re
 from typing import Any

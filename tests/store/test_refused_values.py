@@ -1,4 +1,4 @@
-"""The file refuses bad values (design D2 and D3 of 018-add-schema-conventions, crawl-store)."""
+"""The file refuses bad values (018-add-schema-conventions, crawl-store)."""
 
 import pytest
 from sqlalchemy import update

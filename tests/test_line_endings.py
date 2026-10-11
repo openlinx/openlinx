@@ -39,10 +39,10 @@ def test_checked_out_text_files_use_lf() -> None:
 def test_a_tracked_file_missing_from_the_working_tree_is_skipped(tmp_path: Path) -> None:
     git(tmp_path, "init", "-q")
     (tmp_path / "kept.txt").write_bytes(b"one\ntwo\n")
-    (tmp_path / "moved.txt").write_bytes(b"one\ntwo\n")
+    (tmp_path / "deleted.txt").write_bytes(b"one\ntwo\n")
     git(tmp_path, "add", ".")
     git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "lf")
-    (tmp_path / "moved.txt").unlink()
+    (tmp_path / "deleted.txt").unlink()
     (tmp_path / "kept.txt").write_bytes(b"one\r\ntwo\r\n")
 
     assert text_files_not_checked_out_with_lf(tmp_path) == ["kept.txt"]

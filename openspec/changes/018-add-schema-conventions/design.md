@@ -107,6 +107,11 @@ No boundary double is used.
 - [A tool built on SQLite older than 3.37 cannot open a crawl file] → `docs/schema.md` states the minimum, and `080`'s `doctor` reports the version. Python 3.12+ on our supported platforms ships 3.40 or later through uv.
 - [A CHECK refuses a value that a later change adds without listing it] → The rule lists later values from v0.1. A missed value fails loudly at the first write, in that change's tests.
 - [Guards that pass trivially today could hide a broken check] → In this change they pass vacuously, because `crawl` and `seeds` have no foreign key, secondary index, or derived or later column. Each guard's assertion that it saw at least one match switches on in the `020` task that adds the first foreign key (`found_on_url_id`) or the first index (`urls_url`). A later change does the same for the first derived or later column: `022`'s `origins.http_version` (filled from v0.2) or `030`'s later `pages` columns, whichever lands first.
+- [Group 1's review: what stays unexercised or open] → Recorded at task 1.11:
+  - No column takes the `IS NULL OR` branch of a value CHECK yet, because `crawl` and `seeds` have no nullable enumeration. The first change that declares one tests a NULL write in its slice.
+  - The CHECKs on `crawl.crawl_mode` and `crawl.journal_mode` come from the same helper as the tested `crawl.state`, and no scenario writes a bad value to them. The file check of task 2.6 reads `sqlite_master.sql`, and it could compare CHECKs as well if the review of group 2 asks for it.
+  - `public_table` takes only columns. `020`'s first `WITHOUT ROWID` table (ADR-0005 rule 15) adds `sqlite_with_rowid` and any table-level constraint to it, in that slice.
+  - The ADR-0006 guard of task 1.8 matches `dataclass` and own base classes by name, so an aliased import (`import dataclasses as dc`, `from spider.x import Base as B`) escapes it. CONTRIBUTING's import rule writes our code without such aliases, and review catches the rest.
 
 ## Migration Plan
 

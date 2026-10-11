@@ -28,7 +28,8 @@ def run(name: str, command: Sequence[str], env: Mapping[str, str] | None = None)
     print(f"==> {name}", flush=True)
     code = subprocess.run(command, cwd=REPO_ROOT, env=env, check=False).returncode
     if code != 0:
-        print(f"FAILED: {name} (exit code {code})", file=sys.stderr, flush=True)  # noqa: TID251 - not spider's output
+        message = f"FAILED: {name} (exit code {code})"
+        print(message, file=sys.stderr, flush=True)  # noqa: TID251 - not spider's output
         sys.exit(code)
 
 
