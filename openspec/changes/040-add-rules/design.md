@@ -121,6 +121,7 @@ Categories are stored enumeration values, and `015` requires enumeration values 
 `canonical-to-non-indexable` fires when the target's Indexability is non-indexable, not on "any non-200":
 - **When the target is a Page,** that is the stored `indexability` of `030`.
 - **When the target is not a Page,** `030` stores no Indexability, so the Rule applies steps 1–4 of `030`'s order (robots.txt, 3xx, 4xx, 5xx) to its `urls` row, plus `no_response` for a request that got no response.
+- **The detail key is `target_reason`:** its values are `030`'s six `indexability_status` values plus `no_response`. Naming it `indexability_status` would give one name two value sets (ADR-0005 rule 7), because `no_response` is not a value of that column.
 
 A 2xx non-HTML target, such as a PDF, therefore counts as indexable, as it would for `030`. A target that was never requested is not judged.
 - *Alternative: store Indexability for every Internal URL.* It would add Indexability columns to `020`'s `urls` table, which the v0.1 schema blueprint does not have. It is left to `030`'s Open Questions.
@@ -155,6 +156,12 @@ The Issues reader in `spider.store.issues` is the one way `050`'s `issues`, `iss
 - **The live path** runs each enabled Rule's query on a read-only connection, as one read, and returns the shape of the `issues` view, or of `affected_urls` for one Rule or one URL. `affected_urls` is ignored, because after a resume it holds the previous pass's rows.
 - **Cost:** live Issues cost one evaluation of every Rule per read, on rows that are still growing. `026`'s run of about 500k URLs measures the latency of a full live list during a Crawl and its effect on WAL checkpoints, because a long read holds the WAL from being reset. If the full list takes more than 30 seconds at 500k URLs, the design is revisited: per-Rule reads, or materialising at intervals. The same run measures `page <url>`, which runs every Rule's query for one URL: over 1 second at 500k URLs, the reader gets per-URL forms of the queries.
 - **Interface points:** `050`'s Commands call the reader and never query `affected_urls` themselves, so both paths give them one shape. `080`'s documentation tells agents that Issues of a running Crawl are computed on each read and cost more than those of a finished Crawl, and that `affected_urls` and `issues` in the file hold the last pass's result, valid when `crawl.state` is `completed` or `stopped`.
+
+### D17. Codes
+Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 does, by the slice that first raises them:
+- error, exit 4: `rule_not_found` (`spider rules show` with an unknown id), under `010`'s rule that a code ending in `_not_found` maps to 4
+
+`settings_invalid` (exit 3) comes from `010`, and the `record_failed` warning that the Rule queries leave out is `020`'s.
 
 ## Test seams
 

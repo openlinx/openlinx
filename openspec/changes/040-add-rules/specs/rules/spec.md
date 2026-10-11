@@ -259,14 +259,14 @@ The `canonicals` category SHALL contain these Rules, all over `internal_pages`:
 |---|---|---|---|---|
 | `canonical-missing` | warning | medium | `canonical_count` is 0, and `meta_robots_noindex` and `x_robots_tag_noindex` are both 0 | none |
 | `canonicalised` | warning | medium | `indexability_status` is `canonicalised` | `canonical_url` |
-| `canonical-to-non-indexable` | issue | high | `canonical_url` is non-NULL and differs from the Page's URL, and the *target's Indexability* is non-indexable (defined below) | `canonical_url`, `indexability_status` (the target's reason) |
+| `canonical-to-non-indexable` | issue | high | `canonical_url` is non-NULL and differs from the Page's URL, and the *target's Indexability* is non-indexable (defined below) | `canonical_url`, `target_reason` (why the target is non-indexable: one of 030's six `indexability_status` values, or `no_response`) |
 | `canonical-conflicting` | issue | high | `canonical_count` ≥ 2 and `canonical_url` is NULL | `canonical_link_element_1`, `canonical_link_element_2`, `http_canonical` |
 | `canonical-relative` | warning | low | `canonical_relative` is 1 | none |
 
 The *target's Indexability* SHALL come from `030-add-page-data`:
 
 - **When the target is a Page,** it is the Page's stored `indexability` and `indexability_status`.
-- **When the target is not a Page,** steps 1–4 of 030's Indexability order are applied to the target's `urls` row: `blocked_by_robots_txt`, `redirected`, `client_error` or `server_error`. A target with `fetch_state` `error` is non-indexable with the reason `no_response`. A target with any other outcome, such as a 2xx response that is not HTML, counts as indexable. A target that was never requested has no Indexability, and the Rule does not fire.
+- **When the target is not a Page,** steps 1–4 of 030's Indexability order are applied to the target's `urls` row: `blocked_by_robots_txt`, `redirected`, `client_error` or `server_error`. A target with `fetch_state` `error` is non-indexable with the reason `no_response`. The reason goes in `detail.target_reason`, not under the column name `indexability_status`, because `no_response` is not one of that column's values. A target with any other outcome, such as a 2xx response that is not HTML, counts as indexable. A target that was never requested has no Indexability, and the Rule does not fire.
 
 #### Scenario: Missing canonical
 - **WHEN** an analysed Page has `canonical_count` 0 and no noindex directive
@@ -282,15 +282,15 @@ The *target's Indexability* SHALL come from `030-add-page-data`:
 
 #### Scenario: Canonical to a redirect
 - **WHEN** `https://example.test/a` has `canonical_url` `https://example.test/b`, and `/b` is a Page with `indexability_status` `redirected`
-- **THEN** `canonical-to-non-indexable` fires for `/a` with `detail` `{"canonical_url": "https://example.test/b", "indexability_status": "redirected"}`
+- **THEN** `canonical-to-non-indexable` fires for `/a` with `detail` `{"canonical_url": "https://example.test/b", "target_reason": "redirected"}`
 
 #### Scenario: Canonical to a noindex Page
 - **WHEN** `https://example.test/a` has `canonical_url` `https://example.test/b`, and `/b` is a 200 Page with `indexability_status` `noindex`
-- **THEN** `canonical-to-non-indexable` fires for `/a` with `detail` `{"canonical_url": "https://example.test/b", "indexability_status": "noindex"}`
+- **THEN** `canonical-to-non-indexable` fires for `/a` with `detail` `{"canonical_url": "https://example.test/b", "target_reason": "noindex"}`
 
 #### Scenario: Canonical to a URL without a response
 - **WHEN** `https://example.test/a` has `canonical_url` `https://example.test/b`, and `/b` is not a Page and has `fetch_state` `error`
-- **THEN** `canonical-to-non-indexable` fires for `/a` with `detail` `{"canonical_url": "https://example.test/b", "indexability_status": "no_response"}`
+- **THEN** `canonical-to-non-indexable` fires for `/a` with `detail` `{"canonical_url": "https://example.test/b", "target_reason": "no_response"}`
 
 #### Scenario: Canonical to an indexable Page
 - **WHEN** `https://example.test/a` has `canonical_url` `https://example.test/b`, and `/b` is a 200 Page with `indexability` `indexable`
