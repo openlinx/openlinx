@@ -7,7 +7,7 @@ from hypothesis import given, reject
 from hypothesis import strategies as st
 from yarl import URL
 
-from spider.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url
+from spider.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url, strip_params_pattern
 
 # Sharp cases first: UTS46 and IDNA 2003 differ on ß, ς and the joiners, and drop the ignorables.
 _HOST_CHARACTERS = st.one_of(
@@ -114,3 +114,11 @@ _ANY_CHARACTER = st.characters(exclude_categories=[])
 )
 def test_normalising_any_text_gives_a_url_or_a_rejection(text: str) -> None:
     assert isinstance(normalize_url(text), (str, InvalidUrl))
+
+
+def test_matching_parameters_are_removed() -> None:
+    strip = strip_params_pattern(["utm_*,fbclid"])
+
+    assert normalize_url("http://site.test/p?utm_source=x&id=7&fbclid=y", strip) == (
+        "http://site.test/p?id=7"
+    )

@@ -2,6 +2,7 @@
 
 import re
 import string
+from collections.abc import Sequence
 from dataclasses import dataclass
 from ipaddress import ip_address
 from typing import NewType
@@ -14,6 +15,7 @@ _PERCENT_ENCODED = re.compile("%([0-9A-Fa-f]{2})")
 _UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
 _NOT_ALLOWED = re.compile(r"[^A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]|%(?![0-9A-Fa-f]{2})")
 _HOST = re.compile(r"[a-z0-9\-._~]+")
+_GLOB_WILDCARDS = {"*": ".*", "?": "."}
 _SURROGATE = re.compile(r"[\ud800-\udfff]")
 # UTS46 deletes these silently, so "e<ZWSP>vil.test" would become "evil.test"; aiohttp's URL
 # library (yarl) refuses the same set.
@@ -29,7 +31,19 @@ class InvalidUrl:
     reason: str
 
 
-def normalize_url(text: str) -> NormalizedUrl | InvalidUrl:
+def strip_params_pattern(values: Sequence[str]) -> re.Pattern[str] | None:
+    """One pattern for --strip-params, from flag values that each hold comma-separated globs."""
+    globs = [glob for value in values for glob in value.split(",") if glob]
+    if not globs:
+        return None
+    return re.compile("|".join(_glob_regex(glob) for glob in globs))
+
+
+def _glob_regex(glob: str) -> str:
+    return "".join(_GLOB_WILDCARDS.get(character, re.escape(character)) for character in glob)
+
+
+def normalize_url(text: str, strip: re.Pattern[str] | None = None) -> NormalizedUrl | InvalidUrl:
     # A lone surrogate, as surrogateescape decoding leaves, has no UTF-8 form to percent-encode.
     if _SURROGATE.search(text):
         return InvalidUrl("malformed")
@@ -45,7 +59,7 @@ def normalize_url(text: str) -> NormalizedUrl | InvalidUrl:
     host = _ascii_host(_raw_host(parts.netloc))
     if host is None:
         return InvalidUrl("invalid_host")
-    return NormalizedUrl(urlunsplit(_normalized_parts(parts, host, port)))
+    return NormalizedUrl(urlunsplit(_normalized_parts(parts, host, port, strip)))
 
 
 def _raw_host(netloc: str) -> str:
@@ -85,13 +99,22 @@ def _idna_encoded(host: str) -> str | None:
         return None
 
 
-def _normalized_parts(parts: SplitResult, host: str, port: int | None) -> SplitResult:
+def _normalized_parts(
+    parts: SplitResult, host: str, port: int | None, strip: re.Pattern[str] | None
+) -> SplitResult:
     netloc = host
     if port is not None and port != _DEFAULT_PORTS[parts.scheme]:
         netloc = f"{netloc}:{port}"
     path = _without_dot_segments(_percent_normalized(parts.path))
     query = _percent_normalized(parts.query)
+    if strip is not None:
+        query = _without_params(query, strip)
     return parts._replace(netloc=netloc, path=path, query=query, fragment="")
+
+
+def _without_params(query: str, strip: re.Pattern[str]) -> str:
+    kept = (param for param in query.split("&") if not strip.fullmatch(param.partition("=")[0]))
+    return "&".join(kept)
 
 
 def _percent_normalized(text: str) -> str:
