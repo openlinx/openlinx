@@ -21,3 +21,7 @@ def test_an_empty_path_becomes_a_slash() -> None:
 
 def test_percent_encodings_are_normalised() -> None:
     assert normalize_url("http://site.test/%7euser/a%2fb") == "http://site.test/~user/a%2Fb"
+
+
+def test_characters_outside_ascii_are_percent_encoded() -> None:
+    assert normalize_url("http://site.test/café?q=ü") == "http://site.test/caf%C3%A9?q=%C3%BC"

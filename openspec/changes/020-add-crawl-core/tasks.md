@@ -32,7 +32,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: the normaliser returns a `NormalizedUrl` (design D13), the only producer of that type, or its own rejection type, and never raises.
 - [x] 1.2 Drive "Dot segments are resolved" and "An empty path becomes a slash", a trivial pair.
 - [x] 1.3 Drive "Percent-encodings are normalised".
-- [ ] 1.4 Drive "Characters outside ASCII are percent-encoded".
+- [x] 1.4 Drive "Characters outside ASCII are percent-encoded".
 - [ ] 1.5 Drive "An internationalised host becomes ASCII".
 - [ ] 1.6 **Guard:** "The query and its parameter order are kept" and "A trailing slash is kept", a pair.
 - [ ] 1.7 **Guard:** "Normalising twice changes nothing", as a hypothesis property over generated http and https URLs.
