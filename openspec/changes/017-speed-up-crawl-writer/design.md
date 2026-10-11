@@ -82,7 +82,7 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - **Clean path:** the units of a batch run in the open transaction with no savepoint each.
 - **When a unit raises anything, a `BaseException` included:**
   1. The writer rolls back the whole transaction.
-  2. It begins a new one, and runs the units before the failing one again, in order, each in its own savepoint. That is `015`'s path.
+  2. It begins a new one, and runs the units before the failing one again, in order, with no savepoint each: any failure in the replay ends the writer and its whole transaction goes, so a savepoint would only cost statement-journal I/O (task 1.12).
   3. It commits at once. This is the replay commit, and `on_commit` gets the number of units it made durable.
   4. The failing unit's caller gets the error the unit raised. The failing unit never runs again: its error is already known, and running it again would run its code twice. Above all, it would run code again after a `KeyboardInterrupt`.
   5. The next unit starts a new optimistic batch.
