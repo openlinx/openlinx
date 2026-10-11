@@ -36,6 +36,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | done |
 | 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | done |
 | 017 | `017-speed-up-crawl-writer` | `crawl-store` (modified) | none | planned |
+| 018 | `018-add-schema-conventions` | `crawl-store` (modified) | `schema` (`indexes`) | planned |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | planned |
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned, min |
 | 030 | `030-add-page-data` | `page-data` | none (data only) | planned, min |
@@ -53,17 +54,17 @@ v0.1 is installed from PyPI, where 085 publishes it, with `uv tool install` (or 
 A thin end-to-end slice comes first, so the first Issues reach a user early. The changes then widen.
 
 ```
-slice:   000 ─► 010 ─► 015 ─► 017 ─► 020 ─► 030-min ─► 040-min ─► 050 issues
-                                       │    (first      (3–5       (issues,
-                                       │    columns)    Rules)     issues <id>)
-                                       │
-widen:                                 ├─► 022-min ─┐
-                                       ├─► 060-min ─┤
-                                       ├─► 026 parse pool, synthetic site, benchmark baseline (before the slice's e2e test) ─────┐
-                                       └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 sql, summary/pages/page ─► 080 ─┴─► 026 benchmark re-run (sizes the pool) ─► 085 ─► v0.1 tag
+slice:   000 ─► 010 ─► 015 ─► 017 ─► 018 ─► 020 ─► 030-min ─► 040-min ─► 050 issues
+                                              │    (first      (3–5       (issues,
+                                              │    columns)    Rules)     issues <id>)
+                                              │
+widen:                                        ├─► 022-min ─┐
+                                              ├─► 060-min ─┤
+                                              ├─► 026 parse pool, synthetic site, benchmark baseline (before the slice's e2e test) ─────┐
+                                              └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 sql, summary/pages/page ─► 080 ─┴─► 026 benchmark re-run (sizes the pool) ─► 085 ─► v0.1 tag
 ```
 
-- **The slice:** 015 → 017 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
+- **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
 - **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts once 020's slice is in and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
 - **Release:** 085 comes last, before the v0.1 tag. The product name must be chosen, and checked as free on PyPI and GitHub, before 085 starts.
@@ -129,6 +130,17 @@ If a change needs something another change owns, it depends on that change inste
   - **Prebuilt statements** are a rule for every store module: built once and run as `execute(stmt, params)`, never `.values(<literals>)` per unit and never `insert().values(list)`. Its design decides whether a guard test enforces it.
   - **A local throughput check,** never part of the CI gate: writer-only, 20k Pages at ~466 Link rows per Page, at least 12 Pages/s, a WAL peak of at most 300 MB and a crawler RSS of at most 400 MB. It is provisional until the schema blueprint's links layout lands.
   - Not in 017: the partial frontier index (020), the parse pool (026), and the pipes between a Crawl's processes (060). A writer process, if one is ever added, starts through a dedicated entry module whose imports a startup-allowlist-style test checks.
+- **018-add-schema-conventions** (v0.1, decided 2026-10-11; a separate small change before 020):
+  - [ADR-0005](docs/adr/0005-crawl-file-schema-conventions.md), the crawl file's schema conventions. It records:
+    - the user's schema decisions of 2026-10-10: one v0.1 blueprint, derived values written only by post-crawl passes, later columns as NULL, TEXT + CHECK enumerations
+    - indexes built during the Crawl
+    - every Link occurrence as a row
+    - STRICT tables
+    - 15 naming rules
+  - The file refuses bad values: every public table is `STRICT`, and the CHECKs of enumerations and flags come from the declaration. 015's `crawl` and `seeds` follow at once.
+  - `spider schema` fills `references` and gains `indexes`, each with the query it serves. `docs/schema.md` and the contract test cover indexes, STRICT and `WITHOUT ROWID`.
+  - The conventions are revised. A derived column's description starts with `Derived: `, and a later column's with `Filled from v<major>.<minor>. `. The `crawl` row may hold a derived value that a post-crawl pass writes, such as 040's Health Score.
+  - Not in 018: the other tables, which their owners add under these rules (020, 022, 030, 040, 060), and the links layout, which the links benchmark chooses for 030.
 - **020-add-crawl-core**:
   - Spider mode (`crawl <url>`) and URL normalisation, which keeps the trailing slash.
   - **Scope:** `--scope host|subdomains|subfolder`, `--subdomains`, `--include/--exclude`, `--max-depth`, `--max-urls` (no limit by default; reaching an explicit limit leaves the Crawl resumable), `--strip-params`. An apex Seed admits its `www.` host, never the reverse, and `seed_base_mismatch` warns when a `www.` Seed's site lives on the apex.
