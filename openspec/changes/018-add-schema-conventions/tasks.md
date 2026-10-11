@@ -27,7 +27,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.4 Drive "A value of another type is refused".
 - [x] 1.5 **Guard:** `015`'s convention scenarios over the stricter tables: "Names are snake_case", "Descriptions are present", "Booleans are integers", "Enumeration values are snake_case" and "Timestamp text".
 - [x] 1.6 **Guard:** `015`'s "Crawl metadata" scenarios, unchanged by the revised rule on counts: "Metadata of a new Crawl", "Seeds keep their order", "Version stamp", "Environment stamp", "Completion time" and "A stopped Crawl has no completion time". Also `015`'s "Unmeasured values are NULL" scenarios: "A running Crawl has no completion time" and "No settings file".
-- [ ] 1.7 **Fix, with no scenario:** the line-endings check skips tracked paths that are missing from the working tree.
+- [x] 1.7 **Fix, with no scenario:** the line-endings check skips tracked paths that are missing from the working tree.
 
   `tests/test_line_endings.py` lists every tracked path with `git ls-files --eol`, which reports a deleted or moved path with an empty working-tree ending (`w/`). So the check fails after `openspec archive` moves a change's files and before they are staged (found at `017`'s archive).
 
