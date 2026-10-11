@@ -113,8 +113,8 @@ No boundary double is used.
   - `public_table` takes only columns. `020`'s first `WITHOUT ROWID` table (ADR-0005 rule 15) adds `sqlite_with_rowid` and any table-level constraint to it, in that slice.
   - The ADR-0006 guard of task 1.8 matches `dataclass` and own base classes by name, so an aliased import (`import dataclasses as dc`, `from spider.x import Base as B`) escapes it. CONTRIBUTING's import rule writes our code without such aliases, and review catches the rest.
 - [Group 2's review: what stays open] → Recorded at task 2.10:
-  - A `UniqueConstraint` or `Column(unique=True)` makes an index that SQLite names itself. Neither `spider schema` nor the file check lists it, because the spec lists only declared secondary indexes. `docs/schema.md`'s "How to add a table" says to declare a unique rule as an `Index` with `unique=True`, as `020`'s `urls_url` is. A guard that refuses UNIQUE constraints can come with `020` if its review wants one.
-  - `references` takes the first of a column's foreign keys. A column with two would give an arbitrary one, but ADR-0005's naming (one `<table singular>_id` per reference) rules that out.
+  - A `UniqueConstraint` or `Column(unique=True)` makes an index that SQLite names itself. Neither `spider schema` nor the file check lists it, because the spec lists only declared secondary indexes. `docs/schema.md`'s "How to add a table" says to declare a unique rule as an `Index` with `unique=True`, as `020`'s `urls_url` is. Ruled: task 3.1a's guard refuses a UNIQUE constraint on a public table now.
+  - `references` takes the first of a column's foreign keys. A column with two would give an arbitrary one. Ruled: task 3.1a's guard refuses a public column with more than one foreign key.
   - Four tests carry no scenario title, because they make done-whens non-vacuous before `020`'s tables exist: `test_secondary_indexes_are_listed_in_name_order` (2.2), `test_a_reference_names_its_target_column` (2.3), `test_a_new_file_matches_a_declared_reference_and_indexes` (2.6) and `test_a_documented_indexes_table_is_parsed` (2.7). Task 3.1 counts only tests named after scenarios.
 
 ## Migration Plan
