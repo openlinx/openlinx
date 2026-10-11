@@ -34,7 +34,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.3 Drive "Percent-encodings are normalised".
 - [x] 1.4 Drive "Characters outside ASCII are percent-encoded".
 - [x] 1.5 Drive "An internationalised host becomes ASCII".
-- [ ] 1.6 **Guard:** "The query and its parameter order are kept" and "A trailing slash is kept", a pair.
+- [x] 1.6 **Guard:** "The query and its parameter order are kept" and "A trailing slash is kept", a pair.
 - [ ] 1.7 **Guard:** "Normalising twice changes nothing", as a hypothesis property over generated http and https URLs.
 - [ ] 1.8 Drive "Normalising any text gives a URL or a rejection", as a hypothesis property over arbitrary text.
 - [ ] 1.9 Drive "Matching parameters are removed". Done when: `--strip-params` patterns apply as part of normalisation, keeping the order of the other parameters.

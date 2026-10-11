@@ -68,3 +68,13 @@ def test_an_accepted_host_is_the_host_aiohttp_requests(host: str) -> None:
 
     # Host case carries no meaning; the built-in codec keeps the case of ASCII labels.
     assert urlsplit(result).netloc == (URL(f"http://{host}/").raw_host or "").lower()
+
+
+def test_the_query_and_its_parameter_order_are_kept() -> None:
+    assert normalize_url("http://site.test/p?b=2&a=1") == "http://site.test/p?b=2&a=1"
+
+
+def test_a_trailing_slash_is_kept() -> None:
+    results = (normalize_url("http://site.test/a"), normalize_url("http://site.test/a/"))
+
+    assert results == ("http://site.test/a", "http://site.test/a/")
