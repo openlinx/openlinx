@@ -7,6 +7,11 @@ from spider.store.schema import metadata
 from tests.support.cli import run_cli
 
 SNAKE_CASE = re.compile(r"[a-z][a-z0-9_]*")
+LATER_OR_DERIVED = re.compile(r"Derived: |Filled from v[0-9]+\.[0-9]+\. ")
+
+
+def blank(text: Any) -> bool:
+    return not isinstance(text, str) or not text.strip()
 
 
 def public_tables() -> list[dict[str, Any]]:
@@ -29,7 +34,7 @@ def test_descriptions_are_present() -> None:
         column["description"] for table in tables for column in table["columns"]
     ]
 
-    assert [text for text in descriptions if not isinstance(text, str) or not text.strip()] == []
+    assert [text for text in descriptions if blank(text)] == []
 
 
 def all_columns() -> list[dict[str, Any]]:
@@ -92,17 +97,12 @@ def test_index_names_start_with_their_table() -> None:
         index["name"]
         for table in public_tables()
         for index in table["indexes"]
-        if not index["name"].startswith(f"{table['name']}_")
-        or not isinstance(index["description"], str)
-        or not index["description"].strip()
+        if not index["name"].startswith(f"{table['name']}_") or blank(index["description"])
     ] == []
 
 
-LATER_OR_DERIVED = re.compile(r"Derived: |Filled from v[0-9]+\.[0-9]+\. ")
-
-
 def test_derived_and_later_columns_may_hold_null() -> None:
-    # Vacuous until 022's or 030's first later column, whose task adds an assertion one was seen.
+    # Vacuous until 022's or 030's first later column; its task asserts that one was seen.
     assert [
         column["name"]
         for column in all_columns()

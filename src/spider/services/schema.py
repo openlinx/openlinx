@@ -44,7 +44,7 @@ def describe_schema(table: str | None = None) -> SchemaDescription:
             # SQLite's own indexes for keys are not declared, so only secondary ones are listed.
             "indexes": [
                 _index(index)
-                for index in sorted(candidate.indexes, key=lambda index: str(index.name))
+                for index in sorted(candidate.indexes, key=lambda index: index.name or "")
             ],
         }
         for candidate in declared
@@ -62,9 +62,7 @@ def _column(column: "Column[Any]") -> dict[str, Any]:
         "type": column.type.compile(dialect=sqlite.dialect()),
         "nullable": column.nullable,
         "primary_key": column.primary_key,
-        "references": next(
-            (f"{key.column.table.name}.{key.column.name}" for key in column.foreign_keys), None
-        ),
+        "references": next((key.target_fullname for key in column.foreign_keys), None),
         "format": getattr(column.type, "format", None),
         "values": column.info.get("values"),
     }

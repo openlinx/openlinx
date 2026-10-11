@@ -46,13 +46,13 @@ def file_schema(file: Path) -> dict[str, dict[str, Any]]:
                 "without_rowid": bool(without_rowid),
                 "columns": _file_columns(connection, name),
                 "indexes": _file_indexes(connection, name),
-                "checks": sorted(CHECK_NAME.findall(_sql(connection, "table", name))),
+                "checks": sorted(CHECK_NAME.findall(_create_sql(connection, "table", name))),
             }
             for name, (without_rowid, strict) in listed.items()
         }
 
 
-def _sql(connection: sqlite3.Connection, kind: str, name: str) -> str:
+def _create_sql(connection: sqlite3.Connection, kind: str, name: str) -> str:
     query = "SELECT sql FROM sqlite_schema WHERE type = ? AND name = ?"
     sql: str = connection.execute(query, (kind, name)).fetchone()[0]
     return sql
@@ -60,8 +60,10 @@ def _sql(connection: sqlite3.Connection, kind: str, name: str) -> str:
 
 def _file_columns(connection: sqlite3.Connection, table: str) -> list[tuple[Any, ...]]:
     references = {
-        row[3]: f"{row[2]}.{row[4]}"
-        for row in connection.execute(f"PRAGMA foreign_key_list({table})")
+        column: f"{target}.{target_column}"
+        for _, _, target, column, target_column, *_ in connection.execute(
+            f"PRAGMA foreign_key_list({table})"
+        )
     }
     return [
         (column, type_, not notnull, pk > 0, references.get(column))
@@ -80,13 +82,17 @@ def _file_indexes(connection: sqlite3.Connection, table: str) -> list[tuple[Any,
             for _, _, column, _, _, key in connection.execute(f"PRAGMA index_xinfo({name})")
             if key
         ]
-        where = _sql(connection, "index", name).split(" WHERE ", 1)[1] if partial else None
+        where = _create_sql(connection, "index", name).split(" WHERE ", 1)[1] if partial else None
         indexes.append((name, columns, bool(unique), where))
     return sorted(indexes)
 
 
 def declared_schema() -> dict[str, dict[str, Any]]:
-    """The public tables of `spider schema`, with what only the declaration knows."""
+    """The public tables of `spider schema`, with what only the declaration knows.
+
+    create_all makes CHECKs and WITHOUT ROWID from this declaration, so for those two the
+    comparison guards against a file made another way, such as by a future migration.
+    """
     tables = {}
     for item in describe_schema().tables:
         table = metadata.tables[item["name"]]
@@ -135,15 +141,11 @@ def test_a_new_file_matches_a_declared_reference_and_indexes(
 
 
 def test_every_table_is_strict(temp_workspace: TempWorkspace) -> None:
-    file = create_any_crawl(temp_workspace).path
-    with closing(sqlite3.connect(f"{file.as_uri()}?mode=ro", uri=True)) as connection:
-        strict = {
-            name: flag
-            for schema, name, kind, _, _, flag in connection.execute("PRAGMA table_list")
-            if schema == "main" and kind == "table" and not name.startswith(("sqlite_", "_"))
-        }
+    tables = file_schema(create_any_crawl(temp_workspace).path)
 
-    assert strict == {table["name"]: 1 for table in describe_schema().tables}
+    assert {name: table["strict"] for name, table in tables.items()} == {
+        table["name"]: True for table in describe_schema().tables
+    }
 
 
 INDEXED_SECTION = """## Table `urls`

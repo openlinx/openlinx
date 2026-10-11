@@ -76,7 +76,7 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 | how it was started | `command_argv`, `cwd`, `settings_file`, `config` |
 | what made the file | `tool_version`, `schema_version` (also SQLite's `user_version`), `journal_mode`, `python_version`, `platform` |
 
-- **Counts are not recorded while a Crawl runs.** No column holds the number of URLs, Pages or Issues: they are counted from the tables that hold them, so they can never disagree. A value derived from the stored rows, such as a score, is stored only by a pass that runs after the Crawl, in a derived column.
+- **Counts are not recorded while a Crawl runs.** No column that the Crawl writes holds the number of URLs, Pages or Issues: they are counted from the tables that hold them, so they can never disagree. A value derived from the stored rows, such as a score, is stored only by a pass that runs after the Crawl, in a derived column.
 - **`started_at`** is the same instant as the time in the crawl id, read once when the Crawl is created.
 - **`settings_file`** is the `spider.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key, so the file says how it was made even when `spider.toml` changes later.
 - **The environment stamp** (`python_version` and `platform`) helps when a crawl file is attached to a bug report.
@@ -205,7 +205,7 @@ A new crawl file gets its SQLite journal mode once, when it is created, and `cra
 - its columns, with their types, keys, formats and allowed values, and for a reference the `<table>.<column>` it points to
 - its secondary indexes, each with its columns, whether it is unique, the condition of a partial index, and the query it serves
 
-[schema.md](schema.md) documents the same tables, and a test keeps both equal to a new crawl file. The file itself refuses a value of another type, an enumeration value outside its list and a flag other than 0 or 1 ([ADR-0005](adr/0005-crawl-file-schema-conventions.md)).
+[schema.md](schema.md) documents the same tables. Tests keep both equal to the tables the tool declares, and a new crawl file equal to them too. The file itself refuses a value of another type, an enumeration value outside its list and a flag other than 0 or 1 ([ADR-0005](adr/0005-crawl-file-schema-conventions.md)).
 
 ## Schema versions
 

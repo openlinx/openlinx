@@ -3,13 +3,13 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import Column, ForeignKey, Index, Integer, Table, Text
+from sqlalchemy import Column, ForeignKey, Index, Integer, Text
 
 from spider.store.schema import metadata, public_table
 
 
 @contextmanager
-def indexed_rows_declared() -> Iterator[Table]:
+def indexed_rows_declared() -> Iterator[None]:
     """`indexed_rows`, declared the way 020's urls will be, until the block ends.
 
     Safe because the tests run serially; under xdist this must use an isolated MetaData copy.
@@ -42,6 +42,6 @@ def indexed_rows_declared() -> Iterator[Table]:
         info={"description": "Lists queued rows in id order."},
     )
     try:
-        yield table
+        yield
     finally:
         metadata.remove(table)
