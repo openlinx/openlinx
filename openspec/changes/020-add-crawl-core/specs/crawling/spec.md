@@ -233,7 +233,7 @@ The Crawl SHALL record the resolved Scope in the column `crawl.scope`, which thi
 - **THEN** `crawl.scope` is `{"mode": "subfolder", "hosts": ["site.test", "www.site.test"], "folder": "/blog/", "include": [], "exclude": ["/draft"]}`
 
 ### Requirement: Link discovery
-The Crawl SHALL discover Links in every response it parses, and in the HTTP `Link` header of every in-Scope 2xx response.
+The Crawl SHALL discover Links in every response it parses, and in the HTTP `Link` and `Refresh` headers of every in-Scope 2xx response.
 - **Resolution:** it SHALL resolve each relative reference against the Page's `<base href>` when there is one, and otherwise against the response URL. It SHALL then normalise the result, and SHALL ignore references whose scheme is not http or https, and references that cannot be resolved or normalised.
 - **Link types:** each discovered Link SHALL have one of these Link types, and its target SHALL be requested by default as shown:
 
@@ -245,15 +245,21 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 | `hreflang` | `<link rel="alternate" hreflang>`; an HTTP `Link` header with `rel="alternate"` and `hreflang` | yes |
 | `iframe` | `<iframe src>`, `<frame src>` | yes |
 | `meta_refresh` | the URL in `<meta http-equiv="refresh" content="…; url=…">` | yes |
+| `http_refresh` | the URL in an HTTP `Refresh` header (`…; url=…`) | yes |
 | `image` | `<img src>`; every candidate in the `srcset` of `<img>` and `<source>`; `<video poster>` | yes, as a Resource |
 | `css` | `<link rel="stylesheet" href>` | yes, as a Resource |
 | `javascript` | `<script src>` | yes, as a Resource |
-| `media` | the `src` of `<video>`, `<audio>`, `<source>`, `<track>` and `<embed>`; `<object data>` | yes, as a Resource |
+| `video` | `<video src>`; the `src` of a `<source>` or `<track>` inside `<video>` | yes, as a Resource |
+| `audio` | `<audio src>`; the `src` of a `<source>` or `<track>` inside `<audio>` | yes, as a Resource |
+| `media` | `<embed src>`, `<object data>` | yes, as a Resource |
 | `amphtml` | `<link rel="amphtml">` | no |
 | `mobile_alternate` | `<link rel="alternate" media>` without `hreflang` | no |
+| `misc` | `<link href>` with any other `rel`, such as `icon`, `manifest`, `preload`, or `alternate` without `hreflang` or `media` (a feed); never `preconnect` or `dns-prefetch`, which name an origin, not a file | no |
+
+- **Later Link types:** the Link type enumeration SHALL also list, from v0.1, the types that later releases discover: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap), both from `024-add-list-and-sitemap-modes` (v0.2), and `javascript_redirect` (v1.1, with JavaScript rendering).
 
 - **Link types that are not requested:** a URL reached only through them SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`.
-- **Provenance:** a URL's `discovered_via` SHALL be how it was first found: `seed`, or the Link type. `found_on_url_id` SHALL point to the URL whose response revealed it. Later changes add other ways of finding URLs.
+- **Provenance:** a URL's `discovered_via` SHALL be how it was first found: `seed`, or the Link type. `found_on_url_id` SHALL point to the URL whose response revealed it. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
 
 #### Scenario: A relative link is resolved against the base href
 - **WHEN** the Links of `http://site.test/` are extracted from `<base href="http://site.test/docs/"><a href="guide">Guide</a>`
@@ -266,6 +272,14 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 #### Scenario: rel previous is a pagination Link
 - **WHEN** the Links of `http://site.test/p2` are extracted from `<link rel="previous" href="/p1">`
 - **THEN** exactly one Link is found: a `pagination` Link to `http://site.test/p1`
+
+#### Scenario: Video and audio sources are video and audio Links
+- **WHEN** the Links of `http://site.test/` are extracted from `<video src="/v.mp4"><track src="/v.vtt"></video><audio><source src="/a.mp3"></audio>`
+- **THEN** exactly three Links are found: `video` Links to `http://site.test/v.mp4` and `http://site.test/v.vtt`, and an `audio` Link to `http://site.test/a.mp3`
+
+#### Scenario: A link element of another rel is a misc Link
+- **WHEN** the Links of `http://site.test/` are extracted from `<link rel="icon" href="/favicon.ico"><link rel="preconnect" href="https://cdn.site.test">`
+- **THEN** exactly one Link is found: a `misc` Link to `http://site.test/favicon.ico`
 
 #### Scenario: References that are not http or https are ignored
 - **WHEN** the Links of `http://site.test/` are extracted from `<a href="mailto:hi@site.test">Mail</a><a href="javascript:void(0)">Menu</a>`
@@ -283,6 +297,10 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 - **WHEN** `/` links to `/doc.pdf`, which returns `Content-Type: application/pdf` and `Link: <{site}/doc>; rel="canonical"`
 - **THEN** `{site}/doc` has `fetch_state` = `fetched` and `discovered_via` = `canonical`
 
+#### Scenario: An HTTP Refresh target is followed
+- **WHEN** `/` links to `/old`, which returns 200 with the header `Refresh: 0; url=/new`
+- **THEN** `{site}/new` has `fetch_state` = `fetched` and `discovered_via` = `http_refresh`
+
 #### Scenario: amphtml targets are not requested
 - **WHEN** `/` holds `<link rel="amphtml" href="/amp/">`, and `spider crawl {site}/` runs
 - **THEN** `{site}/amp/` has `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`
@@ -295,35 +313,37 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 The Crawl SHALL read the robots directives of every parsed response with one parser, which `030-add-page-data` reuses for its directive columns. For a response, the parser SHALL give these values:
 - `meta_robots`: the whitespace-normalised `content` of every `<meta>` element whose `name` is `robots` (compared case-insensitively), joined with `, ` in document order, or null when there is none
 - `x_robots_tag`: the whitespace-normalised values of every `X-Robots-Tag` response header, joined with `, ` in the order received, or null when there is none
-- `meta_noindex` and `meta_nofollow`: true when a directive in `meta_robots` is `noindex` or `nofollow` respectively, or `none`
-- `header_noindex` and `header_nofollow`: the same, for the header values that apply
+- `meta_robots_noindex` and `meta_robots_nofollow`: true when a directive in `meta_robots` is `noindex` or `nofollow` respectively, or `none`
+- `x_robots_tag_noindex` and `x_robots_tag_nofollow`: the same, for the header values that apply
+
+These names are the column names of `030-add-page-data`, which stores the values.
 
 Directives SHALL be comma-separated tokens, compared case-insensitively. A header value has a user-agent prefix when it starts with `<name>:` and `<name>` is not `unavailable_after`, `max-snippet`, `max-image-preview` or `max-video-preview`. A prefixed header value SHALL apply only when `<name>` equals the robots user-agent token, compared case-insensitively. `<meta>` elements named after a specific crawler SHALL NOT be read.
 
 #### Scenario: Meta robots directives are read case-insensitively
 - **WHEN** the directives are read from `<meta name="ROBOTS" content="NOINDEX, follow">`
-- **THEN** `meta_robots` is `NOINDEX, follow`, `meta_noindex` is true and `meta_nofollow` is false
+- **THEN** `meta_robots` is `NOINDEX, follow`, `meta_robots_noindex` is true and `meta_robots_nofollow` is false
 
 #### Scenario: A header for another crawler does not apply
 - **WHEN** the directives are read with the default robots user-agent token from the header `X-Robots-Tag: googlebot: noindex`
-- **THEN** `x_robots_tag` is `googlebot: noindex` and `header_noindex` is false
+- **THEN** `x_robots_tag` is `googlebot: noindex` and `x_robots_tag_noindex` is false
 
 #### Scenario: A header for the robots user-agent token applies
 - **WHEN** the directives are read with the robots user-agent token `Googlebot` from the header `X-Robots-Tag: googlebot: noindex`
-- **THEN** `header_noindex` is true
+- **THEN** `x_robots_tag_noindex` is true
 
 #### Scenario: none means noindex and nofollow
 - **WHEN** the directives are read from the header `X-Robots-Tag: none`
-- **THEN** `header_noindex` and `header_nofollow` are both true
+- **THEN** `x_robots_tag_noindex` and `x_robots_tag_nofollow` are both true
 
 #### Scenario: A directive with a value is not a user-agent prefix
 - **WHEN** the directives are read from the header `X-Robots-Tag: unavailable_after: 25 Jun 2030 15:00:00 PST, noindex`
-- **THEN** `header_noindex` is true
+- **THEN** `x_robots_tag_noindex` is true
 
 ### Requirement: Nofollow
 The following SHALL NOT be requested unless the same target is also reached through a Link that is followed:
 - a `hyperlink` whose `rel` attribute contains the token `nofollow`
-- every `hyperlink` on a Page whose robots directives give `meta_nofollow` or `header_nofollow`
+- every `hyperlink` on a Page whose robots directives give `meta_robots_nofollow` or `x_robots_tag_nofollow`
 
 Such a target SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `nofollow`. With `--follow-nofollow`, these Links SHALL be treated like any other `hyperlink`.
 
@@ -368,7 +388,7 @@ An External URL reached through a Link type that is requested SHALL be requested
 - **THEN** the `other.test` fixture instance receives no request
 
 ### Requirement: Resources are requested, not parsed
-URLs reached through `image`, `css`, `javascript` or `media` Links SHALL be requested whenever the Page that references them is followed, even when their Crawl Depth exceeds `--max-depth`. A response that is not HTML SHALL NOT be parsed. `022-add-fetch-policy` adds their size measurements.
+URLs reached through `image`, `css`, `javascript`, `video`, `audio` or `media` Links SHALL be requested whenever the Page that references them is followed, even when their Crawl Depth exceeds `--max-depth`. A response that is not HTML SHALL NOT be parsed. `022-add-fetch-policy` adds their size measurements.
 
 #### Scenario: An image is checked but not parsed
 - **WHEN** `/` holds `<img src="/logo.png">`, and `/logo.png` returns 200 with an `image/png` body
@@ -612,7 +632,7 @@ The crawl store SHALL hold one row for each distinct normalised URL of the Crawl
 | `parse_error_message` | TEXT | yes | | Human-readable detail of `parse_error` |
 
 The listed values SHALL include, from v0.1, the values that later changes write, so that no later change adds one:
-- `discovered_via`: `seed`; every Link type (see "Link discovery"); `redirect`, for a redirect target (`022-add-fetch-policy`); `list`, `sitemap_input` and `sitemap_index`, for a listed URL and for sitemap files (`024-add-list-and-sitemap-modes`, v0.2)
+- `discovered_via`: `seed`; every Link type, the later ones included (see "Link discovery"); `redirect`, for a redirect target (`022-add-fetch-policy`); `list`, `sitemap_input` and `sitemap_index`, for a listed URL and for sitemap files (`024-add-list-and-sitemap-modes`, v0.2). A URL listed in a sitemap has the Link type `xml_sitemap`; there is no separate `sitemap` value.
 - `skip_reason`: `excluded`, `blocked_by_robots_txt`, `robots_unreachable`, `nofollow`, `link_type_not_followed`, `external_not_checked`, `max_depth`; `max_redirects` and `url_too_long` (`022`)
 - `fetch_error`: `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`; `timeout` and `tls_error` (`022`)
 - `parse_error`: `extractor_error`; `body_too_large` (`022`); `worker_crashed` (`026-add-parse-pool`)
@@ -635,6 +655,10 @@ This change SHALL add these indexes to `urls`, built while the Crawl writes:
 #### Scenario: The Content-Type is recorded as received
 - **WHEN** `/` links to `/doc.pdf`, which returns `Content-Type: application/pdf`
 - **THEN** `{site}/doc.pdf` has `content_type` = `application/pdf`
+
+#### Scenario: The ways a URL is found are an enumeration
+- **WHEN** `spider schema urls` runs
+- **THEN** the `values` of the column `discovered_via` are `["seed","hyperlink","canonical","pagination","hreflang","iframe","meta_refresh","http_refresh","image","css","javascript","video","audio","media","amphtml","mobile_alternate","misc","xml_sitemap","sitemap_hreflang","javascript_redirect","redirect","list","sitemap_input","sitemap_index"]`
 
 #### Scenario: Indexes of urls
 - **WHEN** `spider schema urls --fields indexes` runs

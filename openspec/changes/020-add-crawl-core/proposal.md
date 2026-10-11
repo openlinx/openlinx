@@ -27,7 +27,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - `--max-urls <n>`: **no limit by default**, and a value below 1 is rejected. Requests in flight and requests of earlier runs count. Reaching it leaves the Crawl `stopped` and resumable.
 - **Section Crawl:** `--scope subfolder` or any `--include` makes one. URLs outside the Scope are checked but not followed, and `crawl.section_crawl` is set.
 - **Link discovery:**
-  - The Link type table follows Screaming Frog's defaults. It includes `prev`/`previous` for pagination and HTTP `Link` headers.
+  - The Link type table follows Screaming Frog's defaults. It includes `prev`/`previous` for pagination, HTTP `Link` and `Refresh` headers, `video` and `audio`, and `misc` for other `<link>` elements. The types that later releases discover (`xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`) are listed from v0.1.
   - Link-level and page-level nofollow are honoured. `--follow-nofollow` overrides them, and `--check-external/--no-check-external` turns External URL checks on or off.
   - Resources are requested for their status, even beyond `--max-depth`, and are never parsed.
 - **robots.txt:**
@@ -121,5 +121,5 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - `src/spider/extract/links.py` and the extractor registry.
   - `src/spider/store/`: `urls`, `origins`, the new `crawl` columns, the units that write them, and the transition check.
   - the Crawl Service in `src/spider/services/`, built on `015`'s `create_crawl`, and its adapter `src/spider/cli/crawl.py`.
-- **New dependencies:** `aiohttp`, `protego`, `selectolax`, `msgspec` and `publicsuffixlist` (a bundled list, never downloaded at runtime), each added to `tests/dependency_allowlist.txt` and kept off the startup path.
+- **New dependencies:** `aiohttp`, `protego`, `selectolax` (1.0 or later, through its lexbor backend), `msgspec` and `publicsuffixlist` (a bundled list, never downloaded at runtime), each added to `tests/dependency_allowlist.txt` and kept off the startup path.
 - **Docs:** `docs/crawling.md`, the crawl tables in `docs/schema.md`, and the hook and extractor seams in `docs/architecture.md`.

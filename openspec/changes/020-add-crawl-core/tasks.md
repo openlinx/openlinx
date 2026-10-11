@@ -63,14 +63,14 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 3.1 Drive "A relative link is resolved against the base href".
 
-  Done when: the link extractor takes HTML bytes, their Content-Type and the response URL, parses once with selectolax, and returns `DiscoveredLink` values (design D5), which `030` enriches.
-- [ ] 3.2 Drive "Every srcset candidate is an image Link".
-- [ ] 3.3 Drive "rel previous is a pagination Link".
+  Done when: the link extractor takes HTML bytes, their Content-Type and the response URL, parses once with `selectolax.lexbor.LexborHTMLParser`, and returns `DiscoveredLink` values (design D5), which `030` enriches.
+- [ ] 3.2 Drive "Every srcset candidate is an image Link" and "Video and audio sources are video and audio Links", a pair.
+- [ ] 3.3 Drive "rel previous is a pagination Link" and "A link element of another rel is a misc Link", a pair.
 - [ ] 3.4 Drive "References that are not http or https are ignored" and "A malformed reference is ignored", a trivial pair.
 - [ ] 3.5 Drive "The link extractor accepts any bytes", as a hypothesis property over arbitrary bytes, Content-Types and malformed HTML.
 
   Done when: decoding follows design D5's order with replacement characters, in one function that `030` imports.
-- [ ] 3.6 Docs: add the Link type table and decoding to `docs/crawling.md`.
+- [ ] 3.6 Docs: add the Link type table, with the types listed for later releases, and decoding to `docs/crawling.md`.
 - [ ] 3.7 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. Walking skeleton: a foreground Spider crawl (slice)
@@ -86,7 +86,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - the `Fetcher` Protocol (design D8) has a one-hop aiohttp implementation
   - the first `urls` columns (`id`, `url`, `host`, `crawl_depth`, `discovered_via`, `fetch_state`, `status_code`) and the unique index `urls_url` are declared through `018`'s declaration helper, each enumeration with every value of design D18, with their `docs/schema.md` rows; `018`'s guard over index names switches on its assertion that it saw an index
   - every writer unit is defined in a `spider.store.*` module, and ruff's banned-API rule (TID251) bans `sqlalchemy` in `src/`, with per-file-ignores for `src/spider/store/**` and `src/spider/services/schema.py` (design D14)
-- [ ] 4.3 **Guard:** "The Seed is kept as given in seeds", at seam 3+6. `015`'s `create_crawl` writes the Seeds as given.
+- [ ] 4.3 **Guard:** "The Seed is kept as given in seeds" (seam 3+6) and "The ways a URL is found are an enumeration" (seam 1), a pair. `015`'s `create_crawl` writes the Seeds as given, and task 4.2 declared `discovered_via` from the `LinkType` `Literal` (design D5).
 - [ ] 4.4 Drive "Pages linked from the Seed are crawled" at seam 3+6, and "Indexes of urls" at seam 1, a pair.
 
   Done when:
@@ -150,7 +150,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 7. Robots directives and Link following (widening)
 
-- [ ] 7.1 Drive "Meta robots directives are read case-insensitively" at seam 4. Done when: the robots directives parser is a pure function that `030` imports (design D6).
+- [ ] 7.1 Drive "Meta robots directives are read case-insensitively" at seam 4. Done when: the robots directives parser is a pure function that `030` imports, whose fields carry `030`'s column names (design D6).
 - [ ] 7.2 Drive "A header for another crawler does not apply" at seam 4.
 - [ ] 7.3 Drive "A header for the robots user-agent token applies" at seam 4.
 - [ ] 7.4 Drive "none means noindex and nofollow" at seam 4.
@@ -158,7 +158,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 7.6 **Guard:** "The robots directives parser accepts any values", as a hypothesis property at seam 4.
 - [ ] 7.7 Drive "A meta refresh target is followed" at seam 3.
 - [ ] 7.8 Drive "amphtml targets are not requested" at seam 3+6.
-- [ ] 7.9 Drive "A canonical in an HTTP header is followed" at seam 3. Done when: the HTTP `Link` headers of in-Scope 2xx responses are read, parsed or not.
+- [ ] 7.9 Drive "A canonical in an HTTP header is followed" and "An HTTP Refresh target is followed" at seam 3, a pair. Done when: the HTTP `Link` and `Refresh` headers of in-Scope 2xx responses are read, parsed or not.
 - [ ] 7.10 Drive "Links on an error page are not followed" at seam 3+6. Done when: only in-Scope 2xx HTML responses are parsed.
 - [ ] 7.11 Drive "A nofollow link is not requested" at seam 3+6.
 - [ ] 7.12 Drive "A page-level nofollow applies to every hyperlink" at seam 3+6.

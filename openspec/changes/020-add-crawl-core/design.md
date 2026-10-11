@@ -82,11 +82,26 @@ Two independent decisions:
 - **Request** depends on the Link type table, nofollow, the Scope, robots.txt and the limits.
 - **Parse** depends only on the URL being in the Scope with a 2xx HTML response. A Resource Link that returns in-Scope HTML is therefore parsed, and is not a Resource under the glossary.
 
-**The link extractor** is ours. It parses the HTML once with selectolax, and produces:
-- `DiscoveredLink` values (frozen msgspec structs): type, normalised target or null, raw value, element, attribute, rel tokens, nofollow, source `html|http_header`, and position in the HTML
+**The link extractor** is ours. It parses the HTML once with selectolax's lexbor backend, `selectolax.lexbor.LexborHTMLParser`; selectolax 1.0 removed the old `selectolax.parser` backend. It produces:
+- `DiscoveredLink` values (frozen msgspec structs): type, normalised target or null, raw value, element, attribute, rel tokens, nofollow, where it was declared (`declared_in`: `html` or `http_header`, the name of `030`'s column; `origin` means scheme, host and port only, ADR-0005 rule 9), and position in the HTML
 - the page-level robots directives
 
 The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLink` with analysis attributes through its own extractor over the same parsed tree, and stores them. It never redefines discovery.
+
+**The Link types** (the rulings of 2026-10-11 on Screaming Frog's ~28 types):
+- **Added in v0.1:**
+  - `http_refresh`: the `Refresh` header, read by the same parser as a meta refresh
+  - `misc`: other `<link rel>` values, recorded but not requested, as `amphtml` is
+  - `video` and `audio`, split from `media`. `<embed>` and `<object>` stay `media`, which `030` may revisit before v0.1.
+- **Listed from v0.1 and filled later:** `xml_sitemap` and `sitemap_hreflang` (`024`, v0.2), and `javascript_redirect` (v1.1).
+- **Not Link types:**
+  - HTTP redirects: they are `urls.redirect_url_id` (`022`)
+  - HSTS
+  - SWF, which is obsolete
+  - PDF, which is a content type
+  - Font, which needs CSS parsing
+- **One list:** the types are one `LinkType` `Literal` in `spider.store.records`. `discovered_via` lists them, and `030`'s `links.type` takes the same list, so no change adds a Link type of its own.
+- **One value for sitemaps:** a URL listed in a sitemap is `discovered_via` = `xml_sitemap`. `024` uses that Link type instead of a separate `sitemap` value (ruling of 2026-10-11).
 
 **Decoding:** HTML is decoded in this order, with replacement characters for invalid bytes:
 1. a byte order mark
@@ -101,7 +116,7 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 - **Status mapping:** the RFC 9309 mapping (2xx `ok`, 4xx except 429 `missing`, 5xx/429/no response `unreachable`, more than 5 redirects `missing`) is a pure function.
 - **The robots.txt request** follows its own redirects internally, up to 5 hops. It goes through the same politeness gate and counts for `--rate`, but not for `--max-urls`.
 - **Crawl-delay** is recorded, not applied, which matches Googlebot and Screaming Frog.
-- **The robots directives parser** is a pure function from meta `content` values, `X-Robots-Tag` header values and the robots token to the directive values. `030` imports it, so the two changes can never disagree about noindex or nofollow.
+- **The robots directives parser** is a pure function from meta `content` values, `X-Robots-Tag` header values and the robots token to the directive values, named as `030`'s columns (`meta_robots_noindex`, `x_robots_tag_nofollow`, …). `030` imports it, so the two changes can never disagree about noindex or nofollow.
 
 ### D7. Politeness
 - **Per-host limits:** a semaphore per host (`--concurrency`) and a per-host "next allowed start" time (`--rate`).
@@ -259,8 +274,9 @@ None. Before v0.1 the schema is not yet public: this change adds its tables and 
 ## Interface points for later changes
 
 - **`022`:** its timeout settings feed the watchdog function of D16, which keeps the watchdog at least 30 seconds longer than the Fetcher's total request deadline. It replaces the Fetcher implementation behind the Protocol of D8; uses the per-host gate of D7, `ScopeRules.is_internal`, the fake Fetcher and the DNS resolver hook; adds `urls` columns in its slices (`redirect_url_id` with its index `urls_redirect_url_id`), writes the `discovered_via`, `skip_reason`, `fetch_error` and `parse_error` values that this change already lists (D18), and adds its keys to `CrawlSettings`.
+- **`024` (v0.2):** records a URL listed in a sitemap with `discovered_via` = `xml_sitemap` (a Link type, D5), never `sitemap`, and its sitemap files with `sitemap_input` or `sitemap_index`. All of these are already listed (D18), as is `sitemap_hreflang`.
 - **`026`:** writes `parse_error` = `worker_crashed`, already listed (D18); benchmarks the engine as built; may move extractors into a pool without changing their signatures; uses the stop flag's grace period.
-- **`030`:** adds its extractor, handler and pass to `default_hooks()`, with its row types and writers in `spider.store.pages` and `spider.store.links`; imports the robots directives parser, `DiscoveredLink` and the decoding function; adds its keys to `CrawlSettings`.
+- **`030`:** stores every Link with this change's `LinkType` and `declared_in` (D5); adds its extractor, handler and pass to `default_hooks()`, with its row types and writers in `spider.store.pages` and `spider.store.links`; imports the robots directives parser, `DiscoveredLink` and the decoding function; adds its keys to `CrawlSettings`.
 - **`040`:** adds its per-URL handler and its post-crawl pass of query Rules, with the writers in `spider.store.issues`.
 - **`060`:** adds `interrupted` to `TRANSITIONS`; uses `StopReason` for `crawl_runs.stop_reason` (D18); calls the continue operation for `resume`, with its kill-then-resume scenarios; sets the `StopSignal` from control rows (`requested`); builds the `CrawlContext` in the detached process; reuses validation and config resolution (D11).
 
