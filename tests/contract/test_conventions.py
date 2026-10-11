@@ -84,3 +84,15 @@ def test_reference_columns_are_declared() -> None:
         for column in all_columns()
         if column["name"].endswith("_id") and column["references"] is None
     ] == []
+
+
+def test_index_names_start_with_their_table() -> None:
+    # Vacuous until 020's urls_url, whose task adds an assertion that one was seen.
+    assert [
+        index["name"]
+        for table in public_tables()
+        for index in table["indexes"]
+        if not index["name"].startswith(f"{table['name']}_")
+        or not isinstance(index["description"], str)
+        or not index["description"].strip()
+    ] == []

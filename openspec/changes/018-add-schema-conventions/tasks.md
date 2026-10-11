@@ -69,7 +69,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 2.3 **Guard:** "Reference columns are declared", at seam 1.
 
   Done when: `references` is read from the column's declared foreign key, instead of always `null`. `020`'s `found_on_url_id` is the first column to exercise it.
-- [ ] 2.4 **Guard:** "Index names start with their table", at seam 1.
+- [x] 2.4 **Guard:** "Index names start with their table", at seam 1.
 - [ ] 2.5 **Guard:** "Derived and later columns may hold NULL", at seam 1.
 - [ ] 2.6 Drive "A new file matches the declaration", at seam 6.
 
