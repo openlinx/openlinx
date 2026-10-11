@@ -73,7 +73,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 2.5 **Guard:** "Derived and later columns may hold NULL", at seam 1.
 - [ ] 2.6 Drive "A new file matches the declaration", at seam 6.
 
-  Done when: the file check also reads `PRAGMA table_list` (STRICT, and `WITHOUT ROWID` where it is declared), `PRAGMA index_list` and `PRAGMA index_xinfo` (the index columns and uniqueness), and `sqlite_master.sql` (a partial index's condition).
+  Done when: the file check also reads `PRAGMA table_list` (STRICT, and `WITHOUT ROWID` where it is declared), `PRAGMA index_list` and `PRAGMA index_xinfo` (the index columns and uniqueness), and `sqlite_master.sql` (a partial index's condition, and every declared CHECK by name, so the CHECKs on `crawl.crawl_mode` and `crawl.journal_mode` are covered too).
 - [ ] 2.7 Drive "Documentation and declaration agree", at seam 6.
 
   Done when:

@@ -2,7 +2,7 @@
 
 from typing import Any, get_args
 
-from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, Text, or_
+from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, Text
 
 from spider.store.records import CrawlMode, CrawlState, JournalMode
 from spider.store.types import Flag, Json, Timestamp
@@ -20,9 +20,11 @@ def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckCons
     checks = []
     for column in columns:
         if "values" in column.info:
-            allowed = column.in_(column.info["values"])
-            condition = or_(column.is_(None), allowed) if column.nullable else allowed
-            checks.append(CheckConstraint(condition, name=f"{table_name}_{column.name}_values"))
+            checks.append(
+                CheckConstraint(
+                    column.in_(column.info["values"]), name=f"{table_name}_{column.name}_values"
+                )
+            )
         if isinstance(column.type, Flag):
             checks.append(
                 CheckConstraint(column.in_([0, 1]), name=f"{table_name}_{column.name}_flag")

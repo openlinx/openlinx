@@ -48,7 +48,7 @@
 
 ### D2. CHECKs come from the declaration
 - **The source of each CHECK:** the declaration already says what is allowed.
-  - A column with `info["values"]` gets `CHECK (<column> IN (...))`, or `<column> IS NULL OR …` when it is nullable.
+  - A column with `info["values"]` gets `CHECK (<column> IN (...))`, nullable or not. SQLite refuses a row only when a CHECK is false, and `NULL IN (...)` is NULL, so a CHECK passes on NULL: `NOT NULL` is what refuses NULL.
   - A `Flag` column gets `CHECK (<column> IN (0, 1))`.
 - **One helper in `spider.store.schema` adds them:** it runs over each table as the table is declared. Each change's tables call it, and nothing writes a CHECK by hand.
   - The constraints are named `<table>_<column>_values` and `<table>_<column>_flag`, so a failure names its column.
@@ -108,8 +108,8 @@ No boundary double is used.
 - [A CHECK refuses a value that a later change adds without listing it] → The rule lists later values from v0.1. A missed value fails loudly at the first write, in that change's tests.
 - [Guards that pass trivially today could hide a broken check] → In this change they pass vacuously, because `crawl` and `seeds` have no foreign key, secondary index, or derived or later column. Each guard's assertion that it saw at least one match switches on in the `020` task that adds the first foreign key (`found_on_url_id`) or the first index (`urls_url`). A later change does the same for the first derived or later column: `022`'s `origins.http_version` (filled from v0.2) or `030`'s later `pages` columns, whichever lands first.
 - [Group 1's review: what stays unexercised or open] → Recorded at task 1.11:
-  - No column takes the `IS NULL OR` branch of a value CHECK yet, because `crawl` and `seeds` have no nullable enumeration. The first change that declares one tests a NULL write in its slice.
-  - The CHECKs on `crawl.crawl_mode` and `crawl.journal_mode` come from the same helper as the tested `crawl.state`, and no scenario writes a bad value to them. The file check of task 2.6 reads `sqlite_master.sql`, and it could compare CHECKs as well if the review of group 2 asks for it.
+  - Retired by the ruling on the review's "Better ways": a value CHECK has no `IS NULL OR` branch, because a CHECK passes on NULL (D2).
+  - The CHECKs on `crawl.crawl_mode` and `crawl.journal_mode` come from the same helper as the tested `crawl.state`, and no scenario writes a bad value to them. Ruled: the file check of task 2.6 compares every declared CHECK by name with `sqlite_master.sql`, which covers them.
   - `public_table` takes only columns. `020`'s first `WITHOUT ROWID` table (ADR-0005 rule 15) adds `sqlite_with_rowid` and any table-level constraint to it, in that slice.
   - The ADR-0006 guard of task 1.8 matches `dataclass` and own base classes by name, so an aliased import (`import dataclasses as dc`, `from spider.x import Base as B`) escapes it. CONTRIBUTING's import rule writes our code without such aliases, and review catches the rest.
 
