@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from sqlalchemy import Column, Index, Integer, Text
+from sqlalchemy import Column, ForeignKey, Index, Integer, Text
 
 from spider.store.schema import metadata, public_table
 from tests.support.cli import run_cli
@@ -119,7 +119,13 @@ def indexed_table() -> Iterator[None]:
         Column("id", Integer, primary_key=True, comment="The row id."),
         Column("url", Text, nullable=False, comment="A URL."),
         Column("state", Text, nullable=False, comment="A state."),
-        comment="Rows with secondary indexes.",
+        Column(
+            "found_on_row_id",
+            Integer,
+            ForeignKey("indexed_rows.id"),
+            comment="The row it was found on.",
+        ),
+        comment="Rows with a reference and secondary indexes.",
         change=99,
     )
     Index(
@@ -193,3 +199,8 @@ def test_default_limit_of_schema() -> None:
     limit = next(option for option in schema_entry()["options"] if option["name"] == "--limit")
 
     assert (limit["type"], limit["default"], limit["global"]) == ("integer", 50, False)
+
+
+@pytest.mark.usefixtures("indexed_table")
+def test_a_reference_names_its_target_column() -> None:
+    assert columns_of("indexed_rows")["found_on_row_id"]["references"] == "indexed_rows.id"

@@ -62,7 +62,9 @@ def _column(column: "Column[Any]") -> dict[str, Any]:
         "type": column.type.compile(dialect=sqlite.dialect()),
         "nullable": column.nullable,
         "primary_key": column.primary_key,
-        "references": None,
+        "references": next(
+            (f"{key.column.table.name}.{key.column.name}" for key in column.foreign_keys), None
+        ),
         "format": getattr(column.type, "format", None),
         "values": column.info.get("values"),
     }
