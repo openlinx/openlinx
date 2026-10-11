@@ -47,7 +47,7 @@
 - `page-data`: the Page record (every Internal-tab column with its exact definition), Indexability, the Content Area and content metrics, readability, SERP pixel widths, the Exact Duplicate hash, structured-data counts, stored Link attributes and link counts, cookies, raw HTML storage, and the columns that stay NULL until later releases.
 
 ### Modified Capabilities
-_None._ No specs exist yet. This change builds on requirements of `010`, `015`, `020` and `022` and does not modify them.
+_None._ This change builds on requirements of `010`, `015`, `017`, `018`, `020` and `022` and does not modify them.
 
 ## Non-goals
 
@@ -66,24 +66,27 @@ _None._ No specs exist yet. This change builds on requirements of `010`, `015`, 
 - **Depends on `015-add-crawl-store`** for:
   - the table conventions (names, units, timestamps, booleans, JSON, enumerations, NULL)
   - `docs/schema.md` and its contract test, `spider schema` and the transactional writer
-  - migrations and the Crawl's recorded config
+  - the Crawl's recorded config
+- **Depends on `017-speed-up-crawl-writer`** for `submit_async()` and its unit rules: deterministic units that return values only, and statements built once.
+- **Depends on `018-add-schema-conventions`** (ADR-0005) for the declaration helper (`STRICT` tables, CHECKs from listed values and flags), references and indexes in `spider schema`, and the `Derived: ` and `Filled from v<major>.<minor>. ` description prefixes.
 - **Depends on `020-add-crawl-core`** for:
-  - the `urls` table: `is_internal`, `in_scope`, `fetch_state`, `content_type`, `parsed`, `blocked_by_robots`, `crawl_depth` and `fetched_at`
-  - Link discovery and the Link type table, the robots directives parser and the extractor seam
-  - the per-response hook, the post-crawl passes hook and the injectable clock
+  - the `urls` table: `is_internal`, `in_scope`, `fetch_state`, `content_type`, `parsed`, `blocked_by_robots_txt`, `crawl_depth` and `fetched_at`
+  - Link discovery, `DiscoveredLink` and the `LinkType` list, the robots directives parser and page preparation with its extractors
+  - the hooks: pure per-response handlers that return store rows, post-crawl passes that are store functions, and `default_hooks()` (its design D9 and D14)
+  - the injectable clock
 - **Depends on `022-add-fetch-policy`** for:
   - `redirect_url_id`, `size_bytes`, `transferred_bytes` and `content_encoding` on `urls`
   - `origins.http_version`
   - the redaction of cookie values in `response_headers`
   - the gzip fixture support
-- **Works with `026-add-parse-pool`** (v0.2, conditional): its process pool, built only if its benchmark shows parsing is the bottleneck, would run this change's Page extractor. The extractor stays a pure function of its input either way.
+- **Works with `026-add-parse-pool`** (v0.1): page preparation, and this change's Page extractor with it, runs in its process pool. The extractor stays a pure, module-level function of its input.
 - **Consumers:**
   - `040` evaluates Rules over `pages`, `links` and `urls`.
   - `050` exposes `pages`, `page`, `page --html` and `export`.
   - `060` records the new settings in the equivalent command, or warns when they cannot be written as flags.
   - `070` builds the Report.
   - `080` generates the Skill's column reference from the column descriptions.
-- **Code:** `src/spider/extract/` (the Page extractor, content, readability, pixel widths, structured data, Link attributes), `src/spider/store/` (tables and migrations) and `docs/schema.md`.
+- **Code:** `src/spider/extract/` (the Page extractor, content, readability, pixel widths, structured data, Link attributes), `src/spider/store/` (`spider.store.pages` and `spider.store.links`: the tables, their row values and writers, and the inlink pass) and `docs/schema.md`.
 - **Dependencies:**
   - `zstandard`, shared with `022-add-fetch-policy`
   - `py3langid`, imported only when `--detect-language` is set

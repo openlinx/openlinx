@@ -5,19 +5,21 @@
 The motivation is in proposal.md. The exact column definitions are in `specs/page-data/spec.md`. This design covers how the data is produced and stored, and where the boundaries with the other changes lie ([ROADMAP.md](../../../ROADMAP.md), "What each change owns").
 
 - **`010-add-workspace-and-cli-contract`:** `spider.toml` loading, `settings_invalid`, and flag > file > default precedence.
-- **`015-add-crawl-store`:** the table conventions, `docs/schema.md` with its contract test, `spider schema`, the transactional writer, migrations and the Crawl's recorded config.
+- **`015-add-crawl-store`:** the table conventions, `docs/schema.md` with its contract test, `spider schema`, the transactional writer and the Crawl's recorded config.
+- **`017-speed-up-crawl-writer`:** units go through `submit_async()` and may run twice, so each follows `017` D7 (deterministic, values only, checked with `replay_now(writer)` in seam-2 tests) and `017` D9 (statements built once, at import).
+- **`018-add-schema-conventions` and ADR-0005:** every table is declared through `018`'s declaration helper, so it is `STRICT` and its enumerations and flags get CHECKs; `spider schema` lists references and indexes, and the contract test compares them. The schema blueprint of 2026-10-11 and its rulings decide this change's tables.
 - **`020-add-crawl-core`:**
-  - the `urls` table (the frontier, `is_internal`, `in_scope`, `fetch_state`, `content_type`, `parsed`, `blocked_by_robots`, `crawl_depth`, `fetched_at`)
-  - Link discovery and the Link type table, and the robots directives parser
-  - the extractor seam
-  - two hooks: a **per-response hook** that runs for every recorded URL inside that URL's writer unit, and the **post-crawl passes** hook, which runs when a Crawl ends as `completed` or `stopped` and is safe to re-run
+  - the `urls` table (the frontier, `is_internal`, `in_scope`, `fetch_state`, `content_type`, `parsed`, `blocked_by_robots_txt`, `crawl_depth`, `fetched_at`)
+  - Link discovery, its `DiscoveredLink` values and the `LinkType` list in `spider.store.records`, and the robots directives parser
+  - page preparation (`020` D9): one pure function of a fetched response that decodes, parses once and runs the registered extractors, in-process or in `026`'s pool
+  - the hooks of `020` D9 and D14, listed in `default_hooks()`: a **per-response handler** is a pure function from the URL's `UrlResult` to store rows, which the URL's writer unit writes; a **post-crawl pass** is a store function that submits its own units. Passes run when a Crawl ends as `completed` or `stopped`, before its final Crawl State is written, and again after every continued run, so they must be safe to re-run.
   - the injectable clock
 - **`022-add-fetch-policy`:**
   - redirects hop by hop (`redirect_url_id`) and sizes (`size_bytes`, `transferred_bytes`, `content_encoding`)
   - `origins.http_version` (`http_1_1` / `http_2`)
   - `response_headers`, where cookie values are stored as `***`
   - the gzip fixture support
-- **`026-add-parse-pool`:** it may move parsing into a process pool, only if its benchmark shows parsing is the bottleneck. This change's extractor must stay a pure, picklable function of its input.
+- **`026-add-parse-pool`:** page preparation runs in its process pool in v0.1, so this change's extractor must stay a pure, module-level function of its input, with a msgspec result that crosses the process boundary.
 - **Scale target:** about 500k URLs and tens of millions of Link rows in one SQLite file ([ADR-0003](../../../docs/adr/0003-sqlalchemy-core-not-orm.md)).
 
 ## Goals / Non-Goals
@@ -37,7 +39,7 @@ The motivation is in proposal.md. The exact column definitions are in `specs/pag
 
 ### D1. The Page record is one flat table that repeats response values
 `pages` holds every Internal-tab column, including values that `urls` and `origins` already hold: status code, content type, sizes, response time, `fetched_at`, HTTP version and Crawl Depth.
-- **How it is written.** `020`'s per-response hook writes the row in the URL's writer unit, from the same response, so the copies always agree. For an analysed Page, the hook adds the output of this change's Page extractor, which runs where `020` parses (in-process, or in `026`'s pool if it is built). For every other Page, the hook writes only the response-derived columns.
+- **How it is written.** This change's per-response handler is a pure function from the URL's `UrlResult` to store rows (`020` D9): a Page row, its Link rows and its cookie rows. The rows are frozen dataclasses declared in a module of `spider.store` that loads no sqlalchemy. `spider.store.pages` and `spider.store.links` own the tables and register the writer of each row type, and the URL's writer unit writes the rows together with the URL's own row (`020` D14), so the copies always agree. For an analysed Page, the handler reads the output of this change's Page extractor, which runs inside page preparation (in-process, or in `026`'s pool). For every other Page, it builds only the response-derived columns.
 - *Alternative: normalised tables.* `pages` would hold only HTML-derived data, and consumers would join `urls`, or read a SQL view. Rejected: every consumer would need the join, namely `050`'s `--where` and `--fields`, `export`, the Report and agents writing SQL. Views would also complicate `spider schema` and `--where`.
 - *Cost:* a few duplicated columns. The scenario "Repeated values equal the urls row" pins the agreement.
 
@@ -59,7 +61,7 @@ Indexability is stored only for Pages. `040`'s `canonical-to-non-indexable` Rule
 ### D4. Links: `020` discovers, `030` enriches
 - **Owned by `020-add-crawl-core`:** Link discovery, the Link type table (including `srcset`, `prev`/`previous` and ignored references), the choice of which targets are requested, and a `urls` row for every target.
 - **Added by this change:** the attributes that analysis needs, namely anchor text, `alt` text, `rel` flags, the Content Area flag, the element and attribute, and the target's internal flag. It stores one `links` row per discovered Link.
-- **How rows are written.** Links from analysed Pages are enriched from the same parse, so HTML is never parsed twice. Links from the `Link` headers of responses that are not analysed Pages, such as a PDF's canonical header, are written through `020`'s per-response hook.
+- **How rows are written.** Links from analysed Pages are enriched from the same parse, so HTML is never parsed twice. The handler also returns the Links that `020` discovers in the `Link` and `Refresh` headers of responses that are not analysed Pages, such as a PDF's canonical header.
 - **Tests.** Discovery behaviour is tested in `020`, not here. This change tests only the stored attributes, plus the contract that stored targets equal discovered targets.
 - **Storage.** `links` stores URL ids, never URL text. Its natural key `(source_url_id, ordinal)` avoids a surrogate id. There are indexes on `target_url_id` and on `(type, target_url_id)`. Raw `href` values are not stored.
 
@@ -68,7 +70,7 @@ Indexability is stored only for Pages. `040`'s `canonical-to-non-indexable` Rule
 
 ### D6. Link counts
 - Outlink counts are written with the analysed Page.
-- Inlink counts and `linking_pages_pct` are computed in the **post-crawl passes**, through `020`'s hook. They use SQL aggregates over `links`, grouped by target and written in batches of about 10k Pages. They run for Crawls that end as `completed` or `stopped`, run again after `resume`, replace earlier results, and run before `040`'s passes.
+- Inlink counts and `linking_pages_pct` are computed by a **post-crawl pass**, a store function in `spider.store.links` that `default_hooks()` lists before `040`'s pass. It uses SQL aggregates over `links`, grouped by target, and submits units of about 10k Pages, whose statements are built once (`017` D9) and which give the same rows when run twice (`017` D7). It runs for Crawls that end as `completed` or `stopped`, runs again after `resume`, and replaces earlier results.
 - The counts follow Screaming Frog's documented definitions: anchor-element hyperlinks only, nofollow included, and % of Total relative to Pages with status 200.
 - Self-links are excluded. Otherwise every Page listed in the navigation would count a link to itself, and its % of Total would read 100 %.
 - *Alternative: incremental inlink counters updated for every Link write.* Rejected. It is contended, and it is wrong while targets are still unknown.
@@ -118,7 +120,7 @@ SHA-256 over the NFC-normalised Content Area text, stored as hex. It is in the s
 - `060`'s equivalent command warns that `[content_area]` cannot be written as flags.
 
 ### D14. Cookies without values
-`cookies` stores only names and attributes, whatever the Page's status. It is written through `020`'s per-response hook. `022` stores cookie values in `response_headers` as `***`, so no cookie value exists anywhere in a crawl file.
+`cookies` stores only names and attributes, whatever the Page's status: `020` calls the handler for every URL that reaches a final state, and the handler returns the cookie rows of every Page. `022` stores cookie values in `response_headers` as `***`, so no cookie value exists anywhere in a crawl file.
 
 ### D15. Columns grow with their behaviours
 There are no schema-first slices. Each column and table is added in the TDD slice whose scenario first needs it, with its `docs/schema.md` entry in the same commit, so `015`'s contract test is never red between commits. Scenarios are written so that every column is driven by a behaviour; for example, the second-title columns are asserted by "Second title element". The last slice adds the eight columns measured by later releases, and pins the full column set with "Schema lists exactly the Page record columns".
@@ -129,6 +131,7 @@ The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is 
 
 - **Seam 4, pure-logic modules.** This includes the **Page extractor** entry point. It takes a response description (the URL, status, reason phrase, headers, body bytes, `020`'s discovered Links and robots verdicts, and the effective settings) and returns the Page columns, Link attributes and cookies. Other pure logic tested here: word, sentence and syllable counting, Flesch, pixel widths, Indexability, the Content Area, structured-data counting, and the HTML storage decision. All of it uses table-driven tests with the spec's literal expected values.
 - **Seam 3+6, fixture site plus store contract.** End-to-end slices crawl fixture pages under `/pd/` and read `pages`, `links`, `cookies` and `page_sources` through a read-only connection, using only documented tables and columns. The fixture pages include a stored 46-byte gzip blob (`022`'s gzip support), a windows-1251 page, `Set-Cookie` on a 302, robots rules, and a four-Page link graph.
+- **Seam 2, services and store API.** `spider.store.pages` and `spider.store.links` over a real crawl store: each row writer and the inlink pass, with `017`'s `replay_now(writer)` forcing a replay, so a unit that runs twice writes the same rows.
 - **Seam 6, store contract.** `spider schema pages` and `spider schema links` are compared with hand-written expectations. Values are never auto-accepted from a snapshot.
 - **Seam 1, CLI.** This covers the `crawl` flags (`--store-html`, `--no-store-html`, `--detect-language`), the `settings_invalid` error for a bad selector, and one real subprocess run on Windows with console code page 1251.
 - **Boundary doubles.** Only the injectable clock, for `crawl_timestamp`. Neither aiohttp nor our own modules are mocked.
@@ -145,7 +148,7 @@ The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is 
 
 ## Migration Plan
 
-The four tables are part of the squashed schema version 1 (before v0.1). There is no data to migrate and no rollback beyond reverting the change.
+None. Before v0.1 the schema is not yet public: this change adds `pages`, `links`, `cookies` and `page_sources` to the declared schema and to `docs/schema.md`, each in the slice that needs it, and `schema_version` stays `1` (`015` D5).
 
 ## Open Questions
 

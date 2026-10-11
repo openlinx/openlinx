@@ -399,7 +399,7 @@ These columns SHALL each hold the target URL of a Link that `020-add-crawl-core`
 ### Requirement: Indexability
 Every Page SHALL have `indexability` set to `indexable` or `non_indexable`. When it is `non_indexable`, `indexability_status` SHALL be the first reason that applies, checked in this order:
 
-1. `blocked_by_robots_txt`: `urls.blocked_by_robots` is 1. This applies to a Page fetched under `--ignore-robots`.
+1. `blocked_by_robots_txt`: `urls.blocked_by_robots_txt` is 1. This applies to a Page fetched under `--ignore-robots`.
 2. `redirected`: the status code is 3xx.
 3. `client_error`: the status code is 4xx.
 4. `server_error`: the status code is 5xx.
@@ -430,7 +430,7 @@ When no reason applies, `indexability` SHALL be `indexable` and `indexability_st
 - **THEN** `indexability_status` is `server_error`
 
 #### Scenario: Robots.txt beats the status code
-- **WHEN** a Page with `urls.blocked_by_robots` 1 was fetched under `--ignore-robots` and responded 404
+- **WHEN** a Page with `urls.blocked_by_robots_txt` 1 was fetched under `--ignore-robots` and responded 404
 - **THEN** `indexability_status` is `blocked_by_robots_txt`
 
 #### Scenario: Meta refresh redirect is not indexable
