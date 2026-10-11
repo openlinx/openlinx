@@ -10,6 +10,8 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - the fake Fetcher, and the DNS resolver hook
   - the `urls` and `origins` tables, the depth barrier, and the writer unit per URL
 - **`015-add-crawl-store`** redacts secrets, both whole values and partial ones such as `Cookie: ***` and `user:***@proxy`.
+- **`017-speed-up-crawl-writer`** gives the writer that `020`'s unit per URL goes through. A unit may run twice, so the units of this change follow its D7 contract, including the loop walk of D2.
+- **`018-add-schema-conventions` and ADR-0005** set the schema rules. Every column, index and table of this change is declared through `018`'s declaration helper (D10).
 - **`010-add-workspace-and-cli-contract`** takes settings only from flags and `spider.toml`, never from environment variables.
 - **ADR-0001:** aiohttp has no HTTP/2, so `http_version` is measured with an ALPN handshake.
 - **`000-scaffold-project`** leaves HTTPS, virtual hosts and gzip on the fixture site to this change.
@@ -43,12 +45,12 @@ The Fetcher that replaces `020`'s minimal one keeps its interface:
 ### D2. Redirects are URL rows
 Every hop is a normal `urls` row with its own status and timing, linked through `redirect_url_id`. The target is enqueued at its source's depth, where `020`'s depth barrier (D3) keeps depths exact, and it goes through the Scope, robots.txt and the per-host gate like any URL.
 - **Hop limit:** the engine keeps, in memory, the number of consecutive redirects that led to each target discovered through a redirect. A target beyond `--max-redirects` is recorded as `skipped` with `max_redirects`.
-- **Loops:** when the writer stores a redirect whose target is already known, it walks `redirect_url_id` forward, bounded by the hop limit, and marks every URL on a cycle.
+- **Loops:** when the writer stores a redirect whose target is already known, it walks `redirect_url_id` forward, bounded by the hop limit, and sets `in_redirect_loop` on every URL on a cycle. The walk reads only the file, so the unit gives the same result when it runs again (`017` D7).
 - *Alternative:* a `redirect_hops` table keyed by the first URL of each chain. It stores the same hop once per chain. Rejected.
 - *Alternative:* following chains inside the Fetcher. That bypasses politeness and robots.txt for each hop. Rejected.
 
 ### D3. The Seed-redirect Scope rule
-`site.test` → `www.site.test` is the most common start of a crawl, and without this rule it would crawl one URL. A redirect to another registrable domain (SSO, parking pages) only raises a warning, so the Crawl never wanders onto a third-party site. Hosts added this way are appended to `crawl.scope.hosts`.
+`site.test` → `www.site.test` is the most common start of a crawl, and without this rule it would crawl one URL. A redirect to another registrable domain (SSO, parking pages) only raises a warning, so the Crawl never wanders onto a third-party site. Hosts added this way are appended to `crawl.scope.hosts`, in the unit that records the Seed's last hop.
 
 ### D4. Retries and backoff
 - **Retries:** on no response, 5xx or 429, as `--retries`.
@@ -94,6 +96,25 @@ Each is added test-first in `tests/fixture_site/` by the first slice that needs 
 - **A cookie-echo route** that shows whether a `Cookie` header arrived.
 - **A small forward proxy** helper for the `--proxy` scenarios.
 
+### D10. The schema under ADR-0005
+This change adds to `020`'s tables and adds one of its own, all through `018`'s declaration helper (`STRICT`, and CHECKs from the declared values and flags).
+- **`urls` columns:**
+  - `attempt_count` (ADR-0005 rule 5: a count ends with `_count`), NOT NULL with a default of 0, so the inserts of `020`'s units need no change
+  - `redirect_location`, the raw header text
+  - `redirect_url_id`, a declared reference to `urls.id`
+  - `in_redirect_loop`, a flag that reads as yes or no (rule 6)
+  - `body_truncated`
+  - `content_encoding`, `size_bytes` and `transferred_bytes`
+- **Enumeration values:** `redirect`, `max_redirects`, `url_too_long`, `timeout`, `tls_error` and `body_too_large` are already listed by `020` (its D18), so this change adds no value to a CHECK.
+- **`urls_redirect_url_id`** on `(redirect_url_id) WHERE redirect_url_id IS NOT NULL`: it serves "which URLs redirect to this one", the reverse walk of a Redirect Chain. The forward walk reads `redirect_url_id` from the row and needs no index. The index is partial, because most URLs do not redirect, so most rows have no entry.
+- **`origins.http_version`** exists from v0.1 and is NULL until v0.2's ALPN check fills it. Its description starts with `Filled from v0.2. ` (ADR-0005), so the `origins` contract does not change in v0.2.
+- **`response_headers`:**
+  - It has `url_id` as an `INTEGER PRIMARY KEY` (a rowid alias), with a declared reference to `urls.id`.
+  - `headers` is one JSON array per URL (ruling Q5). `080` documents a `json_each` recipe for filtering by a header.
+  - It has no secondary index: `page --headers` reads one row by its key.
+  - A URL without a response has no row.
+- *Alternative:* one row per header. That is about 7.5M rows at 500k URLs, for a filter that no Rule or documented query needs in v0.1. Rejected by ruling Q5.
+
 ## Test seams
 
 - **HTTP (local fixture site) (3):** everything network-related. The real aiohttp runs against the fixture site's HTTP and HTTPS listeners, with virtual hosts behind `020`'s DNS resolver hook.
@@ -104,7 +125,7 @@ Each is added test-first in `tests/fixture_site/` by the first slice that needs 
   - **The DNS resolver hook:** for virtual hosts.
   - **A local test proxy:** for the `--proxy` scenarios.
   - **The trustme test CA:** passed into the crawler's TLS setup. It is an approved boundary double.
-- **Store contract (6):** every column is added and documented in `docs/schema.md` by the slice that needs it.
+- **Store contract (6):** every column, index and table is declared through `018`'s helper and documented in `docs/schema.md` by the slice that needs it. `018`'s contract test also compares the index and STRICT.
 
 ## Risks / Trade-offs
 
@@ -116,7 +137,7 @@ Each is added test-first in `tests/fixture_site/` by the first slice that needs 
 
 ## Migration Plan
 
-New columns, enumeration values and the `response_headers` table go into the squashed v0.1 migration under `015`'s conventions.
+None. Before v0.1 the schema is not yet public. This change adds its columns, its index and the `response_headers` table to the declared schema and `docs/schema.md`, each in the slice that needs it, and `schema_version` stays `1` (`015` D5). It adds no enumeration value, because `020` lists them all.
 
 ## Open Questions
 

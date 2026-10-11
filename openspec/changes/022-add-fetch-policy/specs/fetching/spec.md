@@ -114,7 +114,7 @@ The Crawl SHALL NOT send cookies that responses set. After a response with `Set-
 - **THEN** the request for `/check` has no `Cookie` header
 
 ### Requirement: Timeouts
-A request attempt that has not completed within `--timeout` seconds (default 20, setting `crawl.timeout`) SHALL fail. When no attempt for a URL succeeds, the URL SHALL be recorded with `fetch_state` = `error`, `status_code` NULL and `fetch_error` = `timeout`. This change adds the value `timeout` to `urls.fetch_error`.
+A request attempt that has not completed within `--timeout` seconds (default 20, setting `crawl.timeout`) SHALL fail. When no attempt for a URL succeeds, the URL SHALL be recorded with `fetch_state` = `error`, `status_code` NULL and `fetch_error` = `timeout`. `timeout` is a value of `urls.fetch_error` that `020-add-crawl-core` lists.
 
 #### Scenario: A hanging response times out
 - **WHEN** `/` links to `/hang`, which never answers, and `spider crawl {site}/ --timeout 1 --retries 0` runs
@@ -128,15 +128,15 @@ The Crawl SHALL retry a request attempt, robots.txt included, that gets no respo
 - **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start.
 - **Other 4xx statuses** SHALL NOT be retried.
 
-The URL SHALL record the last attempt's response. This change adds the column `urls.attempts`: INTEGER, not null, the number of requests made for the URL, and 0 when it was not requested.
+The URL SHALL record the last attempt's response. This change adds the column `urls.attempt_count`: INTEGER, not null, the number of requests made for the URL, and 0 when it was not requested.
 
 #### Scenario: A temporary 503 is retried
 - **WHEN** `/flaky` returns 503 once and 200 after that
-- **THEN** `{site}/flaky` has `status_code` = 200 and `attempts` = 2
+- **THEN** `{site}/flaky` has `status_code` = 200 and `attempt_count` = 2
 
 #### Scenario: A persistent 500 is recorded after the retries
 - **WHEN** `/down` always returns 500 and the default `--retries` applies
-- **THEN** `{site}/down` has `status_code` = 500 and `attempts` = 3
+- **THEN** `{site}/down` has `status_code` = 500 and `attempt_count` = 3
 
 #### Scenario: Retries wait one and then two seconds
 - **WHEN** a fake Fetcher always returns 500 for `http://site.test/down`, with a fake clock
@@ -148,7 +148,7 @@ The URL SHALL record the last attempt's response. This change adds the column `u
 
 #### Scenario: A 404 is not retried
 - **WHEN** `/` links to `/missing`, which returns 404
-- **THEN** `{site}/missing` has `attempts` = 1
+- **THEN** `{site}/missing` has `attempt_count` = 1
 
 ### Requirement: Redirects are followed hop by hop
 The Crawl SHALL NOT follow redirects within one request. For a 3xx response with a `Location` header:
@@ -158,9 +158,11 @@ The Crawl SHALL NOT follow redirects within one request. For a 3xx response with
 
 A 3xx response without a usable `Location` SHALL have `redirect_url_id` NULL.
 
-This change adds the value `redirect` to `urls.discovered_via`, and these columns to `urls`:
+`redirect` is a value of `urls.discovered_via` that `020-add-crawl-core` lists. This change adds these columns to `urls`, under the conventions of `018-add-schema-conventions`:
 - `redirect_location`: TEXT, nullable, the raw `Location` header
-- `redirect_url_id`: INTEGER, nullable, referencing `urls.id`
+- `redirect_url_id`: INTEGER, nullable, a declared reference to `urls.id`
+
+It also adds the index `urls_redirect_url_id` on `redirect_url_id`, partial with the condition `redirect_url_id IS NOT NULL`, built while the Crawl writes. It serves finding the URLs that redirect to a URL: the reverse walk of a Redirect Chain.
 
 #### Scenario: Every hop of a Redirect Chain is recorded
 - **WHEN** `/` links to `/a`, `/a` returns 301 to `/b`, `/b` returns 302 to `/c`, and `/c` returns 200
@@ -187,6 +189,10 @@ This change adds the value `redirect` to `urls.discovered_via`, and these column
 - **WHEN** `http://site.test/` links to `http://site.test/out`, which returns 301 to `http://other.test/landing`
 - **THEN** `http://other.test/landing` has `fetch_state` = `fetched` and `parsed` = 0
 
+#### Scenario: Index of redirect targets
+- **WHEN** `spider schema urls --fields indexes` runs
+- **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"urls_redirect_url_id","columns":["redirect_url_id"],"unique":false,"where":"redirect_url_id IS NOT NULL"}`
+
 ### Requirement: A Seed that redirects within its site extends the Scope
 When a Seed's Redirect Chain ends on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. When the chain ends on another registrable domain, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_off_site` warning whose hint contains the final URL of the chain.
 
@@ -199,21 +205,21 @@ When a Seed's Redirect Chain ends on a host with the same registrable domain as 
 - **THEN** the result's `warnings` hold an entry with code `seed_redirected_off_site` whose `hint` contains `http://other.test/`
 
 ### Requirement: Redirect hop limit
-The Crawl SHALL NOT follow a redirect that would be more than `--max-redirects` (default 10, setting `crawl.max_redirects`) consecutive redirects from the first URL of its chain. The target of such a redirect SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, a value this change adds.
+The Crawl SHALL NOT follow a redirect that would be more than `--max-redirects` (default 10, setting `crawl.max_redirects`) consecutive redirects from the first URL of its chain. The target of such a redirect SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, a value that `020-add-crawl-core` lists.
 
 #### Scenario: The eleventh redirect is not followed
 - **WHEN** `/` links to `/r1`, and each of `/r1` to `/r11` returns 301 to the next one (`/r1` to `/r2`, and so on up to `/r11` to `/r12`)
 - **THEN** `{site}/r11` has `fetch_state` = `fetched` and `{site}/r12` has `skip_reason` = `max_redirects`
 
 ### Requirement: Redirect loops
-The Crawl SHALL request each URL at most once in a run, so every redirect loop ends. This change adds the column `urls.redirect_loop`: INTEGER, `boolean`, nullable.
+The Crawl SHALL request each URL at most once in a run, so every redirect loop ends. This change adds the column `urls.in_redirect_loop`: INTEGER, `boolean`, nullable.
 - It is 1 for every URL in a loop.
 - It is 0 for other 3xx responses.
 - It is NULL for URLs without a 3xx response.
 
 #### Scenario: A loop of two URLs is marked
 - **WHEN** `/` links to `/loop-a`, `/loop-a` returns 301 to `/loop-b`, and `/loop-b` returns 301 to `/loop-a`
-- **THEN** `{site}/loop-a` and `{site}/loop-b` both have `redirect_loop` = 1
+- **THEN** `{site}/loop-a` and `{site}/loop-b` both have `in_redirect_loop` = 1
 
 #### Scenario: A looping URL is requested once
 - **WHEN** `/` links to `/loop-a`, `/loop-a` returns 301 to `/loop-b`, and `/loop-b` returns 301 to `/loop-a`
@@ -227,14 +233,14 @@ A `<meta http-equiv="refresh">` SHALL stay a Link of type `meta_refresh` (`020-a
 - **THEN** `{site}/old` has `status_code` = 200 and `redirect_url_id` NULL
 
 ### Requirement: Response size limit
-The Crawl SHALL read at most 20,971,520 bytes (20 MiB) of a response body. This change adds the column `urls.body_truncated`: INTEGER, `boolean`, nullable, 1 when the body was larger and not read in full. A URL with a larger body SHALL have `body_truncated` = 1 and `parsed` = 0. If it would otherwise have been parsed, it SHALL have `parse_error` = `body_too_large`.
+The Crawl SHALL read at most 20,971,520 bytes (20 MiB) of a response body. This change adds the column `urls.body_truncated`: INTEGER, `boolean`, nullable, 1 when the body was larger and not read in full. A URL with a larger body SHALL have `body_truncated` = 1 and `parsed` = 0. If it would otherwise have been parsed, it SHALL have `parse_error` = `body_too_large`, a value that `020-add-crawl-core` lists.
 
 #### Scenario: A huge page is not parsed
 - **WHEN** `/` links to `/huge.html`, a 26,214,400-byte (25 MiB) HTML page
 - **THEN** `{site}/huge.html` has `body_truncated` = 1, `parsed` = 0 and `parse_error` = `body_too_large`
 
 ### Requirement: URL length limit
-URLs longer than 2,000 characters SHALL NOT be requested, and SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `url_too_long`, a value this change adds.
+URLs longer than 2,000 characters SHALL NOT be requested, and SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `url_too_long`, a value that `020-add-crawl-core` lists.
 
 #### Scenario: A very long URL is skipped
 - **WHEN** `/` links to a URL made of `{site}/` followed by 2,001 `a` characters
@@ -262,7 +268,7 @@ Every requested Resource SHALL have its `status_code`, `size_bytes` and `transfe
 - **THEN** `{site}/logo.png` has `status_code` = 200, `size_bytes` = 2048 and `transferred_bytes` = 2048
 
 ### Requirement: TLS certificate verification
-HTTPS requests SHALL verify the server certificate and its host name against the operating system's trust store. When that store cannot be used, certifi's bundle SHALL be the fallback. A request whose certificate does not verify SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `tls_error`, a value this change adds.
+HTTPS requests SHALL verify the server certificate and its host name against the operating system's trust store. When that store cannot be used, certifi's bundle SHALL be the fallback. A request whose certificate does not verify SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `tls_error`, a value that `020-add-crawl-core` lists.
 
 #### Scenario: A certificate for another name is a TLS error
 - **WHEN** `http://site.test/` links to `https://badcert.test/`, whose certificate is issued for `other.test`
@@ -273,7 +279,13 @@ HTTPS requests SHALL verify the server certificate and its host name against the
 - **THEN** that URL has `fetch_error` = `tls_error`
 
 ### Requirement: HTTP version per origin
-For every https origin it requests, the Crawl SHALL make one TLS handshake that offers the ALPN protocols `h2` and `http/1.1`. It SHALL record `origins.http_version` as `http_2` when `h2` is selected, and `http_1_1` otherwise. For http origins it SHALL record `http_1_1`. When the handshake fails, `http_version` SHALL be NULL and the Crawl SHALL go on. This change adds the column `origins.http_version`: TEXT, nullable, with the values `http_2` and `http_1_1`.
+This change adds the column `origins.http_version` in v0.1: TEXT, nullable, with the values `http_2` and `http_1_1`. Its description SHALL start with `Filled from v0.2. `, and it SHALL be NULL in every row until then.
+
+From v0.2, for every https origin it requests, the Crawl SHALL make one TLS handshake that offers the ALPN protocols `h2` and `http/1.1`. It SHALL record `origins.http_version` as `http_2` when `h2` is selected, and `http_1_1` otherwise. For http origins it SHALL record `http_1_1`. When the handshake fails, `http_version` SHALL be NULL and the Crawl SHALL go on.
+
+#### Scenario: The HTTP version is a later column
+- **WHEN** `spider schema origins` runs
+- **THEN** the column `http_version` has `nullable` `true`, `values` `["http_2","http_1_1"]`, and a `description` that starts with `Filled from v0.2. `
 
 #### Scenario: An origin that selects HTTP/2
 - **WHEN** `https://site.test` is served by a TLS listener that selects `h2`, and `spider crawl https://site.test/` runs
@@ -288,15 +300,21 @@ For every https origin it requests, the Crawl SHALL make one TLS handshake that 
 - **THEN** the `origins` row for `{site}` has `http_version` = `http_1_1`
 
 ### Requirement: The response_headers table
-The crawl store SHALL keep the response headers of each requested URL's last attempt in a table `response_headers` with two columns:
-- `url_id`: INTEGER, primary key, referencing `urls.id`
-- `headers`: TEXT in the `json` format, holding a JSON array of `[name, value]` pairs in the order and letter case they were received
+The crawl store SHALL keep the response headers of each requested URL's last attempt in a table `response_headers`, under the conventions of `018-add-schema-conventions`, with one row for each URL that received a response, and two columns:
+- `url_id`: INTEGER, primary key, a declared reference to `urls.id`
+- `headers`: TEXT in the `json` format, not null, holding a JSON array of `[name, value]` pairs in the order and letter case they were received
+
+The table SHALL have no secondary index: its rows are read by `url_id`, its primary key. A query that filters by a header reads `headers` with `json_each`.
 
 Cookie values SHALL never be stored. They SHALL be redacted in this exact format:
 - **`Set-Cookie`:** the cookie value, meaning the text after the first `=` and before the first `;`, SHALL be replaced by `***`. So `sid=abc123; Path=/; HttpOnly` is stored as `sid=***; Path=/; HttpOnly`. A value with no `=` before its first `;` SHALL be stored as `***` followed by its attributes.
 - **`Cookie`:** the value of each `name=value` pair, separated by `;`, SHALL be replaced by `***`. So `a=1; b=2` is stored as `a=***; b=***`.
 
 Header names, cookie names, attributes, and the order of the headers SHALL be kept.
+
+#### Scenario: Columns of response_headers
+- **WHEN** `spider schema response_headers` runs
+- **THEN** the item's columns, reduced to `name`, `type`, `nullable`, `primary_key` and `references`, are `[{"name":"url_id","type":"INTEGER","nullable":false,"primary_key":true,"references":"urls.id"},{"name":"headers","type":"TEXT","nullable":false,"primary_key":false,"references":null}]`, and its `indexes` are `[]`
 
 #### Scenario: Response headers are stored as received
 - **WHEN** `/` returns the header `X-Robots-Tag: noindex`, and `spider crawl {site}/` runs

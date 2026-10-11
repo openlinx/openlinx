@@ -15,6 +15,8 @@ The response headers must also be stored, without cookie values, because `page -
 
 > **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the minimum: timeouts and retries, redirects, body and URL limits, `--user-agent`, gzip, deflate and br, TLS trust, the Resource checks, `response_headers`, and the `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` variables. **Deferred to v0.2:** `--header`, `--auth`, `--proxy` (and `[crawl] proxy`), the ALPN check behind `origins.http_version`, and zstd decoding.
 
+> **Blueprint edits (2026-10-11):** the schema parts follow ADR-0005, `018-add-schema-conventions` and the rulings on the schema blueprint (design D10). The rest of this draft is re-grounded before the change starts.
+
 - **Request identity:**
   - `--user-agent <string>`. The default is `spider/<version> (+<project URL>)`.
   - `--header "Name: Value"`, repeatable, setting `crawl.header`.
@@ -29,17 +31,23 @@ The response headers must also be stored, without cookie values, because `page -
 - **Timeouts and retries:**
   - `--timeout <s>` (default 20).
   - `--retries <n>` (default 2), with 1 s/2 s backoff. `Retry-After` is honoured up to 120 s, and 429 pauses the host.
-  - The `urls.attempts` column.
+  - The `urls.attempt_count` column.
 - **Redirects:**
   - Followed hop by hop. Every hop is a `urls` row with `redirect_location`/`redirect_url_id`, and a target keeps the Crawl Depth of its source.
-  - `--max-redirects <n>` (default 10). Loops are marked with `redirect_loop`.
+  - `--max-redirects <n>` (default 10). Loops are marked with `in_redirect_loop`.
   - A Seed that redirects within its registrable domain extends the Scope. An off-site Seed redirect is a warning.
   - A meta refresh stays a Link, never a redirect hop.
 - **Limits:** response bodies are read up to 20 MiB (`body_truncated`, `parse_error = body_too_large`), and URLs longer than 2,000 characters are skipped (`url_too_long`).
 - **Compression:** `Accept-Encoding: gzip, deflate, br, zstd`, decoded by the tool. The `content_encoding`, `size_bytes` and `transferred_bytes` columns record status and size checks for Resources.
 - **TLS trust:** certificates are verified with truststore (the OS trust store), falling back to certifi. A speed test decides the default path. Failures are `tls_error`.
-- **HTTP version:** one ALPN handshake per https origin gives `origins.http_version` = `http_2` or `http_1_1`.
-- **The `response_headers` table:** headers in received order and letter case, with `Set-Cookie` values stored as `***`.
+- **HTTP version:** one ALPN handshake per https origin gives `origins.http_version` = `http_2` or `http_1_1` (v0.2). In v0.1 the column exists and is NULL, and its description starts with `Filled from v0.2. `.
+- **The `response_headers` table:** one JSON row per URL with a response, keyed by `url_id`. Headers keep their received order and letter case, and `Set-Cookie` values are stored as `***`.
+- **Store, under ADR-0005 and `018`:**
+  - the `urls` columns `attempt_count`, `redirect_location`, `redirect_url_id`, `in_redirect_loop`, `body_truncated`, `content_encoding`, `size_bytes` and `transferred_bytes`
+  - the partial index `urls_redirect_url_id`
+  - `origins.http_version`, a v0.1 column that v0.2 fills
+  - the `response_headers` table
+  - The enumeration values that this change writes (`redirect`, `max_redirects`, `url_too_long`, `timeout`, `tls_error` and `body_too_large`) are listed by `020` from v0.1.
 - **Fixture site (test-first):** virtual hosts, HTTPS listeners with a `trustme` CA (one selects `h2`, one offers only `http/1.1`, one has a certificate for the wrong name, one uses an unknown CA), raw and gzip bodies, response sequences, and a test forward proxy.
 - **Flags that go beyond the wording of ROADMAP.md:** `--timeout`, `--retries` and `--max-redirects` name the limits ROADMAP lists, and `--header`, `--auth` and `--proxy` spell its request options.
 - **MCP tools:** none in this change.
@@ -54,7 +62,7 @@ The response headers must also be stored, without cookie values, because `page -
   - TLS verification, the HTTP version per origin, and the `response_headers` table.
 
 ### Modified Capabilities
-- None. There are no main specs yet. `crawling` comes from `020-add-crawl-core`, which is drafted in parallel, and this change adds columns and enumeration values to its tables under `015`'s conventions.
+- None. `crawling` comes from `020-add-crawl-core`, which is not archived yet. This change adds columns, an index and a table under the conventions of `018-add-schema-conventions`. The enumeration values it writes are already listed by `020`.
 
 ## Non-goals
 
@@ -67,7 +75,9 @@ The response headers must also be stored, without cookie values, because `page -
 
 - **Depends on:**
   - `020-add-crawl-core`: the Fetcher interface, the engine, the per-host gate, the fake Fetcher and clock, the DNS resolver hook, and the `urls`/`origins` tables.
-  - `015-add-crawl-store`: whole and partial redaction, secret settings, and table conventions.
+  - `015-add-crawl-store`: whole and partial redaction, and secret settings.
+  - `017-speed-up-crawl-writer`: the writer through which `020`'s units run, and its unit contract.
+  - `018-add-schema-conventions`: the declaration helper and the schema contract test.
   - `010-add-workspace-and-cli-contract`: settings and exit codes.
   - `000-scaffold-project`: the fixture site harness.
 - **Used by:**
