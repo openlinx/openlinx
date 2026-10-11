@@ -62,7 +62,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 2.5 **Guard:** "A public suffix is not treated as the site".
 - [x] 2.6 Drive "The folder of a Seed page is its parent folder".
 - [x] 2.7 Drive "Exclude wins over include".
-- [ ] 2.8 Docs: write the "Scope" part of `docs/crawling.md` (host rules, the apex-to-www rule and why it goes one way, `--scope`, subfolder folders, include and exclude, and a warning about slow regexes).
+- [x] 2.8 Docs: write the "Scope" part of `docs/crawling.md` (host rules, the apex-to-www rule and why it goes one way, `--scope`, subfolder folders, include and exclude, and a warning about slow regexes).
 - [ ] 2.9 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. The link extractor (slice, seam 4)

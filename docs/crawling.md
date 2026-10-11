@@ -59,3 +59,58 @@ http://site.test/p?a=1&b=2 with "*"               ->   http://site.test/p
 ```
 
 URLs that differ only in stripped parameters are one URL, so the Crawl requests it once.
+
+## Scope
+
+The Scope decides which URLs a Crawl follows. Every recorded URL is either an Internal URL or an External URL, and either in the Scope or outside it.
+
+### Internal and External URLs
+
+A URL is internal when its host is a Seed host, whatever its scheme and port: for the Seed `http://site.test/`, `https://site.test:8443/x` is internal too. The Seed hosts are:
+- the Seed's host
+- `www.` followed by the Seed's host, when the Seed's host is a registrable domain (an apex, such as `site.test` or `shop.co.uk`)
+
+| Seed | URL | |
+|---|---|---|
+| `site.test` | `https://www.site.test/` | internal: the www host of an apex Seed |
+| `www.site.test` | `https://site.test/` | external |
+| `site.test` | `https://blog.site.test/` | external, unless `--scope subdomains` |
+| `co.uk` | `https://www.co.uk/` | external: `co.uk` is a public suffix, not a registrable domain |
+| `127.0.0.1:8765` | `http://127.0.0.1:9000/` | internal: another port of the Seed host |
+| `site.test.` | `https://site.test/` | internal: one trailing dot is ignored |
+| `127.0.0.1` | `http://127.1/` | external: another spelling of an address is another host |
+
+**Why the www rule goes one way.** A site on `site.test` usually also answers on `www.site.test`, so an apex Seed covers both. The reverse would quietly widen a Crawl of `www.site.test` to a host the user did not name. When a site really lives on the apex, a `www.` Seed gets a `seed_base_mismatch` warning, and the Crawl stays in its Scope. An IP address and a single-label host such as `localhost` have no `www.` host.
+
+Registrable domains come from a copy of the [Public Suffix List](https://publicsuffix.org/) bundled with the tool, which is never downloaded during a Crawl. So `shop.co.uk` and `user.github.io` are registrable domains, while `co.uk` and `github.io` are public suffixes.
+
+Hosts are compared ignoring one trailing dot, because DNS treats `site.test.` and `site.test` as one name. The two URLs are still recorded as two rows. Other spellings of an IP address, such as `127.1` or `0x7f.0.0.1`, are not converted: they are internal only when they are written exactly as the Seed host is.
+
+### `--scope`
+
+| Value | In the Scope |
+|---|---|
+| `host` (the default) | the Internal URLs |
+| `subdomains`, or the shorthand `--subdomains` | also every host whose registrable domain is the Seed host's: for the Seed `www.site.test`, `blog.site.test` and `a.b.site.test`, but not `othersite.test` |
+| `subfolder` | only Internal URLs whose path starts with the Seed's folder |
+
+The Seed's folder is its path up to and including its last `/`: the Seed `http://site.test/blog/post-1` has the folder `/blog/`. A Seed whose folder would be `/`, such as `http://site.test/blog` without its trailing slash, is rejected with `subfolder_is_root`, whose hint gives the Seed with the slash.
+
+### Include and exclude patterns
+
+`--include <regex>` and `--exclude <regex>` take Python regular expressions. Each can be given more than once, and each pattern is searched for anywhere in the normalised URL, with case counting.
+
+- **`--exclude`:** a URL that matches is never requested, internal or external. It is recorded with `fetch_state` = `skipped` and `skip_reason` = `excluded`. Use it to keep a Crawl away from logout links, cart actions and endless calendars.
+- **`--include`:** when given, an Internal URL that matches no include pattern is outside the Scope. It is still requested once to record its response, but it is not followed.
+- **Exclude wins:** a URL that matches both is skipped.
+
+```
+spider crawl site.test/blog/ --include "/blog/" --exclude "draft"
+http://site.test/blog/a        in the Scope
+http://site.test/news/n        internal, outside the Scope: checked, not followed
+http://site.test/blog/draft-1  skipped: excluded
+```
+
+An invalid pattern is rejected with `invalid_pattern` before any crawl file is created, and so is a Seed outside its own Scope, such as one that an exclude pattern matches (`seed_out_of_scope`).
+
+**Slow patterns.** Every pattern runs against every URL the Crawl finds, and the URLs come from the site. A pattern with nested quantifiers, such as `(a+)+$`, can take seconds on one long URL. Prefer plain substrings and anchors, such as `/logout$` or `\?sessionid=`.
