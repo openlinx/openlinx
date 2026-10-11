@@ -8,7 +8,7 @@
 - **The evidence:**
   - The store benchmark of 2026-10-10 (recommendations R1–R10).
   - The writer prototype of 2026-10-11, with its comparative runs at 20k Pages (writer-only) and 15k Pages (with Pages prepared in the loop or in a pool of 6).
-  - Both ran on the maintainer's machine: 16 GB, 8 physical and 12 logical cores, under memory pressure from other programs. Runs made at different times vary by up to ~50%, so the numbers below compare back-to-back runs only, and a delta under ~20% is read as a direction, not a size.
+  - Both ran on the maintainer's laptop: 16 GB, a hybrid i5-12450H (4 performance cores with SMT plus 4 efficiency cores, 12 threads), under memory pressure from other programs. Runs made at different times vary by up to ~50%, so the numbers below compare back-to-back runs only, and a delta under ~20% is read as a direction, not a size.
 - **The rulings of 2026-10-11:** the implementer's review of the prototype and the rulings on it (thread host only, `run()` unchanged, a new `submit()` with a window, closures kept, reads without a commit, prebuilt statements as a rule), and the user's decisions: the optimistic batch is kept, the pragmas become defaults with no setting, and the throughput check is local.
 - **The writer's place in the build order:** 015 → 017 → 020 (slice) → 026. `020`'s per-URL unit is the first heavy user.
 
@@ -161,7 +161,7 @@ None. No schema change. `015`'s callers keep `run()`, `run_async()`, `flush()` a
   - A failed unit gets a fallback unit that records the URL as `error`. A failed commit, or `CrawlWriterClosedError`, is `write_failed` (D16).
   - Frontier reads are writer units (D5), with the partial index from its checklist.
   - Its store modules follow the statement rule (D9) and the unit contract (D7). Progress counts come from `on_commit`.
-- **`026`:** the writer needs a full core, so the pool starts at the number of physical cores minus 2. The pool's benchmark measures the GIL effect of D1's caveat.
+- **`026`:** the writer must never be short of CPU. 6 workers (physical cores minus 2) on the hybrid laptop still starved it, so `026`'s benchmark sweeps the worker count up to that bound and records machine-wide CPU and clock frequency. It also measures the GIL effect of D1's caveat.
 - **`030` and `040`:** their units follow D7 and D9.
 - **`060`:** the writer is a thread of the Crawl's process, so the claim belongs to that process. A detached Crawl needs no second spawn for the writer.
 
