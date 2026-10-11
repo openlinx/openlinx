@@ -9,7 +9,7 @@ A crawl id SHALL consist of:
 
 An id SHALL count as taken in a Workspace when `<id>.sqlite`, the writer claim's file `<id>.lock` or the log file `<id>.log` exists in its `crawls/` folder. A new id SHALL never be a taken one: new random characters SHALL be drawn until it is not, and the crawl file SHALL be created exclusively, so two processes can never create the same id.
 
-A process MAY reserve a new id by creating `<id>.log` exclusively, and then create the Crawl with that chosen id (`060-add-crawl-control`'s background Crawls). Creating a Crawl with a chosen id SHALL fail with the error code `crawl_id_taken`, and create nothing, when `<id>.sqlite` exists.
+A process MAY reserve a new id by creating `<id>.log` exclusively, and then create the Crawl with that chosen id (`060-add-crawl-control`'s background Crawls). Creating a Crawl with a chosen id SHALL fail with the error code `crawl_id_taken` (exit code 5, because another process made that Crawl), and create nothing, when `<id>.sqlite` exists.
 
 #### Scenario: Id from the start time
 - **WHEN** a Crawl is created at `2026-09-27T14:03:12.345Z`, and the random source yields `k3f9`

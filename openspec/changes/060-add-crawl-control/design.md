@@ -149,6 +149,21 @@ Both tables go through `018`'s declaration helper, so they are `STRICT`, with CH
   - `crawl_runs.error` is a JSON diagnostic in `010`'s full shape (rule 10: a code column plus `_message`), because it records the diagnostic the run ended with, as `crawl.warnings` records warnings, and `status` prints it whole.
 - **The counters** end in `_count` (rule 5) and are NOT NULL: the run's row is inserted with the counters seeded at the start of the run. `urls_per_second` is NULL until the first heartbeat.
 
+### D14. Codes
+Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 does, each by the slice that first raises it. Exit codes follow `010`'s classes and naming rule; every warning has the level `warning` and no exit code.
+- **v0.1:**
+  - errors, exit 1: `crawl_completed` (`resume` of a `completed` Crawl), `detach_failed` (the background process ended before it created the Crawl)
+  - errors, exit 2: `override_not_allowed`, `limit_reached` (`resume` arguments)
+  - errors, exit 5: `crawl_locked` (another process holds the writer claim), `crawl_id_taken` (a chosen id whose `<id>.sqlite` another process already made; the detaching parent reports it as `detach_failed`)
+  - warnings: `detach_unconfirmed`, `heartbeat_stale`, `job_may_end_crawl`
+- **v0.2:**
+  - errors, exit 2: `secrets_required` (`resume` credentials), `explicit_id_required` (`crawls rm latest`)
+  - error, exit 5: `file_in_use` (`crawls rm` on Windows)
+  - warnings: `estimate_unavailable`, `estimate_exceeds_max_urls`, `secrets_redacted`, `list_from_stdin`, `settings_not_in_command`
+
+From other changes: `empty_list` (`024`, reported by the detaching parent), `crawl_file_invalid`, `crawl_busy` and `crawl_not_found` (`015`), `seed_unreachable` and the other Crawl codes (`020` D17), and `invalid_value` and `settings_invalid` (`010`).
+- *Why `crawl_id_taken` is 5:* `010`'s naming rule covers only `invalid_`, `unknown_` and `_not_found`. A chosen id is taken only when another process created that Crawl between the reservation and the create, which is the `busy` class: another process holds the Crawl.
+
 ## Test seams
 
 Seams from docs/testing.md:
