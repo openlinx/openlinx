@@ -35,6 +35,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 000 | `000-scaffold-project` | none (tooling only) | `spider --version` | done |
 | 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | done |
 | 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | done |
+| 017 | `017-speed-up-crawl-writer` | `crawl-store` (modified) | none | planned |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | planned |
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned, min |
 | 030 | `030-add-page-data` | `page-data` | none (data only) | planned, min |
@@ -52,17 +53,17 @@ v0.1 is installed from PyPI, where 085 publishes it, with `uv tool install` (or 
 A thin end-to-end slice comes first, so the first Issues reach a user early. The changes then widen.
 
 ```
-slice:   000 ─► 010 ─► 015 ─► 020 ─► 030-min ─► 040-min ─► 050 issues
-                                │    (first      (3–5       (issues,
-                                │    columns)    Rules)     issues <id>)
-                                │
-widen:                          ├─► 022-min ─┐
-                                ├─► 060-min ─┤
-                                ├─► 026 parse pool, synthetic site, benchmark baseline (before the slice's e2e test) ─────┐
-                                └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 sql, summary/pages/page ─► 080 ─┴─► 026 benchmark re-run (sizes the pool) ─► 085 ─► v0.1 tag
+slice:   000 ─► 010 ─► 015 ─► 017 ─► 020 ─► 030-min ─► 040-min ─► 050 issues
+                                       │    (first      (3–5       (issues,
+                                       │    columns)    Rules)     issues <id>)
+                                       │
+widen:                                 ├─► 022-min ─┐
+                                       ├─► 060-min ─┤
+                                       ├─► 026 parse pool, synthetic site, benchmark baseline (before the slice's e2e test) ─────┐
+                                       └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 sql, summary/pages/page ─► 080 ─┴─► 026 benchmark re-run (sizes the pool) ─► 085 ─► v0.1 tag
 ```
 
-- **The slice:** 015 → 020 → 030-min → 040-min → 050-issues. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
+- **The slice:** 015 → 017 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it. 030 starts with only the columns its first Rules read, 040 with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. How 030, 040 and 050 split into slice and widening task groups is settled when 030 is re-grounded.
 - **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts once 020's slice is in and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
 - **Release:** 085 comes last, before the v0.1 tag. The product name must be chosen, and checked as free on PyPI and GitHub, before 085 starts.
@@ -117,6 +118,17 @@ If a change needs something another change owns, it depends on that change inste
   - The `--crawl latest|<id>|<path>` option used by every query Command.
   - Redaction of secrets in recorded commands and config: whole values (`***`) and URL passwords (`user:***@proxy`). 022 adds the header shape (`Cookie: ***`) in v0.2.
   - Table conventions, and `docs/schema.md` as the contract: the public schema reference of [ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md), in v0.1. It is checked against the declared schema, and a new crawl file against both through `PRAGMA table_info`.
+- **017-speed-up-crawl-writer** (v0.1, decided 2026-10-11 from the writer prototype; the store layer only):
+  - It modifies `crawl-store` and builds on 015's `CrawlWriter` as built. It comes after 015 and before 020, whose per-URL unit uses it.
+  - **The writer stays a thread.** A writer process is out: it tied the thread under the parse pool (40.1 against 40.4 Pages/s) and writer-only at ~466 Link rows per Page (17.6 against 17.2), its WAL peaked at 402 MB against 212 MB, and it would need units as records with a registry, errors sent over a pipe and a slow test group.
+  - **`run()` and `run_async()` are unchanged:** their result means the unit ran, and `flush()` means it is durable.
+  - **`submit(unit)` is new:** it returns a Future that is resolved at the commit that holds the unit, and fails when that commit fails. A window of unresolved units gives backpressure. Units stay closures (`Callable[[Connection], T]`), with no registry; 020 D14's row records stay 020's rule.
+  - **Reads through the writer** run in its open transaction and commit nothing, so 020's frontier reads see every unit before them.
+  - **The optimistic batch,** internal to the writer: the units of a batch run without a savepoint each. When one fails, the transaction is rolled back, the units before it run again with a savepoint each and are committed at once (the replay commit, a new commit trigger in the spec), and the failing unit never runs again, a `BaseException` included. Unit atomicity is tested with a unit that fails half-way. It gained 14–15% on the clean path in back-to-back runs: 52.8 → 60.9 Pages/s at 120 Link rows per Page, 15.8 → 18.0 at ~466. Since a unit may run twice, a unit has no effect outside its connection.
+  - **The writer's connection pragmas,** with no new setting: `temp_store=MEMORY`, a 64 MB `cache_size` and, in WAL mode, a 256 MB `mmap_size` (−33% wall time together in the store benchmark at 2k Pages). The killed-writer proof is re-run on Windows with `mmap_size` on.
+  - **Prebuilt statements** are a rule for every store module: built once and run as `execute(stmt, params)`, never `.values(<literals>)` per unit and never `insert().values(list)`. Its design decides whether a guard test enforces it.
+  - **A local throughput check,** never part of the CI gate: writer-only, 20k Pages at ~466 Link rows per Page, at least 12 Pages/s, a WAL peak of at most 300 MB and a crawler RSS of at most 400 MB. It is provisional until the schema blueprint's links layout lands.
+  - Not in 017: the partial frontier index (020), the parse pool (026), and the pipes between a Crawl's processes (060). A writer process, if one is ever added, starts through a dedicated entry module whose imports a startup-allowlist-style test checks.
 - **020-add-crawl-core**:
   - Spider mode (`crawl <url>`) and URL normalisation, which keeps the trailing slash.
   - **Scope:** `--scope host|subdomains|subfolder`, `--subdomains`, `--include/--exclude`, `--max-depth`, `--max-urls` (no limit by default; reaching an explicit limit leaves the Crawl resumable), `--strip-params`. An apex Seed admits its `www.` host, never the reverse, and `seed_base_mismatch` warns when a `www.` Seed's site lives on the apex.
@@ -150,7 +162,7 @@ If a change needs something another change owns, it depends on that change inste
   - `mode_conflict` when two Crawl Modes are given.
 - **026-add-parse-pool** (v0.1: the pool and its benchmark):
   - **The parse pool is unconditional in v0.1** (decided 2026-10-11): page preparation runs in a process pool behind 020's executor seam, with bounded queues, clean shutdown of workers on stop and interrupt, and no console windows on Windows. It is built right after 020's slice and lands before the slice's end-to-end test.
-  - The ~500k-URL benchmark sizes the pool (pool size, queue bounds) and doubles as the soak test. It runs manually or nightly, never as part of the CI gate, and its numbers go in `docs/benchmarks.md`.
+  - The pool starts at the number of physical cores minus 2, so the writer keeps a full core: in the writer prototype, 6 workers on 8 physical cores cut the Crawl to about 40 Pages/s by taking CPU from the writer. The ~500k-URL benchmark then sizes the pool (pool size, queue bounds) and doubles as the soak test. It runs manually or nightly, never as part of the CI gate, and its numbers go in `docs/benchmarks.md`.
   - It also measures the crawl-file layout variants that the store benchmark of 2026-10-10 left out (decided 2026-10-11): `links` as a `WITHOUT ROWID` table, a 16 KB page size, a zstd dictionary for stored HTML, and the WAL size of a ~100k-Page run without a concurrent reader.
 - **030-add-page-data** (min in v0.1):
   - Every Internal-tab column, added in the slice where it is first needed.
@@ -276,6 +288,8 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
   - **One context for a Crawl's dependencies:** the clock, the Reporter, the writer, the settings, the Fetcher and the Scope are built in one place and passed as one object, instead of growing every signature.
 - 020: page preparation (parse, extract and normalise, ending in frozen records) is one pure, picklable function of the fetched response, called through an executor seam. 020 ships the in-process executor; 026 plugs in the pool without touching the engine.
 - 020: selectolax 1.0 removed its old backend (`from selectolax.parser import HTMLParser` raises `ImportError`); the link extractor uses `selectolax.lexbor.LexborHTMLParser` (found by the store benchmark, 2026-10-11).
+- 020: D2's unit goes through 017's `submit()`: the URL's task ends at the submit, and the unit's outcome arrives at its commit. Under the robustness rule, a unit that fails, even when it runs again after another unit failed, never stops the Crawl: the engine records that URL as `error` through a fallback unit. Only a failed commit or a writer that has ended is `write_failed` (D16).
+- 020: D1's frontier reads are writer units that commit nothing (017), and `urls` gets the partial index `(crawl_depth, id) WHERE fetch_state = 'queued'` (flat at 1–2 ms in the store benchmark; a cursor alone breaks once a continue re-queues URLs).
 - 060: `resume` is v0.1 now; its spec markers move with 060-min's.
 - 060: its "Crawl State transitions" requirement builds on 020's (020 D12): it adds `running` → `interrupted` and `interrupted` → `running` to 020's `TRANSITIONS`, and records `interrupted` through 020's `set_state`. 020's `stop_reason` now also covers `failed` (`seed_unreachable`, `site_unreachable`, `write_failed`).
 - 060: 020 dropped its kill-then-continue scenarios ("Continuing a killed Crawl completes it", "Continuing does not request fetched URLs again" after a kill, "A Crawl killed on Windows can be continued"), because continuing a killed Crawl needs `interrupted`. 060's "A killed Crawl can be resumed at once" scenarios cover them; add that the resume requests no URL that was `fetched` before the kill.
@@ -283,6 +297,8 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 - 060: the detached process tree includes 026's pool workers: no console windows, and a clean shutdown on stop and interrupt.
 - 060: on Windows, a process started with `sys.executable` from a venv, or from `spider.exe`, is a launcher whose child is the real interpreter, so killing the recorded pid leaves the Crawl running. Start the base interpreter (`sys._base_executable`) with `__PYVENV_LAUNCHER__` set, as `multiprocessing` does, or put the tree in a Job object, and record the real pid for `status`.
 - 060: any `OSError` on a pipe between the Crawl's processes means end of input: on Windows a closed pipe can surface as `BrokenPipeError` at `poll()`, not as `EOFError`.
+- 060: `status` reports the average rate over the whole Crawl next to `rate`.
+- 050: check `summary` against Screaming Frog's Overview counts: URLs encountered, blocked by robots.txt and crawled; Internal and External; Indexable and non-Indexable; and content types with their shares.
 - 030 and 040: under 020 D9 and D14, handlers are pure and return store rows declared in `spider.store.*`, and post-crawl passes are store functions (030: `spider.store.pages` and `spider.store.links`; 040: `spider.store.issues`). Their drafts still describe handlers that write in the unit, and sinks; and they add their entries to 020's `default_hooks()`.
 - 024 (v0.2): decide whether 020's apex-to-www rule applies to each Seed of List and Sitemap mode.
 - 022-min: the recorded `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` values must go through 015's URL redaction (`user:***@host`). Today it is the private `_redact_value` in `spider.store.redaction`, so 022 either makes a public `redact_url` or routes the variables through `SecretNames`.
