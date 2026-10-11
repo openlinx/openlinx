@@ -109,6 +109,19 @@ The schema of a crawl file is a public contract ([ADR-0002](docs/adr/0002-sqlite
 
 - Write a comment only for a non-obvious *why*. Don't add a docstring to a function or method whose name and types already say what it does, and don't add a comment that restates the code.
 - Each module starts with a one-line docstring that names the design decision it implements, such as "design D7 of 000-scaffold-project". An empty `__init__.py` that only marks a test package needs none.
+- **The paradigm** is [ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md): logic in pure functions, data in frozen dataclasses, dependencies as parameters typed by a Protocol, state only where it is inherent, no class hierarchies of our own, and pydantic only at the boundary.
+- **Errors:**
+  - An error that a user or an agent sees is a `SpiderError` with a `DiagnosticCode` from the registry in `spider.output.codes`. A warning is a `Diagnostic` made with `Diagnostic.of(code, ...)` and given to the `Reporter`. Never report a bare message without a code.
+  - A broken contract inside our own code, such as a settings table registered twice, raises a built-in `TypeError` or `RuntimeError`. It is a bug, not a diagnostic.
+  - An error class of the store, such as `CrawlWriterClosedError`, is turned into a code by the service that catches it.
+- **`# type: ignore[code]` and `# noqa: CODE`** always name the code, and are used only when the fault is not ours: a third-party API or stub, or the one place that one of our banned-API rules (`TID251`) leads to. Prefer fixing the type. A short reason goes on the line, or in the comment right above it when the line would grow too long.
+- **Private names** start with `_`. A module's public names are the ones without it, and only those are imported from other modules.
+- **Size, a guide and not a gate:** a module past about 300 non-blank lines, or a class past about 10 methods, is a question for review. Today only `spider/store/writer.py` (366 lines) and its `CrawlWriter` (25 methods) are past either, and ADR-0006 says how it would split. Complexity rules in ruff stay in the ROADMAP Backlog ("Code quality checks").
+- **Imports:**
+  - Our own code is imported by name, as in `from spider.output.codes import USAGE_ERROR`, never as a module.
+  - A standard-library or third-party module is imported either way: whole where its functions are called through it (`asyncio`, `sqlite3`, `re`, `time`, `orjson`, `typer`), and by name otherwise (`from pathlib import Path`).
+  - An import inside a function only keeps a heavy module off the startup path, such as `rich` in `spider.output.table`. `tests/cli/test_startup.py` checks what a startup loads.
+- **Formatting** is `ruff format`'s: double quotes, and lines of at most 100 characters.
 
 ## Windows notes
 
