@@ -44,6 +44,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.13 Fix: the Seed parser finds a scheme by design D13's rule (a scheme name and `:`, unless a port follows), so `mailto:`, `tel:`, `javascript:` and `ftp:` Seeds are rejected and `localhost:8080` gets `https://`, with table cases and a hypothesis property at seam 4: a Seed the parser accepts is http or https, and keeps the scheme its text names.
 - [x] 1.14 Docs: write the "URLs" part of `docs/crawling.md` (the normalisation rules, the kept trailing slash, and `--strip-params`).
 - [x] 1.15 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [ ] 1.16 **Guard:** design D13's rules, by an ast guard in `tests/test_code_style.py` over `src/spider`, with breach cases fed as source strings: `spider.crawl.urls` imports nothing of `spider`, at module level or inside a function, and `NormalizedUrl(` is called only in the modules of an explicit allowlist, which is `spider/crawl/urls.py` until group 4 adds the store's cast points.
 
 ## 2. Scope decisions (slice, seam 4)
 
