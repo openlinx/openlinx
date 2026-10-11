@@ -59,6 +59,25 @@ def test_a_killed_writer_loses_uncommitted_units(temp_workspace: TempWorkspace) 
     assert query(crawl.path, COUNT) == [(0,)]
 
 
+def test_a_new_writer_opens_the_file_of_a_killed_writer_at_once(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    with StoreWorker(crawl.path) as worker:
+        worker.insert(1, 2, 3)
+        worker.flush()
+
+        worker.kill()
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(insert_seed(4, "https://example.com/4"))
+
+    assert (query(crawl.path, "PRAGMA integrity_check"), query(crawl.path, COUNT)) == (
+        [("ok",)],
+        [(4,)],
+    )
+
+
 def test_reading_during_a_write_in_wal_mode(temp_workspace: TempWorkspace) -> None:
     crawl = crawl_without_seeds(temp_workspace)
     with StoreWorker(crawl.path) as worker:

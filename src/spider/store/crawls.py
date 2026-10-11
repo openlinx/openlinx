@@ -75,7 +75,7 @@ def _write_new_file(
     crawl_file: CrawlFile, request: NewCrawl, started_at: datetime, journal_mode: str
 ) -> None:
     settings_file = request.settings_file
-    with opening(crawl_file.path) as engine, engine.begin() as connection:
+    with opening(crawl_file.path, role="create") as engine, engine.begin() as connection:
         metadata.create_all(connection)
         connection.exec_driver_sql(f"PRAGMA user_version = {SCHEMA_VERSION}")
         connection.execute(

@@ -66,7 +66,7 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - At most 2,000 submitted units are unresolved at once; a submit beyond that waits on a condition that each commit signals.
 - 2,000 is four commits of 500, so the writer never waits for a caller while the window has room. In the prototype, a Page unit without HTML was about 18 KB of rows, which puts the window at about 36 MB.
 - Units waited for with `run()` do not count: their caller already waits for each one. The 50,000-job queue of `015` still bounds both kinds.
-- **The test** holds the writer inside the first submitted unit, on an `Event`. A second thread signals that it is about to submit the 2,001st unit, and the test then releases the held unit. Each step appends to an ordered log: released, committed (from `on_commit`), returned. With no fixed sleep, a broken window could still pass only if the second thread were slower than a whole commit of 500 units. It can never fail falsely.
+- **The test** holds the writer inside the first submitted unit, on an `Event`. A second thread signals that it is about to submit the 2,001st unit, and the test then releases the held unit. Each step appends to an ordered log: released, committed (from a done callback of the first unit's Future, which runs after the commit and before it frees any room, where `on_commit` would race the submit), returned. With no fixed sleep, a broken window could still pass only if the second thread were slower than a whole commit of 500 units. It can never fail falsely.
 
 ### D4. Units stay closures
 - A unit stays `Callable[[Connection], T]`, defined in a `spider.store.*` module (`020` D14).
@@ -82,14 +82,19 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - **Clean path:** the units of a batch run in the open transaction with no savepoint each.
 - **When a unit raises anything, a `BaseException` included:**
   1. The writer rolls back the whole transaction.
-  2. It begins a new one, and runs the units before the failing one again, in order, each in its own savepoint. That is `015`'s path.
+  2. It begins a new one, and runs the units before the failing one again, in order, with no savepoint each: any failure in the replay ends the writer and its whole transaction goes, so a savepoint would only cost statement-journal I/O (task 1.12).
   3. It commits at once. This is the replay commit, and `on_commit` gets the number of units it made durable.
   4. The failing unit's caller gets the error the unit raised. The failing unit never runs again: its error is already known, and running it again would run its code twice. Above all, it would run code again after a `KeyboardInterrupt`.
   5. The next unit starts a new optimistic batch.
 - **When the failing unit's caller learns its outcome:** only after the replay commit. Its Future fails and its window slot is freed at that point.
   - If the replay commit itself fails, the failing unit's caller still gets its own error. The replayed units' Futures fail with the commit's error, and the writer ends.
   - A busy file at the replay's `BEGIN` ends the writer, as a busy `BEGIN` does in `015`.
-- **A unit that fails in the replay** behaves like any failing unit under savepoints: its savepoint is rolled back, its Future fails, and the rest of the replay goes on. Only a unit that broke the contract of D7 can fail in the replay, so a `run()` caller may already hold that unit's result. The Future of a submitted unit is always right, and the `on_commit` count leaves the unit out.
+- **The replay must reproduce the first run** (ruling of 2026-10-11). For each unit the batch keeps its first result and its row-change count, the delta of the driver's `total_changes`. In the replay, a unit that raises, returns a different result or changes a different number of rows ends the writer with no commit, through the path of a failed commit:
+  - The failing unit's caller still gets its own error first.
+  - The writer fails with `CrawlWriterReplayError`, which names the unit's `__qualname__` and what differed: it raised, its result or its change count. It is chained from the replay's exception, if any.
+  - Later callers, and `close()`, get `CrawlWriterClosedError` from it, as after any failed commit.
+  - Why not drop the unit and commit the rest: `run()` callers already hold the results of the first run, and may have built later units on them. A silent hole in the file would surface far from its cause.
+  - A file-level error inside a unit (`SQLITE_FULL`, an I/O error, a busy spill in `delete` mode) usually meets the replay again, so it now ends the writer, where in `015` only that unit failed. A full disk stops the Crawl loudly.
 - **The evidence:** back-to-back runs on the clean path, thread host, writer-only, 20k Pages:
 
   | Link rows per Page | Savepoint per unit | Optimistic | Gain | Per-Page overhead of the savepoints |
@@ -107,14 +112,16 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - A unit runs a second time when a later unit of its batch fails. A unit therefore:
   - has no effect outside the writer's connection: no I/O, no shared state, and nothing reported from inside the unit
   - does not change its input
-  - computes its writes from its input and what it reads on the connection, so its second run writes what its first run wrote
-- `docs/crawl-store.md` states the contract, and every code review of a change that adds units checks it. A test cannot prove it for every unit. `020` D14 helps: its units write frozen records that handlers built before the unit.
+  - computes its writes from its input and what it reads on the connection, so its second run writes what its first run wrote: it is deterministic given the file's state, with no clock, randomness or counter of its own
+  - returns a value: `None`, a number, a `str`, a tuple of these, or a frozen dataclass, so that the replay can compare its results. A float `NaN` never equals itself, so a unit does not return one.
+- `docs/crawl-store.md` states the contract, and every code review of a change that adds units checks it. A test cannot prove it for every unit, so the replay checks what it can (D6), and `replay_now(writer)` in `tests/support` lets a change's own tests replay its units. `020` D14 helps: its units write frozen records that handlers built before the unit.
 
 ### D8. The writer's connection settings
-- **What changes:** `opening()` gets a keyword that only `CrawlWriter` passes. With it, the engine gets one more connect listener, after the journal-mode check: `temp_store = MEMORY`, `cache_size = -65536` (64 MiB), and `mmap_size`.
+- **What changes:** `opening()` takes one required keyword, `role`, of type `ConnectionRole = Literal["create", "read", "write"]`, in place of its `read_only` flag (task 3.7). Only `CrawlWriter` passes `"write"`. With it, the engine gets one more connect listener, after the journal-mode check: `temp_store = MEMORY`, `cache_size = -65536` (64 MiB), and `mmap_size`.
   - `mmap_size` is `268435456` (256 MiB) when the journal mode is `wal`.
   - It is set explicitly to `0` in `delete` mode, because `SQLITE_DEFAULT_MMAP_SIZE` is a build-time option and may not be 0 in every build.
   - Creating the file and reading it keep SQLite's defaults.
+- **Why a role, not flags:** a `read_only` and a `writer` flag would allow a read-only writer, a pair that means nothing, and every new caller of `opening()` from `020` on would copy the pair. One required role makes that pair unrepresentable and names the role at each call. It is a `Literal` alias, like the store's `JournalMode` and `CrawlMode`, rather than an `Enum`: callers pass a plain string that mypy checks, with no import, and nothing iterates the roles.
 - **The evidence:** at 2k Pages in the store benchmark, the whole run took 41.7 s as built, 34.3 s with `temp_store`, and 27.8 s with the cache and `mmap_size` too (−33%). Kernel time fell from 18.6 to 7.2 s.
 - **Why no memory mapping in `delete` mode:** that mode is chosen for UNC paths (`015` D3), and a memory-mapped file on a network share is only as coherent as the share's client cache. The gain does not justify that risk on the path we already treat as fragile.
 - **No setting:** the values are safe on every supported OS, and a setting would add a contract to keep. The cache is a ceiling, not an allocation.
@@ -142,6 +149,7 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - **It reports,** as one JSON document: Pages/s overall and per 5k window, Link rows/s, the WAL peak, the process RSS, and the atomicity check (no row from a failed unit, every other Page stored).
 - **Its floor:** at least 12 Pages/s (70% of the 17.2–18.0 measured), a WAL peak of at most 300 MB, and an RSS of at most 400 MB. Below the floor it exits non-zero.
 - **Where it runs:** locally, by hand. It is never part of the CI gate or of `scripts/check.py`, and `docs/benchmarks.md` records the machine and the numbers.
+- **When the floor is first held:** at `030`'s re-grounding, on the links layout chosen there. A 20,000-Page run on the provisional tables would be superseded by it. So `017` only runs a 5,000-Page smoke run, which proves the script (ruling of 2026-10-11).
 
 ## Test seams
 
@@ -162,7 +170,17 @@ Boundary doubles used: `FakeClock` only.
 - [The thread host loses to the GIL once the event loop really fetches and parses] → `026`'s pool takes parsing out of the loop, and its benchmark measures the whole pipeline. A writer process can be added behind `submit()` without changing `020` (D1).
 - [The +14–15% is close to the noise of the machine it was measured on] → Every window of 5k Pages agreed, and the overhead grows with the rows per unit. The throughput check pins the floor, not the gain.
 - [In `delete` mode, a unit that waits out the busy timeout fails, and the replay may wait again for each unit before it] → A busy file in `delete` mode already fails the Crawl with `crawl_busy` (`020`'s risks), and the 64 MiB cache makes spills inside a unit rarer.
-- [The throughput floor is set on a provisional links layout] → The check is marked provisional, and the schema blueprint restates it.
+- [The throughput floor is set on a provisional links layout, and `017` never runs the check at 20,000 Pages] → The check is marked provisional, and `017` records a 5,000-Page smoke run. The first run against the floor happens at `030`'s re-grounding, on the chosen links layout, which restates the floor.
+- [No test shows that creating a crawl file keeps SQLite's defaults] → The settings belong to a connection, so a test would have to observe the creating connection from inside `create_crawl_file`. The code gives that connection the `create` role, which gets no writer settings. Deferred.
+- [A unit that only reads joins the batch, so `on_commit` counts it among the units made durable] → `020` counts progress from its units' Futures, never from `on_commit` (`020` D10, decided 2026-10-11).
+- [A busy `BEGIN` in the replay ends the writer, and no test covers it] → The code takes the same path as any failed replay. A deterministic test would need a lock taken between the rollback and the `BEGIN`. Deferred.
+- [A busy error inside a unit that runs again is raised as it is, so the writer ends with `crawl_busy`, and no test covers it] → It needs a cache spill in `delete` mode while a reader holds the file. Deferred.
+- [The row-change count is masked to 32 bits, because SQLite's `total_changes` is a C int that wraps, and no test covers the wrap] → A test would need 2^31 changes. Deferred.
+- [A submit that waits for room is woken when the writer thread ends for a reason other than a failed commit, and no test covers that] → Every end of the thread goes through the same `finally` that wakes the waiters, which the failed-commit test covers. Deferred.
+- [A job queued just after the writer drained its queue on the way out is failed by its submitter, and no test covers it] → It needs the thread to end between a submit's closed check and its `put`; a deterministic test would need a hook inside the writer. Deferred.
+- [`submit_async` gives its window slot back when the 50,000-job queue is full, and no test covers it] → A test would need the queue full while the window has room. Deferred.
+- [Callers that wait still poll every 0.5 s that the writer thread is alive, though the check after each `put` now fails a job queued after the final drain] → Considered and kept (ruling of 2026-10-11): dropping the polling would make that untested check load-bearing for `run()`, `flush()` and `run_async()`, to save a wakeup that costs nothing. Revisited only if that race becomes testable through a seam.
+- [The test of a new writer after a kill opens the file once the killed process has exited, so no test opens it while the process is still exiting] → The 200-run proof under parallel load (task 3.4) stands in for that window, and opening waits out a `-shm` file that a killed writer still holds. Deferred.
 
 ## Migration Plan
 
@@ -174,7 +192,7 @@ None. No schema change. `015`'s callers keep `run()`, `run_async()`, `flush()` a
   - Its per-URL unit uses `await writer.submit_async(unit)`. The URL's task ends at the submit, and the unit's outcome arrives at the commit.
   - A failed unit gets a fallback unit that records the URL as `error`. A failed commit, or `CrawlWriterClosedError`, is `write_failed` (D16).
   - Frontier reads are writer units (D5), with the partial index from its checklist.
-  - Its store modules follow the statement rule (D9) and the unit contract (D7). Progress counts come from `on_commit`.
+  - Its store modules follow the statement rule (D9) and the unit contract (D7). Progress never comes from `on_commit`, which counts read-only units too; `020` counts from its units' Futures (`020` D10).
 - **`026`:** the writer must never be short of CPU. 6 workers (physical cores minus 2) on the hybrid laptop still starved it, so `026`'s benchmark sweeps the worker count up to that bound and records machine-wide CPU and clock frequency. It also measures the GIL effect of D1's caveat.
 - **`030` and `040`:** their units follow D7 and D9.
 - **`060`:** the writer is a thread of the Crawl's process, so the claim belongs to that process. A detached Crawl needs no second spawn for the writer.

@@ -125,16 +125,40 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
 - **A unit** is a function that gets a database connection and may insert, update and read rows. It returns a value to its caller, for example the next URL to fetch.
 - **One at a time, in order.** The writer runs units on its own thread, one at a time, in the order they were submitted. Units can come from several threads, or from an event loop without blocking it.
 - **One open transaction.** Every unit sees what the units before it wrote, committed or not, so a unit can read a row and update it in one step.
-- **Atomic units.** A unit that fails leaves no change: its writes are rolled back, its error reaches its caller, and the units before and after it are unaffected. That holds for Ctrl+C inside a unit too.
+- **Atomic units.** A unit that fails leaves no change: its writes are rolled back, its error reaches its caller, and the units before and after it are unaffected. That holds for Ctrl+C inside a unit too. A unit that fails never runs again.
 - **When it commits:**
 
   | Trigger | |
   |---|---|
   | 500 units since the last commit | the batch |
   | 1 second after the first unit since the last commit | the timer, checked after each unit and every 50 ms while idle |
+  | a unit failed | the replay commit, described below |
   | `flush()` | at once, before `flush()` returns |
   | `close()` | everything still open |
 
+- **The replay commit.** Units run without a savepoint each, which makes a batch faster. When a unit fails, the writer rolls back the whole open transaction, runs the units before it again, in order, and commits them at once. Only then does the failing unit's caller get its error. If that commit fails, the caller still gets the unit's own error, and the writer ends as after any failed commit.
+- **Units may run again.** Because of the replay, a unit may run a second time before it is committed. A unit therefore:
+  - has no effect outside the writer's connection: no I/O, no shared state, and nothing reported from inside the unit
+  - does not change its input
+  - computes its writes from its input and what it reads on the connection, so its second run writes what its first run wrote: no clock, randomness or counter of its own
+  - returns a value: `None`, a number, a `str`, a tuple of these, or a frozen dataclass, never a float `NaN`, which never equals itself
+
+  The replay checks what it can: a unit that raises, returns a different result or changes a different number of rows when it runs again ends the writer with no commit, because its caller already holds the first result. The failing unit's caller still gets its own error; later callers get `CrawlWriterClosedError`, caused by a `CrawlWriterReplayError` that names the unit and what differed. A file-level error inside a unit, such as a full disk, usually meets the replay again, so it ends the writer too. No test can check the contract for every unit, so the review of every change that adds units checks it.
+- **Waiting for a unit, or submitting it.**
+  - `run(unit)`, or `await run_async(unit)`, returns the unit's result once it has run, which may be before its commit.
+  - `submit(unit)` returns a `concurrent.futures.Future` at once, and `await submit_async(unit)` an `asyncio.Future` bound to the caller's event loop, whose callbacks run on that loop. The Future holds the unit's result after the commit that makes it durable, the unit's own error if it fails, or the commit's error if that commit fails. Its callbacks run on the writer thread, so like `on_commit` they must be quick, and they cannot hand the writer a unit.
+  - Both kinds of unit run in one order.
+- **What an outcome means:**
+
+  | Outcome | Means |
+  |---|---|
+  | `run()` or `run_async()` returns | the unit ran; a crash before the next commit loses it |
+  | `flush()` returns | every unit before it is committed |
+  | a submitted unit's Future holds its result | the unit is committed |
+
+- **The window.** At most 2,000 submitted units wait for their commit at once, four batches' worth, so memory stays bounded. A submit beyond that waits until a commit frees room, and `submit_async` waits without blocking the event loop. Units handed over with `run()` take no room. A failing submitted unit frees its room once the replay commit, if any, is done.
+- **Cancelling** a submitted unit's Future does not withdraw the unit: `cancel()` returns `False`, and the unit runs and is committed as if nothing had happened. Cancelling the Future of `submit_async` only drops the outcome.
+- **A failed commit** ends the writer. The caller of the job in hand and every submitted unit of that commit get its error, `crawl_busy` for a busy file. When the replay commit is the one that fails, or a unit runs again differently, the failing unit's caller still gets its own error, and the units that ran again get the error that ended the writer. Every unit still queued, every submit still waiting for room, and every unit handed over later fail with `CrawlWriterClosedError`.
 - **Watching commits.** An optional `on_commit` callable, given when the writer is opened, is called on the writer thread after each commit with the number of units that commit made durable, for progress and metrics. It must be quick, and an error it raises ends the writer like a failed commit.
 - **What a crash loses.** A process that is killed, even with SIGKILL or TerminateProcess, loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound: `PRAGMA integrity_check` returns `ok`. Tests kill a real writer process to check both.
 - **The write check.** Opening the writer first runs a write that it rolls back. A crawl file that cannot be written, for example one with the read-only attribute, fails at once with `crawl_not_writable` (exit code 7) and `details.file`, before anything is crawled, and the file is left unchanged.
@@ -172,6 +196,8 @@ A new crawl file gets its SQLite journal mode once, when it is created, and `cra
   v0.2 plans to detect them from the system's mount table.
 - **`"wal"` on a UNC path** turns the fallback off, for a share known to support WAL safely.
 - **Durability:** WAL files commit with `synchronous=NORMAL`: a commit survives a killed process, and a power cut may lose the last commits but leaves the file sound. Rollback-journal files commit with `synchronous=FULL`.
+- **The writer's connection settings.** The writer's connection keeps temporary tables and indexes in memory (`temp_store = MEMORY`) and uses a page cache of up to 64 MiB (`cache_size = -65536`), a ceiling rather than an allocation. In WAL mode it also maps up to 256 MiB of the crawl file into memory (`mmap_size = 268435456`). In the store benchmark the three together cut a 2,000-Page write by a third. Creating a file and reading it keep SQLite's defaults, and no setting changes these values.
+- **No memory mapping in rollback-journal mode.** That mode is chosen for network shares, where a mapped file is only as coherent as the share's client cache, so the writer sets `mmap_size = 0` there. It sets it explicitly, because the default is a build-time option of SQLite and is not 0 in every build.
 
 ## Schema versions
 

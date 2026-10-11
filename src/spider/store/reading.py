@@ -18,7 +18,7 @@ from spider.store.schema import SCHEMA_VERSION, crawl
 @contextmanager
 def reading(path: Path) -> Iterator[Connection]:
     try:
-        with opening(path, read_only=True) as engine, engine.connect() as connection:
+        with opening(path, role="read") as engine, engine.connect() as connection:
             _check_schema_version(connection, path)
             yield connection
     except DBAPIError as error:

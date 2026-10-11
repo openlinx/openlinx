@@ -5,7 +5,7 @@
 Crawl data SHALL be written only through the Crawl's transactional writer. Callers submit units of work, and each unit may insert, update and read rows.
 - **Order:** units SHALL run one at a time, in the order they were submitted. Each unit runs in the writer's open transaction and sees the effects of every unit before it. A unit that only reads SHALL commit nothing.
 - **Atomic units:** a unit that fails SHALL leave no change, and its error SHALL be raised to its caller. The other units SHALL be unaffected. A unit that fails SHALL NOT run again.
-- **Units may run again:** when a unit fails, the units that ran before it since the last commit MAY run a second time before they are committed. A unit SHALL therefore have no effect outside the writer's connection, and SHALL NOT change its input.
+- **Units may run again:** when a unit fails, the units that ran before it since the last commit MAY run a second time before they are committed. A unit SHALL therefore have no effect outside the writer's connection, SHALL NOT change its input, SHALL be deterministic given the file's state, and SHALL return a value that compares by value. When a unit that runs again raises, returns a different result or changes a different number of rows, the writer SHALL end without that commit: the failing unit's caller still gets its own error, and later units fail with the error that the writer is closed.
 - **Commits:** the writer SHALL commit its open transaction when any of these happens:
   - 500 units have run since the last commit
   - 1 second has passed since the first unit after the last commit
@@ -42,6 +42,14 @@ Crawl data SHALL be written only through the Crawl's transactional writer. Calle
 #### Scenario: An interrupted unit runs once and the writer goes on
 - **WHEN** a unit inserts the Seed at position 1, the next unit counts each time it runs, inserts the Seed at position 2 and raises `KeyboardInterrupt`, a third unit inserts the Seed at position 3, and the writer is closed
 - **THEN** the caller of the second unit receives `KeyboardInterrupt`, the second unit ran exactly once, and `seeds` holds exactly the positions 1 and 3
+
+#### Scenario: A unit that fails or returns differently when it runs again ends the writer
+- **WHEN** a unit inserts the Seed at position 1 and returns how many times it has run, the next unit raises `ValueError("bad")`, and the writer is closed
+- **THEN** the caller of the second unit receives `ValueError("bad")`, closing the writer raises `CrawlWriterClosedError("The crawl writer is closed.")`, and `seeds` has no rows
+
+#### Scenario: The failing unit gets its own error when the replay commit fails
+- **WHEN** a unit writes a row that breaks a foreign key checked only at the commit, the next unit raises `ValueError("bad")`, and the writer is closed
+- **THEN** the caller of the second unit receives `ValueError("bad")`, closing the writer raises `CrawlWriterClosedError("The crawl writer is closed.")`, and the file has no row of the first unit
 
 #### Scenario: A read through the writer commits nothing
 - **WHEN** 3 units that each insert one Seed have run, a fourth unit counts the rows of `seeds`, the clock has not moved, and there has been no flush
@@ -132,7 +140,7 @@ Submitted units follow the order, atomicity and commit rules of the transactiona
 
 ### Requirement: The writer's connection settings
 
-The writer's connection SHALL keep temporary tables and indexes in memory, and SHALL use a page cache of 64 MiB. In `wal` mode it SHALL also use memory-mapped I/O for up to 256 MiB of the crawl file; in `delete` mode it SHALL use none. No setting changes these values. The durability scenarios of the transactional writer SHALL hold with them, on Windows too.
+The writer's connection SHALL keep temporary tables and indexes in memory, and SHALL use a page cache of 64 MiB. In `wal` mode it SHALL also use memory-mapped I/O for up to 256 MiB of the crawl file; in `delete` mode it SHALL use none. No setting changes these values. Creating a crawl file and reading it SHALL keep SQLite's defaults. The durability scenarios of the transactional writer SHALL hold with them, on Windows too.
 
 #### Scenario: The writer's connection settings in WAL mode
 - **WHEN** a unit of the writer of a crawl file in `wal` mode reads `PRAGMA temp_store`, `PRAGMA cache_size` and `PRAGMA mmap_size`
@@ -141,3 +149,7 @@ The writer's connection SHALL keep temporary tables and indexes in memory, and S
 #### Scenario: The writer's connection settings in rollback-journal mode
 - **WHEN** a unit of the writer of a crawl file in `delete` mode reads `PRAGMA temp_store`, `PRAGMA cache_size` and `PRAGMA mmap_size`
 - **THEN** they are `2`, `-65536` and `0`
+
+#### Scenario: A reader keeps SQLite's defaults
+- **WHEN** a reader of a crawl file reads `PRAGMA temp_store`, `PRAGMA cache_size` and `PRAGMA mmap_size`
+- **THEN** they are the values that a plain SQLite connection to the same file reads
