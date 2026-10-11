@@ -76,7 +76,7 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 | how it was started | `command_argv`, `cwd`, `settings_file`, `config` |
 | what made the file | `tool_version`, `schema_version` (also SQLite's `user_version`), `journal_mode`, `python_version`, `platform` |
 
-- **Counts are not recorded.** No column holds the number of URLs, Pages or Issues: they are counted from the tables that hold them, so they can never disagree.
+- **Counts are not recorded while a Crawl runs.** No column holds the number of URLs, Pages or Issues: they are counted from the tables that hold them, so they can never disagree. A value derived from the stored rows, such as a score, is stored only by a pass that runs after the Crawl, in a derived column.
 - **`started_at`** is the same instant as the time in the crawl id, read once when the Crawl is created.
 - **`settings_file`** is the `spider.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key, so the file says how it was made even when `spider.toml` changes later.
 - **The environment stamp** (`python_version` and `platform`) helps when a crawl file is attached to a bug report.
@@ -199,6 +199,14 @@ A new crawl file gets its SQLite journal mode once, when it is created, and `cra
 - **The writer's connection settings.** The writer's connection keeps temporary tables and indexes in memory (`temp_store = MEMORY`) and uses a page cache of up to 64 MiB (`cache_size = -65536`), a ceiling rather than an allocation. In WAL mode it also maps up to 256 MiB of the crawl file into memory (`mmap_size = 268435456`). In the store benchmark the three together cut a 2,000-Page write by a third. Creating a file and reading it keep SQLite's defaults, and no setting changes these values.
 - **No memory mapping in rollback-journal mode.** That mode is chosen for network shares, where a mapped file is only as coherent as the share's client cache, so the writer sets `mmap_size = 0` there. It sets it explicitly, because the default is a build-time option of SQLite and is not 0 in every build.
 
+## Describing the schema
+
+`spider schema` lists the public tables and needs neither a Workspace nor a Crawl. For each table it gives:
+- its columns, with their types, keys, formats and allowed values, and for a reference the `<table>.<column>` it points to
+- its secondary indexes, each with its columns, whether it is unique, the condition of a partial index, and the query it serves
+
+[schema.md](schema.md) documents the same tables, and a test keeps both equal to a new crawl file. The file itself refuses a value of another type, an enumeration value outside its list and a flag other than 0 or 1 ([ADR-0005](adr/0005-crawl-file-schema-conventions.md)).
+
 ## Schema versions
 
 Every crawl file records its schema version twice: in `crawl.schema_version` and in SQLite's `user_version`, which a tool reads before any table.
@@ -208,3 +216,7 @@ Every crawl file records its schema version twice: in `crawl.schema_version` and
 ## Not measured is NULL
 
 A value that was not measured, or that does not apply, is stored as NULL, never as `0` or an empty string. `0` is a measured zero, and an empty string is a value that is present but empty. So `completed_at` is NULL while a Crawl runs, and `settings_file` is NULL when there was no settings file. Queries should test `IS NULL`, not `= 0` or `= ''`.
+
+Two kinds of column are NULL for a while, and their descriptions say so:
+- **A derived column,** whose description starts with `Derived: `, is written only by a pass that runs after the Crawl, and is NULL until that pass has run.
+- **A column that a later release fills,** whose description starts with `Filled from v<major>.<minor>. `, is in the file from v0.1 and is NULL in every row until that release.
