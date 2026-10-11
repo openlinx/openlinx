@@ -13,10 +13,11 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 ## 1. Page rows end to end
 
 - [ ] 1.1 Drive "HTML response becomes a Page" at seam 3+6. Add the Page handler to `default_hooks()`: a pure function from `020-add-crawl-core`'s `UrlResult` to a Page row. Create `spider.store.pages`, which declares `pages` with `url_id` (references `urls.id`) and `address`, and registers the Page row's writer.
-- [ ] 1.2 Drive "Image response is not a Page" at seam 3+6.
-- [ ] 1.3 Drive "URL blocked by robots.txt is not a Page" and "URL without a response is not a Page" at seam 3+6. This is a trivial pair: both expect no row.
-- [ ] 1.4 Docs: create `docs/page-data.md` covering what a Page is, analysed vs non-analysed Pages and the NULL conventions, with a link from `docs/architecture.md`.
-- [ ] 1.5 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [ ] 1.2 Drive "Indexes of pages" at seam 6, and add the unique index `pages_address` with the query it serves.
+- [ ] 1.3 Drive "Image response is not a Page" at seam 3+6.
+- [ ] 1.4 Drive "URL blocked by robots.txt is not a Page" and "URL without a response is not a Page" at seam 3+6. This is a trivial pair: both expect no row.
+- [ ] 1.5 Docs: create `docs/page-data.md` covering what a Page is, analysed vs non-analysed Pages and the NULL conventions, with a link from `docs/architecture.md`.
+- [ ] 1.6 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Decoding, text and titles
 
@@ -51,14 +52,15 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 - [ ] 4.8 Drive "Crawl Depth is copied from the crawl engine" at seam 3+6, and add `crawl_depth`.
 - [ ] 4.9 Drive "Repeated values equal the urls row" at seam 3+6, and add `content_type` and `response_time_ms`.
 - [ ] 4.10 Drive "HTTP redirect with an HTML body" at seam 3+6, and add `redirect_url` and `redirect_type`.
-- [ ] 4.11 Docs: add the identity, response, size and redirect column definitions to `docs/page-data.md`.
-- [ ] 4.12 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [ ] 4.11 Drive "HTTP Refresh header is a redirect" at seam 4, from `020`'s `http_refresh` Link.
+- [ ] 4.12 Docs: add the identity, response, size and redirect column definitions to `docs/page-data.md`.
+- [ ] 4.13 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Cookies
 
 - [ ] 5.1 Drive "Cookie attributes are stored" at seam 4, by parsing `Set-Cookie` headers into cookie records.
 - [ ] 5.2 Drive "Cookie count matches the headers" at seam 4, and add `set_cookie_count`.
-- [ ] 5.3 Drive "Cookie values are not stored in Page data" at seam 3+6. Create the `cookies` table, and return cookie rows from the handler.
+- [ ] 5.3 Drive "Cookie values are not stored in Page data" at seam 3+6. Create the `cookies` table, keyed by `(url_id, ordinal)` and `WITHOUT ROWID`, and return cookie rows from the handler.
 - [ ] 5.4 Drive "Cookies of a redirect are stored" at seam 3+6 (a 302 Page with `Set-Cookie`).
 - [ ] 5.5 Docs: add the cookie columns and the no-values rule (with `022`'s `***` redaction) to `docs/page-data.md`.
 - [ ] 5.6 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
@@ -86,8 +88,9 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 - [ ] 7.4 Drive "Server error" at seam 4.
 - [ ] 7.5 Drive "Robots.txt beats the status code" at seam 4.
 - [ ] 7.6 Drive "Meta refresh redirect is not indexable" at seam 4.
-- [ ] 7.7 Docs: add the Indexability order and its search-engine rationale to `docs/page-data.md`.
-- [ ] 7.8 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [ ] 7.7 Drive "HTTP Refresh redirect is not indexable" at seam 4.
+- [ ] 7.8 Docs: add the Indexability order and its search-engine rationale to `docs/page-data.md`.
+- [ ] 7.9 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Content Area, counts and declared language
 
@@ -117,20 +120,21 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 
 ## 10. Link attributes
 
-- [ ] 10.1 Drive "Hyperlink with rel flags" at seam 4. Enrich `020-add-crawl-core`'s `DiscoveredLink` values. Create `spider.store.links` with the Link row's writer, and `links` with `source_url_id`, `ordinal`, `target_url_id`, `type`, `origin`, `anchor_text`, `rel`, the three `rel_*` flags and `target_is_internal`.
+- [ ] 10.1 Drive "Hyperlink with rel flags" at seam 4. Enrich `020-add-crawl-core`'s `DiscoveredLink` values. Create `spider.store.links` with the Link row's writer, and `links` with `source_url_id`, `ordinal`, `target_url_id`, `type`, `declared_in`, `anchor_text`, `rel` and the three `rel_*` flags, keyed by `(source_url_id, ordinal)`. Its layout and secondary indexes follow the links benchmark.
 - [ ] 10.2 Drive "Image alt attribute absent or empty" at seam 4, and add `element`, `attribute` and `alt_text`.
 - [ ] 10.3 Drive "Image-only anchor takes the alt text" at seam 4.
 - [ ] 10.4 Drive "Every occurrence is stored" at seam 4.
-- [ ] 10.5 Drive "Navigation Links are outside the Content Area" at seam 4, and add `in_content_area`.
+- [ ] 10.5 Drive "Link positions come from the enclosing element" at seam 4, and add `link_position`.
 - [ ] 10.6 Drive "Hreflang and mobile alternate Links" at seam 4, and add `hreflang` and `media`.
-- [ ] 10.7 Drive "Discovered URLs are the stored Link targets" at seam 3+6. Write Links from analysed Pages, and return the header Links of other responses from the handler.
-- [ ] 10.8 Drive "Link types are an enumeration" at seam 6 (`values` on `links.type`).
-- [ ] 10.9 Docs: add the Link columns and the boundary with `020`'s Link discovery to `docs/page-data.md`.
-- [ ] 10.10 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [ ] 10.7 Drive "Links declared in a header" at seam 4.
+- [ ] 10.8 Drive "Discovered URLs are the stored Link targets" at seam 3+6. Write Links from analysed Pages, and return the header Links of other responses from the handler.
+- [ ] 10.9 Drive "Link types are an enumeration" at seam 6 (`values` on `links.type`).
+- [ ] 10.10 Docs: add the Link columns and the boundary with `020`'s Link discovery to `docs/page-data.md`.
+- [ ] 10.11 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
 
 ## 11. Link counts and Folder Depth
 
-- [ ] 11.1 Drive "Counts for a linked Page" at seam 3+6 on a four-Page fixture site. Add the outlink columns (written with each Page), and the inlink columns with `linking_pages_pct`, computed by the inlink pass, a store function in `spider.store.links` that `default_hooks()` lists before `040`'s pass.
+- [ ] 11.1 Drive "Counts for a linked Page" at seam 3+6 on a four-Page fixture site. Add the outlink columns (written with each Page), and the inlink columns with `linking_pages_pct`, computed by the inlink pass, a store function in `spider.store.links` that `default_hooks()` lists before `040`'s pass. The inlink columns get `Derived: ` descriptions, which "Inlink columns are derived" checks at seam 6 in the same slice.
 - [ ] 11.2 Drive "Repeated inlinks from one source" at seam 3+6.
 - [ ] 11.3 Drive "Inlinks are NULL while the Crawl runs" at seam 3+6.
 - [ ] 11.4 Drive "Folder depth" at seam 4, and add `folder_depth`.
@@ -139,7 +143,7 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 
 ## 12. Later columns, the empty HTML table and cross-platform
 
-- [ ] 12.1 Drive, in one slice, "Schema lists exactly the Page record columns" (seam 6), "Deferred columns are described with their release" (seam 6) and "Deferred columns are NULL after a completed Crawl" (seam 3+6). All three fail only because the 17 later columns are missing. Add them as always-NULL columns whose descriptions name their release.
+- [ ] 12.1 Drive, in one slice, "Schema lists exactly the Page record columns" (seam 6), "Columns of links" (seam 6), "Deferred columns are described with their release" (seam 6) and "Deferred columns are NULL after a completed Crawl" (seam 3+6). All four fail only because the later columns are missing: the 17 of `pages`, and `links.html_source`. Add them as always-NULL columns whose descriptions name their release.
 - [ ] 12.2 Drive "HTML is not stored by default" at seam 3+6. Create `page_sources` (`url_id`, an INTEGER PRIMARY KEY referencing `urls.id`, `encoding` and `html`), whose description starts with `Filled from v0.2. `; nothing writes it in v0.1.
 - [ ] 12.3 Drive "Non-ASCII title on a Windows console" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
 - [ ] 12.4 Docs: add the later columns and the empty `page_sources` table to `docs/page-data.md`, update the Page data table in `docs/architecture.md` with the stored column names, and check that the column descriptions read well as the Skill's column reference that `080` generates.
