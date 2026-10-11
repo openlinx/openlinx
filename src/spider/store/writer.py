@@ -89,6 +89,8 @@ class CrawlWriter:
         self._room = threading.Condition(self._lock)
         self._unresolved = 0
         self._closed = False
+        # Set once the writer thread drains its queue on the way out.
+        self._ended = False
         self._failure: BaseException | None = None
         # Owned by the writer thread: the units in the open transaction, which a failing unit makes
         # run again, and the time of the first one.
@@ -170,6 +172,11 @@ class CrawlWriter:
             if job.submitted:
                 self._unresolved += 1
         self._queue.put(job, block=block)
+        with self._lock:
+            ended = self._ended
+        # Queued after the writer drained its queue on the way out, so it would never complete.
+        if ended:
+            _fail_queued(self._queue, self._failure)
 
     def _refuse_own_thread(self) -> None:
         # A unit that waited for its own writer would wait forever.
@@ -204,25 +211,36 @@ class CrawlWriter:
             else:
                 started.set_exception(self._open_error(error))
         finally:
-            with self._lock:
-                self._closed = True
+            with self._room:
+                self._closed = self._ended = True
+                # A submit that waits for room would otherwise wait forever.
+                self._room.notify_all()
             _fail_queued(self._queue, self._failure)
 
     def _work(self, connection: Connection) -> None:
         while True:
             try:
-                job = self._queue.get(timeout=IDLE_CHECK_SECONDS)
+                job: _Job | None = self._queue.get(timeout=IDLE_CHECK_SECONDS)
             except Empty:
-                self._commit_if_due(connection)
-                continue
+                job = None
             try:
-                if not self._handle(job, connection):
+                if job is None:
+                    self._commit_if_due(connection)
+                elif not self._handle(job, connection):
                     return
             except BaseException as error:
                 failure = self._busy_error(error)
-                # A failed commit ends the writer; the caller of the job in hand learns why.
-                if not job.done.done():
-                    job.done.set_exception(failure)
+                # Closed first, so a submit after anyone learns of the failure fails at once.
+                with self._lock:
+                    self._failure, self._closed = failure, True
+                # A failed commit ends the writer: the caller of the job in hand and every
+                # submitted unit of the open transaction learn why.
+                waiting = [ran.future for ran in self._batch if ran.future is not None]
+                if job is not None:
+                    waiting.append(job.done)
+                for done in waiting:
+                    if not done.done():
+                        done.set_exception(failure)
                 if failure is error:
                     raise
                 raise failure from error
@@ -259,14 +277,12 @@ class CrawlWriter:
         self._first_uncommitted_at = self._clock.monotonic()
 
     def _replay(self, failed: _Job, error: BaseException, connection: Connection) -> None:
-        batch, self._batch = self._batch, []
         try:
             connection.rollback()
-            if batch:
+            if self._batch:
                 self._begin(connection)
-                for ran in batch:
+                for ran in self._batch:
                     _run_again(ran, connection)
-                self._batch = batch
                 self._commit(connection)
         finally:
             # Its own error even when the replay fails and ends the writer (design D6).

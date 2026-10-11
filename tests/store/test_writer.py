@@ -6,7 +6,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import Connection, func, select, update
@@ -260,20 +260,25 @@ def test_the_replay_runs_units_without_a_savepoint(temp_workspace: TempWorkspace
     assert (len(inserts), savepoints) == (2, [])
 
 
-def test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails(
-    temp_workspace: TempWorkspace,
-) -> None:
-    crawl = crawl_without_seeds(temp_workspace)
-    with closing(connect(crawl.path)) as connection:
-        # Checked only at the commit, so the replay commit itself fails.
+def add_a_deferred_reference(crawl_file: Path) -> None:
+    """Adds tables whose reference is checked only at the commit, so the commit itself fails."""
+    with closing(connect(crawl_file)) as connection:
         connection.executescript(
             "CREATE TABLE parents (id INTEGER PRIMARY KEY);"
             "CREATE TABLE children (parent INTEGER REFERENCES parents (id)"
             " DEFERRABLE INITIALLY DEFERRED);"
         )
 
-    def breaks_a_deferred_reference(connection: Connection) -> None:
-        connection.exec_driver_sql("INSERT INTO children VALUES (9)")
+
+def breaks_a_deferred_reference(connection: Connection) -> None:
+    connection.exec_driver_sql("INSERT INTO children VALUES (9)")
+
+
+def test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    add_a_deferred_reference(crawl.path)
 
     closed = close_after_a_replay(crawl.path, breaks_a_deferred_reference)
 
@@ -686,3 +691,99 @@ def test_a_failing_submitted_unit_frees_its_room_in_the_window(
         )
 
     assert submitted
+
+
+def test_a_failed_commit_fails_every_future_of_its_batch(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    add_a_deferred_reference(crawl.path)
+    writer = CrawlWriter(crawl.path, FakeClock())
+    submitted: list[Future[Any]] = [
+        *submit_inserts(writer, 2),
+        writer.submit(breaks_a_deferred_reference),
+    ]
+    with pytest.raises(IntegrityError, match=r"FOREIGN KEY constraint failed") as flushed:
+        writer.flush()
+    with pytest.raises(CrawlWriterClosedError, match=r"^The crawl writer is closed\.$"):
+        writer.submit(count_seeds)
+    with pytest.raises(CrawlWriterClosedError):
+        writer.close()
+
+    assert [future.exception(timeout=0) is flushed.value for future in submitted] == [True] * 3
+
+
+def test_a_submit_that_waits_for_room_wakes_when_the_writer_ends(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    add_a_deferred_reference(crawl.path)
+    hold = threading.Event()
+    about_to_submit = threading.Event()
+    raised: list[BaseException] = []
+
+    def held(connection: Connection) -> None:
+        hold.wait()
+        breaks_a_deferred_reference(connection)
+
+    writer = CrawlWriter(crawl.path, FakeClock())
+    # The 500th unit's commit fails while units 501 to 2,000 are still queued.
+    first = writer.submit(held)
+    rest = submit_inserts(writer, 1999)
+
+    def submit_one_more() -> None:
+        about_to_submit.set()
+        try:
+            writer.submit(count_seeds)
+        except CrawlWriterClosedError as error:
+            raised.append(error)
+
+    submitter = threading.Thread(target=submit_one_more)
+    submitter.start()
+    about_to_submit.wait()
+    hold.set()
+    submitter.join()
+    with pytest.raises(CrawlWriterClosedError):
+        writer.close()
+
+    assert (
+        type(first.exception()),
+        type(rest[-1].exception()),
+        [type(error) for error in raised],
+    ) == (IntegrityError, CrawlWriterClosedError, [CrawlWriterClosedError])
+
+
+def test_a_failed_timer_commit_fails_the_futures_of_its_batch(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    add_a_deferred_reference(crawl.path)
+    clock = FakeClock()
+    writer = CrawlWriter(crawl.path, clock)
+    submitted = writer.submit(breaks_a_deferred_reference)
+    writer.run(count_seeds)
+    # No unit follows, so the idle check commits.
+    clock.advance(1.0)
+    error = submitted.exception(timeout=10)
+    with pytest.raises(CrawlWriterClosedError):
+        writer.close()
+
+    assert type(error) is IntegrityError
+
+
+def test_a_failed_replay_fails_the_futures_of_the_units_that_ran_again(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    runs: list[int] = []
+
+    def counts_its_runs(connection: Connection) -> int:
+        runs.append(1)
+        return len(runs)
+
+    writer = CrawlWriter(crawl.path, FakeClock())
+    replayed = writer.submit(counts_its_runs)
+    failing = writer.submit(raising_insert(9, ValueError("bad")))
+    errors = (failing.exception(timeout=10), replayed.exception(timeout=10))
+    with pytest.raises(CrawlWriterClosedError):
+        writer.close()
+
+    assert [type(error) for error in errors] == [ValueError, CrawlWriterReplayError]

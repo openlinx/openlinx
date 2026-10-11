@@ -50,7 +50,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 2.2 Drive "A flush resolves the submitted units". Done when: right after each successful commit, before `on_commit`, the writer resolves the Futures of the units that commit made durable, with their results.
 - [x] 2.3 Drive "A failing submitted unit fails its Future".
 - [x] 2.4 Drive "A replay commit resolves the units before a failing one".
-- [ ] 2.5 Drive "A failed commit fails every Future of its batch".
+- [x] 2.5 Drive "A failed commit fails every Future of its batch".
 
   Done when:
   - the test creates its own table in the crawl file with a `DEFERRABLE INITIALLY DEFERRED` foreign key, so `COMMIT` itself fails as SQLite reports it, with no mock (design, Test seams)
