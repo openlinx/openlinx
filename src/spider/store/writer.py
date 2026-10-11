@@ -54,6 +54,8 @@ class _Control(Enum):
 class _Job:
     work: Callable[[Connection], Any] | _Control
     done: Future[Any]
+    # Resolved at its commit rather than when it has run.
+    submitted: bool = False
 
 
 @dataclass(frozen=True)
@@ -111,6 +113,11 @@ class CrawlWriter:
                 return await asyncio.wait_for(asyncio.shield(waiting), ALIVE_CHECK_SECONDS)
             except TimeoutError:
                 self._check_alive(done)
+
+    def submit[T](self, unit: Callable[[Connection], T]) -> Future[T]:
+        done: Future[T] = Future()
+        self._submit(_Job(unit, done, submitted=True))
+        return done
 
     def flush(self) -> None:
         done: Future[None] = Future()
@@ -231,8 +238,9 @@ class CrawlWriter:
         # Only units that succeeded run again, so a failing unit never does.
         self._batch.append(_Ran(job.work, result, changes))
         self._commit_if_due(connection)
-        # Only now: a caller that reads after its unit returns sees the commit.
-        job.done.set_result(result)
+        if not job.submitted:
+            # Only now: a caller that reads after its unit returns sees the commit.
+            job.done.set_result(result)
         return True
 
     def _begin(self, connection: Connection) -> None:

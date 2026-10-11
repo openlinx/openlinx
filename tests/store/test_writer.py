@@ -3,7 +3,7 @@
 import sqlite3
 import threading
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 from typing import cast
@@ -541,3 +541,27 @@ def test_a_unit_cannot_wait_for_its_own_writer(temp_workspace: TempWorkspace) ->
         ),
     ):
         writer.run(lambda connection: writer.run(count_seeds))
+
+
+def submit_inserts(writer: CrawlWriter, count: int) -> list[Future[int]]:
+    """Submits units that insert the Seeds 1 to count and return their positions."""
+    return [writer.submit(positioned_insert(position)) for position in range(1, count + 1)]
+
+
+def positioned_insert(position: int) -> Callable[[Connection], int]:
+    def unit(connection: Connection) -> int:
+        insert_seed(position, f"https://example.com/{position}")(connection)
+        return position
+
+    return unit
+
+
+def test_a_submitted_unit_waits_for_its_commit(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        submitted = submit_inserts(writer, 3)
+        count = writer.run(count_seeds)
+        pending = [not future.done() for future in submitted]
+
+    assert (count, pending) == (3, [True, True, True])
