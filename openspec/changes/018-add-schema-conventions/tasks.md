@@ -95,6 +95,6 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - it passes vacuously on `crawl` and `seeds`, and a mutation on the `indexed_rows` fixture shows that each part bites
 
   *No scenario, because* it closes two deferrals of group 2's review (design, Risks) with a rule that the spec's "Indexes" and "Keys and references" conventions already imply.
-- [ ] 3.2 Docs: the "Crawl store" section of `docs/architecture.md` names ADR-0005, and says that the declaration helper is the one way to declare a public table.
+- [x] 3.2 Docs: the "Crawl store" section of `docs/architecture.md` names ADR-0005, and says that the declaration helper is the one way to declare a public table.
 - [ ] 3.3 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
 - [ ] 3.4 Review: run the code-review skill on the whole change against `specs/crawl-store/spec.md` and ADR-0005, then refactor with the whole suite green.

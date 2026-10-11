@@ -95,7 +95,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 
 The schema of a crawl file is a public contract ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)): agents query it with SQL. It changes only this way:
 - **In one slice:** add the table or column to the declared schema (`spider.store.schema`) and to [docs/schema.md](docs/schema.md) in the same commit, in the slice whose scenario first needs it. The store contract test compares the two, so neither may lead. [How to add a table](docs/schema.md#how-to-add-a-table) has the details.
-- **Declared in full:** `info={"change": <n>}` on a new table, a comment on every table and column, the shared column types for timestamps, JSON and booleans, and the conventions of `docs/schema.md`. Tests check them on every declared table.
+- **Declared in full:** a new table through `public_table(..., change=<n>)`, a comment on every table and column, a description on every index, the shared column types for timestamps, JSON and booleans, and the conventions of [ADR-0005](docs/adr/0005-crawl-file-schema-conventions.md), summed up in `docs/schema.md`. Tests check them on every declared table.
 - **Before v0.1:** no migration. Edit the declared tables directly; `schema_version` stays `1`, and crawl files from earlier development builds are not supported.
 - **From v0.1 on:** every schema change adds 1 to `schema_version`, and brings a migration and a test that upgrades a crawl file from every published schema version.
 
