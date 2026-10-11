@@ -1,5 +1,6 @@
 """The transactional writer (015-add-crawl-store, 017-speed-up-crawl-writer, crawl-store)."""
 
+import asyncio
 import sqlite3
 import threading
 from collections.abc import Callable
@@ -787,3 +788,47 @@ def test_a_failed_replay_fails_the_futures_of_the_units_that_ran_again(
         writer.close()
 
     assert [type(error) for error in errors] == [ValueError, CrawlWriterReplayError]
+
+
+async def test_a_unit_submitted_from_an_event_loop_is_resolved_at_its_commit(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    called_on: list[int] = []
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        submitted = await writer.submit_async(positioned_insert(1))
+        submitted.add_done_callback(lambda _: called_on.append(threading.get_ident()))
+        writer.flush()
+        result = await submitted
+
+    assert (result, submitted.get_loop() is asyncio.get_running_loop(), called_on) == (
+        1,
+        True,
+        [threading.get_ident()],
+    )
+
+
+async def test_a_submit_from_an_event_loop_waits_for_room_without_blocking_it(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    hold = threading.Event()
+
+    def held(connection: Connection) -> int:
+        hold.wait()
+        return positioned_insert(1)(connection)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.submit(held)
+        for position in range(2, 2001):
+            writer.submit(positioned_insert(position))
+        waiting = asyncio.create_task(writer.submit_async(positioned_insert(2001)))
+        await asyncio.sleep(0)
+        # Reached only if the waiting submit left the loop free.
+        hold.set()
+        submitted = await waiting
+        writer.flush()
+        result = await submitted
+
+    assert result == 2001

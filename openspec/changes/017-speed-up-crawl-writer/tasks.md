@@ -62,7 +62,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when:
   - at most 2,000 submitted units are unresolved at once, and units waited for with `run()` do not count (design D3)
   - the test holds the writer on an `Event` inside the first unit, and checks an ordered log (released, committed, returned) with no fixed sleep
-- [ ] 2.7 Drive "A unit submitted from an event loop is resolved at its commit".
+- [x] 2.7 Drive "A unit submitted from an event loop is resolved at its commit".
 
   Done when: `await submit_async(unit)` waits for room in the window without blocking the loop, and returns an `asyncio.Future` bound to the caller's loop, whose callbacks run on that loop.
 - [ ] 2.8 Drive "Cancelling a submitted unit's Future does not withdraw it".

@@ -128,6 +128,17 @@ class CrawlWriter:
         self._submit(_Job(unit, done, submitted=True))
         return done
 
+    async def submit_async[T](self, unit: Callable[[Connection], T]) -> asyncio.Future[T]:
+        done: Future[T] = Future()
+        job = _Job(unit, done, submitted=True)
+        try:
+            self._submit(job, block=False)
+        except Full:
+            # Waits for room in the window or the queue without blocking the event loop.
+            await asyncio.to_thread(self._submit, job)
+        # Bound to this loop, so its callbacks run here and never on the writer thread.
+        return asyncio.wrap_future(done)
+
     def flush(self) -> None:
         done: Future[None] = Future()
         self._submit(_Job(_Control.FLUSH, done))
@@ -166,12 +177,19 @@ class CrawlWriter:
         self._refuse_own_thread()
         with self._room:
             while job.submitted and self._unresolved >= WINDOW and not self._closed:
+                if not block:
+                    raise Full
                 self._room.wait()
             if self._closed:
                 raise CrawlWriterClosedError(CLOSED) from self._failure
             if job.submitted:
                 self._unresolved += 1
-        self._queue.put(job, block=block)
+        try:
+            self._queue.put(job, block=block)
+        except Full:
+            if job.submitted:
+                self._free(1)
+            raise
         with self._lock:
             ended = self._ended
         # Queued after the writer drained its queue on the way out, so it would never complete.
