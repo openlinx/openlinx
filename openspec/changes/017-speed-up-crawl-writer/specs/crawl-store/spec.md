@@ -140,7 +140,7 @@ Submitted units follow the order, atomicity and commit rules of the transactiona
 
 ### Requirement: The writer's connection settings
 
-The writer's connection SHALL keep temporary tables and indexes in memory, and SHALL use a page cache of 64 MiB. In `wal` mode it SHALL also use memory-mapped I/O for up to 256 MiB of the crawl file; in `delete` mode it SHALL use none. No setting changes these values. The durability scenarios of the transactional writer SHALL hold with them, on Windows too.
+The writer's connection SHALL keep temporary tables and indexes in memory, and SHALL use a page cache of 64 MiB. In `wal` mode it SHALL also use memory-mapped I/O for up to 256 MiB of the crawl file; in `delete` mode it SHALL use none. No setting changes these values. Creating a crawl file and reading it SHALL keep SQLite's defaults. The durability scenarios of the transactional writer SHALL hold with them, on Windows too.
 
 #### Scenario: The writer's connection settings in WAL mode
 - **WHEN** a unit of the writer of a crawl file in `wal` mode reads `PRAGMA temp_store`, `PRAGMA cache_size` and `PRAGMA mmap_size`
@@ -149,3 +149,7 @@ The writer's connection SHALL keep temporary tables and indexes in memory, and S
 #### Scenario: The writer's connection settings in rollback-journal mode
 - **WHEN** a unit of the writer of a crawl file in `delete` mode reads `PRAGMA temp_store`, `PRAGMA cache_size` and `PRAGMA mmap_size`
 - **THEN** they are `2`, `-65536` and `0`
+
+#### Scenario: A reader keeps SQLite's defaults
+- **WHEN** a reader of a crawl file reads `PRAGMA temp_store`, `PRAGMA cache_size` and `PRAGMA mmap_size`
+- **THEN** they are the values that a plain SQLite connection to the same file reads

@@ -117,10 +117,11 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - `docs/crawl-store.md` states the contract, and every code review of a change that adds units checks it. A test cannot prove it for every unit, so the replay checks what it can (D6), and `replay_now(writer)` in `tests/support` lets a change's own tests replay its units. `020` D14 helps: its units write frozen records that handlers built before the unit.
 
 ### D8. The writer's connection settings
-- **What changes:** `opening()` gets a keyword that only `CrawlWriter` passes. With it, the engine gets one more connect listener, after the journal-mode check: `temp_store = MEMORY`, `cache_size = -65536` (64 MiB), and `mmap_size`.
+- **What changes:** `opening()` takes one required keyword, `role`, of type `ConnectionRole = Literal["create", "read", "write"]`, in place of its `read_only` flag (task 3.7). Only `CrawlWriter` passes `"write"`. With it, the engine gets one more connect listener, after the journal-mode check: `temp_store = MEMORY`, `cache_size = -65536` (64 MiB), and `mmap_size`.
   - `mmap_size` is `268435456` (256 MiB) when the journal mode is `wal`.
   - It is set explicitly to `0` in `delete` mode, because `SQLITE_DEFAULT_MMAP_SIZE` is a build-time option and may not be 0 in every build.
   - Creating the file and reading it keep SQLite's defaults.
+- **Why a role, not flags:** a `read_only` and a `writer` flag would allow a read-only writer, a pair that means nothing, and every new caller of `opening()` from `020` on would copy the pair. One required role makes that pair unrepresentable and names the role at each call. It is a `Literal` alias, like the store's `JournalMode` and `CrawlMode`, rather than an `Enum`: callers pass a plain string that mypy checks, with no import, and nothing iterates the roles.
 - **The evidence:** at 2k Pages in the store benchmark, the whole run took 41.7 s as built, 34.3 s with `temp_store`, and 27.8 s with the cache and `mmap_size` too (−33%). Kernel time fell from 18.6 to 7.2 s.
 - **Why no memory mapping in `delete` mode:** that mode is chosen for UNC paths (`015` D3), and a memory-mapped file on a network share is only as coherent as the share's client cache. The gain does not justify that risk on the path we already treat as fragile.
 - **No setting:** the values are safe on every supported OS, and a setting would add a contract to keep. The cache is a ceiling, not an allocation.
