@@ -24,7 +24,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.3 Drive "Every table is strict", at seam 6.
 
   Done when: the helper declares every public table with `sqlite_strict=True`, and a real number is declared with `sqlalchemy.REAL`, never `Float` or `Double` (design D3).
-- [ ] 1.4 Drive "A value of another type is refused".
+- [x] 1.4 Drive "A value of another type is refused".
 - [ ] 1.5 **Guard:** `015`'s convention scenarios over the stricter tables: "Names are snake_case", "Descriptions are present", "Booleans are integers", "Enumeration values are snake_case" and "Timestamp text".
 - [ ] 1.6 **Guard:** `015`'s "Crawl metadata" scenarios, unchanged by the revised rule on counts: "Metadata of a new Crawl", "Seeds keep their order", "Version stamp", "Environment stamp", "Completion time" and "A stopped Crawl has no completion time". Also `015`'s "Unmeasured values are NULL" scenarios: "A running Crawl has no completion time" and "No settings file".
 - [ ] 1.7 **Fix, with no scenario:** the line-endings check skips tracked paths that are missing from the working tree.
