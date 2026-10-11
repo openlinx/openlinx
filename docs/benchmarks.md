@@ -10,6 +10,8 @@ Measured capacity, and the machine each number was measured on. Benchmarks run b
   - It prepares every Page before the clock starts: 466 Link rows to 367 targets per Page, from a template's navigation, header and footer plus the Page's own Links.
   - It submits one unit per Page through `CrawlWriter.submit()`. Each unit upserts the discovered URLs, reads back their ids, updates the Page's URL row and inserts its Link rows, all through prebuilt statements.
   - A reader process queries the file during the run, and 1 unit in 997 fails half-way.
+  - So that 20,000 Pages fit in memory, a Page is prepared as indexes into shared URLs and templates. Its unit builds its rows on the writer thread, so the floor includes that cost.
+- **Running it:** `uv run python scripts/writer_throughput.py` on a quiet machine. It prints one JSON document and exits non-zero below its floor. `--pages` sets a smaller run.
 - **Its floor:** at least 12 Pages/s at 20,000 Pages, a WAL peak of at most 300 MB and an RSS of at most 400 MB, and the atomicity check passes: no row from a failed unit, every other Page stored.
 - **Its links layout is provisional.** Its `urls` and `links` tables follow the prototype's draft tables and exist only in its scratch crawl file. The first run against the floor, at 20,000 Pages, waits for `030`'s re-grounding on the schema blueprint's links layout, which restates the floor.
 

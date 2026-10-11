@@ -1,12 +1,4 @@
-"""The writer's throughput check (design D11 of 017-speed-up-crawl-writer).
-
-It measures the writer's capacity, not a Crawl's: every Page is prepared before the clock starts,
-and one unit per Page is submitted through `CrawlWriter.submit()`, while a reader process queries
-the file. It prints one JSON document and exits non-zero below its floor. Run it by hand on a
-quiet machine, never in CI or `scripts/check.py`:
-
-    uv run python scripts/writer_throughput.py
-"""
+"""The writer's throughput check, run by hand (017-speed-up-crawl-writer D11)."""
 
 import argparse
 import contextlib
@@ -26,7 +18,7 @@ from datetime import UTC, datetime
 from functools import partial
 from multiprocessing.synchronize import Event
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import psutil
 from sqlalchemy import (
@@ -49,6 +41,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from spider.clock import SystemClock
+from spider.output.codes import CRAWL_BUSY
 from spider.output.diagnostics import SpiderError
 from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
@@ -71,7 +64,8 @@ TEMPLATE_REPEATS = 80
 INTERNAL_TARGETS = 104
 EXTERNAL_TARGETS = 13
 OWN_REPEATS = 19
-# Coprime with PAGES, so a Page's internal targets are distinct.
+# Prime: a Page's internal targets are distinct when the Page count is above INTERNAL_TARGETS
+# and not a multiple of it.
 INTERNAL_STRIDE = 191
 LINK_ROWS_PER_PAGE = (
     TEMPLATE_TARGETS + TEMPLATE_REPEATS + INTERNAL_TARGETS + EXTERNAL_TARGETS + OWN_REPEATS
@@ -79,8 +73,9 @@ LINK_ROWS_PER_PAGE = (
 ANCHORS = tuple(f"Read about topic {n}" for n in range(50))
 
 MIN_PAGES_PER_S = 12.0
-MAX_WAL_BYTES = 300 * 2**20
-MAX_RSS_BYTES = 400 * 2**20
+MIB = 2**20
+MAX_WAL_MIB = 300
+MAX_RSS_MIB = 400
 SAMPLE_SECONDS = 0.2
 READ_PAUSE_SECONDS = 1.0
 
@@ -150,9 +145,15 @@ READS = (
     "SELECT ordinal, target_url_id, type FROM links WHERE source_url_id = :source ORDER BY ordinal",
 )
 
-# A Link: its target's index in Site.urls, type, element, attribute, anchor text, and whether it
-# sits in the content area.
-type Link = tuple[int, str, str, str, str | None, bool]
+
+class Link(NamedTuple):
+    # Its index in Site.urls.
+    target: int
+    type: str
+    element: str
+    attribute: str
+    anchor_text: str | None
+    in_content_area: bool
 
 
 @dataclass(frozen=True)
@@ -172,8 +173,10 @@ class Page:
     poisoned: bool
 
 
-def build_site(pages: int) -> Site:
-    page_urls = [f"{HOST}/{('news', 'shop', 'docs', 'blog')[n % 4]}/page-{n}" for n in range(pages)]
+def build_site(page_count: int) -> Site:
+    page_urls = [
+        f"{HOST}/{('news', 'shop', 'docs', 'blog')[n % 4]}/page-{n}" for n in range(page_count)
+    ]
     template_urls = [
         f"{HOST}/t{t}/nav-{j}" for t in range(TEMPLATES) for j in range(TEMPLATE_TARGETS)
     ]
@@ -184,14 +187,14 @@ def build_site(pages: int) -> Site:
     for t in range(TEMPLATES):
         links: list[Link] = []
         for j in range(TEMPLATE_TARGETS):
-            target = pages + t * TEMPLATE_TARGETS + j
+            target = page_count + t * TEMPLATE_TARGETS + j
             if j < 10:
-                link: Link = (target, "css", "link", "href", None, False)
+                link = Link(target, "css", "link", "href", None, False)
             elif j < 30:
-                link = (target, "image", "img", "src", None, False)
+                link = Link(target, "image", "img", "src", None, False)
             else:
-                link = (target, "hyperlink", "a", "href", f"Section {j}", False)
-            via[target] = link[1]
+                link = Link(target, "hyperlink", "a", "href", f"Section {j}", False)
+            via[target] = link.type
             links.append(link)
         # The footer repeats part of the navigation.
         links += links[30 : 30 + TEMPLATE_REPEATS]
@@ -224,11 +227,11 @@ def build_site(pages: int) -> Site:
     return Site(urls, discovered, templates, fetched)
 
 
-def prepare_pages(pages: int) -> list[Page]:
-    externals_start = pages + TEMPLATES * TEMPLATE_TARGETS
+def prepare_pages(page_count: int) -> list[Page]:
+    externals_start = page_count + TEMPLATES * TEMPLATE_TARGETS
     prepared = []
-    for n in range(pages):
-        internal = [(n + 1 + k * INTERNAL_STRIDE) % pages for k in range(INTERNAL_TARGETS)]
+    for n in range(page_count):
+        internal = [(n + 1 + k * INTERNAL_STRIDE) % page_count for k in range(INTERNAL_TARGETS)]
         external = [externals_start + (n * 13 + k) % EXTERNALS for k in range(EXTERNAL_TARGETS)]
         targets = array("l", internal + external + internal[:OWN_REPEATS])
         prepared.append(Page(n + 1, n % TEMPLATES, targets, (n + 1) % POISON_EVERY == 0))
@@ -237,10 +240,10 @@ def prepare_pages(pages: int) -> list[Page]:
 
 def write_page(site: Site, page: Page, connection: Connection) -> None:
     links = site.templates[page.template] + [
-        (target, "hyperlink", "a", "href", ANCHORS[(page.url_id + n) % len(ANCHORS)], True)
+        Link(target, "hyperlink", "a", "href", ANCHORS[(page.url_id + n) % len(ANCHORS)], True)
         for n, target in enumerate(page.targets)
     ]
-    targets = list(dict.fromkeys(link[0] for link in links))
+    targets = list(dict.fromkeys(link.target for link in links))
     connection.execute(
         UPSERT_URLS,
         [{**site.discovered[target], "found_on_url_id": page.url_id} for target in targets],
@@ -278,30 +281,32 @@ def write_page(site: Site, page: Page, connection: Connection) -> None:
         connection.execute(INSERT_LINKS, rows[:1])
 
 
-def seed_pages(site: Site, pages: int, connection: Connection) -> None:
+def seed_pages(site: Site, page_count: int, connection: Connection) -> None:
     METADATA.create_all(connection)
     connection.execute(
         insert(URLS),
         [
             {**site.discovered[n], "id": n + 1, "crawl_depth": 1, "found_on_url_id": None}
-            for n in range(pages)
+            for n in range(page_count)
         ],
     )
 
 
-def read_while_written(path: Path, pages: int, stop: Event, result: Path) -> None:
+def read_while_written(path: Path, page_count: int, stop: Event, result: Path) -> None:
     reads = busy = rounds = 0
     while not stop.is_set():
         params = {
-            "target": pages + 1 + rounds % TEMPLATE_TARGETS,
-            "source": 1 + rounds * 7_919 % pages,
+            "target": page_count + 1 + rounds % TEMPLATE_TARGETS,
+            "source": 1 + rounds * 7_919 % page_count,
         }
         for sql in READS:
             try:
                 with reading(path) as connection:
                     connection.execute(text(sql), params).all()
                 reads += 1
-            except SpiderError:
+            except SpiderError as error:
+                if error.code != CRAWL_BUSY.code:
+                    raise
                 busy += 1
         rounds += 1
         stop.wait(READ_PAUSE_SECONDS)
@@ -434,6 +439,9 @@ def measure(folder: Path, page_count: int) -> dict[str, Any]:
         stop.set()
         reader.join()
     atomicity = check_atomicity(crawl.path, pages, failed)
+    reader_counts = (
+        json.loads(reader_result.read_text(encoding="utf-8")) if reader_result.exists() else {}
+    )
     return {
         "machine": machine(),
         "pages": page_count,
@@ -442,32 +450,31 @@ def measure(folder: Path, page_count: int) -> dict[str, Any]:
         "pages_per_s": round(page_count / elapsed, 1),
         "pages_per_s_per_5k_window": window_rates(started, resolved_at),
         "link_rows_per_s": round(atomicity["link_rows"] / elapsed),
-        "wal_peak_mb": round(peaks.wal_bytes / 2**20, 1),
-        "rss_peak_mb": round(peaks.rss_bytes / 2**20, 1),
-        "reader": {
-            # A reader that crashed leaves no counts, only its exit code.
-            **(
-                json.loads(reader_result.read_text(encoding="utf-8"))
-                if reader_result.exists()
-                else {}
-            ),
-            "exit_code": reader.exitcode,
-        },
+        "wal_peak_mb": round(peaks.wal_bytes / MIB, 1),
+        "rss_peak_mb": round(peaks.rss_bytes / MIB, 1),
+        "reader": {**reader_counts, "exit_code": reader.exitcode},
         "atomicity": atomicity,
+        "below_floor": below_floor(
+            page_count / elapsed,
+            peaks,
+            # A reader that crashed leaves no counts, only its exit code.
+            reader.exitcode == 0 and reader_counts.get("reads", 0) > 0,
+            atomicity["ok"],
+        ),
     }
 
 
-def below_floor(report: dict[str, Any]) -> list[str]:
+def below_floor(pages_per_s: float, peaks: Peaks, reader_read: bool, atomic: bool) -> list[str]:
     failures = []
-    if report["pages_per_s"] < MIN_PAGES_PER_S:
+    if pages_per_s < MIN_PAGES_PER_S:
         failures.append(f"below {MIN_PAGES_PER_S} Pages/s")
-    if report["wal_peak_mb"] * 2**20 > MAX_WAL_BYTES:
-        failures.append(f"WAL peak above {MAX_WAL_BYTES // 2**20} MB")
-    if report["rss_peak_mb"] * 2**20 > MAX_RSS_BYTES:
-        failures.append(f"RSS peak above {MAX_RSS_BYTES // 2**20} MB")
-    if report["reader"]["exit_code"] != 0:
-        failures.append("the reader process failed, so the run had no reader")
-    if not report["atomicity"]["ok"]:
+    if peaks.wal_bytes > MAX_WAL_MIB * MIB:
+        failures.append(f"WAL peak above {MAX_WAL_MIB} MB")
+    if peaks.rss_bytes > MAX_RSS_MIB * MIB:
+        failures.append(f"RSS peak above {MAX_RSS_MIB} MB")
+    if not reader_read:
+        failures.append("the reader process failed or made no read, so the run had no reader")
+    if not atomic:
         failures.append("atomicity check failed")
     return failures
 
@@ -478,9 +485,12 @@ def main() -> None:
         "--pages", type=int, default=PAGES, help="fewer Pages for a smoke run of the script"
     )
     page_count = parser.parse_args().pages
+    if page_count <= INTERNAL_TARGETS or page_count % INTERNAL_STRIDE == 0:
+        parser.error(
+            f"--pages must be above {INTERNAL_TARGETS} and not a multiple of {INTERNAL_STRIDE}"
+        )
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
         report = measure(Path(folder), page_count)
-    report["below_floor"] = below_floor(report)
     print(json.dumps(report, indent=2))
     sys.exit(1 if report["below_floor"] else 0)
 
