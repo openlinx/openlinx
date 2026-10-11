@@ -334,17 +334,19 @@ def test_a_unit_after_close_fails_at_once(temp_workspace: TempWorkspace) -> None
         writer.run(count_seeds)
 
 
-def test_an_interrupted_unit_rolls_back_and_the_writer_goes_on(
+def test_an_interrupted_unit_runs_once_and_the_writer_goes_on(
     temp_workspace: TempWorkspace,
 ) -> None:
     crawl = crawl_without_seeds(temp_workspace)
+    runs: list[int] = []
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(insert_seed(1, "https://example.com/a"))
         with pytest.raises(KeyboardInterrupt):
-            writer.run(raising_insert(2, KeyboardInterrupt()))
+            writer.run(counted_raising_insert(2, KeyboardInterrupt(), runs))
         writer.run(insert_seed(3, "https://example.com/c"))
 
-    assert [position for position, _ in query(crawl.path, SEEDS)] == [3]
+    assert ([position for position, _ in query(crawl.path, SEEDS)], runs) == ([1, 3], [2])
 
 
 def test_closing_truncates_the_wal_while_a_reader_stays_open(temp_workspace: TempWorkspace) -> None:
