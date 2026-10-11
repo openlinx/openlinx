@@ -136,7 +136,7 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
   | `flush()` | at once, before `flush()` returns |
   | `close()` | everything still open |
 
-- **The replay commit.** Units run without a savepoint each, which makes a batch faster. When a unit fails, the writer rolls back the whole open transaction, runs the units before it again, in order and each in its own savepoint, and commits them at once. Only then does the failing unit's caller get its error.
+- **The replay commit.** Units run without a savepoint each, which makes a batch faster. When a unit fails, the writer rolls back the whole open transaction, runs the units before it again, in order and each in its own savepoint, and commits them at once. Only then does the failing unit's caller get its error. If that commit fails, the caller still gets the unit's own error, and the writer ends as after any failed commit.
 - **Units may run again.** Because of the replay, a unit may run a second time before it is committed. A unit therefore:
   - has no effect outside the writer's connection: no I/O, no shared state, and nothing reported from inside the unit
   - does not change its input

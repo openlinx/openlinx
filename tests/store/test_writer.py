@@ -97,7 +97,7 @@ def test_a_failing_unit_commits_the_units_before_it(temp_workspace: TempWorkspac
             writer.run(raising_insert(4, ValueError("bad")))
         seen = query(crawl.path, SEEDS)
 
-    assert ([position for position, _ in seen], committed[:1]) == ([1, 2, 3], [3])
+    assert ([position for position, _ in seen], committed) == ([1, 2, 3], [3])
 
 
 def test_a_unit_that_fails_in_the_replay_is_left_out_of_its_commit(
@@ -109,7 +109,7 @@ def test_a_unit_that_fails_in_the_replay_is_left_out_of_its_commit(
 
     def fails_when_run_again(connection: Connection) -> None:
         # Breaks the contract that a unit writes the same on every run.
-        runs.append(len(runs))
+        runs.append(2)
         if len(runs) > 1:
             raise ValueError("again")
         insert_seed(2, "https://example.com/2")(connection)
@@ -122,7 +122,29 @@ def test_a_unit_that_fails_in_the_replay_is_left_out_of_its_commit(
             writer.run(raising_insert(4, ValueError("bad")))
         seen = query(crawl.path, SEEDS)
 
-    assert ([position for position, _ in seen], committed[:1], len(runs)) == ([1, 3], [2], 2)
+    assert ([position for position, _ in seen], committed, runs) == ([1, 3], [2], [2, 2])
+
+
+def test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    with closing(connect(crawl.path)) as connection:
+        # Checked only at the commit, so the replay commit itself fails.
+        connection.executescript(
+            "CREATE TABLE parents (id INTEGER PRIMARY KEY);"
+            "CREATE TABLE children (parent INTEGER REFERENCES parents (id)"
+            " DEFERRABLE INITIALLY DEFERRED);"
+        )
+    writer = CrawlWriter(crawl.path, FakeClock())
+    writer.run(lambda connection: connection.exec_driver_sql("INSERT INTO children VALUES (9)"))
+
+    with pytest.raises(ValueError, match=r"^bad$"):
+        writer.run(raising_insert(1, ValueError("bad")))
+    with pytest.raises(CrawlWriterClosedError, match=r"^The crawl writer is closed\.$"):
+        writer.close()
+
+    assert query(crawl.path, "SELECT count(*) FROM children") == [(0,)]
 
 
 def test_a_unit_that_fails_half_way_after_other_units_leaves_no_change(
