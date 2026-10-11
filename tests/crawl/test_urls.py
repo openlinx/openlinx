@@ -147,3 +147,10 @@ def test_a_bare_host_becomes_an_https_seed() -> None:
 @given(st.text(_ANY_CHARACTER))
 def test_the_seed_parser_accepts_any_text(text: str) -> None:
     assert isinstance(parse_seed(text), (str, InvalidUrl))
+
+
+@pytest.mark.parametrize(
+    "text", ["https://user:pass@site.test/", "https://user@site.test/", "http://@site.test/"]
+)
+def test_a_url_with_userinfo_is_rejected(text: str) -> None:
+    assert normalize_url(text) == InvalidUrl("userinfo")

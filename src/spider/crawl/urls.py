@@ -55,6 +55,8 @@ def normalize_url(text: str, strip: re.Pattern[str] | None = None) -> Normalized
         return InvalidUrl("malformed")
     if parts.scheme not in _DEFAULT_PORTS:
         return InvalidUrl("unsupported_scheme")
+    if "@" in parts.netloc:
+        return InvalidUrl("userinfo")
     if not parts.hostname:
         return InvalidUrl("missing_host")
     host = _ascii_host(_raw_host(parts.netloc))
@@ -69,8 +71,7 @@ def parse_seed(text: str) -> NormalizedUrl | InvalidUrl:
 
 
 def _raw_host(netloc: str) -> str:
-    hostinfo = netloc.rpartition("@")[2]
-    before, bracket, bracketed = hostinfo.partition("[")
+    before, bracket, bracketed = netloc.partition("[")
     if bracket:
         return bracketed.partition("]")[0]
     return before.partition(":")[0]
