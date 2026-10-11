@@ -88,7 +88,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - if a run fails with a new SQLite error at open or a lost commit, the work stops and is reported. The fallback (`mmap_size = 0` on Windows only) is decided with the maintainer.
 - [x] 3.5 Docs: in `docs/crawl-store.md`, document the writer's connection settings, and why `delete` mode maps no memory.
 - [x] 3.6 Review: run the code-review skill on group 3's commits against "The writer's connection settings" and the durability scenarios, then refactor with the whole suite green.
-- [ ] 3.7 Refactor: replace `opening()`'s role flags with one required keyword, `role: ConnectionRole`, where `ConnectionRole = Literal["create", "read", "write"]` (design D8). Done when: each of its three callers passes its role, no default hides it, behaviour is unchanged with the whole suite green, and the Risks entry on the two flags is removed.
+- [x] 3.7 Refactor: replace `opening()`'s role flags with one required keyword, `role: ConnectionRole`, where `ConnectionRole = Literal["create", "read", "write"]` (design D8). Done when: each of its three callers passes its role, no default hides it, behaviour is unchanged with the whole suite green, and the Risks entry on the two flags is removed.
 
 ## 4. Prebuilt statements and the throughput check
 

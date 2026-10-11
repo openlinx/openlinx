@@ -178,7 +178,6 @@ Boundary doubles used: `FakeClock` only.
 - [`submit_async` gives its window slot back when the 50,000-job queue is full, and no test covers it] → A test would need the queue full while the window has room. Deferred.
 - [Callers that wait still poll every 0.5 s that the writer thread is alive, though the check after each `put` now fails a job queued after the final drain] → Considered and kept (ruling of 2026-10-11): dropping the polling would make that untested check load-bearing for `run()`, `flush()` and `run_async()`, to save a wakeup that costs nothing. Revisited only if that race becomes testable through a seam.
 - [The test of a new writer after a kill opens the file once the killed process has exited, so no test opens it while the process is still exiting] → The 200-run proof under parallel load (task 3.4) stands in for that window, and opening waits out a `-shm` file that a killed writer still holds. Deferred.
-- [`opening()` takes two flags for a connection's role, `read_only` and `writer`, which allow a pair that means nothing] → Kept, since D8 asks for a keyword that only `CrawlWriter` passes. A role type would replace both flags if a third role appears. Deferred.
 
 ## Migration Plan
 

@@ -5,7 +5,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path, PurePath
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 from sqlalchemy import Connection, Engine, create_engine, event
@@ -22,6 +22,8 @@ SHM_RELEASE_CHECK_SECONDS = 0.05
 
 WRITER_CACHE_KIB = 65_536
 WRITER_MMAP_BYTES = 268_435_456
+
+type ConnectionRole = Literal["create", "read", "write"]
 
 # SQLite's primary result codes for a file or folder that cannot be written.
 NOT_WRITABLE = {
@@ -106,8 +108,9 @@ def _shm_held(error: sqlite3.Error) -> bool:
 
 @contextmanager
 def opening(
-    path: Path, *, read_only: bool = False, busy_seconds: float | None = None, writer: bool = False
+    path: Path, *, role: ConnectionRole, busy_seconds: float | None = None
 ) -> Iterator[Engine]:
+    read_only = role == "read"
     engine = create_engine(
         "sqlite://",
         creator=lambda: connect(path, read_only=read_only, busy_seconds=busy_seconds),
@@ -118,7 +121,7 @@ def opening(
         event.listen(engine, "connect", _synchronous_for_the_journal)
         event.listen(engine, "begin", _begin_immediate)
     # Only the writer's: creating the file and reading it keep SQLite's defaults (design D8).
-    if writer:
+    if role == "write":
         event.listen(engine, "connect", _writer_settings)
     # Disposed at once, so no handle outlives the operation: Windows could not delete the file.
     try:
