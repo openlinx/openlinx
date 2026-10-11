@@ -200,3 +200,7 @@ def test_normalising_with_any_strip_params_gives_a_url_or_a_rejection(
     result = normalize_url(f"http://site.test/p?{text}", strip_params_pattern(values))
 
     assert isinstance(result, (str, InvalidUrl))
+
+
+def test_a_stray_percent_is_encoded_before_escapes_are_decoded() -> None:
+    assert normalize_url("http://site.test/%2%41") == "http://site.test/%252A"

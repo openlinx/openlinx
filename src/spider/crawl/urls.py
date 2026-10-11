@@ -14,10 +14,12 @@ type InvalidUrlReason = Literal[
 ]
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
-_PERCENT_ENCODED = re.compile("%([0-9A-Fa-f]{2})")
+# A stray % is matched with no group, so it is encoded before any escape is decoded.
+_PERCENT = re.compile("%([0-9A-Fa-f]{2})?")
 _UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
 # "[" and "]" belong to an IPv6 host only, so the path and the query encode them.
-_NOT_ALLOWED = re.compile(r"[^A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]|%(?![0-9A-Fa-f]{2})")
+_NOT_ALLOWED = re.compile(r"[^A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]+")
+_BYTE_ESCAPES = tuple(f"%{byte:02X}" for byte in range(256))
 _HOST = re.compile(r"[a-z0-9\-._~]+")
 # "localhost:8080" is a host and a port; "mailto:a@b.test" names the scheme mailto.
 _SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:(?![0-9]+(?:[/?#]|$))")
@@ -143,15 +145,18 @@ def _name(param: str) -> str:
 
 
 def _percent_normalized(text: str) -> str:
-    encoded = _NOT_ALLOWED.sub(_escape, text)
-    return _PERCENT_ENCODED.sub(_normalized_escape, encoded)
+    if "%" in text:
+        text = _PERCENT.sub(_normalized_escape, text)
+    return _NOT_ALLOWED.sub(_escape, text)
 
 
 def _escape(match: re.Match[str]) -> str:
-    return "".join(f"%{byte:02X}" for byte in match[0].encode())
+    return "".join(map(_BYTE_ESCAPES.__getitem__, match[0].encode()))
 
 
 def _normalized_escape(match: re.Match[str]) -> str:
+    if match[1] is None:
+        return "%25"
     character = chr(int(match[1], 16))
     return character if character in _UNRESERVED else f"%{match[1].upper()}"
 
