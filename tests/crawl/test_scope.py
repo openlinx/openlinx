@@ -24,6 +24,12 @@ def test_the_www_host_of_an_apex_seed_is_internal() -> None:
     assert rules.decide(NormalizedUrl("https://www.site.test/x")).is_internal is True
 
 
+def test_the_apex_of_a_www_seed_is_external() -> None:
+    rules = scope_rules(NormalizedUrl("http://www.site.test/"))
+
+    assert rules.decide(NormalizedUrl("http://site.test/x")).is_internal is False
+
+
 def _valid(url: NormalizedUrl | InvalidUrl) -> NormalizedUrl:
     if isinstance(url, InvalidUrl):
         raise TypeError(f"not a valid URL: {url.reason}")
