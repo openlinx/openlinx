@@ -543,9 +543,9 @@ Every run of a Crawl SHALL add one row to the table `crawl_runs`: the first `spi
 | `discovered_count`, `fetched_count`, `error_count`, `skipped_count`, `queued_count` | INTEGER | no | | The Crawl's URLs by `fetch_state`, all runs included, as the run's progress counters held them at the start of the run and then at its last heartbeat |
 | `status_2xx_count`, `status_3xx_count`, `status_4xx_count`, `status_5xx_count`, `status_other_count` | INTEGER | no | | The Crawl's responses by status class, counted the same way |
 | `urls_per_second` | REAL | yes | | URLs requested per second over the last 60 seconds at the last heartbeat; NULL before the first heartbeat |
-| `end_state` | TEXT | yes | `completed`, `stopped`, `failed`, `interrupted` | The Crawl State the run ended in; NULL while it runs |
+| `end_state` | TEXT | yes | `completed`, `stopped`, `failed`, `interrupted` | The Crawl State the run ended in; NULL while it runs. An explicit exception to ADR-0005 rule 7: it lists the Crawl States without `running`, because a run never ends as `running` |
 | `stop_reason` | TEXT | yes | `max_urls`, `interrupt`, `requested`, `seed_unreachable`, `site_unreachable`, `write_failed` | Why a stopped or failed run ended: the value set of `crawl.stop_reason` (`020-add-crawl-core`) |
-| `error` | TEXT | yes | json | The error diagnostic of a failed run, in the full shape of `010-add-workspace-and-cli-contract` |
+| `error` | TEXT | yes | json | The error diagnostic of a failed run, in the full shape of `010-add-workspace-and-cli-contract`. An explicit exception to ADR-0005 rule 10: it is a recorded diagnostic, like `crawl.warnings`, not an error code with a message |
 
 The counters are control data of the run, not counts of the Crawl's data: `status` reads them while the Crawl runs, and every other count comes from the Crawl's tables.
 

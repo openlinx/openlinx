@@ -75,7 +75,7 @@ Seams (docs/testing.md):
 - [ ] 4.11 [HTTP] Drive "Credentials given again are used".
 - [ ] 4.12 [HTTP] Drive "Credentials from spider.toml are read again".
 - [ ] 4.13 [3+6] Drive "A politeness override is recorded".
-- [ ] 4.14 [HTTP] Drive "Proxy variables are read again on resume", with `022`'s local test proxy.
+- [ ] 4.14 [HTTP] Drive "Proxy variables are read again on resume", with `022`'s local test proxy. This slice lands after `022`-min, which honours the proxy variables; the rest of 060-min does not depend on `022`.
 - [ ] 4.15 [3+6] Drive "Each run is recorded": the `ended_at` and `stop_reason` columns of `crawl_runs`.
 - [ ] 4.16 [CLI] Drive "Runs share the stop reasons of the Crawl": `stop_reason` from `020`'s `StopReason`.
 - [ ] 4.17 [Subprocess] Drive "Two resumes at the same time": claim acquisition with a 2-second retry.
@@ -88,25 +88,26 @@ Seams (docs/testing.md):
 
 - [ ] 5.1 [Services] Drive "A reserved id is drawn again" (`crawl-store`): the id draw counts `<id>.lock` and `<id>.log` as taken.
 - [ ] 5.2 [Services] Drive "A chosen id is created once" (`crawl-store`): `create_crawl` with a chosen id, and `crawl_id_taken`.
-- [ ] 5.3 [Subprocess] Drive "Detach returns while the Crawl runs": spawn the hidden `--_run-detached` entry point, have the child create the Crawl with the id the parent chose, and wait for its run row.
-- [ ] 5.4 [Subprocess] Drive "The background Crawl runs to its end".
-- [ ] 5.5 [Subprocess] Drive "The log file holds the progress events": reserve the id by creating `<id>.log` exclusively, and send the child's stdout and stderr to it.
-- [ ] 5.6 [3+6] Drive "A detached run is marked".
-- [ ] 5.7 [Subprocess] Drive "A secret is not on the background command line": secrets handed over in one environment variable, which the child removes after reading.
-- [ ] 5.8 [Subprocess, Windows in CI] Drive "Detach prints absolute Windows paths (Windows)".
-- [ ] 5.9 [CLI + Spawn double] Drive "A background process that dies at start is reported": `detach_failed`.
-- [ ] 5.10 [CLI + Spawn double + Fake clock] Drive "A slow start is reported, not hidden": `detach_unconfirmed`.
-- [ ] 5.11 [Subprocess] Drive "A detached Crawl reads its list from standard input": the parent reads the list and writes the Seed hand-over file.
-- [ ] 5.12 [CLI] Drive "A bad list fails before anything starts".
-- [ ] 5.13 [Subprocess, Windows in CI] Drive "Closing the console does not end the Crawl (Windows)": `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP`.
-- [ ] 5.14 [Subprocess, Windows in CI] Drive "No console window appears (Windows)".
-- [ ] 5.15 [Subprocess, Windows in CI] Drive "A job that would end the Crawl is reported (Windows)": `CREATE_BREAKAWAY_FROM_JOB` with its fallback, and the job-object query.
-- [ ] 5.16 [Subprocess, POSIX in CI] Drive "Hanging up the terminal does not end the Crawl (macOS and Linux)": `start_new_session`, stdin from `/dev/null`.
-- [ ] 5.17 [Subprocess] Drive "Resume can run in the background": `resume --detach`.
-- [ ] 5.18 [Subprocess] Drive "A resumed Crawl is running again".
-- [ ] 5.19 [Subprocess] Drive "A Crawl that reaches its end is completed".
-- [ ] 5.20 Docs: document background Crawls, log files, detached List mode, agent sandboxes and Windows job objects, and the Hand-off flow, in `docs/crawl-control.md`.
-- [ ] 5.21 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [ ] 5.3 [Services] Guard "Id from the start time", "A taken id is drawn again" and "Character set" (`crawl-store`, unchanged from `015`): `015`'s tests for them still pass after the id draw counts `<id>.lock` and `<id>.log`. No new test; run them and name them in the commit.
+- [ ] 5.4 [Subprocess] Drive "Detach returns while the Crawl runs": spawn the hidden `--_run-detached` entry point, have the child create the Crawl with the id the parent chose, and wait for its run row.
+- [ ] 5.5 [Subprocess] Drive "The background Crawl runs to its end".
+- [ ] 5.6 [Subprocess] Drive "The log file holds the progress events": reserve the id by creating `<id>.log` exclusively, and send the child's stdout and stderr to it.
+- [ ] 5.7 [3+6] Drive "A detached run is marked".
+- [ ] 5.8 [Subprocess] Drive "A secret is not on the background command line": secrets handed over in one environment variable, which the child removes after reading.
+- [ ] 5.9 [Subprocess, Windows in CI] Drive "Detach prints absolute Windows paths (Windows)".
+- [ ] 5.10 [CLI + Spawn double] Drive "A background process that dies at start is reported": `detach_failed`.
+- [ ] 5.11 [CLI + Spawn double + Fake clock] Drive "A slow start is reported, not hidden": `detach_unconfirmed`.
+- [ ] 5.12 [Subprocess] Drive "A detached Crawl reads its list from standard input": the parent reads the list and writes the Seed hand-over file.
+- [ ] 5.13 [CLI] Drive "A bad list fails before anything starts".
+- [ ] 5.14 [Subprocess, Windows in CI] Drive "Closing the console does not end the Crawl (Windows)": `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP`.
+- [ ] 5.15 [Subprocess, Windows in CI] Drive "No console window appears (Windows)".
+- [ ] 5.16 [Subprocess, Windows in CI] Drive "A job that would end the Crawl is reported (Windows)": `CREATE_BREAKAWAY_FROM_JOB` with its fallback, and the job-object query.
+- [ ] 5.17 [Subprocess, POSIX in CI] Drive "Hanging up the terminal does not end the Crawl (macOS and Linux)": `start_new_session`, stdin from `/dev/null`.
+- [ ] 5.18 [Subprocess] Drive "Resume can run in the background": `resume --detach`.
+- [ ] 5.19 [Subprocess] Drive "A resumed Crawl is running again".
+- [ ] 5.20 [Subprocess] Drive "A Crawl that reaches its end is completed".
+- [ ] 5.21 Docs: document background Crawls, log files, detached List mode, agent sandboxes and Windows job objects, and the Hand-off flow, in `docs/crawl-control.md`.
+- [ ] 5.22 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Dry run, estimate and equivalent command
 

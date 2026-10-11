@@ -144,6 +144,9 @@ Both tables go through `018`'s declaration helper, so they are `STRICT`, with CH
 - **`crawl_runs.id`** (was `run`): the run number is the entity's own key (ADR-0005 rule 2). The Commands' output keeps the field name `run`.
 - **`control_requests.handled_by_run_id`** (was `handled_by_run`): a declared reference to `crawl_runs.id` (rule 3).
 - **`crawl_runs.stop_reason`** takes its values from `020`'s `StopReason`, the one value set it shares with `crawl.stop_reason` (rule 7), including the `failed` reasons.
+- **Two explicit exceptions,** named in their column descriptions:
+  - `crawl_runs.end_state` lists the Crawl States without `running` (rule 7: one value set per enumeration), because a run never ends as `running`.
+  - `crawl_runs.error` is a JSON diagnostic in `010`'s full shape (rule 10: a code column plus `_message`), because it records the diagnostic the run ended with, as `crawl.warnings` records warnings, and `status` prints it whole.
 - **The counters** end in `_count` (rule 5) and are NOT NULL: the run's row is inserted with the counters seeded at the start of the run. `urls_per_second` is NULL until the first heartbeat.
 
 ## Test seams
