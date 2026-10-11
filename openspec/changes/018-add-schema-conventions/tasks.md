@@ -27,8 +27,18 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 1.4 Drive "A value of another type is refused".
 - [ ] 1.5 **Guard:** `015`'s convention scenarios over the stricter tables: "Names are snake_case", "Descriptions are present", "Booleans are integers", "Enumeration values are snake_case" and "Timestamp text".
 - [ ] 1.6 **Guard:** `015`'s "Crawl metadata" scenarios, unchanged by the revised rule on counts: "Metadata of a new Crawl", "Seeds keep their order", "Version stamp", "Environment stamp", "Completion time" and "A stopped Crawl has no completion time". Also `015`'s "Unmeasured values are NULL" scenarios: "A running Crawl has no completion time" and "No settings file".
-- [ ] 1.7 Docs: in `docs/schema.md`, replace "Conventions" with ADR-0005's rules as the spec states them (D1): STRICT, CHECKs, keys and references, `_at`, the units with `_seconds` and `_count`, errors, the two description prefixes, indexes. State that reading a crawl file needs SQLite 3.37 or later. In "How to add a table", add the declaration helper, `REAL`, and an index's `info["description"]`. Link ADR-0005.
-- [ ] 1.8 Review: run the code-review skill on group 1's commits against "Public schema conventions" and ADR-0005, then refactor with the whole suite green.
+- [ ] 1.7 **Fix, with no scenario:** the line-endings check skips tracked paths that are missing from the working tree.
+
+  `tests/test_line_endings.py` lists every tracked path with `git ls-files --eol`, which reports a deleted or moved path with an empty working-tree ending (`w/`). So the check fails after `openspec archive` moves a change's files and before they are staged (found at `017`'s archive).
+
+  Done when:
+  - red first: a test builds a temporary git repository with two committed LF text files, deletes one from the working tree, and expects no offender; it fails before the fix, so it is a slice, not a guard
+  - the check takes the repository root and skips a path that does not exist on disk
+  - the same test keeps the check sharp: the other file, rewritten with CRLF, is still an offender
+
+  *No scenario, because* the check is `000`'s repository tooling (design D16 of `000-scaffold-project`), which has no capability spec, and a scenario in `crawl-store` would put it under a requirement it does not belong to. It is here because `018` is the next change built after it was found.
+- [ ] 1.8 Docs: in `docs/schema.md`, replace "Conventions" with ADR-0005's rules as the spec states them (D1): STRICT, CHECKs, keys and references, `_at`, the units with `_seconds` and `_count`, errors, the two description prefixes, indexes. State that reading a crawl file needs SQLite 3.37 or later. In "How to add a table", add the declaration helper, `REAL`, and an index's `info["description"]`. Link ADR-0005.
+- [ ] 1.9 Review: run the code-review skill on group 1's commits against "Public schema conventions" and ADR-0005, then refactor with the whole suite green.
 
 ## 2. The schema description: references, indexes and markers (seam 1, seam 6)
 
