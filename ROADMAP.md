@@ -284,7 +284,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 
 **Re-grounding checklist** (what to fix or design when each change is re-grounded):
 - 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
-- 080: `design.md:95` and task 7.8 still name 100's release pipeline for the Skill-copy check, which is now 085's.
+- 080 (done 2026-10-11, with the re-grounding of its docs parts): `design.md:95` and task 7.8 named 100's release pipeline for the Skill-copy check, which is now 085's.
 - 060: re-ground for v0.1. Its proposal and the release notes in `specs/crawl-control/spec.md` still say v0.1.1 for 060-min; they become v0.1, except the command recorded for Crawls started through MCP (v0.1.1). It may not assume 022: 060-min needs only 015 and 020.
 - 015 (done at its archive, 2026-10-10): its `design.md` (lines 13 and 86) and `proposal.md` (lines 11 and 71) say 060-min is v0.1.1. Fix the wording when 015 is archived; the one-writer-by-construction rule in 015 is unchanged until 060 lands.
 - 015 (done at its archive, 2026-10-10): its design D6 names "020's `seq` on URLs" as the order column; 020 D1 uses `urls.id`, which already grows in insertion order. `docs/crawl-store.md` says resuming arrives with 060 in v0.2; it is v0.1 now. Fix both when 015 is archived.
