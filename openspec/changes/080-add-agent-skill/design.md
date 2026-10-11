@@ -142,7 +142,10 @@ Version comparison uses `packaging.version.Version`, so that `0.2.0.dev1 < 0.2.0
 
 ### D12. The SQL schema reference: generated lists, three written sections
 An agent that answers a long-tail question with `spider sql` reads only `references/sql-schema.md`; it may have no copy of `docs/schema.md`. The reference therefore carries what a query needs:
-- **Generated from `spider schema --limit 1000 --format json`** (`018-add-schema-conventions`), so it cannot drift:
+- **Generated from `spider schema --limit 1000 --format json`** (`018-add-schema-conventions`), so it cannot drift. The table sections use the layout of `docs/schema.md`, so people and agents read one form:
+  - **One layout, one parser, one renderer:** this change adds `render_tables(items, compact=...)` to `spider.services.schema_doc`, next to `018`'s `parse_tables`. A round-trip test checks that `parse_tables(render_tables(items))` equals the `spider schema` items, in both modes. The reference tests read `sql-schema.md` back with `parse_tables` and compare it with `spider schema`.
+  - **`compact=True`** is the same layout with less text around it: no alignment padding and no "How to read a table section" preamble. It never drops a heading or a column, so `parse_tables` reads both modes. `sql-schema.md` uses it only if the implementer measures that the full form costs too many tokens.
+  - *Why here and not in `018`:* `018` is built right after `017`, and a renderer with no caller there would be speculative code. This change is its first user.
   - each table and view with its columns: type, nullability, primary key, reference, format, allowed values and description. Allowed values matter most: a query that filters on `fetch_state = 'error'` or `indexability = 'non_indexable'` needs the exact spelling.
   - each table's secondary indexes with their columns, uniqueness, condition and description, and `no secondary index` for a table without one, so the agent can tell which filters are served by an index and which scan.
   - **Joins:** one line `<table>.<column> -> <references>` per reference, grouped by the referring table. This is the join overview: a text list is what an agent reads, and it is complete by construction. A drawn diagram would cost tokens and add nothing that a query needs.
@@ -155,6 +158,7 @@ An agent that answers a long-tail question with `spider sql` reads only `referen
     - The scan rule: a filter or sort on a column that no index of its table starts with scans the table, which takes seconds at about 500k URLs. The written text names no index: the generated lists name them. The layout and indexes of `links` wait for the links benchmark of `030`, so a written index name could go stale before the Skill ships.
 - **Readers need SQLite 3.37 or later** (`018` D3), stated at the top, because an agent may open the file with another tool.
 - *Alternative:* a hand-written `sql-schema.md`. It drifts from the schema, which the reference tests would then have to chase. Rejected.
+- *Alternative:* a layout of its own for `sql-schema.md`. Two layouts of one schema drift in form, and need two parsers. Rejected by the rulings of 2026-10-11.
 - *Alternative:* point the agent at `spider schema` instead of a reference file. It costs a Command call per question, and the written sections have no home there. Rejected.
 
 ### D13. Recipes are checked by their result

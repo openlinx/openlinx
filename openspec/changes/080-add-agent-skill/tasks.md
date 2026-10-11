@@ -74,7 +74,7 @@ Every task is one red → green slice and one commit whose message names its sce
 - [ ] 5.3 Drive "Every Page data column is listed" (CLI seam) for `references/columns.md`, from `spider schema pages`.
 - [ ] 5.4 Drive "Null-until release is shown" (CLI seam).
 - [ ] 5.5 Drive "Every Rule is documented" (CLI seam) for `references/rules.md`, including thresholds with their `spider.toml` keys.
-- [ ] 5.6 Drive "Every column is documented" (CLI seam) for `references/sql-schema.md`, generated from `spider schema --limit 1000 --format json` with each column's type, nullability, primary key, reference, format, allowed values and description (design D12).
+- [ ] 5.6 Drive "Every column is documented" (CLI seam) for `references/sql-schema.md`, generated from `spider schema --limit 1000 --format json` with each column's type, nullability, primary key, reference, format, allowed values and description (design D12). Add `render_tables(items, compact=...)` to `spider.services.schema_doc`, next to `018`'s `parse_tables`, with a pure-logic round-trip test (`parse_tables(render_tables(items)) == items`, for both modes), and read the installed file back with `parse_tables`.
 - [ ] 5.7 Drive "Every index is documented" (CLI seam), with `no secondary index` for a table whose `indexes` is empty.
 - [ ] 5.8 Drive "Every reference is in the joins section" (CLI seam): one `## Joins` line per column with a non-null `references`.
 - [ ] 5.9 Drive "Schema version is stated" (CLI seam, with a Crawl of the local fixture site).
