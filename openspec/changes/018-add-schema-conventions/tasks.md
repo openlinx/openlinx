@@ -37,7 +37,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - the same test keeps the check sharp: the other file, rewritten with CRLF, is still an offender
 
   *No scenario, because* the check is `000`'s repository tooling (design D16 of `000-scaffold-project`), which has no capability spec, and a scenario in `crawl-store` would put it under a requirement it does not belong to. It is here because `018` is the next change built after it was found.
-- [ ] 1.8 **Guard, with no scenario:** the decidable rules of ADR-0006 hold over `src/spider`.
+- [x] 1.8 **Guard, with no scenario:** the decidable rules of ADR-0006 hold over `src/spider`.
 
   Done when:
   - an `ast` test over every module of `src/spider` fails, naming the module and the class, when a `@dataclass` (bare, called, or as `dataclasses.dataclass`) is not `frozen=True`
