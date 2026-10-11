@@ -582,3 +582,14 @@ def test_a_flush_resolves_the_submitted_units(temp_workspace: TempWorkspace) -> 
         seen = query(crawl.path, COUNT)
 
     assert (results, seen, done_at_commit) == ([1, 2, 3], [(3,)], [[True, True, True]])
+
+
+def test_a_failing_submitted_unit_fails_its_future(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        failing = writer.submit(raising_insert(1, ValueError("bad")))
+        writer.flush()
+        error = failing.exception(timeout=0)
+
+    assert (type(error), str(error)) == (ValueError, "bad")
