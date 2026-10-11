@@ -933,3 +933,17 @@ def test_readers_keep_sqlite_s_defaults(temp_workspace: TempWorkspace) -> None:
         defaults = tuple(plain.execute(f"PRAGMA {name}").fetchone()[0] for name in SETTINGS)
 
     assert settings == defaults
+
+
+def test_the_writer_s_connection_settings_in_rollback_journal_mode(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace, journal_setting="delete")
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        journal: str = writer.run(
+            lambda connection: connection.exec_driver_sql("PRAGMA journal_mode").scalar_one()
+        )
+        settings = writer.run(connection_settings)
+
+    assert (journal, settings) == ("delete", (2, -65536, 0))

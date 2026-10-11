@@ -141,7 +141,11 @@ def _synchronous_for_the_journal(connection: sqlite3.Connection, _: Any) -> None
 def _writer_settings(connection: sqlite3.Connection, _: Any) -> None:
     connection.execute("PRAGMA temp_store = MEMORY")
     connection.execute(f"PRAGMA cache_size = -{WRITER_CACHE_KIB}")
-    connection.execute(f"PRAGMA mmap_size = {WRITER_MMAP_BYTES}")
+    (journal_mode,) = connection.execute("PRAGMA journal_mode").fetchone()
+    # delete mode is chosen for network shares, where a mapping is only as coherent as the
+    # share's client cache. Set to 0, not left alone: the default is a build-time option.
+    mmap_size = WRITER_MMAP_BYTES if journal_mode == "wal" else 0
+    connection.execute(f"PRAGMA mmap_size = {mmap_size}")
 
 
 def _begin_immediate(connection: Connection) -> None:
