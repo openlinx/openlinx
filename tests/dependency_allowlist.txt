@@ -8,6 +8,7 @@ markdown-it-py  # rich: Markdown rendering
 mdurl  # markdown-it-py: URL parsing
 pygments  # rich: syntax highlighting
 shellingham  # typer: detects the shell
+idna  # host names as aiohttp encodes them, UTS46 (design D13 of 020-add-crawl-core)
 orjson  # JSON output (design D3 of 010-add-workspace-and-cli-contract)
 pydantic-settings  # spider.toml settings (design D2 of 010-add-workspace-and-cli-contract)
 pydantic  # pydantic-settings: the settings models

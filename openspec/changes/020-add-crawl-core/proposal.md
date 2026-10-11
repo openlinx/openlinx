@@ -129,5 +129,5 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - `src/spider/extract/links.py` and the extractor registry.
   - `src/spider/store/`: `urls`, `origins`, the new `crawl` columns, the units that write them, and the transition check.
   - the Crawl Service in `src/spider/services/`, built on `015`'s `create_crawl`, and its adapter `src/spider/cli/crawl.py`.
-- **New dependencies:** `aiohttp`, `protego`, `selectolax` (1.0 or later, through its lexbor backend), `msgspec` and `publicsuffixlist` (a bundled list, never downloaded at runtime), each added to `tests/dependency_allowlist.txt` and kept off the startup path.
+- **New dependencies:** `aiohttp`, `protego`, `selectolax` (1.0 or later, through its lexbor backend), `msgspec`, `publicsuffixlist` (a bundled list, never downloaded at runtime) and `idna` (UTS46 host names, as aiohttp encodes them), each added to `tests/dependency_allowlist.txt` and kept off the startup path.
 - **Docs:** `docs/crawling.md`, the crawl tables in `docs/schema.md`, and the hook and extractor seams in `docs/architecture.md`.

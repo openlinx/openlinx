@@ -1134,6 +1134,7 @@ name = "spider"
 version = "0.1.0.dev0"
 source = { editable = "." }
 dependencies = [
+    { name = "idna" },
     { name = "orjson" },
     { name = "pydantic-settings" },
     { name = "rich" },
@@ -1159,6 +1160,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "idna", specifier = ">=3.20" },
     { name = "orjson", specifier = ">=3.12.0" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "rich", specifier = ">=15.0.0" },
