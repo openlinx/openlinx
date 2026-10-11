@@ -1,4 +1,4 @@
-"""`spider schema` (015-add-crawl-store, crawl-store)."""
+"""`spider schema` (015-add-crawl-store, 018-add-schema-conventions, crawl-store)."""
 
 from typing import Any
 
@@ -116,8 +116,8 @@ def test_self_description_of_schema() -> None:
         "list",
         ["json", "jsonl", "table"],
         {
-            "available": ["name", "kind", "description", "columns"],
-            "default": ["name", "kind", "description", "columns"],
+            "available": ["name", "kind", "description", "columns", "indexes"],
+            "default": ["name", "kind", "description", "columns", "indexes"],
         },
     )
 

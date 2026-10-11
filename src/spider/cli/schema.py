@@ -1,4 +1,4 @@
-"""`spider schema` over the schema service (design D6 of 015-add-crawl-store)."""
+"""`spider schema` (015-add-crawl-store D6; 018-add-schema-conventions D4)."""
 
 from dataclasses import replace
 from typing import Annotated
@@ -12,7 +12,7 @@ from spider.output.writer import Format
 from spider.services.schema import describe_schema
 
 SCHEMA = "schema"
-TABLE_FIELDS = ("name", "kind", "description", "columns")
+TABLE_FIELDS = ("name", "kind", "description", "columns", "indexes")
 SCHEMA_FIELDS = Fields(available=TABLE_FIELDS, default=TABLE_FIELDS)
 
 

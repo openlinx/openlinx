@@ -60,7 +60,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 2. The schema description: references, indexes and markers (seam 1, seam 6)
 
-- [ ] 2.1 Drive "Self-description of schema" at seam 1. Done when: `spider schema` lists `indexes` as an available and default field.
+- [x] 2.1 Drive "Self-description of schema" at seam 1. Done when: `spider schema` lists `indexes` as an available and default field.
 - [ ] 2.2 Drive "A table without secondary indexes lists none" at seam 1.
 
   Done when:

@@ -39,6 +39,7 @@ def _table(kind: str, name: str, body: str) -> dict[str, Any]:
         "kind": kind,
         "description": " ".join(paragraph),
         "columns": [_column(row) for row in rows],
+        "indexes": [],
     }
 
 

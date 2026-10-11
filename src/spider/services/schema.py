@@ -41,6 +41,7 @@ def describe_schema(table: str | None = None) -> SchemaDescription:
             "kind": "table",
             "description": candidate.comment,
             "columns": [_column(column) for column in candidate.columns],
+            "indexes": [],
         }
         for candidate in declared
         if table is None or candidate.name == table
