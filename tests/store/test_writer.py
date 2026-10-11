@@ -565,3 +565,20 @@ def test_a_submitted_unit_waits_for_its_commit(temp_workspace: TempWorkspace) ->
         pending = [not future.done() for future in submitted]
 
     assert (count, pending) == (3, [True, True, True])
+
+
+def test_a_flush_resolves_the_submitted_units(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    submitted: list[Future[int]] = []
+    done_at_commit: list[list[bool]] = []
+
+    def on_commit(units: int) -> None:
+        done_at_commit.append([future.done() for future in submitted])
+
+    with CrawlWriter(crawl.path, FakeClock(), on_commit=on_commit) as writer:
+        submitted.extend(submit_inserts(writer, 3))
+        writer.flush()
+        results = [future.result(timeout=0) for future in submitted]
+        seen = query(crawl.path, COUNT)
+
+    assert (results, seen, done_at_commit) == ([1, 2, 3], [(3,)], [[True, True, True]])

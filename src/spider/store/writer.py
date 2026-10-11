@@ -65,6 +65,8 @@ class _Ran:
     unit: Callable[[Connection], Any]
     result: Any
     changes: int
+    # A submitted unit's, resolved at the commit that holds it.
+    future: Future[Any] | None = None
 
 
 class CrawlWriter:
@@ -236,7 +238,7 @@ class CrawlWriter:
             self._replay(job, self._busy_error(error), connection)
             return True
         # Only units that succeeded run again, so a failing unit never does.
-        self._batch.append(_Ran(job.work, result, changes))
+        self._batch.append(_Ran(job.work, result, changes, job.done if job.submitted else None))
         self._commit_if_due(connection)
         if not job.submitted:
             # Only now: a caller that reads after its unit returns sees the commit.
@@ -272,9 +274,12 @@ class CrawlWriter:
         if not connection.in_transaction():
             return
         connection.commit()
-        units, self._batch = len(self._batch), []
-        if self._on_commit is not None and units:
-            self._on_commit(units)
+        batch, self._batch = self._batch, []
+        for ran in batch:
+            if ran.future is not None:
+                ran.future.set_result(ran.result)
+        if self._on_commit is not None and batch:
+            self._on_commit(len(batch))
 
     def _busy_error(self, error: BaseException) -> BaseException:
         if not is_busy(error):
