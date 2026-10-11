@@ -780,7 +780,7 @@ The Crawl Service SHALL be able to continue a Crawl from its store when its Craw
 - **THEN** the fixture site receives no request during the continuation for a URL that had `fetch_state` = `fetched` before it
 
 ### Requirement: Per-response hook
-The Crawl SHALL call every registered per-response handler exactly once for each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`). A handler SHALL receive the URL's row values. For a `fetched` URL it SHALL also receive the status code, the response headers and, when the response was parsed, the extractor outputs. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies, and `040-add-rules` for Rules on single URLs.
+The Crawl SHALL call every registered per-response handler exactly once for each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`). A handler SHALL receive the URL's row values. For a `fetched` URL it SHALL also receive the status code, the response headers and, when the response was parsed, the extractor outputs. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
 
 #### Scenario: A registered handler sees every URL once
 - **WHEN** a handler registered for the test records the URLs and states it receives, `/` links to `/a`, `/missing` (which returns 404) and `/logout`, and `spider crawl {site}/ --exclude "/logout$"` runs

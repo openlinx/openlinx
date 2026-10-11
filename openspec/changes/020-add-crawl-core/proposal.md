@@ -118,7 +118,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 - **Used by:**
   - `022` (the engine, the Fetcher interface, the per-host gate, the fake Fetcher, the DNS resolver hook, `urls` and `origins`)
   - `030` (the per-response hook, the extractor registry, `DiscoveredLink`, the robots directives parser, the post-crawl passes, the decoding function)
-  - `040` (both hooks)
+  - `040` (the post-crawl passes)
   - `050` and `070` (`urls`, `section_crawl`)
   - `060` (the continue operation, the stop flag, the transition table, events, validation and config resolution)
   - `026` (the engine and its stop flag, the executor seam and page preparation, `parse_error`)
