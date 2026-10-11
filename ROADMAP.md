@@ -316,7 +316,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 - 026: re-ground for v0.1; the benchmark runs on Windows, macOS and Linux runners or a stated machine, never as part of the CI gate.
 - 026: `psutil` is no longer a dependency of 015; add it as a test dependency for the pool's benchmark.
 - 026: the 500k run reports `response_headers`' share of the crawl file; if it exceeds 10%, the table stores Internal URLs only (decided 2026-10-11).
-- 026: the 500k run measures the latency of 040's live `issues` (every Rule's query over the stored rows) during the Crawl, and its effect on WAL checkpoints, because a long read keeps the WAL from being reset. If the full live list takes over 30 s at 500k URLs, 040's live path is revisited: per-Rule reads, or materialising at intervals (decided 2026-10-11).
+- 026: the 500k run measures the latency of 040's live Issues during the Crawl, for both 050's full `issues` list (every Rule's query over the stored rows) and live `page <url>` (every Rule's query for one URL), and its effect on WAL checkpoints, because a long read keeps the WAL from being reset. If the full live list takes over 30 s at 500k URLs, 040's live path is revisited: per-Rule reads, or materialising at intervals (decided 2026-10-11).
 - 020–050: no Alembic revision per change before v0.1; tables are added to the declared schema and `docs/schema.md` in the same slice (015 D5, D6).
 - 040 (done 2026-10-11): every Rule is its reproducing SQL query over the public schema, stored in `rules.reproduce_sql`. Issues are read live while a Crawl has no final pass, and the post-crawl pass materialises them. `rules show <id>` prints the query, and an Issue can point to it.
 
