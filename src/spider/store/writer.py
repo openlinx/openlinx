@@ -5,6 +5,7 @@ import sqlite3
 import threading
 from collections.abc import Callable
 from concurrent.futures import Future
+from contextlib import suppress
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -40,6 +41,10 @@ class CrawlWriterClosedError(RuntimeError):
     """A unit or a flush reached a writer that was closed, or whose thread ended."""
 
 
+class CrawlWriterReplayError(RuntimeError):
+    """A unit did not do the same when it ran again, so the writer ended without that commit."""
+
+
 class _Control(Enum):
     FLUSH = "flush"
     CLOSE = "close"
@@ -49,6 +54,15 @@ class _Control(Enum):
 class _Job:
     work: Callable[[Connection], Any] | _Control
     done: Future[Any]
+
+
+@dataclass(frozen=True)
+class _Ran:
+    """A unit in the open transaction, with its first run's result and the rows it changed."""
+
+    unit: Callable[[Connection], Any]
+    result: Any
+    changes: int
 
 
 class CrawlWriter:
@@ -69,7 +83,7 @@ class CrawlWriter:
         self._failure: BaseException | None = None
         # Owned by the writer thread: the units in the open transaction, which a failing unit makes
         # run again, and the time of the first one.
-        self._batch: list[Callable[[Connection], Any]] = []
+        self._batch: list[_Ran] = []
         self._first_uncommitted_at = 0.0
         started: Future[None] = Future()
         self._thread = threading.Thread(
@@ -110,7 +124,9 @@ class CrawlWriter:
         if not already and self._thread.is_alive():
             done: Future[None] = Future()
             self._queue.put(_Job(_Control.CLOSE, done))
-            self._wait(done)
+            # A writer that ends meanwhile fails this job; why it ended is raised below.
+            with suppress(CrawlWriterClosedError):
+                self._wait(done)
         self._thread.join()
         # Not wrapped: leaving a with block after a busy unit must still exit with crawl_busy.
         if isinstance(self._failure, SpiderError):
@@ -205,6 +221,7 @@ class CrawlWriter:
             return job.work is _Control.FLUSH
         if not connection.in_transaction():
             self._begin(connection)
+        before = _total_changes(connection)
         # No savepoint: one per unit costs more than replaying the batch when a unit fails.
         try:
             result = job.work(connection)
@@ -213,7 +230,7 @@ class CrawlWriter:
             self._replay(job, self._busy_error(error), connection)
             return True
         # Only units that succeeded run again, so a failing unit never does.
-        self._batch.append(job.work)
+        self._batch.append(_Ran(job.work, result, _total_changes(connection) - before))
         self._commit_if_due(connection)
         # Only now: a caller that reads after its unit returns sees the commit.
         job.done.set_result(result)
@@ -224,12 +241,14 @@ class CrawlWriter:
         self._first_uncommitted_at = self._clock.monotonic()
 
     def _replay(self, failed: _Job, error: BaseException, connection: Connection) -> None:
-        units, self._batch = self._batch, []
+        ran, self._batch = self._batch, []
         try:
             connection.rollback()
-            if units:
+            if ran:
                 self._begin(connection)
-                self._batch = [unit for unit in units if _run_again(unit, connection)]
+                for unit in ran:
+                    _run_again(unit, connection)
+                self._batch = ran
                 self._commit(connection)
         finally:
             # Its own error even when the replay commit fails and ends the writer (design D6).
@@ -277,17 +296,29 @@ def _check_writable(connection: Connection) -> None:
     transaction.rollback()
 
 
-def _run_again(unit: Callable[[Connection], Any], connection: Connection) -> bool:
+def _run_again(ran: _Ran, connection: Connection) -> None:
+    # Never committed without it: its caller holds the first run's result, and may have built
+    # later units on it (design D6).
     savepoint = connection.begin_nested()
+    before = _total_changes(connection)
     try:
-        unit(connection)
-    # A unit that fails only when it runs again broke the unit contract; its caller already holds
-    # the result of its first run, so only its changes are dropped.
-    except BaseException:
-        savepoint.rollback()
-        return False
+        result = ran.unit(connection)
+    except BaseException as error:
+        raise _replay_error(ran, "raised") from error
+    if result != ran.result:
+        raise _replay_error(ran, "returned a different result")
+    if _total_changes(connection) - before != ran.changes:
+        raise _replay_error(ran, "changed a different number of rows")
     savepoint.commit()
-    return True
+
+
+def _replay_error(ran: _Ran, what: str) -> CrawlWriterReplayError:
+    name = getattr(ran.unit, "__qualname__", repr(ran.unit))
+    return CrawlWriterReplayError(f"The unit {name} {what} when it ran again.")
+
+
+def _total_changes(connection: Connection) -> int:
+    return cast(sqlite3.Connection, connection.connection.driver_connection).total_changes
 
 
 def _fail_queued(queue: Queue[_Job]) -> None:

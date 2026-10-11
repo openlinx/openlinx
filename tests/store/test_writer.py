@@ -1,17 +1,20 @@
 """The transactional writer (015-add-crawl-store, 017-speed-up-crawl-writer, crawl-store)."""
 
+import sqlite3
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from pathlib import Path
 
 import pytest
 from sqlalchemy import Connection, func, select, update
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect
 from spider.store.schema import seeds
-from spider.store.writer import CrawlWriter, CrawlWriterClosedError
+from spider.store.writer import CrawlWriter, CrawlWriterClosedError, CrawlWriterReplayError
 from tests.support.clock import FakeClock
 from tests.support.crawls import (
     crawl_without_seeds,
@@ -46,13 +49,16 @@ def test_a_unit_updates_a_row_of_an_earlier_unit(temp_workspace: TempWorkspace) 
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         writer.run(insert_seed(1, "https://example.com/a"))
-        writer.run(
-            lambda connection: connection.execute(
-                update(seeds).where(seeds.c.position == 1).values(url="https://example.com/b")
-            )
-        )
+        writer.run(update_seed_url(1, "https://example.com/b"))
 
     assert query(crawl.path, SEEDS) == [(1, "https://example.com/b")]
+
+
+def update_seed_url(position: int, url: str) -> Callable[[Connection], None]:
+    def unit(connection: Connection) -> None:
+        connection.execute(update(seeds).where(seeds.c.position == position).values(url=url))
+
+    return unit
 
 
 def raising_insert(position: int, error: BaseException) -> Callable[[Connection], None]:
@@ -100,29 +106,84 @@ def test_a_failing_unit_commits_the_units_before_it(temp_workspace: TempWorkspac
     assert ([position for position, _ in seen], committed) == ([1, 2, 3], [3])
 
 
-def test_a_unit_that_fails_in_the_replay_is_left_out_of_its_commit(
+def ended_by_the_replay(
+    crawl_file: Path, unit: Callable[[Connection], object]
+) -> CrawlWriterClosedError:
+    """Runs the unit, then one that fails, so the unit runs again; returns close()'s error."""
+    writer = CrawlWriter(crawl_file, FakeClock())
+    writer.run(unit)
+    with pytest.raises(ValueError, match=r"^bad$"):
+        writer.run(raising_insert(9, ValueError("bad")))
+    with pytest.raises(CrawlWriterClosedError, match=r"^The crawl writer is closed\.$") as closed:
+        writer.close()
+    return closed.value
+
+
+def test_a_unit_that_fails_or_returns_differently_when_it_runs_again_ends_the_writer(
     temp_workspace: TempWorkspace,
 ) -> None:
     crawl = crawl_without_seeds(temp_workspace)
-    committed: list[int] = []
     runs: list[int] = []
 
-    def fails_when_run_again(connection: Connection) -> None:
-        # Breaks the contract that a unit writes the same on every run.
-        runs.append(2)
+    def counts_its_runs(connection: Connection) -> int:
+        runs.append(1)
+        insert_seed(1, "https://example.com/1")(connection)
+        return len(runs)
+
+    closed = ended_by_the_replay(crawl.path, counts_its_runs)
+
+    assert (query(crawl.path, SEEDS), type(closed.__cause__), str(closed.__cause__)) == (
+        [],
+        CrawlWriterReplayError,
+        f"The unit {counts_its_runs.__qualname__} returned a different result when it ran again.",
+    )
+
+
+def test_a_unit_that_changes_a_different_number_of_rows_when_it_runs_again_ends_the_writer(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    runs: list[int] = []
+
+    def inserts_more_each_run(connection: Connection) -> None:
+        runs.append(len(runs) + 1)
+        for position in runs:
+            insert_seed(position, f"https://example.com/{position}")(connection)
+
+    closed = ended_by_the_replay(crawl.path, inserts_more_each_run)
+
+    assert (query(crawl.path, SEEDS), str(closed.__cause__)) == (
+        [],
+        f"The unit {inserts_more_each_run.__qualname__} changed a different number of rows when"
+        " it ran again.",
+    )
+
+
+def test_a_unit_that_meets_a_full_file_when_it_runs_again_ends_the_writer(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    runs: list[int] = []
+
+    def fills_the_file_when_run_again(connection: Connection) -> None:
+        runs.append(1)
         if len(runs) > 1:
-            raise ValueError("again")
-        insert_seed(2, "https://example.com/2")(connection)
+            pages: int = connection.exec_driver_sql("PRAGMA page_count").scalar_one()
+            connection.exec_driver_sql(f"PRAGMA max_page_count = {pages}")
+        insert_seed(1, "https://example.com/" + "x" * 100_000)(connection)
 
-    with CrawlWriter(crawl.path, FakeClock(), on_commit=committed.append) as writer:
-        writer.run(insert_seed(1, "https://example.com/1"))
-        writer.run(fails_when_run_again)
-        writer.run(insert_seed(3, "https://example.com/3"))
-        with pytest.raises(ValueError, match=r"^bad$"):
-            writer.run(raising_insert(4, ValueError("bad")))
-        seen = query(crawl.path, SEEDS)
+    closed = ended_by_the_replay(crawl.path, fills_the_file_when_run_again)
+    full = closed.__cause__.__cause__ if closed.__cause__ else None
 
-    assert ([position for position, _ in seen], committed, runs) == ([1, 3], [2], [2, 2])
+    assert (
+        query(crawl.path, COUNT),
+        str(closed.__cause__),
+        isinstance(full, DBAPIError) and full.orig.sqlite_errorcode,  # type: ignore[union-attr]
+    ) == (
+        [(0,)],
+        f"The unit {fills_the_file_when_run_again.__qualname__} raised when it ran again.",
+        sqlite3.SQLITE_FULL,
+    )
 
 
 def test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails(
@@ -136,15 +197,16 @@ def test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails(
             "CREATE TABLE children (parent INTEGER REFERENCES parents (id)"
             " DEFERRABLE INITIALLY DEFERRED);"
         )
-    writer = CrawlWriter(crawl.path, FakeClock())
-    writer.run(lambda connection: connection.exec_driver_sql("INSERT INTO children VALUES (9)"))
 
-    with pytest.raises(ValueError, match=r"^bad$"):
-        writer.run(raising_insert(1, ValueError("bad")))
-    with pytest.raises(CrawlWriterClosedError, match=r"^The crawl writer is closed\.$"):
-        writer.close()
+    def breaks_a_deferred_reference(connection: Connection) -> None:
+        connection.exec_driver_sql("INSERT INTO children VALUES (9)")
 
-    assert query(crawl.path, "SELECT count(*) FROM children") == [(0,)]
+    closed = ended_by_the_replay(crawl.path, breaks_a_deferred_reference)
+
+    assert (query(crawl.path, "SELECT count(*) FROM children"), type(closed.__cause__)) == (
+        [(0,)],
+        IntegrityError,
+    )
 
 
 def test_a_unit_that_fails_half_way_after_other_units_leaves_no_change(

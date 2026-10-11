@@ -27,7 +27,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 1.7 Docs: in "Writing a Crawl" of `docs/crawl-store.md`, document the replay commit and the unit contract of design D7: a unit may run again before its commit, so it has no effect outside its connection and does not change its input.
 - [x] 1.8 Review: run the code-review skill on group 1's commits against the "Transactional writer" requirement, then refactor with the whole suite green.
 
-- [ ] 1.9 Drive "A unit that fails or returns differently when it runs again ends the writer" (the ruling on design D6 of 2026-10-11).
+- [x] 1.9 Drive "A unit that fails or returns differently when it runs again ends the writer" (the ruling on design D6 of 2026-10-11).
 
   Done when:
   - the batch keeps each unit with its first result and its row-change count (the delta of the driver's `total_changes`)

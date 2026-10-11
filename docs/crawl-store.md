@@ -140,9 +140,10 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
 - **Units may run again.** Because of the replay, a unit may run a second time before it is committed. A unit therefore:
   - has no effect outside the writer's connection: no I/O, no shared state, and nothing reported from inside the unit
   - does not change its input
-  - computes its writes from its input and what it reads on the connection, so its second run writes what its first run wrote
+  - computes its writes from its input and what it reads on the connection, so its second run writes what its first run wrote: no clock, randomness or counter of its own
+  - returns a value: `None`, a number, a `str`, a tuple of these, or a frozen dataclass, never a float `NaN`, which never equals itself
 
-  No test can check this for every unit, so the review of every change that adds units checks it.
+  The replay checks what it can: a unit that raises, returns a different result or changes a different number of rows when it runs again ends the writer with no commit, because its caller already holds the first result. The failing unit's caller still gets its own error; later callers get `CrawlWriterClosedError`, caused by a `CrawlWriterReplayError` that names the unit and what differed. A file-level error inside a unit, such as a full disk, usually meets the replay again, so it ends the writer too. No test can check the contract for every unit, so the review of every change that adds units checks it.
 - **Watching commits.** An optional `on_commit` callable, given when the writer is opened, is called on the writer thread after each commit with the number of units that commit made durable, for progress and metrics. It must be quick, and an error it raises ends the writer like a failed commit.
 - **What a crash loses.** A process that is killed, even with SIGKILL or TerminateProcess, loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound: `PRAGMA integrity_check` returns `ok`. Tests kill a real writer process to check both.
 - **The write check.** Opening the writer first runs a write that it rolls back. A crawl file that cannot be written, for example one with the read-only attribute, fails at once with `crawl_not_writable` (exit code 7) and `details.file`, before anything is crawled, and the file is left unchanged.
