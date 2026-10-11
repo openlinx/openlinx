@@ -31,4 +31,18 @@ def _normalized_parts(parts: SplitResult, port: int | None) -> SplitResult:
     netloc = parts.hostname or ""
     if port is not None and port != _DEFAULT_PORTS[parts.scheme]:
         netloc = f"{netloc}:{port}"
-    return parts._replace(netloc=netloc, fragment="")
+    return parts._replace(netloc=netloc, path=_without_dot_segments(parts.path), fragment="")
+
+
+def _without_dot_segments(path: str) -> str:
+    segments: list[str] = []
+    for segment in path.split("/")[1:]:
+        if segment == "..":
+            if segments:
+                segments.pop()
+        elif segment != ".":
+            segments.append(segment)
+    # A path that ends in a dot segment names a folder, so it ends in a slash (RFC 3986 5.2.4).
+    if path.endswith(("/.", "/..")):
+        segments.append("")
+    return "/" + "/".join(segments)

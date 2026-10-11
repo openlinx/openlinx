@@ -9,3 +9,11 @@ def test_scheme_and_host_case_the_default_port_and_the_fragment_are_normalised()
 
 def test_a_non_default_port_is_kept() -> None:
     assert normalize_url("https://site.test:8443/a") == "https://site.test:8443/a"
+
+
+def test_dot_segments_are_resolved() -> None:
+    assert normalize_url("https://site.test/a/./b/../c") == "https://site.test/a/c"
+
+
+def test_an_empty_path_becomes_a_slash() -> None:
+    assert normalize_url("https://site.test") == "https://site.test/"
