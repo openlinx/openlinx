@@ -14,7 +14,7 @@ This change speeds up the writer and closes that gap before `020` writes through
 - **Reads through the writer** run in its open transaction and commit nothing (a guard; `015` already behaves this way).
 - **The writer's connection settings:** `temp_store=MEMORY`, a 64 MiB page cache and, in WAL mode, 256 MiB of memory-mapped I/O. There is no new setting. The killed-writer scenarios are proved again on Windows with memory mapping on, plus a new one: a new writer opens the file of a killed writer at once.
 - **Prebuilt statements** become a documented rule for store modules: built once, and run with parameters.
-- **A local throughput check:** `scripts/writer_throughput.py`, writer-only, 20k Pages at ~466 Link rows per Page. It must reach at least 12 Pages/s, with a WAL peak of at most 300 MB and a process RSS of at most 400 MB. It never runs in CI, and its links layout is provisional until the schema blueprint's lands.
+- **A local throughput check:** `scripts/writer_throughput.py`, writer-only, 20k Pages at ~466 Link rows per Page. It must reach at least 12 Pages/s, with a WAL peak of at most 300 MB and a process RSS of at most 400 MB. It never runs in CI, and its links layout is provisional until the schema blueprint's lands: `017` records a 5,000-Page smoke run, and the 20,000-Page run against the floor happens at `030`'s re-grounding.
 - **Commands, flags, settings and MCP tools:** none added or changed. `[store]` keeps only `journal_mode`.
 
 ## Capabilities

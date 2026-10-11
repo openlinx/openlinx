@@ -149,6 +149,7 @@ The prototype built both hosts around one batch core. Back-to-back runs at 20k P
 - **It reports,** as one JSON document: Pages/s overall and per 5k window, Link rows/s, the WAL peak, the process RSS, and the atomicity check (no row from a failed unit, every other Page stored).
 - **Its floor:** at least 12 Pages/s (70% of the 17.2–18.0 measured), a WAL peak of at most 300 MB, and an RSS of at most 400 MB. Below the floor it exits non-zero.
 - **Where it runs:** locally, by hand. It is never part of the CI gate or of `scripts/check.py`, and `docs/benchmarks.md` records the machine and the numbers.
+- **When the floor is first held:** at `030`'s re-grounding, on the links layout chosen there. The 20,000-Page run on the provisional tables would be superseded by that run, so `017` runs the check only as a 5,000-Page smoke run that proves the script: its atomicity check, its reader, its WAL peak and its RSS (ruling of 2026-10-11).
 
 ## Test seams
 
@@ -169,7 +170,7 @@ Boundary doubles used: `FakeClock` only.
 - [The thread host loses to the GIL once the event loop really fetches and parses] → `026`'s pool takes parsing out of the loop, and its benchmark measures the whole pipeline. A writer process can be added behind `submit()` without changing `020` (D1).
 - [The +14–15% is close to the noise of the machine it was measured on] → Every window of 5k Pages agreed, and the overhead grows with the rows per unit. The throughput check pins the floor, not the gain.
 - [In `delete` mode, a unit that waits out the busy timeout fails, and the replay may wait again for each unit before it] → A busy file in `delete` mode already fails the Crawl with `crawl_busy` (`020`'s risks), and the 64 MiB cache makes spills inside a unit rarer.
-- [The throughput floor is set on a provisional links layout] → The check is marked provisional, and the schema blueprint restates it.
+- [The throughput floor is set on a provisional links layout, and `017` never runs the check at 20,000 Pages] → The check is marked provisional, `017` records a 5,000-Page smoke run, and the first run against the floor, at 20,000 Pages, happens at `030`'s re-grounding on the chosen links layout, which restates the floor.
 - [A busy `BEGIN` in the replay ends the writer, and no test covers it] → The code takes the same path as any failed replay. A deterministic test would need a lock taken between the rollback and the `BEGIN`. Deferred.
 - [A busy error inside a unit that runs again is raised as it is, so the writer ends with `crawl_busy`, and no test covers it] → It needs a cache spill in `delete` mode while a reader holds the file. Deferred.
 - [The row-change count is masked to 32 bits, because SQLite's `total_changes` is a C int that wraps, and no test covers the wrap] → A test would need 2^31 changes. Deferred.

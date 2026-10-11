@@ -103,7 +103,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - it exits non-zero below 12 Pages/s, above a 300 MB WAL peak or a 400 MB RSS, or on a failed atomicity check
   - `psutil` is a dev dependency, not a runtime one
   - neither CI nor `scripts/check.py` runs it
-- [ ] 4.3 Check: run `scripts/writer_throughput.py` on the maintainer's machine. Done when: it passes its floor, and a "Writer capacity" section of `docs/benchmarks.md` records the machine, the numbers and the provisional links layout. If it misses the floor, the work stops and is reported before anything changes.
+- [ ] 4.3 Check: a 5,000-Page smoke run of `scripts/writer_throughput.py` (`--pages 5000`) on the maintainer's machine. Done when: it passes its atomicity check, its reader, its WAL peak and its RSS bound, and a "Writer capacity" section of `docs/benchmarks.md` records it as a smoke run, with the machine, the SQLite version, the numbers and the provisional links layout. The 20,000-Page run against the floor moves to `030`'s re-grounding, on its links layout (design D11).
 - [ ] 4.4 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Change check
