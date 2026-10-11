@@ -1,4 +1,4 @@
-"""The transactional writer (015-add-crawl-store, crawl-store)."""
+"""The transactional writer (015-add-crawl-store, 017-speed-up-crawl-writer, crawl-store)."""
 
 import threading
 from collections.abc import Callable
@@ -85,6 +85,44 @@ def test_other_units_survive_a_failing_unit(temp_workspace: TempWorkspace) -> No
         writer.run(insert_seed(3, "https://example.com/c"))
 
     assert [position for position, _ in query(crawl.path, SEEDS)] == [1, 3]
+
+
+def test_a_failing_unit_commits_the_units_before_it(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    committed: list[int] = []
+
+    with CrawlWriter(crawl.path, FakeClock(), on_commit=committed.append) as writer:
+        run_inserts(writer, 3)
+        with pytest.raises(ValueError, match=r"^bad$"):
+            writer.run(raising_insert(4, ValueError("bad")))
+        seen = query(crawl.path, SEEDS)
+
+    assert ([position for position, _ in seen], committed[:1]) == ([1, 2, 3], [3])
+
+
+def test_a_unit_that_fails_in_the_replay_is_left_out_of_its_commit(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    committed: list[int] = []
+    runs: list[int] = []
+
+    def fails_when_run_again(connection: Connection) -> None:
+        # Breaks the contract that a unit writes the same on every run.
+        runs.append(len(runs))
+        if len(runs) > 1:
+            raise ValueError("again")
+        insert_seed(2, "https://example.com/2")(connection)
+
+    with CrawlWriter(crawl.path, FakeClock(), on_commit=committed.append) as writer:
+        writer.run(insert_seed(1, "https://example.com/1"))
+        writer.run(fails_when_run_again)
+        writer.run(insert_seed(3, "https://example.com/3"))
+        with pytest.raises(ValueError, match=r"^bad$"):
+            writer.run(raising_insert(4, ValueError("bad")))
+        seen = query(crawl.path, SEEDS)
+
+    assert ([position for position, _ in seen], committed[:1], len(runs)) == ([1, 3], [2], 2)
 
 
 def test_closing_commits_everything(temp_workspace: TempWorkspace) -> None:

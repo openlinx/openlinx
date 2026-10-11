@@ -1,4 +1,5 @@
-"""The transactional writer: units of work on one thread (design D4 of 015-add-crawl-store)."""
+"""The transactional writer: units of work on one thread (design D4 of 015-add-crawl-store, D6 of
+017-speed-up-crawl-writer)."""
 
 import asyncio
 import sqlite3
@@ -67,10 +68,11 @@ class CrawlWriter:
         self._lock = threading.Lock()
         self._closed = False
         self._failure: BaseException | None = None
-        # Owned by the writer thread: units since the last commit, those that left a change, and
-        # the time of the first one.
+        # Owned by the writer thread: units since the last commit, those that left a change, the
+        # units a failing unit makes run again, and the time of the first one.
         self._uncommitted = 0
         self._succeeded = 0
+        self._batch: list[Callable[[Connection], Any]] = []
         self._first_uncommitted_at = 0.0
         started: Future[None] = Future()
         self._thread = threading.Thread(
@@ -205,21 +207,40 @@ class CrawlWriter:
             job.done.set_result(None)
             return job.work is _Control.FLUSH
         if not connection.in_transaction():
-            connection.begin()
-            self._uncommitted, self._succeeded = 0, 0
-            self._first_uncommitted_at = self._clock.monotonic()
-        result, error = _run(job.work, connection)
-        if error is not None:
-            error = self._busy_error(error)
+            self._begin(connection)
+        # No savepoint: one per unit costs more than replaying the batch when a unit fails.
+        try:
+            result = job.work(connection)
+        # KeyboardInterrupt too: it rolls back like any failure and reaches the unit's caller.
+        except BaseException as error:
+            self._replay(job, self._busy_error(error), connection)
+            return True
+        self._batch.append(job.work)
         self._uncommitted += 1
-        self._succeeded += error is None
+        self._succeeded += 1
         self._commit_if_due(connection)
         # Only now: a caller that reads after its unit returns sees the commit.
-        if error is None:
-            job.done.set_result(result)
-        else:
-            job.done.set_exception(error)
+        job.done.set_result(result)
         return True
+
+    def _begin(self, connection: Connection) -> None:
+        connection.begin()
+        self._uncommitted, self._succeeded = 0, 0
+        self._first_uncommitted_at = self._clock.monotonic()
+
+    def _replay(self, failed: _Job, error: BaseException, connection: Connection) -> None:
+        """Commits the units before a failing one, each run again in its own savepoint."""
+        units, self._batch = self._batch, []
+        try:
+            connection.rollback()
+            if units:
+                self._begin(connection)
+                for unit in units:
+                    self._succeeded += _run_again(unit, connection)
+                self._commit(connection)
+        finally:
+            # Never run again: its error is known, and its code must not run twice.
+            failed.done.set_exception(error)
 
     def _commit_if_due(self, connection: Connection) -> None:
         if not connection.in_transaction():
@@ -232,6 +253,7 @@ class CrawlWriter:
         if not connection.in_transaction():
             return
         connection.commit()
+        self._batch = []
         if self._on_commit is not None and self._succeeded:
             self._on_commit(self._succeeded)
 
@@ -262,18 +284,17 @@ def _check_writable(connection: Connection) -> None:
     transaction.rollback()
 
 
-def _run(
-    unit: Callable[[Connection], Any], connection: Connection
-) -> tuple[Any, BaseException | None]:
+def _run_again(unit: Callable[[Connection], Any], connection: Connection) -> bool:
+    # A unit that fails only when it runs again broke the unit contract; its caller already holds
+    # the result of its first run, so only its changes are dropped.
     savepoint = connection.begin_nested()
     try:
-        result = unit(connection)
-    # KeyboardInterrupt too: it rolls back like any failure and reaches the unit's caller.
-    except BaseException as error:
+        unit(connection)
+    except BaseException:
         savepoint.rollback()
-        return None, error
+        return False
     savepoint.commit()
-    return result, None
+    return True
 
 
 def _fail_queued(queue: Queue[_Job]) -> None:

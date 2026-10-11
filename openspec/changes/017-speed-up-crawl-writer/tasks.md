@@ -16,7 +16,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 1. The optimistic batch (seam 2)
 
-- [ ] 1.1 Drive "A failing unit commits the units before it".
+- [x] 1.1 Drive "A failing unit commits the units before it".
 
   Done when: the units of a batch run with no savepoint each. When a unit raises anything, a `BaseException` included, the writer rolls back the transaction, runs the units before it again in order with a savepoint each, commits at once, and raises the unit's own error to its caller (design D6). `on_commit` gets the number of units the replay commit made durable, and a unit that fails in the replay is left out of it.
 - [ ] 1.2 **Guard:** "A unit that fails half-way after other units leaves no change".
