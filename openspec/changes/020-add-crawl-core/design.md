@@ -22,6 +22,7 @@
   - A unit that only reads runs in the open transaction and commits nothing (`017` D5).
   - The optimistic batch may run a unit twice, so every unit follows `017` D7, and a unit that runs once per URL executes statements built once (`017` D9).
   - The writer's connection settings (temporary store in memory, 64 MiB cache, memory mapping in WAL mode).
+  - `on_commit(units)` counts every unit a commit made durable, read-only units included, so this change never uses it for progress (D10).
 - **`018-add-schema-conventions` and ADR-0005,** before this change in the build order (015 → 017 → 018 → 020):
   - every public table is declared through `018`'s declaration helper, which makes it `STRICT` and adds the CHECKs of its listed values and flags
   - `spider schema` reads `references` from declared foreign keys, and lists each index with the query it serves
@@ -185,7 +186,7 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 - *Alternative:* the engine calls each extractor itself. A pool would then need the parsed tree in the worker process, and a tree cannot cross a process boundary. Rejected.
 
 ### D10. Events, result, exit codes and interrupts
-- **Events and diagnostics** go through the context's `Reporter`. The Crawl Service wraps it in a warning log that writes each warning once per code and host, keeps it for the result and `crawl.warnings`, and adds `details.count` and `details.first_url` to counted warnings (D16). `progress` is fixed at every 10 seconds. Its `urls` counts come from counters that the callbacks of D2 update as units commit. They are seeded once per run by a counting query over `urls`, so a continued Crawl starts from its earlier counts. No count over `urls` runs for each event, because a `GROUP BY fetch_state` scans the table (ruling Q1, D18).
+- **Events and diagnostics** go through the context's `Reporter`. The Crawl Service wraps it in a warning log that writes each warning once per code and host, keeps it for the result and `crawl.warnings`, and adds `details.count` and `details.first_url` to counted warnings (D16). `progress` is fixed at every 10 seconds. Its `urls` counts come from counters that the callbacks of D2 update as units commit. Progress never uses the writer's `on_commit`, which counts read-only units too: the frontier reads (D1) are writer units that join the batch. They are seeded once per run by a counting query over `urls`, so a continued Crawl starts from its earlier counts. No count over `urls` runs for each event, because a `GROUP BY fetch_state` scans the table (ruling Q1, D18).
 - **The result** is a frozen dataclass with `to_json()`, built at the end from counting queries over `urls`, never from in-memory counters. The adapter returns it, or `Outcome(result, SpiderError)` for a failed outcome, so `010`'s runner prints it before the one error:
   - `interrupted` (declared by `010`) → exit 130
   - `seed_unreachable` and `site_unreachable` → exit 8
