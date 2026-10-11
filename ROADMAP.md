@@ -192,7 +192,7 @@ If a change needs something another change owns, it depends on that change inste
     - post-crawl Rules are evaluated by that query
     - per-URL Rules may still be evaluated in Python during the Crawl, but a test checks, for each of them, that the Python result equals its SQL query over the stored Crawl
     - `rules show <id>` prints the query, and an Issue can point to it ("reproduce with `spider sql`")
-  - Issues and Affected URLs, including `issues.affected_count`.
+  - Issues and Affected URLs. `issues` is a view whose `affected_count` counts each Rule's Affected URLs, so no count is stored (decided 2026-10-11).
   - The Health Score.
   - `spider rules [list|show <id>]` and `rule_not_found` (exit 4).
   - **(v0.2)** A new Rule category `ai_search`, for AI-search readiness. The exact Rule set is decided when it is drafted. Candidates:
