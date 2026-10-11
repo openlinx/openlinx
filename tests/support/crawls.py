@@ -21,6 +21,7 @@ from spider.workspace.discovery import Workspace, resolve_workspace
 from tests.support.clock import FakeClock
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
+from tests.support.writer import executing
 
 # The start time of the spec's example Crawl 20260927-140312-k3f9.
 STARTED_AT = datetime(2026, 9, 27, 14, 3, 12, 345000, tzinfo=UTC)
@@ -67,7 +68,7 @@ def crawl_without_seeds(temp_workspace: TempWorkspace) -> CrawlFile:
     """A Crawl whose seeds table each scenario fills itself."""
     crawl = create_any_crawl(temp_workspace)
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        writer.run(lambda connection: connection.execute(delete(seeds)))
+        writer.run(executing(delete(seeds)))
     return crawl
 
 

@@ -37,7 +37,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - the two test units that return a SQLAlchemy result return `None`
   - "Writing a Crawl" in `docs/crawl-store.md` states the stricter contract of design D7 and what a replay that differs does
 - [x] 1.10 Test support: `replay_now(writer)` in `tests/support`, which makes the writer replay every unit since the last commit, so a change's own tests can check that its units run again the same (design D7). Done when: a test uses it, and docs/testing.md lists it under Helpers.
-- [ ] 1.11 Review: run the code-review skill on 1.9 and 1.10 against the "Transactional writer" requirement, then refactor with the whole suite green.
+- [x] 1.11 Review: run the code-review skill on 1.9 and 1.10 against the "Transactional writer" requirement, then refactor with the whole suite green.
 
 ## 2. Submitting units with their outcome at the commit (seam 2)
 

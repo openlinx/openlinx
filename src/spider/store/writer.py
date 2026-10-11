@@ -150,7 +150,7 @@ class CrawlWriter:
         self._refuse_own_thread()
         with self._lock:
             if self._closed:
-                raise CrawlWriterClosedError(CLOSED)
+                raise CrawlWriterClosedError(CLOSED) from self._failure
         self._queue.put(job, block=block)
 
     def _refuse_own_thread(self) -> None:
@@ -168,7 +168,7 @@ class CrawlWriter:
     def _check_alive(self, done: Future[Any]) -> None:
         # A job queued after the thread drained the queue on its way out would wait forever.
         if not self._thread.is_alive() and not done.done():
-            raise CrawlWriterClosedError(CLOSED)
+            raise CrawlWriterClosedError(CLOSED) from self._failure
 
     def _serve(self, started: Future[None]) -> None:
         try:
@@ -188,7 +188,7 @@ class CrawlWriter:
         finally:
             with self._lock:
                 self._closed = True
-            _fail_queued(self._queue)
+            _fail_queued(self._queue, self._failure)
 
     def _work(self, connection: Connection) -> None:
         while True:
@@ -221,16 +221,15 @@ class CrawlWriter:
             return job.work is _Control.FLUSH
         if not connection.in_transaction():
             self._begin(connection)
-        before = _total_changes(connection)
         # No savepoint: one per unit costs more than replaying the batch when a unit fails.
         try:
-            result = job.work(connection)
+            result, changes = _run_counted(job.work, connection)
         # KeyboardInterrupt too: it rolls back like any failure and reaches the unit's caller.
         except BaseException as error:
             self._replay(job, self._busy_error(error), connection)
             return True
         # Only units that succeeded run again, so a failing unit never does.
-        self._batch.append(_Ran(job.work, result, _total_changes(connection) - before))
+        self._batch.append(_Ran(job.work, result, changes))
         self._commit_if_due(connection)
         # Only now: a caller that reads after its unit returns sees the commit.
         job.done.set_result(result)
@@ -241,17 +240,17 @@ class CrawlWriter:
         self._first_uncommitted_at = self._clock.monotonic()
 
     def _replay(self, failed: _Job, error: BaseException, connection: Connection) -> None:
-        ran, self._batch = self._batch, []
+        batch, self._batch = self._batch, []
         try:
             connection.rollback()
-            if ran:
+            if batch:
                 self._begin(connection)
-                for unit in ran:
-                    _run_again(unit, connection)
-                self._batch = ran
+                for ran in batch:
+                    _run_again(ran, connection)
+                self._batch = batch
                 self._commit(connection)
         finally:
-            # Its own error even when the replay commit fails and ends the writer (design D6).
+            # Its own error even when the replay fails and ends the writer (design D6).
             failed.done.set_exception(error)
 
     def _commit_if_due(self, connection: Connection) -> None:
@@ -296,19 +295,29 @@ def _check_writable(connection: Connection) -> None:
     transaction.rollback()
 
 
+def _run_counted[T](unit: Callable[[Connection], T], connection: Connection) -> tuple[T, int]:
+    driver = cast(sqlite3.Connection, connection.connection.driver_connection)
+    before = driver.total_changes
+    result = unit(connection)
+    # SQLite's count is a C int, which wraps on a long Crawl.
+    return result, (driver.total_changes - before) & 0xFFFFFFFF
+
+
 def _run_again(ran: _Ran, connection: Connection) -> None:
-    # Never committed without it: its caller holds the first run's result, and may have built
-    # later units on it (design D6).
     savepoint = connection.begin_nested()
-    before = _total_changes(connection)
+    # A unit that does not do the same again ends the writer, never just its own changes: its
+    # caller holds the first run's result, and may have built later units on it (design D6).
     try:
-        result = ran.unit(connection)
+        result, changes = _run_counted(ran.unit, connection)
     except BaseException as error:
+        # Kept as it is, so a busy file still ends the writer with crawl_busy.
+        if is_busy(error):
+            raise
         raise _replay_error(ran, "raised") from error
     if result != ran.result:
         raise _replay_error(ran, "returned a different result")
-    if _total_changes(connection) - before != ran.changes:
-        raise _replay_error(ran, "changed a different number of rows")
+    if changes != ran.changes:
+        raise _replay_error(ran, f"changed {changes} rows instead of {ran.changes}")
     savepoint.commit()
 
 
@@ -317,14 +326,12 @@ def _replay_error(ran: _Ran, what: str) -> CrawlWriterReplayError:
     return CrawlWriterReplayError(f"The unit {name} {what} when it ran again.")
 
 
-def _total_changes(connection: Connection) -> int:
-    return cast(sqlite3.Connection, connection.connection.driver_connection).total_changes
-
-
-def _fail_queued(queue: Queue[_Job]) -> None:
+def _fail_queued(queue: Queue[_Job], failure: BaseException | None) -> None:
     while True:
         try:
             job = queue.get_nowait()
         except Empty:
             return
-        job.done.set_exception(CrawlWriterClosedError(CLOSED))
+        closed = CrawlWriterClosedError(CLOSED)
+        closed.__cause__ = failure
+        job.done.set_exception(closed)

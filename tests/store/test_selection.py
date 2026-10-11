@@ -16,6 +16,7 @@ from spider.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
 from tests.support.crawls import STARTED_AT, create_crawl_at, current_workspace
 from tests.support.workspace import TempWorkspace
+from tests.support.writer import executing
 
 
 def test_by_id(temp_workspace: TempWorkspace) -> None:
@@ -116,7 +117,7 @@ def test_not_a_crawl_file(temp_workspace: TempWorkspace) -> None:
 def test_a_crawl_file_without_its_crawl_row(temp_workspace: TempWorkspace) -> None:
     crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        writer.run(lambda connection: connection.execute(delete(crawl_table)))
+        writer.run(executing(delete(crawl_table)))
 
     with pytest.raises(SpiderError) as raised:
         resolve_latest(temp_workspace)
@@ -141,11 +142,7 @@ def test_a_missing_crawl_file_path(temp_workspace: TempWorkspace) -> None:
 def test_a_crawl_file_that_holds_another_id(temp_workspace: TempWorkspace) -> None:
     crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        writer.run(
-            lambda connection: connection.execute(
-                update(crawl_table).values(id="20260927-090000-zzzz")
-            )
-        )
+        writer.run(executing(update(crawl_table).values(id="20260927-090000-zzzz")))
     workspace = current_workspace(temp_workspace)
 
     with pytest.raises(SpiderError) as raised:
@@ -163,7 +160,7 @@ def test_a_crawl_file_that_holds_another_id(temp_workspace: TempWorkspace) -> No
 
 def holding_another_id(crawl: CrawlFile, crawl_id: str) -> None:
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        writer.run(lambda connection: connection.execute(update(crawl_table).values(id=crawl_id)))
+        writer.run(executing(update(crawl_table).values(id=crawl_id)))
 
 
 def test_latest_that_holds_another_id(temp_workspace: TempWorkspace) -> None:

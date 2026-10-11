@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import Connection, func, select, update
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import IntegrityError
 
 from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect
@@ -25,7 +25,7 @@ from tests.support.crawls import (
 )
 from tests.support.permissions import read_only_file
 from tests.support.workspace import TempWorkspace
-from tests.support.writer import replay_now
+from tests.support.writer import executing, replay_now
 
 SEEDS = "SELECT position, url FROM seeds ORDER BY position"
 COUNT = "SELECT count(*) FROM seeds"
@@ -50,16 +50,13 @@ def test_a_unit_updates_a_row_of_an_earlier_unit(temp_workspace: TempWorkspace) 
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         writer.run(insert_seed(1, "https://example.com/a"))
-        writer.run(update_seed_url(1, "https://example.com/b"))
+        writer.run(
+            executing(
+                update(seeds).where(seeds.c.position == 1).values(url="https://example.com/b")
+            )
+        )
 
     assert query(crawl.path, SEEDS) == [(1, "https://example.com/b")]
-
-
-def update_seed_url(position: int, url: str) -> Callable[[Connection], None]:
-    def unit(connection: Connection) -> None:
-        connection.execute(update(seeds).where(seeds.c.position == position).values(url=url))
-
-    return unit
 
 
 def raising_insert(position: int, error: BaseException) -> Callable[[Connection], None]:
@@ -107,7 +104,7 @@ def test_a_failing_unit_commits_the_units_before_it(temp_workspace: TempWorkspac
     assert ([position for position, _ in seen], committed) == ([1, 2, 3], [3])
 
 
-def ended_by_the_replay(
+def close_after_a_replay(
     crawl_file: Path, unit: Callable[[Connection], object]
 ) -> CrawlWriterClosedError:
     """Runs the unit, then one that fails, so the unit runs again; returns close()'s error."""
@@ -131,7 +128,7 @@ def test_a_unit_that_fails_or_returns_differently_when_it_runs_again_ends_the_wr
         insert_seed(1, "https://example.com/1")(connection)
         return len(runs)
 
-    closed = ended_by_the_replay(crawl.path, counts_its_runs)
+    closed = close_after_a_replay(crawl.path, counts_its_runs)
 
     assert (query(crawl.path, SEEDS), type(closed.__cause__), str(closed.__cause__)) == (
         [],
@@ -151,12 +148,12 @@ def test_a_unit_that_changes_a_different_number_of_rows_when_it_runs_again_ends_
         for position in runs:
             insert_seed(position, f"https://example.com/{position}")(connection)
 
-    closed = ended_by_the_replay(crawl.path, inserts_more_each_run)
+    closed = close_after_a_replay(crawl.path, inserts_more_each_run)
 
     assert (query(crawl.path, SEEDS), str(closed.__cause__)) == (
         [],
-        f"The unit {inserts_more_each_run.__qualname__} changed a different number of rows when"
-        " it ran again.",
+        f"The unit {inserts_more_each_run.__qualname__} changed 2 rows instead of 1 when it ran"
+        " again.",
     )
 
 
@@ -173,18 +170,37 @@ def test_a_unit_that_meets_a_full_file_when_it_runs_again_ends_the_writer(
             connection.exec_driver_sql(f"PRAGMA max_page_count = {pages}")
         insert_seed(1, "https://example.com/" + "x" * 100_000)(connection)
 
-    closed = ended_by_the_replay(crawl.path, fills_the_file_when_run_again)
-    full = closed.__cause__.__cause__ if closed.__cause__ else None
+    closed = close_after_a_replay(crawl.path, fills_the_file_when_run_again)
+    replayed = closed.__cause__
+    full = getattr(getattr(replayed, "__cause__", None), "orig", None)
 
-    assert (
-        query(crawl.path, COUNT),
-        str(closed.__cause__),
-        isinstance(full, DBAPIError) and full.orig.sqlite_errorcode,  # type: ignore[union-attr]
-    ) == (
+    assert (query(crawl.path, COUNT), str(replayed), getattr(full, "sqlite_errorcode", None)) == (
         [(0,)],
         f"The unit {fills_the_file_when_run_again.__qualname__} raised when it ran again.",
         sqlite3.SQLITE_FULL,
     )
+
+
+def test_a_unit_after_a_replay_that_differs_learns_why_the_writer_ended(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    runs: list[int] = []
+
+    def counts_its_runs(connection: Connection) -> int:
+        runs.append(1)
+        return len(runs)
+
+    writer = CrawlWriter(crawl.path, FakeClock())
+    writer.run(counts_its_runs)
+    with pytest.raises(ValueError, match=r"^bad$"):
+        writer.run(raising_insert(9, ValueError("bad")))
+    with pytest.raises(CrawlWriterClosedError) as later:
+        writer.run(count_seeds)
+    with pytest.raises(CrawlWriterClosedError):
+        writer.close()
+
+    assert type(later.value.__cause__) is CrawlWriterReplayError
 
 
 def test_replay_now_runs_the_units_since_the_last_commit_again(
@@ -205,6 +221,26 @@ def test_replay_now_runs_the_units_since_the_last_commit_again(
     assert (len(runs), seen) == (2, [(1,)])
 
 
+def test_replay_now_fails_at_a_unit_that_runs_again_differently(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    runs: list[int] = []
+
+    def counts_its_runs(connection: Connection) -> int:
+        runs.append(1)
+        return len(runs)
+
+    writer = CrawlWriter(crawl.path, FakeClock())
+    writer.run(counts_its_runs)
+    with pytest.raises(CrawlWriterClosedError) as raised:
+        replay_now(writer)
+    with pytest.raises(CrawlWriterClosedError):
+        writer.close()
+
+    assert type(raised.value.__cause__) is CrawlWriterReplayError
+
+
 def test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails(
     temp_workspace: TempWorkspace,
 ) -> None:
@@ -220,7 +256,7 @@ def test_the_failing_unit_gets_its_own_error_when_the_replay_commit_fails(
     def breaks_a_deferred_reference(connection: Connection) -> None:
         connection.exec_driver_sql("INSERT INTO children VALUES (9)")
 
-    closed = ended_by_the_replay(crawl.path, breaks_a_deferred_reference)
+    closed = close_after_a_replay(crawl.path, breaks_a_deferred_reference)
 
     assert (query(crawl.path, "SELECT count(*) FROM children"), type(closed.__cause__)) == (
         [(0,)],
