@@ -126,7 +126,6 @@ An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists t
 - **WHEN** `spider commands` runs
 - **THEN** the `--limit` option of the `schema` entry has `"type":"integer"`, `"default":50` and `"global":false`
 
-
 #### Scenario: A table without secondary indexes lists none
 - **WHEN** `spider schema seeds --fields name,indexes` runs
 - **THEN** `items` is `[{"name":"seeds","indexes":[]}]`
@@ -183,7 +182,6 @@ Every public table, column and index SHALL follow these conventions (ADR-0005):
 #### Scenario: Timestamp text
 - **WHEN** the `crawl` row of a Crawl created at `2026-09-27T14:03:12.345Z` is read
 - **THEN** `started_at` is the 24-character text `2026-09-27T14:03:12.345Z`
-
 
 #### Scenario: An unknown enumeration value is refused
 - **WHEN** a unit sets `crawl.state` to `"paused"`

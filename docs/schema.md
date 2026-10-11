@@ -32,7 +32,7 @@ Tables are listed in the order of the change that added them, and within a chang
 
 ## Conventions
 
-Every public table, column and index follows the conventions of [ADR-0005](adr/0005-crawl-file-schema-conventions.md), which gives all the naming rules and their reasons. The file enforces the ones it can, tests over `spider schema` check some others, and review checks the rest:
+Every public table, column and index follows the conventions of [ADR-0005](adr/0005-crawl-file-schema-conventions.md), which gives all the naming rules and their reasons. The file enforces the ones it can, tests over `spider schema` and the declaration check some others, and review checks the rest:
 - **STRICT tables:** every table is `STRICT`, so a column's type is `INTEGER`, `REAL`, `TEXT` or `BLOB`, and the file refuses a value of another type. Reading a crawl file needs SQLite 3.37 or later.
 - **Names:** lowercase snake_case. Table names are plural nouns, except the one-row `crawl`.
 - **Descriptions:** every table, column and index has one. Two prefixes mark a column that stays NULL for a while:
@@ -61,7 +61,7 @@ A change that stores new data adds its tables and columns in the slice whose sce
    - Read an enumeration's `values` from the `Literal` the code uses.
    - Declare each index with `info={"description": ...}`, naming the query it serves. Declare a unique rule as an index with `unique=True`, never as a `UNIQUE` constraint, whose index SQLite makes and nothing lists.
 2. **Document it here, in the same commit:** a ``## Table `<name>` `` section, placed in change order, with the same description, one row per column, and an Indexes table when it has secondary indexes. The contract test compares this page with `spider schema --limit 1000`, so it is never red between commits.
-3. **Follow the [conventions](#conventions).** Tests over `spider schema` check names, descriptions, types, booleans and enumeration values for every table, including new ones.
+3. **Follow the [conventions](#conventions).** Tests over `spider schema` and the declaration check names, descriptions, types, booleans, enumeration values, references, index names, unique rules declared as indexes, and that derived and later columns may hold NULL, for every table, including new ones.
 4. **No migration before v0.1.** Until the first release the schema is not yet public: a change edits the declared tables directly, and `schema_version` stays `1`. From v0.1 on, a schema change adds 1 to `schema_version` and brings a migration, with a test from every published schema version.
 
 A table whose name starts with `_` is internal: it is left out of `spider schema` and of this page.

@@ -62,7 +62,7 @@
 - **The one trap:** `Float` and `Double` compile to `FLOAT` and `DOUBLE`, which STRICT refuses. A REAL column, such as 030's `average_words_per_sentence`, is declared with `sqlalchemy.REAL`. The convention "a column's type is `INTEGER`, `REAL`, `TEXT` or `BLOB`", checked over `spider schema`, catches any other type before a file is ever created.
 - **How tables become STRICT:** the same declaration helper as D2 sets `sqlite_strict=True` on every public table. Checked by "Every table is strict" through `PRAGMA table_list`.
 - **What shows STRICT at work:** "A value of another type is refused" writes text into `crawl.schema_version`, a plain `INTEGER` column, which only STRICT refuses. An `INTEGER PRIMARY KEY` such as `seeds.position` is a rowid alias: SQLite refuses text there in any table, with `datatype mismatch`, so it would pass without STRICT.
-- **What it costs readers:** a STRICT table can be opened only by SQLite 3.37 or later (2021-11). Our own tool runs on 3.50 or later. `docs/schema.md` states the minimum for other tools, and `080`'s `doctor` reports the SQLite version.
+- **What it costs readers:** a STRICT table can be opened only by SQLite 3.37 or later (2021-11). Our own tool uses the SQLite of the Python it runs on, which is 3.50 or later in the uv-managed and python.org builds. `docs/schema.md` states the minimum for other tools, and `080`'s `doctor` reports the SQLite version.
 - *Alternative:* CHECKs on `typeof()` for every column. They are verbose and duplicate what STRICT does. Rejected.
 
 ### D4. References and indexes in the schema description
@@ -115,7 +115,7 @@ No boundary double is used.
 - [Group 2's review: what stays open] → Recorded at task 2.10:
   - A `UniqueConstraint` or `Column(unique=True)` makes an index that SQLite names itself. Neither `spider schema` nor the file check lists it, because the spec lists only declared secondary indexes. `docs/schema.md`'s "How to add a table" says to declare a unique rule as an `Index` with `unique=True`, as `020`'s `urls_url` is. Ruled: task 3.1a's guard refuses a UNIQUE constraint on a public table now.
   - `references` takes the first of a column's foreign keys. A column with two would give an arbitrary one. Ruled: task 3.1a's guard refuses a public column with more than one foreign key.
-  - Four tests carry no scenario title, because they make done-whens non-vacuous before `020`'s tables exist: `test_secondary_indexes_are_listed_in_name_order` (2.2), `test_a_reference_names_its_target_column` (2.3), `test_a_new_file_matches_a_declared_reference_and_indexes` (2.6) and `test_a_documented_indexes_table_is_parsed` (2.7). Task 3.1 counts only tests named after scenarios.
+  - Six tests carry no scenario title. Four make done-whens non-vacuous before `020`'s tables exist: `test_secondary_indexes_are_listed_in_name_order` (2.2), `test_a_reference_names_its_target_column` (2.3), `test_a_new_file_matches_a_declared_reference_and_indexes` (2.6) and `test_a_documented_indexes_table_is_parsed` (2.7). Two are guards of conventions the spec implies: `test_column_types_are_those_strict_allows` (1.3, D3) and `test_every_unique_rule_is_an_index_and_every_reference_one_key` (3.1a). Task 3.1 counts only tests named after scenarios.
 
 ## Migration Plan
 

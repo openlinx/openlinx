@@ -32,6 +32,11 @@ def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckCons
     return checks
 
 
+def public_tables() -> list[Table]:
+    """The declared tables but the internal ones, whose names start with an underscore."""
+    return [table for table in metadata.tables.values() if not table.name.startswith("_")]
+
+
 def public_table(name: str, *columns: Column[Any], comment: str, change: int) -> Table:
     """The one way to declare a public table: STRICT, with the CHECKs its columns' values call for.
 

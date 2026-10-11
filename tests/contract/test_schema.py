@@ -97,7 +97,7 @@ def declared_schema() -> dict[str, dict[str, Any]]:
     for item in describe_schema().tables:
         table = metadata.tables[item["name"]]
         tables[item["name"]] = {
-            "strict": True,
+            "strict": table.dialect_options["sqlite"]["strict"],
             "without_rowid": not table.dialect_options["sqlite"]["with_rowid"],
             "columns": [
                 (

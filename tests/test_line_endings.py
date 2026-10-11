@@ -8,8 +8,8 @@ TEXT_IN_INDEX = {"i/lf", "i/crlf", "i/mixed"}
 
 
 def git(root: Path, *args: str) -> bytes:
-    # The fake home hides the global .gitconfig, and with it any safe.directory entry.
     return subprocess.run(
+        # The fake home hides the global .gitconfig, and with it any safe.directory entry.
         ["git", "-c", f"safe.directory={root.as_posix()}", *args],
         cwd=root,
         capture_output=True,

@@ -60,7 +60,8 @@ The user decided on one schema blueprint before `020` is built (2026-10-10), and
   - `015-add-crawl-store` as built: the declared `MetaData` with `info={"change": n}`, the `Timestamp`, `Json` and `Flag` types, `describe_schema`, `docs/schema.md` and its contract test.
   - `017-speed-up-crawl-writer` as merged (PR #4): `CrawlWriter`'s optimistic batch, through which a refused unit fails alone, and `opening(role=...)`. The requirements that `017` modified ("Transactional writer") or added are not touched here.
 - **Used by:** every change that adds a table: `020`, `022`, `030`, `040`, `060` and later ones.
-- **Code:** `src/spider/store/schema.py`, `src/spider/store/types.py`, `src/spider/services/schema.py`, and the `schema` Command's fields.
+- **Code:** `src/spider/store/schema.py`, `src/spider/services/schema.py`, the new `src/spider/services/schema_doc.py`, and the `schema` Command's fields.
+- **Repository tooling and code style,** brought in by tasks 1.7 to 1.9 because `018` is the next change built: the line-endings check skips paths missing on disk, an `ast` guard holds ADR-0006's decidable rules, and four `noqa` and `type: ignore` uses follow CONTRIBUTING's "Code style".
 - **Tests:** `tests/contract/test_schema.py`, the `spider schema` tests and the store tests.
 - **Docs:** `docs/adr/0005-crawl-file-schema-conventions.md` (added with this change), `docs/schema.md` and `docs/crawl-store.md`.
 - **New dependencies:** none.
