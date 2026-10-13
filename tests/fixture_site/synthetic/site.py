@@ -82,6 +82,7 @@ class Fault(StrEnum):
     WRONG_CHARSET = "wrong_charset"
     UNKNOWN_CHARSET = "unknown_charset"
     MALFORMED_HTML = "malformed_html"
+    SLOW = "slow"
     NO_TITLE = "no_title"
     NO_H1 = "no_h1"
 
@@ -95,6 +96,7 @@ DEFAULT_SHARES: Mapping[Fault, float] = {
     Fault.WRONG_CHARSET: 5e-4,
     Fault.UNKNOWN_CHARSET: 5e-4,
     Fault.MALFORMED_HTML: 1e-3,
+    Fault.SLOW: 2e-4,
     Fault.NO_TITLE: 2e-3,
     Fault.NO_H1: 2e-3,
 }
@@ -113,6 +115,7 @@ OUTCOMES: Mapping[Fault, Mapping[str, Any]] = {
             Fault.WRONG_CHARSET,
             Fault.UNKNOWN_CHARSET,
             Fault.MALFORMED_HTML,
+            Fault.SLOW,
             Fault.NO_TITLE,
             Fault.NO_H1,
         ),
@@ -183,13 +186,14 @@ def _number(digits: str, below: int) -> int | None:
     return n if n < below else None
 
 
-def _pool_route(path: str) -> Route | None:
+def _pool_route(path: str, delay: float) -> Route | None:
     for pool in SERVED_POOLS:
         prefix, _, suffix = pool.path.partition("{}")
         if path.startswith(prefix) and path.endswith(suffix):
             index = _number(path[len(prefix) : len(path) - len(suffix)], pool.size)
             if index is not None:
-                return Bytes(f"{pool.name} {index}".encode(), content_type=pool.content_type)
+                body = f"{pool.name} {index}".encode()
+                return Bytes(body, content_type=pool.content_type, delay=delay)
     return None
 
 
@@ -258,6 +262,8 @@ class SyntheticSite:
     seed: int
     pages: int
     fanout: int = 50
+    latency: float = 0.0
+    slow_seconds: float = 3.0
     shares: Mapping[Fault, float] = field(default_factory=lambda: dict(DEFAULT_SHARES))
 
     def __post_init__(self) -> None:
@@ -425,14 +431,15 @@ class SyntheticSite:
     def route(self, path: str) -> Route | None:
         n = _page_number(path, self.pages)
         if n is None:
-            return _pool_route(path)
+            return _pool_route(path, self.latency)
         fault = self.fault(n)
         if fault is Fault.SERVER_ERROR:
-            return Status(500)
+            return Status(500, delay=self.latency)
+        delay = self.latency + (self.slow_seconds if fault is Fault.SLOW else 0.0)
         refresh = self._http_refresh(n)
         headers = [] if refresh is None else [("Refresh", f"30; url={refresh}")]
         content_type = "text/html; charset=nonsense" if fault is Fault.UNKNOWN_CHARSET else HTML
-        return Bytes(self.render(n), content_type=content_type, headers=headers)
+        return Bytes(self.render(n), content_type=content_type, headers=headers, delay=delay)
 
     def manifest(self) -> dict[str, Any]:
         """The injected counts and the URLs a Crawl must account for, in one pass of hashes."""
@@ -466,6 +473,8 @@ class SyntheticSite:
             "seed": self.seed,
             "pages": self.pages,
             "fanout": self.fanout,
+            "latency": self.latency,
+            "slow_seconds": self.slow_seconds,
             "shares": {fault.value: self.shares.get(fault, 0.0) for fault in Fault},
             "faults": {fault.value: count for fault, count in faults.items()},
             "outcomes": {fault.value: dict(OUTCOMES[fault]) for fault in Fault},

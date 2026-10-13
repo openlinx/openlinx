@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from collections import Counter, deque
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -217,7 +218,9 @@ def observed_fault(page: Fetched) -> str | None:
 
 
 LOSES_LINKS = {"server_error", "nested_divs", "ends_worker"}
-FAULTY = SyntheticSite(seed=3, pages=400, fanout=4, shares=dict.fromkeys(Fault, 0.05))
+# A slow Page looks like any other but for its time, which a timing test bounds only from below.
+SEEN_FAULTS = [fault for fault in Fault if fault is not Fault.SLOW]
+FAULTY = SyntheticSite(seed=3, pages=400, fanout=4, shares=dict.fromkeys(SEEN_FAULTS, 0.05))
 
 
 @pytest.fixture(scope="module")
@@ -231,7 +234,8 @@ def test_the_faults_a_client_sees_are_the_counts_of_the_manifest(
     seen = Counter(observed_fault(got) for path, got in faulty_crawl.items() if is_page(path))
 
     counts = {fault.value: seen[fault.value] for fault in Fault}
-    assert (counts, min(counts.values()) > 0) == (FAULTY.manifest()["faults"], True)
+    least = min(counts[fault.value] for fault in SEEN_FAULTS)
+    assert (counts, least > 0) == (FAULTY.manifest()["faults"], True)
 
 
 def test_the_urls_the_pages_reference_are_the_url_totals_of_the_manifest(
@@ -317,3 +321,28 @@ def test_another_seed_places_the_faults_on_other_pages() -> None:
 def test_a_synthetic_site_is_checked_when_it_is_declared(changes: dict[str, Any]) -> None:
     with pytest.raises(ValueError, match="synthetic site"):
         SyntheticSite(**{"seed": 1, "pages": 10, **changes})
+
+
+def elapsed(server: ServerHandle, path: str) -> float:
+    connection = connect(server)
+    try:
+        started = time.monotonic()
+        fetch(connection, path)
+        return time.monotonic() - started
+    finally:
+        connection.close()
+
+
+def test_a_slow_page_answers_no_sooner_than_its_delay(fixture_site: StartSite) -> None:
+    site = SyntheticSite(seed=1, pages=20, fanout=4, shares={Fault.SLOW: 1.0}, slow_seconds=0.5)
+    slow = next(n for n in range(20) if site.fault(n) is Fault.SLOW)
+    server = fixture_site(site.as_site())
+
+    assert elapsed(server, page_path(slow)) >= 0.5
+
+
+@pytest.mark.parametrize("path", ["/", "/r/i/0.jpg"])
+def test_the_latency_delays_every_response(fixture_site: StartSite, path: str) -> None:
+    server = fixture_site(SyntheticSite(seed=1, pages=20, shares=NO_FAULTS, latency=0.3).as_site())
+
+    assert elapsed(server, path) >= 0.3
