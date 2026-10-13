@@ -115,4 +115,5 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 
 | Name | Columns | Unique | Where | Description |
 |---|---|---|---|---|
+| `urls_crawl_depth_id` | `crawl_depth`, `id` | no | `fetch_state = 'queued'` | The frontier: the next queued URLs of the open Crawl Depth, in id order. |
 | `urls_url` | `url` | yes | | Recording a discovered URL once (ON CONFLICT (url)), and finding one URL's row. |

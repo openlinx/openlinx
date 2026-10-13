@@ -104,7 +104,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - the first `urls` columns (`id`, `url`, `host`, `crawl_depth`, `discovered_via`, `fetch_state`, `status_code`) and the unique index `urls_url` are declared with `018`'s `public_table(..., change=20)`, each enumeration with every value of design D18, with their `docs/schema.md` rows; `018`'s guard over index names switches on its assertion that it saw an index
   - every writer unit is defined in a `spider.store.*` module, follows `017` D7 (deterministic given the file's state, values as results), and its seam-2 test forces a replay with `017`'s `replay_now(writer)` from `tests/support/writer.py` (design D14); a guard in `tests/test_code_style.py` fails, naming the module, when a module of `src/spider` outside `spider/store/` and `spider/services/schema.py` imports `sqlalchemy`, at module level or inside a function, with cases that feed it source strings to show it is sharp (design D14)
 - [x] 4.3 **Guard:** "The Seed is kept as given in seeds" (seam 3+6) and "The ways a URL is found are an enumeration" (seam 1), a pair. `015`'s `create_crawl` writes the Seeds as given, and task 4.2 declared `discovered_via` from the `LinkType` `Literal` (design D5).
-- [ ] 4.4 Drive "Pages linked from the Seed are crawled" at seam 3+6, and "Indexes of urls" at seam 1, a pair.
+- [x] 4.4 Drive "Pages linked from the Seed are crawled" at seam 3+6, and "Indexes of urls" at seam 1, a pair.
 
   Done when:
   - the scheduler takes queued URLs depth by depth in `urls.id` order through a writer unit that only reads, run with `run_async()` and committing nothing, above a per-depth cursor of the run, over the partial index `urls_crawl_depth_id`, declared with its description (design D1)

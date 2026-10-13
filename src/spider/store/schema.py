@@ -208,3 +208,12 @@ Index(
         "URL's row."
     },
 )
+Index(
+    "urls_crawl_depth_id",
+    urls.c.crawl_depth,
+    urls.c.id,
+    sqlite_where=urls.c.fetch_state == "queued",
+    info={
+        "description": "The frontier: the next queued URLs of the open Crawl Depth, in id order."
+    },
+)

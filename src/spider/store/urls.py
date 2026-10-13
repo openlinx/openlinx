@@ -1,11 +1,12 @@
-"""The urls table's units (020-add-crawl-core D1, D2, D14)."""
+"""The units of the urls table: the frontier and each URL's outcome (020 D1, D2, D14)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
-from sqlalchemy import Connection, bindparam, select, update
+from sqlalchemy import Connection, bindparam, func, literal_column, select, update
 from sqlalchemy.dialects.sqlite import insert
 
 from spider.crawl.urls import NormalizedUrl
+from spider.store.records import NewUrl, QueuedUrl
 from spider.store.schema import urls
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
@@ -15,6 +16,22 @@ _FETCHED = (
     update(urls)
     .where(urls.c.id == bindparam("url_id"))
     .values(fetch_state="fetched", status_code=bindparam("response_status"))
+)
+# A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
+# without the plan depending on a bound value (design D1).
+_IS_QUEUED = urls.c.fetch_state == literal_column("'queued'")
+_QUEUED = (
+    select(urls.c.id, urls.c.url)
+    .where(
+        _IS_QUEUED,
+        urls.c.crawl_depth == bindparam("depth"),
+        urls.c.id > bindparam("after"),
+    )
+    .order_by(urls.c.id)
+    .limit(bindparam("size"))
+)
+_NEXT_DEPTH = select(func.min(urls.c.crawl_depth)).where(
+    _IS_QUEUED, urls.c.crawl_depth > bindparam("depth")
 )
 
 
@@ -38,10 +55,48 @@ def record_seed(url: NormalizedUrl, host: str) -> Callable[[Connection], int]:
     return unit
 
 
-def record_fetched(url_id: int, status_code: int) -> Callable[[Connection], None]:
-    """A unit that records the URL's response."""
+def queued_batch(
+    depth: int, after: int, size: int
+) -> Callable[[Connection], tuple[QueuedUrl, ...]]:
+    """A unit that only reads: the next queued URLs at `depth` whose id is above `after`."""
+
+    def unit(connection: Connection) -> tuple[QueuedUrl, ...]:
+        rows = connection.execute(_QUEUED, {"depth": depth, "after": after, "size": size})
+        # The one place the frontier reads urls.url back (design D13).
+        return tuple(QueuedUrl(row.id, NormalizedUrl(row.url)) for row in rows)
+
+    return unit
+
+
+def next_depth(depth: int) -> Callable[[Connection], int | None]:
+    """A unit that only reads: the shallowest depth deeper than `depth` with a queued URL."""
+
+    def unit(connection: Connection) -> int | None:
+        deeper: int | None = connection.execute(_NEXT_DEPTH, {"depth": depth}).scalar()
+        return deeper
+
+    return unit
+
+
+def record_fetched(
+    url_id: int, status_code: int, discovered: Sequence[NewUrl] = ()
+) -> Callable[[Connection], None]:
+    """A unit that records the URL's response and the URLs discovered from it."""
+    new_rows = [
+        {
+            "url": new.url,
+            "host": new.host,
+            "crawl_depth": new.crawl_depth,
+            "discovered_via": new.discovered_via,
+            "fetch_state": "queued",
+        }
+        for new in discovered
+    ]
 
     def unit(connection: Connection) -> None:
         connection.execute(_FETCHED, {"url_id": url_id, "response_status": status_code})
+        # The unique index urls_url is the only dedup: no URL map in memory (design D1).
+        if new_rows:
+            connection.execute(_INSERT_URL, new_rows)
 
     return unit

@@ -9,5 +9,6 @@ def crawled(*args: str) -> Path:
     """Runs `spider crawl` with `args` and returns the crawl file its result names."""
     result = run_cli("crawl", *args)
     if result.exit_code != 0:
-        raise AssertionError(f"spider crawl exited {result.exit_code}: {result.stderr!r}")
+        last = result.stderr.splitlines()[-1:] or [b""]
+        raise AssertionError(f"spider crawl exited {result.exit_code}: {last[0][:2000]!r}")
     return Path(result.json()["crawl_file"])

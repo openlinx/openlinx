@@ -57,3 +57,24 @@ def test_the_ways_a_url_is_found_are_an_enumeration() -> None:
         "sitemap_input",
         "sitemap_index",
     ]
+
+
+def test_indexes_of_urls() -> None:
+    indexes = run_cli("schema", "urls", "--fields", "indexes").json()["items"][0]["indexes"]
+    reduced = [
+        {key: index[key] for key in ("name", "columns", "unique", "where")} for index in indexes
+    ]
+
+    assert [
+        expected
+        for expected in [
+            {
+                "name": "urls_crawl_depth_id",
+                "columns": ["crawl_depth", "id"],
+                "unique": False,
+                "where": "fetch_state = 'queued'",
+            },
+            {"name": "urls_url", "columns": ["url"], "unique": True, "where": None},
+        ]
+        if expected not in reduced
+    ] == []

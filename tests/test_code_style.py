@@ -175,7 +175,7 @@ class AppGroup(SpiderGroup): ...
 
 URL_MODULE = "spider/crawl/urls.py"
 # Group 4 adds each store module that casts urls.url to a NormalizedUrl (design D13).
-NORMALIZED_URL_MAKERS = {URL_MODULE}
+NORMALIZED_URL_MAKERS = {URL_MODULE, "spider/store/urls.py"}
 
 
 def _imported_modules(tree: ast.AST) -> list[str]:
@@ -248,7 +248,8 @@ def test_a_normalized_url_made_outside_its_makers_is_named() -> None:
         URL_MODULE: "NormalizedUrl('http://site.test/')\n",
         "spider/crawl/scope.py": "urls.NormalizedUrl('http://site.test/')\n",
         "spider/crawl/engine.py": "url = NormalizedUrl('http://site.test/')\n",
-        "spider/store/urls.py": "url = cast(NormalizedUrl, row.url)\n",
+        "spider/store/pages.py": "url = cast(NormalizedUrl, row.url)\n",
+        "spider/store/urls.py": "url = NormalizedUrl(row.url)\n",
         "spider/store/origins.py": "url = typing.cast('NormalizedUrl', row.url)\n",
         "spider/crawl/frontier.py": "def f(url: NormalizedUrl) -> None: ...\n",
         "spider/crawl/links.py": "n = cast(int, row.n)\n",
@@ -257,7 +258,7 @@ def test_a_normalized_url_made_outside_its_makers_is_named() -> None:
     assert url_type_violations(sources) == [
         "spider/crawl/scope.py makes a NormalizedUrl",
         "spider/crawl/engine.py makes a NormalizedUrl",
-        "spider/store/urls.py makes a NormalizedUrl",
+        "spider/store/pages.py makes a NormalizedUrl",
         "spider/store/origins.py makes a NormalizedUrl",
     ]
 

@@ -22,6 +22,14 @@ class Request:
 @dataclass(frozen=True, slots=True)
 class FetchResult:
     status_code: int
+    # As received: in order, in their letter case, repeated names kept.
+    headers: tuple[tuple[str, str], ...]
+    body: bytes
+
+    def header(self, name: str) -> str | None:
+        """The first value of the header `name`, in any letter case."""
+        wanted = name.lower()
+        return next((value for key, value in self.headers if key.lower() == wanted), None)
 
 
 class Fetcher(Protocol):
@@ -36,8 +44,13 @@ class AiohttpFetcher:
         # As given: yarl would decode a %2F in the query and request another URL than recorded.
         url = yarl.URL(request.url, encoded=True)
         async with self._session.get(url, allow_redirects=False) as response:
-            await response.read()
-            return FetchResult(response.status)
+            body = await response.read()
+            # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.
+            headers = tuple(
+                (name.decode("latin-1"), value.decode("latin-1"))
+                for name, value in response.raw_headers
+            )
+            return FetchResult(response.status, headers, body)
 
 
 @asynccontextmanager

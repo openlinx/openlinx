@@ -73,8 +73,24 @@ def extract_links(
 ) -> list[DiscoveredLink]:
     decoded = decode_html(body, content_type)
     tree = LexborHTMLParser(decoded.text)
-    codec = query_codec(decoded.encoding)
-    base = _base(tree, url, codec)
+    base = base_url(tree, url, decoded.encoding)
+    return links_in_tree(tree, base=base, encoding=decoded.encoding, is_internal=is_internal)
+
+
+def base_url(tree: LexborHTMLParser, url: NormalizedUrl, encoding: str) -> str:
+    """What the Page's references resolve against: its base href, else the response URL."""
+    return _base(tree, url, query_codec(encoding))
+
+
+def links_in_tree(
+    tree: LexborHTMLParser,
+    *,
+    base: str,
+    encoding: str,
+    is_internal: Callable[[NormalizedUrl], bool],
+) -> list[DiscoveredLink]:
+    """The Links of a parsed document, for page preparation, which parses once (design D9)."""
+    codec = query_codec(encoding)
     links: list[DiscoveredLink] = []
     for node in tree.css(_ELEMENTS):
         attributes = node.attributes

@@ -46,3 +46,25 @@ def test_the_seed_is_kept_as_given_in_seeds(
         query(crawl_file, "SELECT position, url FROM seeds"),
         query(crawl_file, "SELECT url FROM urls"),
     ) == ([(1, server.base_url)], [(server.url("/"),)])
+
+
+def test_pages_linked_from_the_seed_are_crawled(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/about">About</a>'),
+                "/about": Page(body='<a href="/team">Team</a>'),
+                "/team": Page(body="<p>Team</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert sorted(query(crawl_file, "SELECT url, fetch_state, status_code FROM urls")) == [
+        (server.url("/"), "fetched", 200),
+        (server.url("/about"), "fetched", 200),
+        (server.url("/team"), "fetched", 200),
+    ]

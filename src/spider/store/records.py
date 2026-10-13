@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from spider.crawl.urls import NormalizedUrl
 from spider.workspace.discovery import Workspace
 
 type CrawlMode = Literal["spider", "list", "sitemap"]
@@ -81,3 +82,21 @@ class NewCrawl:
 class CrawlFile:
     id: str
     path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class QueuedUrl:
+    """A URL the frontier hands to the engine."""
+
+    id: int
+    url: NormalizedUrl
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NewUrl:
+    """A URL discovered from a response, recorded unless the Crawl has it already."""
+
+    url: NormalizedUrl
+    host: str
+    crawl_depth: int
+    discovered_via: DiscoveredVia

@@ -12,6 +12,8 @@ from spider.clock import Clock
 from spider.crawl.context import CrawlContext
 from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import aiohttp_fetcher
+from spider.crawl.pages import InProcessExecutor, PageSettings
+from spider.crawl.scope import ScopeRules, scope_rules
 from spider.crawl.urls import InvalidUrl, InvalidUrlReason, NormalizedUrl, parse_seed
 from spider.output.codes import INVALID_URL
 from spider.output.diagnostics import SpiderError
@@ -44,6 +46,7 @@ class CrawlRequest:
 @dataclass(frozen=True)
 class CrawlPlan:
     seed: NormalizedUrl
+    scope: ScopeRules
     new_crawl: NewCrawl
 
 
@@ -76,7 +79,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
     )
-    return CrawlPlan(seed, new_crawl)
+    return CrawlPlan(seed, scope_rules(seed), new_crawl)
 
 
 def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResult:
@@ -87,13 +90,13 @@ def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResul
 
 
 async def _crawl(plan: CrawlPlan, crawl_file: CrawlFile, clock: Clock, reporter: Reporter) -> None:
-    async with crawl_context(crawl_file, clock, reporter) as context:
+    async with crawl_context(crawl_file, plan.scope, clock, reporter) as context:
         await run_crawl(context, plan.seed)
 
 
 @asynccontextmanager
 async def crawl_context(
-    crawl_file: CrawlFile, clock: Clock, reporter: Reporter
+    crawl_file: CrawlFile, scope: ScopeRules, clock: Clock, reporter: Reporter
 ) -> AsyncIterator[CrawlContext]:
     """The one place a Crawl's context is built, and its resources closed (design D15)."""
     from spider.store.writer import CrawlWriter
@@ -104,10 +107,12 @@ async def crawl_context(
         async with aiohttp_fetcher() as fetcher:
             yield CrawlContext(
                 crawl_file=crawl_file,
+                scope=scope,
                 clock=clock,
                 reporter=reporter,
                 writer=writer,
                 fetcher=fetcher,
+                pages=InProcessExecutor(PageSettings(scope)),
             )
     finally:
         await asyncio.to_thread(writer.close)
