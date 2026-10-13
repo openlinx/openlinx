@@ -260,6 +260,15 @@ class SyntheticSite:
     fanout: int = 50
     shares: Mapping[Fault, float] = field(default_factory=lambda: dict(DEFAULT_SHARES))
 
+    def __post_init__(self) -> None:
+        if self.pages < 1 or self.fanout < 1:
+            raise ValueError("a synthetic site needs at least 1 Page and a fanout of at least 1")
+        shares = self.shares.values()
+        if any(share < 0 for share in shares) or sum(shares) > 1:
+            raise ValueError(
+                "a synthetic site's fault shares are each 0 or more and add up to 1 at most"
+            )
+
     def fault(self, n: int) -> Fault | None:
         """Only leaves of the spanning tree carry a fault, so none cuts other Pages off."""
         if n * self.fanout + 1 < self.pages or n == 0:

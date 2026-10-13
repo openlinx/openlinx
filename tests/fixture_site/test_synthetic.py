@@ -1,7 +1,10 @@
 """The synthetic site of the 500k benchmark (026-add-parse-pool D6)."""
 
 import http.client
+import os
 import re
+import subprocess
+import sys
 from collections import Counter, deque
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -262,3 +265,55 @@ def test_the_manifest_names_the_outcome_each_fault_leaves_in_urls() -> None:
         {"status_code": 200, "parsed": 0, "parse_error": "worker_crashed"},
         {"status_code": 500, "parsed": 0, "parse_error": None},
     )
+
+
+# Renders a few Pages of every kind and the manifest, and prints one digest of them all.
+DIGEST_IN_A_CHILD = (
+    "import hashlib, json\n"
+    "from tests.fixture_site.synthetic.site import Fault, SyntheticSite\n"
+    "site = SyntheticSite(seed=3, pages=400, fanout=4, shares=dict.fromkeys(Fault, 0.05))\n"
+    "digest = hashlib.sha256(json.dumps(site.manifest(), sort_keys=True).encode())\n"
+    "for n in range(0, 400, 3):\n"
+    "    digest.update(site.render(n))\n"
+    "print(digest.hexdigest())\n"
+)
+
+
+def digest_in_a_child(hash_seed: str) -> str:
+    return subprocess.run(
+        [sys.executable, "-c", DIGEST_IN_A_CHILD],
+        env={**os.environ, "PYTHONHASHSEED": hash_seed},
+        capture_output=True,
+        check=True,
+        text=True,
+        timeout=60,
+    ).stdout
+
+
+@pytest.mark.slow
+def test_the_same_seed_gives_the_same_bytes_in_every_process() -> None:
+    assert digest_in_a_child("1") == digest_in_a_child("2")
+
+
+def test_another_seed_places_the_faults_on_other_pages() -> None:
+    shares = dict.fromkeys(Fault, 0.05)
+    placed = [
+        [SyntheticSite(seed=seed, pages=400, fanout=4, shares=shares).fault(n) for n in range(400)]
+        for seed in (3, 4)
+    ]
+
+    assert placed[0] != placed[1]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"pages": 0},
+        {"fanout": 0},
+        {"shares": {Fault.NO_TITLE: -0.1}},
+        {"shares": {Fault.NO_TITLE: 0.6, Fault.NO_H1: 0.5}},
+    ],
+)
+def test_a_synthetic_site_is_checked_when_it_is_declared(changes: dict[str, Any]) -> None:
+    with pytest.raises(ValueError, match="synthetic site"):
+        SyntheticSite(**{"seed": 1, "pages": 10, **changes})
