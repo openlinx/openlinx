@@ -157,7 +157,7 @@ If a change needs something another change owns, it depends on that change inste
   - Progress events and the result.
   - **Ctrl+C:** the Crawl becomes `stopped` with `stop_reason: interrupt`, and the command exits 130.
   - **Unreachable Seed:** the Crawl becomes `failed` and resumable, and the command exits 8.
-  - **Robustness and backstops:** one URL never stops the Crawl (counted `parse_failed` and `handler_failed` warnings), parsers tested with hypothesis, hostile fixtures, a lost site (`site_unreachable`, exit 8, resumable), a per-request watchdog, and a stop that waits 10 seconds and then cancels.
+  - **Robustness and backstops:** one URL never stops the Crawl (counted `parse_failed` and `handler_failed` warnings), parsers tested with hypothesis, hostile fixtures, a network pause (decided 2026-10-14: 10 Internal requests in a row without a response pause the Crawl, which probes the Seed at 5, 10, 20 and 40 seconds and then every 60; an answer resumes it, re-queueing the streak once after an outage; nothing within `--network-wait`, default 1800 seconds, fails it with `site_unreachable`, exit 8, resumable), a per-request watchdog, and a stop that waits 10 seconds and then cancels.
   - Parsing runs in-process.
 - **022-add-fetch-policy** (min in v0.1):
   - Timeouts, retries with backoff, and redirects followed hop by hop, with every hop recorded.
@@ -214,7 +214,7 @@ If a change needs something another change owns, it depends on that change inste
     - `-o <file>` writes exactly the stdout bytes, atomically, and leaves stdout empty (`output_written`, `output_not_writable`)
 - **060-add-crawl-control** (min and `resume` in v0.1, rest in v0.2):
   - `crawl --detach` in Spider mode: on Windows it uses CREATE_NO_WINDOW.
-  - `status`, which detects a dead process.
+  - `status`, which detects a dead process, and shows `paused_since` while a Crawl waits for the network (020's network pause, 2026-10-14); a stop request during that pause stops the Crawl at once.
   - `stop` (`--wait`).
   - The recorded runs and control requests behind them. **(v0.1.1)** The command recorded for Crawls started through MCP.
   - The **end-to-end CI test** on Windows, macOS and Linux: `crawl --detach` → `status` → `issues`, with a `sql` query while the Crawl is still running, then `stop`.
@@ -325,7 +325,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 **From a code review of a peer open-source crawler (2026-10-05),** to weigh when each change is re-grounded. Points our drafts already cover are left out.
 - 020:
   - Normalisation keeps the trailing slash: `/a` and `/a/` are distinct URLs, because which one redirects is itself a finding. Say so in the normalisation requirement.
-  - Backstops that end the Crawl with a `stop_reason`: a zero-success breaker (no URL stored after `max(8, 2 × concurrency)` finished requests), a per-URL watchdog, and stop as a grace period followed by cancellation.
+  - Backstops that end the Crawl with a `stop_reason`: a zero-success breaker (no URL stored after `max(8, 2 × concurrency)` finished requests; weighed 2026-10-14: 020 pauses the Crawl and probes the Seed instead, and fails it with `site_unreachable` only after `--network-wait`), a per-URL watchdog, and stop as a grace period followed by cancellation.
   - Invariant tests at seam 3+6: `--max-urls` is never exceeded under concurrency (in-flight URLs count toward it), each URL is fetched once, and link cycles end.
   - A deterministic dispatch order: an explicit insertion sequence as the tie-break, never a timestamp.
   - The apex→www direction joins Scope in one direction only. A `seed_base_mismatch` warning when the Seed's canonical or Links point to the other host. About 20 seed/base cases make a good table test.
