@@ -15,6 +15,7 @@ from spider.aio import loop_factory
 from tests.fixture_site.routes import (
     CONTENT_TYPES,
     DEFAULT_CONTENT_TYPE,
+    Bytes,
     LargeFile,
     Page,
     Redirect,
@@ -111,6 +112,8 @@ def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
             return _xml_response(_sitemap_xml("urlset", "url", base_url, paths))
         case SitemapIndex(paths=paths):
             return _xml_response(_sitemap_xml("sitemapindex", "sitemap", base_url, paths))
+        case Bytes(data=data):
+            return web.Response(body=data, headers={"Content-Type": DEFAULT_CONTENT_TYPE})
         case LargeFile(size=size):
             response = web.StreamResponse(headers={"Content-Type": DEFAULT_CONTENT_TYPE})
             response.content_length = size

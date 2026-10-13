@@ -65,7 +65,12 @@ class LargeFile(RouteOptions):
     size: int
 
 
-Route = Page | Status | Redirect | Robots | Sitemap | SitemapIndex | LargeFile
+@dataclass(frozen=True)
+class Bytes(RouteOptions):
+    data: bytes
+
+
+Route = Page | Status | Redirect | Robots | Sitemap | SitemapIndex | LargeFile | Bytes
 
 
 def redirect_chain(prefix: str, hops: int, to: str) -> dict[str, Route]:

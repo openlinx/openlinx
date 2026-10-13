@@ -38,6 +38,7 @@ SITE = Site(
 | `Sitemap(paths)` | 200, `application/xml` and a `<urlset>` with one absolute `<loc>` per path. |
 | `SitemapIndex(paths)` | 200, `application/xml` and a `<sitemapindex>` with one absolute `<loc>` per path. |
 | `LargeFile(size)` | 200, `Content-Length: size` and a stream of the bytes 0–255 repeated. |
+| `Bytes(data)` | 200, `application/octet-stream` unless `content_type` says otherwise, and the bytes exactly, for a page whose bytes are broken on purpose. |
 
 A gzipped sitemap is an ordinary `Page(file="sitemap.xml.gz", content_type="application/gzip")`. The extension table knows only `.html`, `.txt` and `.xml`; any other extension is `application/octet-stream` unless `content_type` says otherwise.
 
