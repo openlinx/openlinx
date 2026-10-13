@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import time
+import tracemalloc
 from collections import Counter, deque
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -346,3 +347,17 @@ def test_the_latency_delays_every_response(fixture_site: StartSite, path: str) -
     server = fixture_site(SyntheticSite(seed=1, pages=20, shares=NO_FAULTS, latency=0.3).as_site())
 
     assert elapsed(server, path) >= 0.3
+
+
+def test_the_manifest_keeps_nothing_per_page() -> None:
+    # 50,000 Pages, not 500,000: tracemalloc slows the pass about thirtyfold.
+    site = SyntheticSite(seed=1, pages=50_000)
+
+    tracemalloc.start()
+    try:
+        site.manifest()
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+    assert peak < 256 * 2**10
