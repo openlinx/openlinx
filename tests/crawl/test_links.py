@@ -31,3 +31,29 @@ def test_a_relative_link_is_resolved_against_the_base_href() -> None:
             is_internal=True,
         )
     ]
+
+
+def _found(html: str, url: NormalizedUrl = SITE) -> list[tuple[str, str]]:
+    return [(link.type, link.target) for link in _links(html, url)]
+
+
+def test_every_srcset_candidate_is_an_image_link() -> None:
+    found = _found('<img src="/a.png" srcset="/a-2x.png 2x, /a-3x.png 3x">')
+
+    assert found == [
+        ("image", "http://site.test/a.png"),
+        ("image", "http://site.test/a-2x.png"),
+        ("image", "http://site.test/a-3x.png"),
+    ]
+
+
+def test_video_and_audio_sources_are_video_and_audio_links() -> None:
+    found = _found(
+        '<video src="/v.mp4"><track src="/v.vtt"></video><audio><source src="/a.mp3"></audio>'
+    )
+
+    assert found == [
+        ("video", "http://site.test/v.mp4"),
+        ("video", "http://site.test/v.vtt"),
+        ("audio", "http://site.test/a.mp3"),
+    ]
