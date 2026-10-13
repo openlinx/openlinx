@@ -170,6 +170,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 6.5 Drive "An unknown host is a DNS error" at seam 3+6.
 - [ ] 6.6 Docs: document External URL checks and the `fetch_error` codes in `docs/crawling.md`.
 - [ ] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
+- [ ] 6.8 PR #1 (design, Migration Plan): verify that the whole suite passes in CI on Windows, macOS and Linux with the coverage gate on the branch, then hand over to the manager, who pushes and opens PR #1. The change stays open, with groups 7–15 unticked.
 
 ## 7. Robots directives and Link following (widening)
 
@@ -244,8 +245,11 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 10.11 Drive "An unreachable robots.txt of the site is reported" at seam 1. Done when: `robots_unreachable` is declared.
 - [ ] 10.12 Drive "A redirected robots.txt is followed" at seam 3+6.
 - [ ] 10.13 Drive "More than five robots.txt redirects count as missing" at seam 3+6.
-- [ ] 10.14 Docs: document robots.txt handling (status mapping, `--ignore-robots`, `--robots-user-agent`, Crawl-delay) in `docs/crawling.md`.
-- [ ] 10.15 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [ ] 10.14 Drive "A dead External domain is a DNS error" at seam 3+6, with the DNS resolver hook of task 6.1.
+
+  Done when: each URL of an origin whose robots.txt request got no HTTP response is recorded with `fetch_state` = `error` and that request's `fetch_error`, without a request of its own, with a `fetch_error_message` that names the robots.txt request; the origin has `robots_state` = `unreachable` and `robots_status_code` NULL; 5xx and 429 stay `robots_unreachable`; and "An unknown host is a DNS error" still passes (design D6). The Seed's origin pauses the Crawl instead from task 12.6 on.
+- [ ] 10.15 Docs: document robots.txt handling (status mapping, no HTTP response, `--ignore-robots`, `--robots-user-agent`, Crawl-delay) in `docs/crawling.md`.
+- [ ] 10.16 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
 
 ## 11. Politeness (widening)
 
@@ -267,8 +271,10 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
 - [ ] 12.4 Drive "Progress events come every 10 seconds", fake timing. Done when: the `urls` counts of `progress` come from counters that the outcomes of committed units update, seeded once by a counting query when the run starts, and no count over `urls` runs for each event (design D10).
 - [ ] 12.5 Drive "Events are UTF-8 on Windows (Windows)" at seam 1, subprocess, Windows in CI.
-- [ ] 12.6 Drive "An unreachable Seed fails the Crawl" at seam 1. Done when: the `failed` end goes through `check_transition` with `seed_unreachable`, and the adapter returns the result as an `Outcome`.
-- [ ] 12.7 Drive "An unreachable Seed is reported by one error" at seam 1. Done when: `seed_unreachable` is declared, with a hint about network access and sandboxed agents.
+- [ ] 12.6 Drive "An unreachable Seed fails the Crawl" at seam 1.
+
+  Done when: `--network-wait` is declared with `OptionMeta(setting="crawl.network_wait")`, default 1800, in `CrawlSettings`; until the Seed's origin has given an HTTP response, its robots.txt or Seed request without one pauses the Crawl at once, and with `--network-wait 0` no probe starts; the `failed` end goes through `check_transition` with `seed_unreachable`; and the adapter returns the result as an `Outcome` (design D16).
+- [ ] 12.7 Drive "An unreachable Seed is reported by one error" at seam 1. Done when: `seed_unreachable` is declared, with a hint about network access and sandboxed agents that says how long the Crawl waited.
 - [ ] 12.8 Drive "Post-crawl passes do not run for a failed Crawl" at seam 2.
 - [ ] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
 
@@ -276,14 +282,28 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 1, with a handler and a row writer registered for the test. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
 
   Done when: the record-failure count of design D16 trips at `RECORD_FAILURE_LIMIT` (100) URL units in a row that failed on their first run, a URL unit that commits resets it, fallback units do not count, and the constant's comment says why.
-- [ ] 12.11 Drive "Losing the site fails the Crawl" at seam 1, with the reset route of task 5.11. Done when: the count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without a response.
-- [ ] 12.12 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared.
+- [ ] 12.11 Drive "A network wait of zero fails at once" at seam 1, with the reset route of task 5.11.
+
+  Done when: the network pause's count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without an HTTP response, counting the codes D16 lists and the URLs recorded from an Internal origin's robots.txt without a response, but never `tls_error` or an External request; any response resets it; and with `--network-wait 0` the pause ends at once with `site_unreachable`.
+- [ ] 12.12 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared, with a hint that says how long the Crawl waited and names `spider resume` through `spider.naming`.
 - [ ] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
 - [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing.
 
-  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without a response for the site-lost count.
-- [ ] 12.15 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), and the backstops in `docs/crawling.md`.
-- [ ] 12.16 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
+  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without an HTTP response for the network pause.
+- [ ] 12.15 Drive "Probes back off to once a minute" at seam 4. Done when: one pure function gives the probe times of a network wait: 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, none later than the wait.
+- [ ] 12.16 Drive "A dead section does not stop the Crawl", fake timing.
+
+  Done when: probes request the Seed URL through the per-host gate on the context's `Clock`, are not recorded and do not count toward `--max-urls`; the first answering probe resumes the Crawl with the errors kept; and `network_paused` is declared and counted, with `details.count` and `details.total_seconds`.
+- [ ] 12.17 Drive "An outage pauses and resumes the Crawl", fake timing.
+
+  Done when: the `crawl_paused` and `crawl_resumed` events carry the data of the spec's event table; no request starts while paused; and a request that ends without an HTTP response while paused is not recorded, so its URL stays `queued` and is requested again when the Crawl resumes.
+- [ ] 12.18 Drive "URLs that failed in an outage are requested again", fake timing. Done when: a later answering probe re-queues the URLs of the count, each at most once in a run, and the engine dispatches them ahead of the frontier read.
+- [ ] 12.19 Drive "A Crawl that waits longer than the network wait fails", fake timing.
+- [ ] 12.20 Drive "Progress events say when the Crawl is paused", fake timing. Done when: `progress` carries `paused`, and its events go on during a pause.
+- [ ] 12.21 Drive "A negative network wait is rejected" at seam 1.
+- [ ] 12.22 Drive "A Seed that answers late is crawled", fake timing. Done when: a probe that answers before any response from the Seed's origin re-requests its robots.txt and the Seed.
+- [ ] 12.23 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), the network pause with its probes, outcomes, events and `--network-wait`, and the backstops in `docs/crawling.md`.
+- [ ] 12.24 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
 
 ## 13. Stopping with an interrupt (widening)
 

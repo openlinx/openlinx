@@ -447,9 +447,13 @@ With `--ignore-robots`, the Crawl SHALL request URLs that robots.txt disallows, 
 The Crawl SHALL treat an origin's robots.txt by its response, as RFC 9309 describes:
 - **2xx:** its rules apply and `robots_state` = `ok`. Only its first 512,000 bytes SHALL be parsed.
 - **4xx other than 429:** every URL on the origin is allowed, and `robots_state` = `missing`.
-- **5xx, 429, or no response:** every URL on the origin is disallowed, and `robots_state` = `unreachable`.
+- **5xx or 429:** every URL on the origin is disallowed, and `robots_state` = `unreachable`.
   - Its URLs SHALL be recorded with `skip_reason` = `robots_unreachable`.
   - For an Internal origin, a `robots_unreachable` warning SHALL be recorded whose hint contains `--ignore-robots`.
+- **No HTTP response** (any `fetch_error` of "Requests without a response"): `robots_state` = `unreachable` and `robots_status_code` is NULL.
+  - Every URL on the origin SHALL be recorded with `fetch_state` = `error` and the `fetch_error` of the robots.txt request, without a request of its own, and with a `fetch_error_message` that says the error came from the origin's robots.txt request. A continue re-queues them with the other `error` URLs.
+  - On an Internal origin, each such URL SHALL count toward the network pause as a request without an HTTP response (see "Backstops").
+  - The Seed's origin is the exception: until it has given an HTTP response, its robots.txt request without one pauses the Crawl (see "Unreachable Seed").
 - **Redirects:** the robots.txt request SHALL follow up to 5 redirect hops. A longer chain SHALL be treated as `missing`.
 
 #### Scenario: A missing robots.txt allows everything
@@ -463,6 +467,10 @@ The Crawl SHALL treat an origin's robots.txt by its response, as RFC 9309 descri
 #### Scenario: An unreachable robots.txt of the site is reported
 - **WHEN** `/robots.txt` returns 503 on every attempt, and `spider crawl {site}/` runs
 - **THEN** the result's `warnings` hold an entry with code `robots_unreachable` whose `hint` contains `--ignore-robots`
+
+#### Scenario: A dead External domain is a DNS error
+- **WHEN** `http://site.test/` links to `http://nowhere.test/a` and `http://nowhere.test/b`, and `spider crawl http://site.test/` runs
+- **THEN** both URLs have `fetch_state` = `error`, `fetch_error` = `dns_error` and a `fetch_error_message` that contains `robots.txt`, and the `origins` row for `http://nowhere.test` has `robots_state` = `unreachable` and `robots_status_code` NULL
 
 #### Scenario: A redirected robots.txt is followed
 - **WHEN** `/robots.txt` redirects with 301 to `/robots-real.txt`, which disallows `/private/`, and `/` links to `/private/a`
@@ -518,7 +526,7 @@ A request that gets no HTTP response SHALL be recorded with:
 - a `fetch_error` code
 - a non-empty `fetch_error_message`
 
-This capability SHALL use the codes `dns_error`, `connection_refused`, `connection_error`, `invalid_response` and `watchdog` (see Backstops). `022-add-fetch-policy` writes `timeout` and `tls_error`. A URL whose response could not be recorded has `record_failed` (see "One URL never stops the Crawl").
+This capability SHALL use the codes `dns_error`, `connection_refused`, `connection_error`, `invalid_response` and `watchdog` (see Backstops). `022-add-fetch-policy` writes `timeout` and `tls_error`. A URL whose response could not be recorded has `record_failed` (see "One URL never stops the Crawl"). A URL whose origin's robots.txt request got no HTTP response has that request's code, without a request of its own (see "robots.txt fetch outcomes").
 
 #### Scenario: An unknown host is a DNS error
 - **WHEN** `http://site.test/` links to `http://nowhere.test/`, and `spider crawl http://site.test/` runs
@@ -675,7 +683,7 @@ The crawl store SHALL hold one row for each origin of a URL that the Crawl recor
 | `origin` | TEXT | no | | Scheme, host and port, for example `https://site.test`, with a default port left out; unique |
 | `host` | TEXT | no | | The origin's host in lower-case ASCII (IDNA) form |
 | `is_internal` | INTEGER | no | boolean | 1 when the origin's URLs are Internal URLs |
-| `robots_state` | TEXT | yes | `ok`, `missing`, `unreachable` | Rules applied, everything allowed, or everything disallowed; NULL while robots.txt has not been fetched, because no URL of the origin was requested |
+| `robots_state` | TEXT | yes | `ok`, `missing`, `unreachable` | Rules applied, everything allowed, or everything disallowed or unanswered; NULL while robots.txt has not been fetched, because no URL of the origin was requested |
 | `robots_status_code` | INTEGER | yes | | Status code of the final robots.txt response; NULL without a response |
 | `robots_fetched_at` | TEXT | yes | timestamp | UTC time robots.txt was last fetched |
 | `robots_txt` | TEXT | yes | | The robots.txt body as parsed, up to 512,000 bytes |
@@ -874,16 +882,52 @@ The Seed parser, URL normalisation, HTML decoding, the link extractor, the robot
 - **THEN** the URL is allowed or disallowed, and no error is raised
 
 ### Requirement: Backstops
-- **The site is lost:** when `max(8, 2 × --concurrency)` requests in a row for Internal URLs end without an HTTP response, the Crawl SHALL start no new request and end as `failed` with `stop_reason` = `site_unreachable`. URLs not requested SHALL stay `queued`, so the Crawl can be continued. A response of any status SHALL reset the count, and requests for External URLs SHALL NOT count. The Command SHALL print the result, write exactly one error diagnostic, with code `site_unreachable` and a hint that mentions network access and sandboxed agents, and exit with code 8.
-- **The watchdog:** a request that has not ended within the watchdog time after it started SHALL be cancelled. The watchdog time SHALL be the longer of 120 seconds and the Fetcher's total request deadline plus 30 seconds, so it never cuts a response that the Fetcher still allows. Its URL SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `watchdog`, and the Crawl SHALL go on. A request ended by the watchdog SHALL count as a request without a response for the site-lost count.
+- **The network pause:** when `max(8, 2 × --concurrency)` requests in a row for Internal URLs end without an HTTP response, the Crawl SHALL pause instead of recording the rest of the site as errors.
+  - **Without an HTTP response** means the `fetch_error` `dns_error`, `connection_refused`, `connection_error`, `invalid_response` or `watchdog`, or `022-add-fetch-policy`'s `timeout`. `022`'s `tls_error` SHALL NOT count: a certificate failure is an answer of sorts, and a site-wide one SHALL NOT wait `--network-wait` and then fail with a misleading `site_unreachable`. A response of any status SHALL reset the count, and requests for External URLs SHALL NOT count.
+  - **While paused,** no new request SHALL start. Requests in flight SHALL finish: one that gets a response SHALL be recorded, and one that ends without a response SHALL NOT be recorded, so its URL stays `queued` and is requested again when the Crawl resumes.
+  - **Probes:** while paused, the Crawl SHALL request the Seed URL at 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, through the per-host limits of "Per-host concurrency" and "Rate limit". A probe SHALL NOT be recorded as a URL and SHALL NOT count toward `--max-urls`. A probe that gets a response of any status ends the pause:
+    - **A dead section:** when the first probe answers, the failures were the site's own, and the Crawl SHALL resume and keep their errors.
+    - **An outage:** when a later probe answers, the URLs whose requests made up the count SHALL be re-queued and requested again, each at most once in a run, and the Crawl SHALL resume.
+  - **Giving up:** a probe SHALL start only within `--network-wait <seconds>` of the pause's start (setting `crawl.network_wait`, default 1800). When no probe that starts within it gets a response, the Crawl SHALL end as `failed` with `stop_reason` = `site_unreachable`, and URLs not requested SHALL stay `queued`, so the Crawl can be continued. With `--network-wait 0` no probe starts, so the Crawl fails at once. A negative value SHALL be rejected with exit code 2 and error code `invalid_value`. The Command SHALL print the result, write exactly one error diagnostic, with code `site_unreachable` and a hint that says how long the Crawl waited and names `spider resume`, and exit with code 8.
+  - **Visibility:** the Crawl SHALL write a `crawl_paused` event when it pauses and a `crawl_resumed` event when it resumes (see "Progress events"), and one counted `network_paused` warning, with `details.count` (the number of pauses) and `details.total_seconds` (the time spent paused).
+  - **A stop** (the URL limit, an interrupt or a stop request) SHALL end a pause, and the Crawl SHALL stop as it does otherwise.
+- **The watchdog:** a request that has not ended within the watchdog time after it started SHALL be cancelled. The watchdog time SHALL be the longer of 120 seconds and the Fetcher's total request deadline plus 30 seconds, so it never cuts a response that the Fetcher still allows. Its URL SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `watchdog`, and the Crawl SHALL go on. A request ended by the watchdog SHALL count as a request without an HTTP response for the network pause.
 
-#### Scenario: Losing the site fails the Crawl
-- **WHEN** `/` links to `/p1` and to `/down/1` to `/down/20`, every `/down/<n>` resets its connection before answering, and `spider crawl {site}/ --concurrency 1` runs
-- **THEN** stdout holds the result with `"state": "failed"` and `"stop_reason": "site_unreachable"`, and the `urls` table has at least one row with `fetch_state` = `queued`
+#### Scenario: A network wait of zero fails at once
+- **WHEN** `/` links to `/down/1` to `/down/20` and then to `/p1`, every `/down/<n>` resets its connection before answering, and `spider crawl {site}/ --concurrency 1 --network-wait 0` runs
+- **THEN** stdout holds the result with `"state": "failed"` and `"stop_reason": "site_unreachable"`, and `{site}/p1` has `fetch_state` = `queued`
 
 #### Scenario: Losing the site is reported by one error
-- **WHEN** `/` links to `/down/1` to `/down/20`, every `/down/<n>` resets its connection before answering, and `spider crawl {site}/ --concurrency 1` runs
-- **THEN** the Command exits with code 8, and stderr holds exactly one error line, as its last line, with `code` = `site_unreachable`
+- **WHEN** `/` links to `/down/1` to `/down/20`, every `/down/<n>` resets its connection before answering, and `spider crawl {site}/ --concurrency 1 --network-wait 0` runs
+- **THEN** the Command exits with code 8, and stderr holds exactly one error line, as its last line, with `code` = `site_unreachable` and a `hint` that contains `spider resume`
+
+#### Scenario: A dead section does not stop the Crawl
+- **WHEN** a fake Fetcher gets no response for `{site}/down/1` to `{site}/down/20` and answers every other request, `/` links to them and then to `/p1`, and the Crawl runs with `--concurrency 1` and a fake clock
+- **THEN** the Crawl State is `completed`, every `{site}/down/<n>` has `fetch_state` = `error`, `{site}/p1` has `fetch_state` = `fetched`, and the result's `warnings` hold an entry with code `network_paused`
+
+#### Scenario: An outage pauses and resumes the Crawl
+- **WHEN** `/` links to `/p1` to `/p20`, a fake Fetcher gets no response for any request from `/p2` on until 30 seconds of clock time have passed, and the Crawl runs with `--concurrency 1` and a fake clock
+- **THEN** the events hold one `crawl_paused` event and then one `crawl_resumed` event with `data.outcome` = `outage`, and the Crawl State is `completed`
+
+#### Scenario: URLs that failed in an outage are requested again
+- **WHEN** `/` links to `/p1` to `/p20`, a fake Fetcher gets no response for any request from `/p2` on until 30 seconds of clock time have passed, and the Crawl runs with `--concurrency 1` and a fake clock
+- **THEN** every `{site}/p<n>` has `fetch_state` = `fetched`
+
+#### Scenario: A Crawl that waits longer than the network wait fails
+- **WHEN** `/` links to `/p1` to `/p20`, a fake Fetcher gets no response for any request after the one for `/`, and the Crawl runs with `--concurrency 1`, `--network-wait 30` and a fake clock
+- **THEN** the Seed is probed 3 times, and the Crawl ends as `failed` with `stop_reason` = `site_unreachable`
+
+#### Scenario: Probes back off to once a minute
+- **WHEN** the probe times of a network wait of 200 seconds are computed
+- **THEN** they are 5, 10, 20, 40, 100 and 160 seconds after the pause began
+
+#### Scenario: Progress events say when the Crawl is paused
+- **WHEN** a Crawl is paused for 30 seconds of fake-clock time
+- **THEN** every `progress` event written during the pause has `data.paused` = true, and every other one `data.paused` = false
+
+#### Scenario: A negative network wait is rejected
+- **WHEN** `spider crawl {site}/ --network-wait -1` runs
+- **THEN** the Command exits with code 2 and its only stderr error has `code` = `invalid_value`
 
 #### Scenario: Dead External links do not fail the Crawl
 - **WHEN** `http://site.test/` links to `http://nowhere.test/1` to `http://nowhere.test/12`, which do not resolve, and `spider crawl http://site.test/ --concurrency 1` runs
@@ -899,7 +943,9 @@ While a foreground Crawl runs, the Command SHALL write progress events to stderr
 | `event` | When | `data` |
 |---|---|---|
 | `crawl_started` | once, before any other event | `crawl_id`, `crawl_mode`, `seed_count`, `crawl_file` |
-| `progress` | every 10 seconds | `crawl_id`, `elapsed_s`, `urls` (`discovered`, `fetched`, `errors`, `skipped`, `queued`), `rate` (URLs requested per second over the last 60 seconds) |
+| `progress` | every 10 seconds, during a network pause too | `crawl_id`, `elapsed_s`, `urls` (`discovered`, `fetched`, `errors`, `skipped`, `queued`), `rate` (URLs requested per second over the last 60 seconds), `paused` (true while the Crawl is paused) |
+| `crawl_paused` | when the Crawl pauses (see "Backstops") | `crawl_id`, `reason` (the `fetch_error` of the request that paused it), `urls` (the URLs whose requests made up the count) |
+| `crawl_resumed` | when a probe answers | `crawl_id`, `duration_s` (the time paused), `outcome` (`outage` or `dead_section`) |
 | `stopping` | when the Crawl starts to stop before its frontier is empty | `crawl_id`, `reason` (the `stop_reason` it will end with) |
 
 The `urls` counts of a `progress` event SHALL be those of the URLs that committed units recorded, kept as counters while the Crawl runs.
@@ -942,7 +988,7 @@ Exit codes follow `010-add-workspace-and-cli-contract`:
 - 0 when the Crawl State is `completed`, or `stopped` with `stop_reason` `max_urls` or `requested`
 - 130 when the Crawl is `stopped` by an interrupt
 - 7 when the Crawl is `failed` because writing the crawl store failed (`crawl_write_failed`), or 5 when the crawl file stayed locked by another connection for longer than the writer waits (`crawl_busy`, `015-add-crawl-store`)
-- 8 when the Crawl is `failed` because its Seed is unreachable (`seed_unreachable`) or the site was lost (`site_unreachable`)
+- 8 when the Crawl is `failed` because its Seed is unreachable (`seed_unreachable`) or the site stayed unreachable for `--network-wait` (`site_unreachable`)
 
 When writing fails, the Crawl Service SHALL try once more to record `failed` with `stop_reason` = `write_failed`. When that write fails too, the crawl file keeps the Crawl State `running`, which `060-add-crawl-control` reports as `interrupted`.
 
@@ -965,24 +1011,28 @@ For every non-zero exit, stderr SHALL hold exactly one error diagnostic, as its 
 - **THEN** the Command exits with code 7, stdout holds the result with `"state": "failed"`, and the last stderr line is an error with `code` = `crawl_write_failed`
 
 ### Requirement: Unreachable Seed
-When a Spider-mode Crawl gets no HTTP response at all from the Seed's origin, the Crawl SHALL end with the Crawl State `failed`, and it SHALL stay resumable. This covers both robots.txt and the Seed, and failures such as DNS, connection, TLS and timeout errors. The Command SHALL:
+Until the Seed's origin has given an HTTP response, a robots.txt or Seed request that gets none (see "Backstops" for what counts) SHALL pause the Crawl at once, with the probes, outcomes and `--network-wait` of the network pause, because a network may come up or switch just as a Crawl starts. When a probe answers, the Seed's robots.txt and the Seed SHALL be requested again. When no probe that starts within `--network-wait` answers, the Crawl SHALL end with the Crawl State `failed` and `stop_reason` = `seed_unreachable`, and it SHALL stay resumable. The Command SHALL:
 - print the result
-- write exactly one error diagnostic, with code `seed_unreachable` and a hint that mentions network access and sandboxed agents
+- write exactly one error diagnostic, with code `seed_unreachable` and a hint that mentions network access and sandboxed agents and says how long the Crawl waited
 - exit with code 8
 
 This lets an agent tell a site that is down, or a blocked network, from an empty site.
 
 #### Scenario: An unreachable Seed fails the Crawl
-- **WHEN** `spider crawl http://127.0.0.1:{closed_port}/` runs, and nothing listens on that port
+- **WHEN** `spider crawl http://127.0.0.1:{closed_port}/ --network-wait 0` runs, and nothing listens on that port
 - **THEN** the Command exits with code 8 and stdout holds the result with `"state": "failed"` and `"stop_reason": "seed_unreachable"`
 
 #### Scenario: An unreachable Seed is reported by one error
-- **WHEN** `spider crawl http://127.0.0.1:{closed_port}/` runs, and nothing listens on that port
+- **WHEN** `spider crawl http://127.0.0.1:{closed_port}/ --network-wait 0` runs, and nothing listens on that port
 - **THEN** stderr holds exactly one error line, as its last line, with `code` = `seed_unreachable`
 
 #### Scenario: A failed Crawl is continued once its Seed answers
-- **WHEN** a Crawl of `http://127.0.0.1:{port}/` has failed because nothing listened, the fixture site then starts on that port, and the Crawl Service continues the Crawl
+- **WHEN** a Crawl of `http://127.0.0.1:{port}/` with `--network-wait 0` has failed because nothing listened, the fixture site then starts on that port, and the Crawl Service continues the Crawl
 - **THEN** the Crawl ends with the Crawl State `completed`, and `http://127.0.0.1:{port}/` has `fetch_state` = `fetched`
+
+#### Scenario: A Seed that answers late is crawled
+- **WHEN** a fake Fetcher gets no response for any request until 12 seconds of clock time have passed, and a Crawl of `{site}/` runs with a fake clock
+- **THEN** the Seed is probed 3 times, the Crawl State is `completed`, and `{site}/` has `fetch_state` = `fetched`
 
 ### Requirement: Stopping with an interrupt
 The first interrupt SHALL stop a foreground Crawl gracefully. An interrupt is Ctrl+C; on Windows also Ctrl+Break; on macOS and Linux also SIGTERM and SIGHUP. After the first interrupt, the Command SHALL:
