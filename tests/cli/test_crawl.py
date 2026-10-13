@@ -151,3 +151,9 @@ def test_the_result_has_the_fields_of_a_crawl(
         False,
         True,
     )
+
+
+def test_the_crawl_command_prints_one_document() -> None:
+    entry = next(c for c in run_cli("commands").json()["commands"] if c["name"] == "crawl")
+
+    assert entry["output"] == "document"
