@@ -151,10 +151,12 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 **Decoding:** HTML is decoded in this order, with replacement characters for invalid bytes:
 1. a byte order mark
 2. the `charset` parameter of `Content-Type`
-3. a `<meta charset>` in the first 1024 bytes
-4. otherwise UTF-8, falling back to windows-1252
+3. a `<meta charset>` or `<meta http-equiv="Content-Type">` declaration in the first 1024 bytes, as `030` lists it
+4. otherwise UTF-8, falling back to windows-1252 when the body is not valid UTF-8
 
-`030` documents the same order for text, and both go through one shared function.
+`030` documents the same order for text, and both go through one shared function, `decode_html` in `spider.crawl.decoding`, which returns the text and the encoding's name in the Encoding Standard (`windows-1251`, as `030`'s `page_sources.encoding` stores it).
+- **Labels** follow the Encoding Standard where Python's codecs differ: `iso-8859-1`, `latin1` and `ascii` decode as windows-1252, `iso-8859-9` as windows-1254, `gb2312` as gbk, and `shift_jis` and `euc-kr` as Windows' supersets. A label that names no encoding of the Standard, or a codec that is not a text encoding (such as `base64`), is skipped, and the next source applies.
+- **A `<meta>` declaration of UTF-16** means UTF-8, as the Standard says, since the bytes it was read from were ASCII.
 
 ### D6. robots.txt and the robots directives
 - **Parsing:** Protego parses robots.txt, and the verdicts are cached per origin for the run. Only the first 512,000 bytes are parsed, decoded as UTF-8 with replacement.
