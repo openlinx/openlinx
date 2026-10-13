@@ -1,6 +1,11 @@
 """The units of spider.store.urls (020-add-crawl-core D1, D2, D14; seam 2)."""
 
+from typing import Any
+
+from sqlalchemy import Connection, event
+
 from spider.crawl.urls import NormalizedUrl, parse_seed
+from spider.store.connections import opening
 from spider.store.records import NewUrl, QueuedUrl, UrlCounts
 from spider.store.urls import next_depth, queued_batch, record_fetched, record_seed, url_counts
 from spider.store.writer import CrawlWriter
@@ -66,3 +71,28 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             ("https://site.test/b", 1, "queued", None),
         ],
     )
+
+
+def _plan_of_first_statement(connection: Connection, run: Any) -> str:
+    statements: list[tuple[str, Any]] = []
+
+    def keep(_: Any, __: Any, sql: str, parameters: Any, *args: Any) -> None:
+        statements.append((sql, parameters))
+
+    event.listen(connection, "before_cursor_execute", keep)
+    run(connection)
+    event.remove(connection, "before_cursor_execute", keep)
+    sql, parameters = statements[0]
+    driver = connection.connection.driver_connection
+    assert driver is not None
+    rows = driver.execute(f"EXPLAIN QUERY PLAN {sql}", parameters).fetchall()
+    return " | ".join(row[3] for row in rows)
+
+
+def test_the_frontier_read_uses_its_index(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with opening(crawl.path, role="read") as engine, engine.connect() as connection:
+        plan = _plan_of_first_statement(connection, queued_batch(1, 0, 10))
+
+    assert ("USING INDEX urls_crawl_depth_id" in plan, "TEMP B-TREE" in plan) == (True, False), plan
