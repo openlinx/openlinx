@@ -17,7 +17,7 @@ from spider.crawl.pages import InProcessExecutor, PageSettings
 from spider.crawl.scope import ScopeRules, scope_rules
 from spider.crawl.urls import InvalidUrl, InvalidUrlReason, NormalizedUrl, parse_seed
 from spider.output.codes import INVALID_URL
-from spider.output.diagnostics import SpiderError
+from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
 from spider.services.crawls import create_crawl
@@ -63,6 +63,7 @@ class CrawlResult:
     ended_at: datetime
     counts: UrlCounts
     crawl_file: Path
+    warnings: tuple[Diagnostic, ...]
 
     def to_json(self) -> dict[str, Any]:
         summary, counts = self.summary, self.counts
@@ -94,7 +95,23 @@ class CrawlResult:
                 "other": counts.status_other,
             },
             "crawl_file": str(self.crawl_file),
+            "warnings": [warning.to_json() for warning in self.warnings],
         }
+
+
+class WarningLog:
+    """The Crawl's Reporter: passes everything on, and keeps the warnings for the result (D10)."""
+
+    def __init__(self, reporter: Reporter) -> None:
+        self._reporter = reporter
+        self.warnings: list[Diagnostic] = []
+
+    def warn(self, diagnostic: Diagnostic) -> None:
+        self.warnings.append(diagnostic)
+        self._reporter.warn(diagnostic)
+
+    def event(self, name: str, **data: Any) -> None:
+        self._reporter.event(name, **data)
 
 
 def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
@@ -122,6 +139,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
 
 
 def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResult:
+    reporter = log = WarningLog(reporter)
     crawl_file = create_crawl(plan.new_crawl, clock, reporter)
     reporter.event(
         "crawl_started",
@@ -138,6 +156,7 @@ def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResul
         ended_at=clock.now(),
         counts=counts,
         crawl_file=crawl_file.path,
+        warnings=tuple(log.warnings),
     )
 
 

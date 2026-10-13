@@ -1,0 +1,71 @@
+"""The Crawl Service wires 015's journal mode and redaction (020-add-crawl-core D11; seam 2)."""
+
+import json
+import sys
+from pathlib import Path, PureWindowsPath
+from typing import cast
+
+import pytest
+import typer
+
+from spider.cli.app import build_app
+from spider.cli.runner import SpiderGroup
+from spider.output.reporter import Collected
+from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
+from spider.store.records import SecretNames
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site
+from tests.support.app import example_app
+from tests.support.cli import run_cli
+from tests.support.clock import FakeClock
+from tests.support.crawls import crawl_row
+from tests.support.workspace import TempWorkspace
+
+HOME_PAGE = Site(routes={"/": Page(body="<p>Home</p>")})
+
+
+def test_the_journal_mode_setting_reaches_the_crawl_file(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(HOME_PAGE)
+    (temp_workspace.root / "spider.toml").write_bytes(b'[store]\njournal_mode = "delete"\n')
+    tables = cast(SpiderGroup, typer.main.get_group(build_app())).settings_tables
+    request = CrawlRequest(
+        seed=server.url("/"),
+        cwd=temp_workspace.root,
+        home=temp_workspace.home,
+        workspace=None,
+        command_argv=["spider", "crawl", server.url("/")],
+        secret_names=SecretNames(),
+        flags={},
+    )
+
+    result = start_crawl(plan_crawl(request, tables), FakeClock(), Collected())
+
+    assert crawl_row(result.crawl_file)["journal_mode"] == "delete"
+
+
+def test_a_secret_setting_is_redacted_in_the_recorded_config(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(HOME_PAGE)
+    (temp_workspace.root / "spider.toml").write_bytes(b'[example]\ntoken = "s3cret"\n')
+
+    result = run_cli("crawl", server.url("/"), app=example_app())
+    config = json.loads(crawl_row(Path(result.json()["crawl_file"]))["config"])
+
+    assert config["example"] == {"level": "low", "token": "***"}
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="UNC paths are Windows paths")
+def test_a_journal_warning_reaches_the_result(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(HOME_PAGE)
+    local = PureWindowsPath(temp_workspace.root)
+    # The machine's own administrative share: a real UNC path to the same folder.
+    share = PureWindowsPath(f"//localhost/{local.drive[0]}$/", *local.parts[1:])
+
+    result = run_cli("crawl", server.url("/"), "--workspace", str(share))
+
+    assert [warning["code"] for warning in result.json()["warnings"]] == ["store_wal_unavailable"]

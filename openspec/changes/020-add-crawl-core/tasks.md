@@ -126,7 +126,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.11 Drive "The recorded config holds every registered crawl setting" at seam 2.
 
   Done when: `[crawl]` is registered in `build_app` as `"spider.crawl.settings:CrawlSettings"` and passes `010`'s table-rules test, every crawl option declares its setting with `OptionMeta(setting=...)`, and `NewCrawl.config` holds every registered table. Its one option is `--concurrency`, which task 4.13 needs: an option is declared by the task that applies it, so none is inert (ruling of 2026-10-14), and `--max-depth`, `--max-urls` and `--rate` come with tasks 9.5, 9.7 and 11.4.
-- [ ] 4.12 Wire `015`'s journal mode (group 8) and redaction (group 9), at seam 2.
+- [x] 4.12 Wire `015`'s journal mode (group 8) and redaction (group 9), at seam 2.
 
   Done when: the `crawl` adapter always passes `spider.cli.options.secret_names(<its Click command>, <the settings tables>)` to the Crawl Service, which puts it in `NewCrawl.secret_names` (`create_crawl` redacts by itself); and the Crawl Service always sets `NewCrawl.journal_setting` from the resolved `[store] journal_mode`, `"auto"` included, since neither field has a default, so `[store] journal_mode = "delete"` gives `crawl.journal_mode` = `delete`, and a `store_wal_unavailable` warning that `create_crawl` reports reaches the result's `warnings` (and `crawl.warnings` once task 12.3 declares it).
 - [ ] 4.13 Drive "spider.toml sets a crawl setting" and "A flag overrides spider.toml" at seam 1, a trivial pair.

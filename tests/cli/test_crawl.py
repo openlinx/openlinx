@@ -149,6 +149,7 @@ def test_the_result_has_the_fields_of_a_crawl(
             "pages",
             "status_classes",
             "crawl_file",
+            "warnings",
         ],
         "spider",
         server.base_url,
