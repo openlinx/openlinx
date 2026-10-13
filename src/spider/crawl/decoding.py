@@ -133,6 +133,11 @@ def decode_html(body: bytes, content_type: str | None) -> DecodedHtml:
         return _decoded(body, "windows-1252")
 
 
+def query_codec(encoding: str) -> str | None:
+    """The codec of a URL query on a Page in this encoding, or None for UTF-8 (URL Standard)."""
+    return None if encoding in ("utf-8", "utf-16le", "utf-16be") else _CODECS[encoding]
+
+
 def _decoded(body: bytes, name: str) -> DecodedHtml:
     return DecodedHtml(body.decode(_CODECS[name], "replace"), name)
 

@@ -80,3 +80,52 @@ def test_decoding_any_bytes_gives_text(body: bytes, content_type: str | None) ->
     decoded = decode_html(body, content_type)
 
     assert isinstance(decoded.text, str)
+
+
+@pytest.mark.parametrize(
+    ("label", "encoding"),
+    [
+        ("unicode-1-1-utf-8", "utf-8"),
+        ("866", "ibm866"),
+        ("latin2", "iso-8859-2"),
+        ("l3", "iso-8859-3"),
+        ("iso-ir-110", "iso-8859-4"),
+        ("cyrillic", "iso-8859-5"),
+        ("asmo-708", "iso-8859-6"),
+        ("sun_eu_greek", "iso-8859-7"),
+        ("visual", "iso-8859-8"),
+        ("logical", "iso-8859-8-i"),
+        ("latin6", "iso-8859-10"),
+        ("iso885913", "iso-8859-13"),
+        ("iso8859-14", "iso-8859-14"),
+        ("l9", "iso-8859-15"),
+        ("iso-8859-16", "iso-8859-16"),
+        ("koi", "koi8-r"),
+        ("koi8-ru", "koi8-u"),
+        ("mac", "macintosh"),
+        ("dos-874", "windows-874"),
+        ("x-cp1250", "windows-1250"),
+        ("cp1251", "windows-1251"),
+        ("ansi_x3.4-1968", "windows-1252"),
+        ("x-cp1253", "windows-1253"),
+        ("l5", "windows-1254"),
+        ("x-cp1255", "windows-1255"),
+        ("cp1256", "windows-1256"),
+        ("x-cp1257", "windows-1257"),
+        ("cp1258", "windows-1258"),
+        ("x-mac-ukrainian", "x-mac-cyrillic"),
+        ("chinese", "gbk"),
+        ("gb18030", "gb18030"),
+        ("cn-big5", "big5"),
+        ("cseucpkdfmtjapanese", "euc-jp"),
+        ("csiso2022jp", "iso-2022-jp"),
+        ("windows-31j", "shift_jis"),
+        ("ks_c_5601-1989", "euc-kr"),
+        ("unicodefffe", "utf-16be"),
+        ("ucs-2", "utf-16le"),
+        ("x-user-defined", "utf-8"),
+        ("iso-2022-kr", "utf-8"),
+    ],
+)
+def test_each_encoding_of_the_standard_is_named_by_its_labels(label: str, encoding: str) -> None:
+    assert decode_html(b"a", f"text/html; charset={label.upper()}").encoding == encoding

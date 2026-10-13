@@ -121,7 +121,9 @@ The Crawl reads Links from every response it parses: an in-Scope 2xx HTML respon
 
 ### Resolving a reference
 
-- White space around an attribute value is removed, as browsers do.
+- Spaces and control characters around a reference are removed, and so are tabs and newlines inside it, as browsers do.
+- References are read as browsers read them (the [URL Standard](https://url.spec.whatwg.org/)): in an http or https URL a backslash before the query is a slash, so a link written with backslashes is not reported as broken; `///cdn.test/x` names the host `cdn.test`; and `https:cdn.test/x` on an http Page is `https://cdn.test/x`.
+- On a Page whose encoding is neither UTF-8 nor UTF-16, such as windows-1251, the query is percent-encoded in that encoding, as a browser requests it: `?q=й` becomes `?q=%E9`. The path is always encoded as UTF-8.
 - A relative reference is resolved against the Page's first `<base href>`, and otherwise against the response URL. For `<base href="http://site.test/docs/">`, `href="guide"` is `http://site.test/docs/guide`. A base that is not http or https, such as `javascript:void(0)`, resolves no relative reference, as in a browser.
 - The result is normalised (see URLs).
 - A reference gives no Link when its scheme is not http or https (`mailto:`, `tel:`, `javascript:`, `data:`), when it holds a user name, or when it cannot be resolved or normalised, such as `http://[bad/x` or `//`. An empty `src`, `data` or `poster` names no file and gives no Link; an empty `href` links to the Page itself. The next references on the Page are still read.

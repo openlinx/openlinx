@@ -171,6 +171,51 @@ def test_links_are_read_from_the_decoded_document() -> None:
     assert [link.target for link in links] == ["http://site.test/%D0%B9"]
 
 
+@pytest.mark.parametrize(
+    ("href", "expected"),
+    [
+        ("\\catalog", ["http://site.test/catalog"]),
+        ("/a\\b?x\\y", ["http://site.test/a/b?x%5Cy"]),
+        ("\\\\cdn.test\\i.png", ["http://cdn.test/i.png"]),
+        ("///cdn.test/x", ["http://cdn.test/x"]),
+        ("/\\cdn.test/x", ["http://cdn.test/x"]),
+        ("http:\\\\cdn.test\\x", ["http://cdn.test/x"]),
+        ("https:cdn.test/x", ["https://cdn.test/x"]),
+        ("https:///cdn.test/x", ["https://cdn.test/x"]),
+        ("http:p", ["http://site.test/p"]),
+        ("http:", ["http://site.test/"]),
+        ("&#11; /a&#9;/b&#10; &#1;", ["http://site.test/a/b"]),
+        ("//", []),
+        ("//?q", []),
+        ("\\\\", []),
+        ("https:", []),
+    ],
+)
+def test_references_resolve_as_browsers_resolve_them(href: str, expected: list[str]) -> None:
+    found = [link.target for link in _links(f'<a href="{href}">x</a>')]
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    ("html", "charset", "expected"),
+    [
+        ('<a href="/s?q=й">', "windows-1251", "http://site.test/s?q=%E9"),
+        ('<a href="/й?q=й#й">', "windows-1251", "http://site.test/%D0%B9?q=%E9"),
+        ('<a href="/s?q=ж✓">', "windows-1251", "http://site.test/s?q=%E6&%2310003;"),
+        ('<base href="/b/?q=й"><a href="">', "windows-1251", "http://site.test/b/?q=%E9"),
+        ('<a href="/s?q=й">', "utf-8", "http://site.test/s?q=%D0%B9"),
+        ('<a href="/s?q=й">', "utf-16le", "http://site.test/s?q=%D0%B9"),
+    ],
+)
+def test_queries_are_encoded_in_the_page_encoding(html: str, charset: str, expected: str) -> None:
+    body = html.encode(charset, "xmlcharrefreplace")
+
+    links = extract_links(body, f"text/html; charset={charset}", SITE, is_internal=_on_site)
+
+    assert [link.target for link in links] == [expected]
+
+
 _FRAGMENTS = st.sampled_from(
     [
         "<a href=",
@@ -198,14 +243,30 @@ _FRAGMENTS = st.sampled_from(
         '<a href="http://[bad/x">',
         '<img srcset="http://[ 1x, //[::1 2x">',
         "//",
+        "\\",
+        "///",
+        "http:\\\\",
+        "https:",
+        "?q=",
         "#",
         "&amp;",
+        "&#11;",
         "\x00",
     ]
 )
 _MALFORMED_HTML = st.lists(_FRAGMENTS | st.text(max_size=8)).map("".join)
-_BODIES = st.binary() | _MALFORMED_HTML.map(lambda html: html.encode("utf-8", "surrogatepass"))
-_CONTENT_TYPES = st.none() | st.text() | st.text().map("text/html; charset={}".format)
+_ENCODINGS = st.sampled_from(["utf-8", "windows-1251", "shift_jis", "iso-2022-jp", "utf-16le"])
+_BODIES = (
+    st.binary()
+    | _MALFORMED_HTML.map(lambda html: html.encode("utf-8", "surrogatepass"))
+    | st.builds(lambda html, codec: html.encode(codec, "replace"), _MALFORMED_HTML, _ENCODINGS)
+)
+_CONTENT_TYPES = (
+    st.none()
+    | st.text()
+    | st.text().map("text/html; charset={}".format)
+    | _ENCODINGS.map("text/html; charset={}".format)
+)
 
 
 @given(_BODIES, _CONTENT_TYPES)

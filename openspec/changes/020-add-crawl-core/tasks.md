@@ -81,7 +81,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: decoding follows design D5's order with replacement characters, in one function that `030` imports.
 - [x] 3.6 Docs: add the Link type table, with the types listed for later releases, and decoding to `docs/crawling.md`.
 - [x] 3.7 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
-- [ ] 3.8 Fix: references resolve as the URL Standard resolves them in a browser (ruling of 2026-10-14), at seam 4, by table tests, with the never-raises property of task 3.5 extended to backslashes, slashes and non-UTF-8 Content-Types.
+- [x] 3.8 Fix: references resolve as the URL Standard resolves them in a browser (ruling of 2026-10-14), at seam 4, by table tests, with the never-raises property of task 3.5 extended to backslashes, slashes and non-UTF-8 Content-Types.
 
   Done when:
   - in an http or https URL, a `\` before the query or fragment is read as `/`, so `href="\catalog"` is `/catalog`, not a false broken `/%5Ccatalog`
