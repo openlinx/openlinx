@@ -16,8 +16,22 @@ type _Reference = tuple[LinkType, str, str]
 
 # HTML strips these around a URL attribute; urlsplit strips only the leading ones.
 _ASCII_WHITESPACE = "\t\n\x0c\r "
-_ELEMENTS = "a[href], area[href], img, video, audio, source, track"
+_ASCII_TOKEN = re.compile(r"[^\t\n\x0c\r ]+")
+_ELEMENTS = (
+    "a[href], area[href], link[href], img, video, audio, source, track, iframe[src], frame[src],"
+    " script[src], embed[src], object[data]"
+)
+_SOURCES: Mapping[str, tuple[LinkType, str]] = {
+    "iframe": ("iframe", "src"),
+    "frame": ("iframe", "src"),
+    "script": ("javascript", "src"),
+    "embed": ("media", "src"),
+    "object": ("media", "data"),
+}
 _MEDIA_TYPES: Mapping[str, LinkType] = {"video": "video", "audio": "audio"}
+_PAGINATION = frozenset({"next", "prev", "previous"})
+# These name an origin to connect to, not a file.
+_ORIGIN_HINTS = frozenset({"preconnect", "dns-prefetch"})
 # The srcset grammar of HTML: a URL ends at white space, or at the commas closing it, which
 # then end the candidate; otherwise its descriptors run to the next comma outside parentheses.
 _SRCSET_CANDIDATE = re.compile(
@@ -49,7 +63,9 @@ def extract_links(
     base = _base(tree, url)
     links: list[DiscoveredLink] = []
     for node in tree.css(_ELEMENTS):
-        for link_type, attribute, raw in _references(node):
+        attributes = node.attributes
+        rel = tuple(_ASCII_TOKEN.findall((attributes.get("rel") or "").lower()))
+        for link_type, attribute, raw in _references(node.tag, attributes, rel, node.parent):
             target = _resolved(base, raw)
             if target is None:
                 continue
@@ -60,8 +76,8 @@ def extract_links(
                     raw=raw,
                     element=node.tag,
                     attribute=attribute,
-                    rel=(),
-                    nofollow=False,
+                    rel=rel,
+                    nofollow="nofollow" in rel,
                     declared_in="html",
                     ordinal=len(links) + 1,
                     is_internal=is_internal(target),
@@ -70,11 +86,19 @@ def extract_links(
     return links
 
 
-def _references(node: LexborNode) -> Iterator[_Reference]:
-    attributes = node.attributes
-    match node.tag:
+def _references(
+    tag: str | None,
+    attributes: Mapping[str, str | None],
+    rel: tuple[str, ...],
+    parent: LexborNode | None,
+) -> Iterator[_Reference]:
+    match tag:
         case "a" | "area":
             yield from _attribute("hyperlink", "href", attributes)
+        case "link":
+            link_type = _link_type(rel, attributes)
+            if link_type is not None:
+                yield from _attribute(link_type, "href", attributes)
         case "img":
             yield from _attribute("image", "src", attributes)
             yield from _srcset(attributes)
@@ -83,12 +107,27 @@ def _references(node: LexborNode) -> Iterator[_Reference]:
             yield from _attribute("image", "poster", attributes)
         case "audio":
             yield from _attribute("audio", "src", attributes)
+        case "iframe" | "frame" | "script" | "embed" | "object":
+            yield from _attribute(*_SOURCES[tag], attributes)
         case "source" | "track":
-            parent = node.parent
             media_type = _MEDIA_TYPES.get(parent.tag or "") if parent is not None else None
             if media_type is not None:
                 yield from _attribute(media_type, "src", attributes)
             yield from _srcset(attributes)
+
+
+def _link_type(rel: tuple[str, ...], attributes: Mapping[str, str | None]) -> LinkType | None:
+    if "stylesheet" in rel:
+        return "css"
+    if not _PAGINATION.isdisjoint(rel):
+        return "pagination"
+    if "alternate" in rel and "hreflang" in attributes:
+        return "hreflang"
+    if "alternate" in rel and "media" in attributes:
+        return "mobile_alternate"
+    if rel and _ORIGIN_HINTS.issuperset(rel):
+        return None
+    return "misc"
 
 
 def _attribute(

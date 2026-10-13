@@ -74,7 +74,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - `DiscoveredLink` is a `msgspec.Struct` with `frozen=True` and `kw_only=True` (ADR-0006), and `msgspec` comes in with this slice.
   - `018`'s ADR-0006 guard in `tests/test_code_style.py` also refuses a class whose base is `Struct` or `msgspec.Struct` without `frozen=True` among its class keywords, naming the module and the class. A breach case feeds it a source string with such a class and sees it red, and the guard passes on the code.
 - [x] 3.2 Drive "Every srcset candidate is an image Link" and "Video and audio sources are video and audio Links", a pair.
-- [ ] 3.3 Drive "rel previous is a pagination Link" and "A link element of another rel is a misc Link", a pair.
+- [x] 3.3 Drive "rel previous is a pagination Link" and "A link element of another rel is a misc Link", a pair.
 - [ ] 3.4 Drive "References that are not http or https are ignored" and "A malformed reference is ignored", a trivial pair.
 - [ ] 3.5 Drive "The link extractor accepts any bytes", as a hypothesis property over arbitrary bytes, Content-Types and malformed HTML.
 

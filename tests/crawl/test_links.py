@@ -1,5 +1,7 @@
 """Link discovery in HTML (020-add-crawl-core, crawling)."""
 
+import pytest
+
 from spider.crawl.links import DiscoveredLink, extract_links
 from spider.crawl.urls import NormalizedUrl, url_host
 
@@ -56,4 +58,70 @@ def test_video_and_audio_sources_are_video_and_audio_links() -> None:
         ("video", "http://site.test/v.mp4"),
         ("video", "http://site.test/v.vtt"),
         ("audio", "http://site.test/a.mp3"),
+    ]
+
+
+def test_rel_previous_is_a_pagination_link() -> None:
+    found = _found('<link rel="previous" href="/p1">', NormalizedUrl("http://site.test/p2"))
+
+    assert found == [("pagination", "http://site.test/p1")]
+
+
+def test_a_link_element_of_another_rel_is_a_misc_link() -> None:
+    found = _found(
+        '<link rel="icon" href="/favicon.ico"><link rel="preconnect" href="https://cdn.site.test">'
+    )
+
+    assert found == [("misc", "http://site.test/favicon.ico")]
+
+
+@pytest.mark.parametrize(
+    ("html", "expected"),
+    [
+        ('<area href="/m">', ("hyperlink", "area", "href", "http://site.test/m")),
+        ('<link rel="next" href="/p3">', ("pagination", "link", "href", "http://site.test/p3")),
+        ('<link rel="prev" href="/p1">', ("pagination", "link", "href", "http://site.test/p1")),
+        (
+            '<link rel="alternate" hreflang="de" href="/de/">',
+            ("hreflang", "link", "href", "http://site.test/de/"),
+        ),
+        (
+            '<link rel="alternate" media="only screen and (max-width: 640px)" href="/m/">',
+            ("mobile_alternate", "link", "href", "http://site.test/m/"),
+        ),
+        (
+            '<link rel="alternate" type="application/rss+xml" href="/feed">',
+            ("misc", "link", "href", "http://site.test/feed"),
+        ),
+        (
+            '<link rel="Alternate StyleSheet" href="/s.css">',
+            ("css", "link", "href", "http://site.test/s.css"),
+        ),
+        ('<iframe src="/f"></iframe>', ("iframe", "iframe", "src", "http://site.test/f")),
+        (
+            '<frameset><frame src="/f"></frameset>',
+            ("iframe", "frame", "src", "http://site.test/f"),
+        ),
+        ('<script src="/s.js"></script>', ("javascript", "script", "src", "http://site.test/s.js")),
+        ('<embed src="/e.swf">', ("media", "embed", "src", "http://site.test/e.swf")),
+        ('<object data="/o.bin"></object>', ("media", "object", "data", "http://site.test/o.bin")),
+        ('<video poster="/p.png"></video>', ("image", "video", "poster", "http://site.test/p.png")),
+        (
+            '<picture><source srcset="/w.webp 1x"></picture>',
+            ("image", "source", "srcset", "http://site.test/w.webp"),
+        ),
+    ],
+)
+def test_each_element_gives_its_link_type(html: str, expected: tuple[str, ...]) -> None:
+    found = [(link.type, link.element, link.attribute, link.target) for link in _links(html)]
+
+    assert found == [expected]
+
+
+def test_rel_tokens_are_lower_cased_and_nofollow_is_read_from_them() -> None:
+    links = _links('<a rel=" NoFollow\tUGC " href="/x">x</a><a href="/y">y</a>')
+
+    assert [(link.rel, link.nofollow) for link in links] == [
+        (("nofollow", "ugc"), True),
+        ((), False),
     ]
