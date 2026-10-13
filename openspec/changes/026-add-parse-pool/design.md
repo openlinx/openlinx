@@ -66,6 +66,8 @@ Each crash therefore costs one URL and one worker start.
 
 ### D6. The ~500k benchmark, first
 - **The script:** `scripts/crawl_500k.py`, next to `scripts/writer_throughput.py`, generates a synthetic site of 500,000 linked pages from a template served by the fixture harness, and crawls it with no `--max-urls` limit.
+- **The site is seeded:** one seed gives the same pages, Links and faults on every run, and the script records how many Pages carry each injected fault and each Issue of `040`'s v0.1 Rules, so a run is checked by counts, not only timed. An option adds a response latency per request.
+- **A direct mode** writes the same site into a crawl file through the store's units, with no HTTP, so `040`'s Rule queries and `050`'s `summary` can be measured on 500k URLs in minutes instead of hours.
 - **A soak test too** (ROADMAP, Robustness rule): the site injects a share of the hostile fixtures' faults, including deeply nested `<div>` Pages over the deadline (D8) and Pages that end their worker, and a run passes only if it ends with no crash, flat memory, and every URL accounted for in `urls`.
 - **What it records:** URLs per second, peak memory of the crawl process and of each worker, machine-wide CPU and clock frequency, the crawl file's size with each table's share, the WAL peak, and the share of the crawl process's CPU time spent in page preparation.
 - **Where it runs:** by hand, on a stated machine, never in CI or `scripts/check.py` (`docs/benchmarks.md`).
@@ -74,6 +76,7 @@ Each crash therefore costs one URL and one worker start.
   - the crawl-file layout variants the store benchmark of 2026-10-10 left out (task 1.3, ROADMAP 026): the `links` layout, unless `030`'s task 10.1 has chosen it already, by 10.1's four layouts and decision rule, so that whichever runs first settles it once; a 16 KB page size; a zstd dictionary for stored HTML; and the WAL size of a ~100k-Page run without a concurrent reader
   - with the pool, next to the baseline (task 5.1)
   - **after `080`**, on the full v0.1 pipeline (ROADMAP, Build order), with the same script: it sweeps the worker count up to physical cores − 2 and keeps the count that gives the most Pages/s while the writer is never short of CPU; reports `response_headers`' share of the file, which over 10% limits that table to Internal URLs; and measures `040`'s live Issues during the Crawl (`040` D16: the full list under 30 s, `page <url>` under 1 s) and their effect on WAL checkpoints.
+- **Method:** runs of variants are interleaved and the minimum is kept, each stage starts from a fresh crawl file, counts are preferred to wall time, and the rows of retracted runs stay in `docs/benchmarks.md`. The maintainer's laptop varies by up to half between runs made at different times.
 - **Results:** recorded in `docs/benchmarks.md`, with the machine and the commit, so later changes can compare.
 
 ### D7. The benchmark sizes the pool; it does not gate it
