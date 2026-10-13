@@ -4,6 +4,7 @@ import aiohttp
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.server import RunningServer
 
 
 async def test_the_request_log_lists_requests_in_the_order_they_came(
@@ -22,3 +23,15 @@ async def test_the_request_log_lists_requests_in_the_order_they_came(
         [("GET", "/"), ("HEAD", "/about")],
         "probe/1.0",
     )
+
+
+async def test_a_server_that_keeps_no_log_still_answers_and_logs_nothing() -> None:
+    server = RunningServer(Site(routes={"/": Page(body="home")}), keep_log=False)
+    try:
+        async with aiohttp.ClientSession() as session, session.get(server.handle.url("/")) as home:
+            body = await home.read()
+        log = server.handle.requests
+    finally:
+        server.stop()
+
+    assert (body, log) == (b"home", ())

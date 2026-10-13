@@ -37,11 +37,14 @@ class LoggedRequest:
 
 
 class RequestLog:
-    def __init__(self) -> None:
+    def __init__(self, *, keep: bool = True) -> None:
         self._entries: list[LoggedRequest] = []
         self._lock = threading.Lock()
+        self._keep = keep
 
     def add(self, request: web.Request) -> None:
+        if not self._keep:
+            return
         entry = LoggedRequest(
             method=request.method,
             path=request.path_qs,
@@ -170,12 +173,12 @@ def _build_app(
 
 
 class RunningServer:
-    def __init__(self, site: Site) -> None:
+    def __init__(self, site: Site, *, keep_log: bool = True) -> None:
         self._loop = loop_factory()
         self._thread = threading.Thread(target=self._loop.run_forever, name="fixture-site")
         self._thread.start()
         self._in_flight: set[asyncio.Task[Any]] = set()
-        log = RequestLog()
+        log = RequestLog(keep=keep_log)
         app = _build_app(site, lambda: self.handle.base_url, self._in_flight, log)
         self._runner = web.AppRunner(app)
         try:
