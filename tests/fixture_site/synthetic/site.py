@@ -4,9 +4,9 @@ import hashlib
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
-from tests.fixture_site.routes import Bytes, Route, Site
+from tests.fixture_site.routes import Bytes, Route, Site, Status
 
 HTML = "text/html; charset=utf-8"
 TEMPLATES = 4
@@ -76,9 +76,56 @@ CORPUS = " ".join(WORDS[(i * 7_919) % len(WORDS)] for i in range(20_000))
 
 class Fault(StrEnum):
     NESTED_DIVS = "nested_divs"
+    ENDS_WORKER = "ends_worker"
+    SERVER_ERROR = "server_error"
+    INVALID_UTF8 = "invalid_utf8"
+    WRONG_CHARSET = "wrong_charset"
+    UNKNOWN_CHARSET = "unknown_charset"
+    MALFORMED_HTML = "malformed_html"
+    NO_TITLE = "no_title"
+    NO_H1 = "no_h1"
 
 
 NO_FAULTS: Mapping[Fault, float] = {}
+DEFAULT_SHARES: Mapping[Fault, float] = {
+    Fault.NESTED_DIVS: 1e-5,
+    Fault.ENDS_WORKER: 1e-5,
+    Fault.SERVER_ERROR: 1e-3,
+    Fault.INVALID_UTF8: 5e-4,
+    Fault.WRONG_CHARSET: 5e-4,
+    Fault.UNKNOWN_CHARSET: 5e-4,
+    Fault.MALFORMED_HTML: 1e-3,
+    Fault.NO_TITLE: 2e-3,
+    Fault.NO_H1: 2e-3,
+}
+# Their Links are lost: the Page is not parsed, or its preparation never ends.
+LOSES_LINKS = frozenset({Fault.NESTED_DIVS, Fault.ENDS_WORKER, Fault.SERVER_ERROR})
+PARSED = {"status_code": 200, "parsed": 1, "parse_error": None}
+# What each fault should leave in `urls`; the Pages over the deadline and those that end their
+# worker are contained only by 026's pool.
+OUTCOMES: Mapping[Fault, Mapping[str, Any]] = {
+    Fault.NESTED_DIVS: {"status_code": 200, "parsed": 0, "parse_error": "parse_timeout"},
+    Fault.ENDS_WORKER: {"status_code": 200, "parsed": 0, "parse_error": "worker_crashed"},
+    Fault.SERVER_ERROR: {"status_code": 500, "parsed": 0, "parse_error": None},
+    **dict.fromkeys(
+        (
+            Fault.INVALID_UTF8,
+            Fault.WRONG_CHARSET,
+            Fault.UNKNOWN_CHARSET,
+            Fault.MALFORMED_HTML,
+            Fault.NO_TITLE,
+            Fault.NO_H1,
+        ),
+        PARSED,
+    ),
+}
+# The marker on which the benchmark's own extractor ends its worker process.
+END_WORKER = '<meta name="spider-benchmark" content="end-worker">'
+# 100,000 levels take lexbor about 80 s of CPU, far over the 30 s deadline (design D8).
+NESTED_DEPTH = 100_000
+CYRILLIC = bytes(range(0xC0, 0x100)).decode("cp1251")
+INVALID_BYTES = b"<p>broken \x98\xff\xfe bytes</p>"
+MALFORMED = b'<div class="open><p>nul\x00byte<table><td>cell<b><i>misnested</b></i>'
 
 
 class Link(NamedTuple):
@@ -97,21 +144,23 @@ class Pool:
     size: int
     path: str
     content_type: str
+    # What a Crawl does with it: "resource" (checked), "not_followed" or "missing" (a 404).
+    kind: str
 
     def url(self, index: int) -> str:
         return self.path.format(index)
 
 
-IMAGES = Pool("images", 1_500, "/r/i/{}.jpg", "image/jpeg")
-STYLESHEETS = Pool("stylesheets", TEMPLATES * 8, "/r/c/{}.css", "text/css")
-SCRIPTS = Pool("scripts", TEMPLATES * 10, "/r/j/{}.js", "text/javascript")
-VIDEOS = Pool("videos", 100, "/r/v/{}.mp4", "video/mp4")
-AUDIOS = Pool("audios", 100, "/r/a/{}.mp3", "audio/mpeg")
-MEDIA = Pool("media", 100, "/r/m/{}.pdf", "application/pdf")
-AMP = Pool("amp", 100, "/amp/{}", HTML)
-MOBILE = Pool("mobile", 100, "/m/{}", HTML)
-MISC = Pool("misc", 3, "/misc/{}", "application/octet-stream")
-MISSING = Pool("missing", 100, "/missing/{}", HTML)
+IMAGES = Pool("images", 1_500, "/r/i/{}.jpg", "image/jpeg", "resource")
+STYLESHEETS = Pool("stylesheets", TEMPLATES * 8, "/r/c/{}.css", "text/css", "resource")
+SCRIPTS = Pool("scripts", TEMPLATES * 10, "/r/j/{}.js", "text/javascript", "resource")
+VIDEOS = Pool("videos", 100, "/r/v/{}.mp4", "video/mp4", "resource")
+AUDIOS = Pool("audios", 100, "/r/a/{}.mp3", "audio/mpeg", "resource")
+MEDIA = Pool("media", 100, "/r/m/{}.pdf", "application/pdf", "resource")
+AMP = Pool("amp", 100, "/amp/{}", HTML, "not_followed")
+MOBILE = Pool("mobile", 100, "/m/{}", HTML, "not_followed")
+MISC = Pool("misc", 3, "/misc/{}", "application/octet-stream", "not_followed")
+MISSING = Pool("missing", 100, "/missing/{}", HTML, "missing")
 POOLS = (IMAGES, STYLESHEETS, SCRIPTS, VIDEOS, AUDIOS, MEDIA, AMP, MOBILE, MISC, MISSING)
 SERVED_POOLS = tuple(pool for pool in POOLS if pool is not MISSING)
 MISC_RELS = ("icon", "manifest", "alternate")
@@ -175,6 +224,12 @@ def _stream(seed: int, n: int, purpose: str) -> Iterator[int]:
         yield z ^ (z >> 31)
 
 
+def _nested(n: int) -> bytes:
+    head = f'<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><title>Deep {n}</title>'
+    body = f"</head><body><h1>Deep {n}</h1>{'<div>' * NESTED_DEPTH}{'</div>' * NESTED_DEPTH}"
+    return f"{head}{body}</body></html>\n".encode()
+
+
 class _Page:
     """The HTML of one Page and its Links, built side by side so they always agree."""
 
@@ -203,7 +258,18 @@ class SyntheticSite:
     seed: int
     pages: int
     fanout: int = 50
-    shares: Mapping[Fault, float] = field(default_factory=dict)
+    shares: Mapping[Fault, float] = field(default_factory=lambda: dict(DEFAULT_SHARES))
+
+    def fault(self, n: int) -> Fault | None:
+        """Only leaves of the spanning tree carry a fault, so none cuts other Pages off."""
+        if n * self.fanout + 1 < self.pages or n == 0:
+            return None
+        draw = next(_stream(self.seed, n, "fault")) / 2**64
+        for fault in Fault:
+            draw -= self.shares.get(fault, 0.0)
+            if draw < 0:
+                return fault
+        return None
 
     def children(self, n: int) -> range:
         first = n * self.fanout + 1
@@ -214,7 +280,7 @@ class SyntheticSite:
             return None
         return page_path((n + 1) % self.pages)
 
-    def _build(self, n: int) -> _Page:
+    def _build(self, n: int, fault: Fault | None) -> _Page:
         page = _Page()
         refs = dict(pool_refs(n))
         numbers = _stream(self.seed, n, "page")
@@ -222,6 +288,8 @@ class SyntheticSite:
         if refresh is not None:
             page.links.append(Link(refresh, "http_refresh", "", "Refresh"))
         page.add('<!doctype html>\n<html lang="en"><head><meta charset="utf-8">')
+        if fault is Fault.ENDS_WORKER:
+            page.add(END_WORKER)
         if n % REFRESH_EVERY == 1:
             target = page_path((n + 1) % self.pages)
             page.tag(
@@ -232,13 +300,16 @@ class SyntheticSite:
                 "content",
             )
         topic = WORDS[next(numbers) % len(WORDS)]
-        page.add(f"<title>Page {n} about {topic}</title>")
+        if fault is not Fault.NO_TITLE:
+            page.add(f"<title>Page {n} about {topic}</title>")
         page.add(f'<meta name="description" content="All about {topic}, page {n}.">')
         self._head_links(page, n, refs)
         page.add("</head><body><header><nav>")
         for section in range(1, min(NAV_LINKS + 1, self.pages)):
             page.a(page_path(section), f"Section {section}")
-        page.add(f"</nav></header><main><h1>{topic.title()} {n}</h1>")
+        page.add("</nav></header><main>")
+        if fault is not Fault.NO_H1:
+            page.add(f"<h1>{topic.title()} {n}</h1>")
         self._content(page, n, refs, numbers)
         page.add("</main><footer>")
         for section in range(1, min(FOOTER_REPEATS + 1, self.pages)):
@@ -322,18 +393,81 @@ class SyntheticSite:
             size += PARAGRAPH + 7
 
     def page_model(self, n: int) -> tuple[Link, ...]:
-        return tuple(self._build(n).links)
+        """The Links that preparing Page n gives, in document order."""
+        fault = self.fault(n)
+        return () if fault in LOSES_LINKS else tuple(self._build(n, fault).links)
 
     def render(self, n: int) -> bytes:
-        return "".join(self._build(n).parts).encode()
+        fault = self.fault(n)
+        if fault is Fault.NESTED_DIVS:
+            return _nested(n)
+        html = "".join(self._build(n, fault).parts)
+        if fault is Fault.WRONG_CHARSET:
+            # Declared UTF-8 by the Content-Type and the meta, but written in windows-1251.
+            return html.replace("</main>", f"<p>{CYRILLIC}</p></main>", 1).encode("cp1251")
+        body = html.encode()
+        if fault is Fault.INVALID_UTF8:
+            body = body.replace(b"</main>", INVALID_BYTES + b"</main>", 1)
+        if fault is Fault.MALFORMED_HTML:
+            # After every Link, so the broken markup cannot swallow one.
+            body = body.replace(b"</body>", MALFORMED + b"</body>", 1)
+        return body
 
     def route(self, path: str) -> Route | None:
         n = _page_number(path, self.pages)
         if n is None:
             return _pool_route(path)
+        fault = self.fault(n)
+        if fault is Fault.SERVER_ERROR:
+            return Status(500)
         refresh = self._http_refresh(n)
         headers = [] if refresh is None else [("Refresh", f"30; url={refresh}")]
-        return Bytes(self.render(n), content_type=HTML, headers=headers)
+        content_type = "text/html; charset=nonsense" if fault is Fault.UNKNOWN_CHARSET else HTML
+        return Bytes(self.render(n), content_type=content_type, headers=headers)
+
+    def manifest(self) -> dict[str, Any]:
+        """The injected counts and the URLs a Crawl must account for, in one pass of hashes."""
+        faults = dict.fromkeys(Fault, 0)
+        seen = {pool: bytearray(pool.size) for pool in POOLS}
+        filled = dict.fromkeys(POOLS, 0)
+        open_pools = len(POOLS)
+        for n in range(self.pages):
+            fault = self.fault(n)
+            if fault is not None:
+                faults[fault] += 1
+            if not open_pools or fault in LOSES_LINKS:
+                continue
+            for pool, indices in pool_refs(n):
+                for index in indices:
+                    if not seen[pool][index]:
+                        seen[pool][index] = 1
+                        filled[pool] += 1
+                        open_pools -= filled[pool] == pool.size
+
+        def of_kind(kind: str) -> int:
+            return sum(count for pool, count in filled.items() if pool.kind == kind)
+
+        urls = {
+            "pages": self.pages,
+            "resources": of_kind("resource"),
+            "not_followed": of_kind("not_followed"),
+            "missing": of_kind("missing"),
+        }
+        return {
+            "seed": self.seed,
+            "pages": self.pages,
+            "fanout": self.fanout,
+            "shares": {fault.value: self.shares.get(fault, 0.0) for fault in Fault},
+            "faults": {fault.value: count for fault, count in faults.items()},
+            "outcomes": {fault.value: dict(OUTCOMES[fault]) for fault in Fault},
+            "issues": {
+                "title-missing": faults[Fault.NO_TITLE],
+                "h1-missing": faults[Fault.NO_H1],
+                "internal-5xx": faults[Fault.SERVER_ERROR],
+                "internal-4xx": filled[MISSING],
+            },
+            "urls": urls | {"total": sum(urls.values())},
+        }
 
     def as_site(self) -> Site:
         return Site(resolve=self.route)

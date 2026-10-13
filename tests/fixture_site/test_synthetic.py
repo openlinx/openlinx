@@ -2,15 +2,19 @@
 
 import http.client
 import re
-from collections import deque
+from collections import Counter, deque
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from typing import Any
+
+import pytest
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.server import ServerHandle
-from tests.fixture_site.synthetic.site import NO_FAULTS, SyntheticSite, page_path
+from tests.fixture_site.synthetic.site import NO_FAULTS, Fault, SyntheticSite, page_path
 
 HYPERLINK = re.compile(rb'<a href="(/[^"]*)"')
+END_WORKER = b'<meta name="spider-benchmark" content="end-worker">'
 
 
 @dataclass(frozen=True)
@@ -53,6 +57,10 @@ def page_paths(pages: int) -> set[str]:
     return {"/"} | {f"/p/{n}" for n in range(1, pages)}
 
 
+def is_page(path: str) -> bool:
+    return path == "/" or path.startswith("/p/")
+
+
 LINK_TYPES = {
     "hyperlink",
     "canonical",
@@ -71,14 +79,16 @@ LINK_TYPES = {
     "mobile_alternate",
     "misc",
 }
+RESOURCE_TYPES = {"image", "css", "javascript", "video", "audio", "media"}
+NOT_FOLLOWED_TYPES = {"amphtml", "mobile_alternate", "misc"}
 
 
 class LinkReader(HTMLParser):
-    """The Link types of docs/crawling.md (020), read with the stdlib parser, one per Link."""
+    """The Links of docs/crawling.md's table (020), read with the stdlib parser: (type, URL)."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.links: list[str] = []
+        self.links: list[tuple[str, str]] = []
         self._media: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -87,30 +97,30 @@ class LinkReader(HTMLParser):
         if tag in {"video", "audio"}:
             self._media.append(tag)
         if tag in {"a", "area"} and "href" in a:
-            self.links.append("hyperlink")
+            self.links.append(("hyperlink", a["href"]))
         elif tag == "link" and "href" in a:
-            self.links.append(link_rel_type(rel, a))
+            self.links.append((link_rel_type(rel, a), a["href"]))
         elif tag in {"iframe", "frame"} and "src" in a:
-            self.links.append("iframe")
+            self.links.append(("iframe", a["src"]))
         elif tag == "meta" and a.get("http-equiv", "").lower() == "refresh":
-            self.links.append("meta_refresh")
+            self.links.append(("meta_refresh", a["content"].partition("url=")[2]))
         elif tag == "script" and "src" in a:
-            self.links.append("javascript")
+            self.links.append(("javascript", a["src"]))
         elif tag in {"embed", "object"} and ("src" in a or "data" in a):
-            self.links.append("media")
+            self.links.append(("media", a.get("src") or a["data"]))
         self._media_links(tag, a)
 
     def _media_links(self, tag: str, a: dict[str, str]) -> None:
         if tag in {"img", "source"} and "srcset" in a:
-            self.links += ["image"] * len(a["srcset"].split(","))
+            self.links += [("image", c.split()[0]) for c in a["srcset"].split(",")]
         if tag == "img" and "src" in a:
-            self.links.append("image")
+            self.links.append(("image", a["src"]))
         if tag == "video" and "poster" in a:
-            self.links.append("image")
+            self.links.append(("image", a["poster"]))
         if tag in {"video", "audio"} and "src" in a:
-            self.links.append(tag)
+            self.links.append((tag, a["src"]))
         if tag in {"source", "track"} and "src" in a and self._media:
-            self.links.append(self._media[-1])
+            self.links.append((self._media[-1], a["src"]))
 
     def handle_endtag(self, tag: str) -> None:
         if tag in {"video", "audio"} and self._media:
@@ -133,10 +143,11 @@ def link_rel_type(rel: set[str], a: dict[str, str]) -> str:
     return "misc"
 
 
-def links_of(fetched: Fetched) -> list[str]:
+def links_of(fetched: Fetched) -> list[tuple[str, str]]:
     reader = LinkReader()
     reader.feed(fetched.body.decode("utf-8", "replace"))
-    return reader.links + (["http_refresh"] if "refresh" in fetched.headers else [])
+    refresh = fetched.headers.get("refresh")
+    return reader.links + ([] if refresh is None else [("http_refresh", refresh.split("url=")[1])])
 
 
 def test_the_pages_carry_a_link_of_every_link_type(fixture_site: StartSite) -> None:
@@ -144,11 +155,11 @@ def test_the_pages_carry_a_link_of_every_link_type(fixture_site: StartSite) -> N
 
     connection = connect(server)
     try:
-        types = {kind for n in range(100) for kind in links_of(fetch(connection, page_path(n)))}
+        pages = [fetch(connection, page_path(n)) for n in range(100)]
     finally:
         connection.close()
 
-    assert types == LINK_TYPES
+    assert {kind for page in pages for kind, _ in links_of(page)} == LINK_TYPES
 
 
 def test_a_page_with_children_is_about_50_kb_with_about_450_links(
@@ -173,3 +184,81 @@ def test_every_page_is_reached_from_the_seed_by_its_hyperlinks(fixture_site: Sta
     reached = crawl(server)
 
     assert {path for path, got in reached.items() if got.status == 200} == page_paths(600)
+
+
+def observed_fault(page: Fetched) -> str | None:
+    """The fault a client sees in a response, from the response alone."""
+    if page.status == 500:
+        return "server_error"
+    if b"<div>" * 1_000 in page.body:
+        return "nested_divs"
+    if END_WORKER in page.body:
+        return "ends_worker"
+    if "charset=nonsense" in page.headers["content-type"]:
+        return "unknown_charset"
+    try:
+        page.body.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            page.body.decode("cp1251")
+        except UnicodeDecodeError:
+            return "invalid_utf8"
+        return "wrong_charset"
+    if b"\x00" in page.body:
+        return "malformed_html"
+    if b"<title>" not in page.body:
+        return "no_title"
+    if b"<h1>" not in page.body:
+        return "no_h1"
+    return None
+
+
+LOSES_LINKS = {"server_error", "nested_divs", "ends_worker"}
+FAULTY = SyntheticSite(seed=3, pages=400, fanout=4, shares=dict.fromkeys(Fault, 0.05))
+
+
+@pytest.fixture(scope="module")
+def faulty_crawl(module_fixture_site: StartSite) -> dict[str, Fetched]:
+    return crawl(module_fixture_site(FAULTY.as_site()))
+
+
+def test_the_faults_a_client_sees_are_the_counts_of_the_manifest(
+    faulty_crawl: dict[str, Fetched],
+) -> None:
+    seen = Counter(observed_fault(got) for path, got in faulty_crawl.items() if is_page(path))
+
+    counts = {fault.value: seen[fault.value] for fault in Fault}
+    assert (counts, min(counts.values()) > 0) == (FAULTY.manifest()["faults"], True)
+
+
+def test_the_urls_the_pages_reference_are_the_url_totals_of_the_manifest(
+    faulty_crawl: dict[str, Fetched],
+) -> None:
+    links = [
+        link
+        for path, got in faulty_crawl.items()
+        if is_page(path) and observed_fault(got) not in LOSES_LINKS
+        for link in links_of(got)
+    ]
+    followed = {url for kind, url in links if kind not in NOT_FOLLOWED_TYPES}
+    totals: dict[str, Any] = {
+        "pages": sum(1 for path, got in faulty_crawl.items() if is_page(path)),
+        "resources": len({url for kind, url in links if kind in RESOURCE_TYPES}),
+        "not_followed": len({u for k, u in links if k in NOT_FOLLOWED_TYPES} - followed),
+        "missing": sum(
+            1 for url in followed if url in faulty_crawl and faulty_crawl[url].status == 404
+        ),
+    }
+    totals["total"] = sum(totals.values())
+
+    assert totals == FAULTY.manifest()["urls"]
+
+
+def test_the_manifest_names_the_outcome_each_fault_leaves_in_urls() -> None:
+    outcomes = SyntheticSite(seed=1, pages=10).manifest()["outcomes"]
+
+    assert (outcomes["nested_divs"], outcomes["ends_worker"], outcomes["server_error"]) == (
+        {"status_code": 200, "parsed": 0, "parse_error": "parse_timeout"},
+        {"status_code": 200, "parsed": 0, "parse_error": "worker_crashed"},
+        {"status_code": 500, "parsed": 0, "parse_error": None},
+    )
