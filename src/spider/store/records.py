@@ -12,6 +12,10 @@ type CrawlMode = Literal["spider", "list", "sitemap"]
 type JournalMode = Literal["wal", "delete"]
 type JournalSetting = Literal["auto", "wal", "delete"]
 type CrawlState = Literal["running", "stopped", "completed", "failed", "interrupted"]
+# Why a Crawl or one of its runs ended early; the one value set of every such column (D12).
+type StopReason = Literal[
+    "max_urls", "interrupt", "requested", "seed_unreachable", "site_unreachable", "write_failed"
+]
 type SkipReason = Literal[
     "excluded",
     "blocked_by_robots_txt",

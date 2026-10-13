@@ -118,7 +118,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: the result's counts come from queries over `urls`, never from counters, and the `parsed` column exists.
 - [x] 4.7 **Guard:** "The crawl Command prints one document", at seam 1.
-- [ ] 4.8 Drive "Only the listed transitions are allowed" and "An early end needs a reason of its kind" at seam 4, a trivial pair; the first as a check over every pair of states.
+- [x] 4.8 Drive "Only the listed transitions are allowed" and "An early end needs a reason of its kind" at seam 4, a trivial pair; the first as a check over every pair of states.
 
   Done when: `TRANSITIONS` and `check_transition` exist (design D12), `StopReason` is a `Literal` next to `CrawlState`, and `015`'s `set_state` takes the `stop_reason` and checks the transition against the state it reads in the same unit.
 - [ ] 4.9 Drive "A completed Crawl records its state" at seam 3+6. Done when: `crawl.stop_reason` is declared, with its values from `StopReason` and its `docs/schema.md` row.

@@ -16,8 +16,9 @@ from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect, not_writable_name, opening
 from spider.store.ids import Choice, crawl_path, new_crawl_id
 from spider.store.journal import JournalChoice, confirm_journal_mode
-from spider.store.records import CrawlFile, CrawlState, CrawlSummary, NewCrawl
+from spider.store.records import CrawlFile, CrawlState, CrawlSummary, NewCrawl, StopReason
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
+from spider.store.transitions import check_transition
 from spider.workspace.creation import as_workspace_not_writable, create_data_folder
 
 
@@ -40,16 +41,23 @@ def create_crawl_file(
     return crawl_file, journal
 
 
-def set_state(connection: Connection, state: CrawlState, at: datetime) -> None:
+def set_state(
+    connection: Connection, state: CrawlState, at: datetime, stop_reason: StopReason | None = None
+) -> None:
+    """The one writer of how a Crawl ends, checked against the state it reads (020 D12)."""
+    current: CrawlState = connection.execute(select(crawl.c.state)).scalar_one()
+    check_transition(current, state, stop_reason)
     completed_at = at if state == "completed" else None
     connection.execute(update(crawl).values(state=state, completed_at=completed_at))
 
 
-def record_state(state: CrawlState, at: datetime) -> Callable[[Connection], None]:
-    """A unit that writes the Crawl State."""
+def record_state(
+    state: CrawlState, at: datetime, stop_reason: StopReason | None = None
+) -> Callable[[Connection], None]:
+    """A unit that writes the Crawl State, as set_state checks it."""
 
     def unit(connection: Connection) -> None:
-        set_state(connection, state, at)
+        set_state(connection, state, at, stop_reason)
 
     return unit
 
