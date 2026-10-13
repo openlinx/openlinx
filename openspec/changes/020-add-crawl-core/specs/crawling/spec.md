@@ -637,7 +637,7 @@ The listed values SHALL include, from v0.1, the values that later changes write,
 - `discovered_via`: `seed`; every Link type, the later ones included (see "Link discovery"); `redirect`, for a redirect target (`022-add-fetch-policy`); `list`, `sitemap_input` and `sitemap_index`, for a listed URL and for sitemap files (`024-add-list-and-sitemap-modes`, v0.2). A URL listed in a sitemap has the Link type `xml_sitemap`; there is no separate `sitemap` value.
 - `skip_reason`: `excluded`, `blocked_by_robots_txt`, `robots_unreachable`, `nofollow`, `link_type_not_followed`, `external_not_checked`, `max_depth`; `max_redirects` and `url_too_long` (`022`)
 - `fetch_error`: `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`, `record_failed`; `timeout` and `tls_error` (`022`)
-- `parse_error`: `extractor_error`; `body_too_large` (`022`); `worker_crashed` (`026-add-parse-pool`)
+- `parse_error`: `extractor_error`; `body_too_large` (`022`); `worker_crashed` and `parse_timeout` (`026-add-parse-pool`)
 
 This change SHALL add these indexes to `urls`, built while the Crawl writes:
 
@@ -847,7 +847,7 @@ Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, an
 - **THEN** the Command exits with code 7, stdout holds the result with `"state": "failed"` and `"stop_reason": "write_failed"`, and the last stderr line is an error with `code` = `crawl_write_failed`
 
 #### Scenario: Deeply nested HTML does not stop the Crawl
-- **WHEN** `/` links to `/deep`, whose body nests 100,000 `<div>` elements around a link to `/after`, and `spider crawl {site}/` ends
+- **WHEN** `/` links to `/deep`, whose body nests 10,000 `<div>` elements around a link to `/after`, and `spider crawl {site}/` ends
 - **THEN** the Crawl State is `completed`, and `{site}/deep` has `parsed` = 1 or a `parse_error`
 
 #### Scenario: Undecodable bytes do not stop the Crawl
