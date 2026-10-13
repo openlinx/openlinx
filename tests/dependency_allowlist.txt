@@ -9,6 +9,7 @@ mdurl  # markdown-it-py: URL parsing
 pygments  # rich: syntax highlighting
 shellingham  # typer: detects the shell
 idna  # host names as aiohttp encodes them, UTS46 (design D13 of 020-add-crawl-core)
+msgspec  # frozen records that cross 026's process pool: DiscoveredLink and page preparation's (ADR-0006, design D5 of 020-add-crawl-core)
 orjson  # JSON output (design D3 of 010-add-workspace-and-cli-contract)
 publicsuffixlist  # registrable domains for the www rule and --scope subdomains, bundled, never downloaded (design D4 of 020-add-crawl-core)
 pydantic-settings  # spider.toml settings (design D2 of 010-add-workspace-and-cli-contract)
@@ -18,4 +19,5 @@ annotated-types  # pydantic: constraint metadata
 typing-extensions  # pydantic, pydantic-core, typing-inspection and sqlalchemy: typing backports
 typing-inspection  # pydantic and pydantic-settings: runtime type inspection
 python-dotenv  # pydantic-settings: the .env source, which spider drops (design D2 of 010)
+selectolax  # the HTML parser of the link extractor, lexbor backend (design D5 of 020-add-crawl-core)
 sqlalchemy  # the crawl store: SQLite through SQLAlchemy 2 Core (ADR-0003, 015-add-crawl-store)

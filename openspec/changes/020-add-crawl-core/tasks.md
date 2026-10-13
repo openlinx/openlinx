@@ -67,7 +67,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 3. The link extractor (slice, seam 4)
 
-- [ ] 3.1 Drive "A relative link is resolved against the base href".
+- [x] 3.1 Drive "A relative link is resolved against the base href".
 
   Done when:
   - the link extractor takes HTML bytes, their Content-Type, the response URL and an `is_internal` function, parses once with `selectolax.lexbor.LexborHTMLParser`, and returns `DiscoveredLink` values (design D5), which `030` enriches.

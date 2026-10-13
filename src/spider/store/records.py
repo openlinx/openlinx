@@ -22,6 +22,27 @@ type SkipReason = Literal[
     "max_redirects",
     "url_too_long",
 ]
+type LinkType = Literal[
+    "hyperlink",
+    "canonical",
+    "pagination",
+    "hreflang",
+    "iframe",
+    "meta_refresh",
+    "http_refresh",
+    "image",
+    "css",
+    "javascript",
+    "video",
+    "audio",
+    "media",
+    "amphtml",
+    "mobile_alternate",
+    "misc",
+    "xml_sitemap",
+    "sitemap_hreflang",
+    "javascript_redirect",
+]
 
 # The --crawl value that selects the Crawl that started last.
 LATEST = "latest"

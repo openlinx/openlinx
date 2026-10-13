@@ -21,13 +21,17 @@ def _is_dataclass(decorator: ast.expr) -> bool:
     )
 
 
-def _is_frozen(decorator: ast.expr) -> bool:
-    return isinstance(decorator, ast.Call) and any(
+def _sets_frozen(keywords: list[ast.keyword]) -> bool:
+    return any(
         keyword.arg == "frozen"
         and isinstance(keyword.value, ast.Constant)
         and keyword.value.value is True
-        for keyword in decorator.keywords
+        for keyword in keywords
     )
+
+
+def _is_frozen(decorator: ast.expr) -> bool:
+    return isinstance(decorator, ast.Call) and _sets_frozen(decorator.keywords)
 
 
 def _base_name(base: ast.expr) -> str | None:
@@ -73,6 +77,8 @@ def violations(sources: Mapping[str, str]) -> list[str]:
                 for decorator in node.decorator_list
                 if _is_dataclass(decorator) and not _is_frozen(decorator)
             ]
+            if "Struct" in map(_base_name, node.bases) and not _sets_frozen(node.keywords):
+                found.append(f"{module}: {node.name} is a Struct that is not frozen")
             found += [
                 f"{module}: {node.name} subclasses {name}"
                 for name in map(_base_name, node.bases)
@@ -122,6 +128,29 @@ class Frozen: ...
         "m.py: Called is a dataclass that is not frozen",
         "m.py: Thawed is a dataclass that is not frozen",
         "m.py: Qualified is a dataclass that is not frozen",
+    ]
+
+
+def test_a_struct_that_is_not_frozen_is_named() -> None:
+    source = """
+import msgspec
+from msgspec import Struct
+
+class Bare(Struct): ...
+
+class Keyworded(msgspec.Struct, kw_only=True): ...
+
+class Thawed(Struct, frozen=False): ...
+
+class Frozen(msgspec.Struct, frozen=True, kw_only=True): ...
+
+class Other(Exception, frozen=False): ...
+"""
+
+    assert violations({"m.py": source}) == [
+        "m.py: Bare is a Struct that is not frozen",
+        "m.py: Keyworded is a Struct that is not frozen",
+        "m.py: Thawed is a Struct that is not frozen",
     ]
 
 
