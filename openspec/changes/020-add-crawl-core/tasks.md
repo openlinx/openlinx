@@ -125,7 +125,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.10 Drive "The first event line is the start event" at seam 1.
 - [x] 4.11 Drive "The recorded config holds every registered crawl setting" at seam 2.
 
-  Done when: `[crawl]` is registered in `build_app` as `"spider.crawl.settings:CrawlSettings"` and passes `010`'s table-rules test, every crawl option declares its setting with `OptionMeta(setting=...)`, `max_urls`, `max_depth` and `rate` default to `None`, and `NewCrawl.config` holds every registered table.
+  Done when: `[crawl]` is registered in `build_app` as `"spider.crawl.settings:CrawlSettings"` and passes `010`'s table-rules test, every crawl option declares its setting with `OptionMeta(setting=...)`, and `NewCrawl.config` holds every registered table. Its one option is `--concurrency`, which task 4.13 needs: an option is declared by the task that applies it, so none is inert (ruling of 2026-10-14), and `--max-depth`, `--max-urls` and `--rate` come with tasks 9.5, 9.7 and 11.4.
 - [ ] 4.12 Wire `015`'s journal mode (group 8) and redaction (group 9), at seam 2.
 
   Done when: the `crawl` adapter always passes `spider.cli.options.secret_names(<its Click command>, <the settings tables>)` to the Crawl Service, which puts it in `NewCrawl.secret_names` (`create_crawl` redacts by itself); and the Crawl Service always sets `NewCrawl.journal_setting` from the resolved `[store] journal_mode`, `"auto"` included, since neither field has a default, so `[store] journal_mode = "delete"` gives `crawl.journal_mode` = `delete`, and a `store_wal_unavailable` warning that `create_crawl` reports reaches the result's `warnings` (and `crawl.warnings` once task 12.3 declares it).
@@ -170,7 +170,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 6.5 Drive "An unknown host is a DNS error" at seam 3+6.
 - [ ] 6.6 Docs: document External URL checks and the `fetch_error` codes in `docs/crawling.md`.
 - [ ] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
-- [ ] 6.8 PR #1 (design, Migration Plan): verify that the whole suite passes in CI on Windows, macOS and Linux with the coverage gate on the branch, then hand over to the manager, who pushes and opens PR #1. The change stays open, with groups 7–15 unticked.
+- [ ] 6.8 PR #1 (design, Migration Plan): verify that the whole suite passes in CI on Windows, macOS and Linux with the coverage gate on the branch, then hand over to the manager, who pushes and opens PR #1. The change stays open, with groups 7–15 unticked. No option of `spider crawl` is inert at PR #1: each declared option has a test of its effect.
 
 ## 7. Robots directives and Link following (widening)
 
@@ -215,9 +215,9 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 9.2 **Guard:** "A broken image is recorded", at seam 3+6.
 - [ ] 9.3 Drive "The shortest path wins over a faster, longer one" at seam 3+6. Done when: followed URLs of depth d+1 wait for every followed URL of depth d, and checks never wait (design D3).
 - [ ] 9.4 Drive "A Resource is one deeper than its Page" at seam 3+6.
-- [ ] 9.5 Drive "Links beyond the limit are not requested" at seam 3+6.
+- [ ] 9.5 Drive "Links beyond the limit are not requested" at seam 3+6. Done when: `--max-depth` is declared with `OptionMeta(setting="crawl.max_depth")` and the default `None`, no limit (design D11).
 - [ ] 9.6 Drive "Resources are checked beyond the depth limit" at seam 3+6.
-- [ ] 9.7 Drive "The Crawl stops at the limit" at seam 1. Done when: the `stopped` end goes through `check_transition` with `max_urls`.
+- [ ] 9.7 Drive "The Crawl stops at the limit" at seam 1. Done when: `--max-urls` is declared with `OptionMeta(setting="crawl.max_urls")` and the default `None`, no limit, and the `stopped` end goes through `check_transition` with `max_urls`.
 - [ ] 9.8 Drive "URLs not requested stay queued" at seam 3+6.
 - [ ] 9.9 Drive "The limit warning says how to continue" at seam 1. Done when: `max_urls_reached` is declared, with a hint built from `spider.naming`.
 - [ ] 9.10 Drive "The limit holds under concurrency" at seam 3. Done when: requests in flight count toward the limit.
@@ -258,7 +258,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 11.3 Drive "A concurrency of zero is rejected" at seam 1.
 - [ ] 11.4 Drive "Requests to a host are spaced by the rate", fake timing.
 
-  Done when: the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`, and every wait of the engine goes through the context's `Clock`.
+  Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`.
 - [ ] 11.5 **Guard:** "Crawl-delay is not applied", fake timing.
 - [ ] 11.6 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared.
 - [ ] 11.7 Docs: document politeness defaults in `docs/crawling.md`.
