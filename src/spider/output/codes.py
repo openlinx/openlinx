@@ -145,6 +145,12 @@ INTERNAL_ERROR = _declare(
     "An unexpected failure, which is a bug; details.traceback holds the Python traceback.",
 )
 INTERRUPTED = _declare("interrupted", "error", ExitCode.INTERRUPTED, "Stopped with Ctrl+C.")
+INVALID_URL = _declare(
+    "invalid_url",
+    "error",
+    ExitCode.USAGE,
+    "A Seed that is not a valid http or https URL; details.reason says why.",
+)
 WORKSPACE_NESTED = _declare(
     "workspace_nested", "warning", None, "The new Workspace is inside another Workspace."
 )

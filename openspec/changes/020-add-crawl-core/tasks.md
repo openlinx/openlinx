@@ -92,7 +92,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 4. Walking skeleton: a foreground Spider crawl (slice)
 
-- [ ] 4.1 Drive "An invalid Seed is rejected" at seam 1.
+- [x] 4.1 Drive "An invalid Seed is rejected" at seam 1.
 
   Done when: `spider crawl <url>` is registered with `@command_meta(name=CRAWL, output="document", events=True)`, its adapter calls the Crawl Service, `invalid_url` is declared in `spider.output.codes`, and the Workspace holds no new crawl file. A Seed rejected for its userinfo gets a hint that names `022`'s `--auth` (design D13).
 - [ ] 4.2 Drive "The Seed is fetched and recorded" at seam 3+6.
