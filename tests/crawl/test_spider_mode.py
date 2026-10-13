@@ -33,3 +33,16 @@ def test_the_request_is_for_the_recorded_url(
     (url,) = query(crawl_file, "SELECT url FROM urls")[0]
 
     assert [server.url(request.path) for request in server.requests] == [url]
+
+
+def test_the_seed_is_kept_as_given_in_seeds(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(HOME_PAGE)
+
+    crawl_file = crawled(server.base_url)
+
+    assert (
+        query(crawl_file, "SELECT position, url FROM seeds"),
+        query(crawl_file, "SELECT url FROM urls"),
+    ) == ([(1, server.base_url)], [(server.url("/"),)])

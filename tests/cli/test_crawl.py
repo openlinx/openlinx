@@ -25,3 +25,35 @@ def test_a_seed_with_userinfo_is_rejected_with_a_hint_about_auth(
         True,
         False,
     )
+
+
+def test_the_ways_a_url_is_found_are_an_enumeration() -> None:
+    columns = run_cli("schema", "urls").json()["items"][0]["columns"]
+    values = next(column["values"] for column in columns if column["name"] == "discovered_via")
+
+    assert values == [
+        "seed",
+        "hyperlink",
+        "canonical",
+        "pagination",
+        "hreflang",
+        "iframe",
+        "meta_refresh",
+        "http_refresh",
+        "image",
+        "css",
+        "javascript",
+        "video",
+        "audio",
+        "media",
+        "amphtml",
+        "mobile_alternate",
+        "misc",
+        "xml_sitemap",
+        "sitemap_hreflang",
+        "javascript_redirect",
+        "redirect",
+        "list",
+        "sitemap_input",
+        "sitemap_index",
+    ]
