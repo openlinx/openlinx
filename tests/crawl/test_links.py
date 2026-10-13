@@ -112,12 +112,34 @@ def test_a_link_element_of_another_rel_is_a_misc_link() -> None:
             '<picture><source srcset="/w.webp 1x"></picture>',
             ("image", "source", "srcset", "http://site.test/w.webp"),
         ),
+        (
+            '<video><track src="/t.vtt" srcset="/x.png 1x"></video>',
+            ("video", "track", "src", "http://site.test/t.vtt"),
+        ),
+        ('<a href="">Here</a>', ("hyperlink", "a", "href", "http://site.test/")),
     ],
 )
 def test_each_element_gives_its_link_type(html: str, expected: tuple[str, ...]) -> None:
     found = [(link.type, link.element, link.attribute, link.target) for link in _links(html)]
 
     assert found == [expected]
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        '<base href="javascript:void(0)"><a href="guide">Guide</a>',
+        '<a href="//">x</a>',
+        '<img src="">',
+        '<script src=" "></script>',
+        '<embed src="">',
+        '<object data=""></object>',
+        '<video poster=""></video>',
+        '<link rel="stylesheet" href="">',
+    ],
+)
+def test_references_that_name_no_file_give_no_link(html: str) -> None:
+    assert _links(html) == []
 
 
 def test_rel_tokens_are_lower_cased_and_nofollow_is_read_from_them() -> None:

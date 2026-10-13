@@ -122,9 +122,9 @@ The Crawl reads Links from every response it parses: an in-Scope 2xx HTML respon
 ### Resolving a reference
 
 - White space around an attribute value is removed, as browsers do.
-- A relative reference is resolved against the Page's first `<base href>`, and otherwise against the response URL. For `<base href="http://site.test/docs/">`, `href="guide"` is `http://site.test/docs/guide`.
+- A relative reference is resolved against the Page's first `<base href>`, and otherwise against the response URL. For `<base href="http://site.test/docs/">`, `href="guide"` is `http://site.test/docs/guide`. A base that is not http or https, such as `javascript:void(0)`, resolves no relative reference, as in a browser.
 - The result is normalised (see URLs).
-- A reference gives no Link when its scheme is not http or https (`mailto:`, `tel:`, `javascript:`, `data:`), when it holds a user name, or when it cannot be resolved or normalised, such as `http://[bad/x`. The next references on the Page are still read.
+- A reference gives no Link when its scheme is not http or https (`mailto:`, `tel:`, `javascript:`, `data:`), when it holds a user name, or when it cannot be resolved or normalised, such as `http://[bad/x` or `//`. An empty `src`, `data` or `poster` names no file and gives no Link; an empty `href` links to the Page itself. The next references on the Page are still read.
 
 ### Link types
 
@@ -165,4 +165,4 @@ HTML is decoded by the first of these that applies, and bytes that are invalid i
 3. a `<meta charset>` or `<meta http-equiv="Content-Type">` declaration in the first 1024 bytes
 4. UTF-8, or windows-1252 when the body is not valid UTF-8
 
-Encoding labels follow the [Encoding Standard](https://encoding.spec.whatwg.org/), as browsers do: `iso-8859-1` and `ascii` mean windows-1252, `iso-8859-9` means windows-1254, and `shift_jis`, `euc-kr` and `gb2312` mean their Windows supersets. A label that names no encoding, such as `charset=nonsense`, is skipped, and the next source applies. A `<meta>` declaration of UTF-16 means UTF-8.
+Encoding labels are those of the [Encoding Standard](https://encoding.spec.whatwg.org/), as browsers read them: `iso-8859-1` and `ascii` mean windows-1252, `iso-8859-9` means windows-1254, and `shift_jis`, `euc-kr` and `gb2312` mean their Windows supersets. A label the Standard does not list, such as `charset=nonsense`, is skipped, and the next source applies; so are `x-user-defined` and the labels of the Standard's replacement encoding. A `<meta>` declaration inside a comment is not read, a `<meta>` with an unknown label gives way to the next one, and a `<meta>` declaration of UTF-16 means UTF-8.

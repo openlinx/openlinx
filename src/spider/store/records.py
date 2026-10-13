@@ -43,6 +43,7 @@ type LinkType = Literal[
     "sitemap_hreflang",
     "javascript_redirect",
 ]
+type DeclaredIn = Literal["html", "http_header"]
 
 # The --crawl value that selects the Crawl that started last.
 LATEST = "latest"

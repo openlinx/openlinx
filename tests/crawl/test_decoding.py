@@ -38,6 +38,30 @@ _CP1251 = "text/html; charset=windows-1251"
         ),
         (b"caf\xe9", None, ("café", "windows-1252")),
         (b"a\xffb", "text/html; charset=utf-8", ("a\N{REPLACEMENT CHARACTER}b", "utf-8")),
+        (
+            b"<!-- <meta charset=koi8-r> -->\xc3\xa9",
+            None,
+            ("<!-- <meta charset=koi8-r> -->é", "utf-8"),
+        ),
+        (
+            b'<meta name="description" content="charset=koi8-r">\xc3\xa9',
+            None,
+            ('<meta name="description" content="charset=koi8-r">é', "utf-8"),
+        ),
+        (b"<metadata charset=koi8-r>\xc3\xa9", None, ("<metadata charset=koi8-r>é", "utf-8")),
+        (
+            b"<meta charset=nonsense><meta charset=koi8-r>\xd6",
+            None,
+            ("<meta charset=nonsense><meta charset=koi8-r>ж", "koi8-r"),
+        ),
+        (b"\x82\xa0", "text/html; charset=x-sjis", ("\N{HIRAGANA LETTER A}", "shift_jis")),
+        (b"\xe9", "text/html; charset=x-cp1251", ("й", "windows-1251")),
+        (
+            b"\xe0",
+            "text/html; charset=iso-8859-8-i",
+            ("\N{HEBREW LETTER ALEF}", "iso-8859-8-i"),
+        ),
+        (b"caf\xe9", "text/html; charset=u8", ("café", "windows-1252")),
     ],
 )
 def test_html_is_decoded_by_the_first_source_that_applies(

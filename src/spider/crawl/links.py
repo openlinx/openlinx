@@ -2,33 +2,37 @@
 
 import re
 from collections.abc import Callable, Iterator, Mapping
-from typing import Literal
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.decoding import decode_html
 from spider.crawl.urls import NormalizedUrl, normalize_url
-from spider.store.records import LinkType
+from spider.store.records import DeclaredIn, LinkType
 
-type DeclaredIn = Literal["html", "http_header"]
 type _Reference = tuple[LinkType, str, str]
 
 # HTML strips these around a URL attribute; urlsplit strips only the leading ones.
 _ASCII_WHITESPACE = "\t\n\x0c\r "
 _ASCII_TOKEN = re.compile(r"[^\t\n\x0c\r ]+")
-_ELEMENTS = (
-    "a[href], area[href], link[href], img, video, audio, source, track, iframe[src], frame[src],"
-    " script[src], embed[src], object[data]"
-)
-_SOURCES: Mapping[str, tuple[LinkType, str]] = {
+# Elements with one URL attribute; link, img, video, source and track have rules of their own.
+_SINGLE_REFERENCES: Mapping[str, tuple[LinkType, str]] = {
+    "a": ("hyperlink", "href"),
+    "area": ("hyperlink", "href"),
+    "audio": ("audio", "src"),
     "iframe": ("iframe", "src"),
     "frame": ("iframe", "src"),
     "script": ("javascript", "src"),
     "embed": ("media", "src"),
     "object": ("media", "data"),
 }
+_ELEMENTS = ", ".join(
+    [
+        *(f"{tag}[{attribute}]" for tag, (_, attribute) in _SINGLE_REFERENCES.items()),
+        "link[href], img, video, source, track",
+    ]
+)
 _MEDIA_TYPES: Mapping[str, LinkType] = {"video": "video", "audio": "audio"}
 _PAGINATION = frozenset({"next", "prev", "previous"})
 # These name an origin to connect to, not a file.
@@ -66,7 +70,7 @@ def extract_links(
     for node in tree.css(_ELEMENTS):
         attributes = node.attributes
         rel = tuple(_ASCII_TOKEN.findall((attributes.get("rel") or "").lower()))
-        for link_type, attribute, raw in _references(node.tag, attributes, rel, node.parent):
+        for link_type, attribute, raw in _references(node.tag or "", attributes, rel, node.parent):
             target = _resolved(base, raw)
             if target is None:
                 continue
@@ -88,33 +92,30 @@ def extract_links(
 
 
 def _references(
-    tag: str | None,
+    tag: str,
     attributes: Mapping[str, str | None],
     rel: tuple[str, ...],
     parent: LexborNode | None,
 ) -> Iterator[_Reference]:
     match tag:
-        case "a" | "area":
-            yield from _attribute("hyperlink", "href", attributes)
         case "link":
             link_type = _link_type(rel, attributes)
             if link_type is not None:
-                yield from _attribute(link_type, "href", attributes)
+                yield from _from_attribute(link_type, "href", attributes)
         case "img":
-            yield from _attribute("image", "src", attributes)
+            yield from _from_attribute("image", "src", attributes)
             yield from _srcset(attributes)
         case "video":
-            yield from _attribute("video", "src", attributes)
-            yield from _attribute("image", "poster", attributes)
-        case "audio":
-            yield from _attribute("audio", "src", attributes)
-        case "iframe" | "frame" | "script" | "embed" | "object":
-            yield from _attribute(*_SOURCES[tag], attributes)
+            yield from _from_attribute("video", "src", attributes)
+            yield from _from_attribute("image", "poster", attributes)
         case "source" | "track":
             media_type = _MEDIA_TYPES.get(parent.tag or "") if parent is not None else None
             if media_type is not None:
-                yield from _attribute(media_type, "src", attributes)
-            yield from _srcset(attributes)
+                yield from _from_attribute(media_type, "src", attributes)
+            if tag == "source":
+                yield from _srcset(attributes)
+        case _:
+            yield from _from_attribute(*_SINGLE_REFERENCES[tag], attributes)
 
 
 def _link_type(rel: tuple[str, ...], attributes: Mapping[str, str | None]) -> LinkType | None:
@@ -131,11 +132,12 @@ def _link_type(rel: tuple[str, ...], attributes: Mapping[str, str | None]) -> Li
     return "misc"
 
 
-def _attribute(
+def _from_attribute(
     link_type: LinkType, attribute: str, attributes: Mapping[str, str | None]
 ) -> Iterator[_Reference]:
     raw = attributes.get(attribute)
-    if raw is not None:
+    # An empty href links to the Page itself; an empty src, data or poster names no file.
+    if raw is not None and (link_type == "hyperlink" or raw.strip(_ASCII_WHITESPACE)):
         yield link_type, attribute, raw
 
 
@@ -150,13 +152,23 @@ def _base(tree: LexborHTMLParser, url: NormalizedUrl) -> str:
     node = tree.css_first("base[href]")
     if node is None:
         return url
-    return _resolved(url, node.attributes.get("href") or "") or url
+    # Unnormalised, as browsers resolve against it: a javascript: base resolves nothing.
+    try:
+        return urljoin(url, (node.attributes.get("href") or "").strip(_ASCII_WHITESPACE))
+    except ValueError:
+        return url
 
 
 def _resolved(base: str, raw: str) -> NormalizedUrl | None:
+    reference = raw.strip(_ASCII_WHITESPACE)
     try:
-        joined = urljoin(base, raw.strip(_ASCII_WHITESPACE))
+        parts = urlsplit(reference)
+        joined = urljoin(base, reference)
     except ValueError:
+        return None
+    # urljoin reads an empty authority ("//", "http:///x") as a path; it names no host.
+    after_scheme = reference[len(parts.scheme) + 1 :] if parts.scheme else reference
+    if after_scheme.startswith("//") and not parts.netloc:
         return None
     target = normalize_url(joined)
     return target if isinstance(target, str) else None
