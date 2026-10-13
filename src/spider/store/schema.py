@@ -2,7 +2,16 @@
 
 from typing import Any, Literal, get_args, get_origin
 
-from sqlalchemy import CheckConstraint, Column, Index, Integer, MetaData, Table, Text
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    MetaData,
+    Table,
+    Text,
+)
 
 from spider.store.records import CrawlMode, CrawlState, DiscoveredVia, FetchState, JournalMode
 from spider.store.types import Flag, Json, Timestamp
@@ -182,6 +191,12 @@ urls = public_table(
         nullable=False,
         comment="How the URL was first found: seed, or the Link type.",
         info={"values": literal_values(DiscoveredVia)},
+    ),
+    Column(
+        "found_on_url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        comment="The URL whose response first revealed this one; NULL for Seeds.",
     ),
     Column(
         "fetch_state",

@@ -88,6 +88,7 @@ def record_fetched(
             "host": new.host,
             "crawl_depth": new.crawl_depth,
             "discovered_via": new.discovered_via,
+            "found_on_url_id": url_id,
             "fetch_state": "queued",
         }
         for new in discovered

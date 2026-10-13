@@ -111,7 +111,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - hyperlinks are discovered by the page preparation function, called through the in-process executor of the `CrawlContext`, and each `DiscoveredLink` carries `is_internal` from the `ScopeRules` in its settings snapshot (design D5, D9)
   - page preparation decodes and parses once: the link extractor gains a tree-level entry (the tree, the response URL, the base, the encoding and `is_internal`) that page preparation calls with the tree the registered extractors get too, and `extract_links` stays as its wrapper over bytes (design D9)
   - new URLs are deduplicated by `urls_url` inside the URL's unit, with no in-memory map of URLs (design D1)
-- [ ] 4.5 Drive "A discovered URL points to where it was found" at seam 3+6.
+- [x] 4.5 Drive "A discovered URL points to where it was found" at seam 3+6.
 
   Done when: `found_on_url_id` is declared with a foreign key to `urls.id`, the first in the schema, and `docs/schema.md` shows it as `018` documents references; `018`'s guard over reference columns switches on its assertion that it saw a reference.
 - [ ] 4.6 Drive "The result counts a small site" and "A completed Crawl exits with code 0" at seam 1, a trivial pair.

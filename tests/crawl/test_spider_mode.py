@@ -68,3 +68,18 @@ def test_pages_linked_from_the_seed_are_crawled(
         (server.url("/about"), "fetched", 200),
         (server.url("/team"), "fetched", 200),
     ]
+
+
+def test_a_discovered_url_points_to_where_it_was_found(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body='<a href="/about">About</a>')}))
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT found.discovered_via, source.url FROM urls AS found "
+        "JOIN urls AS source ON source.id = found.found_on_url_id WHERE found.url = ?",
+        [server.url("/about")],
+    ) == [("hyperlink", server.url("/"))]
