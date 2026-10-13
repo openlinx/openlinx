@@ -37,7 +37,7 @@ Both need five things:
   - Settings that are not `crawl` flags (for example `[store]` or `[rules]`) are listed in a `settings_not_in_command` warning.
 - **`spider status [--crawl]`:**
   - It reports:
-    - the Crawl State and whether a stop request is pending
+    - the Crawl State and whether a stop request is pending, and since when a Crawl waits for the network (`020`'s network pause)
     - `urls` counts, `status_classes`, `seed_count`
     - rate (from the heartbeat), average rate over all runs, ETA (and whether it is a lower bound), heartbeat age and PID
     - the error of a failed Crawl, the log file, warnings and a next-step hint

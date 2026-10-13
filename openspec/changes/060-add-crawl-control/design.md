@@ -88,6 +88,7 @@ No moment exists in which a Crawl exists without a live writer, so a concurrent 
 - **Rate** (ruling Q2): the run's `urls_per_second`, which the crawl process computes from its 60-second window, the `rate` of its progress events, and writes with the heartbeat. `fetched_at` gets no index.
 - **Average rate:** the URLs requested in all runs (`fetched` plus `error`) divided by `elapsed_s`, the time spent in all runs. It shows whether the current `rate` is typical, and it is what a user compares with another crawler's average.
 - **ETA:** a pure function of rate, queued, `max_urls` and requested.
+- **A network pause** (`020`, decided 2026-10-14): while the Crawl waits for the network, it requests nothing but its probes of the Seed. The heartbeat keeps running and writes `paused_since`, and `status` prints it, so an agent tells a waiting Crawl from a slow one. A stop request ends the pause at once, because no request is in flight to wait for.
 - **`error`:** the `error` of the last run of a `failed` Crawl.
 - **Time source:** "now" comes from the injectable clock, so the rules about rate, ETA, heartbeat and elapsed time are tested with a fake clock.
 - *Alternative:* a `(fetch_state)` index or a `fetched_at` index, as the draft assumed. Each costs an index entry for every URL during the Crawl, for a query the counters answer. Rejected by the blueprint's rulings.
@@ -147,7 +148,7 @@ Both tables go through `018`'s declaration helper, so they are `STRICT`, with CH
 - **Two explicit exceptions,** named in their column descriptions:
   - `crawl_runs.end_state` lists the Crawl States without `running` (rule 7: one value set per enumeration), because a run never ends as `running`.
   - `crawl_runs.error` is a JSON diagnostic in `010`'s full shape (rule 10: a code column plus `_message`), because it records the diagnostic the run ended with, as `crawl.warnings` records warnings, and `status` prints it whole.
-- **The counters** end in `_count` (rule 5) and are NOT NULL: the run's row is inserted with the counters seeded at the start of the run. `urls_per_second` is NULL until the first heartbeat.
+- **The counters** end in `_count` (rule 5) and are NOT NULL: the run's row is inserted with the counters seeded at the start of the run. `urls_per_second` is NULL until the first heartbeat. `paused_since` is NULL whenever the Crawl is not paused, like `ended_at` while a run runs.
 
 ### D14. Codes
 Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 does, each by the slice that first raises it. Exit codes follow `010`'s classes and naming rule; every warning has the level `warning` and no exit code.
