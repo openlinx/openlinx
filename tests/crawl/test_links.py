@@ -1,6 +1,8 @@
 """Link discovery in HTML (020-add-crawl-core, crawling)."""
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from spider.crawl.links import DiscoveredLink, extract_links
 from spider.crawl.urls import NormalizedUrl, url_host
@@ -137,3 +139,63 @@ def test_a_malformed_reference_is_ignored() -> None:
     found = _found('<a href="http://[bad/x">Bad</a><a href="/ok">OK</a>')
 
     assert found == [("hyperlink", "http://site.test/ok")]
+
+
+def test_links_are_read_from_the_decoded_document() -> None:
+    body = '<a href="/й">x</a>'.encode("cp1251")
+
+    links = extract_links(body, "text/html; charset=windows-1251", SITE, is_internal=_on_site)
+
+    assert [link.target for link in links] == ["http://site.test/%D0%B9"]
+
+
+_FRAGMENTS = st.sampled_from(
+    [
+        "<a href=",
+        "<area href='",
+        "<base href=",
+        '<img src="/i" srcset="',
+        "<link rel=",
+        "<video>",
+        "<audio>",
+        "<source src=",
+        "<track src=",
+        "<object data=",
+        "<meta charset=",
+        "<!--",
+        "<script>",
+        "</",
+        ">",
+        '"',
+        "'",
+        " 1x, ",
+        "(",
+        ")",
+        ",",
+        "http://[",
+        '<a href="http://[bad/x">',
+        '<img srcset="http://[ 1x, //[::1 2x">',
+        "//",
+        "#",
+        "&amp;",
+        "\x00",
+    ]
+)
+_MALFORMED_HTML = st.lists(_FRAGMENTS | st.text(max_size=8)).map("".join)
+_BODIES = st.binary() | _MALFORMED_HTML.map(lambda html: html.encode("utf-8", "surrogatepass"))
+_CONTENT_TYPES = st.none() | st.text() | st.text().map("text/html; charset={}".format)
+
+
+@given(_BODIES, _CONTENT_TYPES)
+def test_the_link_extractor_accepts_any_bytes(body: bytes, content_type: str | None) -> None:
+    links = extract_links(body, content_type, SITE, is_internal=_on_site)
+
+    assert isinstance(links, list)
+
+
+def test_deeply_nested_html_gives_its_links() -> None:
+    depth = 100_000
+
+    found = _found("<span>" * depth + '<a href="/after">x</a>' + "</span>" * depth)
+
+    assert found == [("hyperlink", "http://site.test/after")]

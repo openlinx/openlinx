@@ -76,7 +76,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 3.2 Drive "Every srcset candidate is an image Link" and "Video and audio sources are video and audio Links", a pair.
 - [x] 3.3 Drive "rel previous is a pagination Link" and "A link element of another rel is a misc Link", a pair.
 - [x] 3.4 Drive "References that are not http or https are ignored" and "A malformed reference is ignored", a trivial pair.
-- [ ] 3.5 Drive "The link extractor accepts any bytes", as a hypothesis property over arbitrary bytes, Content-Types and malformed HTML.
+- [x] 3.5 Drive "The link extractor accepts any bytes", as a hypothesis property over arbitrary bytes, Content-Types and malformed HTML.
 
   Done when: decoding follows design D5's order with replacement characters, in one function that `030` imports.
 - [ ] 3.6 Docs: add the Link type table, with the types listed for later releases, and decoding to `docs/crawling.md`.

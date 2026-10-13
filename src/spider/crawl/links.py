@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
+from spider.crawl.decoding import decode_html
 from spider.crawl.urls import NormalizedUrl, normalize_url
 from spider.store.records import LinkType
 
@@ -59,7 +60,7 @@ def extract_links(
     *,
     is_internal: Callable[[NormalizedUrl], bool],
 ) -> list[DiscoveredLink]:
-    tree = LexborHTMLParser(body.decode("utf-8", "replace"))
+    tree = LexborHTMLParser(decode_html(body, content_type).text)
     base = _base(tree, url)
     links: list[DiscoveredLink] = []
     for node in tree.css(_ELEMENTS):
