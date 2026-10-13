@@ -141,6 +141,8 @@ def _build_app(
 
     async def handle(request: web.Request) -> web.StreamResponse:
         route = site.routes.get(request.path)
+        if route is None and site.resolve is not None:
+            route = site.resolve(request.path)
         if route is None:
             raise web.HTTPNotFound
         if route.delay:

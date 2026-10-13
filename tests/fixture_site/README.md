@@ -24,7 +24,8 @@ SITE = Site(
 - **A reusable site** is a folder `sites/<name>/` with an empty `__init__.py`, a `site.py` that defines `SITE`, and its page files. Everything under `sites/` is `-text` in `.gitattributes`, so the files keep their exact bytes, line endings included.
 - **A one-off site** is built inline in the test: `Site(routes={...})`.
 - A site is checked when it is declared: a `Page` takes exactly one of `file=` and `body=`, and a site with `Page(file=...)` routes needs `root=`.
-- A path that no route declares answers 404.
+- **A site too large to declare,** such as the synthetic site of `026`, passes `resolve=`, a function from a path to a route or `None`. The server calls it for a path that `routes` does not declare.
+- A path that no route declares, and that `resolve` does not resolve, answers 404.
 
 ## Route kinds
 
