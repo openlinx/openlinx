@@ -60,9 +60,29 @@ def test_settings_tables_load_with_the_settings() -> None:
     assert "tests.support.settings" not in loaded
 
 
-@pytest.mark.parametrize("command", [["--help"], ["commands"], ["schema", "--help"]], ids=" ".join)
-def test_startup_loads_only_the_allowlist(command: list[str]) -> None:
+# spider commands reads the inherited secret flag of an option's setting from the table's model,
+# so it may load pydantic and pydantic's own dependencies (design D10 of 010).
+SETTINGS_MODELS = {
+    "pydantic",
+    "pydantic_core",
+    "annotated_types",
+    "typing_inspection",
+    "typing_extensions",
+}
+
+
+@pytest.mark.parametrize(
+    ("command", "allowed"),
+    [
+        (["--help"], STARTUP_ALLOWLIST),
+        (["commands"], STARTUP_ALLOWLIST | SETTINGS_MODELS),
+        (["schema", "--help"], STARTUP_ALLOWLIST),
+        (["crawl", "--help"], STARTUP_ALLOWLIST),
+    ],
+    ids=lambda value: " ".join(value) if isinstance(value, list) else "",
+)
+def test_startup_loads_only_the_allowlist(command: list[str], allowed: set[str]) -> None:
     loaded = modules_loaded("spider.cli.app", "build_app", *command)
     top_level = {name.partition(".")[0] for name in loaded - interpreter_startup_modules()}
 
-    assert top_level - sys.stdlib_module_names - STARTUP_ALLOWLIST == set()
+    assert top_level - sys.stdlib_module_names - allowed == set()

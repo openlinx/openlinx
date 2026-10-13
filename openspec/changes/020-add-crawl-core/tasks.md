@@ -123,7 +123,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: `TRANSITIONS` and `check_transition` exist (design D12), `StopReason` is a `Literal` next to `CrawlState`, and `015`'s `set_state` takes the `stop_reason` and checks the transition against the state it reads in the same unit.
 - [x] 4.9 Drive "A completed Crawl records its state" at seam 3+6. Done when: `crawl.stop_reason` is declared, with its values from `StopReason` and its `docs/schema.md` row.
 - [x] 4.10 Drive "The first event line is the start event" at seam 1.
-- [ ] 4.11 Drive "The recorded config holds every registered crawl setting" at seam 2.
+- [x] 4.11 Drive "The recorded config holds every registered crawl setting" at seam 2.
 
   Done when: `[crawl]` is registered in `build_app` as `"spider.crawl.settings:CrawlSettings"` and passes `010`'s table-rules test, every crawl option declares its setting with `OptionMeta(setting=...)`, `max_urls`, `max_depth` and `rate` default to `None`, and `NewCrawl.config` holds every registered table.
 - [ ] 4.12 Wire `015`'s journal mode (group 8) and redaction (group 9), at seam 2.

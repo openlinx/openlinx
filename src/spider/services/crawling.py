@@ -43,6 +43,8 @@ class CrawlRequest:
     workspace: Path | None
     command_argv: Sequence[str]
     secret_names: SecretNames
+    # Settings given as flags, by table: they override the settings file (010 D2).
+    flags: Mapping[str, Mapping[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -101,7 +103,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     if isinstance(seed, InvalidUrl):
         raise _invalid_seed(request.seed, seed.reason)
     workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
-    settings = load_settings(workspace, tables)
+    settings = load_settings(workspace, tables, request.flags)
     settings_file = workspace.settings_file if workspace.settings_file.is_file() else None
     new_crawl = NewCrawl(
         workspace=workspace,
@@ -110,7 +112,8 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         seeds=[request.seed],
         command_argv=request.command_argv,
         cwd=request.cwd,
-        config={},
+        # Every registered table, resolved (design D11).
+        config=settings.root.model_dump(mode="json"),
         secret_names=request.secret_names,
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,

@@ -6,7 +6,7 @@ from typing import Annotated, Any
 import typer
 
 from spider.cli.meta import Example, command_meta
-from spider.cli.options import FormatOpt, WorkspaceOpt, secret_names
+from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
 from spider.naming import APP_NAME
@@ -32,6 +32,11 @@ def crawl(
             show_default=False,
         ),
     ],
+    concurrency: Annotated[
+        int,
+        typer.Option("--concurrency", help="The most requests in flight to one host."),
+        OptionMeta(setting="crawl.concurrency"),
+    ] = 5,
     workspace_dir: WorkspaceOpt = None,
     output_format: FormatOpt = Format.JSON,
 ) -> dict[str, Any]:
@@ -51,6 +56,7 @@ def crawl(
         workspace=workspace_dir,
         command_argv=[APP_NAME, *invocation.argv],
         secret_names=secret_names(ctx.command, invocation.settings_tables),
+        flags=setting_flags(ctx),
     )
     plan = plan_crawl(request, invocation.settings_tables)
     return start_crawl(plan, SystemClock(), invocation.reporter).to_json()

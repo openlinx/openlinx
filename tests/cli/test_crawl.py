@@ -1,8 +1,12 @@
 """`spider crawl` (020-add-crawl-core, crawling)."""
 
+import json
+
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.cli import run_cli
+from tests.support.crawling import crawled
+from tests.support.crawls import crawl_row
 from tests.support.workspace import TempWorkspace
 
 SMALL_SITE = Site(
@@ -177,3 +181,19 @@ def test_the_first_event_line_is_the_start_event(
             "crawl_file": result.json()["crawl_file"],
         },
     )
+
+
+def test_the_recorded_config_holds_every_registered_crawl_setting(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SMALL_SITE)
+    entry = next(c for c in run_cli("commands").json()["commands"] if c["name"] == "crawl")
+    defaults = {
+        option["setting"].removeprefix("crawl."): option["default"]
+        for option in entry["options"]
+        if (option["setting"] or "").startswith("crawl.")
+    }
+
+    config = json.loads(crawl_row(crawled(server.url("/")))["config"])
+
+    assert (config["crawl"], bool(defaults)) == (defaults, True)
