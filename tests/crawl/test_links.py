@@ -125,3 +125,15 @@ def test_rel_tokens_are_lower_cased_and_nofollow_is_read_from_them() -> None:
         (("nofollow", "ugc"), True),
         ((), False),
     ]
+
+
+def test_references_that_are_not_http_or_https_are_ignored() -> None:
+    links = _links('<a href="mailto:hi@site.test">Mail</a><a href="javascript:void(0)">Menu</a>')
+
+    assert links == []
+
+
+def test_a_malformed_reference_is_ignored() -> None:
+    found = _found('<a href="http://[bad/x">Bad</a><a href="/ok">OK</a>')
+
+    assert found == [("hyperlink", "http://site.test/ok")]
