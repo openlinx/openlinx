@@ -329,6 +329,8 @@ Analysed Pages SHALL be decoded to text using the first source that applies, in 
 3. a `<meta charset>` or `<meta http-equiv="Content-Type">` declaration in the first 1024 bytes
 4. UTF-8, or windows-1252 when the body is not valid UTF-8
 
+Encoding labels SHALL be those of the WHATWG Encoding Standard, and a label outside it SHALL be skipped so that the next source applies. A `<meta>` element inside an HTML comment SHALL NOT be read. A `<meta>` declaration of UTF-16 SHALL mean UTF-8.
+
 **Element text.** The *text* of an element SHALL be built as follows:
 
 - Take its descendant text nodes in document order, with character references decoded.
@@ -789,7 +791,7 @@ This change stores each discovered Link together with the attributes that analys
 | Column | Type | Null | Format / values | Value |
 |---|---|---|---|---|
 | `source_url_id` | INTEGER, references `urls.id` | no | | the URL whose response contains the Link |
-| `ordinal` | INTEGER | no | | the Link's position in that response, from 1: header Links first in the order received, then HTML Links in document order |
+| `ordinal` | INTEGER | no | | the Link's position in that response, from 1: header Links first in the order received, then HTML Links in document order; the `ordinal` that `020-add-crawl-core`'s Link discovery gives it, never renumbered |
 | `target_url_id` | INTEGER, references `urls.id` | no | | the URL of the Link's normalised target |
 | `type` | TEXT | no | the Link types of `020-add-crawl-core` | the Link type |
 | `declared_in` | TEXT | no | `html`, `http_header` | where the Link was declared |
@@ -797,7 +799,7 @@ This change stores each discovered Link together with the attributes that analys
 | `attribute` | TEXT | yes | `href`, `src`, `srcset`, `poster`, `data`, `content` | the attribute the Link came from (for example `img` and `srcset`); NULL for header Links |
 | `anchor_text` | TEXT | yes | | for `hyperlink`, the element text. When that is empty, the `alt` texts of the `<img>` elements inside, joined with a space. For `<area>`, its `alt`. NULL for other types. |
 | `alt_text` | TEXT | yes | | for `image` Links from an `<img>` element, the normalised `alt` attribute: NULL when absent, the empty string when empty. NULL otherwise. |
-| `rel` | TEXT | yes | | the `rel` value with tokens lowercased and single-spaced, or NULL |
+| `rel` | TEXT | yes | | the Link's `rel` tokens as `020-add-crawl-core`'s Link discovery reads them (ASCII lower-cased), joined with single spaces, or NULL |
 | `rel_nofollow`, `rel_ugc`, `rel_sponsored` | INTEGER | no | boolean | 1 when `rel` contains that token, otherwise 0 |
 | `hreflang` | TEXT | yes | | the trimmed `hreflang` value for `hreflang` Links, otherwise NULL |
 | `media` | TEXT | yes | | the trimmed `media` value for `mobile_alternate` Links, otherwise NULL |
@@ -911,7 +913,7 @@ The Crawl's recorded config SHALL hold the decision as `store_html` = `true` or 
 When storage is on, each Page SHALL have one `page_sources` row with these columns:
 
 - `url_id`
-- `encoding`: the character encoding found by the decoding rules of this capability
+- `encoding`: the character encoding found by the decoding rules of this capability, as the lower-case name of the Encoding Standard that a browser's `TextDecoder` reports (`windows-1251`, `shift_jis`)
 - `html`: a zstd frame of the response body bytes after content decoding
 
 When storage is off, `page_sources` SHALL hold no rows.
