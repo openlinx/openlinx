@@ -69,6 +69,29 @@ Clients in tests:
 
 Timing tests assert only lower bounds, such as "not before 0.5 s", and use generous client timeouts.
 
+## The synthetic site
+
+The site that the 500k benchmark crawls (design D6 of `026-add-parse-pool`), in `synthetic/`. It is a function, not data: `SyntheticSite(seed=..., pages=...)` computes each Page when it is requested, so 500,000 Pages take no memory per Page.
+
+- **Its Pages:** `/` and `/p/1` to `/p/<pages - 1>`.
+  - A Page is about 50 KB with about 450 Links of every Link type: a header navigation of 200 Links, a footer that repeats 80 of them, 60 internal Links drawn from the seed, and its Resources.
+  - Page `n` links to its `fanout` children (`n * fanout + 1` onwards), a spanning tree that reaches every Page from `/`. `fanout` is 50 by default (a depth of about 4 at 500k); 10 gives a deeper site.
+  - `page_model(n)` gives a Page's Links, its type, element, attribute and anchor, in document order, and `render(n)` gives its bytes. Both come from one build, so they always agree.
+- **Its other URLs** come from bounded pools that do not grow with the Pages: images, stylesheets, scripts, video, audio and media under `/r/`, the not-followed `/amp/`, `/m/` and `/misc/`, and `/missing/`, which answers 404.
+- **Determinism:** every draw comes from `blake2b(seed, n, purpose)` and splitmix64, never `hash()` or `random`, so a seed gives the same bytes on every Python, OS and process.
+- **Faults:** `shares` maps each `Fault` to the share of Pages that carry it (`DEFAULT_SHARES` by default, `NO_FAULTS` for none):
+  - nested `<div>`s, 100,000 levels deep
+  - the end-worker marker, `END_WORKER`, on which the benchmark's own extractor ends its worker
+  - a 500
+  - invalid UTF-8, windows-1251 bytes declared UTF-8, or an unknown charset label
+  - NULs and unclosed markup after the last Link
+  - a slow answer after `slow_seconds`
+  - no `<title>` or no `<h1>`
+
+  Only leaves of the spanning tree carry a fault, so no fault cuts other Pages off. `latency` delays every response.
+- **`manifest()`:** the injected counts, the outcome each fault should leave in `urls`, the Issues it injects, and the URLs a Crawl must account for, in one pass that keeps nothing per Page.
+- **`SiteProcess(site)`** (`synthetic/serve.py`) serves it from its own `spawn` process, so the server's CPU and memory never count against the crawl process's. It keeps no request log. `stop()` returns a `Tally` of the Pages requested, those requested more than once, the other requests and the 404s.
+
 ## Extending it
 
 - A new route kind or option starts with a failing test in `tests/fixture_site/`; then implement it.

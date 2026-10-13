@@ -173,7 +173,7 @@ def page_path(n: int) -> str:
     return "/" if n == 0 else f"/p/{n}"
 
 
-def _page_number(path: str, pages: int) -> int | None:
+def page_number(path: str, pages: int) -> int | None:
     if path == "/":
         return 0
     return _number(path.removeprefix("/p/"), pages) if path.startswith("/p/") else None
@@ -429,7 +429,7 @@ class SyntheticSite:
         return body
 
     def route(self, path: str) -> Route | None:
-        n = _page_number(path, self.pages)
+        n = page_number(path, self.pages)
         if n is None:
             return _pool_route(path, self.latency)
         fault = self.fault(n)

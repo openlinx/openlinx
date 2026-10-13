@@ -16,6 +16,7 @@ import pytest
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.server import ServerHandle
+from tests.fixture_site.synthetic.serve import SiteProcess, Tally
 from tests.fixture_site.synthetic.site import NO_FAULTS, Fault, SyntheticSite, page_path
 
 HYPERLINK = re.compile(rb'<a href="(/[^"]*)"')
@@ -36,14 +37,14 @@ def fetch(connection: http.client.HTTPConnection, path: str) -> Fetched:
     return Fetched(response.status, {k.lower(): v for k, v in response.getheaders()}, body)
 
 
-def connect(server: ServerHandle) -> http.client.HTTPConnection:
-    host, port = server.base_url.removeprefix("http://").split(":")
+def connect(base_url: str) -> http.client.HTTPConnection:
+    host, port = base_url.removeprefix("http://").split(":")
     return http.client.HTTPConnection(host, int(port), timeout=60)
 
 
 def crawl(server: ServerHandle) -> dict[str, Fetched]:
     """Every path reached from / through <a href>, as an independent client sees it."""
-    connection = connect(server)
+    connection = connect(server.base_url)
     reached: dict[str, Fetched] = {}
     queue = deque(["/"])
     try:
@@ -158,7 +159,7 @@ def links_of(fetched: Fetched) -> list[tuple[str, str]]:
 def test_the_pages_carry_a_link_of_every_link_type(fixture_site: StartSite) -> None:
     server = fixture_site(SyntheticSite(seed=1, pages=1_000, shares=NO_FAULTS).as_site())
 
-    connection = connect(server)
+    connection = connect(server.base_url)
     try:
         pages = [fetch(connection, page_path(n)) for n in range(100)]
     finally:
@@ -172,7 +173,7 @@ def test_a_page_with_children_is_about_50_kb_with_about_450_links(
 ) -> None:
     server = fixture_site(SyntheticSite(seed=1, pages=100_000, shares=NO_FAULTS).as_site())
 
-    connection = connect(server)
+    connection = connect(server.base_url)
     try:
         page = fetch(connection, "/p/1")
     finally:
@@ -325,7 +326,7 @@ def test_a_synthetic_site_is_checked_when_it_is_declared(changes: dict[str, Any]
 
 
 def elapsed(server: ServerHandle, path: str) -> float:
-    connection = connect(server)
+    connection = connect(server.base_url)
     try:
         started = time.monotonic()
         fetch(connection, path)
@@ -361,3 +362,22 @@ def test_the_manifest_keeps_nothing_per_page() -> None:
         tracemalloc.stop()
 
     assert peak < 256 * 2**10
+
+
+@pytest.mark.slow
+def test_the_site_process_tallies_the_requests_it_served() -> None:
+    with SiteProcess(SyntheticSite(seed=1, pages=20, shares=NO_FAULTS)) as process:
+        connection = connect(process.base_url)
+        try:
+            for path in ("/", "/p/1", "/p/1", "/r/i/0.jpg", "/nope"):
+                fetch(connection, path)
+        finally:
+            connection.close()
+        tally = process.stop()
+
+    assert tally == Tally(
+        pages_requested=2,
+        pages_requested_more_than_once=1,
+        resource_requests=1,
+        not_found=1,
+    )
