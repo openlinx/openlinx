@@ -57,6 +57,8 @@ Every hop is a normal `urls` row with its own status and timing, linked through 
 - **Backoff:** 1 s, 2 s, …, with no jitter, so fake-clock tests assert exact times.
 - **Retry-After:** seconds or an HTTP date, capped at 120 s. A 429 without `Retry-After` pauses the host for 10 s.
 - **Pauses** set the host's "next allowed start" in `020`'s gate, so every request to that host waits, not only the retried one.
+- **`020`'s network pause** (decided 2026-10-14): a timeout counts as a request without a response, like a refused connection. While the Crawl is paused, a failing attempt is neither retried nor recorded, and its URL waits in `queued`, so an outage spends no retries and leaves no false `timeout` rows.
+- **robots.txt without a response:** after its retries, a robots.txt that timed out or failed TLS gives its origin's URLs the same `fetch_error` without a request (`020`); one that answered 5xx or 429 stays `robots_unreachable`.
 
 ### D5. TLS trust
 - **The default:** `truststore.SSLContext` uses the OS trust store on Windows, macOS and Linux.
