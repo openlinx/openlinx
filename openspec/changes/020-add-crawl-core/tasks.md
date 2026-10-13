@@ -79,7 +79,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 3.5 Drive "The link extractor accepts any bytes", as a hypothesis property over arbitrary bytes, Content-Types and malformed HTML.
 
   Done when: decoding follows design D5's order with replacement characters, in one function that `030` imports.
-- [ ] 3.6 Docs: add the Link type table, with the types listed for later releases, and decoding to `docs/crawling.md`.
+- [x] 3.6 Docs: add the Link type table, with the types listed for later releases, and decoding to `docs/crawling.md`.
 - [ ] 3.7 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. Walking skeleton: a foreground Spider crawl (slice)

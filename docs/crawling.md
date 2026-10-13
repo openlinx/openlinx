@@ -114,3 +114,55 @@ http://site.test/blog/draft-1  skipped: excluded
 An invalid pattern is rejected with `invalid_pattern` before any crawl file is created, and so is a Seed outside its own Scope, such as one that an exclude pattern matches (`seed_out_of_scope`).
 
 **Slow patterns.** Every pattern runs against every URL the Crawl finds, and the URLs come from the site. A pattern with nested quantifiers, such as `(a+)+$`, can take seconds on one long URL. Prefer plain substrings and anchors, such as `/logout$` or `\?sessionid=`.
+
+## Links
+
+The Crawl reads Links from every response it parses: an in-Scope 2xx HTML response, plus the HTTP `Link` and `Refresh` headers of every in-Scope 2xx response, such as a PDF's canonical header. Each Link records its type, its normalised target, the element and attribute it came from, its `rel` tokens, and its `ordinal`: its position in the response, from 1, with header Links first and HTML Links after them in document order.
+
+### Resolving a reference
+
+- White space around an attribute value is removed, as browsers do.
+- A relative reference is resolved against the Page's first `<base href>`, and otherwise against the response URL. For `<base href="http://site.test/docs/">`, `href="guide"` is `http://site.test/docs/guide`.
+- The result is normalised (see URLs).
+- A reference gives no Link when its scheme is not http or https (`mailto:`, `tel:`, `javascript:`, `data:`), when it holds a user name, or when it cannot be resolved or normalised, such as `http://[bad/x`. The next references on the Page are still read.
+
+### Link types
+
+| Link type | Found in | Requested |
+|---|---|---|
+| `hyperlink` | `<a href>`, `<area href>` | yes |
+| `canonical` | `<link rel="canonical">`; an HTTP `Link` header with `rel="canonical"` | yes |
+| `pagination` | `<link rel>` `next`, `prev` or `previous`; the same in an HTTP `Link` header | yes |
+| `hreflang` | `<link rel="alternate" hreflang>`; the same in an HTTP `Link` header | yes |
+| `iframe` | `<iframe src>`, `<frame src>` | yes |
+| `meta_refresh` | the URL in `<meta http-equiv="refresh" content="0; url=…">` | yes |
+| `http_refresh` | the URL in an HTTP `Refresh` header | yes |
+| `image` | `<img src>`; every candidate in the `srcset` of `<img>` and `<source>`; `<video poster>` | as a Resource |
+| `css` | `<link rel="stylesheet">` | as a Resource |
+| `javascript` | `<script src>` | as a Resource |
+| `video` | `<video src>`; the `src` of a `<source>` or `<track>` inside `<video>` | as a Resource |
+| `audio` | `<audio src>`; the `src` of a `<source>` or `<track>` inside `<audio>` | as a Resource |
+| `media` | `<embed src>`, `<object data>` | as a Resource |
+| `amphtml` | `<link rel="amphtml">` | no |
+| `mobile_alternate` | `<link rel="alternate" media>` without `hreflang` | no |
+| `misc` | `<link href>` with any other `rel`, such as `icon`, `manifest`, `preload`, or a feed's `alternate` | no |
+
+- A Resource is checked: requested once to record its response, and parsed only when it turns out to be in-Scope HTML.
+- A URL reached only through Links that are not requested is recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`.
+- `<link rel="preconnect">` and `rel="dns-prefetch"` name an origin to connect to, not a file, so they give no Link.
+- `rel` tokens are compared without case: `rel="NoFollow"` is `nofollow`.
+
+The same list of types also holds, from v0.1, the types of later releases: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap) in v0.2, and `javascript_redirect` in v1.1, with JavaScript rendering. A URL's `discovered_via` is the type of the Link it was first found through, or `seed`.
+
+HTTP redirects, HSTS, fonts in CSS, SWF and PDF are not Link types: a redirect is the redirecting URL's `redirect_url_id`, and a PDF is a content type.
+
+### Decoding
+
+HTML is decoded by the first of these that applies, and bytes that are invalid in the chosen encoding become replacement characters (`�`), so a Page with broken bytes is still read:
+
+1. a byte order mark (UTF-8, UTF-16LE or UTF-16BE)
+2. the `charset` parameter of the `Content-Type` header
+3. a `<meta charset>` or `<meta http-equiv="Content-Type">` declaration in the first 1024 bytes
+4. UTF-8, or windows-1252 when the body is not valid UTF-8
+
+Encoding labels follow the [Encoding Standard](https://encoding.spec.whatwg.org/), as browsers do: `iso-8859-1` and `ascii` mean windows-1252, `iso-8859-9` means windows-1254, and `shift_jis`, `euc-kr` and `gb2312` mean their Windows supersets. A label that names no encoding, such as `charset=nonsense`, is skipped, and the next source applies. A `<meta>` declaration of UTF-16 means UTF-8.
