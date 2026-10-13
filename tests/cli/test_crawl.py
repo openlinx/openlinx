@@ -133,6 +133,7 @@ def test_the_result_has_the_fields_of_a_crawl(
         [
             "crawl_id",
             "state",
+            "stop_reason",
             "crawl_mode",
             "seed",
             "seed_count",

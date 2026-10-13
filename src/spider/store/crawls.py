@@ -48,7 +48,9 @@ def set_state(
     current: CrawlState = connection.execute(select(crawl.c.state)).scalar_one()
     check_transition(current, state, stop_reason)
     completed_at = at if state == "completed" else None
-    connection.execute(update(crawl).values(state=state, completed_at=completed_at))
+    connection.execute(
+        update(crawl).values(state=state, completed_at=completed_at, stop_reason=stop_reason)
+    )
 
 
 def record_state(
@@ -62,7 +64,13 @@ def record_state(
     return unit
 
 
-_SUMMARY = select(crawl.c.state, crawl.c.crawl_mode, crawl.c.section_crawl, crawl.c.started_at)
+_SUMMARY = select(
+    crawl.c.state,
+    crawl.c.stop_reason,
+    crawl.c.crawl_mode,
+    crawl.c.section_crawl,
+    crawl.c.started_at,
+)
 _FIRST_SEED = select(seeds.c.url).order_by(seeds.c.position).limit(1)
 _SEED_COUNT = select(func.count()).select_from(seeds)
 
@@ -74,6 +82,7 @@ def crawl_summary() -> Callable[[Connection], CrawlSummary]:
         row = connection.execute(_SUMMARY).one()
         return CrawlSummary(
             state=row.state,
+            stop_reason=row.stop_reason,
             crawl_mode=row.crawl_mode,
             section_crawl=bool(row.section_crawl),
             started_at=row.started_at,

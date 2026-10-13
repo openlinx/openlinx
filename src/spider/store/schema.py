@@ -13,7 +13,14 @@ from sqlalchemy import (
     Text,
 )
 
-from spider.store.records import CrawlMode, CrawlState, DiscoveredVia, FetchState, JournalMode
+from spider.store.records import (
+    CrawlMode,
+    CrawlState,
+    DiscoveredVia,
+    FetchState,
+    JournalMode,
+    StopReason,
+)
 from spider.store.types import Flag, Json, Timestamp
 
 
@@ -99,6 +106,14 @@ crawl = public_table(
         "completed_at",
         Timestamp,
         comment="When the state became completed; NULL in every other state.",
+    ),
+    Column(
+        "stop_reason",
+        Text,
+        comment="Why the Crawl ended early: max_urls, interrupt or requested for a stopped Crawl, "
+        "seed_unreachable, site_unreachable or write_failed for a failed one; NULL while it "
+        "runs and when it is completed.",
+        info={"values": literal_values(StopReason)},
     ),
     Column(
         "command_argv",

@@ -25,6 +25,7 @@ def test_the_units_of_crawls_run_again_the_same(temp_workspace: TempWorkspace) -
     assert (summary, crawl_row(crawl.path)["completed_at"]) == (
         CrawlSummary(
             state="completed",
+            stop_reason=None,
             crawl_mode="spider",
             section_crawl=False,
             started_at="2026-09-27T14:03:12.345Z",

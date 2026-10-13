@@ -68,6 +68,7 @@ class CrawlResult:
         return {
             "crawl_id": self.crawl_id,
             "state": summary.state,
+            "stop_reason": summary.stop_reason,
             "crawl_mode": summary.crawl_mode,
             "seed": summary.seed,
             "seed_count": summary.seed_count,

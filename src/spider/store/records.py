@@ -128,6 +128,7 @@ class CrawlSummary:
     """What a Crawl's result reports from its crawl and seeds rows."""
 
     state: CrawlState
+    stop_reason: StopReason | None
     crawl_mode: CrawlMode
     section_crawl: bool
     started_at: str

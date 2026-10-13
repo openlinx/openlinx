@@ -3,7 +3,7 @@
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawled
-from tests.support.crawls import query
+from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
 
 HOME_PAGE = Site(routes={"/": Page(body="<html><body><h1>Home</h1></body></html>")})
@@ -83,3 +83,13 @@ def test_a_discovered_url_points_to_where_it_was_found(
         "JOIN urls AS source ON source.id = found.found_on_url_id WHERE found.url = ?",
         [server.url("/about")],
     ) == [("hyperlink", server.url("/"))]
+
+
+def test_a_completed_crawl_records_its_state(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(HOME_PAGE)
+
+    row = crawl_row(crawled(server.url("/")))
+
+    assert (row["state"], row["stop_reason"]) == ("completed", None)
