@@ -96,3 +96,23 @@ The Seeds the Crawl started from, in the order they were given.
 |---|---|---|---|---|---|---|
 | `position` | INTEGER | no | PK | | | The 1-based order in which the Seed was given. |
 | `url` | TEXT | no | | | | The Seed URL as given. |
+
+## Table `urls`
+
+One row for each distinct normalised URL of the Crawl; the frontier is its queued rows.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `id` | INTEGER | no | PK | | | Row id, stable for the life of the crawl file; it grows in the order URLs are first recorded, and is the dispatch order within a Crawl Depth. |
+| `url` | TEXT | no | | | | The normalised URL, unique. |
+| `host` | TEXT | no | | | | The URL's host in lower-case ASCII (IDNA) form; the key of the per-host politeness limits. |
+| `crawl_depth` | INTEGER | no | | | | Crawl Depth; 0 for Seeds. |
+| `discovered_via` | TEXT | no | | | `seed`, `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`, `redirect`, `list`, `sitemap_input`, `sitemap_index` | How the URL was first found: seed, or the Link type. |
+| `fetch_state` | TEXT | no | | | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested. |
+| `status_code` | INTEGER | yes | | | | HTTP status code of the URL's own response; NULL without a response. |
+
+### Indexes
+
+| Name | Columns | Unique | Where | Description |
+|---|---|---|---|---|
+| `urls_url` | `url` | yes | | Recording a discovered URL once (ON CONFLICT (url)), and finding one URL's row. |

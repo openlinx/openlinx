@@ -92,13 +92,17 @@ def test_reference_columns_are_declared() -> None:
 
 
 def test_index_names_start_with_their_table() -> None:
-    # Vacuous until 020's urls_url, whose task adds an assertion that one was seen.
-    assert [
-        index["name"]
-        for table in listed_tables()
-        for index in table["indexes"]
-        if not index["name"].startswith(f"{table['name']}_") or blank(index["description"])
-    ] == []
+    indexes = [(table["name"], index) for table in listed_tables() for index in table["indexes"]]
+
+    # Seen at least once, so the rule is not passing vacuously.
+    assert (
+        [
+            index["name"]
+            for table, index in indexes
+            if not index["name"].startswith(f"{table}_") or blank(index["description"])
+        ],
+        bool(indexes),
+    ) == ([], True)
 
 
 def test_derived_and_later_columns_may_hold_null() -> None:

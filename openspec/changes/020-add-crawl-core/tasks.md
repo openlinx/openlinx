@@ -95,7 +95,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.1 Drive "An invalid Seed is rejected" at seam 1.
 
   Done when: `spider crawl <url>` is registered with `@command_meta(name=CRAWL, output="document", events=True)`, its adapter calls the Crawl Service, `invalid_url` is declared in `spider.output.codes`, and the Workspace holds no new crawl file. A Seed rejected for its userinfo gets a hint that names `022`'s `--auth` (design D13).
-- [ ] 4.2 Drive "The Seed is fetched and recorded" at seam 3+6.
+- [x] 4.2 Drive "The Seed is fetched and recorded" at seam 3+6.
 
   Done when:
   - the Crawl Service's start operation creates the Crawl with `015`'s `create_crawl`, and builds the `CrawlContext` (design D15) in one place, opening and closing `CrawlWriter` through `asyncio.to_thread`, and submits each URL's unit with `017`'s `submit_async()`, so the URL's task ends at the submit (design D2)

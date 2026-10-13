@@ -44,6 +44,10 @@ type LinkType = Literal[
     "javascript_redirect",
 ]
 type DeclaredIn = Literal["html", "http_header"]
+type DiscoveredVia = (
+    Literal["seed"] | LinkType | Literal["redirect", "list", "sitemap_input", "sitemap_index"]
+)
+type FetchState = Literal["queued", "fetched", "error", "skipped"]
 
 # The --crawl value that selects the Crawl that started last.
 LATEST = "latest"

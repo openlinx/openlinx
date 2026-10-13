@@ -262,6 +262,47 @@ def test_a_normalized_url_made_outside_its_makers_is_named() -> None:
     ]
 
 
+# Only the store writes SQL; the schema service loads sqlalchemy lazily (020 design D14).
+SQLALCHEMY_IMPORTERS = ("spider/store/", "spider/services/schema.py")
+
+
+def sqlalchemy_violations(sources: Mapping[str, str]) -> list[str]:
+    """Modules outside the store that import sqlalchemy, given every module's source by its path."""
+    return [
+        f"{module} imports {name}"
+        for module, source in sources.items()
+        if not module.startswith(SQLALCHEMY_IMPORTERS)
+        for name in _imported_modules(ast.parse(source))
+        if name == "sqlalchemy" or name.startswith("sqlalchemy.")
+    ]
+
+
+def test_only_the_store_imports_sqlalchemy() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert sqlalchemy_violations(sources) == []
+
+
+def test_an_import_of_sqlalchemy_outside_the_store_is_named() -> None:
+    sources = {
+        "spider/crawl/engine.py": "import sqlalchemy\n",
+        "spider/crawl/frontier.py": "from sqlalchemy.dialects.sqlite import insert\n",
+        "spider/services/crawling.py": "def late():\n    from sqlalchemy import select\n",
+        "spider/crawl/links.py": "import sqlalchemy_utils\nfrom spider.store import urls\n",
+        "spider/store/urls.py": "from sqlalchemy import insert\n",
+        "spider/services/schema.py": "def late():\n    from sqlalchemy.dialects import sqlite\n",
+    }
+
+    assert sqlalchemy_violations(sources) == [
+        "spider/crawl/engine.py imports sqlalchemy",
+        "spider/crawl/frontier.py imports sqlalchemy.dialects.sqlite",
+        "spider/services/crawling.py imports sqlalchemy",
+    ]
+
+
 def test_a_memo_without_an_explicit_bound_is_named() -> None:
     source = """
 import functools

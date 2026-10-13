@@ -1,17 +1,26 @@
 """The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2, D3)."""
 
-from typing import Any, get_args
+from typing import Any, Literal, get_args, get_origin
 
-from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, Text
+from sqlalchemy import CheckConstraint, Column, Index, Integer, MetaData, Table, Text
 
-from spider.store.records import CrawlMode, CrawlState, JournalMode
+from spider.store.records import CrawlMode, CrawlState, DiscoveredVia, FetchState, JournalMode
 from spider.store.types import Flag, Json, Timestamp
+
+
+def literal_values(alias: Any) -> list[str]:
+    """The values of a Literal alias in order, through unions of Literals and other aliases."""
+    value = getattr(alias, "__value__", alias)
+    if get_origin(value) is Literal:
+        return list(get_args(value))
+    return [item for member in get_args(value) for item in literal_values(member)]
+
 
 # Stays 1 until the first schema change after v0.1, which brings migrations (design D5).
 SCHEMA_VERSION = 1
-CRAWL_MODES = list(get_args(CrawlMode.__value__))
-CRAWL_STATES = list(get_args(CrawlState.__value__))
-JOURNAL_MODES = list(get_args(JournalMode.__value__))
+CRAWL_MODES = literal_values(CrawlMode)
+CRAWL_STATES = literal_values(CrawlState)
+JOURNAL_MODES = literal_values(JournalMode)
 
 metadata = MetaData()
 
@@ -147,4 +156,55 @@ seeds = public_table(
     Column("url", Text, nullable=False, comment="The Seed URL as given."),
     comment="The Seeds the Crawl started from, in the order they were given.",
     change=15,
+)
+
+urls = public_table(
+    "urls",
+    Column(
+        "id",
+        Integer,
+        primary_key=True,
+        comment="Row id, stable for the life of the crawl file; it grows in the order URLs are "
+        "first recorded, and is the dispatch order within a Crawl Depth.",
+    ),
+    Column("url", Text, nullable=False, comment="The normalised URL, unique."),
+    Column(
+        "host",
+        Text,
+        nullable=False,
+        comment="The URL's host in lower-case ASCII (IDNA) form; the key of the per-host "
+        "politeness limits.",
+    ),
+    Column("crawl_depth", Integer, nullable=False, comment="Crawl Depth; 0 for Seeds."),
+    Column(
+        "discovered_via",
+        Text,
+        nullable=False,
+        comment="How the URL was first found: seed, or the Link type.",
+        info={"values": literal_values(DiscoveredVia)},
+    ),
+    Column(
+        "fetch_state",
+        Text,
+        nullable=False,
+        comment="Frontier state: waiting, a response was recorded, no response, or not requested.",
+        info={"values": literal_values(FetchState)},
+    ),
+    Column(
+        "status_code",
+        Integer,
+        comment="HTTP status code of the URL's own response; NULL without a response.",
+    ),
+    comment="One row for each distinct normalised URL of the Crawl; the frontier is its "
+    "queued rows.",
+    change=20,
+)
+Index(
+    "urls_url",
+    urls.c.url,
+    unique=True,
+    info={
+        "description": "Recording a discovered URL once (ON CONFLICT (url)), and finding one "
+        "URL's row."
+    },
 )

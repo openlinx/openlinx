@@ -2,7 +2,7 @@
 
 import hashlib
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import closing
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -80,9 +80,9 @@ def create_crawl_at(temp_workspace: TempWorkspace, started_at: str, suffix: str)
     )
 
 
-def query(file: Path, sql: str) -> list[tuple[Any, ...]]:
+def query(file: Path, sql: str, params: Sequence[Any] = ()) -> list[tuple[Any, ...]]:
     with closing(connect(file, read_only=True)) as connection:
-        return connection.execute(sql).fetchall()
+        return connection.execute(sql, params).fetchall()
 
 
 def crawl_row(file: Path) -> dict[str, Any]:

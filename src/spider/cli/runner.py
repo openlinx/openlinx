@@ -28,6 +28,8 @@ class Invocation:
     output: Output
     reporter: Reporter
     settings_tables: SettingsTables
+    # The command line after the program name, which a Crawl records.
+    argv: tuple[str, ...] = ()
 
 
 class SpiderGroup(TyperGroup):
@@ -55,7 +57,9 @@ class SpiderGroup(TyperGroup):
                 complete_var,
                 standalone_mode=False,
                 windows_expand_args=windows_expand_args,
-                obj=Invocation(output, CliReporter(output, SystemClock()), self.settings_tables),
+                obj=Invocation(
+                    output, CliReporter(output, SystemClock()), self.settings_tables, tuple(args)
+                ),
                 **extra,
             )
             # A Command returns its result; --help and --version end in an Exit, whose code
