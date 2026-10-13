@@ -450,7 +450,7 @@ The Crawl SHALL treat an origin's robots.txt by its response, as RFC 9309 descri
 - **5xx or 429:** every URL on the origin is disallowed, and `robots_state` = `unreachable`.
   - Its URLs SHALL be recorded with `skip_reason` = `robots_unreachable`.
   - For an Internal origin, a `robots_unreachable` warning SHALL be recorded whose hint contains `--ignore-robots`.
-- **No HTTP response** (any `fetch_error` of "Requests without a response"): `robots_state` = `unreachable` and `robots_status_code` is NULL.
+- **No HTTP response** (any `fetch_error` of "Requests without a response"): `robots_state` = `unreachable`, `robots_status_code` is NULL, and `robots_fetch_error` and `robots_fetch_error_message` hold the request's error.
   - Every URL on the origin SHALL be recorded with `fetch_state` = `error` and the `fetch_error` of the robots.txt request, without a request of its own, and with a `fetch_error_message` that says the error came from the origin's robots.txt request. A continue re-queues them with the other `error` URLs.
   - On an Internal origin, each such URL SHALL count toward the network pause as a request without an HTTP response (see "Backstops").
   - The Seed's origin is the exception: until it has given an HTTP response, its robots.txt request without one pauses the Crawl (see "Unreachable Seed").
@@ -470,7 +470,7 @@ The Crawl SHALL treat an origin's robots.txt by its response, as RFC 9309 descri
 
 #### Scenario: A dead External domain is a DNS error
 - **WHEN** `http://site.test/` links to `http://nowhere.test/a` and `http://nowhere.test/b`, and `spider crawl http://site.test/` runs
-- **THEN** both URLs have `fetch_state` = `error`, `fetch_error` = `dns_error` and a `fetch_error_message` that contains `robots.txt`, and the `origins` row for `http://nowhere.test` has `robots_state` = `unreachable` and `robots_status_code` NULL
+- **THEN** both URLs have `fetch_state` = `error`, `fetch_error` = `dns_error` and a `fetch_error_message` that contains `robots.txt`, and the `origins` row for `http://nowhere.test` has `robots_state` = `unreachable`, `robots_status_code` NULL and `robots_fetch_error` = `dns_error`
 
 #### Scenario: A redirected robots.txt is followed
 - **WHEN** `/robots.txt` redirects with 301 to `/robots-real.txt`, which disallows `/private/`, and `/` links to `/private/a`
@@ -685,6 +685,8 @@ The crawl store SHALL hold one row for each origin of a URL that the Crawl recor
 | `is_internal` | INTEGER | no | boolean | 1 when the origin's URLs are Internal URLs |
 | `robots_state` | TEXT | yes | `ok`, `missing`, `unreachable` | Rules applied, everything allowed, or everything disallowed or unanswered; NULL while robots.txt has not been fetched, because no URL of the origin was requested |
 | `robots_status_code` | INTEGER | yes | | Status code of the final robots.txt response; NULL without a response |
+| `robots_fetch_error` | TEXT | yes | the values of `urls.fetch_error` | Why the robots.txt request got no HTTP response; NULL when it got one, or while robots.txt has not been fetched |
+| `robots_fetch_error_message` | TEXT | yes | | Human-readable detail of `robots_fetch_error` |
 | `robots_fetched_at` | TEXT | yes | timestamp | UTC time robots.txt was last fetched |
 | `robots_txt` | TEXT | yes | | The robots.txt body as parsed, up to 512,000 bytes |
 | `robots_crawl_delay_ms` | INTEGER | yes | | The `Crawl-delay` for the robots user-agent token; recorded, not applied |
