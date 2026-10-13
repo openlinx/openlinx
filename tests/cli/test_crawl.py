@@ -198,3 +198,25 @@ def test_the_recorded_config_holds_every_registered_crawl_setting(
     config = json.loads(crawl_row(crawled(server.url("/")))["config"])
 
     assert (config["crawl"], bool(defaults)) == (defaults, True)
+
+
+def test_spider_toml_sets_a_crawl_setting(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SMALL_SITE)
+    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nconcurrency = 2\n")
+
+    config = json.loads(crawl_row(crawled(server.url("/")))["config"])
+
+    assert config["crawl"]["concurrency"] == 2
+
+
+def test_a_flag_overrides_spider_toml(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SMALL_SITE)
+    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nconcurrency = 2\n")
+
+    config = json.loads(crawl_row(crawled(server.url("/"), "--concurrency", "3"))["config"])
+
+    assert config["crawl"]["concurrency"] == 3
