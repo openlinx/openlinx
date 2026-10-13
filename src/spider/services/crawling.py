@@ -120,6 +120,13 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
 
 def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResult:
     crawl_file = create_crawl(plan.new_crawl, clock, reporter)
+    reporter.event(
+        "crawl_started",
+        crawl_id=crawl_file.id,
+        crawl_mode=plan.new_crawl.crawl_mode,
+        seed_count=len(plan.new_crawl.seeds),
+        crawl_file=str(crawl_file.path),
+    )
     with asyncio.Runner(loop_factory=loop_factory) as runner:
         summary, counts = runner.run(_crawl(plan, crawl_file, clock, reporter))
     return CrawlResult(

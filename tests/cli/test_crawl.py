@@ -158,3 +158,22 @@ def test_the_crawl_command_prints_one_document() -> None:
     entry = next(c for c in run_cli("commands").json()["commands"] if c["name"] == "crawl")
 
     assert entry["output"] == "document"
+
+
+def test_the_first_event_line_is_the_start_event(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SMALL_SITE)
+
+    result = run_cli("crawl", server.url("/"))
+    first = next(line for line in result.stderr_json_lines() if "event" in line)
+
+    assert (first["event"], first["data"]) == (
+        "crawl_started",
+        {
+            "crawl_id": result.json()["crawl_id"],
+            "crawl_mode": "spider",
+            "seed_count": 1,
+            "crawl_file": result.json()["crawl_file"],
+        },
+    )
