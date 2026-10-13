@@ -51,7 +51,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 
 ## 5. Change check
 
-- [ ] 5.1 Rerun the benchmark with the pool, and record its results next to the baseline in `docs/benchmarks.md`.
+- [ ] 5.1 Rerun the benchmark with the pool, and with each variant of design D6 (the writer's url → id cache, the link extractor's fast paths), and record the results next to the baseline in `docs/benchmarks.md`.
 - [ ] 5.2 Verify that every `#### Scenario:` in `specs/crawl-performance/spec.md` has exactly one test named after it.
 - [ ] 5.3 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
 - [ ] 5.4 Review: run the code-review skill on the whole change against `specs/crawl-performance/spec.md`, then refactor with the whole suite green.
