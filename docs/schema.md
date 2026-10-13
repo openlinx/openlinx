@@ -111,6 +111,7 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `found_on_url_id` | INTEGER | yes | → `urls.id` | | | The URL whose response first revealed this one; NULL for Seeds. |
 | `fetch_state` | TEXT | no | | | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested. |
 | `status_code` | INTEGER | yes | | | | HTTP status code of the URL's own response; NULL without a response. |
+| `parsed` | INTEGER | no | | `boolean` | | 1 when the response was parsed for Links and Page data. |
 
 ### Indexes
 

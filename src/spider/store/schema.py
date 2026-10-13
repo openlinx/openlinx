@@ -210,6 +210,12 @@ urls = public_table(
         Integer,
         comment="HTTP status code of the URL's own response; NULL without a response.",
     ),
+    Column(
+        "parsed",
+        Flag,
+        nullable=False,
+        comment="1 when the response was parsed for Links and Page data.",
+    ),
     comment="One row for each distinct normalised URL of the Crawl; the frontier is its "
     "queued rows.",
     change=20,

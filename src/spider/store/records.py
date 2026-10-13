@@ -100,3 +100,32 @@ class NewUrl:
     host: str
     crawl_depth: int
     discovered_via: DiscoveredVia
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UrlCounts:
+    """The urls counts of a Crawl's result, by fetch_state, by parsed and by status class."""
+
+    discovered: int
+    fetched: int
+    errors: int
+    skipped: int
+    queued: int
+    pages: int
+    status_2xx: int
+    status_3xx: int
+    status_4xx: int
+    status_5xx: int
+    status_other: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CrawlSummary:
+    """What a Crawl's result reports from its crawl and seeds rows."""
+
+    state: CrawlState
+    crawl_mode: CrawlMode
+    section_crawl: bool
+    started_at: str
+    seed: str
+    seed_count: int

@@ -2,12 +2,12 @@
 
 import platform
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import Connection, insert, update
+from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.exc import DBAPIError
 
 from spider import __version__
@@ -16,7 +16,7 @@ from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect, not_writable_name, opening
 from spider.store.ids import Choice, crawl_path, new_crawl_id
 from spider.store.journal import JournalChoice, confirm_journal_mode
-from spider.store.records import CrawlFile, CrawlState, NewCrawl
+from spider.store.records import CrawlFile, CrawlState, CrawlSummary, NewCrawl
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
 from spider.workspace.creation import as_workspace_not_writable, create_data_folder
 
@@ -43,6 +43,37 @@ def create_crawl_file(
 def set_state(connection: Connection, state: CrawlState, at: datetime) -> None:
     completed_at = at if state == "completed" else None
     connection.execute(update(crawl).values(state=state, completed_at=completed_at))
+
+
+def record_state(state: CrawlState, at: datetime) -> Callable[[Connection], None]:
+    """A unit that writes the Crawl State."""
+
+    def unit(connection: Connection) -> None:
+        set_state(connection, state, at)
+
+    return unit
+
+
+_SUMMARY = select(crawl.c.state, crawl.c.crawl_mode, crawl.c.section_crawl, crawl.c.started_at)
+_FIRST_SEED = select(seeds.c.url).order_by(seeds.c.position).limit(1)
+_SEED_COUNT = select(func.count()).select_from(seeds)
+
+
+def crawl_summary() -> Callable[[Connection], CrawlSummary]:
+    """A unit that only reads: the crawl and seeds values of a Crawl's result."""
+
+    def unit(connection: Connection) -> CrawlSummary:
+        row = connection.execute(_SUMMARY).one()
+        return CrawlSummary(
+            state=row.state,
+            crawl_mode=row.crawl_mode,
+            section_crawl=bool(row.section_crawl),
+            started_at=row.started_at,
+            seed=connection.execute(_FIRST_SEED).scalar_one(),
+            seed_count=connection.execute(_SEED_COUNT).scalar_one(),
+        )
+
+    return unit
 
 
 def _claim_new_file(crawls_dir: Path, started_at: datetime, choice: Choice) -> CrawlFile:

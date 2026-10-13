@@ -1,8 +1,8 @@
 """The units of spider.store.urls (020-add-crawl-core D1, D2, D14; seam 2)."""
 
 from spider.crawl.urls import NormalizedUrl, parse_seed
-from spider.store.records import NewUrl, QueuedUrl
-from spider.store.urls import next_depth, queued_batch, record_fetched, record_seed
+from spider.store.records import NewUrl, QueuedUrl, UrlCounts
+from spider.store.urls import next_depth, queued_batch, record_fetched, record_seed, url_counts
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, query
@@ -29,15 +29,17 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
         seed_id = writer.run(record_seed(seed, "site.test"))
         writer.run(record_seed(seed, "site.test"))
         first = writer.run(queued_batch(0, 0, 10))
-        writer.run(record_fetched(seed_id, 200, found))
+        writer.run(record_fetched(seed_id, 200, parsed=True, discovered=found))
         deeper = writer.run(next_depth(0))
         second = writer.run(queued_batch(1, 0, 1))
+        counts = writer.run(url_counts())
         replay_now(writer)
 
     assert (
         first,
         deeper,
         second,
+        counts,
         query(
             crawl.path, "SELECT url, crawl_depth, fetch_state, status_code FROM urls ORDER BY id"
         ),
@@ -45,6 +47,19 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
         (QueuedUrl(seed_id, seed),),
         1,
         (QueuedUrl(seed_id + 1, _url("https://site.test/a")),),
+        UrlCounts(
+            discovered=3,
+            fetched=1,
+            errors=0,
+            skipped=0,
+            queued=2,
+            pages=1,
+            status_2xx=1,
+            status_3xx=0,
+            status_4xx=0,
+            status_5xx=0,
+            status_other=0,
+        ),
         [
             ("https://site.test/", 0, "fetched", 200),
             ("https://site.test/a", 1, "queued", None),

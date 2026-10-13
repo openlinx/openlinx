@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,9 +18,10 @@ from spider.crawl.scope import ScopeRules, scope_rules
 from spider.crawl.urls import InvalidUrl, InvalidUrlReason, NormalizedUrl, parse_seed
 from spider.output.codes import INVALID_URL
 from spider.output.diagnostics import SpiderError
+from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
 from spider.services.crawls import create_crawl
-from spider.store.records import CrawlFile, NewCrawl, SecretNames
+from spider.store.records import CrawlFile, CrawlSummary, NewCrawl, SecretNames, UrlCounts
 from spider.store.settings import StoreSettings
 from spider.workspace.discovery import resolve_workspace
 from spider.workspace.settings import load_settings
@@ -52,11 +54,44 @@ class CrawlPlan:
 
 @dataclass(frozen=True, kw_only=True)
 class CrawlResult:
+    """Built at the end from the crawl file, never from counters kept while it ran (D10)."""
+
     crawl_id: str
+    summary: CrawlSummary
+    ended_at: datetime
+    counts: UrlCounts
     crawl_file: Path
 
     def to_json(self) -> dict[str, Any]:
-        return {"crawl_id": self.crawl_id, "crawl_file": str(self.crawl_file)}
+        summary, counts = self.summary, self.counts
+        started_at = datetime.fromisoformat(summary.started_at)
+        return {
+            "crawl_id": self.crawl_id,
+            "state": summary.state,
+            "crawl_mode": summary.crawl_mode,
+            "seed": summary.seed,
+            "seed_count": summary.seed_count,
+            "section_crawl": summary.section_crawl,
+            "started_at": summary.started_at,
+            "ended_at": timestamp_text(self.ended_at),
+            "duration_s": round((self.ended_at - started_at).total_seconds(), 3),
+            "urls": {
+                "discovered": counts.discovered,
+                "fetched": counts.fetched,
+                "errors": counts.errors,
+                "skipped": counts.skipped,
+                "queued": counts.queued,
+            },
+            "pages": counts.pages,
+            "status_classes": {
+                "2xx": counts.status_2xx,
+                "3xx": counts.status_3xx,
+                "4xx": counts.status_4xx,
+                "5xx": counts.status_5xx,
+                "other": counts.status_other,
+            },
+            "crawl_file": str(self.crawl_file),
+        }
 
 
 def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
@@ -85,13 +120,27 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
 def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResult:
     crawl_file = create_crawl(plan.new_crawl, clock, reporter)
     with asyncio.Runner(loop_factory=loop_factory) as runner:
-        runner.run(_crawl(plan, crawl_file, clock, reporter))
-    return CrawlResult(crawl_id=crawl_file.id, crawl_file=crawl_file.path)
+        summary, counts = runner.run(_crawl(plan, crawl_file, clock, reporter))
+    return CrawlResult(
+        crawl_id=crawl_file.id,
+        summary=summary,
+        ended_at=clock.now(),
+        counts=counts,
+        crawl_file=crawl_file.path,
+    )
 
 
-async def _crawl(plan: CrawlPlan, crawl_file: CrawlFile, clock: Clock, reporter: Reporter) -> None:
+async def _crawl(
+    plan: CrawlPlan, crawl_file: CrawlFile, clock: Clock, reporter: Reporter
+) -> tuple[CrawlSummary, UrlCounts]:
+    from spider.store.crawls import crawl_summary, record_state
+    from spider.store.urls import url_counts
+
     async with crawl_context(crawl_file, plan.scope, clock, reporter) as context:
         await run_crawl(context, plan.seed)
+        writer = context.writer
+        await writer.run_async(record_state("completed", clock.now()))
+        return await writer.run_async(crawl_summary()), await writer.run_async(url_counts())
 
 
 @asynccontextmanager

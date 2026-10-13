@@ -32,10 +32,15 @@ async def _crawl_depth(context: CrawlContext, depth: int) -> None:
 
 async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> None:
     response = await context.fetcher.fetch(Request(queued.url))
-    page = await context.pages.prepare(queued.url, response)
-    discovered = _followed(page, context.scope, depth + 1)
+    parsed = 200 <= response.status_code < 300
+    discovered: tuple[NewUrl, ...] = ()
+    if parsed:
+        page = await context.pages.prepare(queued.url, response)
+        discovered = _followed(page, context.scope, depth + 1)
     # The URL's task ends here; its outcome arrives at the commit (design D2).
-    await context.writer.submit_async(record_fetched(queued.id, response.status_code, discovered))
+    await context.writer.submit_async(
+        record_fetched(queued.id, response.status_code, parsed=parsed, discovered=discovered)
+    )
 
 
 def _followed(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl, ...]:

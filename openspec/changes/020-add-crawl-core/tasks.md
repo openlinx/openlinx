@@ -114,7 +114,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.5 Drive "A discovered URL points to where it was found" at seam 3+6.
 
   Done when: `found_on_url_id` is declared with a foreign key to `urls.id`, the first in the schema, and `docs/schema.md` shows it as `018` documents references; `018`'s guard over reference columns switches on its assertion that it saw a reference.
-- [ ] 4.6 Drive "The result counts a small site" and "A completed Crawl exits with code 0" at seam 1, a trivial pair.
+- [x] 4.6 Drive "The result counts a small site" and "A completed Crawl exits with code 0" at seam 1, a trivial pair.
 
   Done when: the result's counts come from queries over `urls`, never from counters, and the `parsed` column exists.
 - [ ] 4.7 **Guard:** "The crawl Command prints one document", at seam 1.

@@ -6,7 +6,7 @@ from sqlalchemy import Connection, bindparam, func, literal_column, select, upda
 from sqlalchemy.dialects.sqlite import insert
 
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import NewUrl, QueuedUrl
+from spider.store.records import NewUrl, QueuedUrl, UrlCounts
 from spider.store.schema import urls
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
@@ -15,7 +15,11 @@ _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
 _FETCHED = (
     update(urls)
     .where(urls.c.id == bindparam("url_id"))
-    .values(fetch_state="fetched", status_code=bindparam("response_status"))
+    .values(
+        fetch_state="fetched",
+        status_code=bindparam("response_status"),
+        parsed=bindparam("is_parsed"),
+    )
 )
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
@@ -29,6 +33,20 @@ _QUEUED = (
     )
     .order_by(urls.c.id)
     .limit(bindparam("size"))
+)
+_STATUS = urls.c.status_code
+_COUNTS = select(
+    func.count().label("discovered"),
+    func.count().filter(urls.c.fetch_state == "fetched").label("fetched"),
+    func.count().filter(urls.c.fetch_state == "error").label("errors"),
+    func.count().filter(urls.c.fetch_state == "skipped").label("skipped"),
+    func.count().filter(_IS_QUEUED).label("queued"),
+    func.count().filter(urls.c.parsed == 1).label("pages"),
+    *(
+        func.count().filter(_STATUS.between(low, low + 99)).label(f"status_{low // 100}xx")
+        for low in (200, 300, 400, 500)
+    ),
+    func.count().filter(~_STATUS.between(200, 599)).label("status_other"),
 )
 _NEXT_DEPTH = select(func.min(urls.c.crawl_depth)).where(
     _IS_QUEUED, urls.c.crawl_depth > bindparam("depth")
@@ -47,6 +65,7 @@ def record_seed(url: NormalizedUrl, host: str) -> Callable[[Connection], int]:
                 "crawl_depth": 0,
                 "discovered_via": "seed",
                 "fetch_state": "queued",
+                "parsed": False,
             },
         )
         url_id: int = connection.execute(_URL_ID, {"url": url}).scalar_one()
@@ -79,7 +98,7 @@ def next_depth(depth: int) -> Callable[[Connection], int | None]:
 
 
 def record_fetched(
-    url_id: int, status_code: int, discovered: Sequence[NewUrl] = ()
+    url_id: int, status_code: int, *, parsed: bool, discovered: Sequence[NewUrl] = ()
 ) -> Callable[[Connection], None]:
     """A unit that records the URL's response and the URLs discovered from it."""
     new_rows = [
@@ -90,14 +109,26 @@ def record_fetched(
             "discovered_via": new.discovered_via,
             "found_on_url_id": url_id,
             "fetch_state": "queued",
+            "parsed": False,
         }
         for new in discovered
     ]
 
     def unit(connection: Connection) -> None:
-        connection.execute(_FETCHED, {"url_id": url_id, "response_status": status_code})
+        connection.execute(
+            _FETCHED, {"url_id": url_id, "response_status": status_code, "is_parsed": parsed}
+        )
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
             connection.execute(_INSERT_URL, new_rows)
+
+    return unit
+
+
+def url_counts() -> Callable[[Connection], UrlCounts]:
+    """A unit that only reads: the counts of a Crawl's result, from the rows (design D10)."""
+
+    def unit(connection: Connection) -> UrlCounts:
+        return UrlCounts(**connection.execute(_COUNTS).one()._mapping)
 
     return unit
