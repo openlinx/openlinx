@@ -201,6 +201,7 @@ SETTINGS_MODELS = {
         (["commands"], STARTUP_ALLOWLIST | SETTINGS_MODELS),
         (["schema", "--help"], STARTUP_ALLOWLIST),
         (["crawl", "--help"], STARTUP_ALLOWLIST),
+        (["issues", "--help"], STARTUP_ALLOWLIST),
     ],
     ids=lambda value: " ".join(value) if isinstance(value, list) else "",
 )

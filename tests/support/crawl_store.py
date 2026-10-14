@@ -3,6 +3,7 @@ Test seams)."""
 
 import asyncio
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
@@ -15,11 +16,12 @@ from spider.crawl.urls import NormalizedUrl
 from spider.extract.addresses import display_address
 from spider.rules.model import Rule
 from spider.rules.registry import RULES
+from spider.rules.titles import TITLE_MISSING
 from spider.store.crawls import record_state
 from spider.store.issues import materialise_issues
 from spider.store.page_records import PageRow
 from spider.store.pages import write_page
-from spider.store.records import FetchedUrl, NewUrl, RuleRow
+from spider.store.records import FetchedUrl, IssueType, NewUrl, Priority, RuleRow
 from spider.store.schema import urls
 from spider.store.urls import record_fetched, record_seed
 from spider.store.writer import CrawlWriter
@@ -33,6 +35,11 @@ _AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
 _PAGE_WRITER: Mapping[type, Callable[[Connection, Any], None]] = MappingProxyType(
     {PageRow: write_page}
 )
+# Queries of a later tool's Rules, each firing on the URLs under one folder.
+UNDER_A = "SELECT id AS url_id, NULL AS detail FROM urls WHERE url LIKE 'https://example.com/a/%'"
+UNDER_B = "SELECT id AS url_id, NULL AS detail FROM urls WHERE url LIKE 'https://example.com/b/%'"
+UNDER_C = "SELECT id AS url_id, NULL AS detail FROM urls WHERE url LIKE 'https://example.com/c/%'"
+UNDER_D = "SELECT id AS url_id, NULL AS detail FROM urls WHERE url LIKE 'https://example.com/d/%'"
 # The Seed is an analysed Page on which no Rule of the catalogue fires.
 _SEED_PAGE = MappingProxyType(
     {"title_count": 1, "title_1": "Home", "title_1_length": 4, "h1_count": 1, "h1_1": "Home"}
@@ -80,6 +87,22 @@ def crawl_store(
             )
             writer.run(record_state("completed", _AT))
     return crawl.path
+
+
+def later_rule(rule_id: str, issue_type: IssueType, priority: Priority, sql: str) -> Rule:
+    """A Rule of a later tool, which the catalogue lacks, with any Issue Type and Priority."""
+    return replace(
+        TITLE_MISSING,
+        id=rule_id,
+        issue_type=issue_type,
+        priority=priority,
+        applies_to="internal_urls",
+        reproduce_sql=sql,
+    )
+
+
+def under(folder: str, count: int) -> list[str]:
+    return [f"https://example.com/{folder}/{n}" for n in range(count)]
 
 
 def _recorded(rule: Rule) -> RuleRow:

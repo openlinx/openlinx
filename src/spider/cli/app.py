@@ -12,6 +12,7 @@ from spider.cli.click_compat import Context
 from spider.cli.commands import commands
 from spider.cli.crawl import crawl
 from spider.cli.init import init
+from spider.cli.issues import issues
 from spider.cli.meta import CommandGroup, check_command
 from spider.cli.rules import RULES_GROUP
 from spider.cli.runner import (
@@ -71,7 +72,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         rich_markup_mode=None,
     )
     app.callback()(root)
-    registered = [commands, crawl, init, RULES_GROUP, schema, *extra.commands]
+    registered = [commands, crawl, init, issues, RULES_GROUP, schema, *extra.commands]
     # Typer keeps the last of two entries of one name without a word.
     taken: set[str] = set()
     for entry in registered:

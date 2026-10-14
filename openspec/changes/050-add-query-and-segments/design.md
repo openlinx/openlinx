@@ -207,6 +207,7 @@ This change introduces no new seam and uses no boundary doubles. It adds one tes
 - **A Rule that the crawl file records but this tool lacks cannot be read live.** → `rule_not_found` with a message that this version cannot compute it, and a hint to `spider sql` with its `reproduce_sql` (D14). Rare: a running Crawl written by a newer tool.
 - **`issues` pages by index (`paginate()`), so on a `running` Crawl the counts, and so the order, can change between pages.** → There is at most one item per Rule, and the default `--limit` is 50, so one page nearly always holds them all; accepted.
 - **Column-name assumptions in the scenarios.** → The scenarios follow 030's published names, and are renamed if 030 changes them. The behaviour does not change.
+- [Tests of group 1 named after no scenario] → In `tests/cli/test_issues.py`: `test_filter_values_are_repeatable_and_case_insensitive` (task 1.4, red by mutation: the values not lowered), since the Issue list requirement makes the filters repeatable and case-insensitive and "Filters combine" uses neither; in `tests/cli/test_startup.py`, `issues --help` loads only the startup allowlist (task 1.4, red by mutation: `spider.services.query` importing the store at module level, which loaded `sqlalchemy`).
 
 ## Migration Plan
 
