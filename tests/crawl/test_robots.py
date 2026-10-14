@@ -117,7 +117,20 @@ def test_the_crawl_delay_is_in_whole_milliseconds_that_fit_an_integer(
 
 @pytest.mark.parametrize(
     ("status_code", "expected"),
-    [(200, "ok"), (204, "ok"), (299, "ok"), (301, "missing"), (404, "missing"), (410, "missing")],
+    [
+        (200, "ok"),
+        (204, "ok"),
+        (299, "ok"),
+        (301, "missing"),
+        (404, "missing"),
+        (410, "missing"),
+        (428, "missing"),
+        (429, "unreachable"),
+        (430, "missing"),
+        (500, "unreachable"),
+        (503, "unreachable"),
+        (599, "unreachable"),
+    ],
 )
 def test_the_final_robots_txt_response_gives_its_state(status_code: int, expected: str) -> None:
     assert robots_state(status_code) == expected

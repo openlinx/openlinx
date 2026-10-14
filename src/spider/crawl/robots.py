@@ -42,8 +42,9 @@ class RobotsTxt:
 class OriginRobots:
     """What an origin's robots.txt says for the URLs of the origin."""
 
-    # None: everything is allowed.
+    # None: everything is allowed, unless the state is unreachable.
     rules: RobotsTxt | None
+    unreachable: bool = False
 
     def allows(self, url: str) -> bool:
         return self.rules is None or self.rules.allows(url)
@@ -51,7 +52,12 @@ class OriginRobots:
 
 def robots_state(status_code: int) -> RobotsState:
     """RFC 9309's mapping of the final robots.txt response."""
-    return "ok" if 200 <= status_code < 300 else "missing"
+    if 200 <= status_code < 300:
+        return "ok"
+    # A server error, or too many requests, may hide rules: the origin is treated as disallowed.
+    if status_code == 429 or status_code >= 500:
+        return "unreachable"
+    return "missing"
 
 
 def read_robots_txt(body: bytes, token: str) -> RobotsTxt:

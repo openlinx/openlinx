@@ -251,12 +251,7 @@ async def _unit_of(
     blocked = None
     if skip_reason is None:
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
-        blocked = not (await robots.robots_of(queued.url)).allows(queued.url)
-        # --ignore-robots requests it, still labelled as blocked.
-        if blocked and not context.settings.ignore_robots:
-            skip_reason = "blocked_by_robots_txt"
-            if queued.discovered_via == "seed":
-                _warn_of_a_blocked_seed(context, queued.url)
+        skip_reason, blocked = await _robots_check(context, robots, queued)
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
         return record_skipped(
@@ -293,6 +288,24 @@ async def _unit_of(
         return record_error(errored, row_writers)
     fetched = await _fetched(context, queued, decision, response)
     return record_fetched(replace(fetched, blocked_by_robots_txt=blocked), row_writers)
+
+
+async def _robots_check(
+    context: CrawlContext, robots: RobotsLoader, queued: QueuedUrl
+) -> tuple[SkipReason | None, bool | None]:
+    """robots.txt's skip of a URL that would be requested, and its blocked_by_robots_txt, NULL
+    while the rules are unknown (design D6)."""
+    origin_robots = await robots.robots_of(queued.url)
+    ignore = context.settings.ignore_robots
+    if origin_robots.unreachable:
+        return None if ignore else "robots_unreachable", None
+    blocked = not origin_robots.allows(queued.url)
+    # --ignore-robots requests it, still labelled as blocked.
+    if blocked and not ignore:
+        if queued.discovered_via == "seed":
+            _warn_of_a_blocked_seed(context, queued.url)
+        return "blocked_by_robots_txt", True
+    return None, blocked
 
 
 def _skip_reason(
