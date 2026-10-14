@@ -11,3 +11,5 @@ class PageRow:
     # From the HTML: NULL for a Page that is not analysed (design D2).
     title_1: str | None = None
     title_1_length: int | None = None
+    title_2: str | None = None
+    title_count: int | None = None

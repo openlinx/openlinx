@@ -160,6 +160,8 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `url_encoded_address` | TEXT | no | | | | The Page's URL as the Crawl requested it, equal to urls.url: the host in IDNA (punycode) form and every non-ASCII character percent-encoded as UTF-8. |
 | `title_1` | TEXT | yes | | | | The text of the Page's first title element, whitespace-normalised; NULL without one, or when the Page is not analysed. |
 | `title_1_length` | INTEGER | yes | | | | The length of title_1 in Unicode code points; NULL exactly when title_1 is. |
+| `title_2` | TEXT | yes | | | | The text of the Page's second title element, whitespace-normalised; NULL without one, or when the Page is not analysed. |
+| `title_count` | INTEGER | yes | | | | The number of title elements outside svg and math; NULL when the Page is not analysed. |
 
 ### Indexes
 

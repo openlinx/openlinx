@@ -380,6 +380,18 @@ pages = public_table(
         Integer,
         comment="The length of title_1 in Unicode code points; NULL exactly when title_1 is.",
     ),
+    Column(
+        "title_2",
+        Text,
+        comment="The text of the Page's second title element, whitespace-normalised; NULL "
+        "without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "title_count",
+        Integer,
+        comment="The number of title elements outside svg and math; NULL when the Page is not "
+        "analysed.",
+    ),
     comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
     "an HTML document, whatever its status code.",
     change=30,

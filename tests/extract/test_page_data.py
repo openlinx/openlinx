@@ -21,3 +21,15 @@ def test_a_no_break_space_stays_in_a_title() -> None:
     row = page_row(f"<title>{nbsp}a{nbsp} \t b{nbsp}</title>")
 
     assert (row.title_1, row.title_1_length) == (f"{nbsp}a{nbsp} b{nbsp}", 6)
+
+
+def test_title_in_svg_is_ignored() -> None:
+    row = page_row("<head><title>Main</title></head><body><svg><title>Icon</title></svg></body>")
+
+    assert (row.title_count, row.title_2) == (1, None)
+
+
+def test_a_title_in_math_is_ignored() -> None:
+    row = page_row("<title>Main</title><math><mi><title>m</title></mi></math>")
+
+    assert (row.title_1, row.title_count) == ("Main", 1)

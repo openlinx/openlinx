@@ -29,7 +29,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 
 - [x] 2.1 Drive "Charset declared in a meta element" at seam 4. Create the Page extractor in `spider.extract.page_data`, listed in `spider.services.hooks.default_hooks()`: a pure, module-level function of page preparation's tree and `PageInput` to a frozen msgspec Struct, which the Page handler reads under the extractor's name. It reads the tree that page preparation built with `020`'s `decode_html` (`spider.crawl.decoding`) and decodes nothing itself. Add `title_1`.
 - [x] 2.2 Drive "Whitespace is collapsed before measuring" at seam 4. Add whitespace normalisation (ASCII whitespace only) and `title_1_length`.
-- [ ] 2.3 Drive "Title in SVG is ignored" at seam 4, and add `title_count` and `title_2`.
+- [x] 2.3 Drive "Title in SVG is ignored" at seam 4, and add `title_count` and `title_2`.
 - [ ] 2.4 Drive "Second title element" at seam 4, and add `title_2_length`.
 - [ ] 2.5 Drive "Missing title" at seam 4.
 - [ ] 2.6 Docs: add the decoding order, the text model and the title columns to `docs/page-data.md`.
