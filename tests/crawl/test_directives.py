@@ -48,3 +48,11 @@ def test_none_means_noindex_and_nofollow() -> None:
     directives = robots_directives((), ("none",), DEFAULT_ROBOTS_TOKEN)
 
     assert (directives.x_robots_tag_noindex, directives.x_robots_tag_nofollow) == (True, True)
+
+
+def test_a_directive_with_a_value_is_not_a_user_agent_prefix() -> None:
+    header = "unavailable_after: 25 Jun 2030 15:00:00 PST, noindex"
+
+    directives = robots_directives((), (header,), DEFAULT_ROBOTS_TOKEN)
+
+    assert directives.x_robots_tag_noindex is True

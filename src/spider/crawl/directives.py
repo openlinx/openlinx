@@ -8,6 +8,8 @@ from selectolax.lexbor import LexborHTMLParser
 
 # A header value that starts with a name and a colon applies only to the crawler it names.
 _PREFIX = re.compile(r"\s*([^\s:,]+)\s*:")
+# Directives that take a value after a colon, which no user-agent prefix is named after.
+_VALUED = frozenset({"unavailable_after", "max-snippet", "max-image-preview", "max-video-preview"})
 _NOINDEX = frozenset({"noindex", "none"})
 _NOFOLLOW = frozenset({"nofollow", "none"})
 
@@ -54,7 +56,7 @@ def robots_directives(
 def _applying(value: str, token: str) -> str | None:
     """The directives of a header value for the robots token; None for another crawler."""
     prefix = _PREFIX.match(value)
-    if prefix is None:
+    if prefix is None or prefix[1].lower() in _VALUED:
         return value
     return value[prefix.end() :] if prefix[1].lower() == token.lower() else None
 

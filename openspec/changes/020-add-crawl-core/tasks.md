@@ -189,7 +189,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 7.2 Drive "A header for another crawler does not apply" at seam 4.
 - [x] 7.3 Drive "A header for the robots user-agent token applies" at seam 4.
 - [x] 7.4 Drive "none means noindex and nofollow" at seam 4.
-- [ ] 7.5 Drive "A directive with a value is not a user-agent prefix" at seam 4.
+- [x] 7.5 Drive "A directive with a value is not a user-agent prefix" at seam 4.
 - [ ] 7.6 **Guard:** "The robots directives parser accepts any values", as a hypothesis property at seam 4.
 - [ ] 7.7 Drive "A meta refresh target is followed" at seam 3.
 - [ ] 7.8 Drive "amphtml targets are not requested" at seam 3+6.
