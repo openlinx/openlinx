@@ -65,7 +65,7 @@ Turn a Rule off, which `spider rules` shows as `enabled` false:
 enabled = false
 ```
 
-A table may hold `enabled`, a boolean, and the Rule's thresholds by name, each an integer of at least 0; `spider rules show <id>` lists a Rule's thresholds. Anything else stops every Command that reads the settings with `settings_invalid` (exit code 3), before a Crawl requests any URL. `details.errors[].key` is the dotted key, and the hint names the closest Rule id or key when there is one:
+A table may hold `enabled`, a boolean, and the Rule's thresholds by name, each an integer from 0 to 2^63-1, SQLite's largest INTEGER; `spider rules show <id>` lists a Rule's thresholds. Anything else stops every Command that reads the settings with `settings_invalid` (exit code 3), before a Crawl requests any URL. `details.errors[].key` is the dotted key, and the hint names the closest Rule id or key when there is one:
 
 ```
 spider rules list

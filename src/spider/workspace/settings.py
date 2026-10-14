@@ -119,14 +119,9 @@ def _suggestion(error: ValidationError, root_model: type[BaseModel]) -> str | No
         if problem["type"] != "extra_forbidden":
             continue
         *parents, unknown = (str(part) for part in problem["loc"])
-        model: Any = root_model
-        for part in parents:
-            # A keyed table's part is an entry's name: the next level is the entry model.
-            entry = keyed_entry(model)
-            field = None if entry is not None else _field(model, part)
-            if entry is None and field is None:
-                return None
-            model = entry if field is None else field.annotation
+        model = _table_at(root_model, parents)
+        if model is None:
+            continue
         # Keys are compared in lower case, so TITLE-TOO-LONG finds title-too-long.
         keys = {
             (field.alias or name).lower(): field.alias or name
@@ -136,6 +131,23 @@ def _suggestion(error: ValidationError, root_model: type[BaseModel]) -> str | No
         if matches:
             return f"Did you mean {'.'.join([*parents, keys[matches[0]]])}?"
     return None
+
+
+def _table_at(root_model: type[BaseModel], parents: list[str]) -> Any:
+    """The table model at a problem's parent keys, or None where a key cannot be followed."""
+    model: Any = root_model
+    for part in parents:
+        # A keyed table's part is an entry's name: the next level is the entry model.
+        entry = keyed_entry(model)
+        if entry is not None:
+            model = entry
+            continue
+        # Any other level that is no table model, such as a list of tables, ends the walk.
+        field = _field(model, part) if hasattr(model, "model_fields") else None
+        if field is None:
+            return None
+        model = field.annotation
+    return model if hasattr(model, "model_fields") else None
 
 
 def _field(model: Any, key: str) -> Any:

@@ -14,10 +14,8 @@ GUIDANCE = ("description", "why_it_matters", "how_to_fix")
 HOME_PAGE = Site({"/": Page(body="<title>Home</title>")})
 
 
-@pytest.fixture(autouse=True)
-def _in_a_workspace(shop: Path) -> None:
-    # spider rules reads the nearest Workspace, so a test never reads the one it runs in.
-    return None
+# spider rules reads the nearest Workspace, so a test never reads the one it runs in.
+pytestmark = pytest.mark.usefixtures("shop")
 
 
 def test_first_rule_in_the_list() -> None:
@@ -68,7 +66,7 @@ def test_disabled_rule_is_listed(shop: Path) -> None:
 
     items = run_cli("rules", "list", "--limit", "50").json()["items"]
 
-    assert [item["enabled"] for item in items if item["id"] == "h1-missing"] == [False]
+    assert [item["id"] for item in items if not item["enabled"]] == ["h1-missing"]
 
 
 def test_misspelt_rule_id(shop: Path) -> None:
@@ -83,6 +81,17 @@ def test_misspelt_rule_id(shop: Path) -> None:
         error["details"]["errors"][0]["key"],
         "title-too-long" in (error["hint"] or ""),
     ) == (3, "settings_invalid", "rules.title-to-long", True)
+
+
+def test_a_rule_table_named_by_its_field_name_is_invalid(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[rules.title_too_long]\nmax_chars = 70\n")
+
+    result = run_cli("rules", "list")
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["hint"]) == (
+        3,
+        "Did you mean rules.title-too-long?",
+    )
 
 
 def test_unknown_key(shop: Path) -> None:

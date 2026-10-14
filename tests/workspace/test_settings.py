@@ -3,13 +3,15 @@
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel, ConfigDict, Field
 
+from spider.output.diagnostics import SpiderError
 from spider.workspace.creation import create_workspace
 from spider.workspace.discovery import resolve_workspace, target_workspace
 from spider.workspace.settings import load_settings
 from spider.workspace.tables import SettingsTables
 from spider.workspace.template import settings_template
-from tests.support.app import EXAMPLE_TABLE, GROUPS_TABLE
+from tests.support.app import EXAMPLE_TABLE, GROUPS_TABLE, example_app, settings_tables
 from tests.support.settings import ExampleSettings
 from tests.support.workspace import TempWorkspace
 
@@ -85,15 +87,16 @@ def test_setting_variables_are_ignored(
 
 
 def test_template_loads_as_defaults(temp_workspace: TempWorkspace) -> None:
-    home, tables = temp_workspace.home, example_tables()
+    # The tool's tables and the fixture app's: every kind of table, rules' named tables too.
+    home, tables = temp_workspace.home, settings_tables(example_app())
     shop = target_workspace(cwd=temp_workspace.root, flag=Path("shop"), home=home)
     create_workspace(shop, settings_template(tables))
     (temp_workspace.root / "empty" / ".spider").mkdir(parents=True)
     empty = resolve_workspace(cwd=temp_workspace.root / "empty", flag=None, home=home)
 
-    from_template = load_settings(shop, tables).table(ExampleSettings)
+    from_template = load_settings(shop, tables).root.model_dump()
 
-    assert from_template == load_settings(empty, tables).table(ExampleSettings)
+    assert from_template == load_settings(empty, tables).root.model_dump()
 
 
 def test_named_entries(temp_workspace: TempWorkspace) -> None:
@@ -106,3 +109,33 @@ def test_named_entries(temp_workspace: TempWorkspace) -> None:
     settings = load_settings(workspace, tables)
 
     assert settings.root.model_dump()["groups"]["blog"]["level"] == "high"
+
+
+class ListedEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level: str = Field("low", description="The level.")
+
+
+class ListedSettings(BaseModel):
+    """Settings with a list of tables, whose keys the closest-key hint cannot follow."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[ListedEntry] = Field([], description="The entries.")
+    level: str = Field("low", description="The level.")
+
+
+def test_a_key_that_cannot_be_followed_keeps_the_hint_of_the_next(
+    temp_workspace: TempWorkspace,
+) -> None:
+    shop = workspace_with_data_folder(temp_workspace)
+    (shop / "spider.toml").write_bytes(b'[listed]\nentries = [{levl = "high"}]\nlevl = "high"\n')
+    workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
+    tables = SettingsTables()
+    tables.register("listed", f"{__name__}:ListedSettings")
+
+    with pytest.raises(SpiderError) as raised:
+        load_settings(workspace, tables)
+
+    assert raised.value.diagnostic.hint == "Did you mean listed.level?"
