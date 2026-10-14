@@ -31,18 +31,43 @@ Categories are snake_case, such as `meta_descriptions`, because they are stored 
 
 ## Reading `spider rules`
 
-`spider rules list` lists the Rules in catalogue order: by category, in the order above, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`. `spider rules` with no arguments runs `spider rules list`; options go after `list`. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `thresholds`, `description`, `why_it_matters` and `how_to_fix`:
+`spider rules list` lists the Rules in catalogue order: by category, in the order above, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`. `spider rules` with no arguments runs `spider rules list`; options go after `list`. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `enabled`, `thresholds`, `description`, `why_it_matters` and `how_to_fix`:
 
 ```
 spider rules list --limit 1
-{"total":…,"items":[{"id":"internal-4xx","category":"response_codes","issue_type":"issue","priority":"high","applies_to":"internal_urls","thresholds":{},"description":"An Internal URL responded with a client error, a status code from 400 to 499.","why_it_matters":"…","how_to_fix":"…"}],"next_cursor":"…"}
+{"total":…,"items":[{"id":"internal-4xx","category":"response_codes","issue_type":"issue","priority":"high","applies_to":"internal_urls","enabled":true,"thresholds":{},"description":"An Internal URL responded with a client error, a status code from 400 to 499.","why_it_matters":"…","how_to_fix":"…"}],"next_cursor":"…"}
 ```
 
-`spider rules show <id>` prints one Rule as a document with the same fields. `thresholds` maps each limit's name to its `value`, `default` and `unit`:
+`spider rules show <id>` prints one Rule as a document with the same fields. `enabled` is false for a Rule that the Workspace turns off, and `thresholds` maps each limit's name to its `value` in the Workspace, its `default` and its `unit`:
 
 ```
 spider rules show title-too-long
-{"id":"title-too-long","category":"titles","issue_type":"opportunity","priority":"medium","applies_to":"internal_pages","thresholds":{"max_chars":{"value":60,"default":60,"unit":"characters"}},…}
+{"id":"title-too-long","category":"titles","issue_type":"opportunity","priority":"medium","applies_to":"internal_pages","enabled":true,"thresholds":{"max_chars":{"value":60,"default":60,"unit":"characters"}},…}
 ```
 
 An id that no Rule has fails with `rule_not_found` (exit code 4), whose hint points to `spider rules list`.
+
+## Settings: `[rules.<id>]`
+
+A table named by a Rule's id in the Workspace's `spider.toml` changes that Rule in the Workspace, as `spider rules` shows it.
+
+Raise a limit, here the title length, from 60 to 70 characters:
+
+```toml
+[rules.title-too-long]
+max_chars = 70
+```
+
+Turn a Rule off, so that no Crawl evaluates it:
+
+```toml
+[rules.h1-missing]
+enabled = false
+```
+
+A table may hold `enabled`, a boolean, and the Rule's thresholds by name, each an integer of at least 0; `spider rules show <id>` lists a Rule's thresholds. Anything else stops every Command that reads the settings with `settings_invalid` (exit code 3), before a Crawl requests any URL. `details.errors[].key` is the dotted key, and the hint names the closest Rule id or key:
+
+```
+spider rules list
+{"level":"error","code":"settings_invalid","message":"The settings file …/spider.toml is invalid.","hint":"Did you mean rules.title-too-long?","details":{"file":"…/spider.toml","errors":[{"key":"rules.title-to-long","message":"Extra inputs are not permitted"}]}}
+```
