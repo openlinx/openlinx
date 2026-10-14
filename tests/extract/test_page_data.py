@@ -117,6 +117,14 @@ def test_a_heading_in_noscript_is_ignored() -> None:
     assert (row.h1_1, row.h1_count) == ("Main", 1)
 
 
+def test_line_break_separates_heading_words() -> None:
+    assert page_row("<h1>Hello<br>World</h1>").h1_1 == "Hello World"
+
+
+def test_block_elements_separate_heading_words() -> None:
+    assert page_row("<h1>One<p>Two</p>Three<span>Four</span></h1>").h1_1 == "One Two ThreeFour"
+
+
 # Fragments that build the documents a parser repairs: unclosed, nested in foreign content,
 # commented out, NUL and stray markup.
 _FRAGMENTS = st.sampled_from(

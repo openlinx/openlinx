@@ -41,7 +41,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [x] 3.2 Drive "Multiple meta descriptions" at seam 4, and add `meta_description_count`, `meta_description_2` and `meta_description_2_length`.
 - [x] 3.3 Drive "Meta keywords" at seam 4, and add `meta_keywords_1` and `meta_keywords_1_length`.
 - [x] 3.4 Drive "Heading text includes nested elements" at seam 4. Add the element-text algorithm (text nodes in document order, without the contents of the skipped elements) and the ten `h1_*` and `h2_*` columns.
-- [ ] 3.5 Drive "Line break separates heading words" at seam 4 (block breaks at `br` and at block-level elements).
+- [x] 3.5 Drive "Line break separates heading words" at seam 4 (block breaks at `br` and at block-level elements).
 - [ ] 3.6 Drive "Absent and empty elements differ" at seam 4.
 - [ ] 3.7 Docs: add the meta description, meta keywords and heading columns to `docs/page-data.md`.
 - [ ] 3.8 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
