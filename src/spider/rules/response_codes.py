@@ -2,6 +2,10 @@
 
 from spider.rules.model import NO_ROWS, Rule
 
+_INTERNAL_4XX_SQL = """SELECT id AS url_id, json_object('status_code', status_code) AS detail
+FROM urls
+WHERE status_code BETWEEN 400 AND 499"""
+
 INTERNAL_4XX = Rule(
     id="internal-4xx",
     category="response_codes",
@@ -17,7 +21,7 @@ INTERNAL_4XX = Rule(
         "Restore the content, redirect the URL with a 301 to the closest equivalent page, or "
         "change the links that point to it. Answer 410 only for content that is gone for good."
     ),
-    reproduce_sql=NO_ROWS,
+    reproduce_sql=_INTERNAL_4XX_SQL,
 )
 INTERNAL_5XX = Rule(
     id="internal-5xx",
