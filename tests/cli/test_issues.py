@@ -36,3 +36,11 @@ def test_filter_values_are_repeatable_and_case_insensitive(temp_workspace: TempW
     result = run_cli("issues", "--type", "ISSUE", "--type", "Warning", "--priority", "High")
 
     assert [item["rule_id"] for item in result.json()["items"]] == ["rule-c", "rule-a"]
+
+
+def test_filter_by_category(temp_workspace: TempWorkspace) -> None:
+    crawl_store(temp_workspace, pages={"https://example.com/a": {"title_count": 0, "h1_count": 0}})
+
+    result = run_cli("issues", "--category", "headings")
+
+    assert [item["rule_id"] for item in result.json()["items"]] == ["h1-missing"]

@@ -18,7 +18,7 @@ Every group ends with a docs task and a review task.
 - [x] 1.2 Drive `Issue list › Item fields` (Services). Verify: red → green; one commit.
 - [x] 1.3 Drive `Issue list › Issues of a running Crawl are computed live` (Services): a `running` Crawl from the factory, with no `affected_urls` rows, read through the reader's live path (`040` task 3.14). Verify: red → green; one commit.
 - [x] 1.4 Drive `Issue list › Filters combine` (CLI). Declare the `issues` Command with `@command_meta(output="list")`, returning a `Page` whose cursor fingerprint holds the resolved crawl id and the normalised filters (design D14). Its values are comma-separated, repeatable and case-insensitive. Verify: red → green; one commit.
-- [ ] 1.5 Drive `Issue list › Filter by category` (CLI). Verify: red → green; one commit.
+- [x] 1.5 Drive `Issue list › Filter by category` (CLI). Verify: red → green; one commit.
 - [ ] 1.6 Drive `Issue list › Unknown Issue Type` (CLI). Verify: red → green; one commit.
 - [ ] 1.7 Drive `Issue detail › A Rule that did not fire` (Services): the detail entry point returns a `Page` with `header` `{"rule": ...}`, read from the Crawl's `rules` table, and its Affected URLs from `040`'s `affected_urls_in` on the same connection (design D14). The detail Command's name waits for the user's decision (design, Open Questions); the service call and the item shape do not depend on it. Verify: red → green; one commit.
 - [ ] 1.8 Drive `Issue detail › Thresholds recorded for the Crawl` (Services). Verify: red → green; one commit.
