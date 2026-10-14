@@ -123,13 +123,17 @@ def _suggestion(error: ValidationError, root_model: type[BaseModel]) -> str | No
         for part in parents:
             # A keyed table's part is an entry's name: the next level is the entry model.
             entry = keyed_entry(model)
-            model = entry if entry is not None else model.model_fields[part].annotation
-        # A key in the settings file is a field's alias when it has one, such as a Rule id.
+            model = entry if entry is not None else _field(model, part).annotation
         keys = [field.alias or name for name, field in model.model_fields.items()]
         matches = difflib.get_close_matches(unknown, keys, n=1)
         if matches:
             return f"Did you mean {'.'.join([*parents, matches[0]])}?"
     return None
+
+
+def _field(model: Any, key: str) -> Any:
+    # A key in the settings file is a field's alias when it has one, such as a Rule id.
+    return next(field for name, field in model.model_fields.items() if (field.alias or name) == key)
 
 
 def _sources(settings_file: Path) -> type[BaseSettings]:

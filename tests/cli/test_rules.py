@@ -76,6 +76,25 @@ def test_misspelt_rule_id(shop: Path) -> None:
     ) == (3, "settings_invalid", "rules.title-to-long", True)
 
 
+def test_unknown_key(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[rules.h1-missing]\nmax_chars = 10\n")
+
+    result = run_cli("rules", "list")
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["details"]["errors"][0]["key"]) == (
+        3,
+        "rules.h1-missing.max_chars",
+    )
+
+
+def test_a_misspelt_threshold_gets_the_closest_name(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[rules.title-too-long]\nmax_char = 70\n")
+
+    error = run_cli("rules", "list").stderr_json_lines()[-1]
+
+    assert error["hint"] == "Did you mean rules.title-too-long.max_chars?"
+
+
 def test_rule_without_thresholds() -> None:
     items = run_cli("rules", "list", "--limit", "50").json()["items"]
 
