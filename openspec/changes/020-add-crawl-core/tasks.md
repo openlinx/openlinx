@@ -254,6 +254,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 9.16 Drive "Post-crawl passes run when the URL limit stops a Crawl" at seam 2.
 - [x] 9.17 Docs: document Resources, Crawl Depth, `--max-depth`, `--max-urls` (no default, what counts) and the dispatch order in `docs/crawling.md`.
 - [x] 9.18 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [ ] 9.19 Fix the review of group 9 (rulings of 2026-10-14), each red first or red by mutation: the frontier waits for every outcome, fallbacks included, before it reads the queue again from the top, so a URL whose unit failed is requested once; a `skipped` `max_depth` row that a Link reaches at a smaller depth is re-queued, and a skip is recorded only on the depth it was decided on; a failure outranks a stop in the stop flag, and the `max_urls_reached` warning is given only for a `max_urls` stop; the engine reads no deeper depth once a stop has ended a depth; 9.9's test checks the whole hint and `details.max_urls`; `docs/crawling.md` and the `max_urls` help say what counts today, and task 14.2 adds the requests of a continued Crawl; a seam-6 table pins every branch of the discovered-URL conflict.
 
 ## 10. robots.txt (widening)
 
@@ -345,7 +346,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 14.1 **Guard:** "A killed Crawl leaves no half-recorded Page", at seam 1, subprocess, killed with `Popen.kill()`. Mark it `slow`.
 - [ ] 14.2 Drive "Continuing a stopped Crawl completes it" at seam 2.
 
-  Done when: the Crawl Service's continue operation (which `060`'s `resume` calls) accepts `stopped` and `failed` Crawls, goes back to `running` through `check_transition`, counts the URL limit over the Crawl's whole life, and inserts the `urls` row of a Seed that has none.
+  Done when: the Crawl Service's continue operation (which `060`'s `resume` calls) accepts `stopped` and `failed` Crawls, goes back to `running` through `check_transition`, counts the URL limit over the Crawl's whole life (saying so in the `max_urls` help and in `docs/crawling.md`), and inserts the `urls` row of a Seed that has none.
 - [ ] 14.3 **Guard:** "Continuing does not request fetched URLs again", at seam 2.
 - [ ] 14.4 Drive "Continuing clears how the Crawl ended" at seam 2, read by a handler registered for the test.
 - [ ] 14.5 Drive "A failed Crawl is continued once its Seed answers" at seam 2. Done when: continuing re-queues `error` and `robots_unreachable` URLs.
