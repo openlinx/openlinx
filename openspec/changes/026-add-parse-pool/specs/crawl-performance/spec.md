@@ -5,7 +5,7 @@ Keep page preparation off the crawl process, so a large Crawl uses several CPU c
 Scenario conventions:
 - `{site}` is the origin of the local fixture site, for example `http://127.0.0.1:8765`.
 - A bare path such as `/about` means `{site}/about`.
-- "An extractor added for the test" is added to `020-add-crawl-core`'s `default_hooks()` and passed to the Crawl Service, as `020`'s design D9 allows.
+- "An extractor added for the test" is added to `020-add-crawl-core`'s `default_hooks()` in `spider.services.hooks`, the composition root, and passed to the Crawl Service, as `020`'s design D9 allows.
 - A test may shorten the preparation deadline through the pool executor's parameter; the scenarios hold for any deadline.
 
 ## ADDED Requirements

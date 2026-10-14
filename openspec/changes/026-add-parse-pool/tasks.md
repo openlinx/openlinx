@@ -7,7 +7,7 @@ Each task below is one vertical TDD slice and one commit. It is done when:
 4. the commit message names the scenario
 
 Seams (docs/testing.md):
-- **[3+6]**: crawl the fixture site through the Crawl Service, with test extractors added to `020`'s `default_hooks()`, then read the documented tables read-only
+- **[3+6]**: crawl the fixture site through the Crawl Service, with test extractors added to `020`'s `default_hooks()` in `spider.services.hooks`, the composition root, then read the documented tables read-only
 - **[CLI]**: seam 1, `CliRunner`
 - **[Subprocess]**: seam 1, a real `spider` process
 
