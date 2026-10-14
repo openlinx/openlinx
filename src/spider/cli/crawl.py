@@ -75,6 +75,7 @@ def crawl(
         int | None,
         typer.Option(
             "--max-urls",
+            min=1,
             help="The most URL requests over the Crawl's whole life; robots.txt requests do "
             "not count. No limit by default.",
             show_default=False,

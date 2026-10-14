@@ -1,7 +1,7 @@
 """The URL limit at the CLI (020-add-crawl-core D10, crawling; seam 1)."""
 
 from tests.fixture_site.plugin import StartSite
-from tests.support.cli import run_cli
+from tests.support.cli import CliResult, run_cli
 from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
@@ -44,3 +44,21 @@ def test_there_is_no_limit_by_default(
     document = run_cli("crawl", server.url("/")).json()
 
     assert (document["state"], document["urls"]["fetched"]) == ("completed", 10)
+
+
+def test_a_limit_below_one_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--max-urls", "0")
+
+    assert (result.exit_code, _error_codes(result)) == (2, ["invalid_value"])
+
+
+def test_a_limit_below_one_in_the_settings_file_is_refused(temp_workspace: TempWorkspace) -> None:
+    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nmax_urls = 0\n")
+
+    result = run_cli("crawl", "http://site.test/")
+
+    assert (result.exit_code, _error_codes(result)) == (3, ["settings_invalid"])
+
+
+def _error_codes(result: CliResult) -> list[str]:
+    return [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]

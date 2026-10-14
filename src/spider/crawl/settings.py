@@ -29,6 +29,7 @@ class CrawlSettings(BaseModel):
     )
     max_urls: int | None = Field(
         None,
+        ge=1,
         description="The most URL requests over the Crawl's whole life, those of a continued "
         "Crawl included; robots.txt requests do not count. No limit when unset.",
     )
