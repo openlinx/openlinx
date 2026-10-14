@@ -220,7 +220,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 8.1 Drive "URLs that differ only in stripped parameters are fetched once" at seam 3.
 - [x] 8.2 Drive "The subdomains shorthand conflicts with a subfolder Scope" at seam 1. Done when: `option_conflict` is declared.
 - [x] 8.3 Drive "A Seed without its trailing slash is rejected" at seam 1. Done when: `subfolder_is_root` is declared, with a hint built from the Seed.
-- [ ] 8.4 Drive "Pages inside the folder are followed" at seam 3+6.
+- [x] 8.4 Drive "Pages inside the folder are followed" at seam 3+6.
 - [ ] 8.5 Drive "Pages outside the folder are checked but not followed" at seam 3+6.
 - [ ] 8.6 Drive "A URL that matches no include pattern is checked but not followed" at seam 3+6.
 - [ ] 8.7 Drive "An invalid pattern is rejected" at seam 1. Done when: an invalid `--include` pattern is `invalid_pattern`, which task 5.1 declared for `--exclude`, before any crawl file is created.
