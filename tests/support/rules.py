@@ -11,9 +11,16 @@ from sqlalchemy import Connection, select
 from spider.crawl.urls import NormalizedUrl
 from spider.store.page_records import PageRow
 from spider.store.pages import write_page
-from spider.store.records import FetchedUrl, NewUrl, ParseError, RuleRow
+from spider.store.records import (
+    ErroredUrl,
+    FetchedUrl,
+    FetchError,
+    NewUrl,
+    ParseError,
+    RuleRow,
+)
 from spider.store.schema import urls
-from spider.store.urls import record_fetched, record_seed
+from spider.store.urls import record_error, record_fetched, record_seed
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, default_rule_rows
@@ -102,6 +109,19 @@ def responded(status_code: int) -> Callable[[int], UrlUnit]:
             fetched_at=AT,
             response_time_ms=1,
             parsed=False,
+        ),
+        {},
+    )
+
+
+def failed(fetch_error: FetchError) -> Callable[[int], UrlUnit]:
+    """An outcome: the URL's request got no HTTP response, for this reason."""
+    return lambda url_id: record_error(
+        ErroredUrl(
+            url_id=url_id,
+            fetch_error=fetch_error,
+            fetch_error_message=f"The request ended with {fetch_error}.",
+            fetched_at=AT,
         ),
         {},
     )

@@ -8,6 +8,9 @@ WHERE is_internal = 1 AND status_code BETWEEN 400 AND 499"""
 _INTERNAL_5XX_SQL = """SELECT id AS url_id, json_object('status_code', status_code) AS detail
 FROM urls
 WHERE is_internal = 1 AND status_code BETWEEN 500 AND 599"""
+_INTERNAL_NO_RESPONSE_SQL = """SELECT id AS url_id, json_object('error', fetch_error) AS detail
+FROM urls
+WHERE is_internal = 1 AND fetch_state = 'error'"""
 
 INTERNAL_4XX = Rule(
     id="internal-4xx",
@@ -43,5 +46,24 @@ INTERNAL_5XX = Rule(
     ),
     reproduce_sql=_INTERNAL_5XX_SQL,
 )
+INTERNAL_NO_RESPONSE = Rule(
+    id="internal-no-response",
+    category="response_codes",
+    issue_type="issue",
+    priority="high",
+    applies_to="internal_urls",
+    description=(
+        "An Internal URL got no HTTP response: a timeout, or a DNS, connection or TLS error."
+    ),
+    why_it_matters=(
+        "Visitors and search engines that follow a link to the URL get nothing at all, and a "
+        "site that often fails to answer is crawled less."
+    ),
+    how_to_fix=(
+        "Look up the reason in detail.error: a timeout points to a slow page or server, a DNS "
+        "or TLS error to the domain's set-up. Fix it, then request the URL again."
+    ),
+    reproduce_sql=_INTERNAL_NO_RESPONSE_SQL,
+)
 
-RULES = (INTERNAL_4XX, INTERNAL_5XX)
+RULES = (INTERNAL_4XX, INTERNAL_5XX, INTERNAL_NO_RESPONSE)
