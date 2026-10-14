@@ -12,6 +12,7 @@ from spider.crawl.hooks import UrlResult
 from spider.crawl.links import DiscoveredLink
 from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
+from spider.crawl.robots_loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision, apex_seed_named_by_page
 from spider.crawl.urls import NormalizedUrl, url_host
 from spider.naming import APP_NAME
@@ -120,11 +121,12 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             strip_params=context.strip_params,
         )
     )
+    robots = RobotsLoader(context.fetcher, limits)
     checks: set[asyncio.Task[None]] = set()
     depth: int | None = 0
     try:
         while depth is not None:
-            await _crawl_depth(context, outcomes, limits, checks, depth)
+            await _crawl_depth(context, outcomes, limits, robots, checks, depth)
             # A stop cancels the checks in flight: the sweep below would wait for them.
             if context.stop.is_set:
                 break
@@ -148,6 +150,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         context.stop.set("write_failed", closed.__cause__ or closed)
     finally:
         await _cancel_all(checks)
+        await robots.close()
     await outcomes.settled()
     limit = limits.limit_reached()
     # Only once every outcome is in: a failure among them outranks the stop.
@@ -159,6 +162,7 @@ async def _crawl_depth(
     context: CrawlContext,
     outcomes: _Outcomes,
     limits: RequestLimits,
+    robots: RobotsLoader,
     checks: set[asyncio.Task[None]],
     depth: int,
 ) -> None:
@@ -180,7 +184,9 @@ async def _crawl_depth(
                     limits.task_ended()
                     break
                 decision = context.scope.decide(queued.url)
-                task = asyncio.create_task(_crawl_url(context, outcomes, limits, queued, decision))
+                task = asyncio.create_task(
+                    _crawl_url(context, outcomes, limits, robots, queued, decision)
+                )
                 # A check never holds the barrier (design D3); the sweep in run_crawl reads
                 # what one finds after its depth has closed.
                 tasks = checks if _is_check(queued, decision) else running
@@ -212,11 +218,12 @@ async def _crawl_url(
     context: CrawlContext,
     outcomes: _Outcomes,
     limits: RequestLimits,
+    robots: RobotsLoader,
     queued: QueuedUrl,
     decision: ScopeDecision,
 ) -> None:
     try:
-        unit = await _unit_of(context, limits, queued, decision)
+        unit = await _unit_of(context, limits, robots, queued, decision)
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
         if unit is not None:
             await outcomes.submit(queued, unit)
@@ -225,7 +232,11 @@ async def _crawl_url(
 
 
 async def _unit_of(
-    context: CrawlContext, limits: RequestLimits, queued: QueuedUrl, decision: ScopeDecision
+    context: CrawlContext,
+    limits: RequestLimits,
+    robots: RobotsLoader,
+    queued: QueuedUrl,
+    decision: ScopeDecision,
 ) -> UrlUnit | None:
     """The unit that records the URL's final state, with its handlers' rows, or None when the
     URL limit refuses its request, which leaves it queued; `decision` is taken once, at
@@ -238,6 +249,8 @@ async def _unit_of(
             SkippedUrl(queued.id, skip_reason, queued.crawl_depth, _handler_rows(context, skipped)),
             row_writers,
         )
+    # Before the URL's own host slot, which the robots.txt request of its origin takes.
+    await robots.robots_txt(queued.url)
     async with limits.host(url_host(queued.url)), limits.request():
         if not limits.start_request():
             return None
