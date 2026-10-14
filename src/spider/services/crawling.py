@@ -155,6 +155,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         cwd=request.cwd,
         # Every registered table, resolved (design D11).
         config=settings.root.model_dump(mode="json"),
+        scope=scope.to_json(),
         secret_names=request.secret_names,
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,

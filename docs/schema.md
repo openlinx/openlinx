@@ -75,6 +75,7 @@ The Crawl's metadata, in exactly one row.
 | `id` | TEXT | no | PK | | | The crawl id. |
 | `crawl_mode` | TEXT | no | | | `spider`, `list`, `sitemap` | How the Crawl finds URLs. |
 | `section_crawl` | INTEGER | no | | `boolean` | | 1 for a Section Crawl, whose Scope is one part of a site, otherwise 0. |
+| `scope` | TEXT | no | | `json` | | The resolved Scope, as an object of mode, hosts, folder, include and exclude. |
 | `state` | TEXT | no | | | `running`, `stopped`, `completed`, `failed`, `interrupted` | The Crawl State. |
 | `started_at` | TEXT | no | | `timestamp` | | When the Crawl started. |
 | `completed_at` | TEXT | yes | | `timestamp` | | When the state became completed; NULL in every other state. |

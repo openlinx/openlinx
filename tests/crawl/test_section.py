@@ -1,11 +1,17 @@
 """Scope over HTTP and Section Crawls (020-add-crawl-core D4, crawling; seam 3+6)."""
 
+import json
+
+from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.cli import run_cli
-from tests.support.crawling import crawled
+from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
+
+# The fixture's other.test, which these Crawls never link to.
+NO_OTHER_SITE = Site(routes={})
 
 
 def test_pages_inside_the_folder_are_followed(
@@ -91,3 +97,21 @@ def test_exclude_patterns_alone_do_not_make_a_section_crawl(
     result = run_cli("crawl", server.url("/"), "--exclude", "/tag/")
 
     assert (result.exit_code, result.json()["section_crawl"]) == (0, False)
+
+
+def test_a_subfolder_scope_is_recorded(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(Site(routes={"/blog/": Page(body="<p>Blog</p>")}), NO_OTHER_SITE)
+
+    result = crawl_result(
+        "http://site.test/blog/", resolver=hosts.resolver, scope="subfolder", exclude=["/draft"]
+    )
+
+    assert json.loads(crawl_row(result.crawl_file)["scope"]) == {
+        "mode": "subfolder",
+        "hosts": ["site.test", "www.site.test"],
+        "folder": "/blog/",
+        "include": [],
+        "exclude": ["/draft"],
+    }

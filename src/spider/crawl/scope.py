@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 from ipaddress import IPv4Address
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from spider.crawl.urls import NormalizedUrl, url_host, url_path
 from spider.store.records import SkipReason
@@ -27,6 +27,7 @@ class ScopeDecision:
 class ScopeRules:
     # In order: the Seed's host, then its www host, as the recorded Scope lists them.
     seed_hosts: tuple[str, ...]
+    mode: ScopeKind = "host"
     # Filled with --scope subdomains only: a host is internal when its registrable domain is one.
     registrable_domains: frozenset[str] = frozenset()
     folder: str | None = None
@@ -37,6 +38,17 @@ class ScopeRules:
     def section_crawl(self) -> bool:
         # --exclude alone narrows a whole-site Crawl; it makes no Section Crawl.
         return self.folder is not None or bool(self.include)
+
+    def to_json(self) -> dict[str, Any]:
+        """As crawl.scope records it (design D18)."""
+        return {
+            "mode": self.mode,
+            # An IP address or a single label has no registrable domain to list.
+            "hosts": sorted(self.registrable_domains) or list(self.seed_hosts),
+            "folder": self.folder,
+            "include": [pattern.pattern for pattern in self.include],
+            "exclude": [pattern.pattern for pattern in self.exclude],
+        }
 
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
         host = _without_trailing_dot(url_host(url))
@@ -66,6 +78,7 @@ def scope_rules(
     path = url_path(seed)
     return ScopeRules(
         seed_hosts=(host, *www),
+        mode=scope,
         registrable_domains=frozenset({domain})
         if scope == "subdomains" and domain
         else frozenset(),

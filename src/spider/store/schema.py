@@ -107,6 +107,12 @@ crawl = public_table(
         comment="1 for a Section Crawl, whose Scope is one part of a site, otherwise 0.",
     ),
     Column(
+        "scope",
+        Json,
+        nullable=False,
+        comment="The resolved Scope, as an object of mode, hosts, folder, include and exclude.",
+    ),
+    Column(
         "state",
         Text,
         nullable=False,
