@@ -185,22 +185,27 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 7. Robots directives and Link following (widening)
 
-- [ ] 7.1 Drive "Meta robots directives are read case-insensitively" at seam 4. Done when: the robots directives parser is a pure function that `030` imports, whose fields carry `030`'s column names (design D6).
-- [ ] 7.2 Drive "A header for another crawler does not apply" at seam 4.
-- [ ] 7.3 Drive "A header for the robots user-agent token applies" at seam 4.
-- [ ] 7.4 Drive "none means noindex and nofollow" at seam 4.
-- [ ] 7.5 Drive "A directive with a value is not a user-agent prefix" at seam 4.
-- [ ] 7.6 **Guard:** "The robots directives parser accepts any values", as a hypothesis property at seam 4.
-- [ ] 7.7 Drive "A meta refresh target is followed" at seam 3.
-- [ ] 7.8 Drive "amphtml targets are not requested" at seam 3+6.
-- [ ] 7.9 Drive "A canonical in an HTTP header is followed" and "An HTTP Refresh target is followed" at seam 3, a pair. Done when: the HTTP `Link` and `Refresh` headers of in-Scope 2xx responses are read, parsed or not.
-- [ ] 7.10 Drive "Links on an error page are not followed" at seam 3+6. Done when: only in-Scope 2xx HTML responses are parsed. The 2xx and HTML checks exist since group 4's review, so this may pass on its first run; then it shows its red by a mutation, as a guard does.
-- [ ] 7.11 Drive "A nofollow link is not requested" at seam 3+6.
-- [ ] 7.12 Drive "A page-level nofollow applies to every hyperlink" at seam 3+6.
-- [ ] 7.13 Drive "A nofollow target reached through a followed Link is fetched" at seam 3+6.
+- [x] 7.1 Drive "Meta robots directives are read case-insensitively" at seam 4. Done when: the robots directives parser is a pure function that `030` imports, whose fields carry `030`'s column names (design D6).
+- [x] 7.2 Drive "A header for another crawler does not apply" at seam 4.
+- [x] 7.3 Drive "A header for the robots user-agent token applies" at seam 4.
+- [x] 7.4 Drive "none means noindex and nofollow" at seam 4.
+- [x] 7.5 Drive "A directive with a value is not a user-agent prefix" at seam 4.
+- [x] 7.6 **Guard:** "The robots directives parser accepts any values", as a hypothesis property at seam 4.
+- [x] 7.7 Drive "A meta refresh target is followed" at seam 3.
+- [x] 7.8 Drive "amphtml targets are not requested" at seam 3+6.
+- [x] 7.9 Drive "A canonical in an HTTP header is followed" and "An HTTP Refresh target is followed" at seam 3, a pair. Done when: the HTTP `Link` and `Refresh` headers of in-Scope 2xx responses are read, parsed or not.
+- [x] 7.10 Drive "Links on an error page are not followed" at seam 3+6. Done when: only in-Scope 2xx HTML responses are parsed. The 2xx and HTML checks exist since group 4's review, so this may pass on its first run; then it shows its red by a mutation, as a guard does.
+- [x] 7.11 Drive "A nofollow link is not requested" at seam 3+6.
+- [x] 7.12 Drive "A page-level nofollow applies to every hyperlink" at seam 3+6.
+- [ ] 7.13 Drive "A nofollow target reached through a followed Link is fetched" at seam 3+6. Done when: the re-queue takes the followed Link's `crawl_depth`, `discovered_via` and `found_on_url_id` (design D5), the replay test of `spider.store.urls` covers a re-queue, and the descriptions of `discovered_via` and `found_on_url_id` in `docs/schema.md` say so.
 - [ ] 7.14 Drive "Nofollow Links are followed on request" at seam 3+6.
-- [ ] 7.15 Docs: add the robots directives rules, nofollow handling and which responses are parsed to `docs/crawling.md`.
-- [ ] 7.16 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [x] 7.15 Perf: record each URL that a Page links to once. A Page of about 390 hyperlinks names about 310 distinct URLs, and the executemany of their `INSERT … ON CONFLICT` rows is about 80% of its unit in 026's direct-mode benchmark (about 24 URLs/s). The engine collapses a Page's Links to one row per URL after the follow decision: the URL is followed when any of its occurrences is, and its `discovered_via` is that of its first followed occurrence in document order, or of its first occurrence when none is followed (design D5), so 7.11–7.13 never let a nofollow Link hide a followed one. Done when: a test at seam 4 on the discovered-URL function pins it, and the commit gives the numbers before and after.
+- [x] 7.16 Perf: an enumeration's CHECK lists its values as equalities joined by OR. SQLite compiles an `IN` list of more than two values into an ephemeral index, which an executemany builds again for every row: five for each `urls` row, about 118 µs per row through SQLAlchemy, and slower after about 70,000 rows (026's diagnosis of 2026-10-14). Done when: a guard refuses an `IN` list of more than two values in the CHECKs of a new crawl file, `public_table` writes the OR chain (a flag keeps `IN (0, 1)`), ADR-0005's consequences state the rule, and the commit gives the µs per row before and after.
+- [x] 7.17 Seam: the page executor's lifecycle and its backlog, for `026`'s parse pool (design D7, D9, D15; the rulings). `PageExecutor` gains `async start(settings)`, `async close()` and `backlog`; the engine calls `start` once, with the final Scope, right after the Seed is recorded (`022` moves that one call to the end of the Seed's Redirect Chain); `default_page_executor()` in `spider.services.hooks` selects the in-process executor, `start_crawl` takes `pages=` as it takes `resolver=`, and `_crawl_context` closes the executor, also when the Crawl fails. `RequestLimits` holds the global request cap around each request, after the host's slot, and bounds the URL tasks in flight by the cap plus the executor's backlog. Done when: a fake executor passed as `pages=` gets `start` once, before the Seed's preparation, and `close` at the end, also when the Crawl fails; the two caps are table-tested at seam 4; the concurrency scenarios stay green.
+- [ ] 7.18 Fix: a certificate failure is `tls_error`, not `connection_error`. aiohttp's `ClientConnectorCertificateError` is both a `ClientSSLError` and a `ClientConnectorError`, and the Fetcher's mapping met only the second, so an Internal HTTPS site with a bad certificate would count toward the network pause (D16) and end `site_unreachable`, the case its `tls_error` exclusion was ruled for. Done when: a `ClientSSLError` branch comes first, and a seam-4 table maps every aiohttp error the Fetcher can meet to its `fetch_error`, so a subclass caught by an earlier branch fails a test (`022` task 6.2 extends the table).
+- [ ] 7.19 Drive "A robots meta inside noscript does not apply" at seam 4. lexbor parses with scripting off, so a `<meta>` inside `<noscript>` is an element of its tree; browsers and Google's renderer parse with scripting on, where the content of `<noscript>` is text. Done when: a test pins the user's decision that the Links of a body `<noscript>` are discovered and followed (design D5).
+- [ ] 7.20 Docs: add the robots directives rules, nofollow handling and which responses are parsed to `docs/crawling.md`.
+- [ ] 7.21 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Scope over HTTP and Section Crawls (widening)
 

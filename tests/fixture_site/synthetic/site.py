@@ -105,7 +105,7 @@ DEFAULT_SHARES: Mapping[Fault, float] = {
 }
 # Their Links are lost: the Page is not parsed, or its preparation never ends.
 LOSES_LINKS = frozenset({Fault.NESTED_DIVS, Fault.ENDS_WORKER, Fault.SERVER_ERROR, Fault.RESET})
-FETCHED = {"fetch_state": "fetched", "fetch_error": None}
+FETCHED = {"fetch_state": "fetched", "fetch_error": None, "skip_reason": None}
 PARSED = {**FETCHED, "status_code": 200, "parsed": 1, "parse_error": None}
 # What each fault should leave in `urls`; the Pages over the deadline and those that end their
 # worker are contained only by 026's pool.
@@ -121,6 +121,7 @@ OUTCOMES: Mapping[Fault, Mapping[str, Any]] = {
     Fault.RESET: {
         "fetch_state": "error",
         "fetch_error": "connection_error",
+        "skip_reason": None,
         "status_code": None,
         "parsed": 0,
         "parse_error": None,
@@ -152,8 +153,9 @@ MALFORMED = b'<div class="open><p>nul\x00byte<table><td>cell<b><i>misnested</b><
 class Link(NamedTuple):
     target: str
     type: str
-    element: str
-    attribute: str
+    # None for a Link that a response header declares.
+    element: str | None
+    attribute: str | None
     anchor: str | None = None
 
 
@@ -342,7 +344,7 @@ class SyntheticSite:
         numbers = _stream(self.seed, n, "page")
         refresh = self._http_refresh(n)
         if refresh is not None:
-            page.links.append(Link(refresh, "http_refresh", "", "Refresh"))
+            page.links.append(Link(refresh, "http_refresh", None, None))
         page.add('<!doctype html>\n<html lang="en"><head><meta charset="utf-8">')
         if fault is Fault.ENDS_WORKER:
             page.add(END_WORKER)

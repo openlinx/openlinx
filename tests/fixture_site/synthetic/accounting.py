@@ -19,7 +19,9 @@ from tests.fixture_site.synthetic.site import (
 )
 
 CLEAN = "clean"
-URL_ROWS = "SELECT url, fetch_state, fetch_error, status_code, parsed, parse_error FROM urls"
+URL_ROWS = (
+    "SELECT url, fetch_state, fetch_error, skip_reason, status_code, parsed, parse_error FROM urls"
+)
 MISSING_OUTCOME: Mapping[str, Any] = {
     **FETCHED,
     "status_code": 404,
@@ -33,7 +35,20 @@ EXTERNAL_OUTCOME: Mapping[str, Any] = {
     "parsed": 0,
     "parse_error": None,
 }
-_POOL_OUTCOMES = {"missing": MISSING_OUTCOME, "external": EXTERNAL_OUTCOME}
+# Recorded, never requested: amphtml, mobile and misc Links are not followed (020 D5).
+NOT_FOLLOWED_OUTCOME: Mapping[str, Any] = {
+    "fetch_state": "skipped",
+    "fetch_error": None,
+    "skip_reason": "link_type_not_followed",
+    "status_code": None,
+    "parsed": 0,
+    "parse_error": None,
+}
+POOL_OUTCOMES = {
+    "missing": MISSING_OUTCOME,
+    "external": EXTERNAL_OUTCOME,
+    "not_followed": NOT_FOLLOWED_OUTCOME,
+}
 # Wrong rows named in the problems, at most.
 EXAMPLES = 10
 
@@ -42,6 +57,7 @@ class UrlRow(NamedTuple):
     url: str
     fetch_state: str
     fetch_error: str | None
+    skip_reason: str | None
     status_code: int | None
     parsed: int
     parse_error: str | None
@@ -113,9 +129,9 @@ def account(
         elif found is not None:
             kind = found[0].kind
             pooled[kind] += 1
-            if kind not in _POOL_OUTCOMES:
+            if kind not in POOL_OUTCOMES:
                 continue
-            expected = _POOL_OUTCOMES[kind]
+            expected = POOL_OUTCOMES[kind]
         else:
             unknown += 1
             if unknown <= EXAMPLES:
@@ -169,13 +185,8 @@ def _belongs(pool: Pool, index: int, url: str, *, on_site: bool) -> bool:
 
 
 def _outcome(row: UrlRow) -> dict[str, Any]:
-    return {
-        "fetch_state": row.fetch_state,
-        "fetch_error": row.fetch_error,
-        "status_code": row.status_code,
-        "parsed": row.parsed,
-        "parse_error": row.parse_error,
-    }
+    # Every column but the URL, so an outcome column is added to UrlRow alone.
+    return {field: getattr(row, field) for field in UrlRow._fields if field != "url"}
 
 
 def _tally_problems(site: SyntheticSite, tally: Tally) -> list[str]:

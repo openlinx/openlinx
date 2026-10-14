@@ -303,7 +303,7 @@ def test_the_urls_the_pages_reference_are_the_url_totals_of_the_manifest(
 def test_the_manifest_names_the_outcome_each_fault_leaves_in_urls() -> None:
     outcomes = SyntheticSite(seed=1, pages=10).manifest()["outcomes"]
 
-    fetched = {"fetch_state": "fetched", "fetch_error": None}
+    fetched = {"fetch_state": "fetched", "fetch_error": None, "skip_reason": None}
     assert {kind: outcomes[kind] for kind in LOSES_LINKS} == {
         "nested_divs": {**fetched, "status_code": 200, "parsed": 0, "parse_error": "parse_timeout"},
         "ends_worker": {
@@ -316,6 +316,7 @@ def test_the_manifest_names_the_outcome_each_fault_leaves_in_urls() -> None:
         "reset": {
             "fetch_state": "error",
             "fetch_error": "connection_error",
+            "skip_reason": None,
             "status_code": None,
             "parsed": 0,
             "parse_error": None,

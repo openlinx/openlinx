@@ -32,7 +32,7 @@ SITE = Site(
 | Route | Answers with |
 |---|---|
 | `Page(file=... \| body=..., template=False)` | 200 and the file's exact bytes, or the body as UTF-8. The content type comes from the file extension through a fixed table (never `mimetypes`); a `body` page is `text/html; charset=utf-8`. With `template=True`, every `{{base_url}}` becomes the server's base URL. |
-| `Status(code)` | That status and an empty body. |
+| `Status(code, body=None)` | That status and an empty body, or the body as UTF-8 with `text/html; charset=utf-8`, as an error page. |
 | `Redirect(location, status=301)` | That status and `Location` exactly as declared, never made absolute. `redirect_chain(prefix, hops, to)` builds `<prefix>1` → … → `<prefix><hops>` → `to`. |
 | `Robots(text)` | 200, `text/plain; charset=utf-8` and the text. |
 | `Sitemap(paths)` | 200, `application/xml` and a `<urlset>` with one absolute `<loc>` per path. |

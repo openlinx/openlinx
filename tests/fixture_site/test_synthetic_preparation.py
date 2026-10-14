@@ -4,6 +4,7 @@ import multiprocessing
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from spider.crawl.directives import RobotsDirectives
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.pages import PageSettings, PreparedPage, prepare_page
 from spider.crawl.scope import ScopeRules, scope_rules
@@ -45,6 +46,7 @@ SITE = SyntheticSite(
     },
 )
 SCOPE = scope_rules(NormalizedUrl(f"{BASE}/"))
+SETTINGS = PageSettings(SCOPE)
 
 
 def first(predicate: Callable[[int], bool]) -> int:
@@ -80,8 +82,12 @@ def response(n: int) -> FetchResult:
     )
 
 
-def projected(page: PreparedPage) -> list[tuple[object, ...]]:
-    return [(link.target, link.type, link.element, link.attribute) for link in page.links]
+def projected(page: PreparedPage) -> tuple[list[tuple[object, ...]], RobotsDirectives]:
+    links: list[tuple[object, ...]] = [
+        (link.target, link.type, link.element, link.attribute, link.declared_in)
+        for link in page.links
+    ]
+    return (links, page.directives)
 
 
 def url(n: int) -> NormalizedUrl:
@@ -91,19 +97,18 @@ def url(n: int) -> NormalizedUrl:
 def test_the_page_model_is_what_preparing_the_page_gives() -> None:
     kinds = samples()
 
-    prepared = {kind: projected(prepared_page(SITE, url(n), SCOPE)) for kind, n in kinds.items()}
+    prepared = {kind: projected(prepared_page(SITE, url(n), SETTINGS)) for kind, n in kinds.items()}
     parsed = {
-        kind: projected(prepare_page(url(n), response(n), PageSettings(SCOPE)))
-        for kind, n in kinds.items()
+        kind: projected(prepare_page(url(n), response(n), SETTINGS)) for kind, n in kinds.items()
     }
 
     assert prepared == parsed
-    assert all(len(links) > 350 for links in parsed.values())
+    assert all(len(links) > 350 for links, _ in parsed.values())
 
 
 def test_a_page_whose_links_are_lost_is_prepared_with_its_expected_failure() -> None:
     prepared = {
-        fault: prepared_page(SITE, url(with_fault(fault)), SCOPE)
+        fault: prepared_page(SITE, url(with_fault(fault)), SETTINGS)
         for fault in LOSES_LINKS
         # The others never reach preparation: their response is a 500 or a reset.
         if OUTCOMES[fault]["status_code"] == 200

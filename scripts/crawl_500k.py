@@ -36,7 +36,6 @@ from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import FetchFailure, FetchResult, Request
 from spider.crawl.hooks import Hooks
 from spider.crawl.pages import PageSettings, PreparedPage
-from spider.crawl.scope import ScopeRules
 from spider.crawl.stop import StopSignal
 from spider.crawl.urls import NormalizedUrl
 from spider.crawl.warning_log import WarningLog
@@ -77,9 +76,9 @@ BASELINE_SHARES: Mapping[Fault, float] = {
     Fault.NESTED_DIVS: 0.0,
     Fault.ENDS_WORKER: 0.0,
 }
-# 020 records every hyperlink, and checks the External ones: Resources come with its task 9.4,
-# and amphtml, mobile and misc targets with 7.8.
-RECORDED_POOLS = frozenset({"missing", "external"})
+# 020 records every hyperlink and checks the External ones, and records amphtml, mobile and misc
+# targets as not followed; Resources come with its task 9.4.
+RECORDED_POOLS = frozenset({"missing", "external", "not_followed"})
 DIRECT_SEED = "http://synthetic.test/"
 # psutil reports only the nominal clock on Windows; this counter scales it, turbo included.
 PERFORMANCE_CLASS = "Win32_PerfFormattedData_Counters_ProcessorInformation"
@@ -253,26 +252,33 @@ class ModelFetcher:
 class ModelExecutor:
     """The direct mode's page preparation: the Page model, never the HTML (design D6)."""
 
-    def __init__(self, site: SyntheticSite, scope: ScopeRules, *, new_urls_only: bool) -> None:
+    backlog = 0
+
+    def __init__(self, site: SyntheticSite, *, new_urls_only: bool) -> None:
         self._site = site
-        self._scope = scope
-        # The ceiling of 026 D6's url -> id cache: a hyperlink to a URL this process has seen
+        self._settings: PageSettings | None = None
+        # The ceiling of 026 D6's url -> id cache: a Link to a URL this process has seen
         # already never reaches the insert. Bench-only; the urls rows come out the same.
         self._seen: set[str] | None = set() if new_urls_only else None
 
+    async def start(self, settings: PageSettings) -> None:
+        self._settings = settings
+
     async def prepare(self, url: NormalizedUrl, response: FetchResult) -> PreparedPage:
-        page = prepared_page(self._site, url, self._scope)
+        if self._settings is None:
+            raise RuntimeError("the model executor prepares a Page before it is started")
+        page = prepared_page(self._site, url, self._settings)
         seen = self._seen
         if seen is None:
             return page
-        links = []
-        for link in page.links:
-            if link.type == "hyperlink":
-                if link.target in seen:
-                    continue
-                seen.add(link.target)
-            links.append(link)
-        return msgspec.structs.replace(page, links=tuple(links))
+        # Only the URLs earlier Pages recorded, which the insert's ON CONFLICT would drop: within
+        # a Page, 020's discovery chooses between a URL's Links itself.
+        links = tuple(link for link in page.links if link.target not in seen)
+        seen.update(link.target for link in page.links)
+        return msgspec.structs.replace(page, links=links)
+
+    async def close(self) -> None:
+        pass
 
 
 def plan(folder: Path, seed: str, concurrency: int) -> CrawlPlan:
@@ -317,7 +323,7 @@ def direct(folder: Path, site: SyntheticSite, concurrency: int, *, new_urls_only
                 reporter=log,
                 writer=writer,
                 fetcher=ModelFetcher(site, clock),
-                pages=ModelExecutor(site, crawl_plan.scope, new_urls_only=new_urls_only),
+                pages=ModelExecutor(site, new_urls_only=new_urls_only),
                 hooks=benchmark_hooks(),
                 stop=StopSignal(),
             )

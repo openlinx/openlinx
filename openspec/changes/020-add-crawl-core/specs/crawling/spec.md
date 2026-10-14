@@ -261,7 +261,7 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 - **Later Link types:** the Link type enumeration SHALL also list, from v0.1, the types that later releases discover: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap), both from `024-add-list-and-sitemap-modes` (v0.2), and `javascript_redirect` (v1.1, with JavaScript rendering).
 
 - **Link types that are not requested:** a URL reached only through them SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`.
-- **Provenance:** a URL's `discovered_via` SHALL be how it was first found: `seed`, or the Link type. `found_on_url_id` SHALL point to the URL whose response revealed it. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
+- **Provenance:** a URL's `discovered_via` SHALL be how it was first found: `seed`, or the Link type. `found_on_url_id` SHALL point to the URL whose response revealed it. For a URL reached through a Link that is not followed and later through one that is, its `discovered_via`, `found_on_url_id` and `crawl_depth` SHALL be those of the first followed Link. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
 
 #### Scenario: A relative link is resolved against the base href
 - **WHEN** the Links of `http://site.test/` are extracted from `<base href="http://site.test/docs/"><a href="guide">Guide</a>`
@@ -320,7 +320,7 @@ The Crawl SHALL read the robots directives of every parsed response with one par
 
 These names are the column names of `030-add-page-data`, which stores the values.
 
-Directives SHALL be comma-separated tokens, compared case-insensitively. A header value has a user-agent prefix when it starts with `<name>:` and `<name>` is not `unavailable_after`, `max-snippet`, `max-image-preview` or `max-video-preview`. A prefixed header value SHALL apply only when `<name>` equals the robots user-agent token, compared case-insensitively. `<meta>` elements named after a specific crawler SHALL NOT be read.
+Directives SHALL be comma-separated tokens, compared case-insensitively. A header value has a user-agent prefix when it starts with `<name>:` and `<name>` is not `unavailable_after`, `max-snippet`, `max-image-preview` or `max-video-preview`. A prefixed header value SHALL apply only when `<name>` equals the robots user-agent token, compared case-insensitively. `<meta>` elements named after a specific crawler SHALL NOT be read, nor a `<meta>` element inside `<noscript>`: a browser that runs scripts, as Google's renderer does, reads the content of `<noscript>` as text.
 
 #### Scenario: Meta robots directives are read case-insensitively
 - **WHEN** the directives are read from `<meta name="ROBOTS" content="NOINDEX, follow">`
@@ -337,6 +337,10 @@ Directives SHALL be comma-separated tokens, compared case-insensitively. A heade
 #### Scenario: none means noindex and nofollow
 - **WHEN** the directives are read from the header `X-Robots-Tag: none`
 - **THEN** `x_robots_tag_noindex` and `x_robots_tag_nofollow` are both true
+
+#### Scenario: A robots meta inside noscript does not apply
+- **WHEN** the directives are read from `<head><noscript><meta name="robots" content="noindex"></noscript></head>`
+- **THEN** `meta_robots` is null and `meta_robots_noindex` is false
 
 #### Scenario: A directive with a value is not a user-agent prefix
 - **WHEN** the directives are read from the header `X-Robots-Tag: unavailable_after: 25 Jun 2030 15:00:00 PST, noindex`
@@ -626,8 +630,8 @@ The crawl store SHALL hold one row for each distinct normalised URL of the Crawl
 | `is_internal` | INTEGER | no | boolean | 1 for an Internal URL, 0 for an External URL |
 | `in_scope` | INTEGER | no | boolean | 1 when the URL is inside the Scope, so it may be followed |
 | `crawl_depth` | INTEGER | no | | Crawl Depth; 0 for Seeds |
-| `discovered_via` | TEXT | no | listed below | How the URL was first found |
-| `found_on_url_id` | INTEGER, references `urls.id` | yes | | The URL whose response first revealed this one; NULL for Seeds |
+| `discovered_via` | TEXT | no | listed below | How the URL was first found, through a followed Link once one has reached it |
+| `found_on_url_id` | INTEGER, references `urls.id` | yes | | The URL whose response first revealed this one, through a followed Link once one has reached it; NULL for Seeds |
 | `fetch_state` | TEXT | no | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested |
 | `skip_reason` | TEXT | yes | listed below | Why a skipped URL was not requested |
 | `blocked_by_robots_txt` | INTEGER | yes | boolean | 1 when robots.txt disallows the URL for the robots user-agent token (also with `--ignore-robots`), 0 when it allows it; NULL when not checked |
