@@ -36,13 +36,28 @@ Labels are those of the WHATWG Encoding Standard, and an unknown label is skippe
 
 ## Text
 
-Every text column is whitespace-normalised: each run of ASCII whitespace (tab, line feed, form feed, carriage return and space) becomes one space, and ASCII whitespace at either end is removed. A no-break space is text, so it is kept. A length is counted in Unicode code points of the normalised text.
+The *text* of an element, such as a heading, is its text nodes in document order, with character references decoded. The content of `script`, `style`, `noscript`, `template`, `iframe`, `svg` and `math` elements is left out, since it is no text that the Page shows. A `br` element, and the start and end of every block-level element (such as `p`, `div`, `li` or `td`; the spec lists them all), give a break, so `<h1>Hello<br>World</h1>` reads `Hello World`, while an inline element such as `span` joins the text around it.
+
+Every text column is whitespace-normalised, and breaks become spaces: each run of ASCII whitespace (tab, line feed, form feed, carriage return and space) becomes one space, and ASCII whitespace at either end is removed. A no-break space is text, so it is kept. A length is counted in Unicode code points of the normalised text.
 
 ## Titles
 
 - **`title_count`** is the number of `<title>` elements without an `svg`, `math` or `noscript` ancestor. A title inside an SVG image or a MathML formula names the image or the formula, not the Page; one inside `<foreignObject>` of an SVG image is left out too. Nothing inside `noscript` is an element to a browser that runs scripts, as a search engine's renderer does, so its titles are left out as well, while the Links inside it are still discovered (ruled by the user, 2026-10-14). Until page preparation parses with scripting on, a title inside a `noscript` of `<head>` is still counted: the parser moves it out of the `noscript`. It is 0 when the Page has none.
 - **`title_1`** and **`title_2`** are the normalised texts of the first and second of them, in document order. Each is NULL when there is no such element, and the empty string for `<title></title>`.
 - **`title_1_length`** and **`title_2_length`** are their lengths, NULL exactly when their text is.
+
+## Meta description and meta keywords
+
+- **`meta_description_count`** is the number of `<meta>` elements whose `name`, trimmed of ASCII whitespace, is `description` in any ASCII letter case, without an `svg`, `math` or `noscript` ancestor, like titles.
+- **`meta_description_1`** and **`meta_description_2`** are the whitespace-normalised `content` of the first and second of them. A `<meta name="description">` without `content` gives the empty string.
+- **`meta_keywords_1`** is the same for the first `<meta name="keywords">`.
+- Each has a `_length` column, NULL exactly when its text is.
+
+## Headings
+
+- **`h1_count`** and **`h2_count`** are the numbers of `<h1>` and `<h2>` elements without an `svg`, `math` or `noscript` ancestor, like titles.
+- **`h1_1`**, **`h1_2`**, **`h2_1`** and **`h2_2`** are the normalised texts of the first and second of each, in document order, with nested elements such as `<span>` included.
+- Each has a `_length` column, NULL exactly when its text is.
 
 ## The two address forms
 
