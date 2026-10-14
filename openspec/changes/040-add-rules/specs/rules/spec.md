@@ -530,7 +530,7 @@ Each problem's `details.errors[].key` SHALL be the dotted key, for example `rule
 - **THEN** the exit code is 3 and `details.errors[0].key` is `"rules.h1-missing.max_chars"`
 
 ### Requirement: Rule configuration is fixed per Crawl
-When a Crawl starts, it SHALL resolve every Rule's enabled state and effective thresholds and write them to its `rules` table, in the same transaction that creates the `crawl` row. The table follows the conventions of `018-add-schema-conventions` (ADR-0005): it is `STRICT` and `WITHOUT ROWID`, keyed by the Rule id. It holds one row per catalogue Rule, with these columns:
+When a Crawl starts, it SHALL resolve every Rule's enabled state and effective thresholds and write them to its `rules` table, in the same transaction that creates the `crawl` row. The table follows the conventions of `018-add-schema-conventions` (ADR-0005): it is `STRICT`, keyed by the Rule id. It holds one row per catalogue Rule, with these columns:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
