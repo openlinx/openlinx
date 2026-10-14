@@ -65,7 +65,7 @@ Seams (docs/testing.md):
 - [ ] 4.5 [3+6] Drive "A redirect to an excluded URL is not followed".
 - [ ] 4.6 [3+6] Drive "A redirect to an External URL is checked", on `020`'s `fixture_hosts`.
 - [ ] 4.7 [Fixture] Let `fixture_hosts` take a site per name (design D9), test-first in `tests/fixture_site/test_hosts.py`.
-- [ ] 4.8 [3+6] Drive "A redirect to the www host stays inside the Scope": design D3, after `020` task 8.11. The user decides whether v0.1 keeps it (design Open Questions).
+- [ ] 4.8 [3+6] Drive "A redirect to the www host stays inside the Scope", after `020` tasks 8.11 and 14.2: the Seed's Redirect Chain widens the Scope once, at its end and before its final Page is prepared, with the wider `ScopeRules`, the page executor's new settings snapshot, `crawl.scope.hosts` and the chain's earlier rows updated in the final hop's unit, and a continue that builds the Scope from `crawl.scope` (design D3, the user's decision of 2026-10-14). The scenario's www→apex and subdomain cases are proposed for the spec (design Open Questions); until they are ruled, this scenario passes on `020`'s www rule alone, so the slice shows its red on the www→apex case.
 - [ ] 4.9 [CLI] Drive "A redirect to another site is reported". Done when: `seed_redirected_off_site` is declared.
 - [ ] 4.10 [3+6] Drive "The eleventh redirect is not followed": `--max-redirects` and `crawl.max_redirects`, the hop count walked back over `found_on_url_id` (design D2), on the fixture's `redirect_chain("/r", 11, "/r12")`, and writing the value `max_redirects`.
 - [ ] 4.11 [3+6] Drive "A loop of two URLs is marked": the `in_redirect_loop` column.

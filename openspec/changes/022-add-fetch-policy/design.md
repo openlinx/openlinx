@@ -64,10 +64,28 @@ Every hop is a normal `urls` row with its own status and timing, linked through 
 - *Alternative:* following chains inside the Fetcher. That bypasses politeness and robots.txt for each hop. Rejected.
 
 ### D3. The Seed-redirect Scope rule
-`020`'s www rule (its D4) already makes `www.<host>` a Seed host of an apex Seed, so `site.test` → `www.site.test` needs nothing from this change. This rule covers what that one leaves out: a `www.` Seed that redirects to its apex (`020` goes one direction only), and an apex that redirects to another subdomain, such as `en.` or `m.`. A redirect to another registrable domain (SSO, parking pages) only raises a warning, so the Crawl never wanders onto a third-party site.
-- **How it lands:** `CrawlContext` is frozen with one `ScopeRules`, and page preparation's settings snapshot (`PageSettings`, which holds the Scope) is what `026`'s workers start with. A Seed's Redirect Chain is made of 3xx responses, so no Page is prepared before it ends. At the hop that extends the Scope, the engine builds the wider `ScopeRules`, the target's dispatch decision uses them, and the snapshot is built from them before the first Page is prepared.
-- **Recorded:** hosts added this way are appended to `crawl.scope.hosts` (`020` task 8.11) in the unit that records that hop, and a continue rebuilds the Scope from `crawl.scope`.
-- Whether v0.1 keeps this rule, and how it lands, is the user's decision, still open (below).
+The user's decision of 2026-10-14 keeps this rule in v0.1: the Scope widens once, at the end of the Seed's Redirect Chain, before the chain's final Page is prepared, and `026`'s workers start after that, with the final Scope in their settings snapshot.
+
+`020`'s www rule (its D4) already makes `www.<host>` a Seed host of an apex Seed, so `site.test` → `www.site.test` needs nothing from this change. The rule covers the two cases that one leaves out:
+- **A `www.` Seed that redirects to its apex** (`020` goes one direction only): `http://www.site.test/` → `http://site.test/`.
+- **An apex that redirects to another subdomain:** `http://site.test/` → `http://en.site.test/`, or `m.`.
+
+A chain that ends on another registrable domain (SSO, parking pages) only raises `seed_redirected_off_site`, so the Crawl never wanders onto a third-party site.
+
+**What this change builds:**
+- **The Seed's chain** is the Seed and the redirect targets recorded at Crawl Depth 0: in Spider mode only the Seed is at depth 0, and a redirect target keeps its source's depth (D2), so depth 0 with `discovered_via` = `redirect` names a hop of the Seed's chain without a walk. Each hop is requested whatever `--check-external` says, because the chain decides the Scope; the Scope's other decisions (`--exclude`, robots.txt) still apply to it, and a hop they refuse ends the chain.
+- **The end of the chain** is the first hop that gets a response other than a 3xx with a usable Location, or a failure, or a target refused by the hop limit. Only a response can widen the Scope.
+- **Widening:** when the final hop's host has the Seed host's registrable domain and is not a Seed host yet, the engine builds the wider `ScopeRules` with a pure function of `spider.crawl.scope` that adds the host, and `www.<host>` when the host is a registrable domain, as `020` D4 does for a Seed host. Then, before the final hop's response is parsed:
+  1. the final hop's dispatch decision is made again with the wider Scope, so it is `is_internal` = 1 and `in_scope` = 1, and is parsed as a Page when it is 2xx HTML (`020` D5)
+  2. the page executor gets the settings snapshot built from the wider Scope (`PageSettings`), so `DiscoveredLink.is_internal` and every later decision use it
+  3. the engine goes on with a context that holds the wider `ScopeRules` (`dataclasses.replace` of the frozen `CrawlContext`, `020` D15): at depth 0 nothing else is in flight, so no task holds the old one
+- **Recorded in the final hop's unit,** with no effect outside the writer's connection (`017` D7): `crawl.scope.hosts` gains the added hosts (`020` task 8.11), and the URLs and origins already recorded on them, which at that point are only earlier hops of the chain, get `is_internal` = 1 and `in_scope` = 1, so no row disagrees with the final Scope.
+- **A continue** builds `ScopeRules` from the recorded `crawl.scope`, never from the Seed again, so the widened Scope survives a stop or a crash.
+
+**Interface points it uses:**
+- `020`: `ScopeRules` and `ScopeDecision` (D4); `CrawlContext` (D15), replaced once by the engine; the page executor taking a new settings snapshot before its first prepare (D9); `crawl.scope`, written by `create_crawl` (task 8.11) and updated by a unit of `spider.store.crawls`; and the continue operation (group 14) building `ScopeRules` from `crawl.scope`. The last two are wordings for `020`'s design.
+- `026`: the pool starts its workers when it gets its settings snapshot, after the Seed's chain has ended, never with an earlier Scope (a wording for `026`'s design D1). The common Seed answers at once, so the chain ends at its first response, and the workers' start overlaps the Seed's own parsing no longer; that costs about one worker start (about 1 second on Windows) once per Crawl.
+- *Alternative:* start the workers early with the first Scope and replace them when the Scope widens. It keeps the overlap, but adds a restart path for the rare widening. Not taken: the user's decision starts them once, with the final Scope.
 
 ### D4. Retries and backoff
 - **Where:** one retry loop in the shell, around the Fetcher, which the engine's URL task and `020`'s robots.txt loader both call. Each attempt is one `fetch` inside the host's semaphore, raced by `020`'s watchdog on its own. Backoff waits on the context's `Clock` outside the semaphore, so a waiting retry holds none of the host's `--concurrency` slots. `020`'s fake Fetcher then drives the retries in the timing scenarios; a retry loop inside the Fetcher would bypass it.
@@ -110,7 +128,7 @@ There is one `asyncio.open_connection(host, port, ssl=ctx, server_hostname=host)
 
 ### D9. Fixture site additions
 Each is added test-first in `tests/fixture_site/` or `tests/support/` by the first slice that needs it, and no existing route kind or option changes what it does:
-- **Named hosts:** `fixture_hosts` takes a site per name (`site.test`, `www.site.test`, `other.test`, `badcert.test`), so a host that redirects to another one is an instance of its own, and no route needs the `Host` header.
+- **Named hosts:** `fixture_hosts` takes a site per name (`site.test`, `www.site.test`, `en.site.test`, `other.test`, `badcert.test`), so a host that redirects to another one is an instance of its own, and no route needs the `Host` header.
 - **HTTPS listeners** with a `trustme` CA, which the DNS resolver hook maps from port 443 of a name:
   - one for `site.test`
   - one whose certificate names `other.test`, served as `badcert.test`
@@ -182,11 +200,9 @@ None. Before v0.1 the schema is not yet public. This change adds its columns, it
 
 ## Open Questions
 
-**The user's decision, before this change starts:**
-- **The Seed-redirect Scope rule in v0.1** (D3, task 4.8). `020`'s www rule already covers `site.test` → `www.site.test`, so the scenario "A redirect to the www host stays inside the Scope" passes without this rule. The rule is left with two cases: a `www.` Seed that redirects to its apex, and an apex that redirects to another subdomain (`en.`, `m.`).
-  - It needs a seam that `020` and `026` do not have yet: `CrawlContext` holds one frozen `ScopeRules`, and `026`'s workers start with the settings snapshot that holds the Scope. The interface point it would add to `020`: the Scope widens once, when the Seed's Redirect Chain ends, before the chain's final Page is prepared, and the settings snapshot, which `026`'s workers start with, is built after that.
-  - Kept in v0.1: the spec's scenario then becomes a `www.` Seed that redirects to its apex (`http://www.site.test/` → `http://site.test/`, which links to `/a`, and `http://site.test/a` is `fetched` with `is_internal` = 1).
-  - Moved to v0.2: v0.1 keeps `seed_redirected_off_site` for every Seed chain that ends on a host outside the Scope, with a hint that names the final URL to crawl instead.
+**Spec changes to rule** (D3, the user's decision of 2026-10-14):
+- The scenario "A redirect to the www host stays inside the Scope" passes on `020`'s www rule alone. Proposed: it becomes the `www.` Seed case, renamed "A www Seed that redirects to its apex keeps the apex inside the Scope": WHEN `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `spider crawl http://www.site.test/` runs; THEN `http://site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1.
+- An added scenario for the subdomain case, "A redirect to another subdomain stays inside the Scope": WHEN `http://site.test/` redirects with 301 to `http://en.site.test/`, which links to `/a`, and `spider crawl http://site.test/` runs; THEN `http://en.site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1, and `crawl.scope` lists `en.site.test` among its hosts.
 
 **To add when `020`'s network pause lands** (its group 12), with its final numbers then (ruled 2026-10-14 as a draft):
 - A scenario under "Retries with backoff": "A request that fails during a network pause is not retried". WHEN `/` links to `/p1` to `/p20`, a fake Fetcher gets no response for any request after the one for `/`, and the Crawl runs with `--concurrency 1`, `--network-wait 30` and a fake clock; THEN no URL is requested again after the pause began until the Crawl ends, and the URL whose attempt failed during the pause stays `queued`.
