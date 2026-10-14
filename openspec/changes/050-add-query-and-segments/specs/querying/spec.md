@@ -620,9 +620,9 @@ A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `i
 - **THEN** the `url` values of the items are B, A and C, in that order
 
 #### Scenario: Thresholds recorded for the Crawl
-- **WHEN** a Crawl ran with the threshold `max_hops` of the Rule `redirect-chain` set to 3
-- **AND** `spider issues redirect-chain` runs
-- **THEN** `rule.thresholds` is `{"max_hops": 3}`
+- **WHEN** a Crawl ran with the threshold `max_chars` of the Rule `title-too-long` set to 70
+- **AND** `spider issues title-too-long` runs
+- **THEN** `rule.thresholds` is `{"max_chars": 70}`
 
 #### Scenario: Guidance of the Rule
 - **WHEN** `spider issues title-too-long` runs
@@ -633,9 +633,9 @@ A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `i
 - **THEN** `rule.reproduce_sql` equals the `reproduce_sql` of the Crawl's `rules` row for `title-missing`
 
 #### Scenario: Detail of an Affected URL
-- **WHEN** the Issue `title-too-long` has the single Affected URL `https://example.com/a`, recorded with `detail` `{"length": 61}`
-- **AND** `spider issues title-too-long` runs
-- **THEN** `items` is `[{"url": "https://example.com/a", "detail": {"length": 61}}]`
+- **WHEN** the Issue `internal-4xx` has the single Affected URL `https://example.com/gone`, recorded with `detail` `{"status_code": 404}`
+- **AND** `spider issues internal-4xx` runs
+- **THEN** `items` is `[{"url": "https://example.com/gone", "detail": {"status_code": 404}}]`
 
 #### Scenario: Page columns for Affected URLs
 - **WHEN** the Issue `title-too-long` has the single Affected URL `https://example.com/a`, whose title_1_length is 81
