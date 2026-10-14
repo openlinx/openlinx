@@ -26,3 +26,12 @@ def test_no_directives_give_nulls_and_no_verdicts() -> None:
         x_robots_tag_noindex=False,
         x_robots_tag_nofollow=False,
     )
+
+
+def test_a_header_for_another_crawler_does_not_apply() -> None:
+    directives = robots_directives((), ("googlebot: noindex",), "spider")
+
+    assert (directives.x_robots_tag, directives.x_robots_tag_noindex) == (
+        "googlebot: noindex",
+        False,
+    )

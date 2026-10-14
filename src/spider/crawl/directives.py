@@ -1,9 +1,13 @@
 """The robots directives parser, which 030 imports for its directive columns (020 D6)."""
 
+import re
 from collections.abc import Iterable
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
+
+# A header value that starts with a name and a colon applies only to the crawler it names.
+_PREFIX = re.compile(r"\s*([^\s:,]+)\s*:")
 
 
 class RobotsDirectives(msgspec.Struct, frozen=True, kw_only=True):
@@ -31,13 +35,15 @@ def robots_directives(
 ) -> RobotsDirectives:
     meta = [_normalised(content) for content in meta_contents]
     meta_tokens = _directives(meta)
+    header = [_normalised(value) for value in header_values]
+    header_tokens = _directives(value for value in header if _PREFIX.match(value) is None)
     return RobotsDirectives(
         meta_robots=", ".join(meta) if meta else None,
         meta_robots_noindex="noindex" in meta_tokens,
         meta_robots_nofollow="nofollow" in meta_tokens,
-        x_robots_tag=None,
-        x_robots_tag_noindex=False,
-        x_robots_tag_nofollow=False,
+        x_robots_tag=", ".join(header) if header else None,
+        x_robots_tag_noindex="noindex" in header_tokens,
+        x_robots_tag_nofollow="nofollow" in header_tokens,
     )
 
 
