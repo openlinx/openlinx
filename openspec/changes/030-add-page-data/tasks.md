@@ -31,7 +31,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [x] 2.2 Drive "Whitespace is collapsed before measuring" at seam 4. Add whitespace normalisation (ASCII whitespace only) and `title_1_length`.
 - [x] 2.3 Drive "Title in SVG is ignored" at seam 4, and add `title_count` and `title_2`.
 - [x] 2.4 Drive "Second title element" at seam 4, and add `title_2_length`.
-- [ ] 2.5 Drive "Missing title" at seam 4.
+- [x] 2.5 Drive "Missing title" at seam 4.
 - [ ] 2.6 Docs: add the decoding order, the text model and the title columns to `docs/page-data.md`.
 - [ ] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 

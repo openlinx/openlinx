@@ -39,3 +39,9 @@ def test_second_title_element() -> None:
     row = page_row("<head><title>One</title><title>Two</title></head>")
 
     assert (row.title_count, row.title_2, row.title_2_length) == (2, "Two", 3)
+
+
+def test_missing_title() -> None:
+    row = page_row("<p>No title</p>")
+
+    assert (row.title_count, row.title_1, row.title_1_length) == (0, None, None)
