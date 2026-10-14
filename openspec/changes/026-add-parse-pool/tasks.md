@@ -44,7 +44,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
   - the proposal's `crawl_started` lines say that `020` reports `parse_workers` and this change sets it to the pool's size
 - [x] 2.7 Check: `PoolExecutor(workers=n)` refuses, with a `ValueError`, an `n` below 1 or above the waiter's limit on this platform (design D1), as a programmer's error (ruled 2026-10-14).
 - [ ] 2.8 Check: each worker answers "ready" once its start arguments are unpickled, before its first Page, so a worker that ends before it is ready, such as a spawn child that cannot import an extractor's module, makes `prepare()` raise `WorkerStartError`, a Crawl error, and is never replaced; a worker that ends after it is ready is handled as design D3 says (ruled 2026-10-14; it needs nothing of `020`'s task 7.23, so it comes before 3.2).
-- [ ] 2.9 Check: the waiter sees a worker's end as the end of file on its result pipe, watching no process sentinel (design D1, ruled 2026-10-14): a worker terminated from outside fails its Page promptly; the Windows cap before Python 3.13 becomes 62 workers, in the table test, design D1 and `docs/architecture.md`.
+- [x] 2.9 Check: the waiter sees a worker's end as the end of file on its result pipe, watching no process sentinel (design D1, ruled 2026-10-14): a worker terminated from outside fails its Page promptly; the Windows cap before Python 3.13 becomes 62 workers, in the table test, design D1 and `docs/architecture.md`.
 
 ## 3. Bounded queue and crash containment
 

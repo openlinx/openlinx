@@ -65,6 +65,8 @@ SMALL_SITE = Site(
 )
 # A worker that is told to wait stays long enough busy for a test to act meanwhile.
 BUSY_SECONDS = 0.3
+# Longer than any test waits for a Page: such a Page ends only with its worker.
+HANG_SECONDS = 120
 
 
 def at(path: str) -> NormalizedUrl:
@@ -89,6 +91,8 @@ def _record_preparer(tree: LexborHTMLParser, page: PageInput) -> Preparer:
         os._exit(3)
     if page.url.endswith("/busy"):
         time.sleep(BUSY_SECONDS)
+    if page.url.endswith("/hang"):
+        time.sleep(HANG_SECONDS)
     return Preparer(os.getpid(), _prepared_here)
 
 
@@ -264,6 +268,21 @@ async def test_a_worker_that_ends_fails_only_the_page_it_held() -> None:
 
 
 @pytest.mark.slow
+async def test_a_worker_ended_from_outside_fails_its_page_at_once() -> None:
+    async with started(1) as pool:
+        # Answered, so the worker has started and is idle.
+        await pool.prepare(at("/"), RESPONSE)
+        held = asyncio.ensure_future(pool.prepare(at("/hang"), RESPONSE))
+        # The Page has reached the worker's pipe.
+        await asyncio.sleep(0)
+        psutil.Process(pool.worker_pids[0]).terminate()
+        # Seen through its result pipe's end, long before any deadline (design D1).
+        outcome = await asyncio.wait_for(asyncio.gather(held, return_exceptions=True), 10)
+
+    assert [type(error) for error in outcome] == [WorkerEndedError]
+
+
+@pytest.mark.slow
 async def test_the_pages_waiting_for_the_last_worker_fail_when_it_ends() -> None:
     async with started(1) as pool:
         outcomes = await asyncio.wait_for(
@@ -320,7 +339,7 @@ async def test_the_pool_closes_after_a_worker_has_ended() -> None:
         (16, 32, 32, 9, None, 7),
         (8, 12, 12, 100, None, 6),
         # No more than the waiter thread can watch.
-        (64, 128, 128, None, 31, 31),
+        (128, 256, 256, None, 62, 62),
     ],
 )
 def test_the_workers_are_the_available_physical_cores_less_two(
@@ -341,8 +360,8 @@ def test_the_workers_are_the_available_physical_cores_less_two(
 @pytest.mark.parametrize(
     ("platform", "version", "limit"),
     [
-        # connection.wait takes at most 63 handles there: two per worker and the wake pipe.
-        ("win32", (3, 12), 31),
+        # connection.wait takes at most 63 handles there: one per worker and the wake pipe.
+        ("win32", (3, 12), 62),
         ("win32", (3, 13), None),
         ("linux", (3, 12), None),
         ("darwin", (3, 12), None),

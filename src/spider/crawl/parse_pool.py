@@ -141,9 +141,9 @@ def cpu_quota(root: Path, membership: Path) -> int | None:
 def worker_limit(platform: str, version: tuple[int, int]) -> int | None:
     """The most workers the waiter thread can watch, or None for no limit (design D1)."""
     # connection.wait takes at most 63 handles on Windows before Python 3.13, and the waiter
-    # watches two per worker, its result pipe and its process sentinel, and its wake pipe.
+    # watches one per worker, its result pipe, and its own wake pipe.
     if platform == "win32" and version < (3, 13):
-        return (_WINDOWS_WAIT_HANDLES - 1) // 2
+        return _WINDOWS_WAIT_HANDLES - 1
     return None
 
 
