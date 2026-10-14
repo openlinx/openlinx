@@ -93,3 +93,23 @@ def test_urls_found_by_a_check_after_its_depth_are_crawled(
         "SELECT fetch_state, crawl_depth FROM urls WHERE url = ?",
         [server.url("/found")],
     ) == [("fetched", 2)]
+
+
+def test_a_resource_is_one_deeper_than_its_page(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/about">About</a>'),
+                "/about": Page(body='<img src="/i.png">'),
+                "/i.png": Page(body="PNG", content_type="image/png"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file, "SELECT crawl_depth FROM urls WHERE url = ?", [server.url("/i.png")]
+    ) == [(2,)]
