@@ -21,8 +21,11 @@ from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
 from spider.services.crawls import create_crawl
+from spider.store.crawls import crawl_summary, record_state
 from spider.store.records import CrawlFile, CrawlSummary, NewCrawl, SecretNames, UrlCounts
 from spider.store.settings import StoreSettings
+from spider.store.urls import url_counts
+from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import resolve_workspace
 from spider.workspace.settings import load_settings
 from spider.workspace.tables import SettingsTables
@@ -99,15 +102,19 @@ class CrawlResult:
         }
 
 
-class WarningLog:
+class _WarningLog:
     """The Crawl's Reporter: passes everything on, and keeps the warnings for the result (D10)."""
 
     def __init__(self, reporter: Reporter) -> None:
         self._reporter = reporter
-        self.warnings: list[Diagnostic] = []
+        self._warnings: list[Diagnostic] = []
+
+    @property
+    def warnings(self) -> tuple[Diagnostic, ...]:
+        return tuple(self._warnings)
 
     def warn(self, diagnostic: Diagnostic) -> None:
-        self.warnings.append(diagnostic)
+        self._warnings.append(diagnostic)
         self._reporter.warn(diagnostic)
 
     def event(self, name: str, **data: Any) -> None:
@@ -139,9 +146,9 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
 
 
 def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResult:
-    reporter = log = WarningLog(reporter)
-    crawl_file = create_crawl(plan.new_crawl, clock, reporter)
-    reporter.event(
+    log = _WarningLog(reporter)
+    crawl_file = create_crawl(plan.new_crawl, clock, log)
+    log.event(
         "crawl_started",
         crawl_id=crawl_file.id,
         crawl_mode=plan.new_crawl.crawl_mode,
@@ -149,37 +156,35 @@ def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResul
         crawl_file=str(crawl_file.path),
     )
     with asyncio.Runner(loop_factory=loop_factory) as runner:
-        summary, counts = runner.run(_crawl(plan, crawl_file, clock, reporter))
+        ended_at, summary, counts = runner.run(_crawl(plan, crawl_file, clock, log))
     return CrawlResult(
         crawl_id=crawl_file.id,
         summary=summary,
-        ended_at=clock.now(),
+        ended_at=ended_at,
         counts=counts,
         crawl_file=crawl_file.path,
-        warnings=tuple(log.warnings),
+        warnings=log.warnings,
     )
 
 
 async def _crawl(
     plan: CrawlPlan, crawl_file: CrawlFile, clock: Clock, reporter: Reporter
-) -> tuple[CrawlSummary, UrlCounts]:
-    from spider.store.crawls import crawl_summary, record_state
-    from spider.store.urls import url_counts
-
-    async with crawl_context(crawl_file, plan.scope, clock, reporter) as context:
+) -> tuple[datetime, CrawlSummary, UrlCounts]:
+    async with _crawl_context(crawl_file, plan.scope, clock, reporter) as context:
         await run_crawl(context, plan.seed)
         writer = context.writer
-        await writer.run_async(record_state("completed", clock.now()))
-        return await writer.run_async(crawl_summary()), await writer.run_async(url_counts())
+        # One instant: the result's ended_at is the completed_at the file records.
+        ended_at = clock.now()
+        await writer.run_async(record_state("completed", ended_at))
+        summary = await writer.run_async(crawl_summary())
+        return ended_at, summary, await writer.run_async(url_counts())
 
 
 @asynccontextmanager
-async def crawl_context(
+async def _crawl_context(
     crawl_file: CrawlFile, scope: ScopeRules, clock: Clock, reporter: Reporter
 ) -> AsyncIterator[CrawlContext]:
     """The one place a Crawl's context is built, and its resources closed (design D15)."""
-    from spider.store.writer import CrawlWriter
-
     # Opening and closing the writer block, so they run off the event loop.
     writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
     try:

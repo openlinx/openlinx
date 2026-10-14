@@ -13,7 +13,7 @@ from spider.clock import Clock
 from spider.crawl.urls import NormalizedUrl
 
 # Fixed until 022 makes it a setting; the watchdog of design D16 outlasts it.
-REQUEST_DEADLINE_SECONDS = 20
+_REQUEST_DEADLINE_SECONDS = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,7 +70,7 @@ class AiohttpFetcher:
 @asynccontextmanager
 async def aiohttp_fetcher(clock: Clock) -> AsyncIterator[AiohttpFetcher]:
     async with aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=REQUEST_DEADLINE_SECONDS),
+        timeout=aiohttp.ClientTimeout(total=_REQUEST_DEADLINE_SECONDS),
         # No cookie session: a cookie set by one response would change what later ones return.
         cookie_jar=aiohttp.DummyCookieJar(),
     ) as session:

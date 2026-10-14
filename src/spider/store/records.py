@@ -97,12 +97,11 @@ class QueuedUrl:
     url: NormalizedUrl
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(frozen=True, slots=True)
 class NewUrl:
     """A URL discovered from a response, recorded unless the Crawl has it already."""
 
     url: NormalizedUrl
-    host: str
     crawl_depth: int
     discovered_via: DiscoveredVia
 

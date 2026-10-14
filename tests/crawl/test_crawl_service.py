@@ -1,21 +1,18 @@
-"""The Crawl Service wires 015's journal mode and redaction (020-add-crawl-core D11; seam 2)."""
+"""The Crawl Service wires 015's journal mode and redaction (020 D11; seams 2 and 1)."""
 
 import json
 import sys
 from pathlib import Path, PureWindowsPath
-from typing import cast
 
 import pytest
-import typer
 
 from spider.cli.app import build_app
-from spider.cli.runner import SpiderGroup
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
 from spider.store.records import SecretNames
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
-from tests.support.app import example_app
+from tests.support.app import example_app, settings_tables
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
 from tests.support.crawls import crawl_row
@@ -29,7 +26,7 @@ def test_the_journal_mode_setting_reaches_the_crawl_file(
 ) -> None:
     server = fixture_site(HOME_PAGE)
     (temp_workspace.root / "spider.toml").write_bytes(b'[store]\njournal_mode = "delete"\n')
-    tables = cast(SpiderGroup, typer.main.get_group(build_app())).settings_tables
+    tables = settings_tables(build_app())
     request = CrawlRequest(
         seed=server.url("/"),
         cwd=temp_workspace.root,

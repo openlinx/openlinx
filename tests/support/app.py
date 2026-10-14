@@ -3,7 +3,7 @@
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import typer
 
@@ -18,13 +18,14 @@ from spider.cli.options import (
     OptionMeta,
     WorkspaceOpt,
 )
-from spider.cli.runner import Invocation
+from spider.cli.runner import Invocation, SpiderGroup
 from spider.output.codes import DiagnosticCode, ExitCode
 from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
 from spider.store.records import LATEST
 from spider.workspace.discovery import resolve_workspace
+from spider.workspace.tables import SettingsTables
 
 # Declared here, not in spider.output.codes: the tool never lists the fixture app's codes.
 EXAMPLE_FAILED = DiagnosticCode("example_failed", "error", ExitCode.FAILED, "The example failed.")
@@ -236,3 +237,8 @@ def example_app() -> typer.Typer:
             ],
         )
     )
+
+
+def settings_tables(app: typer.Typer) -> SettingsTables:
+    """The settings tables an app registered, as its Commands see them."""
+    return cast(SpiderGroup, typer.main.get_group(app)).settings_tables

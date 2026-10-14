@@ -5,13 +5,14 @@ from collections.abc import Callable
 from sqlalchemy import Connection, bindparam, func, literal_column, select, update
 from sqlalchemy.dialects.sqlite import insert
 
-from spider.crawl.urls import NormalizedUrl
+from spider.crawl.urls import NormalizedUrl, url_host
 from spider.store.records import FetchedUrl, QueuedUrl, UrlCounts
 from spider.store.schema import urls
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
 _INSERT_URL = insert(urls).on_conflict_do_nothing(index_elements=[urls.c.url])
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
+# Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _FETCHED = (
     update(urls)
     .where(urls.c.id == bindparam("url_id"))
@@ -37,7 +38,6 @@ _QUEUED = (
     .order_by(urls.c.id)
     .limit(bindparam("size"))
 )
-_STATUS = urls.c.status_code
 _COUNTS = select(
     func.count().label("discovered"),
     func.count().filter(urls.c.fetch_state == "fetched").label("fetched"),
@@ -46,17 +46,19 @@ _COUNTS = select(
     func.count().filter(_IS_QUEUED).label("queued"),
     func.count().filter(urls.c.parsed == 1).label("pages"),
     *(
-        func.count().filter(_STATUS.between(low, low + 99)).label(f"status_{low // 100}xx")
+        func.count()
+        .filter(urls.c.status_code.between(low, low + 99))
+        .label(f"status_{low // 100}xx")
         for low in (200, 300, 400, 500)
     ),
-    func.count().filter(~_STATUS.between(200, 599)).label("status_other"),
+    func.count().filter(~urls.c.status_code.between(200, 599)).label("status_other"),
 )
 _NEXT_DEPTH = select(func.min(urls.c.crawl_depth)).where(
     _IS_QUEUED, urls.c.crawl_depth > bindparam("depth")
 )
 
 
-def record_seed(url: NormalizedUrl, host: str) -> Callable[[Connection], int]:
+def record_seed(url: NormalizedUrl) -> Callable[[Connection], int]:
     """A unit that records the Seed as queued, once, and returns its id."""
 
     def unit(connection: Connection) -> int:
@@ -64,7 +66,7 @@ def record_seed(url: NormalizedUrl, host: str) -> Callable[[Connection], int]:
             _INSERT_URL,
             {
                 "url": url,
-                "host": host,
+                "host": url_host(url),
                 "crawl_depth": 0,
                 "discovered_via": "seed",
                 "fetch_state": "queued",
@@ -114,7 +116,7 @@ def record_fetched(fetched: FetchedUrl) -> Callable[[Connection], None]:
     new_rows = [
         {
             "url": new.url,
-            "host": new.host,
+            "host": url_host(new.url),
             "crawl_depth": new.crawl_depth,
             "discovered_via": new.discovered_via,
             "found_on_url_id": url_id,

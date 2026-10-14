@@ -11,7 +11,7 @@ spider crawl site.test
 spider crawl https://site.test/shop/ --concurrency 2
 ```
 
-The Crawl requests the Seed, reads the Links of each response it parses, and follows the hyperlinks in its Scope, Crawl Depth by Crawl Depth: every URL at one depth is requested before any URL one deeper, in the order the URLs were first recorded (`urls.id`). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its status is 2xx.
+The Crawl requests the Seed, reads the Links of each response it parses, and follows the hyperlinks in its Scope, Crawl Depth by Crawl Depth: every URL at one depth is requested before any URL one deeper, in the order the URLs were first recorded (`urls.id`). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its status is 2xx and its `Content-Type` is HTML (`text/html` or `application/xhtml+xml`); a PDF, an image or a response without a `Content-Type` is recorded but not parsed.
 
 ### Options and `[crawl]` settings
 
@@ -19,7 +19,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 
 | Option | `[crawl]` key | Default | Meaning |
 |---|---|---|---|
-| `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host. |
+| `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host. For now the Crawl makes one request at a time, so it never goes above this. |
 
 `--workspace` and `--format` are the global flags of every Command.
 
@@ -51,7 +51,7 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 | `urls` | The counts of `urls` rows: `discovered` (all of them), and by `fetch_state`: `fetched`, `errors`, `skipped`, `queued`. |
 | `pages` | URLs whose response was parsed (`parsed` = 1). |
 | `status_classes` | URLs by the class of their status code: `2xx`, `3xx`, `4xx`, `5xx`, `other`. |
-| `crawl_file` | The path of the crawl file. |
+| `crawl_file` | The absolute path of the crawl file. |
 | `warnings` | Every warning of the Crawl, in the full diagnostic shape: `level`, `code`, `message`, `hint`, `details`. |
 
 ```json
@@ -60,7 +60,7 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
  "started_at": "2026-10-14T10:15:00.123Z", "ended_at": "2026-10-14T10:15:04.456Z", "duration_s": 4.333,
  "urls": {"discovered": 4, "fetched": 4, "errors": 0, "skipped": 0, "queued": 0}, "pages": 3,
  "status_classes": {"2xx": 3, "3xx": 0, "4xx": 1, "5xx": 0, "other": 0},
- "crawl_file": ".spider/crawls/20261014-101500-k3f9.sqlite", "warnings": []}
+ "crawl_file": "/home/me/shop/.spider/crawls/20261014-101500-k3f9.sqlite", "warnings": []}
 ```
 
 ### Exit codes

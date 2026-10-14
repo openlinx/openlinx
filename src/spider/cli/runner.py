@@ -23,7 +23,7 @@ from spider.output.writer import Document, Output, Rows
 from spider.workspace.tables import SettingsTables
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Invocation:
     output: Output
     reporter: Reporter
@@ -58,7 +58,10 @@ class SpiderGroup(TyperGroup):
                 standalone_mode=False,
                 windows_expand_args=windows_expand_args,
                 obj=Invocation(
-                    output, CliReporter(output, SystemClock()), self.settings_tables, tuple(args)
+                    output=output,
+                    reporter=CliReporter(output, SystemClock()),
+                    settings_tables=self.settings_tables,
+                    argv=tuple(args),
                 ),
                 **extra,
             )

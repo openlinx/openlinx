@@ -3,8 +3,6 @@
 from itertools import product
 from typing import get_args
 
-import pytest
-
 from spider.store.records import CrawlState, StopReason
 from spider.store.transitions import CrawlStateError, check_transition
 
@@ -38,7 +36,8 @@ def test_only_the_listed_transitions_are_allowed() -> None:
     )
 
 
-@pytest.mark.parametrize("reason", [None, "seed_unreachable"])
-def test_an_early_end_needs_a_reason_of_its_kind(reason: StopReason | None) -> None:
-    with pytest.raises(CrawlStateError):
-        check_transition("running", "stopped", reason)
+def test_an_early_end_needs_a_reason_of_its_kind() -> None:
+    assert [_allowed("running", "stopped", reason) for reason in (None, "seed_unreachable")] == [
+        False,
+        False,
+    ]

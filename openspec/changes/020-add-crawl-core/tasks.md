@@ -109,7 +109,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when:
   - the scheduler takes queued URLs depth by depth in `urls.id` order through a writer unit that only reads, run with `run_async()` and committing nothing, above a per-depth cursor of the run, over the partial index `urls_crawl_depth_id`, declared with its description (design D1)
   - hyperlinks are discovered by the page preparation function, called through the in-process executor of the `CrawlContext`, and each `DiscoveredLink` carries `is_internal` from the `ScopeRules` in its settings snapshot (design D5, D9)
-  - page preparation decodes and parses once: the link extractor gains a tree-level entry (the tree, the response URL, the base, the encoding and `is_internal`) that page preparation calls with the tree the registered extractors get too, and `extract_links` stays as its wrapper over bytes (design D9)
+  - page preparation decodes and parses once: the link extractor gains a tree-level entry, `links_in_tree(tree, base=, encoding=, is_internal=)`, with `base_url(tree, url, encoding)` for the base, that page preparation calls with the tree the registered extractors get too, and `extract_links` stays as its wrapper over bytes (design D9)
   - new URLs are deduplicated by `urls_url` inside the URL's unit, with no in-memory map of URLs (design D1)
 - [x] 4.5 Drive "A discovered URL points to where it was found" at seam 3+6.
 
@@ -123,7 +123,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: `TRANSITIONS` and `check_transition` exist (design D12), `StopReason` is a `Literal` next to `CrawlState`, and `015`'s `set_state` takes the `stop_reason` and checks the transition against the state it reads in the same unit.
 - [x] 4.9 Drive "A completed Crawl records its state" at seam 3+6. Done when: `crawl.stop_reason` is declared, with its values from `StopReason` and its `docs/schema.md` row.
 - [x] 4.10 Drive "The first event line is the start event" at seam 1.
-- [x] 4.11 Drive "The recorded config holds every registered crawl setting" at seam 2.
+- [x] 4.11 Drive "The recorded config holds every registered crawl setting" at seam 1, since the scenario reads `spider commands`.
 
   Done when: `[crawl]` is registered in `build_app` as `"spider.crawl.settings:CrawlSettings"` and passes `010`'s table-rules test, every crawl option declares its setting with `OptionMeta(setting=...)`, and `NewCrawl.config` holds every registered table. Its one option is `--concurrency`, which task 4.13 needs: an option is declared by the task that applies it, so none is inert (ruling of 2026-10-14), and `--max-depth`, `--max-urls` and `--rate` come with tasks 9.5, 9.7 and 11.4.
 - [x] 4.12 Wire `015`'s journal mode (group 8) and redaction (group 9), at seam 2.
@@ -133,7 +133,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.14 Drive "Response timing is recorded" at seam 3+6.
 - [x] 4.15 Drive "The Content-Type is recorded as received" at seam 3+6.
 - [x] 4.16 Docs: write the `spider crawl` reference in `docs/crawling.md` (the result fields, the event table, exit codes, `[crawl]` keys), and the `urls` and `crawl` columns and indexes so far in `docs/schema.md`.
-- [ ] 4.17 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) and prebuilt statements (D9), ADR-0005's naming rules and ADR-0006 (slots on per-URL and per-Link records, `kw_only` above three fields), then refactor with the whole suite green.
+- [x] 4.17 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) and prebuilt statements (D9), ADR-0005's naming rules and ADR-0006 (slots on per-URL and per-Link records, `kw_only` above three fields), then refactor with the whole suite green.
 
 ## 5. Hooks, and one URL never stops the Crawl (slice)
 
@@ -158,6 +158,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when:
   - a failed unit gets a fallback unit that records only the URL's state (`fetch_state` = `error`, `fetch_error` = `record_failed`, the error in `fetch_error_message`), and `record_failed` is declared as a value and as a counted warning
   - only design D2's allowlist (after unwrapping `DBAPIError.orig`: `sqlite3.IntegrityError`, `DataError`, `InterfaceError`, and non-database exceptions of our row code, checked after the writer's own errors `CrawlWriterClosedError`, `CrawlWriterReplayError` and the `SpiderError` `crawl_busy`, which are never one row's) leads to `record_failed`; every other `sqlite3.DatabaseError`, a unit that fails or differs in `017`'s replay, a failing fallback, a failed commit or `CrawlWriterClosedError` sets the stop flag with `write_failed` instead
+  - no Future that `submit_async` returns is dropped: each one's outcome reaches the engine through its callback (design D2), so a Crawl is never `completed` with a URL whose unit failed, and no "Future exception was never retrieved" reaches stderr (review of group 4)
 - [ ] 5.14 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes in `docs/crawling.md`.
 - [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
@@ -183,7 +184,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 7.7 Drive "A meta refresh target is followed" at seam 3.
 - [ ] 7.8 Drive "amphtml targets are not requested" at seam 3+6.
 - [ ] 7.9 Drive "A canonical in an HTTP header is followed" and "An HTTP Refresh target is followed" at seam 3, a pair. Done when: the HTTP `Link` and `Refresh` headers of in-Scope 2xx responses are read, parsed or not.
-- [ ] 7.10 Drive "Links on an error page are not followed" at seam 3+6. Done when: only in-Scope 2xx HTML responses are parsed.
+- [ ] 7.10 Drive "Links on an error page are not followed" at seam 3+6. Done when: only in-Scope 2xx HTML responses are parsed. The 2xx and HTML checks exist since group 4's review, so this may pass on its first run; then it shows its red by a mutation, as a guard does.
 - [ ] 7.11 Drive "A nofollow link is not requested" at seam 3+6.
 - [ ] 7.12 Drive "A page-level nofollow applies to every hyperlink" at seam 3+6.
 - [ ] 7.13 Drive "A nofollow target reached through a followed Link is fetched" at seam 3+6.
@@ -211,7 +212,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 9. Resources, Crawl Depth, limits and invariants (widening)
 
-- [ ] 9.1 Drive "An image is checked but not parsed" at seam 3+6.
+- [ ] 9.1 Drive "An image is checked but not parsed" at seam 3+6. Group 4's review parses only HTML, so the parse half may pass at once; its red then comes from a mutation.
 - [ ] 9.2 **Guard:** "A broken image is recorded", at seam 3+6.
 - [ ] 9.3 Drive "The shortest path wins over a faster, longer one" at seam 3+6. Done when: followed URLs of depth d+1 wait for every followed URL of depth d, and checks never wait (design D3).
 - [ ] 9.4 Drive "A Resource is one deeper than its Page" at seam 3+6.

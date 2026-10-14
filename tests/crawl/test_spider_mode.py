@@ -1,5 +1,7 @@
 """Spider mode over HTTP (020-add-crawl-core, crawling; seam 3+6)."""
 
+import pytest
+
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawled
@@ -95,6 +97,7 @@ def test_a_completed_crawl_records_its_state(
     assert (row["state"], row["stop_reason"]) == ("completed", None)
 
 
+@pytest.mark.slow
 def test_response_timing_is_recorded(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
@@ -129,3 +132,24 @@ def test_the_content_type_is_recorded_as_received(
     assert query(
         crawl_file, "SELECT content_type FROM urls WHERE url = ?", [server.url("/doc.pdf")]
     ) == [("application/pdf",)]
+
+
+def test_a_response_that_is_not_html_is_not_parsed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/doc.pdf">Doc</a>'),
+                "/doc.pdf": Page(body='<a href="/hidden">x</a>', content_type="application/pdf"),
+                "/hidden": Page(body="<p>Hidden</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert sorted(query(crawl_file, "SELECT url, parsed FROM urls")) == [
+        (server.url("/"), 1),
+        (server.url("/doc.pdf"), 0),
+    ]

@@ -23,7 +23,7 @@ def _url(text: str) -> NormalizedUrl:
 
 
 def _new(text: str) -> NewUrl:
-    return NewUrl(url=_url(text), host="site.test", crawl_depth=1, discovered_via="hyperlink")
+    return NewUrl(url=_url(text), crawl_depth=1, discovered_via="hyperlink")
 
 
 def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> None:
@@ -32,8 +32,8 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
     found = (_new("https://site.test/a"), _new("https://site.test/b"), _new("https://site.test/a"))
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        seed_id = writer.run(record_seed(seed, "site.test"))
-        writer.run(record_seed(seed, "site.test"))
+        seed_id = writer.run(record_seed(seed))
+        writer.run(record_seed(seed))
         first = writer.run(queued_batch(0, 0, 10))
         writer.run(
             record_fetched(

@@ -225,7 +225,12 @@ urls = public_table(
         Integer,
         comment="HTTP status code of the URL's own response; NULL without a response.",
     ),
-    Column("content_type", Text, comment="The Content-Type response header as received."),
+    Column(
+        "content_type",
+        Text,
+        comment="The Content-Type response header as received; NULL without a response or "
+        "without the header.",
+    ),
     Column(
         "response_time_ms",
         Integer,

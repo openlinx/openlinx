@@ -21,6 +21,16 @@ from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
 from spider.store.transitions import check_transition
 from spider.workspace.creation import as_workspace_not_writable, create_data_folder
 
+_SUMMARY = select(
+    crawl.c.state,
+    crawl.c.stop_reason,
+    crawl.c.crawl_mode,
+    crawl.c.section_crawl,
+    crawl.c.started_at,
+)
+_FIRST_SEED = select(seeds.c.url).order_by(seeds.c.position).limit(1)
+_SEED_COUNT = select(func.count()).select_from(seeds)
+
 
 def create_crawl_file(
     request: NewCrawl, started_at: datetime, choice: Choice, journal: JournalChoice
@@ -62,17 +72,6 @@ def record_state(
         set_state(connection, state, at, stop_reason)
 
     return unit
-
-
-_SUMMARY = select(
-    crawl.c.state,
-    crawl.c.stop_reason,
-    crawl.c.crawl_mode,
-    crawl.c.section_crawl,
-    crawl.c.started_at,
-)
-_FIRST_SEED = select(seeds.c.url).order_by(seeds.c.position).limit(1)
-_SEED_COUNT = select(func.count()).select_from(seeds)
 
 
 def crawl_summary() -> Callable[[Connection], CrawlSummary]:

@@ -1,19 +1,20 @@
 """The engine: the frontier depth by depth, and each URL's unit (020-add-crawl-core D1, D2, D3)."""
 
 from spider.crawl.context import CrawlContext
-from spider.crawl.fetcher import Request
+from spider.crawl.fetcher import FetchResult, Request
 from spider.crawl.pages import PreparedPage
 from spider.crawl.scope import ScopeRules
-from spider.crawl.urls import NormalizedUrl, url_host
+from spider.crawl.urls import NormalizedUrl
 from spider.store.records import FetchedUrl, NewUrl, QueuedUrl
 from spider.store.urls import next_depth, queued_batch, record_fetched, record_seed
 
 # Queued URLs read from the frontier at once.
-FRONTIER_BATCH = 100
+_FRONTIER_BATCH = 100
+_HTML_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 
 
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
-    await context.writer.run_async(record_seed(seed, url_host(seed)))
+    await context.writer.run_async(record_seed(seed))
     depth: int | None = 0
     while depth is not None:
         await _crawl_depth(context, depth)
@@ -24,7 +25,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
 async def _crawl_depth(context: CrawlContext, depth: int) -> None:
     # The cursor of this run: a URL in flight is never read twice (design D1).
     after = 0
-    while batch := await context.writer.run_async(queued_batch(depth, after, FRONTIER_BATCH)):
+    while batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH)):
         for queued in batch:
             await _crawl_url(context, queued, depth)
         after = batch[-1].id
@@ -32,7 +33,7 @@ async def _crawl_depth(context: CrawlContext, depth: int) -> None:
 
 async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> None:
     response = await context.fetcher.fetch(Request(queued.url))
-    parsed = 200 <= response.status_code < 300
+    parsed = 200 <= response.status_code < 300 and _is_html(response)
     discovered: tuple[NewUrl, ...] = ()
     if parsed:
         page = await context.pages.prepare(queued.url, response)
@@ -52,12 +53,12 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
 
 def _followed(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl, ...]:
     return tuple(
-        NewUrl(
-            url=link.target,
-            host=url_host(link.target),
-            crawl_depth=depth,
-            discovered_via=link.type,
-        )
+        NewUrl(url=link.target, crawl_depth=depth, discovered_via=link.type)
         for link in page.links
         if link.type == "hyperlink" and scope.decide(link.target).in_scope
     )
+
+
+def _is_html(response: FetchResult) -> bool:
+    content_type = response.header("Content-Type") or ""
+    return content_type.partition(";")[0].strip().lower() in _HTML_TYPES
