@@ -145,6 +145,40 @@ INTERNAL_ERROR = _declare(
     "An unexpected failure, which is a bug; details.traceback holds the Python traceback.",
 )
 INTERRUPTED = _declare("interrupted", "error", ExitCode.INTERRUPTED, "Stopped with Ctrl+C.")
+INVALID_URL = _declare(
+    "invalid_url",
+    "error",
+    ExitCode.USAGE,
+    "A Seed that is not a valid http or https URL; details.reason says why.",
+)
+INVALID_PATTERN = _declare(
+    "invalid_pattern",
+    "error",
+    ExitCode.USAGE,
+    "A URL pattern that is not a valid Python regular expression; details.pattern holds it.",
+)
+PARSE_FAILED = _declare(
+    "parse_failed",
+    "warning",
+    None,
+    "A registered extractor raised an error, so a Page was recorded without its output; "
+    "details.count says for how many URLs, details.first_url for which first.",
+)
+HANDLER_FAILED = _declare(
+    "handler_failed",
+    "warning",
+    None,
+    "A per-response handler raised an error, so the URL was recorded without that handler's "
+    "rows; details.count says for how many URLs, details.first_url for which first.",
+)
+RECORD_FAILED = _declare(
+    "record_failed",
+    "warning",
+    None,
+    "The unit that records a URL failed with an error of one row, so the URL was recorded as an "
+    "error without the URLs found on it; details.count says for how many URLs, "
+    "details.first_url for which first.",
+)
 WORKSPACE_NESTED = _declare(
     "workspace_nested", "warning", None, "The new Workspace is inside another Workspace."
 )

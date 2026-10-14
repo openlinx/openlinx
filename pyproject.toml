@@ -7,9 +7,14 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.15"
 dependencies = [
+    "aiohttp>=3.14.3",
+    "idna>=3.20",
+    "msgspec>=0.22.0",
     "orjson>=3.12.0",
+    "publicsuffixlist>=1.1.0.20261010",
     "pydantic-settings>=2.15.0",
     "rich>=15.0.0",
+    "selectolax>=1.0.0",
     "sqlalchemy>=2.1.3,<3",
     "typer>=0.27.2,<0.28",
 ]
@@ -23,7 +28,6 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "aiohttp>=3.14.3",
     "covdefaults>=2.3.0",
     "hypothesis>=6.168.3",
     "mypy>=2.3.1",
@@ -91,7 +95,10 @@ filterwarnings = ["error"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 timeout = 60
-markers = ["slow: waits real seconds, such as a reader's 5 s busy timeout"]
+markers = [
+    "slow: waits real seconds, such as a reader's 5 s busy timeout",
+    "blocks_remote: the network guard blocks the test on purpose",
+]
 
 [tool.coverage.run]
 plugins = ["covdefaults"]

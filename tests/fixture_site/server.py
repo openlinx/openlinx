@@ -1,6 +1,8 @@
 """The fixture-site server, aiohttp on 127.0.0.1 in a thread (design D9 of 000-scaffold-project)."""
 
 import asyncio
+import socket
+import struct
 import threading
 import time
 from collections.abc import Awaitable, Callable, Coroutine, Iterator, Sequence
@@ -41,18 +43,34 @@ class RequestLog:
         self._entries: list[LoggedRequest] = []
         self._lock = threading.Lock()
         self._keep = keep
+        self._in_flight = 0
+        self._most_in_flight = 0
 
     def add(self, request: web.Request) -> None:
-        if not self._keep:
-            return
-        entry = LoggedRequest(
-            method=request.method,
-            path=request.path_qs,
-            headers=CIMultiDictProxy(CIMultiDict(request.headers)),
-            received_at=time.monotonic(),
+        entry = (
+            LoggedRequest(
+                method=request.method,
+                path=request.path_qs,
+                headers=CIMultiDictProxy(CIMultiDict(request.headers)),
+                received_at=time.monotonic(),
+            )
+            if self._keep
+            else None
         )
         with self._lock:
-            self._entries.append(entry)
+            if entry is not None:
+                self._entries.append(entry)
+            self._in_flight += 1
+            self._most_in_flight = max(self._most_in_flight, self._in_flight)
+
+    def answered(self) -> None:
+        with self._lock:
+            self._in_flight -= 1
+
+    @property
+    def most_in_flight(self) -> int:
+        with self._lock:
+            return self._most_in_flight
 
     def snapshot(self) -> tuple[LoggedRequest, ...]:
         with self._lock:
@@ -70,6 +88,11 @@ class ServerHandle:
     @property
     def requests(self) -> tuple[LoggedRequest, ...]:
         return self._log.snapshot()
+
+    @property
+    def most_simultaneous(self) -> int:
+        """The most requests the site has handled at once."""
+        return self._log.most_in_flight
 
 
 def _page_response(site: Site, page: Page, base_url: str) -> web.Response:
@@ -123,6 +146,27 @@ def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
             return response
 
 
+async def _reset_inside_body(
+    request: web.Request, response: web.Response, sent: int
+) -> web.StreamResponse:
+    body = response.body
+    assert isinstance(body, bytes)
+    headers = CIMultiDict(response.headers)
+    headers.popall("Content-Length", None)
+    stream = web.StreamResponse(status=response.status, headers=headers)
+    stream.content_length = len(body)
+    await stream.prepare(request)
+    await stream.write(body[:sent])
+    transport = request.transport
+    assert transport is not None
+    # A zero linger makes the close an RST, as a peer that drops the connection sends.
+    transport.get_extra_info("socket").setsockopt(
+        socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0)
+    )
+    transport.abort()
+    return stream
+
+
 def _pattern_chunks(size: int) -> Iterator[bytes]:
     block = bytes(range(256)) * 256
     for start in range(0, size, len(block)):
@@ -144,6 +188,7 @@ def _build_app(
             return await handler(request)
         finally:
             in_flight.discard(task)
+            log.answered()
 
     async def handle(request: web.Request) -> web.StreamResponse:
         route = site.routes.get(request.path)
@@ -160,6 +205,9 @@ def _build_app(
             response.headers["Content-Type"] = route.content_type
         for name, value in route.headers:
             response.headers.add(name, value)
+        if route.reset_after is not None:
+            assert isinstance(response, web.Response)
+            return await _reset_inside_body(request, response, route.reset_after)
         if isinstance(route, LargeFile):
             await response.prepare(request)
             for chunk in _pattern_chunks(route.size):

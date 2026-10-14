@@ -11,7 +11,7 @@ import typer
 from typer.core import TyperOption
 from typer.models import OptionInfo
 
-from spider.cli.click_compat import Command
+from spider.cli.click_compat import Command, Context, ParameterSource
 from spider.naming import DATA_DIR_NAME, GLOBAL_DATA_DIR, SETTINGS_FILE_NAME
 from spider.output.writer import Format
 from spider.store.records import LATEST, SecretNames
@@ -99,3 +99,18 @@ def secret_names(command: Command, tables: SettingsTables) -> SecretNames:
     )
     # Every secret setting, not only this Command's: crawl.config records every table.
     return SecretNames(flags, tables.secret_settings())
+
+
+def setting_flags(ctx: Context) -> dict[str, dict[str, Any]]:
+    """The settings given as flags on the command line, by table; they beat the settings file."""
+    flags: dict[str, dict[str, Any]] = {}
+    for param, extra in options_with_meta(ctx.command):
+        name = str(param.name)
+        if (
+            extra.setting is None
+            or ctx.get_parameter_source(name) is not ParameterSource.COMMANDLINE
+        ):
+            continue
+        table, _, key = extra.setting.partition(".")
+        flags.setdefault(table, {})[key] = ctx.params[name]
+    return flags

@@ -114,7 +114,7 @@ def test_a_stopped_crawl_has_no_completion_time(temp_workspace: TempWorkspace) -
     stopped_at = datetime(2026, 9, 27, 15, 0, 0, tzinfo=UTC)
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        writer.run(lambda connection: set_state(connection, "stopped", stopped_at))
+        writer.run(lambda connection: set_state(connection, "stopped", stopped_at, "requested"))
 
     assert crawl_row(crawl.path)["completed_at"] is None
 

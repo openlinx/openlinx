@@ -1,0 +1,259 @@
+"""The engine: the frontier depth by depth, and each URL's unit (020-add-crawl-core D1, D2, D3)."""
+
+import asyncio
+from contextlib import suppress
+from typing import Any
+
+from spider.crawl.context import CrawlContext
+from spider.crawl.fetcher import FetchFailure, FetchResult, Request
+from spider.crawl.hooks import UrlResult
+from spider.crawl.pages import PreparedPage
+from spider.crawl.politeness import RequestLimits
+from spider.crawl.scope import ScopeDecision, ScopeRules
+from spider.crawl.urls import NormalizedUrl, url_host
+from spider.output.codes import HANDLER_FAILED, PARSE_FAILED, RECORD_FAILED
+from spider.output.diagnostics import Diagnostic
+from spider.store.failures import is_one_urls_failure
+from spider.store.records import ErroredUrl, FetchedUrl, NewUrl, QueuedUrl, SkippedUrl
+from spider.store.urls import (
+    UrlUnit,
+    next_depth,
+    queued_batch,
+    record_error,
+    record_fetched,
+    record_seed,
+    record_skipped,
+    record_unwritten,
+)
+from spider.store.writer import CrawlWriterClosedError
+
+# Queued URLs read from the frontier at once.
+_FRONTIER_BATCH = 100
+_HTML_TYPES = frozenset({"text/html", "application/xhtml+xml"})
+
+
+class _Outcomes:
+    """Every submitted unit's Future until its outcome has reached the engine (design D2)."""
+
+    def __init__(self, context: CrawlContext) -> None:
+        self._context = context
+        self._pending: set[asyncio.Future[Any]] = set()
+
+    async def submit(self, queued: QueuedUrl, unit: UrlUnit) -> None:
+        future = await self._context.writer.submit_async(unit)
+        self._pending.add(future)
+        future.add_done_callback(lambda done: self._unit_done(queued, done))
+
+    async def settled(self) -> None:
+        """Waits for every outcome, fallback units included."""
+        while self._pending:
+            # The writer commits on its own only every 500 units or second of clock time.
+            with suppress(CrawlWriterClosedError):
+                # An ended writer has already failed every Future it held.
+                await asyncio.to_thread(self._context.writer.flush)
+            # Outcomes that the flush resolved have already left the set.
+            if self._pending:
+                await asyncio.wait(set(self._pending))
+
+    def _unit_done(self, queued: QueuedUrl, done: asyncio.Future[None]) -> None:
+        self._pending.discard(done)
+        error = done.exception()
+        if error is None:
+            return
+        if not is_one_urls_failure(error):
+            self._context.stop.set("write_failed", error)
+            return
+        self._context.reporter.count(
+            Diagnostic.of(
+                RECORD_FAILED,
+                f"Recording {queued.url} failed ({type(error).__name__}), so it was recorded "
+                "as an error, without the URLs found on it and its handlers' rows.",
+            ),
+            queued.url,
+        )
+        fallback = asyncio.ensure_future(self._fall_back(queued, error))
+        self._pending.add(fallback)
+        fallback.add_done_callback(self._pending.discard)
+
+    async def _fall_back(self, queued: QueuedUrl, error: BaseException) -> None:
+        message = f"{type(error).__name__}: {error}"
+        try:
+            await (await self._context.writer.submit_async(record_unwritten(queued.id, message)))
+        # A fallback that fails is the file's failure, not the URL's (design D2).
+        except Exception as failure:
+            self._context.stop.set("write_failed", failure)
+
+
+async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
+    outcomes = _Outcomes(context)
+    limits = RequestLimits(context.settings.concurrency)
+    await context.writer.run_async(record_seed(seed))
+    depth: int | None = 0
+    try:
+        while depth is not None and not context.stop.is_set:
+            await _crawl_depth(context, outcomes, limits, depth)
+            # Read after every unit submitted so far, so it sees the URLs they discovered.
+            depth = await context.writer.run_async(next_depth(depth))
+    # An ended writer refuses every unit; its cause says why it ended (017 D6).
+    except CrawlWriterClosedError as closed:
+        context.stop.set("write_failed", closed.__cause__ or closed)
+    await outcomes.settled()
+
+
+async def _crawl_depth(
+    context: CrawlContext, outcomes: _Outcomes, limits: RequestLimits, depth: int
+) -> None:
+    """Returns once every URL task of the depth has ended, so the next depth sees their URLs."""
+    running: set[asyncio.Task[None]] = set()
+    try:
+        # The cursor of this run: a URL in flight is never read twice (design D1).
+        after = 0
+        while batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH)):
+            for queued in batch:
+                await limits.reserve_task()
+                if context.stop.is_set:
+                    limits.task_ended()
+                    return
+                task = asyncio.create_task(_crawl_url(context, outcomes, limits, queued))
+                running.add(task)
+                task.add_done_callback(running.discard)
+            after = batch[-1].id
+        if running:
+            await asyncio.gather(*running)
+    finally:
+        for task in running:
+            task.cancel()
+        # Retrieved, so that no "Task exception was never retrieved" reaches stderr.
+        await asyncio.gather(*running, return_exceptions=True)
+
+
+async def _crawl_url(
+    context: CrawlContext, outcomes: _Outcomes, limits: RequestLimits, queued: QueuedUrl
+) -> None:
+    try:
+        # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
+        await outcomes.submit(queued, await _unit_of(context, limits, queued))
+    finally:
+        limits.task_ended()
+
+
+async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedUrl) -> UrlUnit:
+    """The unit that records the URL's final state, with its handlers' rows."""
+    row_writers = context.hooks.row_writers
+    # Decided once, at dispatch, so a URL found on several Pages is recorded once (design D1).
+    skip_reason = context.scope.decide(queued.url).skip_reason
+    if skip_reason is not None:
+        skipped = _result(queued, fetch_state="skipped", skip_reason=skip_reason)
+        return record_skipped(
+            SkippedUrl(queued.id, skip_reason, _handler_rows(context, skipped)), row_writers
+        )
+    async with limits.host(url_host(queued.url)):
+        response = await context.fetcher.fetch(Request(queued.url))
+    if isinstance(response, FetchFailure):
+        failed = _result(
+            queued,
+            fetch_state="error",
+            fetch_error=response.fetch_error,
+            fetch_error_message=response.message,
+            fetched_at=response.fetched_at,
+        )
+        errored = ErroredUrl(
+            url_id=queued.id,
+            fetch_error=response.fetch_error,
+            fetch_error_message=response.message,
+            fetched_at=response.fetched_at,
+            rows=_handler_rows(context, failed),
+        )
+        return record_error(errored, row_writers)
+    return record_fetched(await _fetched(context, queued, response), row_writers)
+
+
+async def _fetched(context: CrawlContext, queued: QueuedUrl, response: FetchResult) -> FetchedUrl:
+    parsed = 200 <= response.status_code < 300 and _is_html(response)
+    page = await context.pages.prepare(queued.url, response) if parsed else None
+    discovered = () if page is None else _followed(page, context.scope, queued.crawl_depth + 1)
+    parse_error = None if page is None else page.parse_error
+    parse_error_message = None if page is None else page.parse_error_message
+    if parse_error is not None:
+        context.reporter.count(
+            Diagnostic.of(
+                PARSE_FAILED,
+                f"An extractor failed on {queued.url} ({parse_error_message}); the Page was "
+                "recorded without its output, and its Links were followed.",
+            ),
+            queued.url,
+        )
+    content_type = response.header("Content-Type")
+    result = _result(
+        queued,
+        fetch_state="fetched",
+        status_code=response.status_code,
+        content_type=content_type,
+        response_time_ms=response.response_time_ms,
+        fetched_at=response.fetched_at,
+        parsed=parsed,
+        parse_error=parse_error,
+        parse_error_message=parse_error_message,
+        headers=response.headers,
+        outputs={} if page is None else dict(page.outputs),
+    )
+    return FetchedUrl(
+        url_id=queued.id,
+        status_code=response.status_code,
+        content_type=content_type,
+        fetched_at=response.fetched_at,
+        response_time_ms=response.response_time_ms,
+        parsed=parsed,
+        parse_error=parse_error,
+        parse_error_message=parse_error_message,
+        discovered=discovered,
+        rows=_handler_rows(context, result),
+    )
+
+
+def _result(queued: QueuedUrl, **outcome: Any) -> UrlResult:
+    return UrlResult(
+        url_id=queued.id,
+        url=queued.url,
+        crawl_depth=queued.crawl_depth,
+        discovered_via=queued.discovered_via,
+        found_on_url_id=queued.found_on_url_id,
+        **outcome,
+    )
+
+
+def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[object, ...]:
+    rows: list[object] = []
+    for handler in context.hooks.handlers:
+        try:
+            # Whole, or not at all: a handler that fails midway keeps none of its rows.
+            rows.extend(tuple(handler.handle(result)))
+        # A handler is later changes' code: its failure costs only its rows (design D16).
+        except Exception as error:
+            context.reporter.count(
+                Diagnostic.of(
+                    HANDLER_FAILED,
+                    f"The handler {handler.name} raised {type(error).__name__} on "
+                    f"{result.url}; the URL was recorded without its rows.",
+                ),
+                result.url,
+            )
+    return tuple(rows)
+
+
+def _followed(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl, ...]:
+    return tuple(
+        NewUrl(url=link.target, crawl_depth=depth, discovered_via=link.type)
+        for link in page.links
+        if link.type == "hyperlink" and _enters_frontier(scope.decide(link.target))
+    )
+
+
+def _enters_frontier(decision: ScopeDecision) -> bool:
+    # An excluded URL is recorded too, as skipped when it is dispatched.
+    return decision.in_scope or decision.skip_reason is not None
+
+
+def _is_html(response: FetchResult) -> bool:
+    content_type = response.header("Content-Type") or ""
+    return content_type.partition(";")[0].strip().lower() in _HTML_TYPES
