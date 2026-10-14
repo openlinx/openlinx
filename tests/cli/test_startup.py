@@ -57,12 +57,18 @@ class StandardLibrary:
             return True
         if origin is None:
             return False
-        path = Path(origin)
-        in_site = any(path.is_relative_to(site) for site in self.site_dirs) or not {
+        path = _real(origin)
+        in_site = any(path.is_relative_to(_real(site)) for site in self.site_dirs) or not {
             "site-packages",
             "dist-packages",
         }.isdisjoint(path.parts)
-        return not in_site and any(path.is_relative_to(root) for root in self.roots)
+        return not in_site and any(path.is_relative_to(_real(root)) for root in self.roots)
+
+
+def _real(path: str | Path) -> Path:
+    # Compared resolved: an installation may name one folder by several paths, as Homebrew's
+    # opt/python@3.14 symlink into its Cellar does, and is_relative_to compares the text.
+    return Path(os.path.realpath(path))
 
 
 def this_standard_library() -> StandardLibrary:
@@ -145,6 +151,36 @@ def test_a_module_is_standard_by_where_it_comes_from() -> None:
         "in_base_site",
         "a_namespace",
     }
+
+
+def test_a_folder_reached_through_a_symlink_is_the_same_folder(tmp_path: Path) -> None:
+    cellar = tmp_path / "Cellar"
+    (cellar / "lib" / "json").mkdir(parents=True)
+    opt = tmp_path / "opt"
+    try:
+        opt.symlink_to(cellar, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"this account cannot create a symlink: {error}")
+    through_opt = StandardLibrary(roots=(opt / "lib",), site_dirs=())
+    through_cellar = StandardLibrary(roots=(cellar / "lib",), site_dirs=())
+
+    assert (
+        outside_the_standard_library({"json": str(cellar / "lib" / "json" / "a.py")}, through_opt),
+        outside_the_standard_library({"json": str(opt / "lib" / "json" / "a.py")}, through_cellar),
+    ) == (set(), set())
+
+
+def test_dot_dot_segments_name_the_folder_they_resolve_to() -> None:
+    stdlib = StandardLibrary(
+        roots=(Path("/py/lib/python3.14"), Path("/venv")),
+        site_dirs=(Path("/venv/bin/../lib"),),
+    )
+    loaded = {
+        "json": "/py/lib/other/../python3.14/json/__init__.py",
+        "pkg": "/venv/lib/pkg/__init__.py",
+    }
+
+    assert outside_the_standard_library(loaded, stdlib) == {"pkg"}
 
 
 # spider commands reads the inherited secret flag of an option's setting from the table's model,
