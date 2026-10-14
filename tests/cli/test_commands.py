@@ -143,6 +143,15 @@ def test_store_codes_are_self_described() -> None:
     assert {code: diagnostics[code]["exit_code"] for code in expected} == expected
 
 
+def test_rule_codes_are_self_described() -> None:
+    diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
+
+    assert (diagnostics["rule_not_found"]["level"], diagnostics["rule_not_found"]["exit_code"]) == (
+        "error",
+        4,
+    )
+
+
 def test_warning_and_info_codes_of_this_change() -> None:
     diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
 
