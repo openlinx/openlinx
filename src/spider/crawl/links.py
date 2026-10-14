@@ -74,11 +74,18 @@ def extract_links(
     url: NormalizedUrl,
     *,
     is_internal: Callable[[NormalizedUrl], bool],
+    strip_params: re.Pattern[str] | None = None,
 ) -> list[DiscoveredLink]:
     decoded = decode_html(body, content_type)
     html = parse_html(decoded.text)
     base = base_url(html.tree, url, decoded.encoding)
-    return links_in_tree(html, base=base, encoding=decoded.encoding, is_internal=is_internal)
+    return links_in_tree(
+        html,
+        base=base,
+        encoding=decoded.encoding,
+        is_internal=is_internal,
+        strip_params=strip_params,
+    )
 
 
 def rel_tokens(rel: str) -> tuple[str, ...]:
@@ -97,6 +104,7 @@ def links_in_tree(
     base: str,
     encoding: str,
     is_internal: Callable[[NormalizedUrl], bool],
+    strip_params: re.Pattern[str] | None,
     first_ordinal: int = 1,
 ) -> list[DiscoveredLink]:
     """The Links of a parsed document, for page preparation, which parses once (design D9)."""
@@ -106,7 +114,7 @@ def links_in_tree(
         attributes = node.attributes
         rel = rel_tokens(attributes.get("rel") or "")
         for link_type, attribute, raw in _references(node.tag or "", attributes, rel, node.parent):
-            target = resolve_reference(base, raw, codec)
+            target = resolve_reference(base, raw, codec, strip_params)
             if target is None:
                 continue
             links.append(
@@ -214,12 +222,14 @@ def _base(tree: LexborHTMLParser, url: NormalizedUrl, codec: str | None) -> str:
     return _joined(url, href, codec) or url
 
 
-def resolve_reference(base: str, raw: str, codec: str | None) -> NormalizedUrl | None:
+def resolve_reference(
+    base: str, raw: str, codec: str | None, strip_params: re.Pattern[str] | None
+) -> NormalizedUrl | None:
     """The normalised URL a browser makes of a reference against `base`, or None."""
     joined = _joined(base, _cleaned(raw), codec)
     if joined is None:
         return None
-    target = normalize_url(joined)
+    target = normalize_url(joined, strip_params)
     return target if isinstance(target, str) else None
 
 

@@ -22,7 +22,7 @@ from spider.crawl.pages import (
 )
 from spider.crawl.refresh import refresh_url
 from spider.crawl.scope import scope_rules
-from spider.crawl.urls import NormalizedUrl, url_host
+from spider.crawl.urls import NormalizedUrl, strip_params_pattern, url_host
 
 SITE = NormalizedUrl("http://site.test/")
 
@@ -99,7 +99,7 @@ def test_a_refresh_names_its_target_as_html_reads_it(content: str, url: str | No
 def test_the_link_and_refresh_headers_give_links(
     headers: list[tuple[str, str]], found: list[tuple[str, str, tuple[str, ...]]]
 ) -> None:
-    links = header_links(tuple(headers), SITE, is_internal=_on_site)
+    links = header_links(tuple(headers), SITE, is_internal=_on_site, strip_params=None)
 
     assert (
         [(link.type, link.target, tuple(t for t in link.rel if t == "nofollow")) for link in links],
@@ -144,7 +144,7 @@ def test_the_engine_finds_the_links_that_the_extractors_see() -> None:
     page = prepare_page(SITE, _PAGE_WITH_A_CANONICAL_HEADER, _SEEING)
 
     # As the engine joins them: its own header Links, then the prepared document's.
-    joined = response_links(SITE, _PAGE_WITH_A_CANONICAL_HEADER, _SEEING.scope)
+    joined = response_links(SITE, _PAGE_WITH_A_CANONICAL_HEADER, _SEEING.scope, None)
     assert joined + page.document_links == _seen(page)
 
 
@@ -180,4 +180,25 @@ _HEADER_PIECES = st.sampled_from(
     )
 )
 def test_the_header_links_accept_any_values(headers: list[tuple[str, str]]) -> None:
-    assert isinstance(header_links(tuple(headers), SITE, is_internal=_on_site), list)
+    links = header_links(tuple(headers), SITE, is_internal=_on_site, strip_params=None)
+
+    assert isinstance(links, list)
+
+
+def test_stripped_parameters_leave_every_link_of_a_page() -> None:
+    response = FetchResult(
+        status_code=200,
+        headers=(("Content-Type", "text/html"), ("Link", "</c?utm_id=1>; rel=canonical")),
+        body=b'<a href="/a?utm_id=2&x=1">A</a>',
+        fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
+        response_time_ms=1,
+    )
+    settings = PageSettings(scope=scope_rules(SITE), strip_params=strip_params_pattern(["utm_*"]))
+
+    page = prepare_page(SITE, response, settings)
+
+    assert [
+        link.target
+        for link in response_links(SITE, response, settings.scope, settings.strip_params)
+        + page.document_links
+    ] == ["http://site.test/c", "http://site.test/a?x=1"]

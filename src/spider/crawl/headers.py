@@ -22,13 +22,14 @@ def header_links(
     url: NormalizedUrl,
     *,
     is_internal: Callable[[NormalizedUrl], bool],
+    strip_params: re.Pattern[str] | None,
 ) -> list[DiscoveredLink]:
     """In the order received, numbered from 1: they come before the document's (design D5)."""
     links: list[DiscoveredLink] = []
     for name, value in headers:
         for link_type, raw, rel in _header_references(name.lower(), value):
             # Against the response URL: a header knows no base href.
-            target = resolve_reference(url, raw, None)
+            target = resolve_reference(url, raw, None, strip_params)
             if target is None:
                 continue
             links.append(

@@ -169,7 +169,7 @@ http://site.test/p?utm_source=x&id=7&fbclid=y   ->   http://site.test/p?id=7
 http://site.test/p?a=1&b=2 with "*"               ->   http://site.test/p
 ```
 
-URLs that differ only in stripped parameters are one URL, so the Crawl requests it once.
+URLs that differ only in stripped parameters are one URL, so the Crawl requests it once. The Seed is stripped too, and so are the targets of the HTTP `Link` and `Refresh` headers; the `seeds` table keeps the Seed as given.
 
 ## Scope
 

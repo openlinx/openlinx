@@ -83,9 +83,11 @@ def normalize_url(
     return NormalizedUrl(urlunsplit(_normalized_parts(parts, host, port, strip_params)))
 
 
-def parse_seed(text: str) -> NormalizedUrl | InvalidUrl:
+def parse_seed(
+    text: str, strip_params: re.Pattern[str] | None = None
+) -> NormalizedUrl | InvalidUrl:
     seed = text.strip()
-    return normalize_url(seed if _SCHEME.match(seed) else f"https://{seed}")
+    return normalize_url(seed if _SCHEME.match(seed) else f"https://{seed}", strip_params)
 
 
 def _raw_host(netloc: str) -> str:

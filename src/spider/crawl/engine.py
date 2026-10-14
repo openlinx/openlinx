@@ -99,7 +99,13 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
     )
     # Once, with the final Scope: 022 moves this to the end of the Seed's Redirect Chain.
-    await context.pages.start(PageSettings(context.scope, context.hooks.extractors))
+    await context.pages.start(
+        PageSettings(
+            context.scope,
+            context.hooks.extractors,
+            strip_params=context.strip_params,
+        )
+    )
     depth: int | None = 0
     try:
         while depth is not None and not context.stop.is_set:
@@ -201,7 +207,11 @@ async def _fetched(
     parsed = page is not None and page.parsed
     # The Link and Refresh headers of an in-Scope 2xx response count, whatever became of its
     # preparation (design D9).
-    links = response_links(queued.url, response, context.scope) if followed else ()
+    links = (
+        response_links(queued.url, response, context.scope, context.strip_params)
+        if followed
+        else ()
+    )
     if page is not None:
         links += page.document_links
     nofollow = page is not None and page.directives.nofollow

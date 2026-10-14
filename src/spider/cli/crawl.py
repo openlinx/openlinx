@@ -57,6 +57,17 @@ def crawl(
         ),
         OptionMeta(setting="crawl.follow_nofollow"),
     ] = False,
+    strip_params: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--strip-params",
+            help="Comma-separated glob patterns of query parameter names, such as utm_*, "
+            "removed from every URL before it is recorded or requested. Give it more than once "
+            "for several values.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.strip_params"),
+    ] = None,
     exclude: Annotated[
         list[str] | None,
         typer.Option(

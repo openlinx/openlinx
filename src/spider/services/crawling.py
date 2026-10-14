@@ -21,7 +21,13 @@ from spider.crawl.pages import PageExecutor
 from spider.crawl.scope import ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.stop import StopSignal
-from spider.crawl.urls import InvalidUrl, InvalidUrlReason, NormalizedUrl, parse_seed
+from spider.crawl.urls import (
+    InvalidUrl,
+    InvalidUrlReason,
+    NormalizedUrl,
+    parse_seed,
+    strip_params_pattern,
+)
 from spider.crawl.warning_log import WarningLog
 from spider.output.codes import INVALID_PATTERN, INVALID_URL
 from spider.output.diagnostics import Diagnostic, SpiderError
@@ -63,6 +69,7 @@ class CrawlPlan:
     seed: NormalizedUrl
     settings: CrawlSettings
     scope: ScopeRules
+    strip_params: re.Pattern[str] | None
     new_crawl: NewCrawl
 
 
@@ -113,9 +120,8 @@ class CrawlResult:
 
 def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     """Validation and config resolution, before anything is created (design D11)."""
-    seed = parse_seed(request.seed)
-    if isinstance(seed, InvalidUrl):
-        raise _invalid_seed(request.seed, seed.reason)
+    # Checked before the Workspace is resolved, and stripped once the settings are read.
+    _seed(request.seed, None)
     workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
     settings = load_settings(workspace, tables, request.flags)
     settings_file = workspace.settings_file if workspace.settings_file.is_file() else None
@@ -133,8 +139,23 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         settings_file=settings_file,
     )
     crawl_settings = settings.table(CrawlSettings)
+    strip_params = strip_params_pattern(crawl_settings.strip_params)
+    seed = _seed(request.seed, strip_params)
     scope = scope_rules(seed, exclude=_patterns(crawl_settings.exclude))
-    return CrawlPlan(seed=seed, settings=crawl_settings, scope=scope, new_crawl=new_crawl)
+    return CrawlPlan(
+        seed=seed,
+        settings=crawl_settings,
+        scope=scope,
+        strip_params=strip_params,
+        new_crawl=new_crawl,
+    )
+
+
+def _seed(text: str, strip_params: re.Pattern[str] | None) -> NormalizedUrl:
+    seed = parse_seed(text, strip_params)
+    if isinstance(seed, InvalidUrl):
+        raise _invalid_seed(text, seed.reason)
+    return seed
 
 
 def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
@@ -236,6 +257,7 @@ async def _crawl_context(
                     crawl_file=crawl_file,
                     settings=plan.settings,
                     scope=plan.scope,
+                    strip_params=plan.strip_params,
                     clock=clock,
                     reporter=reporter,
                     writer=writer,

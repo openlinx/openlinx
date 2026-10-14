@@ -19,6 +19,11 @@ class CrawlSettings(BaseModel):
         description="Follow nofollow hyperlinks, and every hyperlink of a Page whose robots "
         "directives say nofollow, like any other hyperlink.",
     )
+    strip_params: list[str] = Field(
+        [],
+        description="Glob patterns of query parameter names, comma-separated, removed from the "
+        "Seed and every discovered URL before it is recorded or requested.",
+    )
     exclude: list[str] = Field(
         [],
         description="Regular expressions of URLs that are never requested; each is searched "
