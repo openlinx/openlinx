@@ -49,8 +49,9 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 3.15 Drive "Live and materialised Issues agree" at seam 3+6.
 - [ ] 3.16 Drive "Missing H2" at seam 2.
 - [ ] 3.17 Drive "Disabled Rule produces no Issue" at seam 3+6.
-- [ ] 3.18 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` over a crawl file, and when Issues are live or materialised.
-- [ ] 3.19 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [ ] 3.18 Drive "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2).
+- [ ] 3.19 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` over a crawl file, and when Issues are live or materialised.
+- [ ] 3.20 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. Title Rules and the post-crawl pass
 

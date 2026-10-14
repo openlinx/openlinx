@@ -32,7 +32,7 @@ In the scenarios, `{site}` is the origin of the local fixture site.
 Each Rule SHALL be evaluated over exactly one population, and its Affected URLs SHALL be members of that population:
 
 - **`internal_urls`**: the rows of the `urls` table of `020-add-crawl-core` (including the columns that `022-add-fetch-policy` adds) with `is_internal` = 1 that were requested (`fetch_state` `fetched` or `error`) or are disallowed by robots.txt (`blocked_by_robots_txt` = 1). Internal URLs outside a Section Crawl's Scope are included.
-- **`internal_pages`**: the rows of `030-add-page-data`'s `pages` table whose URL was parsed (`urls.parsed` = 1), which are the analysed Pages. Rules marked *Indexable only* further restrict this to Pages whose `indexability` is `indexable`.
+- **`internal_pages`**: the rows of `030-add-page-data`'s `pages` table whose URL was parsed (`urls.parsed` = 1), which are the analysed Pages, including a Page on which an extractor failed (`urls.parse_error` = `extractor_error`), whose columns from that extractor are NULL. Rules marked *Indexable only* further restrict this to Pages whose `indexability` is `indexable`.
 - **`resources`**: image Resources, meaning URLs that are the target of at least one `image` Link whose source is a Page, and that were requested by `022-add-fetch-policy`'s Resource checks (`fetch_state` `fetched` or `error`), whether Internal or External. A Resource is a non-HTML file that a Page references (CONTEXT.md); the Rules of this catalogue check only images.
 
 A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). For example, a canonical target that the Crawl never requested produces no Affected URL.
@@ -44,6 +44,10 @@ A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). 
 #### Scenario: Non-analysed Pages are skipped by Page Rules
 - **WHEN** a Page responded 404 with an HTML body and no `<title>`
 - **THEN** `title-missing` has no Affected URL for it
+
+#### Scenario: A failed extractor raises no Issue for its missing columns
+- **WHEN** an analysed Page has `parse_error` = `extractor_error`, and its title and heading columns (`title_count`, `title_1`, `h1_count`, `h1_1`) NULL
+- **THEN** `title-missing` and `h1-missing` have no Affected URL for it
 
 ### Requirement: The v0.1 catalogue
 The Rule catalogue SHALL contain exactly the 42 Rules defined in the category requirements below, with the Issue Type, Priority, population, default thresholds, condition and `detail` keys given there. Column names refer to the `urls` table and to the tables of `030-add-page-data`.

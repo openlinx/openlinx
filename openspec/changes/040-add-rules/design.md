@@ -47,6 +47,7 @@ No Rule runs while a URL is recorded: the Crawl's writer, the bottleneck of a Cr
 
 ### D2. Populations and whose URL is affected
 - **Page Rules** see only analysed Pages (`urls.parsed` = 1).
+- **A Page whose extractor failed** (`parse_error` = `extractor_error`, the user's decision of 2026-10-14) stays among them. The columns its failed extractor fills are NULL, and a Rule never fires on a NULL value, so it raises no false Issue, while the columns of the extractors that succeeded are still checked. *Alternative:* `parse_error IS NULL` in `internal_pages`. It would hide every Issue of a Page whose unrelated extractor failed. Rejected.
 - **Comparison Rules and thin content** (duplicates, `exact-duplicate`, `low-word-count`) see only Indexable Pages. Pages that are canonicalised or noindexed by intent are then not reported as duplicates of the Pages they point to. Screaming Frog behaves the same way.
 - **`image-too-large` and `image-broken`** affect the image URL, because one fix to one file clears every Page that uses it.
 - **`image-missing-alt-text`** affects the Page, because the `alt` attribute is part of the Page's HTML. It counts only `<img src>` Links, so the `srcset` candidates that `020` also discovers are not counted twice.
