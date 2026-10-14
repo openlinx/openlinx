@@ -232,7 +232,12 @@ def _skip_reason(
     max_depth = context.settings.max_depth
     if decision.skip_reason is not None:
         return decision.skip_reason
-    if max_depth is not None and queued.crawl_depth > max_depth:
+    # A followed Page's Resources are requested one deeper than the limit (design D5).
+    if (
+        max_depth is not None
+        and queued.crawl_depth > max_depth
+        and queued.discovered_via not in RESOURCES
+    ):
         return "max_depth"
     if not (decision.is_internal or context.settings.check_external):
         return "external_not_checked"

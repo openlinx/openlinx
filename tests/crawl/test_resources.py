@@ -34,3 +34,23 @@ def test_a_broken_image_is_recorded(temp_workspace: TempWorkspace, fixture_site:
     assert query(
         crawl_file, "SELECT status_code FROM urls WHERE url = ?", [server.url("/missing.png")]
     ) == [(404,)]
+
+
+def test_resources_are_checked_beyond_the_depth_limit(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<img src="/logo.png"><a href="/about">About</a>'),
+                "/logo.png": Page(body="PNG", content_type="image/png"),
+                "/about": Page(body="<p>About</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--max-depth", "0")
+
+    assert query(
+        crawl_file, "SELECT fetch_state FROM urls WHERE url = ?", [server.url("/logo.png")]
+    ) == [("fetched",)]
