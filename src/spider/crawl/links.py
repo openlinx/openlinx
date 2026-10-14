@@ -8,6 +8,8 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.decoding import decode_html, query_codec
+from spider.crawl.noscript import MARKER, ParsedHtml, parse_html
+from spider.crawl.refresh import refresh_url
 from spider.crawl.urls import NormalizedUrl, normalize_url
 from spider.store.records import DeclaredIn, LinkType
 
@@ -37,11 +39,13 @@ _SINGLE_REFERENCES: Mapping[str, tuple[LinkType, str]] = {
 _ELEMENTS = ", ".join(
     [
         *(f"{tag}[{attribute}]" for tag, (_, attribute) in _SINGLE_REFERENCES.items()),
-        "link[href], img, video, source, track",
+        "link[href], img, video, source, track, meta[http-equiv]",
     ]
 )
+_ELEMENTS_OR_NOSCRIPT = f"{_ELEMENTS}, template[{MARKER}]"
 _MEDIA_TYPES: Mapping[str, LinkType] = {"video": "video", "audio": "audio"}
-_PAGINATION = frozenset({"next", "prev", "previous"})
+PAGINATION_RELS = frozenset({"next", "prev", "previous"})
+_METADATA = frozenset({"link", "meta"})
 # These name an origin to connect to, not a file.
 _ORIGIN_HINTS = frozenset({"preconnect", "dns-prefetch"})
 # The srcset grammar of HTML: a URL ends at white space, or at the commas closing it, which
@@ -72,9 +76,14 @@ def extract_links(
     is_internal: Callable[[NormalizedUrl], bool],
 ) -> list[DiscoveredLink]:
     decoded = decode_html(body, content_type)
-    tree = LexborHTMLParser(decoded.text)
-    base = base_url(tree, url, decoded.encoding)
-    return links_in_tree(tree, base=base, encoding=decoded.encoding, is_internal=is_internal)
+    html = parse_html(decoded.text)
+    base = base_url(html.tree, url, decoded.encoding)
+    return links_in_tree(html, base=base, encoding=decoded.encoding, is_internal=is_internal)
+
+
+def rel_tokens(rel: str) -> tuple[str, ...]:
+    """HTML and RFC 8288 compare them without ASCII case."""
+    return tuple(_ASCII_TOKEN.findall(rel.lower()))
 
 
 def base_url(tree: LexborHTMLParser, url: NormalizedUrl, encoding: str) -> str:
@@ -83,20 +92,21 @@ def base_url(tree: LexborHTMLParser, url: NormalizedUrl, encoding: str) -> str:
 
 
 def links_in_tree(
-    tree: LexborHTMLParser,
+    html: ParsedHtml,
     *,
     base: str,
     encoding: str,
     is_internal: Callable[[NormalizedUrl], bool],
+    first_ordinal: int = 1,
 ) -> list[DiscoveredLink]:
     """The Links of a parsed document, for page preparation, which parses once (design D9)."""
     codec = query_codec(encoding)
     links: list[DiscoveredLink] = []
-    for node in tree.css(_ELEMENTS):
+    for node in _link_nodes(html):
         attributes = node.attributes
-        rel = tuple(_ASCII_TOKEN.findall((attributes.get("rel") or "").lower()))
+        rel = rel_tokens(attributes.get("rel") or "")
         for link_type, attribute, raw in _references(node.tag or "", attributes, rel, node.parent):
-            target = _resolved(base, raw, codec)
+            target = resolve_reference(base, raw, codec)
             if target is None:
                 continue
             links.append(
@@ -109,11 +119,23 @@ def links_in_tree(
                     rel=rel,
                     nofollow="nofollow" in rel,
                     declared_in="html",
-                    ordinal=len(links) + 1,
+                    ordinal=first_ordinal + len(links),
                     is_internal=is_internal(target),
                 )
             )
     return links
+
+
+def _link_nodes(html: ParsedHtml) -> Iterator[LexborNode]:
+    for node in html.tree.css(_ELEMENTS_OR_NOSCRIPT):
+        if node.tag != "template":
+            yield node
+            continue
+        text = html.noscript_text(node)
+        if text:
+            # Head metadata inside <noscript> is ignored; other elements there give their Links.
+            fragment = LexborHTMLParser(text, is_fragment=True)
+            yield from (inner for inner in fragment.css(_ELEMENTS) if inner.tag not in _METADATA)
 
 
 def _references(
@@ -123,6 +145,11 @@ def _references(
     parent: LexborNode | None,
 ) -> Iterator[_Reference]:
     match tag:
+        case "meta":
+            if (attributes.get("http-equiv") or "").lower() == "refresh":
+                raw = refresh_url(attributes.get("content") or "")
+                if raw is not None:
+                    yield "meta_refresh", "content", raw
         case "link":
             link_type = _link_type(rel, attributes)
             if link_type is not None:
@@ -146,7 +173,9 @@ def _references(
 def _link_type(rel: tuple[str, ...], attributes: Mapping[str, str | None]) -> LinkType | None:
     if "stylesheet" in rel:
         return "css"
-    if not _PAGINATION.isdisjoint(rel):
+    if "amphtml" in rel:
+        return "amphtml"
+    if not PAGINATION_RELS.isdisjoint(rel):
         return "pagination"
     if "alternate" in rel and "hreflang" in attributes:
         return "hreflang"
@@ -185,7 +214,8 @@ def _base(tree: LexborHTMLParser, url: NormalizedUrl, codec: str | None) -> str:
     return _joined(url, href, codec) or url
 
 
-def _resolved(base: str, raw: str, codec: str | None) -> NormalizedUrl | None:
+def resolve_reference(base: str, raw: str, codec: str | None) -> NormalizedUrl | None:
+    """The normalised URL a browser makes of a reference against `base`, or None."""
     joined = _joined(base, _cleaned(raw), codec)
     if joined is None:
         return None

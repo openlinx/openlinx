@@ -409,3 +409,46 @@ def test_an_import_of_a_plugin_layer_in_the_crawl_core_is_named() -> None:
         "spider/crawl/scope.py imports spider.rules",
         "spider/crawl/links.py imports spider.cli",
     ]
+
+
+# lexbor's serializer recurses into template content: `.html` of a <template> nested 20,000
+# deep ends the process with a native stack overflow (020 design Risks, task 15.1).
+SERIALIZERS = frozenset({"html", "inner_html", "html_pretty", "inner_html_pretty"})
+PAGE_READERS = ("spider/crawl/", "spider/extract/")
+
+
+def serializer_violations(sources: Mapping[str, str]) -> list[str]:
+    """Reads of a serializer in the modules that read Pages, given every module's source by path."""
+    return [
+        f"{module}:{node.lineno} serializes a node with .{node.attr}, which overflows the stack "
+        "on deeply nested templates"
+        for module, source in sources.items()
+        if module.startswith(PAGE_READERS)
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Attribute) and node.attr in SERIALIZERS
+    ]
+
+
+def test_no_module_that_reads_pages_serializes_a_node() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert serializer_violations(sources) == []
+
+
+def test_a_serialization_of_a_node_is_named() -> None:
+    sources = {
+        "spider/crawl/links.py": "def f(node):\n    return node.html\n",
+        "spider/extract/page_data.py": "text = tree.body.inner_html\n",
+        "spider/crawl/pages.py": "x = node.css('a')\ny = node.attributes\n",
+        "spider/report/html.py": "page = node.html\n",
+    }
+
+    assert serializer_violations(sources) == [
+        "spider/crawl/links.py:2 serializes a node with .html, which overflows the stack on deeply "
+        "nested templates",
+        "spider/extract/page_data.py:1 serializes a node with .inner_html, which overflows the "
+        "stack on deeply nested templates",
+    ]

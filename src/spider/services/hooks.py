@@ -1,6 +1,7 @@
 """The composition root of a Crawl's hooks: the crawl core never imports them (020 D9)."""
 
 from spider.crawl.hooks import Handler, Hooks
+from spider.crawl.pages import InProcessExecutor, PageExecutor
 from spider.extract.page_data import PAGE_DATA
 from spider.extract.page_handler import page_rows
 from spider.store.page_records import PageRow
@@ -14,3 +15,8 @@ def default_hooks() -> Hooks:
         handlers=(Handler("pages", page_rows),),
         row_writers={PageRow: write_page},
     )
+
+
+def default_page_executor() -> PageExecutor:
+    """Where Pages are prepared: in process here, 026's process pool later."""
+    return InProcessExecutor()

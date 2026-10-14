@@ -14,6 +14,11 @@ class CrawlSettings(BaseModel):
         description="Request each External URL once to record its response; false records it "
         "as skipped, unrequested.",
     )
+    follow_nofollow: bool = Field(
+        False,
+        description="Follow nofollow hyperlinks, and every hyperlink of a Page whose robots "
+        "directives say nofollow, like any other hyperlink.",
+    )
     exclude: list[str] = Field(
         [],
         description="Regular expressions of URLs that are never requested; each is searched "

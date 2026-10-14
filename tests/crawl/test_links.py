@@ -282,3 +282,53 @@ def test_deeply_nested_html_gives_its_links() -> None:
     found = _found("<span>" * depth + '<a href="/after">x</a>' + "</span>" * depth)
 
     assert found == [("hyperlink", "http://site.test/after")]
+
+
+@pytest.mark.parametrize(
+    ("html", "found"),
+    [
+        ('<head><link rel="icon" href="/i.ico"></head>', [("misc", "http://site.test/i.ico")]),
+        ('<head><noscript><link rel="icon" href="/i.ico"></noscript></head>', []),
+        (
+            '<head><noscript><meta http-equiv="refresh" content="0; url=/no-js"></noscript></head>',
+            [],
+        ),
+        # The user's decision: a crawler without rendering finds every URL the raw HTML holds.
+        (
+            '<body><noscript><a href="/a">A</a><img src="/pixel.gif"></noscript></body>',
+            [("hyperlink", "http://site.test/a"), ("image", "http://site.test/pixel.gif")],
+        ),
+        (
+            '<a href="/1"></a><noscript><a href="/2"></a><link rel="icon" href="/i.ico">'
+            '<img src="/3"></noscript><a href="/4"></a>',
+            [
+                ("hyperlink", "http://site.test/1"),
+                ("hyperlink", "http://site.test/2"),
+                ("image", "http://site.test/3"),
+                ("hyperlink", "http://site.test/4"),
+            ],
+        ),
+        (
+            '<head><noscript><img src="/px.gif"></noscript><link rel="icon" href="/i.ico"></head>',
+            [("image", "http://site.test/px.gif"), ("misc", "http://site.test/i.ico")],
+        ),
+        (
+            '<head><noscript><base href="/other/"></noscript></head><a href="a"></a>',
+            [("hyperlink", "http://site.test/a")],
+        ),
+        # A page's own template holds placeholders that scripts fill in (design D5).
+        ('<template><a href="{{ url }}"></a></template>', []),
+        # A literal start tag makes no template, so its text is never read (design Risks).
+        ('<script>"<noscript>"</script><a href="/x"></a>', [("hyperlink", "http://site.test/x")]),
+        # A known edge: the comment hides the end tag from lexbor, not from a browser.
+        ('<noscript><!-- </noscript> --><a href="/lost"></a>', []),
+        (
+            '<noscript><a href="/a"></a><noscript></noscript><a href="/c"></a></noscript>',
+            [("hyperlink", "http://site.test/a"), ("hyperlink", "http://site.test/c")],
+        ),
+    ],
+)
+def test_noscript_hides_head_metadata_but_not_the_links_of_the_body(
+    html: str, found: list[tuple[str, str]]
+) -> None:
+    assert _found(html) == found

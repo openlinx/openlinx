@@ -2,7 +2,7 @@
 
 import asyncio
 import re
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,7 +17,7 @@ from spider.crawl.context import CrawlContext
 from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import aiohttp_fetcher
 from spider.crawl.hooks import Hooks
-from spider.crawl.pages import InProcessExecutor, PageSettings
+from spider.crawl.pages import PageExecutor
 from spider.crawl.scope import ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.stop import StopSignal
@@ -28,6 +28,7 @@ from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
 from spider.services.crawls import create_crawl
+from spider.services.hooks import default_page_executor
 from spider.store.crawls import crawl_summary, record_state
 from spider.store.records import CrawlFile, CrawlSummary, NewCrawl, SecretNames, UrlCounts
 from spider.store.settings import StoreSettings
@@ -159,20 +160,15 @@ def start_crawl(
     hooks: Hooks,
     *,
     resolver: AbstractResolver | None = None,
+    pages: Callable[[], PageExecutor] | None = None,
 ) -> CrawlResult:
-    """`resolver` is the DNS resolver hook of multi-host tests (design D15)."""
+    """`resolver` is the DNS resolver hook of multi-host tests, and `pages` builds the page
+    executor instead of `default_page_executor` (design D9, D15)."""
     log = WarningLog(reporter)
     crawl_file = create_crawl(plan.new_crawl, clock, log)
-    log.event(
-        "crawl_started",
-        crawl_id=crawl_file.id,
-        crawl_mode=plan.new_crawl.crawl_mode,
-        seed_count=len(plan.new_crawl.seeds),
-        crawl_file=str(crawl_file.path),
-    )
     with asyncio.Runner(loop_factory=loop_factory) as runner:
         ended_at, summary, counts = runner.run(
-            _crawl(plan, crawl_file, clock, log, hooks, resolver)
+            _crawl(plan, crawl_file, clock, log, hooks, resolver, pages or default_page_executor)
         )
     return CrawlResult(
         crawl_id=crawl_file.id,
@@ -191,8 +187,10 @@ async def _crawl(
     reporter: WarningLog,
     hooks: Hooks,
     resolver: AbstractResolver | None,
+    pages: Callable[[], PageExecutor],
 ) -> tuple[datetime, CrawlSummary, UrlCounts]:
-    async with _crawl_context(crawl_file, plan, clock, reporter, hooks, resolver) as context:
+    context_of = _crawl_context(crawl_file, plan, clock, reporter, hooks, resolver, pages)
+    async with context_of as context:
         await run_crawl(context, plan.seed)
         if context.stop.is_set:
             # Never completed: 12.9 records a write failure's failed end, 9.7 and 13.1 a stop.
@@ -216,30 +214,45 @@ async def _crawl_context(
     reporter: WarningLog,
     hooks: Hooks,
     resolver: AbstractResolver | None,
+    pages: Callable[[], PageExecutor],
 ) -> AsyncIterator[CrawlContext]:
     """The one place a Crawl's context is built, and its resources closed (design D15)."""
-    # Opening and closing the writer block, so they run off the event loop.
-    writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
+    # Built before crawl_started reports its workers: nothing spawns before its start.
+    executor = pages()
     try:
-        async with aiohttp_fetcher(clock, resolver) as fetcher:
-            yield CrawlContext(
-                crawl_file=crawl_file,
-                settings=plan.settings,
-                scope=plan.scope,
-                clock=clock,
-                reporter=reporter,
-                writer=writer,
-                fetcher=fetcher,
-                pages=InProcessExecutor(PageSettings(plan.scope, hooks.extractors)),
-                hooks=hooks,
-                stop=StopSignal(),
-            )
-    except BaseException:
-        # An ended writer raises why it ended once more; the error already raised says it first.
-        with suppress(CrawlWriterClosedError):
-            await asyncio.to_thread(writer.close)
-        raise
-    await asyncio.to_thread(writer.close)
+        reporter.event(
+            "crawl_started",
+            crawl_id=crawl_file.id,
+            crawl_mode=plan.new_crawl.crawl_mode,
+            seed_count=len(plan.new_crawl.seeds),
+            crawl_file=str(crawl_file.path),
+            parse_workers=executor.workers,
+        )
+        # Opening and closing the writer block, so they run off the event loop.
+        writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
+        try:
+            async with aiohttp_fetcher(clock, resolver) as fetcher:
+                yield CrawlContext(
+                    crawl_file=crawl_file,
+                    settings=plan.settings,
+                    scope=plan.scope,
+                    clock=clock,
+                    reporter=reporter,
+                    writer=writer,
+                    fetcher=fetcher,
+                    pages=executor,
+                    hooks=hooks,
+                    stop=StopSignal(),
+                )
+        except BaseException:
+            # An ended writer raises why it ended once more; the error raised says it first.
+            with suppress(CrawlWriterClosedError):
+                await asyncio.to_thread(writer.close)
+            raise
+        await asyncio.to_thread(writer.close)
+    finally:
+        # 026's pool shuts its workers down here, however the Crawl ended.
+        await executor.close()
 
 
 def _invalid_seed(text: str, reason: InvalidUrlReason) -> SpiderError:
