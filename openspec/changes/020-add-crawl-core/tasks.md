@@ -152,7 +152,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.6 Drive "Parse failures are counted in one warning" at seam 1.
 
   Done when: the Crawl Service's warning log (design D10) keeps one entry per counted warning with `details.count` and `details.first_url`, writes it to stderr when it first occurs, and `parse_failed` is declared.
-- [ ] 5.7 Drive "A failing handler does not stop the Crawl" at seam 2. Done when: `handler_failed` is declared, and only the failing handler's rows are dropped.
+- [x] 5.7 Drive "A failing handler does not stop the Crawl" at seam 2. Done when: `handler_failed` is declared, and only the failing handler's rows are dropped.
 - [ ] 5.8 Drive "Deeply nested HTML does not stop the Crawl" at seam 3+6, a hostile fixture page of 10,000 nested `<div>` elements, which lexbor parses in about 50 ms (design Risks).
 - [ ] 5.9 **Guard:** "Undecodable bytes do not stop the Crawl", at seam 3+6, a hostile fixture page. Decoding with replacement comes from task 3.5.
 - [ ] 5.10 Drive "A closed port is a refused connection" at seam 3+6. Done when: `fetch_error` and `fetch_error_message` are declared, and the Fetcher returns every request failure in its result, never as an exception (design D8).

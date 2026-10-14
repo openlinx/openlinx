@@ -243,3 +243,63 @@ def test_parse_failures_are_counted_in_one_warning(
     assert [
         (warning["code"], warning["details"]["count"]) for warning in result.to_json()["warnings"]
     ] == [("parse_failed", 2)]
+
+
+def _boom(result: UrlResult) -> tuple[Seen, ...]:
+    if result.url.endswith("/boom"):
+        raise ValueError(result.url)
+    return (Seen(result.url_id, result.fetch_state),)
+
+
+def test_a_failing_handler_does_not_stop_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/boom">Boom</a> <a href="/ok">OK</a>'),
+                "/boom": Page(body="<p>Boom</p>"),
+                "/ok": Page(body="<p>OK</p>"),
+            }
+        )
+    )
+    hooks = default_hooks()
+    hooks = replace(
+        hooks,
+        handlers=(*hooks.handlers, Handler("boom", _boom)),
+        row_writers={**hooks.row_writers, Seen: _write_seen},
+    )
+
+    result = _crawl(temp_workspace, server.url("/"), hooks)
+
+    assert (
+        result.summary.state,
+        [(warning.code, warning.details["count"]) for warning in result.warnings],
+    ) == ("completed", [("handler_failed", 1)])
+
+
+def _boom_only(result: UrlResult) -> tuple[Outputs, ...]:
+    if result.url.endswith("/boom"):
+        raise ValueError(result.url)
+    return ()
+
+
+def test_only_the_failing_handlers_rows_are_dropped(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = default_hooks()
+    hooks = replace(
+        hooks,
+        handlers=(*hooks.handlers, Handler("boom", _boom_only), Handler("seen", _seen)),
+        row_writers={**hooks.row_writers, Seen: _write_seen},
+    )
+
+    result = _crawl(temp_workspace, server.url("/"), hooks)
+
+    assert query(
+        result.crawl_file,
+        "SELECT urls.fetch_state, test_seen.state FROM test_seen "
+        "JOIN urls ON urls.id = test_seen.url_id WHERE urls.url = ?",
+        [server.url("/boom")],
+    ) == [("fetched", "fetched")]

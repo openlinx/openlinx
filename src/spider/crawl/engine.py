@@ -2,11 +2,11 @@
 
 from spider.crawl.context import CrawlContext
 from spider.crawl.fetcher import FetchResult, Request
-from spider.crawl.hooks import Hooks, UrlResult
+from spider.crawl.hooks import UrlResult
 from spider.crawl.pages import PreparedPage
 from spider.crawl.scope import ScopeDecision, ScopeRules
 from spider.crawl.urls import NormalizedUrl
-from spider.output.codes import PARSE_FAILED
+from spider.output.codes import HANDLER_FAILED, PARSE_FAILED
 from spider.output.diagnostics import Diagnostic
 from spider.store.records import FetchedUrl, NewUrl, QueuedUrl, SkippedUrl
 from spider.store.urls import (
@@ -53,7 +53,7 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
             skip_reason=skip_reason,
         )
         unit = record_skipped(
-            SkippedUrl(queued.id, skip_reason, _handled(hooks, skipped)), hooks.row_writers
+            SkippedUrl(queued.id, skip_reason, _handled(context, skipped)), hooks.row_writers
         )
         await context.writer.submit_async(unit)
         return
@@ -90,13 +90,27 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
         parse_error=None if page is None else page.parse_error,
         parse_error_message=None if page is None else page.parse_error_message,
         discovered=discovered,
-        rows=_handled(hooks, result),
+        rows=_handled(context, result),
     )
     await context.writer.submit_async(record_fetched(fetched, hooks.row_writers))
 
 
-def _handled(hooks: Hooks, result: UrlResult) -> tuple[object, ...]:
-    return tuple(row for handler in hooks.handlers for row in handler.handle(result))
+def _handled(context: CrawlContext, result: UrlResult) -> tuple[object, ...]:
+    rows: list[object] = []
+    for handler in context.hooks.handlers:
+        try:
+            rows.extend(handler.handle(result))
+        # A handler is later changes' code: its failure costs only its rows (design D16).
+        except Exception as error:
+            context.reporter.count(
+                Diagnostic.of(
+                    HANDLER_FAILED,
+                    f"The handler {handler.name} raised {type(error).__name__} on "
+                    f"{result.url}; the URL was recorded without its rows.",
+                ),
+                result.url,
+            )
+    return tuple(rows)
 
 
 def _followed(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl, ...]:

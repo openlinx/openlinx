@@ -164,6 +164,13 @@ PARSE_FAILED = _declare(
     "A registered extractor raised an error, so a Page was recorded without its output; "
     "details.count says for how many URLs, details.first_url for which first.",
 )
+HANDLER_FAILED = _declare(
+    "handler_failed",
+    "warning",
+    None,
+    "A per-response handler raised an error, so the URL was recorded without that handler's "
+    "rows; details.count says for how many URLs, details.first_url for which first.",
+)
 WORKSPACE_NESTED = _declare(
     "workspace_nested", "warning", None, "The new Workspace is inside another Workspace."
 )
