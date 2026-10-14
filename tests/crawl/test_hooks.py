@@ -1,9 +1,12 @@
 """The hooks of a Crawl: handlers, passes and extractors (020-add-crawl-core D9; seam 2)."""
 
+import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
 
 import msgspec
+import pytest
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, text
 
@@ -19,7 +22,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.app import settings_tables
 from tests.support.clock import FakeClock
-from tests.support.crawls import query
+from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
 
 
@@ -303,3 +306,66 @@ def test_only_the_failing_handlers_rows_are_dropped(
         "JOIN urls ON urls.id = test_seen.url_id WHERE urls.url = ?",
         [server.url("/boom")],
     ) == [("fetched", "fetched")]
+
+
+@dataclass(frozen=True, slots=True)
+class Unwritable:
+    url_id: int
+
+
+def _unwritable(result: UrlResult) -> tuple[Unwritable, ...]:
+    return (Unwritable(result.url_id),) if result.url.endswith("/boom") else ()
+
+
+def _refuse(connection: Connection, row: Unwritable) -> None:
+    raise ValueError(f"no row for {row.url_id}")
+
+
+def _refuse_with_the_file(connection: Connection, row: Unwritable) -> None:
+    raise sqlite3.OperationalError("disk I/O error")
+
+
+def _with_row_writer(writer: Callable[[Connection, Unwritable], None]) -> Hooks:
+    hooks = default_hooks()
+    return replace(
+        hooks,
+        handlers=(*hooks.handlers, Handler("unwritable", _unwritable)),
+        row_writers={**hooks.row_writers, Unwritable: writer},
+    )
+
+
+def test_a_url_whose_rows_cannot_be_written_is_recorded_as_an_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+
+    result = _crawl(temp_workspace, server.url("/"), _with_row_writer(_refuse))
+
+    assert (
+        query(
+            result.crawl_file,
+            "SELECT url, fetch_state, fetch_error FROM urls WHERE url IN (?, ?) ORDER BY id",
+            [server.url("/boom"), server.url("/ok")],
+        ),
+        result.summary.state,
+        [(warning.code, warning.details["count"]) for warning in result.warnings],
+    ) == (
+        [
+            (server.url("/boom"), "error", "record_failed"),
+            (server.url("/ok"), "fetched", None),
+        ],
+        "completed",
+        [("record_failed", 1)],
+    )
+
+
+def test_a_unit_that_fails_with_the_file_is_never_completed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+
+    with pytest.raises(sqlite3.OperationalError):
+        _crawl(temp_workspace, server.url("/"), _with_row_writer(_refuse_with_the_file))
+    (crawl_file,) = temp_workspace.home.rglob("*.sqlite")
+
+    assert crawl_row(crawl_file)["state"] == "running"

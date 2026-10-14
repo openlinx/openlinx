@@ -18,6 +18,7 @@ from spider.crawl.hooks import Hooks
 from spider.crawl.pages import InProcessExecutor, PageSettings
 from spider.crawl.scope import ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
+from spider.crawl.stop import StopSignal
 from spider.crawl.urls import InvalidUrl, InvalidUrlReason, NormalizedUrl, parse_seed
 from spider.crawl.warning_log import WarningLog
 from spider.output.codes import INVALID_PATTERN, INVALID_URL
@@ -174,6 +175,9 @@ async def _crawl(
 ) -> tuple[datetime, CrawlSummary, UrlCounts]:
     async with _crawl_context(crawl_file, plan.scope, clock, reporter, hooks) as context:
         await run_crawl(context, plan.seed)
+        if context.stop.cause is not None:
+            # Never completed: 12.9 records the failed end as crawl_write_failed.
+            raise context.stop.cause
         writer = context.writer
         # Before completed is written: 040 reads completed as "its Issues are materialised".
         for crawl_pass in hooks.passes:
@@ -203,6 +207,7 @@ async def _crawl_context(
                 fetcher=fetcher,
                 pages=InProcessExecutor(PageSettings(scope, hooks.extractors)),
                 hooks=hooks,
+                stop=StopSignal(),
             )
     finally:
         await asyncio.to_thread(writer.close)

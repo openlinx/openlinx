@@ -10,6 +10,9 @@ from spider.store.records import ErroredUrl, FetchedUrl, QueuedUrl, SkippedUrl, 
 from spider.store.rows import RowWriter, write_rows
 from spider.store.schema import urls
 
+# The unit that records a URL's final state.
+type UrlUnit = Callable[[Connection], None]
+
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
 _INSERT_URL = insert(urls).on_conflict_do_nothing(index_elements=[urls.c.url])
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
@@ -41,6 +44,15 @@ _ERRORED = (
         fetch_error=bindparam("failure"),
         fetch_error_message=bindparam("failure_message"),
         fetched_at=bindparam("request_at"),
+    )
+)
+_UNWRITTEN = (
+    update(urls)
+    .where(urls.c.id == bindparam("url_id"))
+    .values(
+        fetch_state="error",
+        fetch_error="record_failed",
+        fetch_error_message=bindparam("failure_message"),
     )
 )
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
@@ -185,6 +197,16 @@ def record_error(
     def unit(connection: Connection) -> None:
         connection.execute(_ERRORED, values)
         write_rows(connection, errored.rows, row_writers)
+
+    return unit
+
+
+def record_unwritten(url_id: int, message: str) -> UrlUnit:
+    """The fallback unit of a URL whose own unit failed: only its state (design D2)."""
+    values = {"url_id": url_id, "failure_message": message}
+
+    def unit(connection: Connection) -> None:
+        connection.execute(_UNWRITTEN, values)
 
     return unit
 

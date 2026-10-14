@@ -171,6 +171,14 @@ HANDLER_FAILED = _declare(
     "A per-response handler raised an error, so the URL was recorded without that handler's "
     "rows; details.count says for how many URLs, details.first_url for which first.",
 )
+RECORD_FAILED = _declare(
+    "record_failed",
+    "warning",
+    None,
+    "The unit that records a URL failed with an error of one row, so the URL was recorded as an "
+    "error without the URLs found on it; details.count says for how many URLs, "
+    "details.first_url for which first.",
+)
 WORKSPACE_NESTED = _declare(
     "workspace_nested", "warning", None, "The new Workspace is inside another Workspace."
 )

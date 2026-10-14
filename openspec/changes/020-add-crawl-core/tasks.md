@@ -158,7 +158,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.10 Drive "A closed port is a refused connection" at seam 3+6. Done when: `fetch_error` and `fetch_error_message` are declared, and the Fetcher returns every request failure in its result, never as an exception (design D8).
 - [x] 5.11 Fixture: a route option that resets the connection after part of the body, test-first.
 - [x] 5.12 Drive "A connection reset in the body is a connection error" at seam 3+6.
-- [ ] 5.13 Drive "A URL whose rows cannot be written is recorded as an error" at seam 2.
+- [x] 5.13 Drive "A URL whose rows cannot be written is recorded as an error" at seam 2.
 
   Done when:
   - a failed unit gets a fallback unit that records only the URL's state (`fetch_state` = `error`, `fetch_error` = `record_failed`, the error in `fetch_error_message`), and `record_failed` is declared as a value and as a counted warning
