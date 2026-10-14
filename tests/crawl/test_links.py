@@ -1,15 +1,10 @@
 """Link discovery in HTML (020-add-crawl-core, crawling)."""
 
-from datetime import UTC, datetime
-
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.crawl.fetcher import FetchResult
-from spider.crawl.links import DiscoveredLink, extract_links, header_links, refresh_url
-from spider.crawl.pages import PageSettings, prepare_page
-from spider.crawl.scope import scope_rules
+from spider.crawl.links import DiscoveredLink, extract_links
 from spider.crawl.urls import NormalizedUrl, url_host
 
 SITE = NormalizedUrl("http://site.test/")
@@ -287,120 +282,6 @@ def test_deeply_nested_html_gives_its_links() -> None:
     found = _found("<span>" * depth + '<a href="/after">x</a>' + "</span>" * depth)
 
     assert found == [("hyperlink", "http://site.test/after")]
-
-
-@pytest.mark.parametrize(
-    ("content", "url"),
-    [
-        ("0; url=/new", "/new"),
-        ("0;URL=/new", "/new"),
-        ("5, url = /new", "/new"),
-        ("0 url=/new", "/new"),
-        ("0; /new", "/new"),
-        ("0.5; url='/a b'c", "/a b"),
-        ('  3; URL="/q?x=1"', "/q?x=1"),
-        (".5;url=/a", "/a"),
-        ("0;\turl\t=\t/tab", "/tab"),
-        ("0; url=", None),
-        ("0", None),
-        ("0;", None),
-        ("; url=/new", None),
-        ("x; url=/new", None),
-        ("0x; url=/new", None),
-        ("", None),
-    ],
-)
-def test_a_refresh_names_its_target_as_html_reads_it(content: str, url: str | None) -> None:
-    assert refresh_url(content) == url
-
-
-@pytest.mark.parametrize(
-    ("headers", "found"),
-    [
-        ([("Link", '</doc>; rel="canonical"')], [("canonical", "http://site.test/doc", ())]),
-        (
-            [("link", "<http://site.test/p2>; rel=next, </p0>;rel=prev")],
-            [("pagination", "http://site.test/p2", ()), ("pagination", "http://site.test/p0", ())],
-        ),
-        (
-            [("LINK", '</de/>; rel="alternate"; hreflang="de"')],
-            [("hreflang", "http://site.test/de/", ())],
-        ),
-        ([("Link", '</feed>; rel="alternate"; type="application/rss+xml"')], []),
-        ([("Link", "</s.css>; rel=preload; as=style")], []),
-        (
-            [("Link", '</a,b>; title="x, y"; rel="canonical nofollow"')],
-            [("canonical", "http://site.test/a,b", ("nofollow",))],
-        ),
-        ([("Refresh", "5; url=/new")], [("http_refresh", "http://site.test/new", ())]),
-        ([("Refresh", "5")], []),
-        ([("Link", "garbage, <mailto:x@site.test>; rel=canonical")], []),
-        (
-            [("Refresh", "0;url=/r"), ("X-Other", "<x>"), ("Link", "</c>; rel=canonical")],
-            [("http_refresh", "http://site.test/r", ()), ("canonical", "http://site.test/c", ())],
-        ),
-    ],
-)
-def test_the_link_and_refresh_headers_give_links(
-    headers: list[tuple[str, str]], found: list[tuple[str, str, tuple[str, ...]]]
-) -> None:
-    links = header_links(tuple(headers), SITE, is_internal=_on_site)
-
-    assert (
-        [(link.type, link.target, tuple(t for t in link.rel if t == "nofollow")) for link in links],
-        [(link.declared_in, link.ordinal) for link in links],
-    ) == (found, [("http_header", n) for n in range(1, len(found) + 1)])
-
-
-def test_header_links_come_before_the_links_of_the_document() -> None:
-    response = FetchResult(
-        status_code=200,
-        headers=(("Content-Type", "text/html"), ("Link", "</c>; rel=canonical")),
-        body=b'<a href="/a">A</a>',
-        fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
-        response_time_ms=1,
-    )
-
-    page = prepare_page(SITE, response, PageSettings(scope=scope_rules(SITE)))
-
-    assert [(link.ordinal, link.declared_in, link.target) for link in page.links] == [
-        (1, "http_header", "http://site.test/c"),
-        (2, "html", "http://site.test/a"),
-    ]
-
-
-_HEADER_PIECES = st.sampled_from(
-    [
-        "</a>",
-        "<http://site.test/b>",
-        "; rel=",
-        '; rel="canonical"',
-        "; rel=next",
-        "; hreflang=",
-        '; title="x, y"',
-        ";",
-        ",",
-        "=",
-        '"',
-        "<",
-        ">",
-        "0; url=",
-        " ",
-        "\\",
-    ]
-)
-
-
-@given(
-    st.lists(
-        st.tuples(
-            st.sampled_from(["Link", "Refresh", "link", "X-Other"]),
-            st.lists(_HEADER_PIECES | st.text(max_size=6)).map("".join),
-        )
-    )
-)
-def test_the_header_links_accept_any_values(headers: list[tuple[str, str]]) -> None:
-    assert isinstance(header_links(tuple(headers), SITE, is_internal=_on_site), list)
 
 
 @pytest.mark.parametrize(

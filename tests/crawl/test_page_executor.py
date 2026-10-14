@@ -1,6 +1,7 @@
 """The page executor's lifecycle, through the Crawl Service (020-add-crawl-core D9; seam 3)."""
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 import pytest
 
@@ -8,6 +9,7 @@ from spider.crawl.fetcher import FetchResult
 from spider.crawl.hooks import Hooks, Pass
 from spider.crawl.pages import PageSettings, PreparedPage, prepare_page
 from spider.crawl.urls import NormalizedUrl
+from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Collected
 from spider.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
@@ -95,3 +97,26 @@ def test_crawl_started_reports_the_workers_of_the_page_executor(
     assert [data["parse_workers"] for name, data in reporter.events if name == "crawl_started"] == [
         3
     ]
+
+
+class FailingStartReporter:
+    """A reporter whose crawl_started event fails, as a closed stderr would."""
+
+    def warn(self, diagnostic: Diagnostic) -> None:
+        pass
+
+    def event(self, name: str, **data: Any) -> None:
+        if name == "crawl_started":
+            raise OSError("stderr is closed")
+
+
+def test_the_page_executor_closes_when_the_start_event_fails(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(TWO_PAGES)
+    executor = RecordingExecutor()
+
+    with pytest.raises(OSError, match="stderr is closed"):
+        crawl_result(server.url("/"), pages=lambda: executor, reporter=FailingStartReporter())
+
+    assert executor.events == ["close"]

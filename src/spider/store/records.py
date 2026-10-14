@@ -28,6 +28,9 @@ type SkipReason = Literal[
     "max_redirects",
     "url_too_long",
 ]
+# The reasons a URL is recorded as skipped when it is discovered, never dispatched; a later
+# followed Link re-queues a URL skipped for one of them (020 D5).
+type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed"]
 type LinkType = Literal[
     "hyperlink",
     "canonical",
@@ -122,7 +125,7 @@ class NewUrl:
     is_internal: bool
     in_scope: bool
     # Why none of the Page's Links to it is followed; None queues it (design D5).
-    skip_reason: SkipReason | None = None
+    skip_reason: DiscoverySkipReason | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -206,7 +206,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 7.19 Drive "A robots meta inside noscript does not apply" at seam 4. lexbor parses with scripting off, so a `<meta>` inside `<noscript>` is an element of its tree; browsers and Google's renderer parse with scripting on, where the content of `<noscript>` is text. Head metadata inside `<noscript>` is ignored: a robots meta, a meta refresh and a `<link>` give nothing. Done when: a test pins the user's decision that the Links of a body `<noscript>` are discovered and followed (design D5).
 - [x] 7.20 Seam: the page executor's `workers`, reported by `crawl_started` as `parse_workers`, for `026`'s pool (design D9; the rulings). `workers` is the number of processes that prepare Pages besides the crawl process: 0 for the in-process executor. `start_crawl` builds the executor before it reports `crawl_started` (nothing spawns before `start`), and hands it to the context builder, which closes it. Done when: `crawl_started` carries `parse_workers` 0 with the in-process executor, and a fake executor's count when one is passed as `pages=`; `docs/crawling.md` lists the field.
 - [x] 7.21 Docs: add the robots directives rules, nofollow handling and which responses are parsed to `docs/crawling.md`.
-- [ ] 7.22 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [x] 7.22 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Scope over HTTP and Section Crawls (widening)
 

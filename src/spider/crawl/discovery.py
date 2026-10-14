@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from spider.crawl.links import DiscoveredLink
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import LinkType, NewUrl, SkipReason
+from spider.store.records import DiscoverySkipReason, LinkType, NewUrl
 
 # The spec's Link type table: through these a URL in the Scope is followed, any other checked.
 _FOLLOWED: frozenset[LinkType] = frozenset(
@@ -28,7 +28,7 @@ def discovered_urls(
     `follow_nofollow` treats nofollow hyperlinks like any other (--follow-nofollow).
     """
     # A Page names most URLs several times, and each row costs its unit an insert.
-    chosen: dict[NormalizedUrl, tuple[DiscoveredLink, SkipReason | None]] = {}
+    chosen: dict[NormalizedUrl, tuple[DiscoveredLink, DiscoverySkipReason | None]] = {}
     for link in links:
         # Resources are requested with group 9; until then they are not recorded.
         if link.type not in _FOLLOWED and link.type not in _NOT_FOLLOWED:
@@ -41,7 +41,9 @@ def discovered_urls(
     return tuple(_new_url(link, reason, scope, depth) for link, reason in chosen.values())
 
 
-def _skip_reason(link: DiscoveredLink, nofollow: bool, follow_nofollow: bool) -> SkipReason | None:
+def _skip_reason(
+    link: DiscoveredLink, nofollow: bool, follow_nofollow: bool
+) -> DiscoverySkipReason | None:
     if link.type not in _FOLLOWED:
         return "link_type_not_followed"
     if link.type == "hyperlink" and (link.nofollow or nofollow) and not follow_nofollow:
@@ -50,7 +52,7 @@ def _skip_reason(link: DiscoveredLink, nofollow: bool, follow_nofollow: bool) ->
 
 
 def _new_url(
-    link: DiscoveredLink, reason: SkipReason | None, scope: ScopeRules, depth: int
+    link: DiscoveredLink, reason: DiscoverySkipReason | None, scope: ScopeRules, depth: int
 ) -> NewUrl:
     decision = scope.decide(link.target)
     return NewUrl(

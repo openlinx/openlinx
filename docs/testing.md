@@ -59,7 +59,7 @@ These fakes stand in for things outside our code. They are the only test doubles
 - **`doctor`:** network and trust-store probes
 - **SQLite's report of a held `-shm` file:** `SQLITE_IOERR_TRUNCATE`, which a killed writer whose process is still exiting causes on Windows only at random
 
-Never replace our own modules or our own CLI with a double. Installer tests use a real, locally built wheel.
+Never replace our own modules or our own CLI with a double. Installer tests use a real, locally built wheel. The hooks and the page executor are extension points, not doubles: a test registers its own hooks, or passes its own page executor to the Crawl Service as `pages=`, as `026` plugs in its process pool.
 
 ## Rules
 

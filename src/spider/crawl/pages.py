@@ -11,7 +11,8 @@ from selectolax.lexbor import LexborHTMLParser
 from spider.crawl.decoding import decode_html
 from spider.crawl.directives import RobotsDirectives, meta_robots_contents, robots_directives
 from spider.crawl.fetcher import FetchResult
-from spider.crawl.links import DiscoveredLink, base_url, header_links, links_in_tree
+from spider.crawl.headers import header_links
+from spider.crawl.links import DiscoveredLink, base_url, links_in_tree
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import DEFAULT_ROBOTS_TOKEN
@@ -73,7 +74,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     tree = LexborHTMLParser(decoded.text)
     is_internal = partial(_is_internal, settings.scope)
     # The header Links come first, as 030's ordinals count them (design D5).
-    links = header_links(response.headers, url, is_internal=is_internal)
+    links = list(response_links(url, response, settings.scope))
     links += links_in_tree(
         tree,
         base=base_url(tree, url, decoded.encoding),

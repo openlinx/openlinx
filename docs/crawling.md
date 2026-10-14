@@ -21,7 +21,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 |---|---|---|---|
 | `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host, 1 to 50. |
 | `--check-external` / `--no-check-external` | `check_external` | `true` | Request each External URL once to record its response; with `--no-check-external`, record it as skipped, unrequested (see [External URLs](#external-urls)). |
-| `--follow-nofollow` | `follow_nofollow` | `false` | Follow nofollow hyperlinks like any other hyperlink (see [Nofollow](#nofollow)). |
+| `--follow-nofollow` | `follow_nofollow` | `false` | Follow nofollow hyperlinks, and every hyperlink of a Page whose robots directives say nofollow, like any other hyperlink (see [Nofollow](#nofollow)). |
 | `--exclude <regex>` | `exclude` | `[]` | A URL that the pattern matches is never requested; give the option once per pattern (see [Include and exclude patterns](#include-and-exclude-patterns)). |
 
 `--workspace` and `--format` are the global flags of every Command.

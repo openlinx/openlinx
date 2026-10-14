@@ -2,14 +2,21 @@
 
 from collections.abc import Callable, Mapping
 
-from sqlalchemy import Connection, bindparam, func, literal_column, null, select, update
+from sqlalchemy import Connection, bindparam, func, literal_column, null, or_, select, update
 from sqlalchemy.dialects.sqlite import insert
 
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.store.origins import ORIGIN_ID, origin_rows, record_origins
-from spider.store.records import ErroredUrl, FetchedUrl, QueuedUrl, SkippedUrl, UrlCounts
+from spider.store.records import (
+    DiscoverySkipReason,
+    ErroredUrl,
+    FetchedUrl,
+    QueuedUrl,
+    SkippedUrl,
+    UrlCounts,
+)
 from spider.store.rows import RowWriter, write_rows
-from spider.store.schema import urls
+from spider.store.schema import literal_values, urls
 
 type UrlUnit = Callable[[Connection], None]
 
@@ -28,9 +35,11 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
         "discovered_via": _INSERT.excluded.discovered_via,
         "found_on_url_id": _INSERT.excluded.found_on_url_id,
     },
-    where=(
-        (urls.c.skip_reason == literal_column("'nofollow'"))
-        | (urls.c.skip_reason == literal_column("'link_type_not_followed'"))
+    where=or_(
+        *(
+            urls.c.skip_reason == literal_column(f"'{reason}'")
+            for reason in literal_values(DiscoverySkipReason)
+        )
     )
     & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
 )
