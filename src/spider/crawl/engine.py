@@ -252,7 +252,8 @@ async def _unit_of(
     if skip_reason is None:
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
         blocked = not (await robots.robots_of(queued.url)).allows(queued.url)
-        if blocked:
+        # --ignore-robots requests it, still labelled as blocked.
+        if blocked and not context.settings.ignore_robots:
             skip_reason = "blocked_by_robots_txt"
             if queued.discovered_via == "seed":
                 _warn_of_a_blocked_seed(context, queued.url)

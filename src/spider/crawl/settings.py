@@ -22,6 +22,11 @@ class CrawlSettings(BaseModel):
         description="Follow nofollow hyperlinks, and every hyperlink of a Page whose robots "
         "directives say nofollow, like any other hyperlink.",
     )
+    ignore_robots: bool = Field(
+        False,
+        description="Request URLs that robots.txt disallows; they are still recorded with "
+        "blocked_by_robots_txt = 1.",
+    )
     max_depth: int | None = Field(
         None,
         ge=0,

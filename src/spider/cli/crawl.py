@@ -60,6 +60,15 @@ def crawl(
         ),
         OptionMeta(setting="crawl.follow_nofollow"),
     ] = False,
+    ignore_robots: Annotated[
+        bool,
+        typer.Option(
+            "--ignore-robots",
+            help="Request URLs that robots.txt disallows; they are still recorded with "
+            "blocked_by_robots_txt = 1.",
+        ),
+        OptionMeta(setting="crawl.ignore_robots"),
+    ] = False,
     max_depth: Annotated[
         int | None,
         typer.Option(

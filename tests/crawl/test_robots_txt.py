@@ -114,3 +114,17 @@ def test_a_url_that_is_not_requested_still_points_to_its_origin(
         "JOIN origins ON origins.id = urls.origin_id WHERE url = ?",
         ["http://other.test/page"],
     ) == [("http://other.test", None, None, None)]
+
+
+def test_disallowed_urls_are_crawled_and_still_labelled(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(PRIVATE_SITE)
+
+    crawl_file = crawled(server.url("/"), "--ignore-robots")
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, blocked_by_robots_txt FROM urls WHERE url = ?",
+        [server.url("/private/a")],
+    ) == [("fetched", 1)]
