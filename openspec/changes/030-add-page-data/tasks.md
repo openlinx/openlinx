@@ -10,7 +10,7 @@ There are no schema-first slices. A table or column is added in the slice whose 
 
 **The thin slice** (ROADMAP, Build order) is groups 1–3: the Page rows, titles, meta descriptions and headings that `040`-min's first Rules read (`title-missing` and `h1-missing`; its response-code Rules read only `urls`). None of them reads Indexability, so group 7 widens with the rest. Groups 4–12 widen the change after `022`-min, whose size and redirect columns group 4 copies.
 
-Rows and units follow `020` D9 and D14: the Page handler (`spider.extract.page_handler`) returns frozen row values declared in `spider.store.page_records`, which loads no sqlalchemy, all or none. The tables are declared in `spider.store.schema`, and `spider.store.pages` and `spider.store.links` write the rows through the row writers they register in `020`'s `Hooks.row_writers`, with statements built once (`017` D9). The Page extractor (`spider.extract.page_data`, which imports only `spider.crawl.pages`, so `026`'s workers never load the store), the handler, the row writers and the inlink pass are listed in `spider.services.hooks.default_hooks()`, `020`'s composition root. Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
+Rows and units follow `020` D9 and D14: the Page handler (`spider.extract.page_handler`) returns frozen row values declared in `spider.store.page_records`, which loads no sqlalchemy, all or none. The tables are declared in `spider.store.schema`, and `spider.store.pages` and `spider.store.links` write the rows through the row writers they register in `020`'s `Hooks.row_writers`, with statements built once (`017` D9). The Page extractor (`spider.extract.page_data`, which imports only `spider.crawl.pages` and the pure text helpers of `spider.extract`, so `026`'s workers never load sqlalchemy), the handler, the row writers and the inlink pass are listed in `spider.services.hooks.default_hooks()`, `020`'s composition root. Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
 
 A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML as bytes, with the Page extractor in its `PageSettings`, then the Page handler over the resulting `UrlResult`, and asserts the Page row: one pure test covers the decoding, the extractor and the handler's mapping to the column.
 
@@ -33,7 +33,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [x] 2.4 Drive "Second title element" at seam 4, and add `title_2_length`.
 - [x] 2.5 Drive "Missing title" at seam 4.
 - [x] 2.6 Docs: add the decoding order, the text model and the title columns to `docs/page-data.md`.
-- [ ] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
+- [x] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green. The review drives "Title in noscript is ignored" at seam 4.
 
 ## 3. Meta descriptions and headings (slice)
 
@@ -155,8 +155,9 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [ ] 12.1 Drive, in one slice, "Schema lists exactly the Page record columns" (seam 6), "Columns of links" (seam 6), "Deferred columns are described with their release" (seam 6) and "Deferred columns are NULL after a completed Crawl" (seam 3+6). All four fail only because the later columns are missing: the 17 of `pages`, and `links.html_source`. Add them as always-NULL columns whose descriptions name their release.
 - [ ] 12.2 Drive "HTML is not stored by default" at seam 3+6. Create `page_sources` (`url_id`, an INTEGER PRIMARY KEY referencing `urls.id`, `encoding` and `html`), whose description starts with `Filled from v0.2. `; nothing writes it in v0.1.
 - [ ] 12.3 Drive "Non-ASCII title on a Windows console" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
-- [ ] 12.4 Docs: add the later columns and the empty `page_sources` table to `docs/page-data.md`, update the Page data table in `docs/architecture.md` with the stored column names, and check that the column descriptions read well as the Skill's column reference that `080` generates.
-- [ ] 12.5 Review: run the code-review skill on group 12's commits and then on the whole change, and refactor with the whole suite green.
+- [ ] 12.4 Drive "Title in head noscript is ignored" at seam 4, once page preparation parses with scripting on (an upstream selectolax option, the user's decision of 2026-10-14). Until then the parser, with scripting off, moves a title out of a head `noscript`, so no ancestor test can see it (design Risks).
+- [ ] 12.5 Docs: add the later columns and the empty `page_sources` table to `docs/page-data.md`, update the Page data table in `docs/architecture.md` with the stored column names, and check that the column descriptions read well as the Skill's column reference that `080` generates.
+- [ ] 12.6 Review: run the code-review skill on group 12's commits and then on the whole change, and refactor with the whole suite green.
 
 ## 13. (v0.2) SERP pixel widths
 

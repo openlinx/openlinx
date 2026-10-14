@@ -1,5 +1,8 @@
 """The columns the Page extractor derives from the HTML (030-add-page-data, page-data; seam 4)."""
 
+from hypothesis import given
+from hypothesis import strategies as st
+
 from tests.support.page_data import page_row
 
 
@@ -29,6 +32,15 @@ def test_title_in_svg_is_ignored() -> None:
     assert (row.title_count, row.title_2) == (1, None)
 
 
+def test_title_in_noscript_is_ignored() -> None:
+    row = page_row(
+        "<head><title>Main</title></head>"
+        "<body><noscript><title>Enable JavaScript</title></noscript></body>"
+    )
+
+    assert (row.title_1, row.title_count) == ("Main", 1)
+
+
 def test_a_title_in_math_is_ignored() -> None:
     row = page_row("<title>Main</title><math><mi><title>m</title></mi></math>")
 
@@ -45,3 +57,35 @@ def test_missing_title() -> None:
     row = page_row("<p>No title</p>")
 
     assert (row.title_count, row.title_1, row.title_1_length) == (0, None, None)
+
+
+# Fragments that build the documents a parser repairs: unclosed, nested in foreign content,
+# commented out, NUL and stray markup.
+_FRAGMENTS = st.sampled_from(
+    [
+        "<html>",
+        "<head>",
+        "<body>",
+        "<title>",
+        "</title>",
+        "<svg>",
+        "</svg>",
+        "<math><mi>",
+        "<template>",
+        "<!--",
+        "-->",
+        "<",
+        ">",
+        "&nbsp;",
+        "&#0;",
+        "\x00",
+        " \t\n",
+        "a",
+    ]
+)
+
+
+@given(st.one_of(st.binary(max_size=300), st.lists(_FRAGMENTS, max_size=30).map("".join)))
+def test_the_page_extractor_never_raises(body: str | bytes) -> None:
+    # page_row fails on an extractor_error, which is how an extractor's raise is recorded.
+    page_row(body)

@@ -8,7 +8,7 @@ class PageRow:
     url_id: int
     address: str
     url_encoded_address: str
-    # From the HTML: NULL for a Page that is not analysed (design D2).
+    # From the HTML: NULL for a Page that is not analysed or whose Page extractor failed (D2).
     title_1: str | None = None
     title_1_length: int | None = None
     title_2: str | None = None

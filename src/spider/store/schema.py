@@ -372,8 +372,9 @@ pages = public_table(
     Column(
         "title_1",
         Text,
-        comment="The text of the Page's first title element, whitespace-normalised; NULL "
-        "without one, or when the Page is not analysed.",
+        comment="The text of the Page's first title element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed "
+        "or its Page extractor failed.",
     ),
     Column(
         "title_1_length",
@@ -383,8 +384,9 @@ pages = public_table(
     Column(
         "title_2",
         Text,
-        comment="The text of the Page's second title element, whitespace-normalised; NULL "
-        "without one, or when the Page is not analysed.",
+        comment="The text of the Page's second title element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed "
+        "or its Page extractor failed.",
     ),
     Column(
         "title_2_length",
@@ -394,8 +396,8 @@ pages = public_table(
     Column(
         "title_count",
         Integer,
-        comment="The number of title elements outside svg and math; NULL when the Page is not "
-        "analysed.",
+        comment="The number of title elements without an svg, math or noscript ancestor; NULL "
+        "when the Page is not analysed or its Page extractor failed.",
     ),
     comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
     "an HTML document, whatever its status code.",

@@ -4,7 +4,7 @@ import re
 
 # ASCII whitespace only, as document.title has it: a no-break space is text.
 _ASCII_WHITESPACE = "\t\n\x0c\r "
-_WHITESPACE_RUN = re.compile(r"[\t\n\x0c\r ]+")
+_WHITESPACE_RUN = re.compile(f"[{_ASCII_WHITESPACE}]+")
 
 
 def normalized(text: str) -> str:

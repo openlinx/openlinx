@@ -6,7 +6,7 @@ from selectolax.lexbor import LexborHTMLParser, LexborNode
 from spider.crawl.pages import Extractor, PageInput
 from spider.extract.text import normalized
 
-_FOREIGN = frozenset({"svg", "math"})
+_IGNORED_ANCESTORS = frozenset({"svg", "math", "noscript"})
 
 
 class PageData(msgspec.Struct, frozen=True, kw_only=True):
@@ -18,7 +18,9 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
-    titles = [normalized(node.text()) for node in tree.css("title") if not _in_foreign(node)]
+    titles = [
+        normalized(node.text()) for node in tree.css("title") if not _has_ignored_ancestor(node)
+    ]
     first, second = _nth(titles, 0), _nth(titles, 1)
     return PageData(
         title_1=first,
@@ -37,11 +39,13 @@ def _length(text: str | None) -> int | None:
     return None if text is None else len(text)
 
 
-def _in_foreign(node: LexborNode) -> bool:
-    """Inside SVG or MathML, whose title elements are no Page title."""
+def _has_ignored_ancestor(node: LexborNode) -> bool:
+    """Inside SVG or MathML it names a picture or a formula. Inside noscript it is no element
+    at all to a browser that runs scripts, as a search engine's renderer does: the parser here
+    runs with scripting off, so it builds elements there."""
     parent = node.parent
     while parent is not None:
-        if parent.tag in _FOREIGN:
+        if parent.tag in _IGNORED_ANCESTORS:
             return True
         parent = parent.parent
     return False

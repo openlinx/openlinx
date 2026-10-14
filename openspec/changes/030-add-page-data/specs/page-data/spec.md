@@ -378,7 +378,7 @@ Encoding labels SHALL be those of the WHATWG Encoding Standard, and a label outs
 - **THEN** its `canonical_link_element_1` is `https://example.test/docs/page`
 
 ### Requirement: Titles
-Titles SHALL be extracted from `<title>` elements anywhere in the document that have no `svg` or `math` ancestor, so `<title>` elements inside SVG or MathML content are ignored.
+Titles SHALL be extracted from `<title>` elements anywhere in the document that have no `svg`, `math` or `noscript` ancestor. A `<title>` inside SVG or MathML content names a picture or a formula, and nothing inside `noscript` is an element to a browser that runs scripts, as a search engine's renderer does.
 
 - `title_count` is the number of such elements.
 - `title_1` and `title_2` are the texts of the first and second, in document order.
@@ -387,6 +387,14 @@ Titles SHALL be extracted from `<title>` elements anywhere in the document that 
 #### Scenario: Title in SVG is ignored
 - **WHEN** an analysed Page's HTML is `<head><title>Main</title></head><body><svg><title>Icon</title></svg></body>`
 - **THEN** `title_count` is 1 and `title_2` is NULL
+
+#### Scenario: Title in noscript is ignored
+- **WHEN** an analysed Page's HTML is `<head><title>Main</title></head><body><noscript><title>Enable JavaScript</title></noscript></body>`
+- **THEN** `title_1` is `Main` and `title_count` is 1
+
+#### Scenario: Title in head noscript is ignored
+- **WHEN** an analysed Page's HTML is `<head><noscript><title>Enable JavaScript</title></noscript><title>Main</title></head>`
+- **THEN** `title_1` is `Main` and `title_count` is 1
 
 #### Scenario: Second title element
 - **WHEN** an analysed Page's HTML is `<head><title>One</title><title>Two</title></head>`

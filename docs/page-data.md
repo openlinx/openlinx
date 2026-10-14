@@ -40,7 +40,7 @@ Every text column is whitespace-normalised: each run of ASCII whitespace (tab, l
 
 ## Titles
 
-- **`title_count`** is the number of `<title>` elements without an `svg` or `math` ancestor: a title inside an SVG image or a MathML formula names the image or the formula, not the Page. It is 0 when the Page has none.
+- **`title_count`** is the number of `<title>` elements without an `svg`, `math` or `noscript` ancestor. A title inside an SVG image or a MathML formula names the image or the formula, not the Page; one inside `<foreignObject>` of an SVG image is left out too. Nothing inside `noscript` is an element to a browser that runs scripts, as a search engine's renderer does, so its titles are left out as well, while the Links inside it are still discovered (ruled by the user, 2026-10-14). Until page preparation parses with scripting on, a title inside a `noscript` of `<head>` is still counted: the parser moves it out of the `noscript`. It is 0 when the Page has none.
 - **`title_1`** and **`title_2`** are the normalised texts of the first and second of them, in document order. Each is NULL when there is no such element, and the empty string for `<title></title>`.
 - **`title_1_length`** and **`title_2_length`** are their lengths, NULL exactly when their text is.
 
