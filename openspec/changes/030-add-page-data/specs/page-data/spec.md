@@ -69,7 +69,7 @@ When the Page extractor of this change raised on an analysed Page, `020-add-craw
 The columns that a later release fills stay NULL in every Page until then (see "Columns measured by later releases stay NULL").
 
 #### Scenario: A Page whose Page extractor failed keeps its response data and Links
-- **WHEN** the Page extractor raises on `{site}/broken` (a test puts a raising extractor under its name in `default_hooks()`), which responds 200 with `<title>T</title><meta name="robots" content="noindex"><a href="/a">A</a>`
+- **WHEN** the Page extractor raises on `{site}/broken` (a test puts a raising extractor under its name in `default_hooks()` in `spider.services.hooks`, the composition root), which responds 200 with `<title>T</title><meta name="robots" content="noindex"><a href="/a">A</a>`
 - **THEN** `{site}/broken` has `parsed` = 1 and `parse_error` = `extractor_error`, its `pages` row has `status_code` 200, `title_1` NULL, `meta_robots_noindex` 1 and `indexability` `non_indexable`, and its `links` row to `{site}/a` has `type` `hyperlink` and `anchor_text` NULL
 
 #### Scenario: Error Page keeps response data

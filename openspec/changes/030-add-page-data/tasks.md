@@ -22,7 +22,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [x] 1.4 Drive "Image response is not a Page" at seam 3+6.
 - [x] 1.5 Drive "URL blocked by robots.txt is not a Page" and "URL without a response is not a Page" at seam 4, on the `UrlResult` that `020` records for each: `skipped` with `blocked_by_robots_txt`, and `error` with a `fetch_error`. This is a trivial pair: both expect no row. `020`'s task 10.5 and `022`'s timeout scenario pin those records end to end.
 - [x] 1.6 Drive "External HTML response is not a Page" at seam 3+6, through `020`'s DNS resolver hook. The Page handler reads `is_internal` and `in_scope` from the `UrlResult`.
-- [ ] 1.7 Docs: create `docs/page-data.md` covering what a Page is, analysed vs non-analysed Pages, the NULL conventions and the two address forms, with a link from `docs/architecture.md`.
+- [x] 1.7 Docs: create `docs/page-data.md` covering what a Page is, analysed vs non-analysed Pages, the NULL conventions and the two address forms, with a link from `docs/architecture.md`.
 - [ ] 1.8 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Decoding, text and titles (slice)
@@ -137,13 +137,13 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [ ] 10.9 Drive "Discovered URLs are the stored Link targets" at seam 3+6. Write Links from analysed Pages, and return the header Links of other responses from the handler.
 - [ ] 10.10 Drive "Link types are an enumeration" at seam 6 (`values` on `links.type`).
 - [ ] 10.11 Check: the writer's capacity on the chosen `links` layout (`017` D11, moved here from `017`, which records only a 5k-Page smoke run; decided 2026-10-11). Switch `scripts/writer_throughput.py` from its provisional `links` table to the declaration in `spider.store.links`, imported with its key, layout and secondary indexes and never copied into the script, so the check cannot drift from the declared layout; run it at 20,000 Pages on the maintainer's machine, and restate D11's floor (Pages/s, WAL peak, RSS) from that run, in the script and in the "Writer capacity" section of `docs/benchmarks.md`. Done when: the run passes the restated floor, and the section records the machine, the numbers and the layout. If Pages/s falls well below `017`'s 17.2–18.0 on the provisional layout, the work stops and is reported before the floor is lowered.
-- [ ] 10.12 Drive "A Page whose Page extractor failed keeps its response data and Links" at seam 3+6, through the Crawl Service with a raising extractor under the Page extractor's name in `default_hooks()`: the handler writes the `pages` row with the extractor's HTML-derived columns NULL, takes the directive verdicts, the canonical and `indexability`'s other inputs from `PageInput` and the prepared record, and writes the `links` rows from `DiscoveredLink` (design D2).
+- [ ] 10.12 Drive "A Page whose Page extractor failed keeps its response data and Links" at seam 3+6, through the Crawl Service with a raising extractor under the Page extractor's name in `default_hooks()` in `spider.services.hooks`, the composition root: the handler writes the `pages` row with the extractor's HTML-derived columns NULL, takes the directive verdicts, the canonical and `indexability`'s other inputs from `PageInput` and the prepared record, and writes the `links` rows from `DiscoveredLink` (design D2).
 - [ ] 10.13 Docs: add the Link columns, the boundary with `020`'s Link discovery, and what a failed Page extractor leaves (`parse_error` = `extractor_error`) to `docs/page-data.md`.
 - [ ] 10.14 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
 
 ## 11. Link counts and Folder Depth
 
-- [ ] 11.1 Drive "Counts for a linked Page" at seam 3+6 on a four-Page fixture site. Add the outlink columns (written with each Page), and the inlink columns with `linking_pages_pct`, computed by the inlink pass, a store function in `spider.store.links` that `default_hooks()` lists before `040`'s pass. The inlink columns get `Derived: ` descriptions, which "Inlink columns are derived" checks at seam 6 in the same slice.
+- [ ] 11.1 Drive "Counts for a linked Page" at seam 3+6 on a four-Page fixture site. Add the outlink columns (written with each Page), and the inlink columns with `linking_pages_pct`, computed by the inlink pass, a store function in `spider.store.links` that `default_hooks()` in `spider.services.hooks`, the composition root, lists before `040`'s pass. The inlink columns get `Derived: ` descriptions, which "Inlink columns are derived" checks at seam 6 in the same slice.
 - [ ] 11.2 Drive "Repeated inlinks from one source" at seam 3+6.
 - [ ] 11.3 Drive "Inlinks are NULL while the Crawl runs" at seam 3+6.
 - [ ] 11.4 Drive "Folder depth" at seam 4, and add `folder_depth`.

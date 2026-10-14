@@ -73,7 +73,7 @@ _None._ This change builds on requirements of `010`, `015`, `017`, `018`, `020` 
 - **Depends on `020-add-crawl-core`** for:
   - the `urls` table: `is_internal`, `in_scope`, `fetch_state`, `content_type`, `parsed`, `blocked_by_robots_txt`, `crawl_depth` and `fetched_at`
   - Link discovery, `DiscoveredLink` and the `LinkType` list, the robots directives parser and page preparation with its extractors
-  - the hooks: pure per-response handlers that return store rows, post-crawl passes that are store functions, and `default_hooks()` (its design D9 and D14)
+  - the hooks: pure per-response handlers that return store rows, post-crawl passes that are store functions, and `default_hooks()` in `spider.services.hooks`, the composition root (its design D9 and D14)
   - the injectable clock
 - **Depends on `022-add-fetch-policy`** for:
   - `redirect_url_id`, `size_bytes`, `transferred_bytes` and `content_encoding` on `urls`
