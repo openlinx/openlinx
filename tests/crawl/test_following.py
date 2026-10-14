@@ -4,7 +4,7 @@ from pathlib import Path
 
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -85,3 +85,24 @@ def test_an_http_refresh_target_is_followed(
     crawl_file = crawled(server.url("/"))
 
     assert _state(crawl_file, server.url("/new")) == [("fetched", None, "http_refresh")]
+
+
+def test_links_on_an_error_page_are_not_followed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/gone">Gone</a>'),
+                "/gone": Status(404, body='<a href="/secret">Secret</a>'),
+                "/secret": Page(body="<p>Secret</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert (
+        query(crawl_file, "SELECT parsed FROM urls WHERE url = ?", [server.url("/gone")]),
+        query(crawl_file, "SELECT id FROM urls WHERE url = ?", [server.url("/secret")]),
+    ) == ([(0,)], [])
