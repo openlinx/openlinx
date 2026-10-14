@@ -44,3 +44,9 @@ def test_a_crawl_without_a_final_pass_is_read_live(temp_workspace: TempWorkspace
         failed = issues_of(crawl_file)
 
     assert (stopped, failed) == (([("title-missing", 1)], [url_id]), ([], []))
+
+
+def test_a_disabled_rule_has_no_affected_urls_read_live(temp_workspace: TempWorkspace) -> None:
+    crawl_file, _ = crawl_with_page(temp_workspace, disabled={"title-missing"}, title_count=0)
+
+    assert read_affected_urls(crawl_file, "title-missing", RULES) == []

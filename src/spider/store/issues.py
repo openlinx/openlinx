@@ -133,7 +133,8 @@ def read_affected_urls(
                 AffectedUrl(url_id=row.url_id, detail=_detail(row.detail))
                 for row in connection.execute(_STORED_AFFECTED_URLS, {"rule_id": rule_id})
             ]
-        found = _affected_urls(connection, rule)
+        enabled = _enabled_rule_ids(connection)
+        found = _affected_urls(connection, rule) if rule_id in enabled else []
     return sorted(found, key=lambda url: url.url_id)
 
 

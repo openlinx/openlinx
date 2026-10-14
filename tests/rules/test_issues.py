@@ -148,3 +148,13 @@ def test_live_and_materialised_issues_agree(
         {rule_id: sorted(urls, key=lambda url: url.url_id) for rule_id, urls in live.items()},
         True,
     )
+
+
+def test_disabled_rule_produces_no_issue(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    (temp_workspace.root / "spider.toml").write_bytes(b"[rules.title-missing]\nenabled = false\n")
+
+    crawl_file = crawled(fixture_site(TWO_UNTITLED_PAGES).url("/"))
+
+    assert query(crawl_file, "SELECT rule_id FROM issues WHERE rule_id = 'title-missing'") == []
