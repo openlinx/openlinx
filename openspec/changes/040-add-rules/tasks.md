@@ -59,7 +59,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 3.16 **Guard:** "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2). It passes at once; red by mutation: the rejected `parse_error IS NULL` filter.
 - [x] 3.17 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` over a crawl file, and when Issues are live or materialised; the `reproduce_sql` field joins the item fields it lists.
 - [x] 3.18 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
-- [ ] 3.19 Drive the Issues of one URL at seam 2, a clause with no scenario of its own in "Issues of a Crawl without a final pass" (the reader returns "the Issues of one URL, in the shape of `affected_urls`"), which `050`'s `page <url>` calls: `read_url_issues`, with its path chosen by the Crawl State like the rest of the reader, one test per path, red first (the rulings of 2026-10-14).
+- [x] 3.19 Drive the Issues of one URL at seam 2, a clause with no scenario of its own in "Issues of a Crawl without a final pass" (the reader returns "the Issues of one URL, in the shape of `affected_urls`"), which `050`'s `page <url>` calls: `read_url_issues`, with its path chosen by the Crawl State like the rest of the reader, one test per path, red first (the rulings of 2026-10-14).
 
 ## 4. The slice's response code Rules and Missing H1 (slice)
 

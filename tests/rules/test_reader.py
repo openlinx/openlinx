@@ -13,7 +13,13 @@ from spider.output.diagnostics import SpiderError
 from spider.rules.registry import RULES
 from spider.rules.titles import TITLE_MISSING
 from spider.store.crawls import record_state
-from spider.store.issues import materialise_issues, read_affected_urls, read_issues
+from spider.store.issues import (
+    materialise_issues,
+    read_affected_urls,
+    read_issues,
+    read_url_issues,
+)
+from spider.store.records import UrlIssue
 from spider.store.schema import pages
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
@@ -81,4 +87,25 @@ def test_issues_of_a_rule_the_catalogue_lacks_come_after_its_own(
     assert [issue.rule_id for issue in read_issues(crawl_file, RULES)] == [
         "title-missing",
         "a-later-rule",
+    ]
+
+
+def test_the_issues_of_one_url_are_read_live(temp_workspace: TempWorkspace) -> None:
+    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+
+    assert read_url_issues(crawl_file, url_id, RULES) == [
+        UrlIssue(rule_id="title-missing", url_id=url_id, detail=None)
+    ]
+
+
+def test_the_issues_of_one_url_are_read_as_stored(temp_workspace: TempWorkspace) -> None:
+    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    with CrawlWriter(crawl_file, FakeClock()) as writer:
+        asyncio.run(materialise_issues(writer, RULES), loop_factory=loop_factory)
+        # The Page changes after the pass, so only the stored rows still list title-missing.
+        writer.run(executing(TITLED))
+        writer.run(record_state("completed", AT))
+
+    assert read_url_issues(crawl_file, url_id, RULES) == [
+        UrlIssue(rule_id="title-missing", url_id=url_id, detail=None)
     ]

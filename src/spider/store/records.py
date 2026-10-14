@@ -122,6 +122,16 @@ class AffectedUrl:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class UrlIssue:
+    """A row of affected_urls: one Rule that fired for one URL."""
+
+    rule_id: str
+    url_id: int
+    # The JSON object of the measured values, or None when the Rule lists none.
+    detail: Any
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Issue:
     rule_id: str
     category: RuleCategory

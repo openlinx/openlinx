@@ -1,6 +1,6 @@
 """Rules run over a crawl file, and the pass that stores their Issues (040-add-rules D5, D15)."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,7 @@ from sqlalchemy import (
 
 from spider.rules.model import Rule, find_rule
 from spider.store.reading import reading
-from spider.store.records import AffectedUrl, CrawlState, Issue
+from spider.store.records import AffectedUrl, CrawlState, Issue, UrlIssue
 from spider.store.schema import affected_urls, crawl, issues, rules
 from spider.store.writer import CrawlWriter
 
@@ -30,6 +30,9 @@ _ENABLED = select(rules.c.id, rules.c.category, rules.c.issue_type, rules.c.prio
     rules.c.enabled == 1
 )
 _STATE = select(crawl.c.state)
+_STORED_URL_ISSUES = select(affected_urls.c.rule_id, affected_urls.c.detail).where(
+    affected_urls.c.url_id == bindparam("url_id")
+)
 _STORED_ISSUES = select(issues)
 _STORED_AFFECTED_URLS = (
     select(affected_urls.c.url_id, affected_urls.c.detail)
@@ -113,6 +116,15 @@ def stored_affected_urls(
         return _stored_affected_urls(connection, rule)
 
 
+def read_url_issues(crawl_file: Path, url_id: int, catalogue: Sequence[Rule]) -> list[UrlIssue]:
+    """The Rules that fired for one URL, in catalogue order, as stored for a completed or
+    stopped Crawl, otherwise computed live (D16)."""
+    with reading(crawl_file) as connection:
+        if _materialised(connection):
+            return _stored_url_issues(connection, url_id, catalogue)
+        return _live_url_issues(connection, url_id, catalogue)
+
+
 def _live_issues(connection: Connection, catalogue: Sequence[Rule]) -> list[Issue]:
     recorded = {row.id: row for row in connection.execute(_ENABLED)}
     found = []
@@ -136,9 +148,7 @@ def _live_issues(connection: Connection, catalogue: Sequence[Rule]) -> list[Issu
 
 def _stored_issues(connection: Connection, catalogue: Sequence[Rule]) -> list[Issue]:
     stored = {row.rule_id: Issue(**row._asdict()) for row in connection.execute(_STORED_ISSUES)}
-    # A file from a later tool may hold Issues of Rules this catalogue lacks: they come last.
-    ids = [rule.id for rule in catalogue if rule.id in stored]
-    return [stored[rule_id] for rule_id in ids + sorted(stored.keys() - set(ids))]
+    return _in_catalogue_order(stored, catalogue)
 
 
 def _live_affected_urls(connection: Connection, rule: Rule) -> list[AffectedUrl]:
@@ -152,6 +162,39 @@ def _stored_affected_urls(connection: Connection, rule: Rule) -> list[AffectedUr
         AffectedUrl(url_id=row.url_id, detail=_detail(row.detail))
         for row in connection.execute(_STORED_AFFECTED_URLS, {"rule_id": rule.id})
     ]
+
+
+def _live_url_issues(
+    connection: Connection, url_id: int, catalogue: Sequence[Rule]
+) -> list[UrlIssue]:
+    enabled = _enabled_rule_ids(connection)
+    found = []
+    for rule in catalogue:
+        if rule.id not in enabled:
+            continue
+        query = _found(rule)
+        found += [
+            UrlIssue(rule_id=rule.id, url_id=url_id, detail=_detail(row.detail))
+            for row in connection.execute(select(query).where(query.c.url_id == url_id))
+        ]
+    return found
+
+
+def _stored_url_issues(
+    connection: Connection, url_id: int, catalogue: Sequence[Rule]
+) -> list[UrlIssue]:
+    # By the index affected_urls_url_id (D14).
+    stored = {
+        row.rule_id: UrlIssue(rule_id=row.rule_id, url_id=url_id, detail=_detail(row.detail))
+        for row in connection.execute(_STORED_URL_ISSUES, {"url_id": url_id})
+    }
+    return _in_catalogue_order(stored, catalogue)
+
+
+def _in_catalogue_order[T](by_rule_id: Mapping[str, T], catalogue: Sequence[Rule]) -> list[T]:
+    # A file from a later tool may hold rows of Rules this catalogue lacks: they come last.
+    ids = [rule.id for rule in catalogue if rule.id in by_rule_id]
+    return [by_rule_id[rule_id] for rule_id in ids + sorted(by_rule_id.keys() - set(ids))]
 
 
 def _found(rule: Rule) -> Subquery:
