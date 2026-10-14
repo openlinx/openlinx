@@ -22,12 +22,29 @@ from tests.support.workspace import TempWorkspace
 
 SCHEMA_DOC = Path(__file__).resolve().parents[2] / "docs" / "schema.md"
 CHECK_NAME = re.compile(r"CONSTRAINT (\w+) CHECK")
+IN_LIST = re.compile(r"\bIN \(([^)]*)\)")
 
 
 def test_documentation_and_declaration_agree() -> None:
     documented = parse_tables(SCHEMA_DOC.read_text(encoding="utf-8"))
 
     assert documented == run_cli("schema", "--limit", "1000").json()["items"]
+
+
+def test_no_check_lists_more_than_two_values(temp_workspace: TempWorkspace) -> None:
+    """SQLite builds an ephemeral index for a longer IN list again on every executemany row."""
+    crawl = create_any_crawl(temp_workspace)
+
+    with closing(sqlite3.connect(f"{crawl.path.as_uri()}?mode=ro", uri=True)) as connection:
+        tables = connection.execute("SELECT name, sql FROM sqlite_schema WHERE type = 'table'")
+        long_lists = [
+            (name, values)
+            for name, sql in tables
+            for values in IN_LIST.findall(sql or "")
+            if values.count(",") > 1
+        ]
+
+    assert long_lists == []
 
 
 def file_schema(file: Path) -> dict[str, dict[str, Any]]:
