@@ -156,8 +156,12 @@ def default_workers() -> int:
         logical=os.cpu_count(),
         available=_available_cpus(psutil.Process()),
         quota=cpu_quota(_CGROUP_ROOT, _SELF_CGROUP),
-        limit=worker_limit(sys.platform, (sys.version_info.major, sys.version_info.minor)),
+        limit=_waiter_limit(),
     )
+
+
+def _waiter_limit() -> int | None:
+    return worker_limit(sys.platform, (sys.version_info.major, sys.version_info.minor))
 
 
 def _available_cpus(process: Any) -> int | None:
@@ -185,6 +189,12 @@ class PoolExecutor:
 
     def __init__(self, workers: int | None = None) -> None:
         self.workers = default_workers() if workers is None else workers
+        limit = _waiter_limit()
+        if self.workers < 1 or (limit is not None and self.workers > limit):
+            raise ValueError(
+                f"{self.workers} parse workers: the pool runs at least 1"
+                + ("" if limit is None else f" and at most {limit} here")
+            )
         self.backlog = BACKLOG_PER_WORKER * self.workers
         self._workers: list[_Worker] = []
         # The workers still running, idle or busy.

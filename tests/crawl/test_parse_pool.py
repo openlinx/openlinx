@@ -171,6 +171,17 @@ def test_the_backlog_is_two_pages_per_worker() -> None:
     assert PoolExecutor(workers=3).backlog == 6
 
 
+@pytest.mark.parametrize("workers", [0, 3])
+def test_a_worker_count_the_pool_cannot_run_is_refused(
+    monkeypatch: pytest.MonkeyPatch, workers: int
+) -> None:
+    # As on Windows before Python 3.13, with a lower limit.
+    monkeypatch.setattr(parse_pool, "_waiter_limit", lambda: 2)
+
+    with pytest.raises(ValueError, match="parse workers"):
+        PoolExecutor(workers=workers)
+
+
 async def test_a_page_given_before_the_pool_starts_is_refused() -> None:
     with pytest.raises(RuntimeError, match="before it is started"):
         await PoolExecutor(workers=1).prepare(at("/"), RESPONSE)
