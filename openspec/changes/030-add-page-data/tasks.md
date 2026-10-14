@@ -6,7 +6,7 @@ Each task is one red → green slice and one commit (see docs/testing.md).
 
 Seams: 1 CLI, 2 services and store API, 4 pure-logic modules (including the Page extractor), 6 store contract. "Seam 3+6" means crawl the fixture site, then read the documented tables read-only.
 
-There are no schema-first slices. A table or column is added in the slice whose scenario first needs it, through `018`'s declaration helper (`STRICT`, and CHECKs from the declared values and flags), with its description and its `docs/schema.md` entry in the same commit, so the contract test (`015`'s, extended by `018`) is never red between commits. A seam-4 slice that adds an extractor field also adds its column.
+There are no schema-first slices. A table or column is added in the slice whose scenario first needs it, through `018`'s `public_table()` (`STRICT`, and CHECKs from the declared values and flags), with its description and its `docs/schema.md` entry in the same commit, so the contract test (`015`'s, extended by `018`) is never red between commits. A seam-4 slice that adds an extractor field also adds its column.
 
 **The thin slice** (ROADMAP, Build order) is groups 1–3: the Page rows, titles, meta descriptions and headings that `040`-min's first Rules read (`title-missing` and `h1-missing`; its response-code Rules read only `urls`). None of them reads Indexability, so group 7 widens with the rest. Groups 4–12 widen the change after `022`-min, whose size and redirect columns group 4 copies.
 
