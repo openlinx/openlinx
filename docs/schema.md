@@ -18,6 +18,8 @@ Each table has a section headed ``## Table `<name>` ``, with a description and o
 | Values | the allowed values of an enumeration, otherwise empty |
 | Description | what the column holds |
 
+A view, a stored query over the tables, has a section headed ``## View `<name>` `` in the same form; it has no keys or indexes of its own, and its columns' types, nullability and references are those its declaration gives, since SQLite keeps none of them for a view.
+
 A table with secondary indexes has a ``### Indexes`` table after its columns, with one row per index, in name order. The indexes SQLite makes for primary keys are not listed.
 
 | Heading | Meaning |
@@ -63,6 +65,8 @@ A change that stores new data adds its tables and columns in the slice whose sce
 2. **Document it here, in the same commit:** a ``## Table `<name>` `` section, placed in change order, with the same description, one row per column, and an Indexes table when it has secondary indexes. The contract test compares this page with `spider schema --limit 1000`, so it is never red between commits.
 3. **Follow the [conventions](#conventions).** Tests over `spider schema` and the declaration check names, descriptions, types, booleans, enumeration values, references, index names, unique rules declared as indexes, and that derived and later columns may hold NULL, for every table, including new ones.
 4. **No migration before v0.1.** Until the first release the schema is not yet public: a change edits the declared tables directly, and `schema_version` stays `1`. From v0.1 on, a schema change adds 1 to `schema_version` and brings a migration, with a test from every published schema version.
+
+A view is declared the same way with `public_view(name, *columns, query=..., comment=..., change=<n>)`, which names the query's columns in order, a column that refers to a table with `info={"references": "<table>.<column>"}`, and documented in a ``## View `<name>` `` section.
 
 A table whose name starts with `_` is internal: it is left out of `spider schema` and of this page.
 
@@ -205,3 +209,25 @@ One row for each Rule of the catalogue, with the configuration the Crawl was cre
 | `why_it_matters` | TEXT | no | | | | Why its Issues matter. |
 | `how_to_fix` | TEXT | no | | | | How to fix its Issues. |
 | `reproduce_sql` | TEXT | no | | | | The Rule's reproducing query: a read-only SELECT over this file that returns its Affected URLs as url_id and detail. |
+
+## Table `affected_urls`
+
+One row for each Rule and its Affected URL, written only by the post-crawl pass: the result of the last pass.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `rule_id` | TEXT | no | PK, → `rules.id` | | | The Rule that fired. |
+| `url_id` | INTEGER | no | PK, → `urls.id` | | | The Affected URL. |
+| `detail` | TEXT | yes | | `json` | | The measured values, as an object with the keys listed for the Rule; NULL when the Rule lists none. |
+
+## View `issues`
+
+The Issues: one row for each Rule with at least one Affected URL, counted from affected_urls, so it holds the result of the last post-crawl pass.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `rule_id` | TEXT | no | → `rules.id` | | | The Rule that fired. |
+| `category` | TEXT | no | | | | The Rule's category. |
+| `issue_type` | TEXT | no | | | | The Issue Type of the Rule's Issues. |
+| `priority` | TEXT | no | | | | The Priority of the Rule's Issues. |
+| `affected_count` | INTEGER | no | | | | The number of the Rule's rows in affected_urls. |

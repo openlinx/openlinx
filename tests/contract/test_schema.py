@@ -112,6 +112,8 @@ def declared_schema() -> dict[str, dict[str, Any]]:
     """
     tables = {}
     for item in describe_schema().tables:
+        if item["kind"] == "view":
+            continue
         table = metadata.tables[item["name"]]
         tables[item["name"]] = {
             "strict": table.dialect_options["sqlite"]["strict"],
@@ -148,6 +150,25 @@ def test_a_new_file_matches_the_declaration(temp_workspace: TempWorkspace) -> No
     assert file_schema(file) == declared_schema()
 
 
+def file_views(file: Path) -> dict[str, list[str]]:
+    with closing(sqlite3.connect(f"{file.as_uri()}?mode=ro", uri=True)) as connection:
+        return {
+            name: [column for _, column, *_ in connection.execute(f"PRAGMA table_info({name})")]
+            for schema, name, kind, *_ in connection.execute("PRAGMA table_list")
+            if schema == "main" and kind == "view"
+        }
+
+
+def test_a_new_file_has_the_declared_views(temp_workspace: TempWorkspace) -> None:
+    file = create_any_crawl(temp_workspace).path
+
+    assert file_views(file) == {
+        item["name"]: [column["name"] for column in item["columns"]]
+        for item in describe_schema().tables
+        if item["kind"] == "view"
+    }
+
+
 def test_a_new_file_matches_a_declared_reference_and_indexes(
     temp_workspace: TempWorkspace,
 ) -> None:
@@ -161,7 +182,7 @@ def test_every_table_is_strict(temp_workspace: TempWorkspace) -> None:
     tables = file_schema(create_any_crawl(temp_workspace).path)
 
     assert {name: table["strict"] for name, table in tables.items()} == {
-        table["name"]: True for table in describe_schema().tables
+        table["name"]: True for table in describe_schema().tables if table["kind"] == "table"
     }
 
 

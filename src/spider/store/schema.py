@@ -10,10 +10,14 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
+    Select,
     Table,
     Text,
+    func,
     or_,
+    select,
 )
+from sqlalchemy.sql.ddl import CreateView
 
 from spider.naming import APP_NAME, SETTINGS_FILE_NAME
 from spider.store.records import (
@@ -96,6 +100,29 @@ def public_table(
         sqlite_strict=True,
         sqlite_with_rowid=not without_rowid,
     )
+
+
+def public_view(
+    name: str, *columns: Column[Any], query: Select[Any], comment: str, change: int
+) -> Table:
+    """The one way to declare a public view: a query over the tables, with its columns declared.
+
+    SQLite reports no NOT NULL and its own type names for a view's computed columns, so the
+    declaration, which must name the query's columns in order, is what spider schema shows.
+    """
+    # Checked before CreateView, which adds the view to the metadata.
+    if [column.name for column in query.selected_columns] != [column.name for column in columns]:
+        raise TypeError(f"The view {name} declares other columns than its query selects.")
+    view = CreateView(query, name, metadata=metadata).table
+    for declared in columns:
+        column = view.c[declared.name]
+        column.type = declared.type
+        column.nullable = declared.nullable
+        column.comment = declared.comment
+        column.info.update(declared.info)
+    view.comment = comment
+    view.info["change"] = change
+    return view
 
 
 crawl = public_table(
@@ -601,4 +628,66 @@ rules = public_table(
     "created with, which it uses throughout.",
     change=40,
     without_rowid=True,
+)
+
+affected_urls = public_table(
+    "affected_urls",
+    Column(
+        "rule_id",
+        Text,
+        ForeignKey("rules.id"),
+        primary_key=True,
+        comment="The Rule that fired.",
+    ),
+    Column(
+        "url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        autoincrement=False,
+        comment="The Affected URL.",
+    ),
+    Column(
+        "detail",
+        Json,
+        comment="The measured values, as an object with the keys listed for the Rule; NULL "
+        "when the Rule lists none.",
+    ),
+    comment="One row for each Rule and its Affected URL, written only by the post-crawl pass: "
+    "the result of the last pass.",
+    change=40,
+    without_rowid=True,
+)
+
+issues = public_view(
+    "issues",
+    Column(
+        "rule_id",
+        Text,
+        nullable=False,
+        comment="The Rule that fired.",
+        info={"references": "rules.id"},
+    ),
+    Column("category", Text, nullable=False, comment="The Rule's category."),
+    Column("issue_type", Text, nullable=False, comment="The Issue Type of the Rule's Issues."),
+    Column("priority", Text, nullable=False, comment="The Priority of the Rule's Issues."),
+    Column(
+        "affected_count",
+        Integer,
+        nullable=False,
+        comment="The number of the Rule's rows in affected_urls.",
+    ),
+    # Grouped by the primary key's prefix, so the count reads affected_urls in key order.
+    query=select(
+        rules.c.id.label("rule_id"),
+        rules.c.category,
+        rules.c.issue_type,
+        rules.c.priority,
+        func.count().label("affected_count"),
+    )
+    .join_from(affected_urls, rules, affected_urls.c.rule_id == rules.c.id)
+    .group_by(affected_urls.c.rule_id),
+    comment="The Issues: one row for each Rule with at least one Affected URL, counted from "
+    "affected_urls, so it holds the result of the last post-crawl pass.",
+    change=40,
 )

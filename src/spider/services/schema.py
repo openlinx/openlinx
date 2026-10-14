@@ -34,7 +34,7 @@ def describe_schema(table: str | None = None) -> SchemaDescription:
     tables = [
         {
             "name": candidate.name,
-            "kind": "table",
+            "kind": "view" if candidate.is_view else "table",
             "description": candidate.comment,
             "columns": [_column(column) for column in candidate.columns],
             # SQLite's own indexes for keys are not declared, so only secondary ones are listed.
@@ -58,7 +58,11 @@ def _column(column: "Column[Any]") -> dict[str, Any]:
         "type": column.type.compile(dialect=sqlite.dialect()),
         "nullable": column.nullable,
         "primary_key": column.primary_key,
-        "references": next((key.target_fullname for key in column.foreign_keys), None),
+        # A view's column has no foreign key, so its declaration names the reference.
+        "references": next(
+            (key.target_fullname for key in column.foreign_keys),
+            column.info.get("references"),
+        ),
         "format": getattr(column.type, "format", None),
         "values": column.info.get("values"),
     }

@@ -92,6 +92,21 @@ def test_reference_columns_are_declared() -> None:
     ) == ([], True)
 
 
+def test_references_name_a_listed_column() -> None:
+    # A view's references are declared by hand, so nothing else checks their targets.
+    listed = {
+        f"{table['name']}.{column['name']}"
+        for table in listed_tables()
+        for column in table["columns"]
+    }
+
+    assert [
+        column["references"]
+        for column in all_columns()
+        if column["references"] is not None and column["references"] not in listed
+    ] == []
+
+
 def test_index_names_start_with_their_table() -> None:
     indexes = [(table["name"], index) for table in listed_tables() for index in table["indexes"]]
 
