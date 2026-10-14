@@ -60,7 +60,7 @@ No Rule runs while a URL is recorded: the Crawl's writer, the bottleneck of a Cr
 - *Consequence:* Resource Issues never change the Health Score, which is defined over Internal Pages (see Open Questions).
 
 ### D3. What makes a Rule Issue-type
-`issue` is reserved for definite defects, because Issue-type Issues alone drive the Health Score. There are 10 of them:
+`issue` is reserved for definite defects, because Issue-type Issues alone drive the Health Score. There are 10 of them, 6 in v0.1 (`internal-4xx`, `internal-5xx`, `internal-no-response`, `redirect-loop`, `title-missing` and `canonical-to-non-indexable`):
 
 - `internal-4xx`, `internal-5xx`, `internal-no-response` and `redirect-loop`
 - `title-missing` and `title-multiple`
@@ -73,8 +73,8 @@ Anything that can be intentional, or that the maintainer does not want to lower 
 - *Alternative: copy Screaming Frog's Issue Types everywhere.* Rejected. They are not fully documented, and several are Opportunities that would hide definite defects from the Health Score.
 - *Consequence:* changing a Rule's Issue Type later changes Health Scores. It is treated as a contract change and noted in the changelog.
 
-### D4. 42 Rules
-The maintainer approved keeping all 42 Rules on 2026-09-27. Noindex and nofollow each combine meta robots and X-Robots-Tag: the problem is the same, and `detail.sources` tells the agent where to fix it. Every Rule has a distinct fix. The low-value Rules (`title-same-as-h1`, `h1-too-long`, `url-underscores`, `url-parameters`, `meta-description-too-short`) are `opportunity`/`low`, so they do not touch the Health Score and sort last in Reports. Each one can be disabled with `enabled = false`.
+### D4. 42 Rules, 15 of them in v0.1
+The maintainer approved keeping all 42 Rules on 2026-09-27. v0.1 ships the 15 that ROADMAP lists under "The v0.1 Rules" (the user's decision of 2026-10-05); the other 27 are v0.2, and the spec marks each requirement and scenario with its release. Noindex and nofollow each combine meta robots and X-Robots-Tag: the problem is the same, and `detail.sources` tells the agent where to fix it. Every Rule has a distinct fix. The low-value Rules (`title-same-as-h1`, `h1-too-long`, `url-underscores`, `url-parameters`, `meta-description-too-short`) are `opportunity`/`low`, so they do not touch the Health Score and sort last in Reports. Each one can be disabled with `enabled = false`.
 
 ### D5. When Rules run
 - **During the Crawl,** nothing is written. The Issues reader computes the Issues live from the queries (D16), so a running Crawl shows its Issues so far.

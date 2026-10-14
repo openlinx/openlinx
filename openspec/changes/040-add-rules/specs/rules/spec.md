@@ -20,9 +20,11 @@ The categories SHALL be, in this order: `response_codes`, `security`, `titles`, 
 
 In the scenarios, `{site}` is the origin of the local fixture site.
 
+> **v0.1.**
+
 #### Scenario: Rule ids are unique kebab-case
 - **WHEN** `spider rules list --limit 50` runs
-- **THEN** all 42 `id` values match `^[a-z0-9]+(-[a-z0-9]+)*$` and no value appears twice
+- **THEN** every `id` value matches `^[a-z0-9]+(-[a-z0-9]+)*$` and no value appears twice
 
 #### Scenario: Every Rule has its guidance
 - **WHEN** `spider rules list --limit 50` runs
@@ -37,6 +39,8 @@ Each Rule SHALL be evaluated over exactly one population, and its Affected URLs 
 
 A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). For example, a canonical target that the Crawl never requested produces no Affected URL.
 
+> **v0.1**, except the `resources` population, which only the image Rules use (**v0.2**).
+
 #### Scenario: External URLs are not Internal URLs
 - **WHEN** an External URL linked from a Page responded 404
 - **THEN** `internal-4xx` has no Affected URL for it
@@ -50,11 +54,13 @@ A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). 
 - **THEN** `title-missing` and `h1-missing` have no Affected URL for it
 
 ### Requirement: The v0.1 catalogue
-The Rule catalogue SHALL contain exactly the 42 Rules defined in the category requirements below, with the Issue Type, Priority, population, default thresholds, condition and `detail` keys given there. Column names refer to the `urls` table and to the tables of `030-add-page-data`.
+The Rule catalogue SHALL contain exactly the Rules defined in the category requirements below: in v0.1 the 15 Rules that their release marks name (ROADMAP, "The v0.1 Rules", the user's decision of 2026-10-05), and from v0.2 all 42, with the Issue Type, Priority, population, default thresholds, condition and `detail` keys given there. Column names refer to the `urls` table and to the tables of `030-add-page-data`.
+
+> **v0.1**: 15 Rules; **v0.2**: all 42.
 
 #### Scenario: Catalogue size
 - **WHEN** `spider rules list --limit 50` runs in a Workspace without `[rules]` settings
-- **THEN** `total` is 42 and every item has `enabled` true
+- **THEN** `total` is 15 (42 from v0.2) and every item has `enabled` true
 
 ### Requirement: Response code Rules
 The `response_codes` category SHALL contain these Rules, all over `internal_urls`:
@@ -72,6 +78,8 @@ The `response_codes` category SHALL contain these Rules, all over `internal_urls
 A URL's *Redirect Chain length* is the number of 3xx responses met when following `redirect_url_id` from the URL. The walk stops at the first URL that is not a 3xx response, has no `redirect_url_id`, was not requested or was already visited. `final_url` is the URL where the walk stops.
 
 `fetch_error` `record_failed` means that the Crawl received a response but could not record it (`020-add-crawl-core`). That is the tool's failure, not the site's, so it is no Issue: the `record_failed` warning reports it, and a continue requests the URL again. `image-broken` excludes it the same way.
+
+> **v0.1.**
 
 #### Scenario: Client error
 - **WHEN** the Internal URL `https://example.test/gone` has `status_code` 404
@@ -120,6 +128,8 @@ The `security` category SHALL contain this Rule. It is a Warning, so it never lo
 |---|---|---|---|---|---|
 | `http-url` | warning | high | `internal_urls` | an Internal URL with the `http` scheme and a `status_code` from 200 to 299 | `status_code` |
 
+> **v0.1.**
+
 #### Scenario: Content served over HTTP
 - **WHEN** the Internal URL `http://example.test/a` has `status_code` 200
 - **THEN** `http-url` fires for it with `detail` `{"status_code": 200}`
@@ -141,6 +151,8 @@ The `titles` category SHALL contain these Rules, all over `internal_pages`:
 | `title-same-as-h1` | opportunity | low | `title_1` is non-empty and equal (case-sensitive) to `h1_1` | none | none |
 
 In v0.1, `title-too-long` checks characters only. `030-add-page-data` fills `title_1_width_px` from v0.2, and the Rule's `max_pixels` threshold and its `width_px` detail key arrive with it, so v0.1 shows no threshold that cannot fire.
+
+> **v0.1** for `title-missing`, `title-duplicate` and `title-too-long`. **v0.2** for `title-too-short`, `title-multiple` and `title-same-as-h1`, with the scenarios "Title too short", "Title at the minimum", "Multiple titles", "Title equals H1" and "Comparison with H1 is case-sensitive".
 
 #### Scenario: Missing title
 - **WHEN** an analysed Page has `title_count` 0
@@ -197,6 +209,8 @@ The `meta_descriptions` category SHALL contain these Rules, all over `internal_p
 | `meta-description-too-short` | opportunity | low | `meta_description_1_length` is at least 1 and less than `min_chars` | `min_chars` 70 (characters) | `length` |
 | `meta-description-multiple` | warning | low | `meta_description_count` > 1 | none | `count` |
 
+> **v0.1** for `meta-description-missing`. **v0.2** for the other four, with the scenarios "Duplicate meta descriptions", "Meta description too long", "Meta description at both limits", "Meta description too short" and "Multiple meta descriptions".
+
 #### Scenario: Missing meta description
 - **WHEN** an analysed Page has `meta_description_count` 0
 - **THEN** `meta-description-missing` fires for it
@@ -231,6 +245,8 @@ The `headings` category SHALL contain these Rules, all over `internal_pages`:
 | `h1-multiple` | warning | low | `h1_count` > 1 | none | `count` |
 | `h1-too-long` | opportunity | low | `h1_1_length` > `max_chars` | `max_chars` 70 (characters) | `length` |
 | `h2-missing` | opportunity | low | `h2_count` is 0 or `h2_1` is the empty string | none | none |
+
+> **v0.1** for `h1-missing`. **v0.2** for `h1-duplicate`, `h1-multiple`, `h1-too-long` and `h2-missing`, with the scenarios "Duplicate H1", "Multiple H1", "H1 too long", "H1 at the limit" and "Missing H2".
 
 #### Scenario: Missing H1
 - **WHEN** an analysed Page has `h1_count` 0
@@ -271,6 +287,8 @@ The *target's Indexability* SHALL come from `030-add-page-data`:
 
 - **When the target is a Page,** it is the Page's stored `indexability` and `indexability_status`.
 - **When the target is not a Page,** steps 1–4 of 030's Indexability order are applied to the target's `urls` row: `blocked_by_robots_txt`, `redirected`, `client_error` or `server_error`. A target with `fetch_state` `error` is non-indexable with the reason `no_response`. The reason goes in `detail.target_reason`, not under the column name `indexability_status`, because `no_response` is not one of that column's values. A target with any other outcome, such as a 2xx response that is not HTML, counts as indexable. A target that was never requested has no Indexability, and the Rule does not fire.
+
+> **v0.1** for `canonical-to-non-indexable` and the target's Indexability. **v0.2** for `canonical-missing`, `canonicalised`, `canonical-conflicting` and `canonical-relative`, with the scenarios "Missing canonical", "Noindex Page needs no canonical", "Canonicalised Page", "Conflicting canonicals", "Agreeing canonicals" and "Relative canonical".
 
 #### Scenario: Missing canonical
 - **WHEN** an analysed Page has `canonical_count` 0 and no noindex directive
@@ -329,6 +347,8 @@ The `directives` category SHALL contain these Rules, all over `internal_pages`:
 | `nofollow` | warning | medium | `meta_robots_nofollow` or `x_robots_tag_nofollow` is 1 | `sources`, in the same way |
 | `meta-refresh` | warning | low | `meta_refresh` is non-NULL | `meta_refresh`, `redirect_url` |
 
+> **v0.1** for `noindex`. **v0.2** for `nofollow` and `meta-refresh`, with the scenarios "Nofollow from meta robots" and "Meta refresh used".
+
 #### Scenario: Noindex from X-Robots-Tag only
 - **WHEN** an analysed Page has `meta_robots_noindex` 0 and `x_robots_tag_noindex` 1
 - **THEN** `noindex` fires for it with `detail` `{"sources": ["x_robots_tag"]}`
@@ -352,6 +372,8 @@ The `content` category SHALL contain these Rules, both over `internal_pages`:
 |---|---|---|---|---|---|
 | `low-word-count` | opportunity | medium | *Indexable only*: `word_count` < `min_words` | `min_words` 200 (words) | `word_count` |
 | `exact-duplicate` | issue | medium | *Indexable only*: `content_hash` is non-NULL and equal to that of at least one other Indexable Page | none | `content_hash`, `pages` |
+
+> **v0.2.**
 
 #### Scenario: Thin Page
 - **WHEN** an Indexable Page has `word_count` 199
@@ -383,6 +405,8 @@ The `urls` category SHALL contain these Rules, all over `internal_pages`. The *p
 | `url-parameters` | opportunity | low | the query is non-empty | none | none |
 | `url-too-long` | opportunity | low | `url_encoded_address` is longer than `max_chars` characters | `max_chars` 115 (characters) | `length` |
 | `url-non-ascii` | opportunity | low | the path or query contains a non-ASCII character | none | none |
+
+> **v0.2.**
 
 #### Scenario: Uppercase letters in the path
 - **WHEN** an analysed Page has `address` `https://example.test/Shoes`
@@ -429,6 +453,8 @@ The `images` category SHALL contain these Rules:
 | `image-too-large` | opportunity | medium | `resources` | an image Resource whose `urls.size_bytes` is more than `max_kb` × 1024 | `max_kb` 100 (kilobytes of 1024 bytes) | `size_bytes` |
 | `image-broken` | issue | medium | `resources` | an image Resource with a `status_code` from 400 to 599, or with `fetch_state` `error` and a `fetch_error` other than `record_failed` | none | `status_code` or `error` (the `fetch_error`) |
 
+> **v0.2.**
+
 #### Scenario: Images without alt text
 - **WHEN** an analysed Page has one `img`/`src` `image` Link with `alt_text` NULL and one with `alt_text` equal to the empty string
 - **THEN** `image-missing-alt-text` fires for the Page with `detail` `{"missing_alt_attribute": 1, "empty_alt": 1}`
@@ -465,13 +491,15 @@ A table `[rules.<id>]` in the Workspace's `spider.toml` SHALL be able to set:
 
 The table name is the Rule id itself. These settings mirror no flag, so `010-add-workspace-and-cli-contract`'s flag-mirroring rule for keys does not apply to them. A disabled Rule SHALL NOT be evaluated and SHALL produce no Issue.
 
+> **v0.1.**
+
 #### Scenario: Raised title limit
 - **WHEN** `spider.toml` has `[rules.title-too-long]` with `max_chars = 70`, and an analysed Page has `title_1_length` 65
 - **THEN** `title-too-long` has no Affected URL for it
 
 #### Scenario: Disabled Rule produces no Issue
-- **WHEN** `spider.toml` has `[rules.h2-missing]` with `enabled = false`, and a Crawl of the fixture site with Pages without `<h2>` ends as `completed`
-- **THEN** `issues` holds no row for `h2-missing`
+- **WHEN** `spider.toml` has `[rules.title-missing]` with `enabled = false`, and a Crawl of the fixture site with Pages without `<title>` ends as `completed`
+- **THEN** `issues` holds no row for `title-missing`
 
 #### Scenario: Override shown by the rules Command
 - **WHEN** `spider.toml` has `[rules.title-too-long]` with `max_chars = 70` and `spider rules show title-too-long` runs
@@ -487,17 +515,19 @@ Any Command that loads the Workspace's `spider.toml` SHALL fail with the setting
 
 Each problem's `details.errors[].key` SHALL be the dotted key, for example `rules.title-to-long`, and the hint SHALL name the closest known Rule id or key when there is one. `spider crawl` SHALL fail before any URL is requested.
 
+> **v0.1.**
+
 #### Scenario: Misspelt Rule id
 - **WHEN** `spider.toml` has `[rules.title-to-long]` and `spider rules list` runs
 - **THEN** the exit code is 3, the error has the code `settings_invalid` and `details.errors[0].key` `"rules.title-to-long"`, and the hint contains `title-too-long`
 
 #### Scenario: Negative threshold
-- **WHEN** `spider.toml` has `[rules.low-word-count]` with `min_words = -5` and `spider crawl {site}/` runs
-- **THEN** the exit code is 3, `details.errors[0].key` is `"rules.low-word-count.min_words"`, and the fixture site receives 0 requests
+- **WHEN** `spider.toml` has `[rules.title-too-long]` with `max_chars = -5` and `spider crawl {site}/` runs
+- **THEN** the exit code is 3, `details.errors[0].key` is `"rules.title-too-long.max_chars"`, and the fixture site receives 0 requests
 
 #### Scenario: Unknown key
-- **WHEN** `spider.toml` has `[rules.h2-missing]` with `max_chars = 10` and `spider rules list` runs
-- **THEN** the exit code is 3 and `details.errors[0].key` is `"rules.h2-missing.max_chars"`
+- **WHEN** `spider.toml` has `[rules.h1-missing]` with `max_chars = 10` and `spider rules list` runs
+- **THEN** the exit code is 3 and `details.errors[0].key` is `"rules.h1-missing.max_chars"`
 
 ### Requirement: Rule configuration is fixed per Crawl
 When a Crawl starts, it SHALL resolve every Rule's enabled state and effective thresholds and write them to its `rules` table, in the same transaction that creates the `crawl` row. The table follows the conventions of `018-add-schema-conventions` (ADR-0005): it is `STRICT` and `WITHOUT ROWID`, keyed by the Rule id. It holds one row per catalogue Rule, with these columns:
@@ -518,13 +548,15 @@ When a Crawl starts, it SHALL resolve every Rule's enabled state and effective t
 
 The Crawl SHALL use this configuration throughout, including after `resume`. Editing `spider.toml` later SHALL NOT change the Issues stored for an existing Crawl. v0.1 has no Command that recomputes them; `rules apply` arrives in v0.2.
 
+> **v0.1.**
+
 #### Scenario: Keys of the Rule tables
 - **WHEN** `spider schema rules` and `spider schema affected_urls` run
 - **THEN** the columns with `primary_key` true are `id` of `rules`, with the type `TEXT`, and `rule_id` and `url_id` of `affected_urls`, whose `references` are `rules.id` and `urls.id`
 
 #### Scenario: Crawl records the thresholds it used
-- **WHEN** a Crawl runs with `[rules.low-word-count]` `min_words = 300`
-- **THEN** its `rules` row for `low-word-count` has `thresholds` `{"min_words": 300}`
+- **WHEN** a Crawl runs with `[rules.title-too-long]` `max_chars = 70`
+- **THEN** its `rules` row for `title-too-long` has `thresholds` `{"max_chars": 70}`
 
 #### Scenario: Later edits do not change a completed Crawl
 - **WHEN** a Crawl ended as `completed` with the default `min_words` and `spider.toml` then sets `min_words = 5000`
@@ -542,6 +574,8 @@ Every Rule SHALL have a reproducing query and SHALL be evaluated only by it. The
 
 No Rule SHALL be evaluated while a URL is recorded: this change registers no per-response handler, and the Crawl's writer writes no Affected URL while the Crawl runs.
 
+> **v0.1.**
+
 #### Scenario: A Rule's query returns its stored Affected URLs
 - **WHEN** a Crawl of the fixture pages under `{site}/rules/` ends as `completed`, and the `reproduce_sql` of each enabled Rule in its `rules` table is run over its file through a read-only connection
 - **THEN** for every Rule the rows returned equal the Rule's `affected_urls` rows, with `detail` compared as JSON
@@ -556,6 +590,8 @@ This change SHALL provide the Issues reader, through which `050-add-query-and-se
 - the Affected URLs of one Rule, and the Issues of one URL, in the shape of `affected_urls`
 
 A Crawl has materialised Issues exactly when its Crawl State is `completed` or `stopped`, because the post-crawl pass runs before either state is written (`020-add-crawl-core`). The reader SHALL then read `affected_urls` and the `issues` view. In every other Crawl State (`running`, `failed` or `interrupted`), it SHALL compute the Issues live: it runs each enabled Rule's query read-only over the stored rows, and ignores `affected_urls`, which may hold an earlier pass's rows.
+
+> **v0.1.**
 
 #### Scenario: Issue visible before the Crawl ends
 - **WHEN** the fixture Page `{site}/notitle` has been written and the Crawl is still waiting on `{site}/slow`, which delays its response by 5 s
@@ -579,6 +615,8 @@ This change's post-crawl pass SHALL materialise the Issues when a Crawl ends as 
 2. Then one unit records the Health Score fields.
 
 It SHALL run again when a resumed Crawl ends, and each run SHALL replace the rows of the run before, so an Affected URL is never stored twice. A Crawl that ends as `failed`, or whose process died, gets no pass until it is resumed and ends; until then its Issues are read live.
+
+> **v0.1.**
 
 #### Scenario: Duplicates found by the post-crawl passes
 - **WHEN** a Crawl of two fixture Pages with the title `Shoes` ends as `completed`
@@ -604,6 +642,8 @@ Only the post-crawl pass writes `affected_urls`. Its rows are the result of the 
 | `affected_urls_url_id` | `url_id` | no | | The Issues of one URL (`050-add-query-and-segments`' `page <url>`), and the Health Score's count of affected Pages |
 
 The Issues SHALL be a view `issues` over `rules` and `affected_urls`, with one row per Rule that has at least one Affected URL and the columns `rule_id`, `category`, `issue_type`, `priority` and `affected_count`, the number of the Rule's rows in `affected_urls`. No count of Affected URLs SHALL be stored. A Rule that did not fire SHALL have no `issues` row.
+
+> **v0.1.**
 
 #### Scenario: Issue row counts its Affected URLs
 - **WHEN** a Crawl of the fixture site ends as `completed` with two Pages that have no `<title>`
@@ -643,6 +683,8 @@ At the end of the post-crawl passes, the Crawl SHALL record these crawl metadata
 | `health_calculated_at` | TEXT | yes | timestamp | When the post-crawl pass calculated the score |
 
 Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed Crawl keeps the values of its last pass until its next pass. The Health Score of any subset of Internal Pages, such as a Segment, SHALL use the same formula restricted to that subset, through one function that `050-add-query-and-segments` and `070-add-html-report` call at query time. While the Issues reader computes Issues live, the function takes the live Affected URLs.
+
+> **v0.1**, except the scenario "Resource Issues do not change the score", which needs the image Rules (**v0.2**).
 
 #### Scenario: Pages with Issue-type Issues lower the score
 - **WHEN** a Crawl has 10 Internal Pages, 3 of which are Affected URLs of Rules whose Issue Type is `issue`
@@ -691,6 +733,8 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - `thresholds`: an object that maps each threshold name to `{value, default, unit}`, where the unit is `characters`, `pixels`, `words`, `kilobytes` or `hops`
 - `description`, `why_it_matters`, `how_to_fix` and `reproduce_sql`
 
+> **v0.1.**
+
 #### Scenario: First Rule in the list
 - **WHEN** `spider rules list --limit 1` runs without `[rules]` settings
 - **THEN** `items[0].id` is `internal-4xx`, `items[0].category` is `response_codes` and `next_cursor` is not null
@@ -700,11 +744,13 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** the item with `id` `title-missing` has `thresholds` `{}`
 
 #### Scenario: Disabled Rule is listed
-- **WHEN** `spider.toml` has `[rules.url-parameters]` with `enabled = false` and `spider rules list --limit 50` runs
-- **THEN** the item with `id` `url-parameters` has `enabled` false
+- **WHEN** `spider.toml` has `[rules.h1-missing]` with `enabled = false` and `spider rules list --limit 50` runs
+- **THEN** the item with `id` `h1-missing` has `enabled` false
 
 ### Requirement: Show one Rule
 `spider rules show <id>` SHALL print one JSON object with the same fields as a list item. An unknown id SHALL fail with the error code `rule_not_found`, which maps to exit code 4 under the rules of `010-add-workspace-and-cli-contract`. Its `message` SHALL contain the id and its `hint` SHALL mention `spider rules list`.
+
+> **v0.1.**
 
 #### Scenario: Show a Rule with thresholds
 - **WHEN** `spider rules show title-too-long` runs without `[rules]` settings
@@ -728,6 +774,8 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - the index `affected_urls_url_id`
 
 `docs/schema.md` SHALL document them as `018-add-schema-conventions` requires.
+
+> **v0.1.**
 
 #### Scenario: Issue Types are an enumeration
 - **WHEN** `spider schema issues` runs
