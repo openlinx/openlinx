@@ -48,6 +48,15 @@ def crawl(
         ),
         OptionMeta(setting="crawl.check_external"),
     ] = True,
+    follow_nofollow: Annotated[
+        bool,
+        typer.Option(
+            "--follow-nofollow",
+            help="Follow nofollow hyperlinks, and every hyperlink of a Page whose robots "
+            "directives say nofollow, like any other hyperlink.",
+        ),
+        OptionMeta(setting="crawl.follow_nofollow"),
+    ] = False,
     exclude: Annotated[
         list[str] | None,
         typer.Option(
