@@ -8,14 +8,14 @@ from spider.crawl.urls import NormalizedUrl
 from spider.store.records import DiscoverySkipReason, LinkType, NewUrl
 
 # The spec's Link type table: through these a URL in the Scope is followed, through
-# _RESOURCES it is requested as a Resource, and through any other type it is recorded skipped.
+# RESOURCES it is requested as a Resource, and through any other type it is recorded skipped.
 _FOLLOWED: frozenset[LinkType] = frozenset(
     {"hyperlink", "canonical", "pagination", "hreflang", "iframe", "meta_refresh", "http_refresh"}
 )
-_RESOURCES: frozenset[LinkType] = frozenset(
+RESOURCES: frozenset[LinkType] = frozenset(
     {"image", "css", "javascript", "video", "audio", "media"}
 )
-_REQUESTED = _FOLLOWED | _RESOURCES
+_REQUESTED = _FOLLOWED | RESOURCES
 
 
 def discovered_urls(

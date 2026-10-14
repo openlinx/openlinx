@@ -6,7 +6,7 @@ from contextlib import suppress
 from typing import Any
 
 from spider.crawl.context import CrawlContext
-from spider.crawl.discovery import discovered_urls
+from spider.crawl.discovery import RESOURCES, discovered_urls
 from spider.crawl.fetcher import FetchFailure, FetchResult, Request
 from spider.crawl.hooks import UrlResult
 from spider.crawl.links import DiscoveredLink
@@ -113,22 +113,35 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             strip_params=context.strip_params,
         )
     )
+    checks: set[asyncio.Task[None]] = set()
     depth: int | None = 0
     try:
         while depth is not None and not context.stop.is_set:
-            await _crawl_depth(context, outcomes, limits, depth)
+            await _crawl_depth(context, outcomes, limits, checks, depth)
             # Read after every unit submitted so far, so it sees the URLs they discovered.
             depth = await context.writer.run_async(next_depth(depth))
+            if depth is None and checks:
+                # A check that was in-Scope HTML may have found URLs at a depth the frontier
+                # has passed: once every check has ended, the queue is read from the top.
+                await asyncio.gather(*checks)
+                depth = await context.writer.run_async(next_depth(-1))
     # An ended writer refuses every unit; its cause says why it ended (017 D6).
     except CrawlWriterClosedError as closed:
         context.stop.set("write_failed", closed.__cause__ or closed)
+    finally:
+        await _cancelled(checks)
     await outcomes.settled()
 
 
 async def _crawl_depth(
-    context: CrawlContext, outcomes: _Outcomes, limits: RequestLimits, depth: int
+    context: CrawlContext,
+    outcomes: _Outcomes,
+    limits: RequestLimits,
+    checks: set[asyncio.Task[None]],
+    depth: int,
 ) -> None:
-    """Returns once every URL task of the depth has ended, so the next depth sees their URLs."""
+    """Returns once every followed URL's task of the depth has ended, so the next depth sees
+    their URLs; the depth's checks join `checks` and run on."""
     running: set[asyncio.Task[None]] = set()
     try:
         # The cursor of this run: a URL in flight is never read twice (design D1).
@@ -139,34 +152,51 @@ async def _crawl_depth(
                 if context.stop.is_set:
                     limits.task_ended()
                     return
-                task = asyncio.create_task(_crawl_url(context, outcomes, limits, queued))
-                running.add(task)
-                task.add_done_callback(running.discard)
+                decision = context.scope.decide(queued.url)
+                task = asyncio.create_task(_crawl_url(context, outcomes, limits, queued, decision))
+                # A check never holds the barrier (design D3); the sweep in run_crawl reads
+                # what one finds after its depth has closed.
+                tasks = checks if _is_check(queued, decision) else running
+                tasks.add(task)
+                task.add_done_callback(tasks.discard)
             after = batch[-1].id
         if running:
             await asyncio.gather(*running)
     finally:
-        for task in running:
-            task.cancel()
-        # Retrieved, so that no "Task exception was never retrieved" reaches stderr.
-        await asyncio.gather(*running, return_exceptions=True)
+        await _cancelled(running)
+
+
+async def _cancelled(tasks: set[asyncio.Task[None]]) -> None:
+    for task in tasks:
+        task.cancel()
+    # Retrieved, so that no "Task exception was never retrieved" reaches stderr.
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _is_check(queued: QueuedUrl, decision: ScopeDecision) -> bool:
+    return not decision.in_scope or queued.discovered_via in RESOURCES
 
 
 async def _crawl_url(
-    context: CrawlContext, outcomes: _Outcomes, limits: RequestLimits, queued: QueuedUrl
+    context: CrawlContext,
+    outcomes: _Outcomes,
+    limits: RequestLimits,
+    queued: QueuedUrl,
+    decision: ScopeDecision,
 ) -> None:
     try:
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
-        await outcomes.submit(queued, await _unit_of(context, limits, queued))
+        await outcomes.submit(queued, await _unit_of(context, limits, queued, decision))
     finally:
         limits.task_ended()
 
 
-async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedUrl) -> UrlUnit:
-    """The unit that records the URL's final state, with its handlers' rows."""
+async def _unit_of(
+    context: CrawlContext, limits: RequestLimits, queued: QueuedUrl, decision: ScopeDecision
+) -> UrlUnit:
+    """The unit that records the URL's final state, with its handlers' rows; `decision` is
+    taken once, at dispatch, so a URL found on several Pages is recorded once (design D1)."""
     row_writers = context.hooks.row_writers
-    # Decided once, at dispatch, so a URL found on several Pages is recorded once (design D1).
-    decision = context.scope.decide(queued.url)
     skip_reason = _skip_reason(context, decision)
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
