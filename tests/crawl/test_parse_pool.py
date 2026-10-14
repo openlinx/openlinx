@@ -587,6 +587,20 @@ def test_a_crashed_worker_is_recorded(
 
 
 @pytest.mark.slow
+def test_the_crawl_continues_after_a_worker_crash(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(CRASH_SITE)
+    hooks, _ = recording_preparers()
+
+    # One worker: /ok is prepared by the replacement of the worker /die ended.
+    result = crawl_result(server.url("/"), hooks, pages=lambda: PoolExecutor(workers=1))
+
+    parsed = query(result.crawl_file, "SELECT parsed FROM urls WHERE url = ?", (server.url("/ok"),))
+    assert (parsed, result.summary.state) == ([(1,)], "completed")
+
+
+@pytest.mark.slow
 @pytest.mark.parse_pool
 def test_the_number_of_parse_workers_is_reported(
     temp_workspace: TempWorkspace, fixture_site: StartSite
