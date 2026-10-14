@@ -18,12 +18,8 @@ from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect
 from spider.store.reading import reading
 from spider.store.schema import seeds
-from spider.store.writer import (
-    CLOSE_CHECKPOINT_BUSY_SECONDS,
-    CrawlWriter,
-    CrawlWriterClosedError,
-    CrawlWriterReplayError,
-)
+from spider.store.writer import CrawlWriter, CrawlWriterClosedError, CrawlWriterReplayError
+from tests.support.cli import PROCESS_TIMEOUT
 from tests.support.clock import FakeClock
 from tests.support.crawls import (
     crawl_without_seeds,
@@ -984,25 +980,29 @@ def test_the_writer_s_connection_settings_in_rollback_journal_mode(
 
 
 @pytest.mark.slow
-def test_a_read_open_while_the_writer_closes_holds_it_back_a_second_at_most(
-    temp_workspace: TempWorkspace,
-) -> None:
+def test_closing_waits_for_an_open_read_and_leaves_no_wal(temp_workspace: TempWorkspace) -> None:
     crawl = create_any_crawl(temp_workspace)
-    count = select(func.count()).select_from(seeds)
+    reading_seeds = threading.Event()
 
-    with reading(crawl.path) as connection:
-        read_before = connection.execute(count).scalar_one()
-        writer = CrawlWriter(crawl.path, FakeClock())
+    def read_for_a_while() -> None:
+        with reading(crawl.path) as connection:
+            connection.execute(select(func.count()).select_from(seeds)).scalar_one()
+            reading_seeds.set()
+            # A read that outlasts a 1 s bound: the premise, not a wait for something.
+            time.sleep(1.5)
+
+    reader = threading.Thread(target=read_for_a_while)
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
         writer.run(insert_seed(2, "https://example.com/two"))
+        reader.start()
+        reading_seeds.wait(PROCESS_TIMEOUT)
         started = time.monotonic()
         writer.close()
         closing_took = time.monotonic() - started
-        read_after = connection.execute(count).scalar_one()
+    reader.join()
 
-    # A busy checkpoint loses nothing: the WAL stays for the reads that open next.
-    assert (
-        closing_took < CLOSE_CHECKPOINT_BUSY_SECONDS + 1,
-        read_before,
-        read_after,
-        query(crawl.path, "SELECT count(*) FROM seeds"),
-    ) == (True, 1, 1, [(2,)])
+    # A read-only connection never checkpoints: once the writer gives up, the WAL stays.
+    assert (closing_took < 5.0, crawl.path.with_name(crawl.path.name + "-wal").exists()) == (
+        True,
+        False,
+    )
