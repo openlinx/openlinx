@@ -24,3 +24,13 @@ def test_an_image_is_checked_but_not_parsed(
     assert query(
         crawl_file, "SELECT status_code, parsed FROM urls WHERE url = ?", [server.url("/logo.png")]
     ) == [(200, 0)]
+
+
+def test_a_broken_image_is_recorded(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/": Page(body='<img src="/missing.png">')}))
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file, "SELECT status_code FROM urls WHERE url = ?", [server.url("/missing.png")]
+    ) == [(404,)]
