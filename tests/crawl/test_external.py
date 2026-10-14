@@ -118,3 +118,19 @@ def test_external_checks_can_be_turned_off(
     crawl_result("http://site.test/", resolver=hosts.resolver, check_external=False)
 
     assert hosts.other.requests == ()
+
+
+def test_an_unknown_host_is_a_dns_error(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(routes={"/": Page(body='<a href="http://nowhere.test/">Nowhere</a>')}), EMPTY
+    )
+
+    crawl_file = crawl_result("http://site.test/", resolver=hosts.resolver).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, fetch_error FROM urls WHERE url = ?",
+        ["http://nowhere.test/"],
+    ) == [("error", "dns_error")]

@@ -178,7 +178,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 6.2 Drive "An External URL is checked" at seam 3+6. Done when: `is_internal` and `in_scope` are declared.
 - [x] 6.3 Drive "An External origin gets its own row" at seam 3+6. Done when: the `origins` table is declared with `public_table(..., change=20)`: `id`, `origin` (with the named unique index `origins_origin`, never `unique=True`), `host` and `is_internal`, with its `docs/schema.md` section; `urls.origin_id` is declared NOT NULL with a foreign key to `origins.id`; and the unit that records a URL records its origin (design D18).
 - [x] 6.4 Drive "External checks can be turned off" at seam 3.
-- [ ] 6.5 Drive "An unknown host is a DNS error" at seam 3+6.
+- [x] 6.5 Drive "An unknown host is a DNS error" at seam 3+6.
 - [ ] 6.6 Docs: document External URL checks and the `fetch_error` codes in `docs/crawling.md`.
 - [ ] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 - [ ] 6.8 PR #1 (design, Migration Plan): verify that the whole suite passes in CI on Windows, macOS and Linux with the coverage gate on the branch, then hand over to the manager, who pushes and opens PR #1. The change stays open, with groups 7–15 unticked. No option of `spider crawl` is inert at PR #1: each declared option has a test of its effect.
