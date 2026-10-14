@@ -54,4 +54,6 @@ class RobotsLoader:
             sitemaps=() if rules is None else rules.sitemaps,
         )
         await self._writer.run_async(record_robots_txt(record))
-        return OriginRobots(rules, unreachable=state == "unreachable")
+        return OriginRobots(
+            rules, unreachable=state == "unreachable", status_code=response.status_code
+        )

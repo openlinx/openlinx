@@ -15,13 +15,14 @@ from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
 from spider.crawl.robots_loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision, apex_seed_named_by_page
-from spider.crawl.urls import NormalizedUrl, url_host
+from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.naming import APP_NAME
 from spider.output.codes import (
     HANDLER_FAILED,
     MAX_URLS_REACHED,
     PARSE_FAILED,
     RECORD_FAILED,
+    ROBOTS_UNREACHABLE,
     SEED_BASE_MISMATCH,
     SEED_BLOCKED_BY_ROBOTS_TXT,
 )
@@ -251,7 +252,7 @@ async def _unit_of(
     blocked = None
     if skip_reason is None:
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
-        skip_reason, blocked = await _robots_check(context, robots, queued)
+        skip_reason, blocked = await _robots_check(context, robots, queued, decision)
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
         return record_skipped(
@@ -291,14 +292,18 @@ async def _unit_of(
 
 
 async def _robots_check(
-    context: CrawlContext, robots: RobotsLoader, queued: QueuedUrl
+    context: CrawlContext, robots: RobotsLoader, queued: QueuedUrl, decision: ScopeDecision
 ) -> tuple[SkipReason | None, bool | None]:
     """robots.txt's skip of a URL that would be requested, and its blocked_by_robots_txt, NULL
     while the rules are unknown (design D6)."""
     origin_robots = await robots.robots_of(queued.url)
     ignore = context.settings.ignore_robots
     if origin_robots.unreachable:
-        return None if ignore else "robots_unreachable", None
+        if ignore:
+            return None, None
+        if decision.is_internal:
+            _warn_of_an_unreachable_robots_txt(context, queued.url, origin_robots.status_code)
+        return "robots_unreachable", None
     blocked = not origin_robots.allows(queued.url)
     # --ignore-robots requests it, still labelled as blocked.
     if blocked and not ignore:
@@ -392,6 +397,22 @@ def _warn_of_the_url_limit(context: CrawlContext, limit: int) -> None:
             # The command itself, as an agent runs it: twice the limit is one higher value.
             hint=f"{APP_NAME} resume --crawl {context.crawl_file.id} --max-urls {2 * limit}",
             details={"max_urls": limit},
+        )
+    )
+
+
+def _warn_of_an_unreachable_robots_txt(
+    context: CrawlContext, url: NormalizedUrl, status_code: int | None
+) -> None:
+    origin = url_origin(url)
+    # Once per host, by the warning log: every URL of the origin comes here (design D10).
+    context.reporter.warn(
+        Diagnostic.of(
+            ROBOTS_UNREACHABLE,
+            f"The robots.txt of {origin} answered {status_code}, so none of its URLs was "
+            "requested.",
+            hint="Run the Crawl again later, or give --ignore-robots to crawl the origin anyway.",
+            details={"origin": origin, "host": url_host(url), "status_code": status_code},
         )
     )
 

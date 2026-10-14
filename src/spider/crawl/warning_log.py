@@ -24,6 +24,8 @@ class WarningLog:
     def __init__(self, reporter: Reporter) -> None:
         self._reporter = reporter
         self._warnings: list[Diagnostic] = []
+        # Each warning is written once per code and host (design D10).
+        self._written: set[tuple[str, object]] = set()
         # By code: where a counted warning is kept, and how many URLs it affected so far.
         self._counted: dict[str, tuple[int, int]] = {}
 
@@ -36,6 +38,10 @@ class WarningLog:
         return tuple(warnings)
 
     def warn(self, diagnostic: Diagnostic) -> None:
+        key = (diagnostic.code, diagnostic.details.get("host"))
+        if key in self._written:
+            return
+        self._written.add(key)
         self._warnings.append(diagnostic)
         self._reporter.warn(diagnostic)
 

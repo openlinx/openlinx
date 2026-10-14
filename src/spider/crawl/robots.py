@@ -45,6 +45,8 @@ class OriginRobots:
     # None: everything is allowed, unless the state is unreachable.
     rules: RobotsTxt | None
     unreachable: bool = False
+    # Of the final robots.txt response; None without one.
+    status_code: int | None = None
 
     def allows(self, url: str) -> bool:
         return self.rules is None or self.rules.allows(url)

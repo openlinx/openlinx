@@ -198,6 +198,14 @@ SEED_BLOCKED_BY_ROBOTS_TXT = _declare(
     "robots.txt disallows the Seed for the robots user-agent token, so it was not requested; "
     "the hint names --ignore-robots, and details.seed holds the Seed.",
 )
+ROBOTS_UNREACHABLE = _declare(
+    "robots_unreachable",
+    "warning",
+    None,
+    "The robots.txt of an Internal origin answered with a server error or 429, so none of its "
+    "URLs was requested; the hint names --ignore-robots, and details.origin, details.host and "
+    "details.status_code say which.",
+)
 PARSE_FAILED = _declare(
     "parse_failed",
     "warning",
