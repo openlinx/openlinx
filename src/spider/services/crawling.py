@@ -193,6 +193,9 @@ async def _crawl(
     async with _crawl_context(crawl_file, plan.scope, clock, reporter, hooks) as context:
         await run_crawl(context, plan.seed)
         writer = context.writer
+        # Before completed is written: 040 reads completed as "its Issues are materialised".
+        for crawl_pass in hooks.passes:
+            await crawl_pass.run(writer)
         # One instant: the result's ended_at is the completed_at the file records.
         ended_at = clock.now()
         await writer.run_async(record_state("completed", ended_at))

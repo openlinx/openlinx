@@ -6,10 +6,12 @@ from typing import Any
 from sqlalchemy import Connection, text
 
 from spider.cli.app import build_app
-from spider.crawl.hooks import Handler, Hooks, UrlResult, default_hooks
+from spider.crawl.hooks import Handler, Hooks, Pass, UrlResult, default_hooks
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
-from spider.store.records import SecretNames
+from spider.store.crawls import crawl_summary
+from spider.store.records import CrawlState, SecretNames
+from spider.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.app import settings_tables
@@ -86,3 +88,20 @@ def test_a_registered_handler_sees_every_url_once(
         (server.url("/logout"), "skipped"),
         (server.url("/missing"), "fetched"),
     ]
+
+
+def test_post_crawl_passes_run_before_a_crawl_is_completed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
+    seen: list[CrawlState] = []
+
+    async def record_state(writer: CrawlWriter) -> None:
+        seen.append((await writer.run_async(crawl_summary())).state)
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("state", record_state)))
+
+    _crawl(temp_workspace, server.url("/"), hooks)
+
+    assert seen == ["running"]

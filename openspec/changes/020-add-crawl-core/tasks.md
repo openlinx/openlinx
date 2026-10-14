@@ -147,7 +147,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.3 Drive "A registered handler sees every URL once" at seam 2.
 
   Done when: `Hooks` and `default_hooks()` exist (design D9), the Crawl Service takes the `Hooks` to use, a handler is pure and returns store rows, and the store writes them in the unit that records the URL's final state (design D14).
-- [ ] 5.4 Drive "Post-crawl passes run before a Crawl is completed" at seam 2. Done when: a pass is a store function that submits its own units, and runs before `completed` is written.
+- [x] 5.4 Drive "Post-crawl passes run before a Crawl is completed" at seam 2. Done when: a pass is a store function that submits its own units, and runs before `completed` is written.
 - [ ] 5.5 Drive "An extractor error is recorded" and "The Crawl continues after an extractor error" at seam 3+6, a trivial pair. Done when: `parse_error` and `parse_error_message` are declared, and an extractor's failure is recorded as `extractor_error`, with `<name>: <type>` as its message. An extractor is a module-level function of the parsed tree and a frozen `PageInput` (design D9).
 - [ ] 5.6 Drive "Parse failures are counted in one warning" at seam 1.
 
