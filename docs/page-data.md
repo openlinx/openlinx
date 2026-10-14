@@ -24,6 +24,26 @@ The columns follow the conventions of [schema.md](schema.md#conventions):
 - The empty string is an element that is present but empty, such as `<title></title>`.
 - 0 is a measured zero: a count of an analysed Page is 0 or more, and NULL only when the Page extractor failed on it.
 
+## Decoding
+
+Page preparation decodes an analysed Page's body once, as Link discovery does, from the first source that applies:
+1. a byte order mark
+2. the `charset` parameter of `Content-Type`
+3. a `<meta charset>` or `<meta http-equiv="Content-Type">` declaration in the first 1024 bytes, outside comments; a declaration of UTF-16 means UTF-8, since it was read from ASCII bytes
+4. UTF-8, or windows-1252 when the body is not valid UTF-8
+
+Labels are those of the WHATWG Encoding Standard, and an unknown label is skipped, so the next source applies. A byte that does not decode becomes U+FFFD. The Page extractor reads the parsed document and never decodes anything itself.
+
+## Text
+
+Every text column is whitespace-normalised: each run of ASCII whitespace (tab, line feed, form feed, carriage return and space) becomes one space, and ASCII whitespace at either end is removed. A no-break space is text, so it is kept. A length is counted in Unicode code points of the normalised text.
+
+## Titles
+
+- **`title_count`** is the number of `<title>` elements without an `svg` or `math` ancestor: a title inside an SVG image or a MathML formula names the image or the formula, not the Page. It is 0 when the Page has none.
+- **`title_1`** and **`title_2`** are the normalised texts of the first and second of them, in document order. Each is NULL when there is no such element, and the empty string for `<title></title>`.
+- **`title_1_length`** and **`title_2_length`** are their lengths, NULL exactly when their text is.
+
 ## The two address forms
 
 - **`url_encoded_address`** is the URL as the Crawl requested it, equal to `urls.url`: the host in IDNA (punycode) form and every non-ASCII character percent-encoded as UTF-8, such as `https://xn--bcher-kva.test/%C3%BCber%20uns`.
