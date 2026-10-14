@@ -3,7 +3,7 @@
 from spider.rules.response_codes import INTERNAL_4XX, INTERNAL_5XX, INTERNAL_NO_RESPONSE
 from spider.store.issues import evaluate_rule
 from spider.store.records import AffectedUrl
-from tests.support.rules import crawl_with_url, failed, responded
+from tests.support.rules import crawl_with_url, failed, responded, unrecorded
 from tests.support.workspace import TempWorkspace
 
 
@@ -39,3 +39,9 @@ def test_no_response(temp_workspace: TempWorkspace) -> None:
     assert evaluate_rule(crawl_file, INTERNAL_NO_RESPONSE) == [
         AffectedUrl(url_id=url_id, detail={"error": "timeout"})
     ]
+
+
+def test_a_url_that_failed_to_be_recorded_is_no_issue(temp_workspace: TempWorkspace) -> None:
+    crawl_file, _ = crawl_with_url(temp_workspace, "https://example.test/odd", unrecorded())
+
+    assert evaluate_rule(crawl_file, INTERNAL_NO_RESPONSE) == []

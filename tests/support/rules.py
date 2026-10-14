@@ -20,7 +20,7 @@ from spider.store.records import (
     RuleRow,
 )
 from spider.store.schema import urls
-from spider.store.urls import record_error, record_fetched, record_seed
+from spider.store.urls import record_error, record_fetched, record_seed, record_unwritten
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, default_rule_rows
@@ -125,6 +125,11 @@ def failed(fetch_error: FetchError) -> Callable[[int], UrlUnit]:
         ),
         {},
     )
+
+
+def unrecorded() -> Callable[[int], UrlUnit]:
+    """An outcome: the Crawl got a response but failed to record it (record_failed)."""
+    return lambda url_id: record_unwritten(url_id, "The URL's unit failed.")
 
 
 def _html(url_id: int, discovered: tuple[NewUrl, ...]) -> FetchedUrl:

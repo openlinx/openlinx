@@ -70,7 +70,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 4.3 Drive "Client error recorded by a Crawl" at seam 3+6, with an Internal URL that is not a Page. `020`'s Crawl records it, Internal and not parsed, since group 6 of `020`.
 - [x] 4.4 Drive "Server error" at seam 2, with `internal-5xx`'s query (registered in task 1.1).
 - [x] 4.5 Drive "No response" at seam 2, over `020`'s `fetch_error`, and register `internal-no-response`.
-- [ ] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
+- [x] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
 - [ ] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1`, replacing the query that returns no rows, which `h1-missing` carries from task 3.3 (registered in task 2.2).
 - [ ] 4.8 Docs: add the slice's five Rules (`internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`) to the catalogue in `docs/rules.md`.
 - [ ] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.

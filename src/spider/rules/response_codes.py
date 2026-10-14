@@ -10,7 +10,10 @@ FROM urls
 WHERE is_internal = 1 AND status_code BETWEEN 500 AND 599"""
 _INTERNAL_NO_RESPONSE_SQL = """SELECT id AS url_id, json_object('error', fetch_error) AS detail
 FROM urls
-WHERE is_internal = 1 AND fetch_state = 'error'"""
+WHERE is_internal = 1 AND fetch_state = 'error'
+  -- record_failed: the Crawl got a response and failed to record it. That is the tool's
+  -- failure, which the record_failed warning reports, not the site's.
+  AND fetch_error <> 'record_failed'"""
 
 INTERNAL_4XX = Rule(
     id="internal-4xx",
