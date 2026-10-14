@@ -48,6 +48,7 @@ Every route takes these as keyword arguments:
 - `content_type="..."`: replaces the route's own `Content-Type`.
 - `delay=0.5`: seconds to wait before the response headers.
 - `hang=True`: never answer.
+- `reset_after=100`: send the headers, with the whole body's `Content-Length`, and that many bytes of the body, then reset the connection (TCP RST).
 
 When the server stops, it cancels every handler still running (hanging or delayed) before aiohttp's cleanup, which would otherwise wait up to 60 s for them.
 

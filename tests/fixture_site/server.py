@@ -1,6 +1,8 @@
 """The fixture-site server, aiohttp on 127.0.0.1 in a thread (design D9 of 000-scaffold-project)."""
 
 import asyncio
+import socket
+import struct
 import threading
 import time
 from collections.abc import Awaitable, Callable, Coroutine, Iterator, Sequence
@@ -117,6 +119,27 @@ def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
             return response
 
 
+async def _reset_inside_body(
+    request: web.Request, response: web.Response, sent: int
+) -> web.StreamResponse:
+    body = response.body
+    assert isinstance(body, bytes)
+    headers = CIMultiDict(response.headers)
+    headers.popall("Content-Length", None)
+    stream = web.StreamResponse(status=response.status, headers=headers)
+    stream.content_length = len(body)
+    await stream.prepare(request)
+    await stream.write(body[:sent])
+    transport = request.transport
+    assert transport is not None
+    # A zero linger makes the close an RST, as a peer that drops the connection sends.
+    transport.get_extra_info("socket").setsockopt(
+        socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0)
+    )
+    transport.abort()
+    return stream
+
+
 def _pattern_chunks(size: int) -> Iterator[bytes]:
     block = bytes(range(256)) * 256
     for start in range(0, size, len(block)):
@@ -152,6 +175,9 @@ def _build_app(
             response.headers["Content-Type"] = route.content_type
         for name, value in route.headers:
             response.headers.add(name, value)
+        if route.reset_after is not None:
+            assert isinstance(response, web.Response)
+            return await _reset_inside_body(request, response, route.reset_after)
         if isinstance(route, LargeFile):
             await response.prepare(request)
             for chunk in _pattern_chunks(route.size):
