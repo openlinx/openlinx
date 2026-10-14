@@ -78,9 +78,9 @@ BASELINE_SHARES: Mapping[Fault, float] = {
     Fault.NESTED_DIVS: 0.0,
     Fault.ENDS_WORKER: 0.0,
 }
-# 020 records only the hyperlinks it follows: Resources come with its task 9.4, and amphtml,
-# mobile and misc targets with 7.8.
-RECORDED_POOLS = frozenset({"missing"})
+# 020 records every hyperlink, and checks the External ones: Resources come with its task 9.4,
+# and amphtml, mobile and misc targets with 7.8.
+RECORDED_POOLS = frozenset({"missing", "external"})
 DIRECT_SEED = "http://synthetic.test/"
 # psutil reports only the nominal clock on Windows; this counter scales it, turbo included.
 PERFORMANCE_CLASS = "Win32_PerfFormattedData_Counters_ProcessorInformation"
@@ -297,9 +297,11 @@ def benchmark_hooks() -> Hooks:
     return replace(hooks, extractors=(*hooks.extractors, END_WORKER_EXTRACTOR))
 
 
-def crawl(folder: Path, base_url: str, concurrency: int) -> Path:
-    crawl_plan = plan(folder, base_url + "/", concurrency)
-    result = start_crawl(crawl_plan, SystemClock(), Collected(), benchmark_hooks())
+def crawl(folder: Path, served: SiteProcess, concurrency: int) -> Path:
+    crawl_plan = plan(folder, served.base_url + "/", concurrency)
+    result = start_crawl(
+        crawl_plan, SystemClock(), Collected(), benchmark_hooks(), resolver=served.resolver()
+    )
     return result.crawl_file
 
 
@@ -443,7 +445,7 @@ def measure(
             if served is None:
                 crawl_file = direct(folder, site, concurrency, new_urls_only=new_urls_only)
             else:
-                crawl_file = crawl(folder, served.base_url, concurrency)
+                crawl_file = crawl(folder, served, concurrency)
         except Exception as error:
             failures.append(f"the run failed: {type(error).__name__}: {error}")
         # The site process ignores Ctrl+C, so it is stopped in order below.
@@ -490,7 +492,14 @@ def measure(
     if report["memory"]["grew"]:
         failures.append("the crawl process's memory grew")
     if crawl_file is not None:
-        accounting = account(site, url_rows(crawl_file), recorded_pools=RECORDED_POOLS, tally=tally)
+        origin = DIRECT_SEED.rstrip("/") if served is None else served.base_url
+        accounting = account(
+            site,
+            url_rows(crawl_file),
+            origin=origin,
+            recorded_pools=RECORDED_POOLS,
+            tally=tally,
+        )
         urls = sum(recorded for _, recorded, _ in accounting.pages.values()) + sum(
             recorded for _, recorded in accounting.pools.values()
         )

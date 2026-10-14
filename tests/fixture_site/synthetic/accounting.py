@@ -8,9 +8,11 @@ from urllib.parse import urlsplit
 
 from tests.fixture_site.synthetic.serve import Tally
 from tests.fixture_site.synthetic.site import (
+    EXTERNAL,
     FETCHED,
     OUTCOMES,
     PARSED,
+    Pool,
     SyntheticSite,
     page_number,
     pool_index,
@@ -23,6 +25,14 @@ MISSING_OUTCOME: Mapping[str, Any] = {
     "parsed": 0,
     "parse_error": None,
 }
+# Checked, never parsed: an External URL is outside the Scope.
+EXTERNAL_OUTCOME: Mapping[str, Any] = {
+    **FETCHED,
+    "status_code": 200,
+    "parsed": 0,
+    "parse_error": None,
+}
+_POOL_OUTCOMES = {"missing": MISSING_OUTCOME, "external": EXTERNAL_OUTCOME}
 # Wrong rows named in the problems, at most.
 EXAMPLES = 10
 
@@ -67,13 +77,15 @@ def account(
     site: SyntheticSite,
     rows: Iterable[UrlRow],
     *,
+    origin: str,
     recorded_pools: Set[str],
     tally: Tally | None = None,
 ) -> Accounting:
     """Checks each Page's row against its expected outcome, and the counts of every kind.
 
+    `origin` is the site's own, the Seed's; External URLs are on the hosts of the External pool.
     `recorded_pools` names the pool kinds the build records ("resource", "not_followed",
-    "missing"); the others must have no row.
+    "missing", "external"); the others must have no row.
     """
     manifest = site.manifest()
     expected_pages = Counter({kind: count for kind, count in manifest["faults"].items() if count})
@@ -87,18 +99,22 @@ def account(
         parts = urlsplit(row.url)
         # A query makes another URL of the same path.
         path = parts.path if not parts.query else ""
-        n = page_number(path, site.pages)
+        on_site = row.url.startswith(origin.rstrip("/") + "/")
+        n = page_number(path, site.pages) if on_site else None
         found = pool_index(path) if n is None else None
+        if found is not None and not _belongs(found[0], found[1], row.url, on_site=on_site):
+            found = None
         if n is not None:
             fault = site.fault(n)
             kind = CLEAN if fault is None else fault.value
             expected = PARSED if fault is None else OUTCOMES[fault]
             recorded[kind] += 1
         elif found is not None:
-            kind, expected = found[0].kind, MISSING_OUTCOME
+            kind = found[0].kind
             pooled[kind] += 1
-            if kind != "missing":
+            if kind not in _POOL_OUTCOMES:
                 continue
+            expected = _POOL_OUTCOMES[kind]
         else:
             unknown += 1
             if unknown <= EXAMPLES:
@@ -136,7 +152,19 @@ def account(
     return Accounting(pages=pages, pools=pools, problems=tuple(problems))
 
 
-_URL_KEYS = {"resource": "resources", "not_followed": "not_followed", "missing": "missing"}
+_URL_KEYS = {
+    "resource": "resources",
+    "not_followed": "not_followed",
+    "missing": "missing",
+    "external": "external",
+}
+
+
+def _belongs(pool: Pool, index: int, url: str, *, on_site: bool) -> bool:
+    """An External URL is on the host its index names; every other pool is on the site."""
+    if pool is EXTERNAL:
+        return not on_site and url == pool.url(index)
+    return on_site
 
 
 def _outcome(row: UrlRow) -> dict[str, Any]:

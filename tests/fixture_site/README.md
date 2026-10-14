@@ -82,7 +82,7 @@ The site that the 500k benchmark crawls (design D6 of `026-add-parse-pool`), in 
   - A Page is about 50 KB with about 450 Links of every Link type: a header navigation of 200 Links, a footer that repeats 80 of them, 60 internal Links drawn from the seed, and its Resources.
   - Page `n` links to its `fanout` children (`n * fanout + 1` onwards), a spanning tree that reaches every Page from `/`. `fanout` is 50 by default (a depth of about 4 at 500k); 10 gives a deeper site.
   - `page_model(n)` gives a Page's Links, its type, element, attribute and anchor, in document order, and `render(n)` gives its bytes. Both come from one build, so they always agree.
-- **Its other URLs** come from bounded pools that do not grow with the Pages: images, stylesheets, scripts, video, audio and media under `/r/`, the not-followed `/amp/`, `/m/` and `/misc/`, and `/missing/`, which answers 404.
+- **Its other URLs** come from bounded pools that do not grow with the Pages: images, stylesheets, scripts, video, audio and media under `/r/`, the not-followed `/amp/`, `/m/` and `/misc/`, `/missing/`, which answers 404, and 1,000 External URLs `http://ext<k>.test/e/<i>` on 50 hosts, five on each Page, which `SiteProcess.resolver()`, a DNS resolver hook for `start_crawl`, sends to the site's own process.
 - **Determinism:** every draw comes from `blake2b(seed, n, purpose)` and splitmix64, never `hash()` or `random`, so a seed gives the same bytes on every Python, OS and process.
 - **Faults:** `shares` maps each `Fault` to the share of Pages that carry it (`DEFAULT_SHARES` by default, `NO_FAULTS` for none):
   - nested `<div>`s, 100,000 levels deep

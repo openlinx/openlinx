@@ -165,11 +165,19 @@ class Pool:
     size: int
     path: str
     content_type: str
-    # What a Crawl does with it: "resource" (checked), "not_followed" or "missing" (a 404).
+    # What a Crawl does with it: "resource" (checked), "not_followed", "missing" (a 404) or
+    # "external" (checked on another host).
     kind: str
+    # Spread over this many External hosts, or 0 for the site's own host.
+    hosts: int = 0
 
     def url(self, index: int) -> str:
-        return self.path.format(index)
+        path = self.path.format(index)
+        return f"http://{external_host(index % self.hosts)}{path}" if self.hosts else path
+
+
+def external_host(k: int) -> str:
+    return f"ext{k}.test"
 
 
 IMAGES = Pool("images", 1_500, "/r/i/{}.jpg", "image/jpeg", "resource")
@@ -182,7 +190,11 @@ AMP = Pool("amp", 100, "/amp/{}", HTML, "not_followed")
 MOBILE = Pool("mobile", 100, "/m/{}", HTML, "not_followed")
 MISC = Pool("misc", 3, "/misc/{}", "application/octet-stream", "not_followed")
 MISSING = Pool("missing", 100, "/missing/{}", HTML, "missing")
-POOLS = (IMAGES, STYLESHEETS, SCRIPTS, VIDEOS, AUDIOS, MEDIA, AMP, MOBILE, MISC, MISSING)
+# Reached through the DNS resolver hook, which sends every External host to this site.
+EXTERNAL = Pool("external", 1_000, "/e/{}", HTML, "external", hosts=50)
+EXTERNAL_HOSTS = tuple(external_host(k) for k in range(EXTERNAL.hosts))
+EXTERNAL_PER_PAGE = 5
+POOLS = (IMAGES, STYLESHEETS, SCRIPTS, VIDEOS, AUDIOS, MEDIA, AMP, MOBILE, MISC, MISSING, EXTERNAL)
 SERVED_POOLS = tuple(pool for pool in POOLS if pool is not MISSING)
 MISC_RELS = ("icon", "manifest", "alternate")
 
@@ -238,6 +250,8 @@ def pool_refs(n: int) -> Iterator[tuple[Pool, tuple[int, ...]]]:
     yield AUDIOS, (n % AUDIOS.size,)
     yield MEDIA, ((2 * n) % MEDIA.size, (2 * n + 1) % MEDIA.size)
     yield MISSING, (n % MISSING.size,)
+    first = n * EXTERNAL_PER_PAGE
+    yield EXTERNAL, tuple((first + j) % EXTERNAL.size for j in range(EXTERNAL_PER_PAGE))
 
 
 _MASK = 2**64 - 1
@@ -424,6 +438,8 @@ class SyntheticSite:
             Link(area, "hyperlink", "area", "href"),
         )
         page.a(MISSING.url(refs[MISSING][0]), "An old page")
+        for index in refs[EXTERNAL]:
+            page.a(EXTERNAL.url(index), f"Partner {index}")
         self._pad(page, numbers)
 
     def _pad(self, page: _Page, numbers: Iterator[int]) -> None:
@@ -501,6 +517,7 @@ class SyntheticSite:
             "resources": of_kind("resource"),
             "not_followed": of_kind("not_followed"),
             "missing": of_kind("missing"),
+            "external": of_kind("external"),
         }
         return {
             "seed": self.seed,

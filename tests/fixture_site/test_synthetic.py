@@ -12,13 +12,20 @@ from collections import Counter, deque
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.server import ServerHandle
 from tests.fixture_site.synthetic.serve import SiteProcess, Tally
-from tests.fixture_site.synthetic.site import NO_FAULTS, Fault, SyntheticSite, page_path
+from tests.fixture_site.synthetic.site import (
+    EXTERNAL_HOSTS,
+    NO_FAULTS,
+    Fault,
+    SyntheticSite,
+    page_path,
+)
 
 HYPERLINK = re.compile(rb'<a href="(/[^"]*)"')
 END_WORKER = b'<meta name="spider-benchmark" content="end-worker">'
@@ -192,6 +199,22 @@ def test_a_page_with_children_is_about_50_kb_with_about_450_links(
     assert (45_000 <= size <= 55_000, 400 <= links <= 500) == (True, True), (size, links)
 
 
+def test_the_pages_link_to_the_external_hosts_which_the_site_answers(
+    fixture_site: StartSite,
+) -> None:
+    server = fixture_site(SyntheticSite(seed=1, pages=1_000, shares=NO_FAULTS).as_site())
+
+    connection = connect(server.base_url)
+    try:
+        pages = [fetch(connection, page_path(n)) for n in range(200)]
+        external = [url for page in pages for kind, url in links_of(page) if "://" in url]
+        answered = fetch(connection, urlsplit(external[0]).path).status
+    finally:
+        connection.close()
+
+    assert ({urlsplit(url).hostname for url in external}, answered) == (set(EXTERNAL_HOSTS), 200)
+
+
 def test_every_page_is_reached_from_the_seed_by_its_hyperlinks(fixture_site: StartSite) -> None:
     site = SyntheticSite(seed=1, pages=600, fanout=5, shares=NO_FAULTS)
     server = fixture_site(site.as_site())
@@ -269,6 +292,7 @@ def test_the_urls_the_pages_reference_are_the_url_totals_of_the_manifest(
             1 for url in followed if url in faulty_crawl and faulty_crawl[url].status == 404
         ),
     }
+    totals["external"] = len({url for kind, url in links if url.startswith("http://")})
     totals["total"] = sum(totals.values())
 
     assert totals == FAULTY.manifest()["urls"]

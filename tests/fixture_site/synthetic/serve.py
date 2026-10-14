@@ -8,9 +8,10 @@ from multiprocessing.connection import Connection
 from types import TracebackType
 from typing import Self
 
+from tests.fixture_site.hosts import FixtureResolver
 from tests.fixture_site.routes import Route, Site
-from tests.fixture_site.server import RunningServer
-from tests.fixture_site.synthetic.site import SyntheticSite, page_number
+from tests.fixture_site.server import RequestLog, RunningServer, ServerHandle
+from tests.fixture_site.synthetic.site import EXTERNAL_HOSTS, SyntheticSite, page_number
 
 # A spawned child imports aiohttp and the site first, about a second on Windows.
 START_TIMEOUT = 60
@@ -40,6 +41,11 @@ class SiteProcess:
         self.base_url: str = self._connection.recv()
         assert self._process.pid is not None
         self.pid: int = self._process.pid
+
+    def resolver(self) -> FixtureResolver:
+        """The DNS resolver hook that sends each External host of the site to this process."""
+        handle = ServerHandle(self.base_url, RequestLog(keep=False))
+        return FixtureResolver(dict.fromkeys(EXTERNAL_HOSTS, handle))
 
     def stop(self) -> Tally:
         self._connection.send(STOP)

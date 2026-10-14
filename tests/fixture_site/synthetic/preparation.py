@@ -44,7 +44,7 @@ def prepared_page(site: SyntheticSite, url: NormalizedUrl, scope: ScopeRules) ->
     fault = site.fault(n)
     if fault in LOSES_LINKS:
         return PreparedPage(links=(), parse_error=OUTCOMES[fault]["parse_error"])
-    # Every target of the model is a path from the root, so it joins to the origin as it is.
+    # A target of the model is an absolute URL or a path from the root, which joins the origin.
     origin = f"{parts.scheme}://{parts.netloc}"
     links: list[DiscoveredLink] = []
     for link in site.page_model(n):
@@ -52,7 +52,7 @@ def prepared_page(site: SyntheticSite, url: NormalizedUrl, scope: ScopeRules) ->
         link_type = _PREPARED_AS.get(link.type, cast(LinkType, link.type))
         if link_type is None:
             continue
-        target = normalize_url(origin + link.target)
+        target = normalize_url(link.target if "://" in link.target else origin + link.target)
         assert isinstance(target, str)
         links.append(
             DiscoveredLink(

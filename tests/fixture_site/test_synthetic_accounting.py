@@ -2,14 +2,23 @@
 
 from pathlib import Path
 
+from aiohttp.abc import AbstractResolver
+
 from spider.cli.app import build_app
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
 from spider.services.hooks import default_hooks
 from spider.store.records import SecretNames
-from tests.fixture_site.synthetic.accounting import CLEAN, MISSING_OUTCOME, UrlRow, account
+from tests.fixture_site.synthetic.accounting import (
+    CLEAN,
+    EXTERNAL_OUTCOME,
+    MISSING_OUTCOME,
+    UrlRow,
+    account,
+)
 from tests.fixture_site.synthetic.serve import SiteProcess, Tally
 from tests.fixture_site.synthetic.site import (
+    EXTERNAL,
     LOSES_LINKS,
     MISSING,
     OUTCOMES,
@@ -47,7 +56,7 @@ SITE = SyntheticSite(
 URL_ROWS = "SELECT url, fetch_state, fetch_error, status_code, parsed, parse_error FROM urls"
 
 
-def crawled(temp_workspace: TempWorkspace, seed: str) -> Path:
+def crawled(temp_workspace: TempWorkspace, seed: str, resolver: AbstractResolver) -> Path:
     request = CrawlRequest(
         seed=seed,
         cwd=temp_workspace.root,
@@ -58,20 +67,24 @@ def crawled(temp_workspace: TempWorkspace, seed: str) -> Path:
         flags={},
     )
     plan = plan_crawl(request, settings_tables(build_app()))
-    return start_crawl(plan, FakeClock(), Collected(), default_hooks()).crawl_file
+    hooks = default_hooks()
+    return start_crawl(plan, FakeClock(), Collected(), hooks, resolver=resolver).crawl_file
 
 
 def test_a_crawl_of_the_synthetic_site_is_accounted_for(temp_workspace: TempWorkspace) -> None:
     with SiteProcess(SITE) as site:
-        crawl_file = crawled(temp_workspace, site.base_url + "/")
+        crawl_file = crawled(temp_workspace, site.base_url + "/", site.resolver())
         tally = site.stop()
 
     rows = [UrlRow(*row) for row in query(crawl_file, URL_ROWS)]
-    accounting = account(SITE, rows, recorded_pools={"missing"}, tally=tally)
+    accounting = account(
+        SITE, rows, origin=site.base_url, recorded_pools={"missing", "external"}, tally=tally
+    )
 
-    assert (accounting.problems, set(accounting.pages)) == (
+    assert (accounting.problems, set(accounting.pages), accounting.pools["external"][1]) == (
         (),
         {CLEAN, *(fault.value for fault in SITE.shares)},
+        SITE.manifest()["urls"]["external"],
     )
 
 
@@ -79,13 +92,16 @@ def expected_rows() -> list[UrlRow]:
     """The rows a correct Crawl of SITE leaves, as the manifest's outcomes say."""
     rows = []
     missing: set[int] = set()
+    external: set[int] = set()
     for n in range(SITE.pages):
         fault = SITE.fault(n)
         outcome = PARSED if fault is None else OUTCOMES[fault]
         rows.append(UrlRow(url=BASE + page_path(n), **outcome))
         if fault not in LOSES_LINKS:
             missing |= set(dict(pool_refs(n))[MISSING])
+            external |= set(dict(pool_refs(n))[EXTERNAL])
     rows += [UrlRow(url=BASE + MISSING.url(i), **MISSING_OUTCOME) for i in sorted(missing)]
+    rows += [UrlRow(url=EXTERNAL.url(i), **EXTERNAL_OUTCOME) for i in sorted(external)]
     return rows
 
 
@@ -98,6 +114,9 @@ def test_every_url_that_is_not_accounted_for_is_a_problem() -> None:
     rows += [
         UrlRow(BASE + "/elsewhere", "fetched", None, 200, 1, None),
         UrlRow(BASE + "/r/i/3.jpg", "fetched", None, 200, 0, None),
+        # Another host than its index names, and a pool path on the site's own origin.
+        UrlRow("http://ext3.test/e/4", "fetched", None, 200, 0, None),
+        UrlRow(BASE + "/e/4", "fetched", None, 200, 0, None),
     ]
     tally = Tally(
         pages_requested=SITE.pages - 1,
@@ -106,7 +125,9 @@ def test_every_url_that_is_not_accounted_for_is_a_problem() -> None:
         not_found=0,
     )
 
-    accounting = account(SITE, rows, recorded_pools={"missing"}, tally=tally)
+    accounting = account(
+        SITE, rows, origin=BASE, recorded_pools={"missing", "external"}, tally=tally
+    )
 
     queued = {
         "fetch_state": "queued",
@@ -120,6 +141,8 @@ def test_every_url_that_is_not_accounted_for_is_a_problem() -> None:
     assert accounting.problems == (
         f"{BASE}/p/1 (clean) was recorded as {queued}",
         f"{BASE}/elsewhere is no URL of the synthetic site",
+        "http://ext3.test/e/4 is no URL of the synthetic site",
+        f"{BASE}/e/4 is no URL of the synthetic site",
         f"clean Pages: {clean_pages} of {clean_pages} recorded, {clean_pages - 1} with the "
         "expected outcome",
         f"server_error Pages: {servers - 1} of {servers} recorded, {servers - 1} with the "

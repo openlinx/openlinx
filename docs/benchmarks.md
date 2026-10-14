@@ -39,7 +39,7 @@ A 5,000-Page run (`--pages 5000`) that proves the script. It is not a run agains
 
 `scripts/crawl_500k.py` crawls a synthetic site of up to 500,000 linked Pages and checks the run by counts (`026`, design D6). It is the benchmark of the parse pool and its soak test.
 
-- **The site:** `tests/fixture_site/synthetic/`. It is a function of its seed and a Page's number: about 50 KB and 450 Links of every Link type per Page, a spanning tree of `--fanout` children per Page, and a share of injected faults on leaves of the tree. It is served from its own process, which tallies the Pages it served.
+- **The site:** `tests/fixture_site/synthetic/`. It is a function of its seed and a Page's number: about 50 KB and 450 Links of every Link type per Page, five of them to 1,000 External URLs on 50 `*.test` hosts, which the crawl reaches through `020`'s DNS resolver hook, a spanning tree of `--fanout` children per Page, and a share of injected faults on leaves of the tree. It is served from its own process, which tallies the Pages it served.
 - **Running it:** from the repository root, on a quiet machine:
   - `uv run python -m scripts.crawl_500k` crawls 500,000 Pages over HTTP through the Crawl Service, with no `--max-urls`
   - `--mode direct` writes the same site through the real engine, store units and writer, with no HTTP: each response is a status and a Content-Type, and page preparation is replaced by the Page model, whose Links are what preparing the Page's HTML gives (a test pins that)
@@ -52,7 +52,7 @@ A 5,000-Page run (`--pages 5000`) that proves the script. It is not a run agains
 - **What fails a run:**
   - an exception, or an interrupt (Ctrl+C reaches only the script, which stops the site in order)
   - memory that grows: the last quarter's peak RSS above the second quarter's by more than 64 MiB or 10%
-  - a URL not accounted for in `urls`: each Page with its expected outcome (`parsed`, or its fault's), each URL count per kind against the site's manifest, no URL that is not the site's, and every Page served exactly once. Resources and other not-followed URLs must have no row until `020` records them (its tasks 9.4 and 7.8).
+  - a URL not accounted for in `urls`: each Page with its expected outcome (`parsed`, or its fault's), each URL count per kind against the site's manifest, no URL that is not the site's, and every Page served exactly once. Each External URL is checked once and not parsed. Resources and other not-followed URLs must have no row until `020` records them (its tasks 9.4 and 7.8).
 
 ### Check run, 2026-10-14
 
