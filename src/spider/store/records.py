@@ -54,6 +54,16 @@ type DiscoveredVia = (
     Literal["seed"] | LinkType | Literal["redirect", "list", "sitemap_input", "sitemap_index"]
 )
 type FetchState = Literal["queued", "fetched", "error", "skipped"]
+type FetchError = Literal[
+    "dns_error",
+    "connection_refused",
+    "connection_error",
+    "invalid_response",
+    "watchdog",
+    "record_failed",
+    "timeout",
+    "tls_error",
+]
 # extractor_error keeps parsed = 1; the others mean nothing came out of page preparation.
 type ParseError = Literal["extractor_error", "body_too_large", "worker_crashed", "parse_timeout"]
 
@@ -162,4 +172,15 @@ class SkippedUrl:
 
     url_id: int
     skip_reason: SkipReason
+    rows: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ErroredUrl:
+    """A URL whose request got no HTTP response, with what the handlers returned for it."""
+
+    url_id: int
+    fetch_error: FetchError
+    fetch_error_message: str
+    fetched_at: datetime
     rows: tuple[object, ...] = ()

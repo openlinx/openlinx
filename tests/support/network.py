@@ -86,3 +86,11 @@ def block_remote_connections(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(loop_type, "sock_connect", guarded_sock_connect)
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
+
+
+def closed_port() -> int:
+    """A loopback port that nothing listens on when this returns."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port: int = sock.getsockname()[1]
+    return port

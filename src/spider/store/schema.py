@@ -17,6 +17,7 @@ from spider.store.records import (
     CrawlMode,
     CrawlState,
     DiscoveredVia,
+    FetchError,
     FetchState,
     JournalMode,
     ParseError,
@@ -233,6 +234,13 @@ urls = public_table(
         Integer,
         comment="HTTP status code of the URL's own response; NULL without a response.",
     ),
+    Column(
+        "fetch_error",
+        Text,
+        comment="Why no response is recorded for the URL.",
+        info={"values": literal_values(FetchError)},
+    ),
+    Column("fetch_error_message", Text, comment="Human-readable detail of fetch_error."),
     Column(
         "content_type",
         Text,

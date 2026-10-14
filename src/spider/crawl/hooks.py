@@ -7,7 +7,7 @@ import msgspec
 
 from spider.crawl.pages import Extractor
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import FetchState, SkipReason
+from spider.store.records import FetchError, FetchState, SkipReason
 from spider.store.rows import RowWriter
 from spider.store.writer import CrawlWriter
 
@@ -21,6 +21,7 @@ class UrlResult:
     crawl_depth: int
     fetch_state: FetchState
     skip_reason: SkipReason | None = None
+    fetch_error: FetchError | None = None
     status_code: int | None = None
     # As received: in order, in their letter case, repeated names kept.
     headers: tuple[tuple[str, str], ...] = ()

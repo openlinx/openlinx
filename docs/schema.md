@@ -113,6 +113,8 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `fetch_state` | TEXT | no | | | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested. |
 | `skip_reason` | TEXT | yes | | | `excluded`, `blocked_by_robots_txt`, `robots_unreachable`, `nofollow`, `link_type_not_followed`, `external_not_checked`, `max_depth`, `max_redirects`, `url_too_long` | Why a skipped URL was not requested. |
 | `status_code` | INTEGER | yes | | | | HTTP status code of the URL's own response; NULL without a response. |
+| `fetch_error` | TEXT | yes | | | `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`, `record_failed`, `timeout`, `tls_error` | Why no response is recorded for the URL. |
+| `fetch_error_message` | TEXT | yes | | | | Human-readable detail of fetch_error. |
 | `content_type` | TEXT | yes | | | | The Content-Type response header as received; NULL without a response or without the header. |
 | `response_time_ms` | INTEGER | yes | | | | Time from sending the request to receiving the whole body. |
 | `fetched_at` | TEXT | yes | | `timestamp` | | UTC time of the request. |

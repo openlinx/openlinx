@@ -7,10 +7,18 @@ from sqlalchemy import Connection, event
 
 from spider.crawl.urls import NormalizedUrl, parse_seed
 from spider.store.connections import opening
-from spider.store.records import FetchedUrl, NewUrl, QueuedUrl, SkippedUrl, UrlCounts
+from spider.store.records import (
+    ErroredUrl,
+    FetchedUrl,
+    NewUrl,
+    QueuedUrl,
+    SkippedUrl,
+    UrlCounts,
+)
 from spider.store.urls import (
     next_depth,
     queued_batch,
+    record_error,
     record_fetched,
     record_seed,
     record_skipped,
@@ -59,6 +67,17 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
         writer.run(record_skipped(SkippedUrl(seed_id + 2, "excluded"), {}))
         deeper = writer.run(next_depth(0))
         second = writer.run(queued_batch(1, 0, 1))
+        writer.run(
+            record_error(
+                ErroredUrl(
+                    url_id=seed_id + 1,
+                    fetch_error="connection_refused",
+                    fetch_error_message="ConnectionRefusedError: refused",
+                    fetched_at=datetime(2026, 9, 27, 14, 3, 14, tzinfo=UTC),
+                ),
+                {},
+            )
+        )
         counts = writer.run(url_counts())
         replay_now(writer)
 
@@ -69,8 +88,8 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
         counts,
         query(
             crawl.path,
-            "SELECT url, crawl_depth, fetch_state, skip_reason, status_code, content_type, "
-            "response_time_ms, fetched_at FROM urls ORDER BY id",
+            "SELECT url, crawl_depth, fetch_state, skip_reason, fetch_error, status_code, "
+            "content_type, response_time_ms, fetched_at FROM urls ORDER BY id",
         ),
     ) == (
         (QueuedUrl(seed_id, seed),),
@@ -79,9 +98,9 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
         UrlCounts(
             discovered=3,
             fetched=1,
-            errors=0,
+            errors=1,
             skipped=1,
-            queued=1,
+            queued=0,
             pages=1,
             status_2xx=1,
             status_3xx=0,
@@ -95,13 +114,24 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 0,
                 "fetched",
                 None,
+                None,
                 200,
                 "text/html",
                 120,
                 "2026-09-27T14:03:13.000Z",
             ),
-            ("https://site.test/a", 1, "queued", None, None, None, None, None),
-            ("https://site.test/b", 1, "skipped", "excluded", None, None, None, None),
+            (
+                "https://site.test/a",
+                1,
+                "error",
+                None,
+                "connection_refused",
+                None,
+                None,
+                None,
+                "2026-09-27T14:03:14.000Z",
+            ),
+            ("https://site.test/b", 1, "skipped", "excluded", None, None, None, None, None),
         ],
     )
 

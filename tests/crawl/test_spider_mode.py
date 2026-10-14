@@ -7,6 +7,7 @@ from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.sites.hostile import site as hostile
 from tests.support.crawling import crawled
 from tests.support.crawls import crawl_row, query
+from tests.support.network import closed_port
 from tests.support.workspace import TempWorkspace
 
 HOME_PAGE = Site(routes={"/": Page(body="<html><body><h1>Home</h1></body></html>")})
@@ -236,3 +237,24 @@ def test_undecodable_bytes_do_not_stop_the_crawl(
     assert query(
         crawl_file, "SELECT fetch_state FROM urls WHERE url = ?", [server.url("/after")]
     ) == [("fetched",)]
+
+
+def test_a_closed_port_is_a_refused_connection(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    target = f"http://127.0.0.1:{closed_port()}/"
+    server = fixture_site(Site(routes={"/": Page(body=f'<a href="{target}">Gone</a>')}))
+
+    crawl_file = crawled(server.url("/"))
+    ((fetch_state, status_code, fetch_error, message),) = query(
+        crawl_file,
+        "SELECT fetch_state, status_code, fetch_error, fetch_error_message FROM urls WHERE url = ?",
+        [target],
+    )
+
+    assert (fetch_state, status_code, fetch_error, bool(message)) == (
+        "error",
+        None,
+        "connection_refused",
+        True,
+    )

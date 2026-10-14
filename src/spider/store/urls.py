@@ -6,7 +6,7 @@ from sqlalchemy import Connection, bindparam, func, literal_column, select, upda
 from sqlalchemy.dialects.sqlite import insert
 
 from spider.crawl.urls import NormalizedUrl, url_host
-from spider.store.records import FetchedUrl, QueuedUrl, SkippedUrl, UrlCounts
+from spider.store.records import ErroredUrl, FetchedUrl, QueuedUrl, SkippedUrl, UrlCounts
 from spider.store.rows import RowWriter, write_rows
 from spider.store.schema import urls
 
@@ -32,6 +32,16 @@ _SKIPPED = (
     update(urls)
     .where(urls.c.id == bindparam("url_id"))
     .values(fetch_state="skipped", skip_reason=bindparam("reason"))
+)
+_ERRORED = (
+    update(urls)
+    .where(urls.c.id == bindparam("url_id"))
+    .values(
+        fetch_state="error",
+        fetch_error=bindparam("failure"),
+        fetch_error_message=bindparam("failure_message"),
+        fetched_at=bindparam("request_at"),
+    )
 )
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
@@ -157,6 +167,24 @@ def record_skipped(
     def unit(connection: Connection) -> None:
         connection.execute(_SKIPPED, values)
         write_rows(connection, skipped.rows, row_writers)
+
+    return unit
+
+
+def record_error(
+    errored: ErroredUrl, row_writers: Mapping[type, RowWriter]
+) -> Callable[[Connection], None]:
+    """A unit that records a URL whose request got no HTTP response, why, and its rows."""
+    values = {
+        "url_id": errored.url_id,
+        "failure": errored.fetch_error,
+        "failure_message": errored.fetch_error_message,
+        "request_at": errored.fetched_at,
+    }
+
+    def unit(connection: Connection) -> None:
+        connection.execute(_ERRORED, values)
+        write_rows(connection, errored.rows, row_writers)
 
     return unit
 
