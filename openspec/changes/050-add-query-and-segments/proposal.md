@@ -68,7 +68,7 @@ Global flags added by this change to the CLI contract: `--format csv`, `--no-bom
   - `040-add-rules`: the Issues reader, the per-Crawl `rules` table (with `reproduce_sql`), the `issues` view (with its computed `affected_count`), `affected_urls`, the derived `health_*` fields of `crawl`, the Health Score function and `rule_not_found`.
   - `060-add-crawl-control`: the Crawl State `interrupted`; `status` remains the cheap progress reading of a running Crawl.
 - **Used by:** `070-add-html-report` (the summary model, the export row serialisers, Segments, the CSV writer and `-o`), `080-add-agent-skill` (command metadata and recipes) and `090-add-mcp-server` (the same JSON).
-- **Code:** `src/spider/query/` (the where language, sorting and paging, Segments, export views), `src/spider/services/query.py`, the query command modules in `src/spider/cli/`, and the CSV writer, `NoBomOpt` and `OutputOpt` in 010's output layer `spider.output`.
+- **Code:** `src/spider/query/` (the where language's tokenizer, parser and AST, with no `sqlalchemy`), `src/spider/store/query` (every query of these Commands and the compiler from the AST to Core: sorting and paging, Segments and the export views, since data access stays in the store, `020` D14), `src/spider/services/query.py` (orchestration), the query command modules in `src/spider/cli/`, and the CSV writer, `NoBomOpt` and `OutputOpt` in 010's output layer `spider.output`.
 - **Data:** no new tables and no schema version bump. Segments are never stored.
 - **Dependencies:** no new third-party packages.
 - **Docs:** `docs/querying.md`, `docs/segments.md`, `docs/contracts/summary.md`, and the `csv` format, the CSV policy and `-o` in `docs/cli.md`.

@@ -22,7 +22,12 @@ This change adds to that contract the `csv` format, the CSV policy, `--no-bom` a
 - **`040`'s reader at the connection level (its task 4.11):** `issues_in(connection, catalogue)` and `affected_urls_in(connection, rule_id, catalogue)` take an open `reading()` connection and return Core selects in the shapes of the `issues` view and of `affected_urls` for one Rule (`url_id`, and `detail` as stored JSON text). The reader alone chooses the stored or the live path. Both paths know a rule id by the Crawl's own `rules` table, and `rule_not_found(rule_id, known)` lists the closest of `known` in `details.suggestions`.
 - `spider.query` exists as an empty package; `spider.services.query` is new.
 
-All query logic lives in the **Query Service** (`src/spider/services/query.py` plus `src/spider/query/`). The CLI modules only parse flags and serialise, and `090-add-mcp-server` wraps the same service calls.
+The query Commands are served by the **Query Service**, in three layers, since data access stays in the store (`020` D14, whose guard in `tests/test_code_style.py` allows `sqlalchemy` only in `spider.store`; the rulings of 2026-10-14):
+- `spider.query`: the pure parts, the `--where` tokenizer, parser and AST, with no `sqlalchemy` (seam 4).
+- `spider.store.query`: every query of these Commands, and the compiler from the AST to Core. It is a module for the thin slice (`ordered_issues`), and becomes a package when it grows.
+- `spider.services.query`: orchestration only. It resolves the Crawl, opens one `reading()`, and calls the store.
+
+The CLI modules only parse flags and serialise, and `090-add-mcp-server` wraps the same service calls.
 
 The scenarios use the column names that 030 publishes (`address`, `status_code`, `title_1`, `title_1_length`, `meta_description_1`, `word_count`, `crawl_depth`, `unique_inlinks`, `indexability`, `indexability_status`), the table names `pages`, `links`, `urls`, `issues` and `affected_urls`, and rule ids from 040's catalogue (`title-missing`, `title-too-long`, `h1-missing`, `meta-description-too-long`, `image-broken`). The summary's `crawl.completed_at` is `015`'s `crawl.completed_at`. Rule ids in the scenarios come from `040`'s 42-Rule catalogue; v0.1 ships 15 of them, and a scenario's stored Issues need not be ones v0.1 evaluates.
 
@@ -42,7 +47,7 @@ The scenarios use the column names that 030 publishes (`address`, `status_code`,
 ## Decisions
 
 ### D1. A hand-written parser for `--where`, compiled to SQLAlchemy Core
-A small tokenizer and a recursive-descent parser produce an AST. A compiler turns the AST into a Core expression against the chosen view's table object, binding every literal as a parameter. Column names resolve only against that table's known columns (ADR-0003), and unknown names get `difflib` close matches in `details.suggestions`. Nesting depth is capped at 64.
+A small tokenizer and a recursive-descent parser in `spider.query` produce an AST. A compiler in `spider.store.query` turns the AST into a Core expression against the chosen view's table object, binding every literal as a parameter. Column names resolve only against that table's known columns (ADR-0003), and unknown names get `difflib` close matches in `details.suggestions`. Nesting depth is capped at 64.
 - *Alternatives:* Lark or pyparsing add a dependency and give weaker control over error positions. Accepting SQL fragments checked by sqlglot is a heavy dependency, leaves room for injection mistakes, and brings SQL dialect surprises. JMESPath is unfamiliar for tabular filters.
 
 ### D2. Two-valued logic for nulls

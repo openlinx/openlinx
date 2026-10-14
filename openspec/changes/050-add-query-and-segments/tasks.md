@@ -33,7 +33,7 @@ Every group ends with a docs task and a review task.
 
 ## 2. The basic `--where` language (seam 4: Pure-logic)
 
-- [ ] 2.1 Drive `Where filter language › Comparison`: a tokenizer, a recursive-descent parser and a Core compiler for `column compare literal`, evaluated on an in-memory SQLite table defined by the test. Verify: red → green; one commit.
+- [ ] 2.1 Drive `Where filter language › Comparison`: a tokenizer, a recursive-descent parser and the AST in `spider.query`, which loads no `sqlalchemy`, and the compiler to Core in `spider.store.query` (design Context, D1), for `column compare literal`, evaluated on an in-memory SQLite table defined by the test. Verify: red → green; one commit.
 - [ ] 2.2 Drive `Where filter language › and requires both`. Verify: red → green; one commit.
 - [ ] 2.3 Drive `Where filter language › Column names are case-insensitive`. Verify: red → green; one commit.
 - [ ] 2.4 Drive `Where filter language › contains ignores case in any script`: the `spider_contains` casefold function. Verify: red → green; one commit.
