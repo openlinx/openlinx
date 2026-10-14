@@ -263,7 +263,7 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
 - **`CrawlContext`** is a frozen dataclass with `kw_only=True` (ADR-0006): the `CrawlFile`, the resolved `CrawlSettings`, the `ScopeRules`, the `Clock`, the `Reporter` (the warning log of D10), the `CrawlWriter`, the `Fetcher`, the page executor (D9), the `Hooks` and the `StopSignal`.
 - **Built in one place:** an async context manager in the Crawl Service opens the writer, the Fetcher's session and the page executor, yields the context, and closes them, the writer through `asyncio.to_thread`. The start and continue operations use it; `060` uses it for detached Crawls.
 - **Who takes it:** only the imperative shell (the engine, the scheduler, the robots.txt loader and the service). The pure modules (normalisation, Scope, robots, directives, extraction, transitions) take plain values, so they stay table-testable at seam 4.
-- **Boundary doubles go in through it:** tests pass a fake Fetcher, `FakeClock` or the DNS resolver hook to the builder. Nothing else of ours is replaced.
+- **Boundary doubles go in through it:** tests pass a fake Fetcher, `FakeClock` or the DNS resolver hook to the builder. Nothing else of ours is replaced. The hooks and the page executor are extension points, not doubles: a test registers its own hooks, or passes its own page executor as `pages=`, as `026` plugs in its pool (task 7.17).
 - *Alternative:* growing every signature with each dependency. `022` alone would touch most of the engine. Rejected.
 
 ### D16. Robustness and backstops
@@ -344,6 +344,7 @@ Seams from docs/testing.md:
 Boundary doubles used, all from the approved list:
 - **The fake Fetcher and `FakeClock`:** for rate spacing, Crawl-delay, the progress interval, the watchdog and the stop grace period only.
 - **The DNS resolver hook:** for the multi-host scenarios.
+- **A page executor passed as `pages=`:** an extension point, as the hooks are, for the executor's lifecycle and `crawl_started`'s `parse_workers` (tasks 7.17 and 7.20).
 - **A full disk:** SQLite's own `max_page_count` limit, set by a test-scoped connection listener, so SQLite reports `SQLITE_FULL` exactly as for a full disk. No file-system fake.
 
 ## Risks / Trade-offs
@@ -380,6 +381,7 @@ Boundary doubles used, all from the approved list:
 - [7.16's message reported 111.5 → 40.5 µs per `urls` row at 475,063 rows, which read as a cost that grows with the table] → After 7.16 the `urls` insert stays at about 6 µs a row through SQLAlchemy up to about 475,000 rows in a fresh process (026's measurement with the same script); the 40.5 µs of 7.16's message was a measurement under memory pressure.
 - [lexbor parses with scripting off, so the content of `<noscript>` is elements to it, while browsers and Google's renderer read it as text] → A robots meta inside `<noscript>` is not read (task 7.19). Neither is a meta refresh or a `<link>` inside `<noscript>` (task 7.19), so a head canonical inside `<noscript>` is no declaration when 8.12 builds the canonical Link type. The Links of a body `<noscript>` are discovered and followed, by the user's decision (D5).
 - [lexbor parses with scripting off, and selectolax 1.0 offers no way to turn it on: a head `<noscript><img>`, the common tracking pixel, ends `<head>`, so every later head element (canonical, meta description, robots, hreflang) lands in `<body>`; a head-noscript `<title>` moves out of its `<noscript>`, where no ancestor test sees it] → Group 15 parses with scripting on once selectolax offers it, and then finds the Links of a body `<noscript>` by fragment-parsing its text (the user's ruling); an upstream selectolax pull request is being prepared. Until then the noscript-ancestor rule of task 7.19 covers what stays inside a head `<noscript>`: `<meta>` and `<link>`.
+- [`PageSettings.robots_token` is `DEFAULT_ROBOTS_TOKEN` from `spider.naming`, and the engine passes no other token yet] → Group 10's `--robots-user-agent` task sets it in the settings snapshot the engine starts the page executor with, or the setting would be ignored for the robots directives.
 - [Post-crawl passes take only the writer, `Pass.run(writer)`, and `040` needs a clock in them] → A scheduled task gives `Pass.run` one frozen `PassContext(writer, clock)`; nothing in this change may assume that `Pass.run` takes the writer alone.
 
 ## Migration Plan

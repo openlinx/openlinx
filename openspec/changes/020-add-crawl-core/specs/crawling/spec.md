@@ -180,7 +180,7 @@ With `--scope subfolder`, only Internal URLs whose path starts with the Seed's f
 
 ### Requirement: Include and exclude patterns
 `--include <regex>` and `--exclude <regex>` SHALL take Python regular expressions, and each flag SHALL be accepted more than once. Each pattern SHALL be searched for anywhere in the normalised URL, case-sensitively.
-- **Exclude:** a URL that matches an `--exclude` pattern SHALL NOT be requested. It SHALL be recorded with `fetch_state` = `skipped`, `skip_reason` = `excluded` and `in_scope` = 0.
+- **Exclude:** a URL that matches an `--exclude` pattern SHALL NOT be requested. It SHALL be recorded with `fetch_state` = `skipped`, `skip_reason` = `excluded` and `in_scope` = 0, unless only Links that are not followed reach it, which record it as `nofollow` or `link_type_not_followed` (see "Nofollow" and "Link discovery").
 - **Include:** when at least one `--include` pattern is given, an Internal URL that matches none of them SHALL be outside the Scope.
 - **Errors:**
   - An invalid pattern SHALL be rejected with exit code 2 and error code `invalid_pattern`.
@@ -797,7 +797,7 @@ The Crawl Service SHALL be able to continue a Crawl from its store when its Craw
 - **THEN** the fixture site receives no request during the continuation for a URL that had `fetch_state` = `fetched` before it
 
 ### Requirement: Per-response hook
-The Crawl SHALL call every registered per-response handler exactly once for each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`). A handler SHALL receive the URL's row values. For a `fetched` URL it SHALL also receive the status code, the response headers and, when the response was parsed, the extractor outputs. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
+The Crawl SHALL call every registered per-response handler exactly once for each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`) when it is dispatched. A URL that only Links that are not followed reach is recorded `skipped` when it is discovered, and reaches no handler, since a later followed Link may still queue it. A handler SHALL receive the URL's row values. For a `fetched` URL it SHALL also receive the status code, the response headers and, when the response was parsed, the extractor outputs. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
 
 #### Scenario: A registered handler sees every URL once
 - **WHEN** a handler registered for the test records the URLs and states it receives, `/` links to `/a`, `/missing` (which returns 404) and `/logout`, and `spider crawl {site}/ --exclude "/logout$"` runs
