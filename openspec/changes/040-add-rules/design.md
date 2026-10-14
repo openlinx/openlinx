@@ -16,7 +16,7 @@ The motivation is in proposal.md, and the catalogue and behaviour are in `specs/
 - a **per-response hook** of pure handlers, which this change does not use (D1)
 - a **post-crawl passes** hook of store functions, which runs when a Crawl ends as `completed` or `stopped`, before its final Crawl State is written, and again after every continued run, so a pass must be safe to re-run
 
-`015-add-crawl-store` provides the `crawl` row and the writer. `017-speed-up-crawl-writer` sets the contract of a unit (its D7): a unit may run again before its commit, so it is deterministic, has no effect outside its connection and returns values only. `018-add-schema-conventions` sets the schema conventions of [ADR-0005](../../../docs/adr/0005-crawl-file-schema-conventions.md) and the declaration helper every table goes through. Issues must be queryable while a Crawl runs. Crawls can reach about 500k URLs.
+`015-add-crawl-store` provides the `crawl` row and the writer. `017-speed-up-crawl-writer` sets the contract of a unit (its D7): a unit may run again before its commit, so it is deterministic, has no effect outside its connection and returns values only. `018-add-schema-conventions` sets the schema conventions of [ADR-0005](../../../docs/adr/0005-crawl-file-schema-conventions.md) and `public_table()`, which every public table goes through. Issues must be queryable while a Crawl runs. Crawls can reach about 500k URLs.
 
 ## Goals / Non-Goals
 
@@ -127,7 +127,7 @@ A 2xx non-HTML target, such as a PDF, therefore counts as indexable, as it would
 - *Alternative: store Indexability for every Internal URL.* It would add Indexability columns to `020`'s `urls` table, which the v0.1 schema blueprint does not have. It is left to `030`'s Open Questions.
 
 ### D14. The tables under ADR-0005
-The schema blueprint of 2026-10-11 and its rulings decide these tables before they are built. Each goes through `018`'s declaration helper, so it is `STRICT`, and its enumerations and flags get CHECKs from the declared values.
+The schema blueprint of 2026-10-11 and its rulings decide these tables before they are built. Each goes through `018`'s `public_table()`, so it is `STRICT`, and its enumerations and flags get CHECKs from the declared values.
 - **`rules`:** keyed by `id`, the Rule id, as TEXT: a public identifier that a user types (ADR-0005 rule 2). It is `WITHOUT ROWID`, because the Rule id is its natural key and it holds about 42 rows.
   - `category`, `issue_type`, `priority` and `applies_to` are enumerations whose values are `Literal`s in `spider.store.records`, as `020`'s are, so the code, the CHECK and `values` cannot disagree.
   - `reproduce_sql` holds the Rule's query (ruling Q11, D15).
