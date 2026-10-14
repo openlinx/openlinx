@@ -16,11 +16,15 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - the result on stdout, events and diagnostics on stderr, and partial results
   - the paging envelope, and the exit-code table (busy 5, usage 2)
   - no environment variables as settings
-- **`020-add-crawl-core`:**
-  - the Crawl Service start and continue operations; the continue operation re-queues URLs that got no response
-  - the transition table `TRANSITIONS` with `set_state` (D12), and `StopReason`, the six values of `crawl.stop_reason`
-  - the stop flag, the events, the progress counters (D10) and the post-crawl passes
-  - the `CrawlContext` (D15), config resolution and the settings registry
+- **`020-add-crawl-core`,** re-grounded on 2026-10-14 against its code through group 6 (its first pull request):
+  - the Crawl Service in `spider.services.crawling`: `plan_crawl(request, tables)`, validation and config resolution before anything is created, which turns a `CrawlRequest` (the Seed, `cwd`, `home`, `workspace`, `command_argv`, `secret_names` and the settings given as `flags`) into a `CrawlPlan` (`seed`, `settings`, `scope`, `new_crawl`); and `start_crawl(plan, clock, reporter, hooks, *, resolver=None)`, which creates the Crawl, builds its `CrawlContext` in one place (`_crawl_context`, `020` D15), runs it under `asyncio.Runner(loop_factory=loop_factory)` and returns the `CrawlResult`, whose `to_json()` is the result of a foreground `spider crawl`
+  - the stop flag: `StopSignal` in `spider.crawl.stop`, in the context, set once with `set(reason, cause=None)`; the engine starts no request once it is set
+  - `TRANSITIONS` and `check_transition` in `spider.store.transitions`, which already allows `stopped` → `running` and `failed` → `running`, and `set_state(connection, state, at, stop_reason)` with its unit `record_state` in `spider.store.crawls`, the one writer of how a Crawl ends (D12); `StopReason` holds the six values of `crawl.stop_reason`
+  - `url_counts()` in `spider.store.urls`, the counting unit of the result, whose `UrlCounts` holds the `fetch_state` counts, `pages` and the five status classes
+  - `WarningLog` in `spider.crawl.warning_log`, the Crawl's Reporter, over `010`'s `CliReporter`, which writes events and diagnostics to stderr
+  - the settings registry with `CrawlSettings` (`spider.crawl.settings`), `OptionMeta(setting=...)`, and `secret_names(command, tables)` in `spider.cli.options`
+- **What `020` builds after its first pull request,** which some tasks here wait for (tasks.md names the `020` task each time): the `stopped` end of a stop flag and `--max-urls` (tasks 9.7 and 13.1), post-crawl passes on a stop (task 9.16), robots.txt (group 10), `--rate` (task 11.1), the progress counters and `progress` events (task 12.4), the failed ends with their errors (tasks 12.6–12.12), the network pause (tasks 12.15–12.22), interrupts and the stop's grace period (group 13), and the continue operation (group 14). Today the Crawl Service raises for any stop flag, because no `stopped` end is built yet.
+- **`015`'s code that this change builds on:** `create_crawl(request, clock, reporter, choice=secrets.choice)` in `spider.services.crawls` draws the id with `new_crawl_id(started_at, choice)` and claims it by creating `<id>.sqlite` exclusively (`_claim_new_file` in `spider.store.crawls`), drawing again when that file exists; `opening(path, *, role, busy_seconds=None)` in `spider.store.connections` opens a connection with a `ConnectionRole` (`create`, `write` or `read`, `017` D8); and `--crawl` (`CrawlOpt` in `spider.cli.options`, with `latest`) resolves through `resolve_crawl(reference, workspace=..., cwd=...)` in `spider.store.selection`.
 - **`024-add-list-and-sitemap-modes`:** the list and sitemap readers.
 - **Consumers:**
   - `090-add-mcp-server` (v0.1.1) starts long Crawls detached, needs the detach JSON within 10 seconds, and relies on breakaway from Windows job objects.
@@ -58,8 +62,8 @@ The OS releases the claim when a process dies, so "`running` and nobody holds th
 3. **In List mode, the parent stores the Seeds first.** It also reads the list, from a file or from standard input, with `024`'s reader. It reports list errors such as `empty_list` itself, and stores the Seeds in the hand-over file `<id>.seeds.json` before spawning, because a detached child cannot read the parent's standard input.
 4. **The parent spawns the child** with `sys.executable -m spider crawl --_run-detached <id>`. The child's stdout and stderr go to the log file, and stdin comes from the null device.
 5. **The parent passes the rest through the environment:** the original argv (for `crawl.command_argv`) and the secret values, in a single JSON variable that the child removes from its own environment after reading it. This is an internal hand-over, not a settings source.
-6. **The child creates the Crawl with the reserved id,** holding the writer claim from the first moment. It writes `seeds` from the hand-over file and deletes that file, then writes its `crawl_runs` row.
-7. **The parent polls** every 100 ms, for up to 10 seconds, for that row with the child's PID. Then:
+6. **The child creates the Crawl with the reserved id,** holding the writer claim from the first moment, through `020`'s Crawl Service: `plan_crawl` again from the handed-over argv, then the start operation with the chosen id, so a detached Crawl builds its `CrawlContext` in the same place as a foreground one (`020` D15), and its `StopSignal` is the one the control check sets (D6). It writes `seeds` from the hand-over file (v0.2, List mode) and deletes that file, then writes its `crawl_runs` row, whose `pid` is its own `os.getpid()`.
+7. **The parent polls** every 100 ms, for up to 10 seconds, for that row, and prints the `pid` the row records, never the one `Popen` returned (D4). Then:
    - a row appears: `state: "running"`
    - the child exits first: `detach_failed`
    - 10 seconds pass: `state: null` with `detach_unconfirmed`
@@ -72,6 +76,7 @@ No moment exists in which a Crawl exists without a live writer, so a concurrent 
 - **Flags:** `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB`, with `close_fds=True`.
 - **Why CREATE_NO_WINDOW rather than DETACHED_PROCESS:** with CREATE_NO_WINDOW the background process owns a hidden console and is still detached from the caller's console. This also matters for `026`'s parse pool, which is unconditional in v0.1: under DETACHED_PROCESS, which has no console, every `spawn` parse worker would get a visible console window, while under CREATE_NO_WINDOW they inherit the hidden one. The maintainer approved this on 2026-09-27.
 - **No breakaway allowed:** if `CreateProcess` fails with `ERROR_ACCESS_DENIED` because the job object forbids breakaway, the call is repeated without `CREATE_BREAKAWAY_FROM_JOB`. If the caller's job object has `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, the output gets `job_may_end_crawl`. The job object is queried through `ctypes`.
+- **The real interpreter:** from a virtual environment, or from the `spider.exe` entry point, `sys.executable` on Windows is a launcher whose child is the real interpreter, so a killed launcher leaves the Crawl running. The child is therefore started from `sys._base_executable` with `__PYVENV_LAUNCHER__` set to `sys.executable`, as `multiprocessing` does, and the pid that `status` reports and the tests end is the one the child records itself (D3).
 
 ### D5. POSIX process creation
 `start_new_session=True` (setsid), stdin from `/dev/null`, stdout and stderr to the log file, and `close_fds=True`. SIGHUP and signals to the caller's process group do not reach the Crawl. Some agent sandboxes kill every descendant anyway. `status` then shows `interrupted`, `resume` continues the Crawl, and the Skill prefers Hand-off for large Crawls.
@@ -79,12 +84,12 @@ No moment exists in which a Crawl exists without a live writer, so a concurrent 
 ### D6. Control rows
 - **Marking the table:** `control_requests` is declared through `018`'s `public_table()` with `info={"control": True}`. Control writes (D12) are allowed only on tables marked this way.
 - **Writing a request:** `stop` inserts into `control_requests` through `write_control` (D12): a short transaction with a 5-second busy wait.
-- **Checking for requests:** the crawl process checks for unhandled rows at least once per second, through a writer unit that only reads (`017` D5). A request sets `020`'s stop flag with `stop_reason = requested`, the same path as Ctrl+C.
+- **Checking for requests:** the crawl process checks for unhandled rows at least once per second, through a writer unit that only reads, run with `await writer.run_async(...)` like `020`'s frontier reads (`017` D5), on the context's `Clock`. A request calls `context.stop.set("requested")`, the same path as Ctrl+C (`020` group 13), and ends a network pause at once (`020` D16).
 - **Marking it handled:** the unit that handles it sets `handled_at` and `handled_by_run_id`.
 
 ### D7. Status computation
-- **Counts of a running Crawl** come from the heartbeat (ruling Q1 of the schema blueprint). `urls` has no index for counts by `fetch_state` (`020` D18), so a `GROUP BY` over it scans the whole table, and an agent may poll `status` every few seconds during a Crawl of about 500k URLs. The crawl process already keeps `020`'s progress counters (D10), seeded once per run by a counting query and updated as units commit. This change adds the status classes to them, and the heartbeat writes them to the run's row every 5 seconds. They are control data of the run, like `heartbeat_at`, not counts of the Crawl's data (ADR-0005).
-- **Counts of a Crawl that is not running** are counted over `urls` once: no process is writing, and the result is exact.
+- **Counts of a running Crawl** come from the heartbeat (ruling Q1 of the schema blueprint). `urls` has no index for counts by `fetch_state` (`020` D18), so a `GROUP BY` over it scans the whole table, and an agent may poll `status` every few seconds during a Crawl of about 500k URLs. The crawl process keeps `020`'s progress counters (D10, `020` task 12.4), seeded once per run by a counting query and updated as units commit. This change adds the status classes to them, as `UrlCounts` already holds them for the result, and the heartbeat writes them to the run's row every 5 seconds. They are control data of the run, like `heartbeat_at`, not counts of the Crawl's data (ADR-0005).
+- **Counts of a Crawl that is not running** are counted over `urls` once, with `020`'s `url_counts()`: no process is writing, and the result is exact.
 - **Rate** (ruling Q2): the run's `urls_per_second`, which the crawl process computes from its 60-second window, the `rate` of its progress events, and writes with the heartbeat. `fetched_at` gets no index.
 - **Average rate:** the URLs requested in all runs (`fetched` plus `error`) divided by `elapsed_s`, the time spent in all runs. It shows whether the current `rate` is typical, and it is what a user compares with another crawler's average.
 - **ETA:** a pure function of rate, queued, `max_urls` and requested.
@@ -129,12 +134,13 @@ Everything that decides which URLs belong to the Crawl stays fixed: the Crawl Mo
 `015` was planned to build these, and they moved here on 2026-10-05, because only background Crawls and `resume` need them. They live in `spider.store` (`020` D14).
 - **The writer claim** (`spider.store.claim`): an operating-system lock on `<id>.lock`, taken without waiting: `msvcrt.locking` on Windows and `fcntl.flock` on POSIX, on the lock file, never on the crawl file.
   - The operating system releases it when the process ends, SIGKILL and TerminateProcess included, so "`running` and the claim is free" means the process is dead (D2).
-  - The Crawl Service takes it before `create_crawl` creates `<id>.sqlite`, and before a resume opens the writer, and holds it until the writer is closed. A Crawl therefore never exists without a live claim (D3).
+  - It is taken where the id is claimed: `create_crawl` draws the id and takes `<id>.lock` before it creates `<id>.sqlite` (`_claim_new_file`), and gives the claim to the Crawl Service with the `CrawlFile`; a resume takes it before it opens the writer. The Crawl Service holds it until the writer is closed. A Crawl therefore never exists without a live claim (D3).
   - Failing to take it is `crawl_locked` (exit code 5), declared by this change.
   - The lock file stays behind. It is harmless, it marks the id as taken, and `crawls rm` deletes it.
-- **Control writes** (`write_control`, in `spider.store.control`): a read-write connection without the claim, with a 5-second busy timeout, whose SQLite authorizer refuses every write to a table not marked `info={"control": True}`.
-- **Recording `interrupted`** (`check_writer`, in the same module): it tries the claim without waiting. When it gets it and the state is `running`, one transaction records `interrupted` through `020`'s `set_state`, whose transition check this change extends with `running` → `interrupted`, and sets the last run's `end_state`. Then it releases the claim.
-- **Reserved and chosen ids** (`crawl-store`'s "Crawl ids", modified): the id draw also counts `<id>.lock` and `<id>.log` as taken. The detaching parent reserves an id by creating `<id>.log` exclusively, and `create_crawl` accepts a chosen id, failing with `crawl_id_taken` when `<id>.sqlite` exists.
+- **Control writes** (`write_control`, in `spider.store.control`): a read-write connection without the claim, opened with `opening(path, role="control", busy_seconds=5)`, a new `ConnectionRole` whose connect listener installs a SQLite authorizer that refuses every write to a table not marked `info={"control": True}`.
+- **Recording `interrupted`** (`check_writer`, in the same module): it tries the claim without waiting. When it gets it and the state is `running`, one transaction records `interrupted` through `020`'s `set_state`, whose `TRANSITIONS` this change extends with `running` → `interrupted` and `interrupted` → `running`, and sets the last run's `end_state`. Then it releases the claim.
+- **Reserved and chosen ids** (`crawl-store`'s "Crawl ids", modified): the id draw (`new_crawl_id` and `_claim_new_file`) also counts `<id>.lock` and `<id>.log` as taken. The detaching parent reserves an id by creating `<id>.log` exclusively, and `create_crawl` accepts a chosen id, failing with `crawl_id_taken` when the exclusive create of `<id>.sqlite` finds the file.
+- **The empty-file window:** `_claim_new_file` creates `<id>.sqlite` empty before its schema is written, so a `--crawl latest` in that moment meets a file that is not a crawl file yet and reports `crawl_file_invalid` (ROADMAP's checklist). Open Questions propose creating it as `<id>.sqlite.tmp`, counted as taken, and renaming it once its schema is written.
 - *Alternative:* `filelock`, as `015`'s first draft planned. It is a new dependency for about 30 lines of standard-library code. Rejected, unless the two platform locks prove awkward when they are built.
 - *Alternative:* a lock inside SQLite. SQLite locks last one transaction, not a process lifetime. Rejected.
 - *Alternative:* a PID file. PIDs are reused, and nothing releases the file automatically. Rejected.
@@ -201,6 +207,8 @@ Boundary doubles, all from the approved list:
 - [Antivirus or indexers hold files open on Windows] → `crawls rm` reports `file_in_use` and deletes nothing, so no Crawl is half deleted.
 - [Secrets in the child's environment are readable by the same user] → This is the same trust boundary as the user's shell. The variable is removed after it is read, so any parse workers do not inherit it.
 - [A hand-over file is left behind when the child dies at start] → `detach_failed` names the log file, and `crawls rm <id>` deletes the files of a reserved id.
+- [`026`'s parse workers are part of the detached process tree] → They inherit the hidden console (D4), the stop and the interrupt shut them down through `026`'s pool, and a worker whose Crawl process was killed ends when its pipe closes: any `OSError` on a pipe between the Crawl's processes means end of input, since on Windows a closed pipe can surface as `BrokenPipeError` at `poll()`, not as `EOFError`.
+- [Most of this change's Crawl-side behaviour waits for parts of `020` after its first pull request: the `stopped` end, the progress counters, the failed ends, the network pause, interrupts and the continue operation] → tasks.md names the `020` task each slice waits for; the claim, the control table, dead-process detection and detach of a completed Crawl can start right after `020`'s first pull request.
 
 ## Migration Plan
 
@@ -208,7 +216,12 @@ None. Before v0.1 the schema is not yet public: this change adds `crawl_runs` an
 
 ## Open Questions
 
-These are deferrable, and each adds a Command or flag later without changing these specs:
+**Spec changes to decide before this change starts:**
+- **The empty-file window** (D12): add `<id>.sqlite.tmp` to the files that make an id taken in `crawl-store`'s "Crawl ids", and create a crawl file under that name, renamed to `<id>.sqlite` once its schema is written, so `--crawl latest` never meets a half-made file. Recommended, with a scenario "A Crawl being created is not the latest" under "Crawl ids". Otherwise the window stays, and `--crawl latest` can fail in the milliseconds of a creation.
+- **A killed Crawl requests no fetched URL again** (ROADMAP's checklist): `020` dropped its kill-then-continue scenarios for these. Recommended: the THEN of "A killed Crawl can be resumed at once (Windows)" and "(macOS and Linux)" also says that the fixture site receives no second request for a URL that was `fetched` before the kill.
+- **What resume puts back:** `020`'s continue operation re-queues every URL that ended as `error` (`record_failed` included) or with `robots_unreachable`, while "Resuming a Crawl" says "those that ended without a response or behind an unreachable robots.txt". Recommended: say "every URL that ended as `error`, or with `skip_reason` = `robots_unreachable`, as `020-add-crawl-core`'s continue operation does".
+
+**Deferrable,** each adds a Command or flag later without changing these specs:
 - `spider crawl --like <id>` (or `crawls rerun <id>`), to re-run a Crawl directly from its recorded config.
 - Retention: `crawls prune --older-than`, or a Workspace setting that caps the number of kept Crawls.
 - `status --watch` for people.

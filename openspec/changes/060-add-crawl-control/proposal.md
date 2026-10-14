@@ -19,6 +19,8 @@ Both need five things:
 >
 > **Moved from 015 (2026-10-05):** the writer claim (`crawl_locked`), control writes by processes without the claim, recording a dead Crawl as `interrupted`, and reserved and chosen crawl ids (`crawl_id_taken`). `015` did not build them, so this change does (design D12).
 >
+> **Re-grounded (2026-10-14)** against `020-add-crawl-core`'s code through its group 6, its first pull request: `plan_crawl` and `start_crawl` in `spider.services.crawling`, `StopSignal`, `TRANSITIONS` with `set_state`, `url_counts()`, `create_crawl` with its id draw, `opening()` and its connection roles, and `--crawl`. The parts of `020` that land later (the `stopped` end, the progress counters, the failed ends, the network pause, interrupts and the continue operation) are named in tasks.md where a task waits for them, and the tasks are grouped by release.
+>
 > **Schema blueprint (2026-10-11):** `crawl_runs.id` and `control_requests.handled_by_run_id` follow ADR-0005, `crawl_runs.stop_reason` shares `crawl.stop_reason`'s six values, and the heartbeat records the progress counters, so `status` never counts over `urls` while a Crawl runs.
 
 - **`spider crawl … --detach`**:
@@ -85,8 +87,8 @@ Both need five things:
   - `015-add-crawl-store`: the crawl file, crawl ids, the Crawl State values, the writer, redaction and `--crawl`
   - `017-speed-up-crawl-writer` and `018-add-schema-conventions`: the contract of a unit, and the schema conventions with `public_table()`
   - `020-add-crawl-core`:
-    - the Crawl Service start and continue operations, the transition table, the stop flag, the events and the progress counters
-    - config resolution and the settings registry, and the post-crawl passes
+    - from its first pull request: the Crawl Service's `plan_crawl` and `start_crawl`, the context builder, `StopSignal`, `TRANSITIONS` and `set_state`, `url_counts()`, the settings registry and the post-crawl passes
+    - from its later groups: the `stopped` end and `--max-urls`, robots.txt, `--rate`, the progress counters and events, the failed ends, the network pause, interrupts with the stop's grace period, and the continue operation
   - `022-add-fetch-policy`: the proxy variables in v0.1, and `--auth`, `--header` and `--proxy` in v0.2.
   - `024-add-list-and-sitemap-modes`: List mode, and the list and sitemap readers used by the estimate.
 - **Edits this change makes to others' areas:**
@@ -101,10 +103,11 @@ Both need five things:
   - `080-add-agent-skill`: Hand-off and polling workflows.
   - `090-add-mcp-server`: the crawl-control tools and detached starts.
 - **Code:**
-  - `src/spider/services/crawl.py`: detach, status, stop, resume, dry run and crawls.
-  - `src/spider/crawl/process.py`: background start per OS.
-  - `src/spider/crawl/control.py`: control requests, heartbeat and liveness.
-  - `src/spider/crawl/commandline.py`: equivalent-command rendering.
-  - `src/spider/crawl/estimate.py`, `src/spider/cli/control.py`, and the store tables.
+  - `spider.services.control`: detach, status, stop and resume, next to `020`'s `spider.services.crawling` (the start) and `015`'s `spider.services.crawls` (creating a Crawl), which gains a chosen id and, in v0.2, `crawls list|show|rm`.
+  - `spider.crawl.process`: background start per OS.
+  - `spider.crawl.heartbeat`: the control check and the heartbeat beside the engine.
+  - `spider.store.claim`, `spider.store.control` (control writes and `check_writer`) and the `crawl_runs` and `control_requests` units: data access stays in the store (`020` D14).
+  - `spider.cli.control`: the Commands.
+  - **(v0.1.1)** `spider.crawl.commandline`: the equivalent command's argv; **(v0.2)** its shell forms, and `spider.crawl.estimate`.
 - **Dependencies:** none new. The Windows job-object check uses `ctypes`.
 - **Docs:** `docs/crawl-control.md` (background Crawls, Hand-off, Crawl States, status fields, resume rules and the dry run).
