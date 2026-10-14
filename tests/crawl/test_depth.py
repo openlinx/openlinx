@@ -140,6 +140,30 @@ def test_a_late_check_lowers_the_depth_of_a_url_still_queued(
     ) == [("fetched", 2)]
 
 
+@pytest.mark.slow
+def test_a_late_check_gives_a_url_skipped_beyond_the_depth_limit_its_shorter_path(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<img src="/late.html"><a href="/a">A</a>'),
+                # Ends after the frontier has skipped /c at depth 3.
+                "/late.html": Page(body='<a href="/c">C</a>', delay=SLOW / 2),
+                "/a": Page(body='<a href="/b">B</a>'),
+                "/b": Page(body='<a href="/c">C</a>'),
+                "/c": Page(body="<p>C</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--max-depth", "2")
+
+    assert query(
+        crawl_file, "SELECT fetch_state, crawl_depth FROM urls WHERE url = ?", [server.url("/c")]
+    ) == [("fetched", 2)]
+
+
 def test_links_beyond_the_limit_are_not_requested(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:

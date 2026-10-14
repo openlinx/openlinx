@@ -198,6 +198,8 @@ class SkippedUrl:
 
     url_id: int
     skip_reason: SkipReason
+    # The depth the skip was decided on: a URL lowered since then is decided again (design D5).
+    crawl_depth: int
     rows: tuple[object, ...] = ()
 
 

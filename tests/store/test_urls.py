@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
+import pytest
 from sqlalchemy import Connection, event, text
 
 from spider.crawl.urls import NormalizedUrl, parse_seed
@@ -34,7 +35,7 @@ from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, query
 from tests.support.workspace import TempWorkspace
-from tests.support.writer import replay_now
+from tests.support.writer import executing, replay_now
 
 
 def _url(text: str) -> NormalizedUrl:
@@ -109,7 +110,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 {Note: _write_note},
             )
         )
-        writer.run(record_skipped(SkippedUrl(seed_id + 2, "excluded"), {}))
+        writer.run(record_skipped(SkippedUrl(seed_id + 2, "excluded", 1), {}))
         deeper = writer.run(next_depth(0))
         second = writer.run(queued_batch(1, 0, 1))
         writer.run(
@@ -223,7 +224,7 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
                 {},
             )
         )
-        writer.run(record_skipped(SkippedUrl(seed_id + 4, "excluded"), {}))
+        writer.run(record_skipped(SkippedUrl(seed_id + 4, "excluded", 1), {}))
         about_id = seed_id + 5
         writer.run(
             record_fetched(
@@ -252,6 +253,83 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
         ("https://site.test/out", 1, "hyperlink", seed_id, "skipped", "excluded"),
         ("https://site.test/about", 1, "hyperlink", seed_id, "fetched", None),
     ]
+
+
+_TARGET = "https://site.test/t"
+
+
+def _target_at_depth_three(writer: CrawlWriter) -> dict[str, int]:
+    """/ links to /1 and /s, /1 to /2 and /s2, /2 to /t and /s3: /t is queued at depth 3, and
+    /s, /s2 and /s3, at depths 1, 2 and 3, can link to it."""
+    seed_id = writer.run(record_seed(_url("https://site.test/"), is_internal=True, in_scope=True))
+    ids = {"/": seed_id}
+    for page, links in (("/", ("/1", "/s")), ("/1", ("/2", "/s2")), ("/2", ("/t", "/s3"))):
+        news = tuple(_new(f"https://site.test{link}") for link in links)
+        writer.run(record_fetched(_fetched(ids[page], *news), {}))
+        ids |= {link: seed_id + len(ids) + n for n, link in enumerate(links)}
+    return ids
+
+
+def _target(crawl_file: Any) -> list[tuple[object, ...]]:
+    return query(
+        crawl_file,
+        "SELECT target.crawl_depth, page.url, target.fetch_state, target.skip_reason "
+        "FROM urls AS target JOIN urls AS page ON page.id = target.found_on_url_id "
+        "WHERE target.url = ?",
+        [_TARGET],
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "page", "expected"),
+    [
+        ("queued", "/s", (2, "/s", "queued", None)),
+        ("queued", "/s2", (3, "/2", "queued", None)),
+        ("queued", "/s3", (3, "/2", "queued", None)),
+        ("fetched", "/s", (3, "/2", "fetched", None)),
+        ("max_depth", "/s", (2, "/s", "queued", None)),
+        ("max_depth", "/s2", (3, "/2", "skipped", "max_depth")),
+        ("excluded", "/s", (3, "/2", "skipped", "excluded")),
+    ],
+)
+def test_a_followed_link_to_a_recorded_url_changes_it_only_on_a_shorter_path_it_may_take(
+    temp_workspace: TempWorkspace,
+    state: Literal["queued", "fetched", "max_depth", "excluded"],
+    page: str,
+    expected: tuple[object, ...],
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        ids = _target_at_depth_three(writer)
+        if state == "fetched":
+            writer.run(record_fetched(_fetched(ids["/t"]), {}))
+        elif state != "queued":
+            writer.run(record_skipped(SkippedUrl(ids["/t"], state, 3), {}))
+        writer.run(record_fetched(_fetched(ids[page], _new(_TARGET)), {}))
+        replay_now(writer)
+
+    found_on = expected[1]
+    assert _target(crawl.path) == [(expected[0], f"https://site.test{found_on}", *expected[2:])]
+
+
+def test_a_skip_decided_on_a_depth_lowered_meanwhile_leaves_the_url_queued_without_its_rows(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(executing(text("CREATE TABLE test_notes (url_id INTEGER)")))
+        ids = _target_at_depth_three(writer)
+        writer.run(record_fetched(_fetched(ids["/s"], _new(_TARGET)), {}))
+        skipped = SkippedUrl(ids["/t"], "max_depth", 3, (Note(ids["/t"]),))
+        writer.run(record_skipped(skipped, {Note: _write_note}))
+        replay_now(writer)
+
+    assert (_target(crawl.path), query(crawl.path, "SELECT url_id FROM test_notes")) == (
+        [(2, "https://site.test/s", "queued", None)],
+        [],
+    )
 
 
 def test_each_reason_of_a_skip_at_discovery_is_a_skip_reason() -> None:

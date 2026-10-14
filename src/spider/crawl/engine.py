@@ -123,22 +123,25 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     checks: set[asyncio.Task[None]] = set()
     depth: int | None = 0
     try:
-        while depth is not None and not context.stop.is_set:
+        while depth is not None:
             await _crawl_depth(context, outcomes, limits, checks, depth)
-            limit = limits.limit_reached()
-            if limit is not None:
+            # A stop cancels the checks in flight: the sweep below would wait for them.
+            if context.stop.is_set:
+                break
+            if limits.limit_reached() is not None:
                 # The URL limit: what has started ends and is recorded, and nothing more starts.
                 await asyncio.gather(*checks)
                 context.stop.set("max_urls")
-                _warn_of_the_url_limit(context, limit)
                 break
             # Read after every unit submitted so far, so it sees the URLs they discovered.
             depth = await context.writer.run_async(next_depth(depth))
             if depth is None:
                 # A check that was in-Scope HTML may have found URLs, or a shorter path to them,
-                # at a depth the frontier has passed: once every check has ended, the queue is
-                # read from the top.
+                # at a depth the frontier has passed: once every check has ended, and every
+                # outcome, so that no URL whose unit failed is still queued, the queue is read
+                # from the top.
                 await asyncio.gather(*checks)
+                await outcomes.settled()
                 depth = await context.writer.run_async(next_depth(_ABOVE_NO_DEPTH))
     # An ended writer refuses every unit; its cause says why it ended (017 D6).
     except CrawlWriterClosedError as closed:
@@ -146,6 +149,10 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     finally:
         await _cancel_all(checks)
     await outcomes.settled()
+    limit = limits.limit_reached()
+    # Only once every outcome is in: a failure among them outranks the stop.
+    if limit is not None and context.stop.reason == "max_urls":
+        _warn_of_the_url_limit(context, limit)
 
 
 async def _crawl_depth(
@@ -228,7 +235,8 @@ async def _unit_of(
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
         return record_skipped(
-            SkippedUrl(queued.id, skip_reason, _handler_rows(context, skipped)), row_writers
+            SkippedUrl(queued.id, skip_reason, queued.crawl_depth, _handler_rows(context, skipped)),
+            row_writers,
         )
     async with limits.host(url_host(queued.url)), limits.request():
         if not limits.start_request():

@@ -28,7 +28,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | `--include <regex>` | `include` | `[]` | When given, an Internal URL that matches no include pattern is checked but not followed; give the option once per pattern. |
 | `--exclude <regex>` | `exclude` | `[]` | A URL that the pattern matches is never requested; give the option once per pattern (see [Include and exclude patterns](#include-and-exclude-patterns)). |
 | `--max-depth <n>` | `max_depth` | none | The deepest Crawl Depth whose URLs are requested, 0 or more; Resources of followed Pages are requested one deeper (see [Crawl Depth](#crawl-depth)). |
-| `--max-urls <n>` | `max_urls` | none | The most URL requests over the Crawl's whole life, 1 or more (see [The URL limit](#the-url-limit)). |
+| `--max-urls <n>` | `max_urls` | none | The most URL requests the Crawl starts, 1 or more (see [The URL limit](#the-url-limit)). |
 
 `--workspace` and `--format` are the global flags of every Command.
 
@@ -61,9 +61,9 @@ http://site.test/a.png     depth 2, fetched (a Resource of /a)
 
 ### The URL limit
 
-There is no URL limit by default. With `--max-urls <n>`, the Crawl starts at most `n` URL requests over its whole life:
+There is no URL limit by default. With `--max-urls <n>`, the Crawl starts at most `n` URL requests:
 
-- A request counts from the moment it starts, so requests in flight count, and so do the requests a continued Crawl made before. A URL recorded without a request, such as an excluded one, does not count, and neither will robots.txt requests.
+- A request counts from the moment it starts, so requests in flight count. A URL recorded without a request, such as an excluded one, does not count, and neither do robots.txt requests.
 - At the first request the limit refuses, nothing new starts. The requests in flight end and are recorded, and every URL not requested stays `queued`.
 - The Crawl ends `stopped` with `crawl.stop_reason` = `max_urls`, and exits with code 0. Its post-crawl passes have run, as for a `completed` Crawl.
 - The result holds a `max_urls_reached` warning whose hint is the command that continues the Crawl with twice the limit, such as `spider resume --crawl 20261014-101500-k3f9 --max-urls 6`.

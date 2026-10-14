@@ -31,11 +31,12 @@ def test_the_limit_warning_says_how_to_continue(
 
     result = run_cli("crawl", server.url("/"), "--max-urls", "3")
 
+    document = result.json()
     assert [
-        "--max-urls" in (warning["hint"] or "")
-        for warning in result.json()["warnings"]
+        (warning["hint"], warning["details"]["max_urls"])
+        for warning in document["warnings"]
         if warning["code"] == "max_urls_reached"
-    ] == [True]
+    ] == [(f"spider resume --crawl {document['crawl_id']} --max-urls 6", 3)]
 
 
 def test_there_is_no_limit_by_default(

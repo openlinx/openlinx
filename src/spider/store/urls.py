@@ -25,8 +25,9 @@ type UrlUnit = Callable[[Connection], None]
 _INSERT = insert(urls).values(origin_id=ORIGIN_ID)
 _INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])
 # A followed Link re-queues a URL that only unfollowed Links reached, as found through it, and
-# gives a URL still queued the shorter path a check found after its depth closed (design D3);
-# every other conflict changes nothing, so a replayed unit gives the same rows (design D5).
+# gives the shorter path a check found after its depth closed (design D3) to a URL still queued,
+# or skipped beyond the depth limit, which dispatch then decides again; every other conflict
+# changes nothing, so a replayed unit gives the same rows (design D5).
 _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     index_elements=[urls.c.url],
     set_={
@@ -42,7 +43,10 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
                 urls.c.skip_reason == literal_column(f"'{reason}'")
                 for reason in literal_values(DiscoverySkipReason)
             ),
-            (urls.c.fetch_state == literal_column("'queued'"))
+            (
+                (urls.c.fetch_state == literal_column("'queued'"))
+                | (urls.c.skip_reason == literal_column("'max_depth'"))
+            )
             & (urls.c.crawl_depth > _INSERT.excluded.crawl_depth),
         )
     )
@@ -62,7 +66,9 @@ _FETCHED = _URL_ROW.values(
     parse_error=bindparam("parse_failure"),
     parse_error_message=bindparam("parse_failure_message"),
 )
-_SKIPPED = _URL_ROW.values(fetch_state="skipped", skip_reason=bindparam("reason"))
+_SKIPPED = _URL_ROW.where(urls.c.crawl_depth == bindparam("decided_depth")).values(
+    fetch_state="skipped", skip_reason=bindparam("reason")
+)
 _ERRORED = _URL_ROW.values(
     fetch_state="error",
     fetch_error=bindparam("failure"),
@@ -215,12 +221,17 @@ def record_fetched(
 def record_skipped(
     skipped: SkippedUrl, row_writers: Mapping[type, RowWriter]
 ) -> Callable[[Connection], None]:
-    """A unit that records a URL as not requested, why, and its rows."""
-    values = {"url_id": skipped.url_id, "reason": skipped.skip_reason}
+    """A unit that records a URL as not requested, why, and its rows, unless a shorter path
+    lowered its depth after the skip was decided: it then stays queued (design D5)."""
+    values = {
+        "url_id": skipped.url_id,
+        "reason": skipped.skip_reason,
+        "decided_depth": skipped.crawl_depth,
+    }
 
     def unit(connection: Connection) -> None:
-        connection.execute(_SKIPPED, values)
-        write_rows(connection, skipped.rows, row_writers)
+        if connection.execute(_SKIPPED, values).rowcount:
+            write_rows(connection, skipped.rows, row_writers)
 
     return unit
 
