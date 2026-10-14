@@ -440,6 +440,8 @@ def _row_values(result: UrlResult) -> tuple[RowValues, ...]:
         result.found_on_url_id is not None,
         result.fetched_at is not None,
         result.response_time_ms is not None,
+        result.is_internal,
+        result.in_scope,
     )
     return (RowValues(result.url_id, repr(values)),)
 
@@ -473,10 +475,20 @@ def test_a_handler_gets_the_row_values_of_the_url(
     ) == [
         (
             server.url("/"),
-            repr(("fetched", 200, "text/html; charset=utf-8", True, "seed", False, True, True)),
+            repr(
+                (
+                    *("fetched", 200, "text/html; charset=utf-8", True),
+                    *("seed", False, True, True, True, True),
+                )
+            ),
         ),
         (
             server.url("/ok"),
-            repr(("fetched", 200, "text/html; charset=utf-8", True, "hyperlink", True, True, True)),
+            repr(
+                (
+                    *("fetched", 200, "text/html; charset=utf-8", True),
+                    *("hyperlink", True, True, True, True, True),
+                )
+            ),
         ),
     ]

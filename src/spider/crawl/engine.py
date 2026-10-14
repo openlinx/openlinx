@@ -87,7 +87,10 @@ class _Outcomes:
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     outcomes = _Outcomes(context)
     limits = RequestLimits(context.settings.concurrency)
-    await context.writer.run_async(record_seed(seed))
+    decision = context.scope.decide(seed)
+    await context.writer.run_async(
+        record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
+    )
     depth: int | None = 0
     try:
         while depth is not None and not context.stop.is_set:
@@ -141,9 +144,10 @@ async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedU
     """The unit that records the URL's final state, with its handlers' rows."""
     row_writers = context.hooks.row_writers
     # Decided once, at dispatch, so a URL found on several Pages is recorded once (design D1).
-    skip_reason = context.scope.decide(queued.url).skip_reason
+    decision = context.scope.decide(queued.url)
+    skip_reason = decision.skip_reason
     if skip_reason is not None:
-        skipped = _result(queued, fetch_state="skipped", skip_reason=skip_reason)
+        skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
         return record_skipped(
             SkippedUrl(queued.id, skip_reason, _handler_rows(context, skipped)), row_writers
         )
@@ -152,6 +156,7 @@ async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedU
     if isinstance(response, FetchFailure):
         failed = _result(
             queued,
+            decision,
             fetch_state="error",
             fetch_error=response.fetch_error,
             fetch_error_message=response.message,
@@ -165,13 +170,16 @@ async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedU
             rows=_handler_rows(context, failed),
         )
         return record_error(errored, row_writers)
-    return record_fetched(await _fetched(context, queued, response), row_writers)
+    return record_fetched(await _fetched(context, queued, decision, response), row_writers)
 
 
-async def _fetched(context: CrawlContext, queued: QueuedUrl, response: FetchResult) -> FetchedUrl:
-    parsed = 200 <= response.status_code < 300 and _is_html(response)
+async def _fetched(
+    context: CrawlContext, queued: QueuedUrl, decision: ScopeDecision, response: FetchResult
+) -> FetchedUrl:
+    # An External URL or one outside the Scope is checked, never parsed (design D5).
+    parsed = decision.in_scope and 200 <= response.status_code < 300 and _is_html(response)
     page = await context.pages.prepare(queued.url, response) if parsed else None
-    discovered = () if page is None else _followed(page, context.scope, queued.crawl_depth + 1)
+    discovered = () if page is None else _discovered(page, context.scope, queued.crawl_depth + 1)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
@@ -186,6 +194,7 @@ async def _fetched(context: CrawlContext, queued: QueuedUrl, response: FetchResu
     content_type = response.header("Content-Type")
     result = _result(
         queued,
+        decision,
         fetch_state="fetched",
         status_code=response.status_code,
         content_type=content_type,
@@ -211,13 +220,15 @@ async def _fetched(context: CrawlContext, queued: QueuedUrl, response: FetchResu
     )
 
 
-def _result(queued: QueuedUrl, **outcome: Any) -> UrlResult:
+def _result(queued: QueuedUrl, decision: ScopeDecision, **outcome: Any) -> UrlResult:
     return UrlResult(
         url_id=queued.id,
         url=queued.url,
         crawl_depth=queued.crawl_depth,
         discovered_via=queued.discovered_via,
         found_on_url_id=queued.found_on_url_id,
+        is_internal=decision.is_internal,
+        in_scope=decision.in_scope,
         **outcome,
     )
 
@@ -241,17 +252,23 @@ def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[object, ...
     return tuple(rows)
 
 
-def _followed(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl, ...]:
+def _discovered(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl, ...]:
+    # Every hyperlink is recorded: one in the Scope is followed, any other checked or skipped.
     return tuple(
-        NewUrl(url=link.target, crawl_depth=depth, discovered_via=link.type)
+        _new_url(link.target, scope.decide(link.target), depth)
         for link in page.links
-        if link.type == "hyperlink" and _enters_frontier(scope.decide(link.target))
+        if link.type == "hyperlink"
     )
 
 
-def _enters_frontier(decision: ScopeDecision) -> bool:
-    # An excluded URL is recorded too, as skipped when it is dispatched.
-    return decision.in_scope or decision.skip_reason is not None
+def _new_url(url: NormalizedUrl, decision: ScopeDecision, depth: int) -> NewUrl:
+    return NewUrl(
+        url=url,
+        crawl_depth=depth,
+        discovered_via="hyperlink",
+        is_internal=decision.is_internal,
+        in_scope=decision.in_scope,
+    )
 
 
 def _is_html(response: FetchResult) -> bool:

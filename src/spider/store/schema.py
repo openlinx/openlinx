@@ -202,6 +202,18 @@ urls = public_table(
         comment="The URL's host in lower-case ASCII (IDNA) form; the key of the per-host "
         "politeness limits.",
     ),
+    Column(
+        "is_internal",
+        Flag,
+        nullable=False,
+        comment="1 for an Internal URL, 0 for an External URL.",
+    ),
+    Column(
+        "in_scope",
+        Flag,
+        nullable=False,
+        comment="1 when the URL is inside the Scope, so it may be followed.",
+    ),
     Column("crawl_depth", Integer, nullable=False, comment="Crawl Depth; 0 for Seeds."),
     Column(
         "discovered_via",

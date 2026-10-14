@@ -107,6 +107,8 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `id` | INTEGER | no | PK | | | Row id, stable for the life of the crawl file; it grows in the order URLs are first recorded, and is the dispatch order within a Crawl Depth. |
 | `url` | TEXT | no | | | | The normalised URL, unique. |
 | `host` | TEXT | no | | | | The URL's host in lower-case ASCII (IDNA) form; the key of the per-host politeness limits. |
+| `is_internal` | INTEGER | no | | `boolean` | | 1 for an Internal URL, 0 for an External URL. |
+| `in_scope` | INTEGER | no | | `boolean` | | 1 when the URL is inside the Scope, so it may be followed. |
 | `crawl_depth` | INTEGER | no | | | | Crawl Depth; 0 for Seeds. |
 | `discovered_via` | TEXT | no | | | `seed`, `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`, `redirect`, `list`, `sitemap_input`, `sitemap_index` | How the URL was first found: seed, or the Link type. |
 | `found_on_url_id` | INTEGER | yes | → `urls.id` | | | The URL whose response first revealed this one; NULL for Seeds. |

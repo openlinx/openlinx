@@ -22,6 +22,8 @@ class UrlResult:
     crawl_depth: int
     discovered_via: DiscoveredVia
     found_on_url_id: int | None
+    is_internal: bool
+    in_scope: bool
     fetch_state: FetchState
     skip_reason: SkipReason | None = None
     fetch_error: FetchError | None = None

@@ -72,7 +72,9 @@ _NEXT_DEPTH = select(func.min(urls.c.crawl_depth)).where(
 )
 
 
-def record_seed(url: NormalizedUrl) -> Callable[[Connection], int]:
+def record_seed(
+    url: NormalizedUrl, *, is_internal: bool, in_scope: bool
+) -> Callable[[Connection], int]:
     """A unit that records the Seed as queued, once, and returns its id."""
 
     def unit(connection: Connection) -> int:
@@ -81,6 +83,8 @@ def record_seed(url: NormalizedUrl) -> Callable[[Connection], int]:
             {
                 "url": url,
                 "host": url_host(url),
+                "is_internal": is_internal,
+                "in_scope": in_scope,
                 "crawl_depth": 0,
                 "discovered_via": "seed",
                 "fetch_state": "queued",
@@ -144,6 +148,8 @@ def record_fetched(
         {
             "url": new.url,
             "host": url_host(new.url),
+            "is_internal": new.is_internal,
+            "in_scope": new.in_scope,
             "crawl_depth": new.crawl_depth,
             "discovered_via": new.discovered_via,
             "found_on_url_id": url_id,
