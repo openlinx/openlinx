@@ -37,10 +37,10 @@ The response headers must also be stored, without cookie values, because `page -
 - **Redirects:**
   - Followed hop by hop, by the engine. Every hop is a `urls` row with `redirect_location`/`redirect_url_id`, and a target keeps the Crawl Depth of its source.
   - `--max-redirects <n>` (default 10). Loops are marked with `in_redirect_loop`.
-  - A Seed that redirects within its registrable domain extends the Scope (whether v0.1 keeps it is an open question of the design). An off-site Seed redirect is a warning.
+  - A Seed that redirects within its registrable domain extends the Scope (whether v0.1 keeps it is the user's decision, still open in the design). An off-site Seed redirect is a warning.
   - A meta refresh stays a Link, never a redirect hop.
 - **Limits:** response bodies are read up to 20 MiB, before and after decoding (`body_truncated`, `parse_error = body_too_large`), and URLs longer than 2,000 characters are skipped (`url_too_long`).
-- **Compression:** gzip, deflate and br, decoded by the tool; zstd from v0.2 (the design's Open Questions settle the header's v0.1 value). The `content_encoding`, `size_bytes` and `transferred_bytes` columns record status and size checks for Resources.
+- **Compression:** gzip, deflate and br, decoded by the tool; zstd from v0.2, so v0.1 sends `Accept-Encoding: gzip, deflate, br`. The `content_encoding`, `size_bytes` and `transferred_bytes` columns record status and size checks for Resources.
 - **TLS trust:** certificates are verified with truststore (the OS trust store), falling back to certifi. A speed test decides the default path. Failures are `tls_error`.
 - **HTTP version:** one ALPN handshake per https origin gives `origins.http_version` = `http_2` or `http_1_1` (v0.2). In v0.1 the column exists and is NULL, and its description starts with `Filled from v0.2. `.
 - **The `response_headers` table:** one JSON row per URL with a response, keyed by `url_id`. Headers keep their received order and letter case, and `Set-Cookie` values are stored as `***`.

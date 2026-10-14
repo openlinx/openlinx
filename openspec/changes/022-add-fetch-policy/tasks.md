@@ -10,7 +10,7 @@ A slice that needs a new column, index or table adds it through `018`'s `public_
 
 An option and its setting are declared by the task that applies them (`020` D11, no inert option), each with `OptionMeta(setting="crawl.<key>")` and its key in `CrawlSettings`: `--user-agent` in 1.2, `--retries` in 3.2, `--timeout` in 3.5 and `--max-redirects` in 4.10.
 
-`response_headers` rows follow `020` D9 and D14: this change's handler returns them, and `spider.store.response_headers` writes them through the row writer it registers in `Hooks.row_writers`, with statements built once (`017` D9), both listed in `default_hooks()`.
+`response_headers` rows follow `020` D9 and D14: this change's handler returns them, and `spider.store.response_headers` writes them through the row writer it registers in `Hooks.row_writers`, with statements built once (`017` D9), both listed in `default_hooks()` (`spider.services.hooks`).
 
 **v0.1 and v0.2:** groups 1–8 are 022-min, in v0.1 (ROADMAP). Groups 9–12 are marked (v0.2) and wait for v0.2.
 
@@ -19,7 +19,7 @@ An option and its setting are declared by the task that applies them (`020` D11,
 Seams (docs/testing.md):
 - **[Pure]**: seam 4, pure-logic modules
 - **[HTTP]**: seam 3, the real crawler against the fixture site
-- **[3+6]**: crawl the fixture site, through `crawl_result` (`tests/support/crawling.py`, whose `FakeClock` makes backoff waits instant) or `crawled` (the CLI), then read the documented tables read-only
+- **[3+6]**: crawl the fixture site, through `crawl_result` (`tests/support/crawling.py`) or `crawled` (the CLI), both on the real clock, then read the documented tables read-only. A retry test there waits its real backoff (design, Test seams).
 - **[2]**: seam 2, a store module through the writer, with `replay_now(writer)` (`017` D7)
 - **[CLI]**: seam 1, `CliRunner`
 - **[Fake timing]**: `020`'s fake Fetcher plus `FakeClock`, through the context builder, for timing scenarios only
@@ -27,7 +27,7 @@ Seams (docs/testing.md):
 
 ## 1. Request identity and cookies
 
-- [ ] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` in `aiohttp_fetcher`, built from `spider.naming` and the tool's version (design Open Questions: the project URL).
+- [ ] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` in `aiohttp_fetcher`, built from `spider.naming` and the tool's version, with a `PROJECT_URL` constant next to `APP_NAME` (design D1).
 - [ ] 1.2 [HTTP] Drive "A custom user agent is used on every request": `--user-agent` and `crawl.user_agent`. Its robots.txt half comes after `020` task 10.4.
 - [ ] 1.3 [HTTP] **Guard:** "Cookies set by the site are not sent back". `020`'s Fetcher already has a `DummyCookieJar`, so the test may pass on its first run; it then shows its red by a mutation. `/` sets the cookie through the route's `headers`, and the request log shows the request for `/check`.
 - [ ] 1.4 Docs: document the user agent and cookies in `docs/crawling.md`.
@@ -65,7 +65,7 @@ Seams (docs/testing.md):
 - [ ] 4.5 [3+6] Drive "A redirect to an excluded URL is not followed".
 - [ ] 4.6 [3+6] Drive "A redirect to an External URL is checked", on `020`'s `fixture_hosts`.
 - [ ] 4.7 [Fixture] Let `fixture_hosts` take a site per name (design D9), test-first in `tests/fixture_site/test_hosts.py`.
-- [ ] 4.8 [3+6] Drive "A redirect to the www host stays inside the Scope": design D3, after `020` task 8.11. Design Open Questions ask whether v0.1 keeps it.
+- [ ] 4.8 [3+6] Drive "A redirect to the www host stays inside the Scope": design D3, after `020` task 8.11. The user decides whether v0.1 keeps it (design Open Questions).
 - [ ] 4.9 [CLI] Drive "A redirect to another site is reported". Done when: `seed_redirected_off_site` is declared.
 - [ ] 4.10 [3+6] Drive "The eleventh redirect is not followed": `--max-redirects` and `crawl.max_redirects`, the hop count walked back over `found_on_url_id` (design D2), on the fixture's `redirect_chain("/r", 11, "/r12")`, and writing the value `max_redirects`.
 - [ ] 4.11 [3+6] Drive "A loop of two URLs is marked": the `in_redirect_loop` column.
@@ -78,7 +78,7 @@ Seams (docs/testing.md):
 
 - [ ] 5.1 [3+6] Drive "A huge page is not parsed": the 20 MiB cap, and the `body_truncated` column, on the fixture's `LargeFile` with `content_type="text/html"`.
 - [ ] 5.2 [3+6] Drive "A very long URL is skipped": `ScopeRules.decide` gives `url_too_long` before its patterns (design D12).
-- [ ] 5.3 [HTTP] Drive "Requests accept compressed bodies": `auto_decompress=False` and an explicit `Accept-Encoding`, whose v0.1 value design Open Questions ask about.
+- [ ] 5.3 [HTTP] Drive "Requests accept compressed bodies": `auto_decompress=False` and an explicit `Accept-Encoding: gzip, deflate, br`.
 - [ ] 5.4 [Fixture] Serve a precompressed gzip file from a site folder with `Page(file=..., headers=[("Content-Encoding", "gzip")])`, test-first; add a raw-bytes route kind only if that cannot serve it (design D9).
 - [ ] 5.5 [3+6] Drive "A compressed Resource records both sizes", after `020` task 9.1: decoding in the tool, and the `content_encoding`, `size_bytes` and `transferred_bytes` columns. Done when: the 20 MiB cap applies to the decoded size too (`test_a_compressed_body_is_capped_after_decoding`, design Risks).
 - [ ] 5.6 [3+6] Drive "An image's size is recorded", after `020` task 9.1.
