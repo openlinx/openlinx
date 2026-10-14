@@ -34,7 +34,9 @@ def crawl(
     ],
     concurrency: Annotated[
         int,
-        typer.Option("--concurrency", help="The most requests in flight to one host."),
+        typer.Option(
+            "--concurrency", min=1, max=50, help="The most requests in flight to one host, 1 to 50."
+        ),
         OptionMeta(setting="crawl.concurrency"),
     ] = 5,
     exclude: Annotated[

@@ -6,7 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class CrawlSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    concurrency: int = Field(5, description="The most requests in flight to one host.")
+    concurrency: int = Field(
+        5, ge=1, le=50, description="The most requests in flight to one host, 1 to 50."
+    )
     exclude: list[str] = Field(
         [],
         description="Regular expressions of URLs that are never requested; each is searched "

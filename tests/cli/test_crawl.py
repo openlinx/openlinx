@@ -232,3 +232,21 @@ def test_an_invalid_exclude_pattern_is_rejected(temp_workspace: TempWorkspace) -
         error["details"],
         list(temp_workspace.home.rglob("*.sqlite")),
     ) == (2, "invalid_pattern", {"pattern": "("}, [])
+
+
+def test_a_concurrency_of_zero_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--concurrency", "0")
+    errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+
+    assert (result.exit_code, errors) == (2, ["invalid_value"])
+
+
+def test_a_concurrency_above_50_in_the_settings_file_is_refused(
+    temp_workspace: TempWorkspace,
+) -> None:
+    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nconcurrency = 51\n")
+
+    result = run_cli("crawl", "http://site.test/")
+    errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+
+    assert (result.exit_code, errors) == (3, ["settings_invalid"])
