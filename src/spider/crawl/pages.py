@@ -18,6 +18,7 @@ from spider.crawl.directives import (
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.headers import header_links
 from spider.crawl.links import DiscoveredLink, base_url, links_in_tree
+from spider.crawl.noscript import parse_html
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import DEFAULT_ROBOTS_TOKEN
@@ -82,13 +83,14 @@ class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
 def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettings) -> PreparedPage:
     """Decodes and parses once; the link extractor and later extractors share the tree."""
     decoded = decode_html(response.body, response.header("Content-Type"))
-    tree = LexborHTMLParser(decoded.text)
+    html = parse_html(decoded.text)
+    tree = html.tree
     is_internal = partial(_is_internal, settings.scope)
     # The header Links come first, as 030's ordinals count them (design D5).
     from_headers = response_links(url, response, settings.scope)
     from_document = tuple(
         links_in_tree(
-            tree,
+            html,
             base=base_url(tree, url, decoded.encoding),
             encoding=decoded.encoding,
             is_internal=is_internal,

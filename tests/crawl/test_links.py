@@ -298,6 +298,32 @@ def test_deeply_nested_html_gives_its_links() -> None:
             '<body><noscript><a href="/a">A</a><img src="/pixel.gif"></noscript></body>',
             [("hyperlink", "http://site.test/a"), ("image", "http://site.test/pixel.gif")],
         ),
+        (
+            '<a href="/1"></a><noscript><a href="/2"></a><link rel="icon" href="/i.ico">'
+            '<img src="/3"></noscript><a href="/4"></a>',
+            [
+                ("hyperlink", "http://site.test/1"),
+                ("hyperlink", "http://site.test/2"),
+                ("image", "http://site.test/3"),
+                ("hyperlink", "http://site.test/4"),
+            ],
+        ),
+        (
+            '<head><noscript><img src="/px.gif"></noscript><link rel="icon" href="/i.ico"></head>',
+            [("image", "http://site.test/px.gif"), ("misc", "http://site.test/i.ico")],
+        ),
+        (
+            '<head><noscript><base href="/other/"></noscript></head><a href="a"></a>',
+            [("hyperlink", "http://site.test/a")],
+        ),
+        # A page's own template holds placeholders that scripts fill in (design D5).
+        ('<template><a href="{{ url }}"></a></template>', []),
+        # Known edges, where a template ends later than a browser's text (design Risks).
+        ('<noscript><!-- </noscript> --><a href="/lost"></a>', []),
+        (
+            '<noscript><a href="/a"></a><noscript></noscript><a href="/lost"></a></noscript>',
+            [("hyperlink", "http://site.test/a")],
+        ),
     ],
 )
 def test_noscript_hides_head_metadata_but_not_the_links_of_the_body(
