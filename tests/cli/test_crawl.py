@@ -266,3 +266,26 @@ def test_no_check_external_records_an_external_url_as_skipped(
         "SELECT fetch_state, skip_reason FROM urls WHERE url = ?",
         ["http://other.test/"],
     ) == [("skipped", "external_not_checked")]
+
+
+def test_the_subdomains_shorthand_conflicts_with_a_subfolder_scope(
+    temp_workspace: TempWorkspace,
+) -> None:
+    result = run_cli("crawl", "http://site.test/blog/", "--subdomains", "--scope", "subfolder")
+    errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+
+    assert (result.exit_code, errors, list(temp_workspace.home.rglob("*.sqlite"))) == (
+        2,
+        ["option_conflict"],
+        [],
+    )
+
+
+def test_the_subdomains_shorthand_is_the_subdomains_scope(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SMALL_SITE)
+
+    config = json.loads(crawl_row(crawled(server.url("/"), "--subdomains"))["config"])
+
+    assert config["crawl"]["scope"] == "subdomains"

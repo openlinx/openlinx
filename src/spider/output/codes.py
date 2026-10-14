@@ -151,6 +151,12 @@ INVALID_URL = _declare(
     ExitCode.USAGE,
     "A Seed that is not a valid http or https URL; details.reason says why.",
 )
+OPTION_CONFLICT = _declare(
+    "option_conflict",
+    "error",
+    ExitCode.USAGE,
+    "Two flags that cannot be given together, such as --subdomains with another --scope.",
+)
 INVALID_PATTERN = _declare(
     "invalid_pattern",
     "error",

@@ -12,7 +12,8 @@ from spider.store.records import SkipReason
 if TYPE_CHECKING:
     from publicsuffixlist import PublicSuffixList
 
-type ScopeKind = Literal["host", "subdomains", "subfolder"]
+# A plain alias, not a type statement: Typer reads it as the choices of --scope.
+ScopeKind = Literal["host", "subdomains", "subfolder"]
 
 
 @dataclass(frozen=True, slots=True)

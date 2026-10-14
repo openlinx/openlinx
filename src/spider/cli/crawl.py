@@ -9,7 +9,10 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
+from spider.crawl.scope import ScopeKind
 from spider.naming import APP_NAME
+from spider.output.codes import OPTION_CONFLICT
+from spider.output.diagnostics import SpiderError
 from spider.output.writer import Format
 
 CRAWL = "crawl"
@@ -57,6 +60,19 @@ def crawl(
         ),
         OptionMeta(setting="crawl.follow_nofollow"),
     ] = False,
+    scope: Annotated[
+        ScopeKind,
+        typer.Option(
+            "--scope",
+            help="Which Internal URLs are followed: host (the Seed hosts), subdomains (every "
+            "host of their registrable domains) or subfolder (the Seed's folder).",
+        ),
+        OptionMeta(setting="crawl.scope"),
+    ] = "host",
+    subdomains: Annotated[
+        bool,
+        typer.Option("--subdomains", help="The same as --scope subdomains."),
+    ] = False,
     strip_params: Annotated[
         list[str] | None,
         typer.Option(
@@ -98,7 +114,21 @@ def crawl(
         workspace=workspace_dir,
         command_argv=[APP_NAME, *invocation.argv],
         secret_names=secret_names(ctx.command, invocation.settings_tables),
-        flags=setting_flags(ctx),
+        flags=_with_subdomains(setting_flags(ctx)) if subdomains else setting_flags(ctx),
     )
     plan = plan_crawl(request, invocation.settings_tables)
     return start_crawl(plan, SystemClock(), invocation.reporter, default_hooks()).to_json()
+
+
+def _with_subdomains(flags: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """--subdomains has no setting of its own: it is resolved into scope (design D11)."""
+    crawl_flags = flags.get("crawl", {})
+    scope = crawl_flags.get("scope", "subdomains")
+    if scope != "subdomains":
+        raise SpiderError(
+            OPTION_CONFLICT,
+            f"--subdomains means --scope subdomains, so it cannot be given with --scope {scope}.",
+            hint="Give --scope alone, or --subdomains alone.",
+            details={"options": ["--subdomains", "--scope"]},
+        )
+    return {**flags, "crawl": {**crawl_flags, "scope": "subdomains"}}

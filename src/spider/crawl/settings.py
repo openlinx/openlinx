@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from spider.crawl.scope import ScopeKind
+
 
 class CrawlSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -18,6 +20,11 @@ class CrawlSettings(BaseModel):
         False,
         description="Follow nofollow hyperlinks, and every hyperlink of a Page whose robots "
         "directives say nofollow, like any other hyperlink.",
+    )
+    scope: ScopeKind = Field(
+        "host",
+        description="Which Internal URLs are in the Scope: host (the Seed hosts), subdomains "
+        "(every host of their registrable domains) or subfolder (the Seed's folder).",
     )
     strip_params: list[str] = Field(
         [],
