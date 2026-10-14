@@ -1,7 +1,7 @@
 """The Issues of the Query Service (050-add-query-and-segments, querying; seam 2)."""
 
 from spider.rules.titles import TITLE_MISSING
-from spider.services.query import QueryRequest, issue_list
+from spider.services.query import QueryRequest, issue_detail, issue_list
 from spider.store.records import LATEST
 from tests.support.crawl_store import (
     UNDER_A,
@@ -73,3 +73,11 @@ def test_issues_of_a_running_crawl_are_computed_live(temp_workspace: TempWorkspa
         query(crawl_file, "SELECT count(*) FROM affected_urls"),
         [(item["rule_id"], item["affected_count"]) for item in found],
     ) == ([("running",)], [(0,)], [("title-missing", 1)])
+
+
+def test_a_rule_that_did_not_fire(temp_workspace: TempWorkspace) -> None:
+    crawl_store(temp_workspace, completed=True)
+
+    found = issue_detail(request(temp_workspace), "h1-missing")
+
+    assert (found.total, found.items) == (0, [])

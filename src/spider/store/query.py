@@ -4,11 +4,12 @@ store, 020-add-crawl-core D14)."""
 from collections.abc import Collection, Sequence
 from typing import Any
 
+import orjson
 from sqlalchemy import Connection, case, select
 
 from spider.rules.model import Rule
-from spider.store.issues import issues_in
-from spider.store.schema import rules
+from spider.store.issues import affected_urls_in, issues_in
+from spider.store.schema import rules, urls
 
 
 def ordered_issues(
@@ -43,3 +44,19 @@ def ordered_issues(
         )
     )
     return [dict(row._mapping) for row in connection.execute(ordered)]
+
+
+def affected_url_items(
+    connection: Connection, rule_id: str, catalogue: Sequence[Rule]
+) -> list[dict[str, Any]]:
+    """The Rule's Affected URLs as {url, detail}, in URL order."""
+    found = affected_urls_in(connection, rule_id, catalogue).subquery()
+    ordered = (
+        select(urls.c.url, found.c.detail)
+        .join_from(found, urls, urls.c.id == found.c.url_id)
+        .order_by(urls.c.url)
+    )
+    return [
+        {"url": url, "detail": None if detail is None else orjson.loads(detail)}
+        for url, detail in connection.execute(ordered)
+    ]

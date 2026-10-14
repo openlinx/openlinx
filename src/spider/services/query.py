@@ -8,7 +8,9 @@ from typing import get_args
 from spider.output.codes import INVALID_VALUE
 from spider.output.diagnostics import SpiderError
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
-from spider.store.records import IssueType, Priority, RuleCategory
+from spider.store.records import CrawlFile, IssueType, Priority, RuleCategory
+
+# Each function imports the store inside its body: sqlalchemy stays off the CLI's startup path.
 
 ISSUES = "issues"
 ISSUE_ITEM = ("rule_id", "category", "issue_type", "priority", "affected_count", "description")
@@ -71,15 +73,11 @@ def issue_list(
     cursor: str | None = None,
     fields: str | None = None,
 ) -> Page:
-    # Imported here: sqlalchemy stays off the CLI's startup path.
     from spider.rules.registry import RULES
     from spider.store.query import ordered_issues
     from spider.store.reading import reading
-    from spider.store.selection import resolve_crawl
-    from spider.workspace.discovery import resolve_workspace
 
-    workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
-    crawl_file = resolve_crawl(request.crawl, workspace=workspace, cwd=request.cwd)
+    crawl_file = _crawl_file(request)
     with reading(crawl_file.path) as connection:
         items = ordered_issues(
             connection,
@@ -102,3 +100,22 @@ def issue_list(
         fingerprint=fingerprint(ISSUES, selection),
         fields=select_fields(fields, ISSUE_FIELDS),
     )
+
+
+def issue_detail(request: QueryRequest, rule_id: str) -> Page:
+    """One Issue: its Rule's Affected URLs."""
+    from spider.rules.registry import RULES
+    from spider.store.query import affected_url_items
+    from spider.store.reading import reading
+
+    with reading(_crawl_file(request).path) as connection:
+        items = affected_url_items(connection, rule_id, RULES)
+    return Page(items, len(items), None)
+
+
+def _crawl_file(request: QueryRequest) -> CrawlFile:
+    from spider.store.selection import resolve_crawl
+    from spider.workspace.discovery import resolve_workspace
+
+    workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
+    return resolve_crawl(request.crawl, workspace=workspace, cwd=request.cwd)
