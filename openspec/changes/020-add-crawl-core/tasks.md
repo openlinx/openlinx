@@ -180,7 +180,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 6.4 Drive "External checks can be turned off" at seam 3.
 - [x] 6.5 Drive "An unknown host is a DNS error" at seam 3+6.
 - [x] 6.6 Docs: document External URL checks and the `fetch_error` codes in `docs/crawling.md`.
-- [ ] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
+- [x] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 - [ ] 6.8 PR #1 (design, Migration Plan): verify that the whole suite passes in CI on Windows, macOS and Linux with the coverage gate on the branch, then hand over to the manager, who pushes and opens PR #1. The change stays open, with groups 7–15 unticked. No option of `spider crawl` is inert at PR #1: each declared option has a test of its effect.
 
 ## 7. Robots directives and Link following (widening)

@@ -15,7 +15,7 @@ def test_an_external_url_is_checked(
     temp_workspace: TempWorkspace, fixture_hosts: StartHosts
 ) -> None:
     hosts = fixture_hosts(
-        Site(routes={"/": Page(body='<a href="http://other.test/page">Other</a>')}),
+        LINKS_TO_OTHER,
         Site(
             routes={
                 "/page": Page(body='<a href="http://other.test/deeper">Deeper</a>'),

@@ -105,7 +105,6 @@ def _fetch_error(error: Exception) -> FetchError:
 async def aiohttp_fetcher(
     clock: Clock, resolver: AbstractResolver | None = None
 ) -> AsyncIterator[AiohttpFetcher]:
-    """`resolver` is the DNS resolver hook of tests; without it, aiohttp's own resolves names."""
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(resolver=resolver),
         timeout=aiohttp.ClientTimeout(total=_REQUEST_DEADLINE_SECONDS),

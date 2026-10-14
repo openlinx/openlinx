@@ -11,7 +11,7 @@ spider crawl site.test
 spider crawl https://site.test/shop/ --concurrency 2
 ```
 
-The Crawl requests the Seed, reads the Links of each response it parses, follows the hyperlinks in its Scope and checks the others (see [External URLs](#external-urls)), Crawl Depth by Crawl Depth: every URL at one depth is done before any URL one deeper starts, and the URLs of a depth start in the order they were first recorded (`urls.id`), several at a time (see [Requests in flight](#requests-in-flight)). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its URL is in the Scope, its status is 2xx and its `Content-Type` is HTML (`text/html` or `application/xhtml+xml`); a PDF, an image, a response without a `Content-Type` or the response of an External URL is recorded but not parsed.
+The Crawl requests the Seed, reads the Links of each response it parses, follows the hyperlinks in its Scope and checks the others, unless they are skipped (see [External URLs](#external-urls)), Crawl Depth by Crawl Depth: every URL at one depth is done before any URL one deeper starts, and the URLs of a depth start in the order they were first recorded (`urls.id`), several at a time (see [Requests in flight](#requests-in-flight)). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its URL is in the Scope, its status is 2xx and its `Content-Type` is HTML (`text/html` or `application/xhtml+xml`); a PDF, an image, a response without a `Content-Type` or the response of an External URL is recorded but not parsed.
 
 ### Options and `[crawl]` settings
 
@@ -100,7 +100,7 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 | A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |
 | The URL's rows cannot be written | The URL alone is recorded, with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs found on it or its handlers' rows. This holds for a value the file refuses (a constraint, a value too big, a value that cannot be bound) and for an error of the tool's own row code; any other database error stops the Crawl, as above. |
 | The URL matches an `--exclude` pattern | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `excluded`, and no response columns. |
-| The URL is External, with `--no-check-external` | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `external_not_checked`. |
+| The URL is External, with `--no-check-external` | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `external_not_checked`; an External URL that an `--exclude` pattern matches is `excluded`. |
 
 Each of the three failures of the tool's own code is reported by one counted warning, written to stderr when it first occurs and kept once in the result's `warnings`, however many URLs it affects:
 

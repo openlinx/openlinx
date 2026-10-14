@@ -7,9 +7,9 @@ from pathlib import Path, PureWindowsPath
 import pytest
 
 from spider.cli.app import build_app
-from spider.crawl.hooks import default_hooks
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
+from spider.services.hooks import default_hooks
 from spider.store.records import SecretNames
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite

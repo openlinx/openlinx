@@ -9,8 +9,9 @@ import pytest
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, text
 
-from spider.crawl.hooks import Handler, Hooks, Pass, UrlResult, default_hooks
+from spider.crawl.hooks import Handler, Hooks, Pass, UrlResult
 from spider.crawl.pages import Extractor, PageInput
+from spider.services.hooks import default_hooks
 from spider.store.crawls import crawl_summary
 from spider.store.records import CrawlState
 from spider.store.writer import CrawlWriter, CrawlWriterReplayError

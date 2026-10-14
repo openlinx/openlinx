@@ -80,24 +80,22 @@ def record_seed(
     url: NormalizedUrl, *, is_internal: bool, in_scope: bool
 ) -> Callable[[Connection], int]:
     """A unit that records the Seed as queued, once, and returns its id."""
-    origins = origin_rows([(url, is_internal)])
+    row = {
+        "url": url,
+        "host": url_host(url),
+        "origin": url_origin(url),
+        "is_internal": is_internal,
+        "in_scope": in_scope,
+        "crawl_depth": 0,
+        "discovered_via": "seed",
+        "fetch_state": "queued",
+        "parsed": False,
+    }
+    origins = origin_rows([row])
 
     def unit(connection: Connection) -> int:
         record_origins(connection, origins)
-        connection.execute(
-            _INSERT_URL,
-            {
-                "url": url,
-                "host": url_host(url),
-                "origin": url_origin(url),
-                "is_internal": is_internal,
-                "in_scope": in_scope,
-                "crawl_depth": 0,
-                "discovered_via": "seed",
-                "fetch_state": "queued",
-                "parsed": False,
-            },
-        )
+        connection.execute(_INSERT_URL, row)
         url_id: int = connection.execute(_URL_ID, {"url": url}).scalar_one()
         return url_id
 
@@ -166,7 +164,7 @@ def record_fetched(
         }
         for new in fetched.discovered
     ]
-    origins = origin_rows((new.url, new.is_internal) for new in fetched.discovered)
+    origins = origin_rows(new_rows)
 
     def unit(connection: Connection) -> None:
         connection.execute(_FETCHED, values)

@@ -15,6 +15,14 @@ from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import ParseError
 
+_HTML_TYPES = frozenset({"text/html", "application/xhtml+xml"})
+
+
+def is_html_type(content_type: str | None) -> bool:
+    """The one rule of an HTML response, which 030's Page predicate imports (design D5)."""
+    media_type = (content_type or "").partition(";")[0]
+    return media_type.strip().lower() in _HTML_TYPES
+
 
 class PageInput(msgspec.Struct, frozen=True, kw_only=True):
     """What an extractor gets besides the tree; built in the process that parses the Page."""

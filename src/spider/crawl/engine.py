@@ -7,7 +7,7 @@ from typing import Any
 from spider.crawl.context import CrawlContext
 from spider.crawl.fetcher import FetchFailure, FetchResult, Request
 from spider.crawl.hooks import UrlResult
-from spider.crawl.pages import PreparedPage
+from spider.crawl.pages import PreparedPage, is_html_type
 from spider.crawl.politeness import RequestLimits
 from spider.crawl.scope import ScopeDecision, ScopeRules
 from spider.crawl.urls import NormalizedUrl, url_host
@@ -36,7 +36,6 @@ from spider.store.writer import CrawlWriterClosedError
 
 # Queued URLs read from the frontier at once.
 _FRONTIER_BATCH = 100
-_HTML_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 
 
 class _Outcomes:
@@ -191,8 +190,9 @@ def _skip_reason(context: CrawlContext, decision: ScopeDecision) -> SkipReason |
 async def _fetched(
     context: CrawlContext, queued: QueuedUrl, decision: ScopeDecision, response: FetchResult
 ) -> FetchedUrl:
+    content_type = response.header("Content-Type")
     # An External URL or one outside the Scope is checked, never parsed (design D5).
-    parsed = decision.in_scope and 200 <= response.status_code < 300 and _is_html(response)
+    parsed = decision.in_scope and 200 <= response.status_code < 300 and is_html_type(content_type)
     page = await context.pages.prepare(queued.url, response) if parsed else None
     discovered = () if page is None else _discovered(page, context.scope, queued.crawl_depth + 1)
     parse_error = None if page is None else page.parse_error
@@ -206,7 +206,6 @@ async def _fetched(
             ),
             queued.url,
         )
-    content_type = response.header("Content-Type")
     result = _result(
         queued,
         decision,
@@ -284,8 +283,3 @@ def _new_url(url: NormalizedUrl, decision: ScopeDecision, depth: int) -> NewUrl:
         is_internal=decision.is_internal,
         in_scope=decision.in_scope,
     )
-
-
-def _is_html(response: FetchResult) -> bool:
-    content_type = response.header("Content-Type") or ""
-    return content_type.partition(";")[0].strip().lower() in _HTML_TYPES

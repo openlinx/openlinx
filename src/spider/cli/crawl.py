@@ -67,8 +67,8 @@ def crawl(
     the Workspace. Progress events go to stderr, and the result to stdout when the Crawl ends.
     """
     # Imported here: the crawler stays off the CLI's startup path.
-    from spider.crawl.hooks import default_hooks
     from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
+    from spider.services.hooks import default_hooks
 
     invocation: Invocation = ctx.obj
     request = CrawlRequest(
