@@ -7,6 +7,7 @@ from spider.rules.titles import TITLE_MISSING
 from spider.services.query import QueryRequest, issue_list
 from spider.store.records import LATEST, IssueType, Priority
 from tests.support.crawl_store import crawl_store
+from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
 
@@ -92,3 +93,15 @@ def test_item_fields(temp_workspace: TempWorkspace) -> None:
             "description": TITLE_MISSING.description,
         }
     ]
+
+
+def test_issues_of_a_running_crawl_are_computed_live(temp_workspace: TempWorkspace) -> None:
+    crawl_file = crawl_store(temp_workspace, pages={"https://example.com/a": {"title_count": 0}})
+
+    found = issue_list(request(temp_workspace))
+
+    assert (
+        query(crawl_file, "SELECT state FROM crawl"),
+        query(crawl_file, "SELECT count(*) FROM affected_urls"),
+        [(item["rule_id"], item["affected_count"]) for item in found],
+    ) == ([("running",)], [(0,)], [("title-missing", 1)])
