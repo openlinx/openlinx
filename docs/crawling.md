@@ -221,7 +221,7 @@ Every URL belongs to an origin: its scheme, host and port, such as `https://site
 
 `--subdomains` with another `--scope` value, such as `--subdomains --scope subfolder`, is rejected with `option_conflict`. `scope` is also a key of the settings file's `[crawl]` table; `--subdomains` has none.
 
-The Seed's folder is its path up to and including its last `/`: the Seed `http://site.test/blog/post-1` has the folder `/blog/`. A Seed whose folder would be `/`, such as `http://site.test/blog` without its trailing slash, is rejected with `subfolder_is_root`, whose hint gives the Seed with the slash.
+The Seed's folder is its path up to and including its last `/`: the Seed `http://site.test/blog/post-1` has the folder `/blog/`. A Seed whose folder would be `/`, such as `http://site.test/blog` without its trailing slash, is rejected with `subfolder_is_root`, whose hint gives the Seed with the slash. A root Seed, such as `http://site.test/`, is rejected too, since its folder is the whole site.
 
 ### Include and exclude patterns
 

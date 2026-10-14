@@ -157,6 +157,13 @@ OPTION_CONFLICT = _declare(
     ExitCode.USAGE,
     "Two flags that cannot be given together, such as --subdomains with another --scope.",
 )
+SUBFOLDER_IS_ROOT = _declare(
+    "subfolder_is_root",
+    "error",
+    ExitCode.USAGE,
+    "--scope subfolder with a Seed whose folder is the root, such as a folder's URL without its "
+    "trailing slash; the hint gives the Seed with it.",
+)
 INVALID_PATTERN = _declare(
     "invalid_pattern",
     "error",

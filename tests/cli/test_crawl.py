@@ -1,10 +1,11 @@
 """`spider crawl` (020-add-crawl-core, crawling)."""
 
 import json
+from typing import Any
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
-from tests.support.cli import run_cli
+from tests.support.cli import CliResult, run_cli
 from tests.support.crawling import crawled
 from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
@@ -289,3 +290,26 @@ def test_the_subdomains_shorthand_is_the_subdomains_scope(
     config = json.loads(crawl_row(crawled(server.url("/"), "--subdomains"))["config"])
 
     assert config["crawl"]["scope"] == "subdomains"
+
+
+def _errors(result: CliResult) -> list[dict[str, Any]]:
+    return [line for line in result.stderr_json_lines() if line.get("level") == "error"]
+
+
+def test_a_seed_without_its_trailing_slash_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/blog", "--scope", "subfolder")
+
+    assert (
+        result.exit_code,
+        [(error["code"], "http://site.test/blog/" in error["hint"]) for error in _errors(result)],
+    ) == (2, [("subfolder_is_root", True)])
+
+
+def test_a_root_seed_with_a_subfolder_scope_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--scope", "subfolder")
+
+    assert (
+        result.exit_code,
+        [(error["code"], "--scope subfolder" in error["hint"]) for error in _errors(result)],
+        list(temp_workspace.home.rglob("*.sqlite")),
+    ) == (2, [("subfolder_is_root", True)], [])

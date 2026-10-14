@@ -27,9 +27,11 @@ from spider.crawl.urls import (
     NormalizedUrl,
     parse_seed,
     strip_params_pattern,
+    url_origin,
+    url_path,
 )
 from spider.crawl.warning_log import WarningLog
-from spider.output.codes import INVALID_PATTERN, INVALID_URL
+from spider.output.codes import INVALID_PATTERN, INVALID_URL, SUBFOLDER_IS_ROOT
 from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
@@ -142,6 +144,8 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     strip_params = strip_params_pattern(crawl_settings.strip_params)
     seed = _seed(request.seed, strip_params)
     scope = scope_rules(seed, scope=crawl_settings.scope, exclude=_patterns(crawl_settings.exclude))
+    if scope.folder == "/":
+        raise _subfolder_is_root(seed)
     return CrawlPlan(
         seed=seed,
         settings=crawl_settings,
@@ -275,6 +279,24 @@ async def _crawl_context(
     finally:
         # 026's pool shuts its workers down here, however the Crawl ended.
         await executor.close()
+
+
+def _subfolder_is_root(seed: NormalizedUrl) -> SpiderError:
+    path = url_path(seed)
+    if path == "/":
+        hint = (
+            f"Give a Seed inside a folder, such as {url_origin(seed)}/blog/, or leave out "
+            "--scope subfolder to crawl the whole site."
+        )
+    else:
+        hint = f"Give the folder's URL with its trailing slash: {url_origin(seed)}{path}/."
+    return SpiderError(
+        SUBFOLDER_IS_ROOT,
+        f"The folder of the Seed {seed} is the root, so --scope subfolder would crawl the "
+        "whole site.",
+        hint=hint,
+        details={"seed": seed},
+    )
 
 
 def _invalid_seed(text: str, reason: InvalidUrlReason) -> SpiderError:
