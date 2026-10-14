@@ -59,6 +59,9 @@ def _header_references(name: str, value: str) -> Iterator[tuple[LinkType, str, t
             for param in _LINK_PARAM.finditer(link_value[2]):
                 # RFC 8288: a parameter after the first of its name is ignored.
                 params.setdefault(param[1].lower(), _unquoted(param[2] or ""))
+            # RFC 8288: an anchor makes the link-value describe another resource.
+            if "anchor" in params:
+                continue
             rel = rel_tokens(params.get("rel", ""))
             link_type = _header_link_type(rel, params)
             if link_type is not None:

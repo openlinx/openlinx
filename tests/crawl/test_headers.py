@@ -75,6 +75,11 @@ def test_a_refresh_names_its_target_as_html_reads_it(content: str, url: str | No
         # RFC 8288: a parameter after the first of its name is ignored.
         ([("Link", "</c>; rel=canonical; rel=next")], [("canonical", "http://site.test/c", ())]),
         ([("Link", "garbage, <mailto:x@site.test>; rel=canonical")], []),
+        # RFC 8288: an anchor makes the link-value describe another resource.
+        (
+            [("Link", '</b>; rel=canonical; anchor="/a", </c>; rel=canonical')],
+            [("canonical", "http://site.test/c", ())],
+        ),
         (
             [("Refresh", "0;url=/r"), ("X-Other", "<x>"), ("Link", "</c>; rel=canonical")],
             [("http_refresh", "http://site.test/r", ()), ("canonical", "http://site.test/c", ())],
@@ -118,6 +123,7 @@ _HEADER_PIECES = st.sampled_from(
         "; rel=next",
         "; hreflang=",
         '; title="x, y"',
+        '; anchor="/a"',
         ";",
         ",",
         "=",
