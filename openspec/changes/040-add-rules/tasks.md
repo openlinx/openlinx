@@ -56,7 +56,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 3.13 Drive "A Crawl without a final pass is read live" at seam 2: the path chosen by the Crawl State. `resume` comes with `060`, so the test calls the pass, then writes `running` → `stopped` → `running` → `failed` with `020`'s `record_state`, which its transitions allow.
 - [x] 3.14 Drive "Live and materialised Issues agree" at seam 3+6.
 - [x] 3.15 Drive "Disabled Rule produces no Issue" at seam 3+6.
-- [ ] 3.16 **Guard:** "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2). It passes at once; red by mutation: the rejected `parse_error IS NULL` filter.
+- [x] 3.16 **Guard:** "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2). It passes at once; red by mutation: the rejected `parse_error IS NULL` filter.
 - [ ] 3.17 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` over a crawl file, and when Issues are live or materialised; the `reproduce_sql` field joins the item fields it lists.
 - [ ] 3.18 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 

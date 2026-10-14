@@ -11,7 +11,7 @@ from spider.rules.settings import RulesSettings
 from spider.services.rules import rule_rows
 from spider.store.page_records import PageRow
 from spider.store.pages import write_page
-from spider.store.records import FetchedUrl
+from spider.store.records import FetchedUrl, ParseError
 from spider.store.urls import record_fetched, record_seed
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
@@ -22,10 +22,15 @@ PAGE_URL = NormalizedUrl("https://site.test/")
 
 
 def crawl_with_page(
-    temp_workspace: TempWorkspace, *, disabled: Collection[str] = (), **page_data: Any
+    temp_workspace: TempWorkspace,
+    *,
+    disabled: Collection[str] = (),
+    parse_error: ParseError | None = None,
+    **page_data: Any,
 ) -> tuple[Path, int]:
     """A crawl file and the URL id of its one analysed Page, with these Page data columns,
-    whose rules table marks the Rules named in `disabled` off.
+    whose rules table marks the Rules named in `disabled` off; `extractor_error` as
+    `parse_error` makes it a Page on which an extractor failed.
 
     The rows go through the store's own units, as a Crawl writes them: the Seed, then its
     HTML response with its Page row.
@@ -43,6 +48,7 @@ def crawl_with_page(
             fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
             response_time_ms=1,
             parsed=True,
+            parse_error=parse_error,
             rows=(page,),
         )
         writer.run(record_fetched(fetched, {PageRow: write_page}))
