@@ -190,7 +190,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 7.3 Drive "A header for the robots user-agent token applies" at seam 4.
 - [x] 7.4 Drive "none means noindex and nofollow" at seam 4.
 - [x] 7.5 Drive "A directive with a value is not a user-agent prefix" at seam 4.
-- [ ] 7.6 **Guard:** "The robots directives parser accepts any values", as a hypothesis property at seam 4.
+- [x] 7.6 **Guard:** "The robots directives parser accepts any values", as a hypothesis property at seam 4.
 - [ ] 7.7 Drive "A meta refresh target is followed" at seam 3.
 - [ ] 7.8 Drive "amphtml targets are not requested" at seam 3+6.
 - [ ] 7.9 Drive "A canonical in an HTTP header is followed" and "An HTTP Refresh target is followed" at seam 3, a pair. Done when: the HTTP `Link` and `Refresh` headers of in-Scope 2xx responses are read, parsed or not.

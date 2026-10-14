@@ -1,5 +1,7 @@
 """The robots directives parser (020-add-crawl-core D6; seam 4)."""
 
+from hypothesis import given
+from hypothesis import strategies as st
 from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.directives import RobotsDirectives, meta_robots_contents, robots_directives
@@ -56,3 +58,37 @@ def test_a_directive_with_a_value_is_not_a_user_agent_prefix() -> None:
     directives = robots_directives((), (header,), DEFAULT_ROBOTS_TOKEN)
 
     assert directives.x_robots_tag_noindex is True
+
+
+_PIECES = st.sampled_from(
+    [
+        "noindex",
+        "NOFOLLOW",
+        "none",
+        ",",
+        ", ",
+        ":",
+        " : ",
+        "googlebot:",
+        f"{DEFAULT_ROBOTS_TOKEN}:",
+        "unavailable_after:",
+        "max-snippet:",
+        "\t",
+        "\x00",
+        "\u00a0",
+        "\ud800",
+    ]
+)
+_VALUES = st.lists(_PIECES | st.text(max_size=8)).map("".join)
+
+
+@given(st.lists(_VALUES), st.lists(_VALUES), st.text() | _PIECES | st.just(DEFAULT_ROBOTS_TOKEN))
+def test_the_robots_directives_parser_accepts_any_values(
+    meta_contents: list[str], header_values: list[str], token: str
+) -> None:
+    directives = robots_directives(meta_contents, header_values, token)
+
+    assert (directives.meta_robots is None, directives.x_robots_tag is None) == (
+        not meta_contents,
+        not header_values,
+    )
