@@ -3,6 +3,7 @@
 import asyncio
 import sqlite3
 import threading
+import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
@@ -17,7 +18,12 @@ from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect
 from spider.store.reading import reading
 from spider.store.schema import seeds
-from spider.store.writer import CrawlWriter, CrawlWriterClosedError, CrawlWriterReplayError
+from spider.store.writer import (
+    CLOSE_CHECKPOINT_BUSY_SECONDS,
+    CrawlWriter,
+    CrawlWriterClosedError,
+    CrawlWriterReplayError,
+)
 from tests.support.clock import FakeClock
 from tests.support.crawls import (
     crawl_without_seeds,
@@ -975,3 +981,28 @@ def test_the_writer_s_connection_settings_in_rollback_journal_mode(
         settings = writer.run(connection_settings)
 
     assert (journal, settings) == ("delete", (2, -65536, 0))
+
+
+@pytest.mark.slow
+def test_a_read_open_while_the_writer_closes_holds_it_back_a_second_at_most(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+    count = select(func.count()).select_from(seeds)
+
+    with reading(crawl.path) as connection:
+        read_before = connection.execute(count).scalar_one()
+        writer = CrawlWriter(crawl.path, FakeClock())
+        writer.run(insert_seed(2, "https://example.com/two"))
+        started = time.monotonic()
+        writer.close()
+        closing_took = time.monotonic() - started
+        read_after = connection.execute(count).scalar_one()
+
+    # A busy checkpoint loses nothing: the WAL stays for the reads that open next.
+    assert (
+        closing_took < CLOSE_CHECKPOINT_BUSY_SECONDS + 1,
+        read_before,
+        read_after,
+        query(crawl.path, "SELECT count(*) FROM seeds"),
+    ) == (True, 1, 1, [(2,)])

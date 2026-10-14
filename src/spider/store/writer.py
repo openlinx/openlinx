@@ -36,6 +36,9 @@ COMMIT_AFTER_SECONDS = 1.0
 IDLE_CHECK_SECONDS = 0.05
 # How often a waiting caller checks that the writer thread is still there.
 ALIVE_CHECK_SECONDS = 0.5
+# How long the closing checkpoint waits for open reads: the last connection to close
+# checkpoints anyway, so a busy one only leaves the WAL to a read that is still open.
+CLOSE_CHECKPOINT_BUSY_SECONDS = 1.0
 CLOSED = "The crawl writer is closed."
 
 
@@ -266,9 +269,7 @@ class CrawlWriter:
         if isinstance(job.work, _Control):
             self._commit(connection)
             if job.work is _Control.CLOSE:
-                # Readers that stay open would otherwise keep the WAL from shrinking. Run on the
-                # driver's connection: through SQLAlchemy it would begin a transaction first.
-                _driver(connection).execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                _checkpoint(_driver(connection))
             job.done.set_result(None)
             return job.work is _Control.FLUSH
         if not connection.in_transaction():
@@ -375,6 +376,18 @@ def _check_writable(connection: Connection) -> None:
     transaction = connection.begin()
     connection.execute(update(crawl).values(id=crawl.c.id))
     transaction.rollback()
+
+
+def _checkpoint(driver: sqlite3.Connection) -> None:
+    # Readers that stay open would otherwise keep the WAL from shrinking. Run on the driver's
+    # connection: through SQLAlchemy it would begin a transaction first. TRUNCATE, not PASSIVE,
+    # which never truncates, so a long-lived reader would keep a large WAL.
+    (busy_ms,) = driver.execute("PRAGMA busy_timeout").fetchone()
+    driver.execute(f"PRAGMA busy_timeout = {int(CLOSE_CHECKPOINT_BUSY_SECONDS * 1000)}")
+    try:
+        driver.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        driver.execute(f"PRAGMA busy_timeout = {busy_ms}")
 
 
 def _driver(connection: Connection) -> sqlite3.Connection:
