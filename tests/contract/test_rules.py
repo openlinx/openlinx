@@ -42,3 +42,19 @@ def test_a_view_that_declares_other_columns_than_its_query_is_refused() -> None:
         )
 
     assert "rule_ids" not in metadata.tables
+
+
+def test_keys_of_the_rule_tables() -> None:
+    keys = {}
+    for table in ("rules", "affected_urls"):
+        (item,) = run_cli("schema", table).json()["items"]
+        keys[table] = [
+            (column["name"], column["type"], column["references"])
+            for column in item["columns"]
+            if column["primary_key"]
+        ]
+
+    assert keys == {
+        "rules": [("id", "TEXT", None)],
+        "affected_urls": [("rule_id", "TEXT", "rules.id"), ("url_id", "INTEGER", "urls.id")],
+    }
