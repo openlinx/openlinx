@@ -569,7 +569,7 @@ The Crawl SHALL have no URL limit by default. With `--max-urls <n>`, the Crawl S
 - the requests a continued Crawl recorded before SHALL count
 - robots.txt requests SHALL NOT count
 
-A value below 1 SHALL be rejected with exit code 2 and error code `invalid_value`. When the limit is reached:
+A value below 1 SHALL be rejected with exit code 2 and error code `invalid_value`. The limit is reached when it refuses a request: a Crawl that requests n URLs and has none left SHALL end `completed`, since `stopped` would promise a resume with nothing to do. When the limit is reached:
 - no new request SHALL start
 - the Crawl SHALL end with the Crawl State `stopped` and `crawl.stop_reason` = `max_urls`, and SHALL be resumable
 - URLs not yet requested SHALL stay `queued`
