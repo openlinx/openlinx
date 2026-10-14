@@ -412,6 +412,25 @@ pages = public_table(
         comment="The length of meta_description_1 in Unicode code points; NULL exactly when "
         "meta_description_1 is.",
     ),
+    Column(
+        "meta_description_2",
+        Text,
+        comment="The content of the Page's second meta description, whitespace-normalised, the "
+        "empty string for one without content; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "meta_description_2_length",
+        Integer,
+        comment="The length of meta_description_2 in Unicode code points; NULL exactly when "
+        "meta_description_2 is.",
+    ),
+    Column(
+        "meta_description_count",
+        Integer,
+        comment="The number of meta elements named description without an svg, math or "
+        "noscript ancestor; NULL when the Page is not analysed or its Page extractor failed.",
+    ),
     comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
     "an HTML document, whatever its status code.",
     change=30,

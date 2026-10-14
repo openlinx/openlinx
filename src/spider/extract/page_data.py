@@ -17,20 +17,27 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     title_count: int
     meta_description_1: str | None
     meta_description_1_length: int | None
+    meta_description_2: str | None
+    meta_description_2_length: int | None
+    meta_description_count: int
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
     titles = [normalized(node.text()) for node in _page_nodes(tree, "title")]
     first, second = _nth(titles, 0), _nth(titles, 1)
-    description = _nth(_meta_contents(tree, "description"), 0)
+    descriptions = _meta_contents(tree, "description")
+    description_1, description_2 = _nth(descriptions, 0), _nth(descriptions, 1)
     return PageData(
         title_1=first,
         title_1_length=_length(first),
         title_2=second,
         title_2_length=_length(second),
         title_count=len(titles),
-        meta_description_1=description,
-        meta_description_1_length=_length(description),
+        meta_description_1=description_1,
+        meta_description_1_length=_length(description_1),
+        meta_description_2=description_2,
+        meta_description_2_length=_length(description_2),
+        meta_description_count=len(descriptions),
     )
 
 

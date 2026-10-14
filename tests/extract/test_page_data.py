@@ -80,6 +80,16 @@ def test_a_meta_description_in_noscript_is_ignored() -> None:
     assert row.meta_description_1 == "Main"
 
 
+def test_multiple_meta_descriptions() -> None:
+    row = page_row('<meta name="description" content="A"><meta name="description" content="B">')
+
+    assert (
+        row.meta_description_count,
+        row.meta_description_2,
+        row.meta_description_2_length,
+    ) == (2, "B", 1)
+
+
 # Fragments that build the documents a parser repairs: unclosed, nested in foreign content,
 # commented out, NUL and stray markup.
 _FRAGMENTS = st.sampled_from(
