@@ -42,6 +42,7 @@ def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
         },
         secret_names=SecretNames(),
         journal_setting="auto",
+        section_crawl=False,
     )
 
     crawl = create_crawl(request, FakeClock(start=STARTED_AT), Collected(), scripted_choice("k3f9"))

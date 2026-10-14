@@ -162,7 +162,7 @@ SUBFOLDER_IS_ROOT = _declare(
     "error",
     ExitCode.USAGE,
     "--scope subfolder with a Seed whose folder is the root, such as a folder's URL without its "
-    "trailing slash; the hint gives the Seed with it.",
+    "trailing slash; details.suggested_seed holds the Seed with it, or null for a root Seed.",
 )
 INVALID_PATTERN = _declare(
     "invalid_pattern",

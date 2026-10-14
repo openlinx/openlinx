@@ -49,6 +49,7 @@ def new_crawl(workspace: Workspace) -> NewCrawl:
         },
         secret_names=SecretNames(),
         journal_setting="auto",
+        section_crawl=False,
     )
 
 

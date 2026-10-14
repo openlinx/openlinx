@@ -129,7 +129,7 @@ def test_a_www_seed_whose_canonical_names_the_apex_is_reported(
 
     assert (
         [
-            (warning.code, "http://site.test/" in (warning.hint or ""))
+            (warning.code, "http://site.test/ " in (warning.hint or ""))
             for warning in result.warnings
         ],
         query(
@@ -159,6 +159,15 @@ def test_a_www_seed_whose_links_stay_on_www_is_not_reported(
 
     result = crawl_result("http://www.site.test/", resolver=hosts.resolver)
 
-    assert [
-        warning.code for warning in result.warnings if warning.code == "seed_base_mismatch"
-    ] == []
+    # The parsed rows prove the Seed's Page was read, so no warning is no vacuous pass.
+    assert (
+        [warning.code for warning in result.warnings if warning.code == "seed_base_mismatch"],
+        query(result.crawl_file, "SELECT url, parsed FROM urls ORDER BY id"),
+    ) == (
+        [],
+        [
+            ("http://www.site.test/", 1),
+            ("http://www.site.test/a", 1),
+            ("http://www.site.test/b", 1),
+        ],
+    )

@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from spider.crawl.scope import ScopeKind
+from spider.store.records import ScopeKind
 
 
 class CrawlSettings(BaseModel):

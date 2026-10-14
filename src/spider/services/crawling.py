@@ -313,19 +313,21 @@ def _seed_out_of_scope(seed: NormalizedUrl, decision: ScopeDecision) -> SpiderEr
 
 def _subfolder_is_root(seed: NormalizedUrl) -> SpiderError:
     path = url_path(seed)
+    suggested: str | None = None
     if path == "/":
         hint = (
             f"Give a Seed inside a folder, such as {url_origin(seed)}/blog/, or leave out "
             "--scope subfolder to crawl the whole site."
         )
     else:
-        hint = f"Give the folder's URL with its trailing slash: {url_origin(seed)}{path}/."
+        suggested = f"{url_origin(seed)}{path}/"
+        hint = f"Give {suggested} as the Seed, the folder's URL with its trailing slash."
     return SpiderError(
         SUBFOLDER_IS_ROOT,
         f"The folder of the Seed {seed} is the root, so --scope subfolder would crawl the "
         "whole site.",
         hint=hint,
-        details={"seed": seed},
+        details={"seed": seed, "suggested_seed": suggested},
     )
 
 

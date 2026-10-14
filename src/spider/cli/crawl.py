@@ -9,11 +9,11 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
-from spider.crawl.scope import ScopeKind
 from spider.naming import APP_NAME
 from spider.output.codes import OPTION_CONFLICT
 from spider.output.diagnostics import SpiderError
 from spider.output.writer import Format
+from spider.store.records import ScopeKind
 
 CRAWL = "crawl"
 

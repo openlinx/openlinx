@@ -301,8 +301,15 @@ def test_a_seed_without_its_trailing_slash_is_rejected(temp_workspace: TempWorks
 
     assert (
         result.exit_code,
-        [(error["code"], "http://site.test/blog/" in error["hint"]) for error in _errors(result)],
-    ) == (2, [("subfolder_is_root", True)])
+        [
+            (
+                error["code"],
+                error["details"]["suggested_seed"],
+                "http://site.test/blog/ " in error["hint"],
+            )
+            for error in _errors(result)
+        ],
+    ) == (2, [("subfolder_is_root", "http://site.test/blog/", True)])
 
 
 def test_a_root_seed_with_a_subfolder_scope_is_rejected(temp_workspace: TempWorkspace) -> None:
@@ -310,9 +317,16 @@ def test_a_root_seed_with_a_subfolder_scope_is_rejected(temp_workspace: TempWork
 
     assert (
         result.exit_code,
-        [(error["code"], "--scope subfolder" in error["hint"]) for error in _errors(result)],
+        [
+            (
+                error["code"],
+                error["details"]["suggested_seed"],
+                "--scope subfolder" in error["hint"],
+            )
+            for error in _errors(result)
+        ],
         list(temp_workspace.home.rglob("*.sqlite")),
-    ) == (2, [("subfolder_is_root", True)], [])
+    ) == (2, [("subfolder_is_root", None, True)], [])
 
 
 def test_an_invalid_pattern_is_rejected(temp_workspace: TempWorkspace) -> None:

@@ -5,18 +5,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 from ipaddress import IPv4Address
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING
 
 from spider.crawl.urls import NormalizedUrl, url_host, url_path, without_www
-from spider.store.records import SkipReason
+from spider.store.records import RecordedScope, ScopeKind, SkipReason
 
 if TYPE_CHECKING:
     from publicsuffixlist import PublicSuffixList
 
     from spider.crawl.links import DiscoveredLink
-
-# A plain alias, not a type statement: Typer reads it as the choices of --scope.
-ScopeKind = Literal["host", "subdomains", "subfolder"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +39,25 @@ class ScopeRules:
         # --exclude alone narrows a whole-site Crawl; it makes no Section Crawl.
         return self.folder is not None or bool(self.include)
 
-    def to_json(self) -> dict[str, Any]:
+    @classmethod
+    def from_json(cls, recorded: RecordedScope) -> "ScopeRules":
+        """The rules crawl.scope was recorded from, for the continue (design D1)."""
+        hosts = recorded["hosts"]
+        return cls(
+            # The subdomains record lists registrable domains, or the Seed host when it has none.
+            seed_hosts=tuple(hosts),
+            mode=recorded["mode"],
+            registrable_domains=frozenset(
+                host for host in hosts if _registrable_domain(host) == host
+            )
+            if recorded["mode"] == "subdomains"
+            else frozenset(),
+            folder=recorded["folder"],
+            include=tuple(re.compile(pattern) for pattern in recorded["include"]),
+            exclude=tuple(re.compile(pattern) for pattern in recorded["exclude"]),
+        )
+
+    def to_json(self) -> RecordedScope:
         """As crawl.scope records it (design D18)."""
         return {
             "mode": self.mode,
@@ -124,30 +139,28 @@ def _is_ipv4(host: str) -> bool:
 def apex_seed_named_by_page(
     seed: NormalizedUrl, links: Iterable["DiscoveredLink"], rules: ScopeRules
 ) -> NormalizedUrl | None:
-    """The Seed on its apex host, when the Seed is www. plus a registrable domain and its Page
-    names the apex outside the Scope: by its canonical, or by more hyperlinks than to the
-    Seed's host (D4)."""
+    """The Seed on its apex host, when the Seed is www. plus a registrable domain, its Page names
+    the apex by its first canonical to either host or by more hyperlinks than to the Seed's
+    host, and the Scope leaves that Seed out (D4)."""
     host = _without_trailing_dot(url_host(seed))
     apex = host.removeprefix("www.")
     if apex == host or _registrable_domain(apex) != apex:
         return None
     apex_seed = without_www(seed)
-    named = _named_apex_url(links, host, apex, apex_seed)
-    # The warning says the Crawl may miss the site, which is false when the Scope holds it.
-    if named is None or rules.decide(named).in_scope:
+    # The warning says the apex part of the site is outside the Crawl: not so when it is in.
+    if not _names_apex(links, host, apex) or rules.decide(apex_seed).in_scope:
         return None
     return apex_seed
 
 
-def _named_apex_url(
-    links: Iterable["DiscoveredLink"], host: str, apex: str, apex_seed: NormalizedUrl
-) -> NormalizedUrl | None:
+def _names_apex(links: Iterable["DiscoveredLink"], host: str, apex: str) -> bool:
     to_apex = to_seed_host = 0
     for link in links:
         target_host = _without_trailing_dot(url_host(link.target))
-        if link.type == "canonical" and target_host == apex:
-            return link.target
+        # The first canonical to either host is the Page's own word on which one is the site.
+        if link.type == "canonical" and target_host in (apex, host):
+            return target_host == apex
         if link.type == "hyperlink":
             to_apex += target_host == apex
             to_seed_host += target_host == host
-    return apex_seed if to_apex > to_seed_host else None
+    return to_apex > to_seed_host

@@ -274,7 +274,7 @@ def _warn_of_seed_base_mismatch(
                 SEED_BASE_MISMATCH,
                 f"The Seed {seed} names its apex host as the site: its Page links there by its "
                 "canonical or by most of its hyperlinks, so the Crawl may miss most of the site.",
-                hint=f"To crawl the site the Seed names, give the Seed {apex_seed}.",
+                hint=f"Give {apex_seed} as the Seed to crawl the site its Page names.",
                 details={"seed": seed, "apex_seed": apex_seed},
             )
         )
