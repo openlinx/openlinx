@@ -84,6 +84,17 @@ def crawl(
         ),
         OptionMeta(setting="crawl.strip_params"),
     ] = None,
+    include: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--include",
+            help="A regular expression, searched for in each normalised URL; when given, an "
+            "Internal URL that matches no include pattern is checked but not followed. Give it "
+            "more than once for several patterns.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.include"),
+    ] = None,
     exclude: Annotated[
         list[str] | None,
         typer.Option(

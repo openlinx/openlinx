@@ -143,7 +143,12 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     crawl_settings = settings.table(CrawlSettings)
     strip_params = strip_params_pattern(crawl_settings.strip_params)
     seed = _seed(request.seed, strip_params)
-    scope = scope_rules(seed, scope=crawl_settings.scope, exclude=_patterns(crawl_settings.exclude))
+    scope = scope_rules(
+        seed,
+        scope=crawl_settings.scope,
+        include=_patterns(crawl_settings.include),
+        exclude=_patterns(crawl_settings.exclude),
+    )
     if scope.folder == "/":
         raise _subfolder_is_root(seed)
     return CrawlPlan(

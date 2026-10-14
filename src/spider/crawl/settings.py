@@ -31,6 +31,11 @@ class CrawlSettings(BaseModel):
         description="Glob patterns of query parameter names, comma-separated, removed from the "
         "Seed and every discovered URL before it is recorded or requested.",
     )
+    include: list[str] = Field(
+        [],
+        description="Regular expressions of Internal URLs in the Scope; when given, a URL that "
+        "matches none is checked but not followed. Each is searched for in the normalised URL.",
+    )
     exclude: list[str] = Field(
         [],
         description="Regular expressions of URLs that are never requested; each is searched "

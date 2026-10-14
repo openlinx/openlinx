@@ -49,3 +49,24 @@ def test_pages_outside_the_folder_are_checked_but_not_followed(
         ),
         query(crawl_file, "SELECT id FROM urls WHERE url = ?", [server.url("/shop/item")]),
     ) == ([("fetched", 0)], [])
+
+
+def test_a_url_that_matches_no_include_pattern_is_checked_but_not_followed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/blog/": Page(body='<a href="/news/n">News</a>'),
+                "/news/n": Page(body="<p>News</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/blog/"), "--include", "/blog/")
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, in_scope, parsed FROM urls WHERE url = ?",
+        [server.url("/news/n")],
+    ) == [("fetched", 0, 0)]
