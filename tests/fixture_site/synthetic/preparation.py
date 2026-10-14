@@ -7,7 +7,7 @@ The benchmark's direct mode prepares Pages with `prepared_page` instead of parsi
 import os
 from collections.abc import Mapping
 from typing import cast
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
@@ -37,19 +37,22 @@ _END_WORKER_SELECTOR = 'meta[name="spider-benchmark"][content="end-worker"]'
 
 
 def prepared_page(site: SyntheticSite, url: NormalizedUrl, scope: ScopeRules) -> PreparedPage:
-    n = page_number(urlsplit(url).path, site.pages)
+    parts = urlsplit(url)
+    n = page_number(parts.path, site.pages)
     if n is None:
         raise ValueError(f"{url} is not a Page of the synthetic site")
     fault = site.fault(n)
     if fault in LOSES_LINKS:
         return PreparedPage(links=(), parse_error=OUTCOMES[fault]["parse_error"])
+    # Every target of the model is a path from the root, so it joins to the origin as it is.
+    origin = f"{parts.scheme}://{parts.netloc}"
     links: list[DiscoveredLink] = []
     for link in site.page_model(n):
         # The model spells each type as 020's LinkType does.
         link_type = _PREPARED_AS.get(link.type, cast(LinkType, link.type))
         if link_type is None:
             continue
-        target = normalize_url(urljoin(url, link.target))
+        target = normalize_url(origin + link.target)
         assert isinstance(target, str)
         links.append(
             DiscoveredLink(
