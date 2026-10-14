@@ -41,6 +41,8 @@ RULE_PAGES = Site(
         "/rules/gone": Status(404, body="Gone", content_type="text/plain"),
     }
 )
+# Every Rule that fires on RULE_PAGES: neither Page has an h1.
+FIRING_ON_RULE_PAGES = ("h1-missing", "internal-4xx", "title-missing")
 
 
 def test_issue_row_counts_its_affected_urls(
@@ -81,8 +83,8 @@ def test_a_rule_s_query_returns_its_stored_affected_urls(
         for (rule_id,) in query(crawl_file, "SELECT DISTINCT rule_id FROM affected_urls")
     }
 
-    # title-missing fires on /rules/untitled, so the comparison is not vacuous.
-    assert (returned, "title-missing" in stored) == (stored, True)
+    # They fire on /rules/untitled and /rules/gone, so the comparison is not vacuous.
+    assert (returned, sorted(stored)) == (stored, sorted(FIRING_ON_RULE_PAGES))
 
 
 SLOW_SITE = Site(
@@ -157,12 +159,14 @@ def test_live_and_materialised_issues_agree(
     live = {rule_id: live_affected_urls(crawl_file, rule_id, RULES) for rule_id in enabled}
     stored = {rule_id: stored_affected_urls(crawl_file, rule_id) for rule_id in enabled}
 
-    # title-missing fires on /rules/untitled, so the comparison is not vacuous.
-    assert (live_issues(crawl_file, RULES), live, "title-missing" in enabled) == (
-        stored_issues(crawl_file, RULES),
-        stored,
-        True,
-    )
+    stored_found = stored_issues(crawl_file, RULES)
+
+    # They fire on /rules/untitled and /rules/gone, so the comparison is not vacuous.
+    assert (
+        live_issues(crawl_file, RULES),
+        live,
+        sorted(issue.rule_id for issue in stored_found),
+    ) == (stored_found, stored, sorted(FIRING_ON_RULE_PAGES))
 
 
 def test_disabled_rule_produces_no_issue(

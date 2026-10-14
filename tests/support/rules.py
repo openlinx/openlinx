@@ -26,9 +26,9 @@ from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, default_rule_rows
 from tests.support.workspace import TempWorkspace
 
-PAGE_URL = NormalizedUrl("https://site.test/")
-SITE = NormalizedUrl("https://example.test/")
-AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+_PAGE_URL = NormalizedUrl("https://site.test/")
+_SEED = NormalizedUrl("https://example.test/")
+_AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
 type UrlUnit = Callable[[Connection], None]
 
 
@@ -54,18 +54,9 @@ def crawl_with_page(
     )
     crawl = create_any_crawl(temp_workspace, rules=rules)
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        url_id = writer.run(record_seed(PAGE_URL, is_internal=True, in_scope=True))
-        page = PageRow(url_id=url_id, address=PAGE_URL, url_encoded_address=PAGE_URL, **page_data)
-        fetched = FetchedUrl(
-            url_id=url_id,
-            status_code=200,
-            content_type="text/html",
-            fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
-            response_time_ms=1,
-            parsed=True,
-            parse_error=parse_error,
-            rows=(page,),
-        )
+        url_id = writer.run(record_seed(_PAGE_URL, is_internal=True, in_scope=True))
+        page = PageRow(url_id=url_id, address=_PAGE_URL, url_encoded_address=_PAGE_URL, **page_data)
+        fetched = _html(url_id, parse_error=parse_error, rows=(page,))
         writer.run(record_fetched(fetched, {PageRow: write_page}))
     return crawl.path, url_id
 
@@ -85,7 +76,7 @@ def crawl_with_url(
     crawl = create_any_crawl(temp_workspace)
     target = NormalizedUrl(url)
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        seed_id = writer.run(record_seed(SITE, is_internal=True, in_scope=True))
+        seed_id = writer.run(record_seed(_SEED, is_internal=True, in_scope=True))
         found = NewUrl(
             url=target,
             crawl_depth=1,
@@ -106,7 +97,7 @@ def responded(status_code: int) -> Callable[[int], UrlUnit]:
             url_id=url_id,
             status_code=status_code,
             content_type="text/plain",
-            fetched_at=AT,
+            fetched_at=_AT,
             response_time_ms=1,
             parsed=False,
         ),
@@ -121,7 +112,7 @@ def failed(fetch_error: FetchError) -> Callable[[int], UrlUnit]:
             url_id=url_id,
             fetch_error=fetch_error,
             fetch_error_message=f"The request ended with {fetch_error}.",
-            fetched_at=AT,
+            fetched_at=_AT,
         ),
         {},
     )
@@ -132,15 +123,23 @@ def unrecorded() -> Callable[[int], UrlUnit]:
     return lambda url_id: record_unwritten(url_id, "The URL's unit failed.")
 
 
-def _html(url_id: int, discovered: tuple[NewUrl, ...]) -> FetchedUrl:
+def _html(
+    url_id: int,
+    *,
+    discovered: tuple[NewUrl, ...] = (),
+    rows: tuple[object, ...] = (),
+    parse_error: ParseError | None = None,
+) -> FetchedUrl:
     return FetchedUrl(
         url_id=url_id,
         status_code=200,
         content_type="text/html",
-        fetched_at=AT,
+        fetched_at=_AT,
         response_time_ms=1,
         parsed=True,
+        parse_error=parse_error,
         discovered=discovered,
+        rows=rows,
     )
 
 

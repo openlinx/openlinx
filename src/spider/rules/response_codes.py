@@ -4,10 +4,10 @@ from spider.rules.model import Rule
 
 _INTERNAL_4XX_SQL = """SELECT id AS url_id, json_object('status_code', status_code) AS detail
 FROM urls
-WHERE is_internal = 1 AND status_code BETWEEN 400 AND 499"""
+WHERE is_internal = 1 AND fetch_state = 'fetched' AND status_code BETWEEN 400 AND 499"""
 _INTERNAL_5XX_SQL = """SELECT id AS url_id, json_object('status_code', status_code) AS detail
 FROM urls
-WHERE is_internal = 1 AND status_code BETWEEN 500 AND 599"""
+WHERE is_internal = 1 AND fetch_state = 'fetched' AND status_code BETWEEN 500 AND 599"""
 _INTERNAL_NO_RESPONSE_SQL = """SELECT id AS url_id, json_object('error', fetch_error) AS detail
 FROM urls
 WHERE is_internal = 1 AND fetch_state = 'error'
@@ -56,15 +56,18 @@ INTERNAL_NO_RESPONSE = Rule(
     priority="high",
     applies_to="internal_urls",
     description=(
-        "An Internal URL got no HTTP response: a timeout, or a DNS, connection or TLS error."
+        "An Internal URL got no HTTP response: a timeout, a DNS, connection or TLS error, an "
+        "answer that was no valid HTTP, or its site's robots.txt failed so it was not requested."
     ),
     why_it_matters=(
         "Visitors and search engines that follow a link to the URL get nothing at all, and a "
         "site that often fails to answer is crawled less."
     ),
     how_to_fix=(
-        "Look up the reason in detail.error: a timeout points to a slow page or server, a DNS "
-        "or TLS error to the domain's set-up. Fix it, then request the URL again."
+        "Look up the reason in detail.error: timeout or watchdog points to a slow page or "
+        "server, connection_refused or connection_error to a server that is down, dns_error or "
+        "tls_error to the domain's set-up, invalid_response to a broken server. Fix it, then "
+        "request the URL again."
     ),
     reproduce_sql=_INTERNAL_NO_RESPONSE_SQL,
 )

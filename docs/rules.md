@@ -38,7 +38,7 @@ Each Rule fires for a URL of its population when the condition holds, and record
 |---|---|---|---|---|---|
 | `internal-4xx` | `response_codes` | `issue` | `high` | an Internal URL with a `status_code` from 400 to 499 | `status_code` |
 | `internal-5xx` | `response_codes` | `issue` | `high` | an Internal URL with a `status_code` from 500 to 599 | `status_code` |
-| `internal-no-response` | `response_codes` | `issue` | `high` | an Internal URL with `fetch_state` `error`, whatever its `fetch_error` but `record_failed` | `error`: the URL's `fetch_error` |
+| `internal-no-response` | `response_codes` | `issue` | `high` | an Internal URL with `fetch_state` `error` and any `fetch_error` other than `record_failed` | `error`: the URL's `fetch_error` |
 | `title-missing` | `titles` | `issue` | `high` | an analysed Page whose `title_count` is 0 or whose `title_1` is the empty string | none |
 | `h1-missing` | `headings` | `warning` | `medium` | an analysed Page whose `h1_count` is 0 or whose `h1_1` is the empty string | none |
 
@@ -48,7 +48,7 @@ Each Rule fires for a URL of its population when the condition holds, and record
 
 ## Reading `spider rules`
 
-`spider rules list` lists the Rules in catalogue order: by category, in the order above, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`, and `--workspace` for a Workspace other than the nearest one. `spider rules` with no arguments runs `spider rules list`; options go after `list`. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `enabled`, `thresholds`, `description`, `why_it_matters`, `how_to_fix` and `reproduce_sql`:
+`spider rules list` lists the Rules in catalogue order: by category, in the order of the Rule model, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`, and `--workspace` for a Workspace other than the nearest one. `spider rules` with no arguments runs `spider rules list`; options go after `list`. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `enabled`, `thresholds`, `description`, `why_it_matters`, `how_to_fix` and `reproduce_sql`:
 
 ```
 spider rules list --limit 1

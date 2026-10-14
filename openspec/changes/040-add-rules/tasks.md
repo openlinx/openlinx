@@ -73,7 +73,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
 - [x] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1`, replacing the query that returns no rows, which `h1-missing` carries from task 3.3 (registered in task 2.2).
 - [x] 4.8 Docs: add the slice's five Rules (`internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`) to the catalogue in `docs/rules.md`.
-- [ ] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [x] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Title Rules and the post-crawl pass (v0.1, except the tasks marked v0.2)
 
