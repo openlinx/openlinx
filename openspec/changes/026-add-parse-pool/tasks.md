@@ -32,7 +32,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 - [x] 2.3 [Subprocess, Windows in CI] Drive "Pages are parsed in worker processes on Windows (Windows)".
 - [x] 2.4 Docs: document the parse pool (start method, worker count, the snapshot sent once when a worker starts, the unchanged extractor interface) in `docs/architecture.md`.
 - [x] 2.5 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
-- [ ] 2.6 Review fixes of group 2's review (2026-10-14), each test-first with its cause:
+- [x] 2.6 Review fixes of group 2's review (2026-10-14), each test-first with its cause:
   - a worker whose crawl process has ended returns quietly when it cannot send its outcome, and its outcome's fallback pickling never raises
   - `test_spider_crawl_starts_its_parse_workers` goes: its `>= 1` children also holds for the in-process executor on POSIX, it duplicates `test_a_crawl_marked_parse_pool_prepares_its_pages_in_the_pool`, and it starts `default_workers()` processes
   - the default worker count is pinned against faked machine facts, no longer against a copy of its own code

@@ -3,10 +3,11 @@
 import asyncio
 import multiprocessing
 import os
+import pickle
 import sys
 import threading
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,10 +20,20 @@ from selectolax.lexbor import LexborHTMLParser
 
 from spider.cli.app import build_app
 from spider.clock import SystemClock
+from spider.crawl import parse_pool
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.hooks import Handler, Hooks, UrlResult
 from spider.crawl.pages import Extractor, PageInput, PageSettings, PreparedPage, prepare_page
-from spider.crawl.parse_pool import PoolExecutor, WorkerEndedError, default_workers, worker_count
+from spider.crawl.parse_pool import (
+    PoolExecutor,
+    WorkerEndedError,
+    _pickled,
+    _work,
+    cpu_quota,
+    default_workers,
+    worker_count,
+    worker_limit,
+)
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.output.reporter import Collected
@@ -33,7 +44,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.app import settings_tables
 from tests.support.cli import run_cli, run_cli_process
-from tests.support.crawling import crawl_result, crawled
+from tests.support.crawling import crawl_result
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
@@ -162,6 +173,11 @@ async def test_a_page_given_before_the_pool_starts_is_refused() -> None:
         await PoolExecutor(workers=1).prepare(at("/"), RESPONSE)
 
 
+async def test_a_pool_that_never_started_closes_cleanly() -> None:
+    # 020's Crawl closes its executor in a finally, also when the writer failed before start().
+    await asyncio.wait_for(PoolExecutor(workers=1).close(), timeout=30)
+
+
 @pytest.mark.slow
 async def test_an_outcome_the_crawl_process_cannot_read_fails_only_its_page() -> None:
     async with started(1, RECORD_PREPARER, UNREADABLE_ON_BAD) as pool:
@@ -184,6 +200,33 @@ async def test_an_output_a_worker_cannot_send_costs_only_its_extractor() -> None
         "extractor_error",
         "unpicklable_on_odd: PicklingError",
     )
+
+
+def test_an_outcome_that_cannot_cross_even_without_its_outputs_fails_its_page() -> None:
+    page = prepare_page(at("/"), RESPONSE, PageSettings(scope_rules(at("/"))))
+    unsendable = msgspec.structs.replace(page, links=(lambda: None,))
+
+    assert type(pickle.loads(_pickled(unsendable))) is RuntimeError  # noqa: S301
+
+
+@pytest.mark.slow
+def test_a_worker_whose_crawl_process_has_ended_ends_quietly() -> None:
+    spawn = multiprocessing.get_context("spawn")
+    task_reader, task_writer = spawn.Pipe(duplex=False)
+    result_reader, result_writer = spawn.Pipe(duplex=False)
+    worker = spawn.Process(
+        target=_work, args=(PageSettings(scope_rules(at("/"))), task_reader, result_writer)
+    )
+    worker.start()
+    task_reader.close()
+    result_writer.close()
+    # As a second Ctrl+C ends the crawl process while its worker prepares a Page.
+    result_reader.close()
+    task_writer.send((at("/"), RESPONSE))
+    worker.join(timeout=30)
+    task_writer.close()
+
+    assert worker.exitcode == 0
 
 
 @pytest.mark.slow
@@ -246,37 +289,104 @@ async def test_the_pool_closes_after_a_worker_has_ended() -> None:
 
 
 @pytest.mark.parametrize(
-    ("physical", "logical", "available", "workers"),
+    ("physical", "logical", "available", "quota", "limit", "workers"),
     [
         # The maintainer's laptop: 8 physical cores of 12 logical ones gives 6 workers.
-        (8, 12, 12, 6),
+        (8, 12, 12, None, None, 6),
         # Without a physical count, half the logical ones.
-        (None, 12, 12, 4),
+        (None, 12, 12, None, None, 4),
         # Only part of the machine is ours (taskset, a container's cpuset): as many physical
         # cores as its share of the logical ones.
-        (8, 16, 8, 2),
-        (8, 12, 3, 1),
-        (2, 4, 4, 1),
-        (None, None, None, 1),
+        (8, 16, 8, None, None, 2),
+        (8, 12, 3, None, None, 1),
+        (2, 4, 4, None, None, 1),
+        (None, None, None, None, None, 1),
+        # A CPU quota (docker --cpus=2, a Kubernetes limit) on a 16-core host.
+        (16, 32, 32, 2, None, 1),
+        (16, 32, 32, 9, None, 7),
+        (8, 12, 12, 100, None, 6),
+        # No more than the waiter thread can watch.
+        (64, 128, 128, None, 31, 31),
     ],
 )
 def test_the_workers_are_the_available_physical_cores_less_two(
-    physical: int | None, logical: int | None, available: int | None, workers: int
+    physical: int | None,
+    logical: int | None,
+    available: int | None,
+    quota: int | None,
+    limit: int | None,
+    workers: int,
 ) -> None:
-    assert worker_count(physical=physical, logical=logical, available=available) == workers
-
-
-def test_the_default_worker_count_is_this_machines() -> None:
-    process_cpu_count = getattr(os, "process_cpu_count", None)
-    affinity = getattr(psutil.Process(), "cpu_affinity", None)
-    if process_cpu_count is not None:
-        available = process_cpu_count()
-    else:
-        available = None if affinity is None else len(affinity())
-
-    assert default_workers() == worker_count(
-        physical=psutil.cpu_count(logical=False), logical=os.cpu_count(), available=available
+    count = worker_count(
+        physical=physical, logical=logical, available=available, quota=quota, limit=limit
     )
+
+    assert count == workers
+
+
+@pytest.mark.parametrize(
+    ("platform", "version", "limit"),
+    [
+        # connection.wait takes at most 63 handles there: two per worker and the wake pipe.
+        ("win32", (3, 12), 31),
+        ("win32", (3, 13), None),
+        ("linux", (3, 12), None),
+        ("darwin", (3, 12), None),
+    ],
+)
+def test_the_workers_are_no_more_than_the_waiter_can_watch(
+    platform: str, version: tuple[int, int], limit: int | None
+) -> None:
+    assert worker_limit(platform, version) == limit
+
+
+@pytest.mark.parametrize(
+    ("membership", "files", "quota"),
+    [
+        # A container in its own cgroup namespace: docker --cpus=2.
+        ("0::/\n", {"cpu.max": "200000 100000\n"}, 2),
+        ("0::/\n", {"cpu.max": "max 100000\n"}, None),
+        # Part of a CPU counts as a whole one.
+        ("0::/\n", {"cpu.max": "150000 100000\n"}, 2),
+        # A Kubernetes pod's limit sits on an ancestor: the lowest on the way to the root counts.
+        (
+            "0::/kubepods/pod/c\n",
+            {"kubepods/pod/cpu.max": "400000 100000\n", "kubepods/pod/c/cpu.max": "max 100000\n"},
+            4,
+        ),
+        ("0::/a\n", {"cpu.max": "800000 100000\n", "a/cpu.max": "300000 100000\n"}, 3),
+        # cgroup v1 only, or no /proc (macOS, Windows): no quota is seen.
+        ("1:cpu,cpuacct:/\n", {}, None),
+        (None, {}, None),
+    ],
+)
+def test_a_cgroup_cpu_quota_is_read(
+    tmp_path: Path, membership: str | None, files: dict[str, str], quota: int | None
+) -> None:
+    root = tmp_path / "cgroup"
+    for name, text in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text, newline="\n")
+    if membership is not None:
+        (tmp_path / "self").write_text(membership, newline="\n")
+
+    assert cpu_quota(root, tmp_path / "self") == quota
+
+
+def test_the_default_worker_count_reads_this_machine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # 16 physical cores of 32 logical ones, 24 of them available, under a quota of 9 CPUs.
+    monkeypatch.setattr(psutil, "cpu_count", lambda logical=True: 32 if logical else 16)
+    monkeypatch.setattr(os, "cpu_count", lambda: 32)
+    monkeypatch.setattr(os, "process_cpu_count", lambda: 24, raising=False)
+    (tmp_path / "crawl").mkdir()
+    (tmp_path / "crawl" / "cpu.max").write_text("900000 100000\n", newline="\n")
+    (tmp_path / "self").write_text("0::/crawl\n", newline="\n")
+    monkeypatch.setattr(parse_pool, "_CGROUP_ROOT", tmp_path)
+    monkeypatch.setattr(parse_pool, "_SELF_CGROUP", tmp_path / "self")
+
+    assert default_workers() == 7
 
 
 def test_the_default_page_executor_is_the_pool() -> None:
@@ -342,38 +452,6 @@ def test_a_crawl_marked_parse_pool_prepares_its_pages_in_the_pool(
     crawl_without_a_page_executor(fixture_site(SMALL_SITE).url("/"), hooks)
 
     assert (len(preparers), os.getpid() in preparers) == (3, False)
-
-
-def children_during(run: Callable[[], object]) -> set[int]:
-    """The processes this one started while `run` ran."""
-    children: set[int] = set()
-    done = threading.Event()
-
-    def watch() -> None:
-        this = psutil.Process()
-        while not done.wait(0.02):
-            children.update(child.pid for child in this.children())
-
-    watcher = threading.Thread(target=watch)
-    watcher.start()
-    try:
-        run()
-    finally:
-        done.set()
-        watcher.join()
-    return children
-
-
-@pytest.mark.slow
-@pytest.mark.parse_pool
-def test_spider_crawl_starts_its_parse_workers(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(SMALL_SITE)
-
-    children = children_during(lambda: crawled(server.url("/")))
-
-    assert len(children) >= 1
 
 
 @pytest.mark.slow

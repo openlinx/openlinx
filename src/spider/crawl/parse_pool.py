@@ -1,6 +1,7 @@
 """The pool executor: page preparation in worker processes (design D1 of 026-add-parse-pool)."""
 
 import asyncio
+import math
 import multiprocessing
 import os
 import pickle
@@ -12,6 +13,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from multiprocessing.connection import _ConnectionBase, wait
 from multiprocessing.process import BaseProcess
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import msgspec
@@ -22,6 +24,9 @@ from spider.crawl.urls import NormalizedUrl
 
 # Pages that may wait for a busy worker, per worker (design D2).
 BACKLOG_PER_WORKER = 2
+_WINDOWS_WAIT_HANDLES = 63
+_CGROUP_ROOT = Path("/sys/fs/cgroup")
+_SELF_CGROUP = Path("/proc/self/cgroup")
 
 # A Connection on POSIX, a PipeConnection on Windows: the one class both pipe ends share.
 type _PipeEnd = _ConnectionBase[Any, Any]
@@ -54,17 +59,22 @@ def _work(settings: PageSettings, tasks: _PipeEnd, results: _PipeEnd) -> None:
             outcome = prepare_page(url, response, settings)
         except Exception as error:
             outcome = error
-        results.send_bytes(_pickled(outcome))
+        try:
+            results.send_bytes(_pickled(outcome))
+        # As at recv: the crawl process ended while this worker prepared its Page.
+        except OSError:
+            return
 
 
 def _pickled(outcome: _Outcome) -> bytes:
     """What a worker sends: whatever cannot cross to the crawl process costs only itself."""
-    try:
+    with suppress(Exception):
         return pickle.dumps(outcome, pickle.HIGHEST_PROTOCOL)
-    except Exception:
-        if isinstance(outcome, PreparedPage):
+    if isinstance(outcome, PreparedPage):
+        with suppress(Exception):
             return pickle.dumps(_without_unsendable_outputs(outcome), pickle.HIGHEST_PROTOCOL)
-        return pickle.dumps(RuntimeError(f"{type(outcome).__name__}: {outcome}"))
+        return pickle.dumps(RuntimeError("The parse worker could not send its PreparedPage."))
+    return pickle.dumps(RuntimeError(f"{type(outcome).__name__}: {outcome}"))
 
 
 def _without_unsendable_outputs(page: PreparedPage) -> PreparedPage:
@@ -86,14 +96,55 @@ def _without_unsendable_outputs(page: PreparedPage) -> PreparedPage:
     )
 
 
-def worker_count(*, physical: int | None, logical: int | None, available: int | None) -> int:
+def worker_count(
+    *,
+    physical: int | None,
+    logical: int | None,
+    available: int | None,
+    quota: int | None,
+    limit: int | None,
+) -> int:
     """The physical cores available less two, for the crawl process and the writer (design D1)."""
     cores = physical or (logical or 0) // 2
     if available and logical and available < logical:
         # Only part of the machine is ours (taskset, a container's cpuset): as many physical
-        # cores as its share of the logical ones. A CPU quota is not seen.
+        # cores as its share of the logical ones.
         cores = cores * available // logical
-    return max(1, cores - 2)
+    if quota is not None:
+        # CPU time, however the cores share it out (docker --cpus, a Kubernetes limit).
+        cores = min(cores, quota)
+    workers = max(1, cores - 2)
+    return workers if limit is None else min(workers, limit)
+
+
+def cpu_quota(root: Path, membership: Path) -> int | None:
+    """The CPUs a cgroup v2 quota (`cpu.max`) leaves this process, the lowest up to the root."""
+    try:
+        lines = membership.read_text().splitlines()
+    except OSError:
+        return None
+    # cgroup v2's own line; v1's controllers have lines of their own, which are not read.
+    group = next((PurePosixPath(line[3:]) for line in lines if line.startswith("0::")), None)
+    if group is None:
+        return None
+    quotas: list[int] = []
+    for path in (group, *group.parents):
+        try:
+            limit, period = root.joinpath(*path.parts[1:], "cpu.max").read_text().split()
+            if limit != "max":
+                quotas.append(math.ceil(int(limit) / int(period)))
+        except (OSError, ValueError):
+            continue
+    return min(quotas, default=None)
+
+
+def worker_limit(platform: str, version: tuple[int, int]) -> int | None:
+    """The most workers the waiter thread can watch, or None for no limit (design D1)."""
+    # connection.wait takes at most 63 handles on Windows before Python 3.13, and the waiter
+    # watches two per worker, its result pipe and its process sentinel, and its wake pipe.
+    if platform == "win32" and version < (3, 13):
+        return (_WINDOWS_WAIT_HANDLES - 1) // 2
+    return None
 
 
 def default_workers() -> int:
@@ -104,6 +155,8 @@ def default_workers() -> int:
         physical=psutil.cpu_count(logical=False),
         logical=os.cpu_count(),
         available=_available_cpus(psutil.Process()),
+        quota=cpu_quota(_CGROUP_ROOT, _SELF_CGROUP),
+        limit=worker_limit(sys.platform, (sys.version_info.major, sys.version_info.minor)),
     )
 
 
