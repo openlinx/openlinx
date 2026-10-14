@@ -45,6 +45,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [x] 3.6 Drive "Absent and empty elements differ" at seam 4.
 - [x] 3.7 Docs: add the meta description, meta keywords and heading columns to `docs/page-data.md`.
 - [x] 3.8 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [ ] 3.9 Review fixes of group 3, each test-first with its cause: headings read the text of their first two elements only and count the rest (nested headings made the text walk quadratic); the never-raises property builds headings, breaks, blocks, `noscript` and meta descriptions, and a deep-nesting test runs the walker; a test pins every element of the walker's skip list; the ancestor rule becomes one `:not(svg *, math *, noscript *)` query if that is simpler and not slower.
 
 ## 4. Identity, response, size and redirects
 
@@ -74,7 +75,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 ## 6. Directives and canonicals
 
 - [ ] 6.1 Drive "Meta robots keeps case but reads directives" at seam 4, using `020-add-crawl-core`'s robots directives parser for the flags. Add `meta_robots`, `meta_robots_noindex` and `meta_robots_nofollow`.
-- [ ] 6.2 Drive "X-Robots-Tag is stored with the parser's verdict" at seam 4, and add `x_robots_tag`, `x_robots_tag_noindex` and `x_robots_tag_nofollow`.
+- [ ] 6.2 Drive "X-Robots-Tag is stored with the parser's verdict" at seam 4, and add `x_robots_tag`, `x_robots_tag_noindex` and `x_robots_tag_nofollow`, read from the response headers with `020`'s directives parser, so a Page whose preparation failed keeps them (design Risks).
 - [ ] 6.3 Drive "Meta refresh with a quoted target" at seam 4, using `020`'s discovered `meta_refresh` Link. Add `meta_refresh`, and set `redirect_type` `meta_refresh`.
 - [ ] 6.4 Drive "Meta refresh without a target is not a redirect" at seam 4.
 - [ ] 6.5 Drive "Relative canonical to another URL" at seam 4, and add `canonical_url`, `canonical_link_element_1`, `canonical_count` and `canonical_relative`.
