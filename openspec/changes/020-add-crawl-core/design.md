@@ -176,7 +176,7 @@ The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLi
   - Why: recorded as `robots_unreachable`, a dead External domain would read as a robots.txt problem, and "An unknown host is a DNS error" contradicted the old mapping.
   - On an Internal origin each such URL counts toward the network pause (D16), unless its code is `tls_error`. A continue re-queues them with the other `error` URLs (D1).
   - The Seed's origin is the exception: until it has answered, its robots.txt without a response pauses the Crawl (D16), and the robots.txt request is made again when a probe answers.
-- **The robots.txt request** follows its own redirects internally, up to 5 hops. It goes through the same politeness gate and counts for `--rate`, but not for `--max-urls`.
+- **The robots.txt request** follows its own redirects internally, up to 5 hops. It goes through the same politeness gate and counts for `--rate`, but not for `--max-urls`. It is made only for a URL that the Scope does not skip and the URL limit does not refuse, so an origin none of whose URLs could start keeps NULL robots columns (task 10.16).
 - **Crawl-delay** is recorded, not applied, which matches Googlebot and Screaming Frog.
 - **The robots directives parser** is a pure function from meta `content` values, `X-Robots-Tag` header values and the robots token to the directive values, named as `030`'s columns (`meta_robots_noindex`, `x_robots_tag_nofollow`, …). `030` imports it, so the two changes can never disagree about noindex or nofollow.
 
