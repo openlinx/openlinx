@@ -11,7 +11,7 @@ spider crawl site.test
 spider crawl https://site.test/shop/ --concurrency 2
 ```
 
-The Crawl requests the Seed, reads the Links of each response it parses, follows the hyperlinks in its Scope and checks the others, unless they are skipped (see [External URLs](#external-urls)), Crawl Depth by Crawl Depth: every URL at one depth is done before any URL one deeper starts, and the URLs of a depth start in the order they were first recorded (`urls.id`), several at a time (see [Requests in flight](#requests-in-flight)). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its URL is in the Scope, its status is 2xx and its `Content-Type` is HTML (`text/html` or `application/xhtml+xml`); a PDF, an image, a response without a `Content-Type` or the response of an External URL is recorded but not parsed.
+The Crawl requests the Seed, reads the Links of each response it parses, follows the hyperlinks in its Scope and checks the others, unless they are skipped (see [External URLs](#external-urls)), Crawl Depth by Crawl Depth (see [Crawl Depth](#crawl-depth)): every followed URL at one depth is done before any followed URL one deeper starts, and the URLs of a depth start in the order they were first recorded (`urls.id`), several at a time (see [Requests in flight](#requests-in-flight)). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its URL is in the Scope, its status is 2xx and its `Content-Type` is HTML (`text/html` or `application/xhtml+xml`); a PDF, an image, a response without a `Content-Type` or the response of an External URL is recorded but not parsed.
 
 ### Options and `[crawl]` settings
 
@@ -22,7 +22,13 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host, 1 to 50. |
 | `--check-external` / `--no-check-external` | `check_external` | `true` | Request each External URL once to record its response; with `--no-check-external`, record it as skipped, unrequested (see [External URLs](#external-urls)). |
 | `--follow-nofollow` | `follow_nofollow` | `false` | Follow nofollow hyperlinks, and every hyperlink of a Page whose robots directives say nofollow, like any other hyperlink (see [Nofollow](#nofollow)). |
+| `--scope <kind>` | `scope` | `host` | Which Internal URLs are in the Scope: `host`, `subdomains` or `subfolder` (see [`--scope`](#--scope)). |
+| `--subdomains` | | | The same as `--scope subdomains`; it has no key of its own. |
+| `--strip-params <globs>` | `strip_params` | `[]` | Query parameters removed from every URL before it is recorded or requested (see [Stripping query parameters](#stripping-query-parameters)). |
+| `--include <regex>` | `include` | `[]` | When given, an Internal URL that matches no include pattern is checked but not followed; give the option once per pattern. |
 | `--exclude <regex>` | `exclude` | `[]` | A URL that the pattern matches is never requested; give the option once per pattern (see [Include and exclude patterns](#include-and-exclude-patterns)). |
+| `--max-depth <n>` | `max_depth` | none | The deepest Crawl Depth whose URLs are requested, 0 or more; Resources of followed Pages are requested one deeper (see [Crawl Depth](#crawl-depth)). |
+| `--max-urls <n>` | `max_urls` | none | The most URL requests over the Crawl's whole life, 1 or more (see [The URL limit](#the-url-limit)). |
 
 `--workspace` and `--format` are the global flags of every Command.
 
@@ -33,7 +39,36 @@ URLs are requested concurrently, and two limits bound them:
 - **Per host:** at most `--concurrency` requests to one host at a time, 5 by default. The host is the URL's host, whatever its scheme or port.
 - **In all:** at most 4 × `--concurrency` URLs in progress at once, kept within 20 to 100, so a Page that links to many External hosts never opens hundreds of connections.
 
-A Crawl Depth ends only when every URL of it is done, so a URL one deeper never starts while a shallower one is in progress, and Crawl Depth stays the shortest path from the Seed.
+### Crawl Depth
+
+The Seed has `crawl_depth` = 0, and every other URL the fewest Links followed from the Seed to reach it, whatever order the responses come in. A Resource is one deeper than the Page that references it.
+
+- **The depth barrier:** a Crawl Depth ends only when every followed URL of it is done, an Internal URL in the Scope reached by a Link that is not a Resource. A followed URL one deeper never starts before that, so a slow Page holds the next depth back, and the depth stays the shortest path.
+- **Checks never wait:** External URLs, URLs outside the Scope and Resources are checks. They start in their depth's turn but never hold the next depth back, so a slow image or a slow outbound link costs no time.
+- **A check that is HTML:** a Resource Link to in-Scope HTML is parsed when it answers, even after its depth has ended. When nothing is left to start, the Crawl waits for every check and reads the queue again from the smallest depth, so what such a check found is still crawled. A URL it reaches that is still `queued` takes the shorter depth; one already requested keeps its depth.
+
+With `--max-depth <n>`, a URL deeper than `n` is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_depth`. Resources of followed Pages are the exception, so with `--max-depth 0` the Seed's images are still checked. There is no depth limit by default.
+
+```
+spider crawl site.test --max-depth 1
+http://site.test/          depth 0, fetched
+http://site.test/a         depth 1, fetched
+http://site.test/logo.png  depth 1, fetched (a Resource of /)
+http://site.test/b         depth 2, skipped: max_depth
+http://site.test/a.png     depth 2, fetched (a Resource of /a)
+```
+
+### The URL limit
+
+There is no URL limit by default. With `--max-urls <n>`, the Crawl starts at most `n` URL requests over its whole life:
+
+- A request counts from the moment it starts, so requests in flight count, and so do the requests a continued Crawl made before. A URL recorded without a request, such as an excluded one, does not count, and neither will robots.txt requests.
+- At the first request the limit refuses, nothing new starts. The requests in flight end and are recorded, and every URL not requested stays `queued`.
+- The Crawl ends `stopped` with `crawl.stop_reason` = `max_urls`, and exits with code 0. Its post-crawl passes have run, as for a `completed` Crawl.
+- The result holds a `max_urls_reached` warning whose hint is the command that continues the Crawl with twice the limit, such as `spider resume --crawl 20261014-101500-k3f9 --max-urls 6`.
+- A site with exactly `n` URLs ends `completed`, since no request was refused.
+
+A value below 1 is rejected with `invalid_value` (exit 2) on the command line, and with `settings_invalid` (exit 3) in `spider.toml`.
 
 ### Events
 
@@ -79,7 +114,7 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 
 | Exit code | When | Error code |
 |---|---|---|
-| 0 | the Crawl is `completed` | |
+| 0 | the Crawl is `completed`, or `stopped` by `--max-urls` | |
 | 2 | the Seed is not a valid http or https URL, a pattern is not a valid regular expression, or an option value is not allowed; no crawl file is created | `invalid_url` (with `details.reason`: `malformed`, `unsupported_scheme`, `userinfo`, `missing_host` or `invalid_host`), `invalid_pattern` (with `details.pattern`), `invalid_value` |
 | 3 | `spider.toml` is invalid | `settings_invalid` |
 | 5 | another connection held the crawl file for longer than the writer waits | `crawl_busy` |
@@ -104,6 +139,7 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 | Only nofollow Links reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `nofollow` (see [Nofollow](#nofollow)). |
 | Only Links of a type that is not requested reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `link_type_not_followed` (see [Link types](#link-types)). |
 | The URL is External, with `--no-check-external` | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `external_not_checked`; an External URL that an `--exclude` pattern matches is `excluded`. |
+| The URL is deeper than `--max-depth`, and no Resource | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `max_depth` (see [Crawl Depth](#crawl-depth)). |
 
 Each of the three failures of the tool's own code is reported by one counted warning, written to stderr when it first occurs and kept once in the result's `warnings`, however many URLs it affects:
 
@@ -300,7 +336,7 @@ The Crawl reads Links from every response it parses: an in-Scope 2xx HTML respon
 | `mobile_alternate` | `<link rel="alternate" media>` without `hreflang` | no |
 | `misc` | `<link href>` with any other `rel`, such as `icon`, `manifest`, `preload`, or a feed's `alternate` | no |
 
-- A Resource is checked: requested once to record its response, and parsed only when it turns out to be in-Scope HTML.
+- A Resource is checked: requested once to record its response, whenever its Page is followed, even one deeper than `--max-depth`, and parsed only when it turns out to be in-Scope HTML. A broken image shows as its 4xx or 5xx `status_code`.
 - A URL reached only through Links that are not requested is recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`. A Link that is requested, on the same Page or a later one, still requests it.
 - `<link rel="preconnect">` and `rel="dns-prefetch"` name an origin to connect to, not a file, so they give no Link.
 - `rel` tokens are compared without case: `rel="NoFollow"` is `nofollow`.
