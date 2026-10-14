@@ -1,7 +1,6 @@
 """`<noscript>` read as a browser that runs scripts reads it (020-add-crawl-core D5, task 15.1)."""
 
 import re
-from bisect import bisect_right
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -33,33 +32,36 @@ def parse_html(text: str) -> ParsedHtml:
 
 
 def without_noscript(text: str) -> tuple[str, tuple[str, ...]]:
-    """Every `<noscript>` tag renamed to a `<template>` tag, which lexbor keeps in `<head>` and
-    out of the tree, and the text of each `<noscript>` as a browser that runs scripts reads it:
-    from its start tag's `>` to the next `</noscript>`."""
-    tags = list(_NOSCRIPT_TAG.finditer(text))
-    if not tags:
-        return text, ()
-    ends = [tag.start() for tag in tags if tag[1]]
+    """Every `<noscript>` renamed to a `<template>`, which lexbor keeps in `<head>` and out of the
+    tree, and its text as a browser that runs scripts reads it: from its start tag's `>` on."""
     parts: list[str] = []
     noscripts: list[str] = []
     position = 0
-    # The first ">" after the latest start tag: it stays the first for every later start tag
-    # before it, so a page of unclosed start tags is read once, not once per tag.
-    closing = 0
-    for tag in tags:
+    # The text of the open <noscript> runs to the next end tag, or to the next start tag, which
+    # closes it first: a literal start tag in a script must not swallow a real <noscript>, and
+    # the texts never overlap. An end tag outside a range is left: it could close a <template>.
+    opened: int | None = None
+    for tag in _NOSCRIPT_TAG.finditer(text):
+        if tag[1] and opened is None:
+            continue
         parts.append(text[position : tag.start()])
         position = tag.end()
-        if tag[1]:
-            parts.append("</template")
-            continue
-        if closing != -1 and closing < tag.end():
-            closing = text.find(">", tag.end())
-        parts.append(f'<template {MARKER}="{len(noscripts)}"')
-        if closing == -1:
-            noscripts.append("")
-            continue
-        following = bisect_right(ends, closing)
-        end = ends[following] if following < len(ends) else len(text)
-        noscripts.append(text[closing + 1 : end])
+        if opened is not None:
+            noscripts.append(_text_after_start_tag(text, opened, tag.start()))
+            # A renamed end tag keeps its own ">"; a start tag needs a whole end tag before it.
+            parts.append("</template" if tag[1] else "</template>")
+            opened = None
+        if not tag[1]:
+            parts.append(f'<template {MARKER}="{len(noscripts)}"')
+            opened = tag.end()
+    if opened is not None:
+        noscripts.append(_text_after_start_tag(text, opened, len(text)))
+    if not noscripts:
+        return text, ()
     parts.append(text[position:])
     return "".join(parts), tuple(noscripts)
+
+
+def _text_after_start_tag(text: str, start: int, end: int) -> str:
+    closing = text.find(">", start, end)
+    return "" if closing == -1 else text[closing + 1 : end]

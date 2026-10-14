@@ -81,12 +81,15 @@ def test_a_title_and_a_robots_meta_in_a_head_noscript_are_ignored() -> None:
         ),
         ("<noscript/>", f"{TEMPLATE}/>", ("",)),
         ("<noscript", TEMPLATE, ("",)),
-        # A browser that runs scripts ends the outer <noscript> at the first end tag.
+        # A start tag ends the open range, so a literal never swallows a real <noscript>; the
+        # Links agree with a browser's, which reads "A<noscript>B" as the outer one's text.
         (
             "<noscript>A<noscript>B</noscript>C</noscript>",
-            f'{TEMPLATE}>A<template {MARKER}="1">B</template>C</template>',
-            ("A<noscript>B", "B"),
+            f'{TEMPLATE}>A</template><template {MARKER}="1">B</template>C</noscript>',
+            ("A", "B"),
         ),
+        # An end tag outside a range is left as it is: it could close a page's own template.
+        ("<template></noscript></template>", "<template></noscript></template>", ()),
         # Known edges: a literal <noscript is renamed wherever it stands (design Risks).
         ("<!-- <noscript> -->", f"<!-- {TEMPLATE}> -->", (" -->",)),
         ('<script>"<noscript>"</script>', f'<script>"{TEMPLATE}>"</script>', ('"</script>',)),
@@ -140,6 +143,30 @@ _PIECES = st.sampled_from(
 @given(st.lists(_PIECES | st.text(max_size=4)).map("".join))
 def test_preparing_any_page_with_noscript_tags_gives_a_page(html: str) -> None:
     assert isinstance(_prepared(html)[0], PreparedPage)
+
+
+def test_the_noscript_texts_of_unclosed_start_tags_never_overlap() -> None:
+    html = "<noscript>" * 1000
+
+    assert sum(map(len, without_noscript(html)[1])) <= len(html)
+
+
+@given(st.lists(_PIECES | st.text(max_size=4)).map("".join))
+def test_the_noscript_texts_are_never_longer_than_the_document(html: str) -> None:
+    assert sum(map(len, without_noscript(html)[1])) <= len(html)
+
+
+def test_a_literal_noscript_start_tag_leaves_a_later_noscript_hidden() -> None:
+    page, head = _prepared(
+        "<head><script>s.replace('<noscript>', '')</script><noscript><img src=\"/px\">"
+        '<meta name="robots" content="noindex"></noscript><link rel="canonical" href="/c">'
+        "</head>"
+    )
+
+    assert (page.directives.meta_robots, head.children) == (
+        None,
+        ("script", "template", "link"),
+    )
 
 
 @pytest.mark.parametrize("index", ["1", "x", "9" * 5000])

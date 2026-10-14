@@ -318,11 +318,13 @@ def test_deeply_nested_html_gives_its_links() -> None:
         ),
         # A page's own template holds placeholders that scripts fill in (design D5).
         ('<template><a href="{{ url }}"></a></template>', []),
-        # Known edges, where a template ends later than a browser's text (design Risks).
+        # A literal start tag makes no template, so its text is never read (design Risks).
+        ('<script>"<noscript>"</script><a href="/x"></a>', [("hyperlink", "http://site.test/x")]),
+        # A known edge: the comment hides the end tag from lexbor, not from a browser.
         ('<noscript><!-- </noscript> --><a href="/lost"></a>', []),
         (
-            '<noscript><a href="/a"></a><noscript></noscript><a href="/lost"></a></noscript>',
-            [("hyperlink", "http://site.test/a")],
+            '<noscript><a href="/a"></a><noscript></noscript><a href="/c"></a></noscript>',
+            [("hyperlink", "http://site.test/a"), ("hyperlink", "http://site.test/c")],
         ),
     ],
 )
