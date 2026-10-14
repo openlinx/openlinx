@@ -258,3 +258,30 @@ def test_a_closed_port_is_a_refused_connection(
         "connection_refused",
         True,
     )
+
+
+def test_a_connection_reset_in_the_body_is_a_connection_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/reset">Reset</a> <a href="/after">After</a>'),
+                "/reset": Page(body="<p>" + "x" * 100_000 + "</p>", reset_after=100),
+                "/after": Page(body="<p>After</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert sorted(
+        query(
+            crawl_file,
+            "SELECT url, fetch_state, fetch_error FROM urls WHERE url IN (?, ?)",
+            [server.url("/reset"), server.url("/after")],
+        )
+    ) == [
+        (server.url("/after"), "fetched", None),
+        (server.url("/reset"), "error", "connection_error"),
+    ]
