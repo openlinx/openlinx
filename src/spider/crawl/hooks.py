@@ -1,13 +1,14 @@
 """The hooks later changes plug into: extractors, handlers, passes (020-add-crawl-core D9)."""
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import msgspec
 
 from spider.crawl.pages import Extractor
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import FetchError, FetchState, SkipReason
+from spider.store.records import DiscoveredVia, FetchError, FetchState, ParseError, SkipReason
 from spider.store.rows import RowWriter
 from spider.store.writer import CrawlWriter
 
@@ -19,10 +20,19 @@ class UrlResult:
     url_id: int
     url: NormalizedUrl
     crawl_depth: int
+    discovered_via: DiscoveredVia
+    found_on_url_id: int | None
     fetch_state: FetchState
     skip_reason: SkipReason | None = None
     fetch_error: FetchError | None = None
+    fetch_error_message: str | None = None
     status_code: int | None = None
+    content_type: str | None = None
+    response_time_ms: int | None = None
+    fetched_at: datetime | None = None
+    parsed: bool = False
+    parse_error: ParseError | None = None
+    parse_error_message: str | None = None
     # As received: in order, in their letter case, repeated names kept.
     headers: tuple[tuple[str, str], ...] = ()
     # By extractor name, for a parsed response; an extractor that failed has none.
@@ -34,7 +44,7 @@ class Handler:
     """Pure: the store rows for one URL, which its unit writes with the URL's final state."""
 
     name: str
-    handle: Callable[[UrlResult], Sequence[object]]
+    handle: Callable[[UrlResult], Iterable[object]]
 
 
 @dataclass(frozen=True, slots=True)

@@ -492,7 +492,7 @@ The Crawl SHALL select robots.txt groups, and user-agent-prefixed robots directi
 - **THEN** `http://site.test/g` is disallowed
 
 ### Requirement: Per-host concurrency
-The Crawl SHALL never have more than `--concurrency` requests in flight to one host. The default SHALL be 5. A value outside 1 to 50 SHALL be rejected with exit code 2 and error code `invalid_value`.
+The Crawl SHALL never have more than `--concurrency` requests in flight to one host. The default SHALL be 5. A value outside 1 to 50 SHALL be rejected: as `--concurrency` with exit code 2 and error code `invalid_value`, and in `spider.toml` with exit code 3 and `settings_invalid`, as any invalid setting is.
 
 #### Scenario: At most five requests to a host by default
 - **WHEN** `/` links to `/slow/1` to `/slow/20`, each answering after 500 ms, and `spider crawl {site}/` runs

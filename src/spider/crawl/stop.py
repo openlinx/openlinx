@@ -18,7 +18,7 @@ class StopSignal:
 
     @property
     def cause(self) -> BaseException | None:
-        """The error that set it, for write_failed."""
+        """The error that ended the Crawl, with write_failed; None for the other reasons."""
         return self._cause
 
     def set(self, reason: StopReason, cause: BaseException | None = None) -> None:

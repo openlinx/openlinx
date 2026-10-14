@@ -1,7 +1,7 @@
 """The hooks of a Crawl: handlers, passes and extractors (020-add-crawl-core D9; seam 2)."""
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -17,7 +17,7 @@ from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
 from spider.store.crawls import crawl_summary
 from spider.store.records import CrawlState, SecretNames
-from spider.store.writer import CrawlWriter
+from spider.store.writer import CrawlWriter, CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.app import settings_tables
@@ -369,3 +369,143 @@ def test_a_unit_that_fails_with_the_file_is_never_completed(
     (crawl_file,) = temp_workspace.home.rglob("*.sqlite")
 
     assert crawl_row(crawl_file)["state"] == "running"
+
+
+def _seen_then_boom(result: UrlResult) -> Iterator[Seen]:
+    yield Seen(result.url_id, result.fetch_state)
+    if result.url.endswith("/boom"):
+        raise ValueError(result.url)
+
+
+def test_a_handler_that_fails_midway_keeps_none_of_its_rows(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = default_hooks()
+    hooks = replace(
+        hooks,
+        handlers=(*hooks.handlers, Handler("halfway", _seen_then_boom)),
+        row_writers={**hooks.row_writers, Seen: _write_seen},
+    )
+
+    result = _crawl(temp_workspace, server.url("/"), hooks)
+
+    assert query(
+        result.crawl_file,
+        "SELECT count(*) FROM test_seen JOIN urls ON urls.id = test_seen.url_id WHERE urls.url = ?",
+        [server.url("/boom")],
+    ) == [(0,)]
+
+
+def _not_a_struct(tree: LexborHTMLParser, page: PageInput) -> Found:
+    return {"url": page.url}  # type: ignore[return-value]
+
+
+def test_an_extractor_that_returns_no_struct_is_an_extractor_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+
+    result = _crawl(
+        temp_workspace, server.url("/"), _with_extractors(Extractor("loose", _not_a_struct))
+    )
+
+    assert query(
+        result.crawl_file,
+        "SELECT parsed, parse_error, parse_error_message FROM urls WHERE url = ?",
+        [server.url("/ok")],
+    ) == [(1, "extractor_error", "loose: TypeError")]
+
+
+@dataclass(frozen=True, slots=True)
+class Flaky:
+    url_id: int
+
+
+def _flaky_or_unwritable(result: UrlResult) -> tuple[object, ...]:
+    if result.url.endswith("/boom"):
+        return (Unwritable(result.url_id),)
+    return (Flaky(result.url_id),) if result.crawl_depth == 0 else ()
+
+
+def _write_flaky(written: list[int]) -> Callable[[Connection, Flaky], None]:
+    def write(connection: Connection, row: Flaky) -> None:
+        # Fails when the writer runs the unit again, which ends the writer (017 D6).
+        if written:
+            raise RuntimeError("not the same twice")
+        written.append(row.url_id)
+
+    return write
+
+
+def test_a_writer_that_ends_reports_why_it_ended(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = default_hooks()
+    hooks = replace(
+        hooks,
+        handlers=(*hooks.handlers, Handler("flaky", _flaky_or_unwritable)),
+        row_writers={**hooks.row_writers, Flaky: _write_flaky([]), Unwritable: _refuse},
+    )
+
+    with pytest.raises(CrawlWriterReplayError):
+        _crawl(temp_workspace, server.url("/"), hooks)
+
+
+@dataclass(frozen=True, slots=True)
+class RowValues:
+    url_id: int
+    values: str
+
+
+def _row_values(result: UrlResult) -> tuple[RowValues, ...]:
+    values = (
+        result.fetch_state,
+        result.status_code,
+        result.content_type,
+        result.parsed,
+        result.discovered_via,
+        result.found_on_url_id is not None,
+        result.fetched_at is not None,
+        result.response_time_ms is not None,
+    )
+    return (RowValues(result.url_id, repr(values)),)
+
+
+def _write_row_values(connection: Connection, row: RowValues) -> None:
+    connection.execute(text("CREATE TABLE IF NOT EXISTS test_values (url_id INTEGER, v TEXT)"))
+    connection.execute(
+        text("INSERT INTO test_values VALUES (:url_id, :v)"),
+        {"url_id": row.url_id, "v": row.values},
+    )
+
+
+def test_a_handler_gets_the_row_values_of_the_url(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = default_hooks()
+    hooks = replace(
+        hooks,
+        handlers=(*hooks.handlers, Handler("values", _row_values)),
+        row_writers={**hooks.row_writers, RowValues: _write_row_values},
+    )
+
+    result = _crawl(temp_workspace, server.url("/"), hooks)
+
+    assert query(
+        result.crawl_file,
+        "SELECT urls.url, test_values.v FROM test_values JOIN urls ON urls.id = test_values.url_id "
+        "WHERE urls.url IN (?, ?) ORDER BY urls.id",
+        [server.url("/"), server.url("/ok")],
+    ) == [
+        (
+            server.url("/"),
+            repr(("fetched", 200, "text/html; charset=utf-8", True, "seed", False, True, True)),
+        ),
+        (
+            server.url("/ok"),
+            repr(("fetched", 200, "text/html; charset=utf-8", True, "hyperlink", True, True, True)),
+        ),
+    ]

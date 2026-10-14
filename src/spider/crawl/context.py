@@ -9,7 +9,7 @@ from spider.crawl.pages import PageExecutor
 from spider.crawl.scope import ScopeRules
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.stop import StopSignal
-from spider.crawl.warning_log import WarningLog
+from spider.crawl.warning_log import CrawlReporter
 from spider.store.records import CrawlFile
 from spider.store.writer import CrawlWriter
 
@@ -20,7 +20,7 @@ class CrawlContext:
     settings: CrawlSettings
     scope: ScopeRules
     clock: Clock
-    reporter: WarningLog
+    reporter: CrawlReporter
     writer: CrawlWriter
     fetcher: Fetcher
     pages: PageExecutor

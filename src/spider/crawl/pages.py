@@ -76,7 +76,11 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     failures: list[str] = []
     for extractor in settings.extractors:
         try:
-            outputs.append((extractor.name, extractor.extract(tree, page)))
+            output = extractor.extract(tree, page)
+            # Only a msgspec struct crosses 026's process boundary as it is.
+            if not isinstance(output, msgspec.Struct):
+                raise TypeError(f"{extractor.name} returned {type(output).__name__}")
+            outputs.append((extractor.name, output))
         # An extractor is later changes' code: its failure costs only its output (design D16).
         except Exception as error:
             failures.append(f"{extractor.name}: {type(error).__name__}")

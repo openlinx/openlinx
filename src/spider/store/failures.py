@@ -12,7 +12,7 @@ from spider.store.writer import CrawlWriterClosedError, CrawlWriterReplayError
 _ONE_ROW = (sqlite3.IntegrityError, sqlite3.DataError, sqlite3.InterfaceError)
 
 
-def is_one_rows_error(error: BaseException) -> bool:
+def is_one_urls_failure(error: BaseException) -> bool:
     """True when the URL alone failed, so a fallback unit records it; else the file failed."""
     # The writer's own errors first: none of them is a database error.
     if isinstance(error, CrawlWriterClosedError | CrawlWriterReplayError):

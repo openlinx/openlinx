@@ -10,56 +10,40 @@ from spider.store.records import ErroredUrl, FetchedUrl, QueuedUrl, SkippedUrl, 
 from spider.store.rows import RowWriter, write_rows
 from spider.store.schema import urls
 
-# The unit that records a URL's final state.
 type UrlUnit = Callable[[Connection], None]
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
 _INSERT_URL = insert(urls).on_conflict_do_nothing(index_elements=[urls.c.url])
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
-_FETCHED = (
-    update(urls)
-    .where(urls.c.id == bindparam("url_id"))
-    .values(
-        fetch_state="fetched",
-        status_code=bindparam("response_status"),
-        content_type=bindparam("response_type"),
-        response_time_ms=bindparam("response_ms"),
-        fetched_at=bindparam("request_at"),
-        parsed=bindparam("is_parsed"),
-        parse_error=bindparam("parse_failure"),
-        parse_error_message=bindparam("parse_failure_message"),
-    )
+_URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
+_FETCHED = _URL_ROW.values(
+    fetch_state="fetched",
+    status_code=bindparam("response_status"),
+    content_type=bindparam("response_type"),
+    response_time_ms=bindparam("response_ms"),
+    fetched_at=bindparam("request_at"),
+    parsed=bindparam("is_parsed"),
+    parse_error=bindparam("parse_failure"),
+    parse_error_message=bindparam("parse_failure_message"),
 )
-_SKIPPED = (
-    update(urls)
-    .where(urls.c.id == bindparam("url_id"))
-    .values(fetch_state="skipped", skip_reason=bindparam("reason"))
+_SKIPPED = _URL_ROW.values(fetch_state="skipped", skip_reason=bindparam("reason"))
+_ERRORED = _URL_ROW.values(
+    fetch_state="error",
+    fetch_error=bindparam("failure"),
+    fetch_error_message=bindparam("failure_message"),
+    fetched_at=bindparam("request_at"),
 )
-_ERRORED = (
-    update(urls)
-    .where(urls.c.id == bindparam("url_id"))
-    .values(
-        fetch_state="error",
-        fetch_error=bindparam("failure"),
-        fetch_error_message=bindparam("failure_message"),
-        fetched_at=bindparam("request_at"),
-    )
-)
-_UNWRITTEN = (
-    update(urls)
-    .where(urls.c.id == bindparam("url_id"))
-    .values(
-        fetch_state="error",
-        fetch_error="record_failed",
-        fetch_error_message=bindparam("failure_message"),
-    )
+_UNWRITTEN = _URL_ROW.values(
+    fetch_state="error",
+    fetch_error="record_failed",
+    fetch_error_message=bindparam("failure_message"),
 )
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
 _IS_QUEUED = urls.c.fetch_state == literal_column("'queued'")
 _QUEUED = (
-    select(urls.c.id, urls.c.url)
+    select(urls.c.id, urls.c.url, urls.c.crawl_depth, urls.c.discovered_via, urls.c.found_on_url_id)
     .where(
         _IS_QUEUED,
         urls.c.crawl_depth == bindparam("depth"),
@@ -117,7 +101,16 @@ def queued_batch(
     def unit(connection: Connection) -> tuple[QueuedUrl, ...]:
         rows = connection.execute(_QUEUED, {"depth": depth, "after": after, "size": size})
         # The one place the frontier reads urls.url back (design D13).
-        return tuple(QueuedUrl(row.id, NormalizedUrl(row.url)) for row in rows)
+        return tuple(
+            QueuedUrl(
+                id=row.id,
+                url=NormalizedUrl(row.url),
+                crawl_depth=row.crawl_depth,
+                discovered_via=row.discovered_via,
+                found_on_url_id=row.found_on_url_id,
+            )
+            for row in rows
+        )
 
     return unit
 

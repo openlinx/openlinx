@@ -70,8 +70,8 @@ class AiohttpFetcher:
                     for name, value in response.raw_headers
                 )
                 status_code = response.status
-        # Cancellation is no failure of the request, and passes through.
-        except (aiohttp.ClientError, OSError, TimeoutError) as error:
+        # Cancellation is no Exception, so it passes through.
+        except Exception as error:
             return FetchFailure(
                 fetch_error=_fetch_error(error),
                 message=f"{type(error).__name__}: {error}",
@@ -88,7 +88,8 @@ class AiohttpFetcher:
 
 
 def _fetch_error(error: Exception) -> FetchError:
-    if isinstance(error, aiohttp.ClientConnectorDNSError):
+    # The system resolver cannot encode a name such as a..b.test, and aiohttp passes that on.
+    if isinstance(error, aiohttp.ClientConnectorDNSError | UnicodeError):
         return "dns_error"
     cause = error.os_error if isinstance(error, aiohttp.ClientConnectorError) else error
     if isinstance(cause, ConnectionRefusedError):

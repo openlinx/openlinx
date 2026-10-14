@@ -3,7 +3,7 @@
 import asyncio
 import re
 from collections.abc import AsyncIterator, Mapping, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -30,7 +30,7 @@ from spider.store.crawls import crawl_summary, record_state
 from spider.store.records import CrawlFile, CrawlSummary, NewCrawl, SecretNames, UrlCounts
 from spider.store.settings import StoreSettings
 from spider.store.urls import url_counts
-from spider.store.writer import CrawlWriter
+from spider.store.writer import CrawlWriter, CrawlWriterClosedError
 from spider.workspace.discovery import resolve_workspace
 from spider.workspace.settings import load_settings
 from spider.workspace.tables import SettingsTables
@@ -55,7 +55,7 @@ class CrawlRequest:
     flags: Mapping[str, Mapping[str, Any]]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CrawlPlan:
     seed: NormalizedUrl
     settings: CrawlSettings
@@ -131,7 +131,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     )
     crawl_settings = settings.table(CrawlSettings)
     scope = scope_rules(seed, exclude=_patterns(crawl_settings.exclude))
-    return CrawlPlan(seed, crawl_settings, scope, new_crawl)
+    return CrawlPlan(seed=seed, settings=crawl_settings, scope=scope, new_crawl=new_crawl)
 
 
 def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
@@ -143,8 +143,8 @@ def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
             raise SpiderError(
                 INVALID_PATTERN,
                 f"The pattern {text} is not a valid regular expression: {error}.",
-                hint="Give a Python regular expression; escape a literal character such as "
-                "( or ? with a backslash.",
+                hint="Fix it in --exclude or in exclude of the settings file's [crawl] table: "
+                "a Python regular expression, with a literal character such as ( or ? escaped.",
                 details={"pattern": text},
             ) from None
     return tuple(patterns)
@@ -177,9 +177,9 @@ async def _crawl(
 ) -> tuple[datetime, CrawlSummary, UrlCounts]:
     async with _crawl_context(crawl_file, plan, clock, reporter, hooks) as context:
         await run_crawl(context, plan.seed)
-        if context.stop.cause is not None:
-            # Never completed: 12.9 records the failed end as crawl_write_failed.
-            raise context.stop.cause
+        if context.stop.is_set:
+            # Never completed: 12.9 records a write failure's failed end, 9.7 and 13.1 a stop.
+            raise context.stop.cause or RuntimeError(f"no end is built for {context.stop.reason}")
         writer = context.writer
         # Before completed is written: 040 reads completed as "its Issues are materialised".
         for crawl_pass in hooks.passes:
@@ -212,8 +212,12 @@ async def _crawl_context(
                 hooks=hooks,
                 stop=StopSignal(),
             )
-    finally:
-        await asyncio.to_thread(writer.close)
+    except BaseException:
+        # An ended writer raises why it ended once more; the error already raised says it first.
+        with suppress(CrawlWriterClosedError):
+            await asyncio.to_thread(writer.close)
+        raise
+    await asyncio.to_thread(writer.close)
 
 
 def _invalid_seed(text: str, reason: InvalidUrlReason) -> SpiderError:

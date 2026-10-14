@@ -95,7 +95,10 @@ filterwarnings = ["error"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 timeout = 60
-markers = ["slow: waits real seconds, such as a reader's 5 s busy timeout"]
+markers = [
+    "slow: waits real seconds, such as a reader's 5 s busy timeout",
+    "blocks_remote: the network guard blocks the test on purpose",
+]
 
 [tool.coverage.run]
 plugins = ["covdefaults"]

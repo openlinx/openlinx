@@ -13,7 +13,7 @@ from spider.crawl.scope import ScopeDecision, ScopeRules
 from spider.crawl.urls import NormalizedUrl, url_host
 from spider.output.codes import HANDLER_FAILED, PARSE_FAILED, RECORD_FAILED
 from spider.output.diagnostics import Diagnostic
-from spider.store.failures import is_one_rows_error
+from spider.store.failures import is_one_urls_failure
 from spider.store.records import ErroredUrl, FetchedUrl, NewUrl, QueuedUrl, SkippedUrl
 from spider.store.urls import (
     UrlUnit,
@@ -60,7 +60,7 @@ class _Outcomes:
         error = done.exception()
         if error is None:
             return
-        if not is_one_rows_error(error):
+        if not is_one_urls_failure(error):
             self._context.stop.set("write_failed", error)
             return
         self._context.reporter.count(
@@ -89,10 +89,14 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     limits = RequestLimits(context.settings.concurrency)
     await context.writer.run_async(record_seed(seed))
     depth: int | None = 0
-    while depth is not None and not context.stop.is_set:
-        await _crawl_depth(context, outcomes, limits, depth)
-        # Read after every unit submitted so far, so it sees the URLs they discovered.
-        depth = await context.writer.run_async(next_depth(depth))
+    try:
+        while depth is not None and not context.stop.is_set:
+            await _crawl_depth(context, outcomes, limits, depth)
+            # Read after every unit submitted so far, so it sees the URLs they discovered.
+            depth = await context.writer.run_async(next_depth(depth))
+    # An ended writer refuses every unit; its cause says why it ended (017 D6).
+    except CrawlWriterClosedError as closed:
+        context.stop.set("write_failed", closed.__cause__ or closed)
     await outcomes.settled()
 
 
@@ -106,12 +110,11 @@ async def _crawl_depth(
         after = 0
         while batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH)):
             for queued in batch:
-                # Held by the URL's task until it ends, so tasks never outgrow the global cap.
-                await limits.tasks.acquire()
+                await limits.reserve_task()
                 if context.stop.is_set:
-                    limits.tasks.release()
+                    limits.task_ended()
                     return
-                task = asyncio.create_task(_crawl_url(context, outcomes, limits, queued, depth))
+                task = asyncio.create_task(_crawl_url(context, outcomes, limits, queued))
                 running.add(task)
                 task.add_done_callback(running.discard)
             after = batch[-1].id
@@ -125,101 +128,106 @@ async def _crawl_depth(
 
 
 async def _crawl_url(
-    context: CrawlContext,
-    outcomes: _Outcomes,
-    limits: RequestLimits,
-    queued: QueuedUrl,
-    depth: int,
+    context: CrawlContext, outcomes: _Outcomes, limits: RequestLimits, queued: QueuedUrl
 ) -> None:
     try:
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
-        await outcomes.submit(queued, await _unit_of(context, limits, queued, depth))
+        await outcomes.submit(queued, await _unit_of(context, limits, queued))
     finally:
-        limits.tasks.release()
+        limits.task_ended()
 
 
-async def _unit_of(
-    context: CrawlContext, limits: RequestLimits, queued: QueuedUrl, depth: int
-) -> UrlUnit:
+async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedUrl) -> UrlUnit:
     """The unit that records the URL's final state, with its handlers' rows."""
     row_writers = context.hooks.row_writers
     # Decided once, at dispatch, so a URL found on several Pages is recorded once (design D1).
     skip_reason = context.scope.decide(queued.url).skip_reason
     if skip_reason is not None:
-        skipped = UrlResult(
-            url_id=queued.id,
-            url=queued.url,
-            crawl_depth=depth,
-            fetch_state="skipped",
-            skip_reason=skip_reason,
-        )
+        skipped = _result(queued, fetch_state="skipped", skip_reason=skip_reason)
         return record_skipped(
-            SkippedUrl(queued.id, skip_reason, _handled(context, skipped)), row_writers
+            SkippedUrl(queued.id, skip_reason, _handler_rows(context, skipped)), row_writers
         )
     async with limits.host(url_host(queued.url)):
         response = await context.fetcher.fetch(Request(queued.url))
     if isinstance(response, FetchFailure):
-        failed = UrlResult(
-            url_id=queued.id,
-            url=queued.url,
-            crawl_depth=depth,
+        failed = _result(
+            queued,
             fetch_state="error",
             fetch_error=response.fetch_error,
+            fetch_error_message=response.message,
+            fetched_at=response.fetched_at,
         )
         errored = ErroredUrl(
             url_id=queued.id,
             fetch_error=response.fetch_error,
             fetch_error_message=response.message,
             fetched_at=response.fetched_at,
-            rows=_handled(context, failed),
+            rows=_handler_rows(context, failed),
         )
         return record_error(errored, row_writers)
-    return record_fetched(await _fetched(context, queued, depth, response), row_writers)
+    return record_fetched(await _fetched(context, queued, response), row_writers)
 
 
-async def _fetched(
-    context: CrawlContext, queued: QueuedUrl, depth: int, response: FetchResult
-) -> FetchedUrl:
+async def _fetched(context: CrawlContext, queued: QueuedUrl, response: FetchResult) -> FetchedUrl:
     parsed = 200 <= response.status_code < 300 and _is_html(response)
     page = await context.pages.prepare(queued.url, response) if parsed else None
-    discovered = () if page is None else _followed(page, context.scope, depth + 1)
-    if page is not None and page.parse_error is not None:
+    discovered = () if page is None else _followed(page, context.scope, queued.crawl_depth + 1)
+    parse_error = None if page is None else page.parse_error
+    parse_error_message = None if page is None else page.parse_error_message
+    if parse_error is not None:
         context.reporter.count(
             Diagnostic.of(
                 PARSE_FAILED,
-                f"An extractor failed on {queued.url} ({page.parse_error_message}); the Page "
-                "was recorded without its output, and its Links were followed.",
+                f"An extractor failed on {queued.url} ({parse_error_message}); the Page was "
+                "recorded without its output, and its Links were followed.",
             ),
             queued.url,
         )
-    result = UrlResult(
-        url_id=queued.id,
-        url=queued.url,
-        crawl_depth=depth,
+    content_type = response.header("Content-Type")
+    result = _result(
+        queued,
         fetch_state="fetched",
         status_code=response.status_code,
+        content_type=content_type,
+        response_time_ms=response.response_time_ms,
+        fetched_at=response.fetched_at,
+        parsed=parsed,
+        parse_error=parse_error,
+        parse_error_message=parse_error_message,
         headers=response.headers,
         outputs={} if page is None else dict(page.outputs),
     )
     return FetchedUrl(
         url_id=queued.id,
         status_code=response.status_code,
-        content_type=response.header("Content-Type"),
+        content_type=content_type,
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
         parsed=parsed,
-        parse_error=None if page is None else page.parse_error,
-        parse_error_message=None if page is None else page.parse_error_message,
+        parse_error=parse_error,
+        parse_error_message=parse_error_message,
         discovered=discovered,
-        rows=_handled(context, result),
+        rows=_handler_rows(context, result),
     )
 
 
-def _handled(context: CrawlContext, result: UrlResult) -> tuple[object, ...]:
+def _result(queued: QueuedUrl, **outcome: Any) -> UrlResult:
+    return UrlResult(
+        url_id=queued.id,
+        url=queued.url,
+        crawl_depth=queued.crawl_depth,
+        discovered_via=queued.discovered_via,
+        found_on_url_id=queued.found_on_url_id,
+        **outcome,
+    )
+
+
+def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[object, ...]:
     rows: list[object] = []
     for handler in context.hooks.handlers:
         try:
-            rows.extend(handler.handle(result))
+            # Whole, or not at all: a handler that fails midway keeps none of its rows.
+            rows.extend(tuple(handler.handle(result)))
         # A handler is later changes' code: its failure costs only its rows (design D16).
         except Exception as error:
             context.reporter.count(
@@ -237,11 +245,12 @@ def _followed(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl
     return tuple(
         NewUrl(url=link.target, crawl_depth=depth, discovered_via=link.type)
         for link in page.links
-        if link.type == "hyperlink" and _recorded(scope.decide(link.target))
+        if link.type == "hyperlink" and _enters_frontier(scope.decide(link.target))
     )
 
 
-def _recorded(decision: ScopeDecision) -> bool:
+def _enters_frontier(decision: ScopeDecision) -> bool:
+    # An excluded URL is recorded too, as skipped when it is dispatched.
     return decision.in_scope or decision.skip_reason is not None
 
 

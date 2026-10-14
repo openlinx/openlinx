@@ -1,11 +1,21 @@
 """The Crawl's warning log: every warning kept once, counted ones with their count (020 D10)."""
 
 from dataclasses import replace
-from typing import Any
+from typing import Any, Protocol
 
 from spider.crawl.urls import NormalizedUrl
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Reporter
+
+
+class CrawlReporter(Protocol):
+    """A Reporter that also counts the counted warnings of D16."""
+
+    def warn(self, diagnostic: Diagnostic) -> None: ...
+
+    def event(self, name: str, **data: Any) -> None: ...
+
+    def count(self, diagnostic: Diagnostic, url: NormalizedUrl) -> None: ...
 
 
 class WarningLog:

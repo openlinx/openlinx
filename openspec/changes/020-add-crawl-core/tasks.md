@@ -149,7 +149,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: `Hooks` and `default_hooks()` exist (design D9), the Crawl Service takes the `Hooks` to use, a handler is pure and returns store rows, and the store writes them in the unit that records the URL's final state (design D14).
 - [x] 5.4 Drive "Post-crawl passes run before a Crawl is completed" at seam 2. Done when: a pass is a store function that submits its own units, and runs before `completed` is written.
 - [x] 5.5 Drive "An extractor error is recorded", "The Crawl continues after an extractor error" and "Links of a Page whose extractor failed are followed" at seam 3+6. Done when: `parse_error` and `parse_error_message` are declared, the `parsed` column says that it means parsed with its Links found, and a registered extractor's failure is recorded as `extractor_error`, with `<name>: <type>` as its message, while the URL keeps `parsed` = 1, its Links are followed and handlers get the other extractors' outputs (ruling of 2026-10-14). An extractor is a module-level function of the parsed tree and a frozen `PageInput` (design D9).
-- [x] 5.6 Drive "Parse failures are counted in one warning" at seam 1.
+- [x] 5.6 Drive "Parse failures are counted in one warning" at seam 2, through the result's `to_json()`, which the CLI prints as it is: only the Crawl Service takes the test's extractor (review of group 5).
 
   Done when: the Crawl Service's warning log (design D10) keeps one entry per counted warning with `details.count` and `details.first_url`, writes it to stderr when it first occurs, and `parse_failed` is declared.
 - [x] 5.7 Drive "A failing handler does not stop the Crawl" at seam 2. Done when: `handler_failed` is declared, and only the failing handler's rows are dropped.
@@ -170,7 +170,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: the URLs of a frontier batch are crawled by concurrent tasks, bounded by a semaphore per host and the global cap of design D7 (4 × concurrency, clamped to 20–100), and the next Crawl Depth's first frontier read waits until every task of the open depth has submitted its unit or ended (design D3); task 9.3 adds that checks never wait. Tasks 5.14–5.16 were 11.1–11.3: concurrent tasks change the engine's loop, so they come before PR #1, and groups 7–14 never build on a sequential one (ruling of 2026-10-14).
 - [x] 5.16 Drive "A concurrency of zero is rejected" at seam 1.
 - [x] 5.17 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes and the per-host and global request limits in `docs/crawling.md`.
-- [ ] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [x] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Internal and External URLs over HTTP (slice)
 

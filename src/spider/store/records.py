@@ -101,12 +101,15 @@ class CrawlFile:
     path: Path
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class QueuedUrl:
-    """A URL the frontier hands to the engine."""
+    """A URL the frontier hands to the engine, with the row values its handlers get."""
 
     id: int
     url: NormalizedUrl
+    crawl_depth: int
+    discovered_via: DiscoveredVia
+    found_on_url_id: int | None
 
 
 @dataclass(frozen=True, slots=True)

@@ -93,7 +93,7 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 
 | What fails | How the URL is recorded |
 |---|---|
-| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `connection_error` (any other failure, a connection reset in the middle of the body included) |
+| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `connection_error` (any other failure, a connection reset in the middle of the body included) |
 | The body has bytes its character encoding cannot hold | Nothing: they are decoded as replacement characters, and the Page is parsed as usual. |
 | A registered extractor raises an error | `parsed` stays 1 and the Page's Links are followed; `parse_error` = `extractor_error`, and `parse_error_message` names the extractor and the error's type, such as `title: ValueError`. Only that extractor's output is missing. |
 | A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |

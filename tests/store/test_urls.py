@@ -1,9 +1,10 @@
 """The units of spider.store.urls (020-add-crawl-core D1, D2, D14; seam 2)."""
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Connection, event
+from sqlalchemy import Connection, event, text
 
 from spider.crawl.urls import NormalizedUrl, parse_seed
 from spider.store.connections import opening
@@ -22,6 +23,7 @@ from spider.store.urls import (
     record_fetched,
     record_seed,
     record_skipped,
+    record_unwritten,
     url_counts,
 )
 from spider.store.writer import CrawlWriter
@@ -41,10 +43,25 @@ def _new(text: str) -> NewUrl:
     return NewUrl(url=_url(text), crawl_depth=1, discovered_via="hyperlink")
 
 
+@dataclass(frozen=True, slots=True)
+class Note:
+    url_id: int
+
+
+def _write_note(connection: Connection, row: Note) -> None:
+    connection.execute(text("CREATE TABLE IF NOT EXISTS test_notes (url_id INTEGER)"))
+    connection.execute(text("INSERT INTO test_notes VALUES (:url_id)"), {"url_id": row.url_id})
+
+
 def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> None:
     crawl = create_any_crawl(temp_workspace)
     seed = _url("https://site.test/")
-    found = (_new("https://site.test/a"), _new("https://site.test/b"), _new("https://site.test/a"))
+    found = (
+        _new("https://site.test/a"),
+        _new("https://site.test/b"),
+        _new("https://site.test/a"),
+        _new("https://site.test/c"),
+    )
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         seed_id = writer.run(record_seed(seed))
@@ -60,8 +77,9 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     response_time_ms=120,
                     parsed=True,
                     discovered=found,
+                    rows=(Note(seed_id),),
                 ),
-                {},
+                {Note: _write_note},
             )
         )
         writer.run(record_skipped(SkippedUrl(seed_id + 2, "excluded"), {}))
@@ -78,6 +96,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 {},
             )
         )
+        writer.run(record_unwritten(seed_id + 3, "ValueError: no row"))
         counts = writer.run(url_counts())
         replay_now(writer)
 
@@ -91,14 +110,27 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             "SELECT url, crawl_depth, fetch_state, skip_reason, fetch_error, status_code, "
             "content_type, response_time_ms, fetched_at FROM urls ORDER BY id",
         ),
+        query(crawl.path, "SELECT url_id FROM test_notes"),
     ) == (
-        (QueuedUrl(seed_id, seed),),
+        (
+            QueuedUrl(
+                id=seed_id, url=seed, crawl_depth=0, discovered_via="seed", found_on_url_id=None
+            ),
+        ),
         1,
-        (QueuedUrl(seed_id + 1, _url("https://site.test/a")),),
+        (
+            QueuedUrl(
+                id=seed_id + 1,
+                url=_url("https://site.test/a"),
+                crawl_depth=1,
+                discovered_via="hyperlink",
+                found_on_url_id=seed_id,
+            ),
+        ),
         UrlCounts(
-            discovered=3,
+            discovered=4,
             fetched=1,
-            errors=1,
+            errors=2,
             skipped=1,
             queued=0,
             pages=1,
@@ -132,7 +164,9 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 "2026-09-27T14:03:14.000Z",
             ),
             ("https://site.test/b", 1, "skipped", "excluded", None, None, None, None, None),
+            ("https://site.test/c", 1, "error", None, "record_failed", None, None, None, None),
         ],
+        [(seed_id,)],
     )
 
 

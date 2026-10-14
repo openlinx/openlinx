@@ -12,4 +12,7 @@ def write_rows(
     connection: Connection, rows: Sequence[object], writers: Mapping[type, RowWriter]
 ) -> None:
     for row in rows:
-        writers[type(row)](connection, row)
+        writer = writers.get(type(row))
+        if writer is None:
+            raise TypeError(f"no row writer is registered for {type(row).__name__}")
+        writer(connection, row)

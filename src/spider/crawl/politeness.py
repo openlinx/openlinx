@@ -14,7 +14,14 @@ class RequestLimits:
     def __init__(self, concurrency: int) -> None:
         self._concurrency = concurrency
         self._hosts: dict[str, asyncio.Semaphore] = {}
-        self.tasks = asyncio.Semaphore(global_cap(concurrency))
+        self._tasks = asyncio.Semaphore(global_cap(concurrency))
+
+    async def reserve_task(self) -> None:
+        """Waits for room under the global cap before a URL's task is created."""
+        await self._tasks.acquire()
+
+    def task_ended(self) -> None:
+        self._tasks.release()
 
     def host(self, host: str) -> asyncio.Semaphore:
         semaphore = self._hosts.get(host)
