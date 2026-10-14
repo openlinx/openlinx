@@ -17,13 +17,13 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 1. Rule model and the rules Command (slice)
 
-- [ ] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. This is a trivial pair: both fail until the registry and the Command exist. Add the Rule model, the registry, `internal-4xx` with its guidance texts, and `spider rules list` on `010`'s output contract, with bare `spider rules` running `list`. `010`'s CLI has no Command groups yet, so this slice adds them in general (design D18): a group's Commands are registered under it, each with its own `@command_meta`, `spider commands` lists each by its full path (cli-contract: `rules list`), `--help` shows them, and the global-flag check works under a group. `060`'s `crawls list` reuses it.
+- [ ] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. This is a trivial pair: both fail until the registry and the Command exist. Add the Rule model, the registry, `internal-4xx` and `internal-5xx` with their guidance texts ("First Rule in the list" needs a second Rule for its `next_cursor`, and `internal-5xx` follows `internal-4xx` in the catalogue), and `spider rules list` on `010`'s output contract, with bare `spider rules` running `list`. `010`'s CLI has no Command groups yet, so this slice adds them in general (design D18): a group's Commands are registered under it, each with its own `@command_meta`, `spider commands` lists each by its full path (cli-contract: `rules list`), tested here, where `spider commands` first meets a group, and `--help` shows them. `060`'s `crawls list` reuses it.
 - [ ] 1.2 Drive "Show a Rule with thresholds" at seam 1. Register `title-too-long` with its thresholds and texts, and add `spider rules show <id>`.
 - [ ] 1.3 Drive "Rule without thresholds" at seam 1, and register `title-missing`.
 - [ ] 1.4 Drive "Unknown Rule id" at seam 1: `rule_not_found`, exit code 4, and a hint naming `spider rules list`.
 - [ ] 1.5 Drive "Windows console output" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
 - [ ] 1.6 Docs: create `docs/rules.md` covering the Rule model, what Issue Type and Priority mean, the Issue-type principle with `http-url` as Warning/High (design D3), category and id naming (D12) and how to read `spider rules` output.
-- [ ] 1.7 **Guard:** every code this change declares (design D17) is listed by `spider commands` with its level and exit code, and its Commands by their full paths, `rules list` and `rules show`, at seam 1.
+- [ ] 1.7 **Guard:** every code this change declares (design D17) is listed by `spider commands` with its level and exit code, at seam 1.
 - [ ] 1.8 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Configuration in spider.toml (slice)
@@ -62,7 +62,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 4.1 Drive "Client error" at seam 2, over `urls` rows: `020`'s `is_internal`, `fetch_state` and `status_code`. The `internal_urls` population reads `blocked_by_robots_txt` only from task 7.1, after `020` task 10.5 declares the column (design D2).
 - [ ] 4.2 Drive "External URLs are not Internal URLs" at seam 2.
 - [ ] 4.3 Drive "Client error recorded by a Crawl" at seam 3+6, with an Internal URL that is not a Page. `020`'s Crawl records it, Internal and not parsed, since group 6 of `020`.
-- [ ] 4.4 Drive "Server error" at seam 2, and register `internal-5xx`.
+- [ ] 4.4 Drive "Server error" at seam 2, with `internal-5xx`'s query (registered in task 1.1).
 - [ ] 4.5 Drive "No response" at seam 2, over `020`'s `fetch_error`, and register `internal-no-response`.
 - [ ] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
 - [ ] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1`, with `h1-missing`'s query (registered in task 2.2).
