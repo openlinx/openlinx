@@ -31,7 +31,7 @@ Categories are snake_case, such as `meta_descriptions`, because they are stored 
 
 ## Reading `spider rules`
 
-`spider rules list` lists the Rules in catalogue order: by category, in the order above, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`. `spider rules` with no arguments runs `spider rules list`; options go after `list`. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `enabled`, `thresholds`, `description`, `why_it_matters` and `how_to_fix`:
+`spider rules list` lists the Rules in catalogue order: by category, in the order above, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`, and `--workspace` for a Workspace other than the nearest one. `spider rules` with no arguments runs `spider rules list`; options go after `list`. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `enabled`, `thresholds`, `description`, `why_it_matters` and `how_to_fix`:
 
 ```
 spider rules list --limit 1
@@ -58,14 +58,14 @@ Raise a limit, here the title length, from 60 to 70 characters:
 max_chars = 70
 ```
 
-Turn a Rule off, so that no Crawl evaluates it:
+Turn a Rule off, which `spider rules` shows as `enabled` false:
 
 ```toml
 [rules.h1-missing]
 enabled = false
 ```
 
-A table may hold `enabled`, a boolean, and the Rule's thresholds by name, each an integer of at least 0; `spider rules show <id>` lists a Rule's thresholds. Anything else stops every Command that reads the settings with `settings_invalid` (exit code 3), before a Crawl requests any URL. `details.errors[].key` is the dotted key, and the hint names the closest Rule id or key:
+A table may hold `enabled`, a boolean, and the Rule's thresholds by name, each an integer of at least 0; `spider rules show <id>` lists a Rule's thresholds. Anything else stops every Command that reads the settings with `settings_invalid` (exit code 3), before a Crawl requests any URL. `details.errors[].key` is the dotted key, and the hint names the closest Rule id or key when there is one:
 
 ```
 spider rules list

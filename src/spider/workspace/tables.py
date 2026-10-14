@@ -13,6 +13,11 @@ if TYPE_CHECKING:
 type Table = type[BaseModel] | type[dict[str, Any]]
 
 
+# The json_schema_extra key of a table model that opts into being a table of named tables,
+# each named table with settings of its own, such as 040's [rules.<id>].
+NAMED_TABLES = "named_tables"
+
+
 class SettingsTables:
     def __init__(self) -> None:
         # "module:Class" references: a table's module, and pydantic, load only with the settings.
@@ -31,8 +36,7 @@ class SettingsTables:
         # Declared once, on the settings field (json_schema_extra), so redaction reads it too.
         name, _, key = setting.partition(".")
         model: Any = _resolve(self._references[name])
-        extra = model.model_fields[key].json_schema_extra
-        return isinstance(extra, dict) and extra.get("secret") is True
+        return _is_secret(model.model_fields[key])
 
     def secret_settings(self) -> frozenset[str]:
         return frozenset(
@@ -62,10 +66,10 @@ def keyed_entry(table: Any) -> Any:
 
 def named_tables(table: Any) -> dict[str, Any] | None:
     """The tables of a table of named tables, by name, or None for another table."""
-    fields = getattr(table, "model_fields", None)
-    if not fields or not all(_is_model(field.annotation) for field in fields.values()):
+    extra = getattr(table, "model_config", {}).get("json_schema_extra")
+    if not isinstance(extra, dict) or extra.get(NAMED_TABLES) is not True:
         return None
-    return {field.alias or key: field.annotation for key, field in fields.items()}
+    return {field.alias or key: field for key, field in table.model_fields.items()}
 
 
 def _is_model(annotation: Any) -> bool:
@@ -77,35 +81,56 @@ def check_table(name: str, table: Table) -> None:
     entry = keyed_entry(table)
     tables = named_tables(table)
     if tables is not None:
-        # Each named table has settings of its own (040's [rules.<id>]), so the template
-        # describes them all with the table's docstring.
-        if getattr(table, "model_config", {}).get("extra") != "forbid":
-            raise TypeError(f'Settings table [{name}] must set extra="forbid".')
-        if not table.__doc__ or "\n" in table.__doc__:
-            raise TypeError(f"Settings table [{name}] needs a one-line docstring.")
-        for key, model in tables.items():
-            _check_model(f"{name}.{key}", model)
+        _check_named_tables(name, table, tables)
     elif entry is None:
         _check_model(name, table)
     else:
         # Literal entries (`<name> = <value>`) have no docstring to describe the table in the
         # template, so they wait for the change that needs them (050's [segments]).
-        if not isinstance(entry, type) or not hasattr(entry, "model_fields"):
+        if not _is_model(entry):
             raise TypeError(f"Settings table [{name}] needs a table model for its entries.")
         _check_model(f"{name}.<name>", entry)
         # The template describes the keyed table with it.
-        if not entry.__doc__ or "\n" in entry.__doc__:
-            raise TypeError(f"Settings table [{name}] needs a one-line entry docstring.")
+        _check_one_line(entry.__doc__, f"Settings table [{name}] needs a one-line entry docstring.")
+
+
+def _check_named_tables(name: str, table: Any, tables: dict[str, Any]) -> None:
+    # The template describes every named table with the table's docstring.
+    _check_forbids_extra(name, table)
+    _check_one_line(table.__doc__, f"Settings table [{name}] needs a one-line docstring.")
+    for key, field in tables.items():
+        if not _is_model(field.annotation):
+            raise TypeError(f"Settings table [{name}.{key}] needs a table model.")
+        # Settings load the table with no value given, so every named table has a default.
+        if field.is_required():
+            raise TypeError(f"Settings table [{name}.{key}] needs a default.")
+        _check_model(f"{name}.{key}", field.annotation)
+        # Redaction reads secrets from the top level of a table only (secret_settings).
+        if any(_is_secret(setting) for setting in field.annotation.model_fields.values()):
+            raise TypeError(f"Settings table [{name}.{key}] cannot hold a secret.")
+
+
+def _check_forbids_extra(name: str, model: Any) -> None:
+    if getattr(model, "model_config", {}).get("extra") != "forbid":
+        raise TypeError(f'Settings table [{name}] must set extra="forbid".')
+
+
+def _check_one_line(text: str | None, problem: str) -> None:
+    if not text or "\n" in text:
+        raise TypeError(problem)
+
+
+def _is_secret(field: Any) -> bool:
+    extra = field.json_schema_extra
+    return isinstance(extra, dict) and extra.get("secret") is True
 
 
 def _check_model(name: str, model: Any) -> None:
     # The template and the error hints rely on flat tables whose keys all have a
     # one-line description and a default that is a TOML literal, or None for unset.
-    if getattr(model, "model_config", {}).get("extra") != "forbid":
-        raise TypeError(f'Settings table [{name}] must set extra="forbid".')
+    _check_forbids_extra(name, model)
     for key, field in model.model_fields.items():
-        if not field.description or "\n" in field.description:
-            raise TypeError(f"Setting {name}.{key} needs a one-line description.")
+        _check_one_line(field.description, f"Setting {name}.{key} needs a one-line description.")
         if field.default is not None and not _is_toml_literal(field.default):
             raise TypeError(f"Setting {name}.{key} needs a default TOML can write.")
 

@@ -79,10 +79,10 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         if name in taken:
             raise TypeError(f"Two Commands or groups are named {name}.")
         taken.add(name)
+        if " " in name:
+            raise TypeError(f"{name} has a space in its name, which only a grouped Command has.")
         if isinstance(entry, CommandGroup):
             app.add_typer(_group_app(entry), name=name)
-        elif " " in name:
-            raise TypeError(f"Command {name} has a space in its name but no group.")
         else:
             app.command(name=name)(entry)
     return app

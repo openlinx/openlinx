@@ -53,8 +53,9 @@ Settings come only from a Command's flag, then the Workspace's `spider.toml`, th
   - `extra="forbid"`, and a one-line description on every setting
   - a default TOML can write: a string, a finite number, a boolean or a list of those
   - or a `None` default for a setting that is unset; the template writes it as `# <key> =`
-  - flat tables, except keyed tables
-- **Keyed tables:** a table may be `dict[str, V]`, where V is a table model with a one-line docstring, for entries the user names, such as `[rules.<id>]`. Entries that are TOML literals (`050`'s `[segments]`) wait for the change that needs them, which also decides how the template describes them. The template writes the entry docstring and a commented `# [<table>.<name>]` header.
+  - flat tables, except keyed tables and tables of named tables
+- **Keyed tables:** a table may be `dict[str, V]`, where V is a table model with a one-line docstring, for entries the user names. Entries that are TOML literals (`050`'s `[segments]`) wait for the change that needs them, which also decides how the template describes them. The template writes the entry docstring and a commented `# [<table>.<name>]` header.
+- **Tables of named tables** (`040` D9): a table model opts in with the marker that `spider.workspace.tables` names (`NAMED_TABLES` in its `json_schema_extra`), and each of its fields is then a named table with settings of its own, such as `[rules.<id>]`, one per Rule. A field's alias is its name in `spider.toml`, so a name may hold `-`. The table forbids unknown names and has a one-line docstring, which the template writes with a commented `# [<table>.<name>]` header; each named table follows the rules of a table, has a default and holds no secret, since redaction reads secrets from the top level of a table only. A model of models that does not opt in is refused.
 - **Secrets** are declared once, on the settings field (`json_schema_extra={"secret": True}`). An option mapped to that setting inherits it, so `spider commands` reads the table's model; an option with no setting declares `secret` itself. A test checks that every option's setting names a setting of a registered table.
 
 ## Crawl pipeline

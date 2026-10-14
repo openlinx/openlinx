@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from spider.cli.app import build_app
 from spider.cli.options import options_with_meta
 from spider.cli.runner import SpiderGroup, commands_by_path
-from spider.workspace.tables import SettingsTables, Table, check_table
+from spider.workspace.tables import NAMED_TABLES, SettingsTables, Table, check_table
 from tests.support.app import example_app
 
 
@@ -53,13 +53,13 @@ class Sized(BaseModel):
 class NamedTables(BaseModel):
     """Tables of the example, each named by its key."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={NAMED_TABLES: True})
 
     first_one: Sized = Field(Sized.model_validate({}), alias="first-one", description="The first.")
 
 
 class UndocumentedNamedTables(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={NAMED_TABLES: True})
 
     first: Sized = Field(Sized.model_validate({}), description="The first.")
 
@@ -67,9 +67,47 @@ class UndocumentedNamedTables(BaseModel):
 class LooseNamedTables(BaseModel):
     """Tables of the example."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={NAMED_TABLES: True})
 
     first: Loose = Field(Loose.model_validate({}), description="The first.")
+
+
+class UnmarkedNamedTables(BaseModel):
+    """Tables of the example, which do not opt into the kind."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    first: Sized = Field(Sized.model_validate({}), description="The first.")
+
+
+class RequiredNamedTables(BaseModel):
+    """Tables of the example, one without a default."""
+
+    model_config = ConfigDict(extra="forbid", json_schema_extra={NAMED_TABLES: True})
+
+    first: Sized = Field(description="The first.")
+
+
+class Credentials(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str | None = Field(None, description="A token.", json_schema_extra={"secret": True})
+
+
+class SecretNamedTables(BaseModel):
+    """Tables of the example, one with a secret."""
+
+    model_config = ConfigDict(extra="forbid", json_schema_extra={NAMED_TABLES: True})
+
+    first: Credentials = Field(Credentials.model_validate({}), description="The first.")
+
+
+class LooseOuterNamedTables(BaseModel):
+    """Tables of the example, which allow unknown names."""
+
+    model_config = ConfigDict(json_schema_extra={NAMED_TABLES: True})
+
+    first: Sized = Field(Sized.model_validate({}), description="The first.")
 
 
 @pytest.mark.parametrize(
@@ -85,6 +123,10 @@ class LooseNamedTables(BaseModel):
         dict[str, str],
         UndocumentedNamedTables,
         LooseNamedTables,
+        UnmarkedNamedTables,
+        RequiredNamedTables,
+        SecretNamedTables,
+        LooseOuterNamedTables,
     ],
 )
 def test_a_table_the_template_cannot_describe_is_refused(table: Table) -> None:

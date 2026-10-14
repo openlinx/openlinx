@@ -21,7 +21,7 @@ msgspec  # frozen records that cross 026's process pool: DiscoveredLink and page
 orjson  # JSON output (design D3 of 010-add-workspace-and-cli-contract)
 publicsuffixlist  # registrable domains for the www rule and --scope subdomains, bundled, never downloaded (design D4 of 020-add-crawl-core)
 pydantic-settings  # spider.toml settings (design D2 of 010-add-workspace-and-cli-contract)
-pydantic  # pydantic-settings: the settings models
+pydantic  # the settings models (design D2 of 010-add-workspace-and-cli-contract); 2.11 for serialize_by_alias, which [rules.<id>] needs (040-add-rules D9)
 pydantic-core  # pydantic: validation
 annotated-types  # pydantic: constraint metadata
 typing-extensions  # pydantic, pydantic-core, typing-inspection, sqlalchemy, aiohttp and aiosignal: typing backports

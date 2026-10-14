@@ -14,6 +14,12 @@ GUIDANCE = ("description", "why_it_matters", "how_to_fix")
 HOME_PAGE = Site({"/": Page(body="<title>Home</title>")})
 
 
+@pytest.fixture(autouse=True)
+def _in_a_workspace(shop: Path) -> None:
+    # spider rules reads the nearest Workspace, so a test never reads the one it runs in.
+    return None
+
+
 def test_first_rule_in_the_list() -> None:
     page = run_cli("rules", "list", "--limit", "1").json()
 
@@ -199,3 +205,32 @@ def test_the_group_help_lists_its_commands() -> None:
         True,
         True,
     )
+
+
+def test_the_rules_of_another_workspace(shop: Path) -> None:
+    other = shop.parent / "other"
+    other.mkdir()
+    (other / "spider.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
+
+    rule = run_cli("rules", "show", "title-too-long", "--workspace", str(other)).json()
+
+    assert rule["thresholds"]["max_chars"]["value"] == 70
+
+
+def test_a_threshold_above_the_integer_range_of_the_store_is_invalid(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 9223372036854775808\n")
+
+    result = run_cli("rules", "list")
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["details"]["errors"][0]["key"]) == (
+        3,
+        "rules.title-too-long.max_chars",
+    )
+
+
+def test_a_rule_id_in_capitals_gets_the_closest_id(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[rules.TITLE-TOO-LONG]\nmax_chars = 70\n")
+
+    error = run_cli("rules", "list").stderr_json_lines()[-1]
+
+    assert error["hint"] == "Did you mean rules.title-too-long?"

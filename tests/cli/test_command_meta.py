@@ -154,3 +154,14 @@ def test_a_group_name_already_taken_is_refused(name: str) -> None:
 
     with pytest.raises(TypeError, match="named"):
         build_app(AppExtra(commands=[group]))
+
+
+def test_a_group_name_with_a_space_is_refused() -> None:
+    @command_meta(name="two words list", output="document", formats=[Format.JSON])
+    def listed(output_format: FormatOpt = Format.JSON) -> dict[str, Any]:
+        return {}
+
+    group = CommandGroup(name="two words", summary="Two.", commands=(listed,), default=listed)
+
+    with pytest.raises(TypeError, match="space"):
+        build_app(AppExtra(commands=[group]))

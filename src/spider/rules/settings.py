@@ -4,8 +4,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
+from spider.naming import APP_NAME
 from spider.rules.model import Rule
 from spider.rules.registry import RULES
+from spider.workspace.tables import NAMED_TABLES
+
+# SQLite's largest INTEGER: the Crawl stores the thresholds it used (040-add-rules D6).
+_LARGEST = 2**63 - 1
 
 
 def _rule_table(rule: Rule) -> type[BaseModel]:
@@ -14,7 +19,7 @@ def _rule_table(rule: Rule) -> type[BaseModel]:
         # boolean, which pydantic would otherwise read from text such as "70" or "no".
         "enabled": (
             bool,
-            Field(True, strict=True, description="false leaves the Rule out of every Crawl."),
+            Field(True, strict=True, description="false turns the Rule off."),
         ),
     }
     for threshold in rule.thresholds:
@@ -23,11 +28,12 @@ def _rule_table(rule: Rule) -> type[BaseModel]:
             Field(
                 threshold.default,
                 ge=0,
+                le=_LARGEST,
                 strict=True,
                 description=f"The limit, in {threshold.unit}.",
             ),
         )
-    name = "".join(word.title() for word in rule.id.split("-")) + "Settings"
+    name = "".join(word.capitalize() for word in rule.id.split("-")) + "Settings"
     return create_model(name, __config__=ConfigDict(extra="forbid"), **fields)
 
 
@@ -46,8 +52,10 @@ def _tables() -> dict[str, Any]:
 RulesSettings = create_model(
     "RulesSettings",
     # A Crawl's recorded config names them by Rule id too.
-    __config__=ConfigDict(extra="forbid", serialize_by_alias=True),
+    __config__=ConfigDict(
+        extra="forbid", serialize_by_alias=True, json_schema_extra={NAMED_TABLES: True}
+    ),
     __doc__="A Rule's thresholds and whether it runs, in a table named by its id, such as "
-    "[rules.title-too-long].",
+    f"[rules.title-too-long]; {APP_NAME} rules list lists the ids and thresholds.",
     **_tables(),
 )

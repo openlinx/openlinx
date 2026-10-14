@@ -176,8 +176,9 @@ def test_a_table_of_named_tables_in_the_template(shop: Path) -> None:
     run_cli("init")
 
     lines = (shop / "spider.toml").read_text(encoding="utf-8").splitlines()
+    header = lines.index("# [rules.<name>]")
 
-    assert "# [rules.<name>]" in lines
+    assert ("spider rules list" in lines[header - 1], "# max_chars = 60" in lines) == (True, False)
 
 
 def test_a_keyed_table_in_the_template(shop: Path) -> None:

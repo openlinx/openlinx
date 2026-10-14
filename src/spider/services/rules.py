@@ -56,10 +56,12 @@ def rule_item(request: RulesRequest, tables: SettingsTables, rule_id: str) -> di
 def _configured(request: RulesRequest, tables: SettingsTables) -> Mapping[str, Any]:
     """The [rules.<id>] settings of the Workspace, by Rule id, with their defaults."""
     # Imported here: pydantic stays off the CLI's startup path.
+    from spider.rules.settings import RulesSettings
     from spider.workspace.settings import load_settings
 
     workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
-    configured: Mapping[str, Any] = load_settings(workspace, tables).root.model_dump()["rules"]
+    rules = load_settings(workspace, tables).table(RulesSettings)
+    configured: Mapping[str, Any] = rules.model_dump(by_alias=True)
     return configured
 
 
