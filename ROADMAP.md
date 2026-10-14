@@ -228,6 +228,7 @@ If a change needs something another change owns, it depends on that change inste
   - Report Sections, and `report brief --section <id>` / `--list`.
   - Report Notes, SVG charts, Health Score per Segment, and escaping.
   - The table script, tested at seam 9.
+  - To weigh at its re-grounding (the user's wish of 2026-10-14, not a decision): a polished, terminal-style look with switchable dark palettes and a light one, a monospace and sans-serif pairing, block-character bars, terse copy, and charts richer than a minimal SVG builder; it meets the draft's no-web-fonts rule, its own SVG builder and its offline CSP (070 design, Open Questions).
   - The **end-to-end CI test** on all three OSes: `crawl --detach` → `status` → `issues` → `report`.
 - **080-add-agent-skill** (min in v0.1):
   - **The Skill** (workflows, install instructions and one-liners), generated from `spider commands` by a developer script (`scripts/generate_skill.py`). In v0.1 the one-liner is `uv tool install`, and the workflows use only v0.1 Commands.
