@@ -177,3 +177,20 @@ def test_nofollow_links_are_followed_on_request(
     crawl_file = crawled(server.url("/"), "--follow-nofollow")
 
     assert _state(crawl_file, server.url("/private")) == [("fetched", None, "hyperlink")]
+
+
+def test_an_x_robots_tag_nofollow_applies_to_every_hyperlink(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/x">X</a>', headers=[("X-Robots-Tag", "nofollow")]),
+                "/x": Page(body="<p>X</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _state(crawl_file, server.url("/x")) == [("skipped", "nofollow", "hyperlink")]
