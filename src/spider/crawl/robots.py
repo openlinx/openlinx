@@ -38,13 +38,13 @@ class RobotsTxt:
         return tuple(self._rules.sitemaps)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class OriginRobots:
-    """What an origin's robots.txt says for the URLs of the origin."""
+    """What an origin's robots.txt request gave, for the URLs of the origin."""
 
-    # None: everything is allowed, unless the state is unreachable.
-    rules: RobotsTxt | None
-    unreachable: bool = False
+    state: RobotsState
+    # The rules of an ok robots.txt; without them every URL is allowed.
+    rules: RobotsTxt | None = None
     # Of the final robots.txt response; None without one.
     status_code: int | None = None
     # Why the robots.txt request got no HTTP response: every URL of the origin gets it.

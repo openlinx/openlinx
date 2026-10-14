@@ -526,6 +526,7 @@ def _slowly(
     return write
 
 
+@pytest.mark.slow
 def test_a_check_whose_unit_fails_as_the_frontier_runs_dry_is_requested_once(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
@@ -555,6 +556,7 @@ LIMIT_SITE = Site(
 )
 
 
+@pytest.mark.slow
 def test_a_file_failure_after_the_url_limit_ends_the_crawl_with_that_failure(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
@@ -564,6 +566,7 @@ def test_a_file_failure_after_the_url_limit_ends_the_crawl_with_that_failure(
         crawl_result(server.url("/"), _with_row_writer(_slowly(_refuse_with_the_file)), max_urls=2)
 
 
+@pytest.mark.slow
 def test_a_crawl_that_failed_after_its_url_limit_gives_no_limit_warning(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
@@ -579,3 +582,17 @@ def test_a_crawl_that_failed_after_its_url_limit_gives_no_limit_warning(
         )
 
     assert [warning.code for warning in reporter.warnings] == []
+
+
+def test_a_url_recorded_as_unwritten_keeps_its_robots_txt_verdict(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+
+    result = crawl_result(server.url("/"), _with_row_writer(_refuse))
+
+    assert query(
+        result.crawl_file,
+        "SELECT fetch_error, blocked_by_robots_txt FROM urls WHERE url = ?",
+        [server.url("/boom")],
+    ) == [("record_failed", 0)]

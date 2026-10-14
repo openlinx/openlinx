@@ -64,10 +64,10 @@ class _Outcomes:
         self._context = context
         self._pending: set[asyncio.Future[Any]] = set()
 
-    async def submit(self, queued: QueuedUrl, unit: UrlUnit) -> None:
+    async def submit(self, queued: QueuedUrl, unit: UrlUnit, blocked: bool | None) -> None:
         future = await self._context.writer.submit_async(unit)
         self._pending.add(future)
-        future.add_done_callback(lambda done: self._unit_done(queued, done))
+        future.add_done_callback(lambda done: self._unit_done(queued, blocked, done))
 
     async def settled(self) -> None:
         """Waits for every outcome, fallback units included."""
@@ -80,7 +80,9 @@ class _Outcomes:
             if self._pending:
                 await asyncio.wait(set(self._pending))
 
-    def _unit_done(self, queued: QueuedUrl, done: asyncio.Future[None]) -> None:
+    def _unit_done(
+        self, queued: QueuedUrl, blocked: bool | None, done: asyncio.Future[None]
+    ) -> None:
         self._pending.discard(done)
         error = done.exception()
         if error is None:
@@ -96,14 +98,17 @@ class _Outcomes:
             ),
             queued.url,
         )
-        fallback = asyncio.ensure_future(self._fall_back(queued, error))
+        fallback = asyncio.ensure_future(self._fall_back(queued, blocked, error))
         self._pending.add(fallback)
         fallback.add_done_callback(self._pending.discard)
 
-    async def _fall_back(self, queued: QueuedUrl, error: BaseException) -> None:
+    async def _fall_back(
+        self, queued: QueuedUrl, blocked: bool | None, error: BaseException
+    ) -> None:
         message = f"{type(error).__name__}: {error}"
+        unit = record_unwritten(queued.id, message, blocked_by_robots_txt=blocked)
         try:
-            await (await self._context.writer.submit_async(record_unwritten(queued.id, message)))
+            await (await self._context.writer.submit_async(unit))
         # A fallback that fails is the file's failure, not the URL's (design D2).
         except Exception as failure:
             self._context.stop.set("write_failed", failure)
@@ -231,10 +236,10 @@ async def _crawl_url(
     decision: ScopeDecision,
 ) -> None:
     try:
-        unit = await _unit_of(context, limits, robots, queued, decision)
+        recorded = await _unit_of(context, limits, robots, queued, decision)
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
-        if unit is not None:
-            await outcomes.submit(queued, unit)
+        if recorded is not None:
+            await outcomes.submit(queued, *recorded)
     finally:
         limits.task_ended()
 
@@ -245,15 +250,18 @@ async def _unit_of(
     robots: RobotsLoader,
     queued: QueuedUrl,
     decision: ScopeDecision,
-) -> UrlUnit | None:
-    """The unit that records the URL's final state, with its handlers' rows, or None when the
-    URL limit refuses its request, which leaves it queued; `decision` is taken once, at
-    dispatch, so a URL found on several Pages is recorded once (design D1)."""
+) -> tuple[UrlUnit, bool | None] | None:
+    """The unit that records the URL's final state, with its handlers' rows, and its
+    blocked_by_robots_txt, which a fallback unit keeps; or None when the URL limit refuses
+    its request, which leaves it queued. `decision` is taken once, at dispatch, so a URL
+    found on several Pages is recorded once (design D1)."""
     row_writers = context.hooks.row_writers
     skip_reason = _skip_reason(context, queued, decision)
     # Only a URL that would be requested is checked, so a skip never requests robots.txt.
     blocked = None
     if skip_reason is None:
+        if limits.refuses():
+            return None
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
         origin_robots = await robots.robots_of(queued.url)
         if origin_robots.fetch_error is not None:
@@ -263,38 +271,47 @@ async def _unit_of(
                 f"The robots.txt request of {url_origin(queued.url)} got no HTTP response, "
                 f"so the URL was not requested: {origin_robots.fetch_error_message}"
             )
-            return _record_error(
-                context, queued, decision, origin_robots.fetch_error, message, None, None
+            unit = _record_error(
+                context,
+                queued,
+                decision,
+                origin_robots.fetch_error,
+                message,
+                fetched_at=None,
+                blocked=None,
             )
+            return unit, None
         skip_reason, blocked = _robots_check(context, origin_robots, queued, decision)
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
-        return record_skipped(
+        unit = record_skipped(
             SkippedUrl(
-                queued.id,
-                skip_reason,
-                queued.crawl_depth,
+                url_id=queued.id,
+                skip_reason=skip_reason,
+                crawl_depth=queued.crawl_depth,
                 blocked_by_robots_txt=blocked,
                 rows=_handler_rows(context, skipped),
             ),
             row_writers,
         )
+        return unit, blocked
     async with limits.host(url_host(queued.url)), limits.request():
         if not limits.start_request():
             return None
         response = await context.fetcher.fetch(Request(queued.url))
     if isinstance(response, FetchFailure):
-        return _record_error(
+        unit = _record_error(
             context,
             queued,
             decision,
             response.fetch_error,
             response.message,
-            response.fetched_at,
-            blocked,
+            fetched_at=response.fetched_at,
+            blocked=blocked,
         )
+        return unit, blocked
     fetched = await _fetched(context, queued, decision, response)
-    return record_fetched(replace(fetched, blocked_by_robots_txt=blocked), row_writers)
+    return record_fetched(replace(fetched, blocked_by_robots_txt=blocked), row_writers), blocked
 
 
 def _record_error(
@@ -303,6 +320,7 @@ def _record_error(
     decision: ScopeDecision,
     fetch_error: FetchError,
     message: str,
+    *,
     fetched_at: datetime | None,
     blocked: bool | None,
 ) -> UrlUnit:
@@ -331,7 +349,7 @@ def _robots_check(
     """robots.txt's skip of a URL that would be requested, and its blocked_by_robots_txt, NULL
     while the rules are unknown (design D6)."""
     ignore = context.settings.ignore_robots
-    if origin_robots.unreachable:
+    if origin_robots.state == "unreachable":
         if ignore:
             return None, None
         if decision.is_internal:

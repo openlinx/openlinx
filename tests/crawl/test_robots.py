@@ -12,7 +12,7 @@ _LAST_RULE = b"\nDisallow: /x"
 _AT_THE_LIMIT = b"User-agent: *\n#" + b"-" * (512_000 - 15 - len(_LAST_RULE)) + _LAST_RULE + b"$"
 
 
-def test_the_group_for_the_tools_token_applies() -> None:
+def test_the_group_for_the_tool_s_token_applies() -> None:
     robots = read_robots_txt(
         b"User-agent: spider\nDisallow: /a\n\nUser-agent: *\nDisallow: /b", DEFAULT_ROBOTS_TOKEN
     )
@@ -93,7 +93,7 @@ def test_any_robots_txt_gives_a_decision(body: bytes, path: str, token: str) -> 
     assert (
         robots.allows(f"http://site.test/{path}") in {True, False},
         robots.crawl_delay_ms is None or 0 <= robots.crawl_delay_ms < 2**63,
-        len(robots.sitemaps) >= 0,
+        all(isinstance(sitemap, str) for sitemap in robots.sitemaps),
     ) == (True, True, True)
 
 

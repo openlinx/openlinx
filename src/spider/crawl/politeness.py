@@ -28,11 +28,18 @@ class RequestLimits:
     def start_request(self) -> bool:
         """Counts a URL request as it starts, in flight from then on, or refuses it at the URL
         limit; called with its host's slot and the global cap held, so the count is exact."""
-        if self._max_urls is not None and self._started >= self._max_urls:
-            self._refused = self._max_urls
+        if self.refuses():
             return False
         self._started += 1
         return True
+
+    def refuses(self) -> bool:
+        """Whether the URL limit refuses a request now, which marks it reached; counts
+        nothing, so a URL that cannot start never requests its origin's robots.txt."""
+        if self._max_urls is not None and self._started >= self._max_urls:
+            self._refused = self._max_urls
+            return True
+        return False
 
     def limit_reached(self) -> int | None:
         """The URL limit once it has refused a request, which leaves a URL queued."""

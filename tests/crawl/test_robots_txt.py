@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status, redirect_chain
@@ -204,11 +202,8 @@ def test_a_redirected_robots_txt_is_followed(
     ) == [("blocked_by_robots_txt",)]
 
 
-@pytest.mark.parametrize(("redirects", "expected"), [(5, "ok"), (6, "missing")])
-def test_more_than_five_robots_txt_redirects_count_as_missing(
-    temp_workspace: TempWorkspace, fixture_site: StartSite, redirects: int, expected: str
-) -> None:
-    # /robots.txt -> /r1 -> ... -> /robots-real.txt: `redirects` redirects.
+def _robots_state_after_redirects(fixture_site: StartSite, redirects: int) -> list[tuple[object]]:
+    """The robots_state of a site whose /robots.txt reaches its rules after `redirects`."""
     server = fixture_site(
         Site(
             routes={
@@ -222,9 +217,19 @@ def test_more_than_five_robots_txt_redirects_count_as_missing(
 
     crawl_file = crawled(server.url("/"))
 
-    assert query(
-        crawl_file, "SELECT robots_state FROM origins WHERE origin = ?", [server.base_url]
-    ) == [(expected,)]
+    return query(crawl_file, "SELECT robots_state FROM origins WHERE origin = ?", [server.base_url])
+
+
+def test_more_than_five_robots_txt_redirects_count_as_missing(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    assert _robots_state_after_redirects(fixture_site, 6) == [("missing",)]
+
+
+def test_five_robots_txt_redirects_are_followed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    assert _robots_state_after_redirects(fixture_site, 5) == [("ok",)]
 
 
 def test_a_dead_external_domain_is_a_dns_error(
@@ -234,7 +239,8 @@ def test_a_dead_external_domain_is_a_dns_error(
         Site(
             routes={
                 "/": Page(
-                    body='<a href="http://nowhere.test/a">A</a><a href="http://nowhere.test/b">B</a>'
+                    body='<a href="http://nowhere.test/a">A</a>'
+                    '<a href="http://nowhere.test/b">B</a>'
                 )
             }
         ),
@@ -261,3 +267,19 @@ def test_a_dead_external_domain_is_a_dns_error(
         ],
         [("unreachable", None, "dns_error")],
     )
+
+
+def test_a_url_that_the_url_limit_refuses_never_requests_robots_txt(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(routes={"/": Page(body='<a href="http://other.test/x">X</a>')}),
+        Site(routes={"/robots.txt": Robots("User-agent: *\nAllow: /\n")}),
+    )
+
+    crawl_file = crawl_result("http://site.test/", resolver=hosts.resolver, max_urls=1).crawl_file
+
+    assert (
+        [request.path for request in hosts.other.requests],
+        query(crawl_file, "SELECT robots_state FROM origins WHERE origin = 'http://other.test'"),
+    ) == ([], [(None,)])

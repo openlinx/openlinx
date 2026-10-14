@@ -110,7 +110,11 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 {Note: _write_note},
             )
         )
-        writer.run(record_skipped(SkippedUrl(seed_id + 2, "excluded", 1), {}))
+        writer.run(
+            record_skipped(
+                SkippedUrl(url_id=seed_id + 2, skip_reason="excluded", crawl_depth=1), {}
+            )
+        )
         deeper = writer.run(next_depth(0))
         second = writer.run(queued_batch(1, 0, 1))
         writer.run(
@@ -124,7 +128,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 {},
             )
         )
-        writer.run(record_unwritten(seed_id + 3, "ValueError: no row"))
+        writer.run(record_unwritten(seed_id + 3, "ValueError: no row", blocked_by_robots_txt=False))
         counts = writer.run(url_counts())
         replay_now(writer)
 
@@ -224,7 +228,11 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
                 {},
             )
         )
-        writer.run(record_skipped(SkippedUrl(seed_id + 4, "excluded", 1), {}))
+        writer.run(
+            record_skipped(
+                SkippedUrl(url_id=seed_id + 4, skip_reason="excluded", crawl_depth=1), {}
+            )
+        )
         about_id = seed_id + 5
         writer.run(
             record_fetched(
@@ -305,7 +313,8 @@ def test_a_followed_link_to_a_recorded_url_changes_it_only_on_a_shorter_path_it_
         if state == "fetched":
             writer.run(record_fetched(_fetched(ids["/t"]), {}))
         elif state != "queued":
-            writer.run(record_skipped(SkippedUrl(ids["/t"], state, 3), {}))
+            skipped = SkippedUrl(url_id=ids["/t"], skip_reason=state, crawl_depth=3)
+            writer.run(record_skipped(skipped, {}))
         writer.run(record_fetched(_fetched(ids[page], _new(_TARGET)), {}))
         replay_now(writer)
 
@@ -322,7 +331,9 @@ def test_a_skip_decided_on_a_depth_lowered_meanwhile_leaves_the_url_queued_witho
         writer.run(executing(text("CREATE TABLE test_notes (url_id INTEGER)")))
         ids = _target_at_depth_three(writer)
         writer.run(record_fetched(_fetched(ids["/s"], _new(_TARGET)), {}))
-        skipped = SkippedUrl(ids["/t"], "max_depth", 3, rows=(Note(ids["/t"]),))
+        skipped = SkippedUrl(
+            url_id=ids["/t"], skip_reason="max_depth", crawl_depth=3, rows=(Note(ids["/t"]),)
+        )
         writer.run(record_skipped(skipped, {Note: _write_note}))
         replay_now(writer)
 

@@ -196,7 +196,7 @@ class FetchedUrl:
     rows: tuple[object, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class SkippedUrl:
     """A URL recorded without a request, with what the handlers returned for it."""
 
@@ -233,4 +233,4 @@ class RobotsTxtRecord:
     fetched_at: datetime
     text: str | None
     crawl_delay_ms: int | None
-    sitemaps: tuple[str, ...] | None
+    sitemaps: tuple[str, ...]

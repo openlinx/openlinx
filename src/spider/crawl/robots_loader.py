@@ -1,6 +1,7 @@
 """The robots.txt loader: each origin's robots.txt, requested once in a run (020 D6, D7)."""
 
 import asyncio
+from datetime import datetime
 
 from spider.crawl.fetcher import Fetcher, FetchFailure, FetchResult, Request
 from spider.crawl.links import resolve_reference
@@ -50,44 +51,11 @@ class RobotsLoader:
                 break
             url = target
             response = await self._request(url)
-        if isinstance(response, FetchFailure):
-            return await self._unanswered(robots_url, response)
-        state = robots_state(response.status_code)
-        rules = read_robots_txt(response.body, self._token) if state == "ok" else None
-        record = RobotsTxtRecord(
-            # The URL's origin row exists: the URL that requests robots.txt was recorded first.
-            origin=url_origin(robots_url),
-            state=state,
-            status_code=response.status_code,
-            fetched_at=response.fetched_at,
-            text=None if rules is None else rules.text,
-            crawl_delay_ms=None if rules is None else rules.crawl_delay_ms,
-            sitemaps=() if rules is None else rules.sitemaps,
-        )
+        robots = _origin_robots(response, self._token)
+        # The URL's origin row exists: the URL that requests robots.txt was recorded first.
+        record = _robots_txt_record(url_origin(robots_url), robots, response.fetched_at)
         await self._writer.run_async(record_robots_txt(record))
-        return OriginRobots(
-            rules, unreachable=state == "unreachable", status_code=response.status_code
-        )
-
-    async def _unanswered(self, robots_url: NormalizedUrl, failure: FetchFailure) -> OriginRobots:
-        record = RobotsTxtRecord(
-            origin=url_origin(robots_url),
-            state="unreachable",
-            status_code=None,
-            fetch_error=failure.fetch_error,
-            fetch_error_message=failure.message,
-            fetched_at=failure.fetched_at,
-            text=None,
-            crawl_delay_ms=None,
-            sitemaps=(),
-        )
-        await self._writer.run_async(record_robots_txt(record))
-        return OriginRobots(
-            None,
-            unreachable=True,
-            fetch_error=failure.fetch_error,
-            fetch_error_message=failure.message,
-        )
+        return robots
 
     async def _request(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
         # The host's politeness gate, but never the URL limit, which counts only URLs (D6).
@@ -101,4 +69,33 @@ def _redirect_target(
     if not isinstance(response, FetchResult) or response.status_code not in _REDIRECTS:
         return None
     location = response.header("Location")
-    return None if location is None else resolve_reference(url, location, None, None)
+    if location is None:
+        return None
+    return resolve_reference(url, location, codec=None, strip_params=None)
+
+
+def _origin_robots(response: FetchResult | FetchFailure, token: str) -> OriginRobots:
+    if isinstance(response, FetchFailure):
+        return OriginRobots(
+            state="unreachable",
+            fetch_error=response.fetch_error,
+            fetch_error_message=response.message,
+        )
+    state = robots_state(response.status_code)
+    rules = read_robots_txt(response.body, token) if state == "ok" else None
+    return OriginRobots(state=state, rules=rules, status_code=response.status_code)
+
+
+def _robots_txt_record(origin: str, robots: OriginRobots, fetched_at: datetime) -> RobotsTxtRecord:
+    rules = robots.rules
+    return RobotsTxtRecord(
+        origin=origin,
+        state=robots.state,
+        status_code=robots.status_code,
+        fetch_error=robots.fetch_error,
+        fetch_error_message=robots.fetch_error_message,
+        fetched_at=fetched_at,
+        text=None if rules is None else rules.text,
+        crawl_delay_ms=None if rules is None else rules.crawl_delay_ms,
+        sitemaps=() if rules is None else rules.sitemaps,
+    )

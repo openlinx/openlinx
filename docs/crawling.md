@@ -307,7 +307,7 @@ An agent reads it to know what a Crawl covered without parsing its command line.
 
 ## robots.txt
 
-Before its first request to an origin, the Crawl requests the origin's `/robots.txt`, once per origin in a run, and obeys it for the robots user-agent token (see [The robots user-agent token](#the-robots-user-agent-token)). Every origin is asked: Internal ones, External ones and those of Resources. A URL recorded without a request, such as an excluded URL or an External URL under `--no-check-external`, never makes its origin's robots.txt be requested.
+Before its first request to an origin, the Crawl requests the origin's `/robots.txt`, once per origin in a run, and obeys it for the robots user-agent token (see [The robots user-agent token](#the-robots-user-agent-token)). Every origin is asked: Internal ones, External ones and those of Resources. A URL recorded without a request, such as an excluded URL or an External URL under `--no-check-external`, never makes its origin's robots.txt be requested, and neither does a URL that the URL limit refuses.
 
 - A robots.txt request goes through the same per-host limits as a URL's, but it is not recorded as a URL and does not count toward `--max-urls`.
 - A redirected robots.txt is followed for up to 5 hops; a longer chain counts as missing.
@@ -325,7 +325,7 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 
 `urls.blocked_by_robots_txt` is 1 for a URL the rules disallow, 0 for one they allow, and NULL for a URL that was not checked: one skipped before robots.txt mattered, or one of an origin whose rules are unknown.
 
-The origin's row keeps what robots.txt gave: `robots_state`, `robots_status_code` (of the final response), `robots_fetch_error` and `robots_fetch_error_message` (when there was no response), `robots_fetched_at`, `robots_txt` (the text as parsed), `robots_crawl_delay_ms` and `robots_sitemaps` (a JSON array of its `Sitemap:` URLs). They stay NULL while no URL of the origin was requested.
+The origin's row keeps what robots.txt gave: `robots_state`, `robots_status_code` (of the final response), `robots_fetch_error` and `robots_fetch_error_message` (when there was no response), `robots_fetched_at`, `robots_txt` (the text as parsed), `robots_crawl_delay_ms` and `robots_sitemaps` (a JSON array of its `Sitemap:` URLs). They stay NULL while robots.txt has not been requested: it is requested for the origin's first URL that the Scope does not skip and the URL limit does not refuse, so an origin whose every URL robots.txt kept out still has them.
 
 A Seed that robots.txt disallows is reported as a `seed_blocked_by_robots_txt` warning whose hint names `--ignore-robots`.
 

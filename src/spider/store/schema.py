@@ -359,7 +359,8 @@ origins = public_table(
         "robots_state",
         Text,
         comment="Rules applied, everything allowed, or everything disallowed or unanswered; NULL "
-        "while robots.txt has not been fetched, because no URL of the origin was requested.",
+        "while robots.txt has not been fetched, which happens before the first URL of the "
+        "origin that the Scope does not skip and the URL limit does not refuse.",
         info={"values": literal_values(RobotsState)},
     ),
     Column(
