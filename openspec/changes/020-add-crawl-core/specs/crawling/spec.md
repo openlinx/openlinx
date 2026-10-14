@@ -320,7 +320,7 @@ The Crawl SHALL read the robots directives of every parsed response with one par
 
 These names are the column names of `030-add-page-data`, which stores the values.
 
-Directives SHALL be comma-separated tokens, compared case-insensitively. A header value has a user-agent prefix when it starts with `<name>:` and `<name>` is not `unavailable_after`, `max-snippet`, `max-image-preview` or `max-video-preview`. A prefixed header value SHALL apply only when `<name>` equals the robots user-agent token, compared case-insensitively. `<meta>` elements named after a specific crawler SHALL NOT be read.
+Directives SHALL be comma-separated tokens, compared case-insensitively. A header value has a user-agent prefix when it starts with `<name>:` and `<name>` is not `unavailable_after`, `max-snippet`, `max-image-preview` or `max-video-preview`. A prefixed header value SHALL apply only when `<name>` equals the robots user-agent token, compared case-insensitively. `<meta>` elements named after a specific crawler SHALL NOT be read, nor a `<meta>` element inside `<noscript>`: a browser that runs scripts, as Google's renderer does, reads the content of `<noscript>` as text.
 
 #### Scenario: Meta robots directives are read case-insensitively
 - **WHEN** the directives are read from `<meta name="ROBOTS" content="NOINDEX, follow">`
@@ -337,6 +337,10 @@ Directives SHALL be comma-separated tokens, compared case-insensitively. A heade
 #### Scenario: none means noindex and nofollow
 - **WHEN** the directives are read from the header `X-Robots-Tag: none`
 - **THEN** `x_robots_tag_noindex` and `x_robots_tag_nofollow` are both true
+
+#### Scenario: A robots meta inside noscript does not apply
+- **WHEN** the directives are read from `<head><noscript><meta name="robots" content="noindex"></noscript></head>`
+- **THEN** `meta_robots` is null and `meta_robots_noindex` is false
 
 #### Scenario: A directive with a value is not a user-agent prefix
 - **WHEN** the directives are read from the header `X-Robots-Tag: unavailable_after: 25 Jun 2030 15:00:00 PST, noindex`
