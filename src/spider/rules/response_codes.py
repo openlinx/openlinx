@@ -1,4 +1,4 @@
-"""The response_codes Rules (040-add-rules, rules)."""
+"""The response_codes Rules (040-add-rules D3, D4)."""
 
 from spider.rules.model import Rule
 
@@ -14,8 +14,8 @@ INTERNAL_4XX = Rule(
         "content, and the links that point to it lead nowhere."
     ),
     how_to_fix=(
-        "Restore the page, redirect the URL with a 301 to the closest equivalent page, or change "
-        "the links that point to it. Answer 410 only for content that is gone for good."
+        "Restore the content, redirect the URL with a 301 to the closest equivalent page, or "
+        "change the links that point to it. Answer 410 only for content that is gone for good."
     ),
 )
 INTERNAL_5XX = Rule(

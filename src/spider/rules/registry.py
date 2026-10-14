@@ -1,4 +1,4 @@
-"""The catalogue: every Rule, in catalogue order (040-add-rules, rules)."""
+"""The catalogue: every Rule, in catalogue order (040-add-rules D4)."""
 
 from spider.rules import response_codes, titles
 from spider.rules.model import Rule

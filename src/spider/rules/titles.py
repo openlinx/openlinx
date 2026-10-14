@@ -1,4 +1,4 @@
-"""The titles Rules (040-add-rules, rules)."""
+"""The titles Rules (040-add-rules D3, D4)."""
 
 from spider.naming import SETTINGS_FILE_NAME
 from spider.rules.model import Rule, Threshold
@@ -12,7 +12,7 @@ TITLE_MISSING = Rule(
     description="A Page has no title, or its first title is empty.",
     why_it_matters=(
         "The title names the page in search results and in browser tabs. Without one, "
-        "search engines make up a title from the page, which rarely says what it offers."
+        "search engines make up a title from the page, which may not say what it offers."
     ),
     how_to_fix=(
         "Add one <title> element to the <head> of the page, with a few words that describe "

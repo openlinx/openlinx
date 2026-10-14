@@ -1,4 +1,4 @@
-"""The service behind `spider rules` (040-add-rules, rules)."""
+"""The service behind `spider rules` (040-add-rules D11)."""
 
 from typing import Any
 
@@ -9,6 +9,18 @@ from spider.rules.model import Rule
 from spider.rules.registry import RULES
 
 _BY_ID = {rule.id: rule for rule in RULES}
+# The fields of an item, in the order _item gives them.
+RULE_FIELDS = (
+    "id",
+    "category",
+    "issue_type",
+    "priority",
+    "applies_to",
+    "thresholds",
+    "description",
+    "why_it_matters",
+    "how_to_fix",
+)
 
 
 def rule_items() -> list[dict[str, Any]]:

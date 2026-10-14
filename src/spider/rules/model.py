@@ -1,4 +1,4 @@
-"""The Rule model (040-add-rules, rules)."""
+"""The Rule model (040-add-rules D1, D12)."""
 
 from dataclasses import dataclass
 from typing import Literal

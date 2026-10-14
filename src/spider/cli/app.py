@@ -1,4 +1,4 @@
-"""The app factory and the console script (design D8 of 010-add-workspace-and-cli-contract)."""
+"""The app factory and the console script (010-add-workspace-and-cli-contract D8; 040 D18)."""
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -13,8 +13,8 @@ from spider.cli.commands import commands
 from spider.cli.crawl import crawl
 from spider.cli.init import init
 from spider.cli.meta import CommandGroup, check_command
-from spider.cli.rules import RULES
-from spider.cli.runner import Invocation, SpiderGroup
+from spider.cli.rules import RULES_GROUP
+from spider.cli.runner import Invocation, SpiderGroup, option_before_the_command
 from spider.cli.schema import schema
 from spider.naming import APP_NAME
 from spider.workspace.tables import SettingsTables
@@ -65,7 +65,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         rich_markup_mode=None,
     )
     app.callback()(root)
-    registered = [commands, crawl, init, RULES, schema, *extra.commands]
+    registered = [commands, crawl, init, RULES_GROUP, schema, *extra.commands]
     for entry in registered:
         if isinstance(entry, CommandGroup):
             app.add_typer(_group_app(entry), name=entry.name)
@@ -75,16 +75,28 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
 
 
 def _group_app(group: CommandGroup) -> typer.Typer:
-    class Group(TyperGroup):
-        def parse_args(self, ctx: Context, args: list[str]) -> list[str]:
-            # The bare group name runs its default Command.
-            return super().parse_args(ctx, args or [group.default])
-
-    app = typer.Typer(cls=Group, help=group.summary, rich_markup_mode=None)
+    names = {}
     for command in group.commands:
         parent, _, name = check_command(command).name.rpartition(" ")
         if parent != group.name:
             raise TypeError(f"Command {command.__name__} is not named under {group.name}.")
+        names[command] = name
+    if group.default not in names:
+        raise TypeError(f"The default of group {group.name} is not one of its Commands.")
+    default = names[group.default]
+
+    class Group(TyperGroup):
+        def parse_args(self, ctx: Context, args: list[str]) -> list[str]:
+            if not args:
+                return super().parse_args(ctx, [default])
+            # Options are taken after the Command name only, as global flags are.
+            if args[0].startswith("-") and args[0] not in ctx.help_option_names:
+                flag = args[0].partition("=")[0]
+                raise option_before_the_command(flag, f"{group.name} {default}")
+            return super().parse_args(ctx, args)
+
+    app = typer.Typer(cls=Group, help=group.summary, rich_markup_mode=None)
+    for command, name in names.items():
         app.command(name=name)(command)
     return app
 

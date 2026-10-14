@@ -1,7 +1,7 @@
-"""`spider commands`, the self-description (design D7 of 010-add-workspace-and-cli-contract)."""
+"""`spider commands`, the self-description (010-add-workspace-and-cli-contract D7; 040 D18)."""
 
 import inspect
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from enum import Enum
 from pathlib import PurePath
 from typing import Any, cast
@@ -13,7 +13,7 @@ from spider import __version__
 from spider.cli.click_compat import Command, Parameter
 from spider.cli.meta import CommandMeta, Example, command_meta, meta_of
 from spider.cli.options import FORMAT_PARAMETER, FormatOpt, is_secret_option, options_with_meta
-from spider.cli.runner import Invocation
+from spider.cli.runner import Invocation, commands_by_path
 from spider.naming import APP_NAME
 from spider.output.codes import DECLARED, ExitCode
 from spider.output.writer import Format
@@ -56,7 +56,7 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
         "tool": {"name": APP_NAME, "version": __version__},
         "commands": [
             _entry(name, command, invocation.settings_tables)
-            for name, command in sorted(_commands(root))
+            for name, command in sorted(commands_by_path(root))
         ],
         "exit_codes": [
             {"code": code.value, "name": code.name.lower(), "description": code.description}
@@ -65,18 +65,6 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
         "diagnostics": [declared.to_json() for declared in DECLARED],
         "environment": ENVIRONMENT,
     }
-
-
-def _commands(group: TyperGroup, prefix: str = "") -> Iterator[tuple[str, Command]]:
-    for name, command in group.commands.items():
-        # Hidden Commands are not part of the contract: --help does not show them either.
-        if command.hidden:
-            continue
-        if isinstance(command, TyperGroup):
-            # A group's Commands are named by their full path, such as `rules list`.
-            yield from _commands(command, f"{prefix}{name} ")
-        else:
-            yield prefix + name, command
 
 
 def _entry(name: str, command: Command, tables: SettingsTables) -> dict[str, Any]:

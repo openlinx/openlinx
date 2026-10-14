@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from spider.cli.app import build_app
 from spider.cli.options import options_with_meta
-from spider.cli.runner import SpiderGroup
+from spider.cli.runner import SpiderGroup, commands_by_path
 from spider.workspace.tables import SettingsTables, Table, check_table
 from tests.support.app import example_app
 
@@ -82,7 +82,7 @@ def test_every_option_setting_names_a_setting_of_a_registered_table(
     tables = dict(group.settings_tables.items())
     settings = [
         extra.setting
-        for command in group.commands.values()
+        for _, command in commands_by_path(group)
         for _, extra in options_with_meta(command)
         if extra.setting is not None
     ]
@@ -101,7 +101,7 @@ def test_options_of_secret_settings_have_only_long_names(app: Callable[[], typer
 
     assert [
         (command.name, name)
-        for command in group.commands.values()
+        for _, command in commands_by_path(group)
         for option, extra in options_with_meta(command)
         if extra.setting is not None and tables.is_secret(extra.setting)
         for name in option.opts

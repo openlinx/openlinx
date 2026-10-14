@@ -31,6 +31,7 @@ A short map for contributors and coding agents. Terms follow [CONTEXT.md](../CON
 ## Commands, services and output
 
 - **A Command is an adapter plus a service.** The adapter turns flags into a typed request, picks the Reporter, calls the service and returns its result. The service holds the logic: plain Python with typed inputs and outputs, and no Click, Typer or `Output`. `spider init` is the adapter of `spider.services.workspace.init_workspace`. The MCP server (`090`) calls the same services directly and never invokes a Click Command.
+- **Command groups** (`040` D18): a `CommandGroup` (`spider.cli.meta`) in `build_app`'s list, or in `AppExtra.commands`, holds Commands named by their full path, such as `rules list`, each with its own `@command_meta`. `build_app` registers them under the group and refuses one named outside it, or a default that is not one of them. `spider.cli.runner.commands_by_path` is the one walk of the Commands by full path, which `spider commands`, the global-flag check and the guards over options use. The group given no arguments runs its default Command, and an option given before the Command name fails with a hint that says where it goes.
 - **The Reporter** (`spider.output.reporter`) is how a service reports warnings and progress events: `warn(diagnostic)` and `event(name, **data)`.
   - `CliReporter` writes each call to stderr as one JSON line.
   - `Collected` keeps the calls in memory, so the MCP server can put the warnings into a tool result.

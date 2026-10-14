@@ -17,6 +17,17 @@ def test_before_the_command_name() -> None:
     )
 
 
+def test_a_global_flag_between_a_group_and_its_command() -> None:
+    result = run_cli("rules", "--format", "json", "list")
+    error = result.stderr_json_lines()[-1]
+
+    assert (result.exit_code, error["code"], "after the Command name" in (error["hint"] or "")) == (
+        2,
+        "usage_error",
+        True,
+    )
+
+
 def test_after_the_command_name(shop: Path) -> None:
     assert run_cli("init", "--format", "json").exit_code == 0
 

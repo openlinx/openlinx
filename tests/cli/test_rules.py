@@ -67,8 +67,24 @@ def test_unknown_rule_id() -> None:
 def test_windows_console_output() -> None:
     stdout = run_cli_process("rules", "show", "title-too-long").stdout
 
-    assert json.loads(stdout.decode("utf-8"))["id"] == "title-too-long"
+    # Byte for byte as in process: no line ending or encoding of the console's. 010's
+    # Cyrillic tests guard the encoding itself, since a Rule's texts are ASCII.
+    assert (json.loads(stdout.decode("utf-8"))["id"], stdout) == (
+        "title-too-long",
+        run_cli("rules", "show", "title-too-long").stdout,
+    )
 
 
 def test_the_bare_group_lists_the_rules() -> None:
     assert run_cli("rules").json() == run_cli("rules", "list").json()
+
+
+def test_an_option_after_the_group_name_says_where_it_goes() -> None:
+    result = run_cli("rules", "--limit", "1")
+    error = result.stderr_json_lines()[-1]
+
+    assert (result.exit_code, error["code"], error["hint"]) == (
+        2,
+        "usage_error",
+        "Put --limit after the Command name: spider rules list --limit ...",
+    )

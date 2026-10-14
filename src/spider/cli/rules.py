@@ -1,28 +1,18 @@
-"""`spider rules` (040-add-rules, rules)."""
+"""`spider rules list` and `spider rules show` (040-add-rules D11, D18)."""
 
 from typing import Annotated, Any
 
 import typer
 
-from spider.cli.meta import CommandGroup, command_meta
+from spider.cli.meta import CommandGroup, Example, command_meta
 from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt
+from spider.naming import APP_NAME
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
-from spider.services.rules import rule_item, rule_items
+from spider.services.rules import RULE_FIELDS, rule_item, rule_items
 
 LIST = "rules list"
 SHOW = "rules show"
-RULE_FIELDS = (
-    "id",
-    "category",
-    "issue_type",
-    "priority",
-    "applies_to",
-    "thresholds",
-    "description",
-    "why_it_matters",
-    "how_to_fix",
-)
 LIST_FIELDS = Fields(available=RULE_FIELDS, default=RULE_FIELDS)
 
 
@@ -31,6 +21,12 @@ LIST_FIELDS = Fields(available=RULE_FIELDS, default=RULE_FIELDS)
     output="list",
     formats=[Format.JSON, Format.JSONL, Format.TABLE],
     fields=LIST_FIELDS,
+    examples=[
+        Example(
+            f"{APP_NAME} {LIST} --fields id,issue_type,priority",
+            "List each Rule with its Issue Type and Priority.",
+        )
+    ],
 )
 def list_rules(
     output_format: FormatOpt = Format.JSON,
@@ -48,18 +44,23 @@ def list_rules(
     )
 
 
-@command_meta(name=SHOW, output="document", formats=[Format.JSON, Format.TABLE])
+@command_meta(
+    name=SHOW,
+    output="document",
+    formats=[Format.JSON, Format.TABLE],
+    examples=[Example(f"{APP_NAME} {SHOW} title-too-long", "Show one Rule and its thresholds.")],
+)
 def show_rule(
-    rule_id: Annotated[str, typer.Argument(metavar="ID", help="The Rule id.")],
+    rule_id: Annotated[str, typer.Argument(help="The Rule id.")],
     output_format: FormatOpt = Format.JSON,
 ) -> dict[str, Any]:
     """Show one Rule, with the fields of a rules list item."""
     return rule_item(rule_id)
 
 
-RULES = CommandGroup(
-    "rules",
-    "Describe the Rules that turn a Crawl's data into Issues.",
-    (list_rules, show_rule),
-    "list",
+RULES_GROUP = CommandGroup(
+    name="rules",
+    summary="Describe the Rules that turn a Crawl's data into Issues.",
+    commands=(list_rules, show_rule),
+    default=list_rules,
 )

@@ -8,7 +8,7 @@ A Rule is a deterministic check with fixed guidance. Every Rule has:
 - `id`: kebab-case, such as `title-too-long`. It is never renamed or reused, so a script or a `spider.toml` that names it keeps working.
 - `category`: one of `response_codes`, `security`, `titles`, `meta_descriptions`, `headings`, `canonicals`, `directives`, `content`, `urls` and `images`, in this order.
 - `issue_type` and `priority`: see below.
-- `applies_to`: the population the Rule checks. `internal_urls` are the Internal URLs that were requested; `internal_pages` are the analysed Pages ([page-data.md](page-data.md#analysed-and-non-analysed-pages)); `resources` are the images that Pages reference (v0.2).
+- `applies_to`: the population the Rule checks. `internal_urls` are the Internal URLs that were requested, or that robots.txt disallows; `internal_pages` are the analysed Pages ([page-data.md](page-data.md#analysed-and-non-analysed-pages)); `resources` are the Resources that Pages reference, in v0.2 the images.
 - `thresholds`: the named limits of the Rule, each a non-negative integer with a default and a unit (`characters`, `pixels`, `words`, `kilobytes` or `hops`). A Rule without limits has none.
 - `description`, `why_it_matters` and `how_to_fix`: fixed English guidance, the same in every Crawl, so an agent can explain an Issue without judgement calls.
 
@@ -31,7 +31,7 @@ Categories are snake_case, such as `meta_descriptions`, because they are stored 
 
 ## Reading `spider rules`
 
-`spider rules list` lists the Rules in catalogue order: by category, in the order above, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`. `spider rules` alone does the same. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `thresholds`, `description`, `why_it_matters` and `how_to_fix`:
+`spider rules list` lists the Rules in catalogue order: by category, in the order above, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`. `spider rules` with no arguments runs `spider rules list`; options go after `list`. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `thresholds`, `description`, `why_it_matters` and `how_to_fix`:
 
 ```
 spider rules list --limit 1

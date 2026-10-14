@@ -7,7 +7,7 @@ import pytest
 import typer
 
 from spider.cli.app import AppExtra, build_app
-from spider.cli.meta import command_meta
+from spider.cli.meta import CommandGroup, command_meta
 from spider.cli.options import FormatOpt, OptionMeta
 from spider.output.paging import Fields
 from spider.output.writer import Format
@@ -106,3 +106,29 @@ def short_secret(
 def test_a_secret_option_with_a_short_name_is_refused() -> None:
     with pytest.raises(TypeError, match="api_key"):
         build_app(extra=AppExtra(commands=[short_secret]))
+
+
+@command_meta(name="examples show", output="document", formats=[Format.JSON])
+def grouped(output_format: FormatOpt = Format.JSON) -> dict[str, Any]:
+    return {}
+
+
+@command_meta(name="examples list", output="document", formats=[Format.JSON])
+def other_grouped(output_format: FormatOpt = Format.JSON) -> dict[str, Any]:
+    return {}
+
+
+def test_a_command_named_outside_its_group_is_refused() -> None:
+    group = CommandGroup(name="others", summary="Others.", commands=(grouped,), default=grouped)
+
+    with pytest.raises(TypeError, match="not named under others"):
+        build_app(AppExtra(commands=[group]))
+
+
+def test_a_group_whose_default_is_not_one_of_its_commands_is_refused() -> None:
+    group = CommandGroup(
+        name="examples", summary="Examples.", commands=(grouped,), default=other_grouped
+    )
+
+    with pytest.raises(TypeError, match="default"):
+        build_app(AppExtra(commands=[group]))

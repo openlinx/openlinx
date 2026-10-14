@@ -1,4 +1,4 @@
-"""`@command_meta`: what a Command outputs (design D7 of 010-add-workspace-and-cli-contract)."""
+"""`@command_meta` and Command groups (010-add-workspace-and-cli-contract D7; 040-add-rules D18)."""
 
 import functools
 import inspect
@@ -34,15 +34,15 @@ class CommandMeta:
     examples: tuple[Example, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CommandGroup:
     """Commands below one name, each named by its full path, such as `rules list`."""
 
     name: str
     summary: str
-    commands: Sequence[Callable[..., Any]]
-    # What the bare group name runs.
-    default: str
+    commands: tuple[Callable[..., Any], ...]
+    # What the group name given no arguments runs: one of its Commands.
+    default: Callable[..., Any]
 
 
 @runtime_checkable

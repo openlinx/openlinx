@@ -1,16 +1,16 @@
-"""Runs the app; each failure is a diagnostic (design D5 of 010-add-workspace-and-cli-contract)."""
+"""Runs the app; each failure is a diagnostic (010-add-workspace-and-cli-contract D5; 040 D18)."""
 
 import sys
 import traceback
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any, NoReturn
 
 import typer
 from typer.core import TyperGroup
 
+from spider.cli.click_compat import Command, MissingParameter
 from spider.cli.click_compat import Context as ClickContext
-from spider.cli.click_compat import MissingParameter
 from spider.cli.click_compat import UsageError as ClickUsageError
 from spider.cli.meta import formats_hint, meta_of
 from spider.cli.options import FORMAT_PARAMETER, options_with_meta
@@ -109,10 +109,31 @@ class SpiderGroup(TyperGroup):
             raise _interrupted() from error
 
 
+def commands_by_path(group: TyperGroup, prefix: str = "") -> Iterator[tuple[str, Command]]:
+    """Each Command by its full path, such as `rules list`, leaving out hidden ones."""
+    for name, command in group.commands.items():
+        # Hidden Commands are not part of the contract: --help does not show them either.
+        if command.hidden:
+            continue
+        if isinstance(command, TyperGroup):
+            yield from commands_by_path(command, f"{prefix}{name} ")
+        else:
+            yield prefix + name, command
+
+
+def option_before_the_command(flag: str, command: str) -> SpiderError:
+    # Click would only say "No such option", which does not tell an agent where the flag goes.
+    return SpiderError(
+        USAGE_ERROR,
+        f"{flag} is given before the Command name.",
+        hint=f"Put {flag} after the Command name: {APP_NAME} {command} {flag} ...",
+    )
+
+
 def _global_flags(group: TyperGroup) -> set[str]:
     return {
         opt
-        for command in group.commands.values()
+        for _, command in commands_by_path(group)
         for param, extra in options_with_meta(command)
         if extra.is_global
         for opt in param.opts
@@ -120,17 +141,12 @@ def _global_flags(group: TyperGroup) -> set[str]:
 
 
 def _check_global_flags_follow_the_command(args: Sequence[str], global_flags: set[str]) -> None:
-    # Click would only say "No such option", which does not tell an agent where the flag goes.
     for arg in args:
         if not arg.startswith("-") or arg == "--":
             return
         flag = arg.partition("=")[0]
         if flag in global_flags:
-            raise SpiderError(
-                USAGE_ERROR,
-                f"{flag} is given before the Command name.",
-                hint=f"Put {flag} after the Command name: {APP_NAME} <Command> {flag} ...",
-            )
+            raise option_before_the_command(flag, "<Command>")
 
 
 def _interrupted() -> SpiderError:
