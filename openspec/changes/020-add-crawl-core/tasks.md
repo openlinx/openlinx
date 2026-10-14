@@ -169,7 +169,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: the URLs of a frontier batch are crawled by concurrent tasks, bounded by a semaphore per host and the global cap of design D7 (4 × concurrency, clamped to 20–100), and the next Crawl Depth's first frontier read waits until every task of the open depth has submitted its unit or ended (design D3); task 9.3 adds that checks never wait. Tasks 5.14–5.16 were 11.1–11.3: concurrent tasks change the engine's loop, so they come before PR #1, and groups 7–14 never build on a sequential one (ruling of 2026-10-14).
 - [x] 5.16 Drive "A concurrency of zero is rejected" at seam 1.
-- [ ] 5.17 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes and the per-host and global request limits in `docs/crawling.md`.
+- [x] 5.17 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes and the per-host and global request limits in `docs/crawling.md`.
 - [ ] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Internal and External URLs over HTTP (slice)

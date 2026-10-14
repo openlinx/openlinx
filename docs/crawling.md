@@ -11,7 +11,7 @@ spider crawl site.test
 spider crawl https://site.test/shop/ --concurrency 2
 ```
 
-The Crawl requests the Seed, reads the Links of each response it parses, and follows the hyperlinks in its Scope, Crawl Depth by Crawl Depth: every URL at one depth is requested before any URL one deeper, in the order the URLs were first recorded (`urls.id`). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its status is 2xx and its `Content-Type` is HTML (`text/html` or `application/xhtml+xml`); a PDF, an image or a response without a `Content-Type` is recorded but not parsed.
+The Crawl requests the Seed, reads the Links of each response it parses, and follows the hyperlinks in its Scope, Crawl Depth by Crawl Depth: every URL at one depth is done before any URL one deeper starts, and the URLs of a depth start in the order they were first recorded (`urls.id`), several at a time (see [Requests in flight](#requests-in-flight)). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its status is 2xx and its `Content-Type` is HTML (`text/html` or `application/xhtml+xml`); a PDF, an image or a response without a `Content-Type` is recorded but not parsed.
 
 ### Options and `[crawl]` settings
 
@@ -19,9 +19,19 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 
 | Option | `[crawl]` key | Default | Meaning |
 |---|---|---|---|
-| `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host. For now the Crawl makes one request at a time, so it never goes above this. |
+| `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host, 1 to 50. |
+| `--exclude <regex>` | `exclude` | `[]` | A URL that the pattern matches is never requested; give the option once per pattern (see [Include and exclude patterns](#include-and-exclude-patterns)). |
 
 `--workspace` and `--format` are the global flags of every Command.
+
+### Requests in flight
+
+URLs are requested concurrently, and two limits bound them:
+
+- **Per host:** at most `--concurrency` requests to one host at a time, 5 by default. The host is the URL's host, whatever its scheme or port.
+- **In all:** at most 4 × `--concurrency` URLs in progress at once, kept within 20 to 100, so a Page that links to many External hosts never opens hundreds of connections.
+
+A Crawl Depth ends only when every URL of it is done, so a URL one deeper never starts while a shallower one is in progress, and Crawl Depth stays the shortest path from the Seed.
 
 ### Events
 
@@ -68,12 +78,35 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 | Exit code | When | Error code |
 |---|---|---|
 | 0 | the Crawl is `completed` | |
-| 2 | the Seed is not a valid http or https URL, or an option value is not allowed; no crawl file is created | `invalid_url` (with `details.reason`: `malformed`, `unsupported_scheme`, `userinfo`, `missing_host` or `invalid_host`), `invalid_value` |
+| 2 | the Seed is not a valid http or https URL, a pattern is not a valid regular expression, or an option value is not allowed; no crawl file is created | `invalid_url` (with `details.reason`: `malformed`, `unsupported_scheme`, `userinfo`, `missing_host` or `invalid_host`), `invalid_pattern` (with `details.pattern`), `invalid_value` |
 | 3 | `spider.toml` is invalid | `settings_invalid` |
 | 5 | another connection held the crawl file for longer than the writer waits | `crawl_busy` |
 | 7 | the Workspace or the crawl file cannot be written | `workspace_not_writable`, `crawl_not_writable` |
 
 A Seed with a user name or password is refused, and the error never repeats it: give the URL without them. Credentials for a site will be an option of their own (`--auth`, planned for v0.2).
+
+When the crawl file itself cannot be written, for example on a full disk, the Crawl stops requesting URLs and the Command ends with the writer's error: `crawl_busy` (exit 5) for a file another connection holds, otherwise `internal_error`. The crawl file is left `running`, with every URL recorded so far. A later release reports this as `crawl_write_failed` and records the Crawl as `failed`.
+
+### When one URL fails
+
+One URL never stops the Crawl: what goes wrong with it is recorded on its row, and the Crawl goes on.
+
+| What fails | How the URL is recorded |
+|---|---|
+| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `connection_error` (any other failure, a connection reset in the middle of the body included) |
+| The body has bytes its character encoding cannot hold | Nothing: they are decoded as replacement characters, and the Page is parsed as usual. |
+| A registered extractor raises an error | `parsed` stays 1 and the Page's Links are followed; `parse_error` = `extractor_error`, and `parse_error_message` names the extractor and the error's type, such as `title: ValueError`. Only that extractor's output is missing. |
+| A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |
+| The URL's rows cannot be written | The URL alone is recorded, with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs found on it or its handlers' rows. This holds for a value the file refuses (a constraint, a value too big, a value that cannot be bound) and for an error of the tool's own row code; any other database error stops the Crawl, as above. |
+| The URL matches an `--exclude` pattern | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `excluded`, and no response columns. |
+
+Each of the three failures of the tool's own code is reported by one counted warning, written to stderr when it first occurs and kept once in the result's `warnings`, however many URLs it affects:
+
+| Code | Counts URLs where | `details` |
+|---|---|---|
+| `parse_failed` | an extractor failed | `count`, `first_url` |
+| `handler_failed` | a handler failed | `count`, `first_url` |
+| `record_failed` | the rows could not be written | `count`, `first_url` |
 
 ## URLs
 
@@ -184,7 +217,7 @@ http://site.test/news/n        internal, outside the Scope: checked, not followe
 http://site.test/blog/draft-1  skipped: excluded
 ```
 
-An invalid pattern is rejected with `invalid_pattern` before any crawl file is created, and so is a Seed outside its own Scope, such as one that an exclude pattern matches (`seed_out_of_scope`).
+An invalid pattern is rejected with `invalid_pattern` (the pattern in `details.pattern`) before any crawl file is created. A Seed outside its own Scope, such as one that an exclude pattern matches, is not rejected yet: the Crawl records the Seed as `skipped` and ends. A later slice rejects it as `seed_out_of_scope`.
 
 **Slow patterns.** Every pattern runs against every URL the Crawl finds, and the URLs come from the site. A pattern with nested quantifiers, such as `(a+)+$`, can take seconds on one long URL. Prefer plain substrings and anchors, such as `/logout$` or `\?sessionid=`.
 
