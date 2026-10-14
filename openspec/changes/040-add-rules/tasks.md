@@ -21,7 +21,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 1.2 Drive "Show a Rule with thresholds" at seam 1. Register `title-too-long` with its thresholds and texts, and add `spider rules show <id>`.
 - [x] 1.3 Drive "Rule without thresholds" at seam 1, and register `title-missing`.
 - [x] 1.4 Drive "Unknown Rule id" at seam 1: `rule_not_found`, exit code 4, and a hint naming `spider rules list`.
-- [ ] 1.5 Drive "Windows console output" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
+- [x] 1.5 Drive "Windows console output" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
 - [ ] 1.6 Docs: create `docs/rules.md` covering the Rule model, what Issue Type and Priority mean, the Issue-type principle with `http-url` as Warning/High (design D3), category and id naming (D12) and how to read `spider rules` output.
 - [ ] 1.7 **Guard:** every code this change declares (design D17) is listed by `spider commands` with its level and exit code, at seam 1.
 - [ ] 1.8 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.

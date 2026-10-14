@@ -1,6 +1,11 @@
 """`spider rules` (040-add-rules, rules; seam 1)."""
 
-from tests.support.cli import run_cli
+import json
+import sys
+
+import pytest
+
+from tests.support.cli import run_cli, run_cli_process
 
 GUIDANCE = ("description", "why_it_matters", "how_to_fix")
 
@@ -56,6 +61,13 @@ def test_unknown_rule_id() -> None:
         "nope" in error["message"],
         "spider rules list" in error["hint"],
     ) == (4, "rule_not_found", True, True)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the Windows console code page")
+def test_windows_console_output() -> None:
+    stdout = run_cli_process("rules", "show", "title-too-long").stdout
+
+    assert json.loads(stdout.decode("utf-8"))["id"] == "title-too-long"
 
 
 def test_the_bare_group_lists_the_rules() -> None:
