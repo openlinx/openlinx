@@ -60,7 +60,13 @@ For an analysed Page, following the table conventions of `015-add-crawl-store`:
 - A text column SHALL be NULL when its element or header is absent, and the empty string when the element is present but empty.
 - A length column SHALL be NULL exactly when its text column is NULL, and so SHALL a width column from v0.2.
 
+When the Page extractor of this change raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns the Page extractor fills (the title, heading, directive, content and structured-data columns, and the Link attributes it adds) SHALL be NULL. The columns that come from the response, from `020-add-crawl-core`'s discovered Links and from the outlink counts SHALL be set.
+
 The columns that a later release fills stay NULL in every Page until then (see "Columns measured by later releases stay NULL").
+
+#### Scenario: A Page whose Page extractor failed keeps its response data and Links
+- **WHEN** the Page extractor raises on `{site}/broken` (a test puts a raising extractor under its name in `default_hooks()`), which responds 200 with `<title>T</title><a href="/a">A</a>`
+- **THEN** `{site}/broken` has `parsed` = 1 and `parse_error` = `extractor_error`, its `pages` row has `status_code` 200, `title_1` NULL and `outlinks` 1, and its `links` row to `{site}/a` has `type` `hyperlink` and `anchor_text` NULL
 
 #### Scenario: Error Page keeps response data
 - **WHEN** `{site}/missing` responds 404 with `Content-Type: text/html` and the body `<title>Not found</title>`
@@ -808,7 +814,7 @@ This change stores each discovered Link together with the attributes that analys
 
 `(source_url_id, ordinal)` SHALL be the primary key. How the rows are laid out on disk, and the indexes of `links`, are chosen by the links benchmark (ADR-0005); they change none of these columns.
 
-**Link position.** For a Link from an element that the HTML parser places inside `<head>`, `link_position` SHALL be `head`. For a Link from an element inside `<body>`, it SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element, and SHALL be `content` when there is none. It SHALL be NULL only for a Link declared in an HTTP header. The `[content_area]` settings do not change it.
+**Link position.** For a Link from an element that the HTML parser places inside `<head>`, `link_position` SHALL be `head`. For a Link from an element inside `<body>`, it SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element, and SHALL be `content` when there is none. It SHALL be NULL only for a Link declared in an HTTP header, and for every Link of a Page whose Page extractor failed. The `[content_area]` settings do not change it.
 
 #### Scenario: Hyperlink with rel flags
 - **WHEN** the analysed Page `https://example.test/a` contains `<main><a href="/b" rel="nofollow UGC">Read  more</a></main>`
