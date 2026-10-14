@@ -19,6 +19,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
+from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
 
@@ -93,6 +94,23 @@ def test_post_crawl_passes_run_before_a_crawl_is_completed(
     crawl_result(server.url("/"), hooks)
 
     assert seen == ["running"]
+
+
+def test_post_crawl_passes_run_when_the_url_limit_stops_a_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+    runs: list[str] = []
+
+    async def count_runs(writer: CrawlWriter) -> None:
+        runs.append("run")
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
+
+    crawl_result(server.url("/"), hooks, max_urls=3)
+
+    assert runs == ["run"]
 
 
 class Found(msgspec.Struct, frozen=True):

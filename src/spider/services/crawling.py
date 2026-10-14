@@ -237,10 +237,10 @@ async def _crawl(
             # 12.9 records a write failure's failed end, 13.1 an interrupt's.
             raise context.stop.cause or RuntimeError(f"no end is built for {stop_reason}")
         writer = context.writer
-        if stop_reason is None:
-            # Before completed is written: 040 reads completed as "its Issues are materialised".
-            for crawl_pass in hooks.passes:
-                await crawl_pass.run(writer)
+        # Before the end is written, for completed and stopped alike: 040 reads either state as
+        # "its Issues are materialised".
+        for crawl_pass in hooks.passes:
+            await crawl_pass.run(writer)
         # One instant: the result's ended_at is the completed_at the file records.
         ended_at = clock.now()
         if stop_reason is None:
