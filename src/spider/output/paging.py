@@ -55,26 +55,40 @@ def paginate(
     return Page(project(items[start:end], fields), len(items), next_cursor)
 
 
-def keyset_after(cursor: str | None, fingerprint: str, keyset: type) -> Any:
-    """The keyset that a cursor of keyset_page holds, or None without a cursor."""
+def keyset_after(
+    cursor: str | None, fingerprint: str, types: tuple[type, ...]
+) -> tuple[Any, ...] | None:
+    """The keys that a cursor of keyset_page holds, one of each of `types`, or None without a
+    cursor."""
     if cursor is None:
         return None
     after = decode_cursor(cursor, fingerprint)
-    # The fingerprint matched, so only a hand-made cursor gets here with another keyset.
-    if not isinstance(after, keyset):
+    # The fingerprint matched, so only a hand-made cursor gets here with other keys; the exact
+    # type, since True is an int to isinstance.
+    if not (
+        isinstance(after, list)
+        and len(after) == len(types)
+        and all(type(key) is expected for key, expected in zip(after, types, strict=True))
+    ):
         raise _invalid_cursor()
-    return after
+    return tuple(after)
 
 
 def keyset_page(
-    found: Sequence[Mapping[str, Any]], total: int, *, limit: int, fingerprint: str, key: str
+    found: Sequence[Mapping[str, Any]],
+    total: int,
+    *,
+    limit: int,
+    fingerprint: str,
+    keys: Sequence[str],
 ) -> Page:
-    """A Page of the items read after a cursor's keyset in keyset order, `found` holding up to
+    """A Page of the items read after a cursor's keys in their order, `found` holding up to
     limit + 1 of them: one more than the page says whether a next page exists."""
     items = found[:limit]
     # A limit of 0 asks only for the count, so there is no next page to point to.
     more = limit > 0 and len(found) > limit
-    return Page(items, total, encode_cursor(fingerprint, items[-1][key]) if more else None)
+    next_cursor = encode_cursor(fingerprint, [items[-1][key] for key in keys]) if more else None
+    return Page(items, total, next_cursor)
 
 
 def fingerprint(command: str, selection: Mapping[str, Any]) -> str:

@@ -10,6 +10,7 @@ from spider.output.diagnostics import SpiderError
 from spider.output.paging import (
     Fields,
     Page,
+    decode_cursor,
     fingerprint,
     keyset_after,
     keyset_page,
@@ -56,7 +57,7 @@ def _filter_values(flag: str, values: Iterable[str], accepted: tuple[str, ...]) 
         if "" in given:
             raise SpiderError(
                 INVALID_VALUE,
-                f"{flag} {listed} has an empty value.",
+                f"{flag} {listed!r} has an empty value.",
                 hint=f"Separate the values with single commas, such as {flag} "
                 f"{accepted[0]},{accepted[1]}.",
                 details={"flag": flag, "value": listed, "accepted": list(accepted)},
@@ -85,21 +86,20 @@ def issue_list(
     from spider.store.query import ordered_issues
     from spider.store.reading import reading
 
+    # Checked before the Issues are read: on a running Crawl that runs every Rule's query.
+    chosen = select_fields(fields, ISSUE_FIELDS)
     crawl_file = _crawl_file(request)
+    bound = _fingerprint(
+        crawl_file,
+        type=sorted(filters.issue_types),
+        priority=sorted(filters.priorities),
+        category=sorted(filters.categories),
+    )
+    if cursor is not None:
+        decode_cursor(cursor, bound)
     with reading(crawl_file.path) as connection:
         items = ordered_issues(connection, RULES, filters)
-    return paginate(
-        items,
-        limit=limit,
-        cursor=cursor,
-        fingerprint=_fingerprint(
-            crawl_file,
-            type=sorted(filters.issue_types),
-            priority=sorted(filters.priorities),
-            category=sorted(filters.categories),
-        ),
-        fields=select_fields(fields, ISSUE_FIELDS),
-    )
+    return paginate(items, limit=limit, cursor=cursor, fingerprint=bound, fields=chosen)
 
 
 def issue_detail(
@@ -112,12 +112,14 @@ def issue_detail(
 
     crawl_file = _crawl_file(request)
     bound = _fingerprint(crawl_file, rule_id=rule_id)
-    after = keyset_after(cursor, bound, str)
+    after = keyset_after(cursor, bound, (str,))
     with reading(crawl_file.path) as connection:
         # First: the reader refuses a rule id the Crawl's rules table lacks.
-        total, found = affected_url_page(connection, rule_id, RULES, after=after, limit=limit + 1)
+        total, found = affected_url_page(
+            connection, rule_id, RULES, after=None if after is None else after[0], limit=limit + 1
+        )
         rule = recorded_rule(connection, rule_id)
-    page = keyset_page(found, total, limit=limit, fingerprint=bound, key="url")
+    page = keyset_page(found, total, limit=limit, fingerprint=bound, keys=("url",))
     return replace(page, header={"rule": rule})
 
 

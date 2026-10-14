@@ -102,13 +102,17 @@ def crawl_store(
 
 
 def later_rule(rule_id: str, issue_type: IssueType, priority: Priority, sql: str) -> Rule:
-    """A Rule of a later tool, which the catalogue lacks, with any Issue Type and Priority."""
+    """A Rule of a later tool, which the catalogue lacks, with any Issue Type and Priority,
+    and texts of its own, which only the Crawl's rules table holds."""
     return replace(
         TITLE_MISSING,
         id=rule_id,
         issue_type=issue_type,
         priority=priority,
         applies_to="internal_urls",
+        description=f"What {rule_id} checks.",
+        why_it_matters=f"Why {rule_id} matters.",
+        how_to_fix=f"How to fix {rule_id}.",
         reproduce_sql=sql,
     )
 

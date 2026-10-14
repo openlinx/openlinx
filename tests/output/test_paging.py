@@ -7,7 +7,14 @@ from typing import Any
 import pytest
 
 from spider.output.diagnostics import SpiderError
-from spider.output.paging import decode_cursor, encode_cursor, keyset_after, paginate
+from spider.output.paging import (
+    Page,
+    decode_cursor,
+    encode_cursor,
+    keyset_after,
+    keyset_page,
+    paginate,
+)
 
 FINGERPRINT = "0123456789abcdef"
 # Payloads of every length modulo 3, and bytes that plain base64 writes as + and /.
@@ -58,9 +65,35 @@ def test_a_cursor_whose_position_is_not_an_index_is_undecodable(keyset: Any) -> 
     assert raised.value.code == "invalid_cursor"
 
 
-def test_a_keyset_cursor_whose_keyset_has_another_type_is_refused() -> None:
+@pytest.mark.parametrize(
+    ("keyset", "types"),
+    [(5, (str,)), ([5], (str,)), (["a", "b"], (str,)), ([True], (int,)), ([1], (int, str))],
+)
+def test_a_keyset_cursor_whose_keyset_has_another_shape_is_refused(
+    keyset: Any, types: tuple[type, ...]
+) -> None:
     # The fingerprint matches: only a hand-made cursor has another keyset.
     with pytest.raises(SpiderError) as raised:
-        keyset_after(encode_cursor(FINGERPRINT, 5), FINGERPRINT, str)
+        keyset_after(encode_cursor(FINGERPRINT, keyset), FINGERPRINT, types)
 
     assert raised.value.code == "invalid_cursor"
+
+
+def test_a_keyset_cursor_gives_its_keys() -> None:
+    assert keyset_after(encode_cursor(FINGERPRINT, [3, "a"]), FINGERPRINT, (int, str)) == (3, "a")
+
+
+def test_a_keyset_page_of_limit_0_has_only_the_total() -> None:
+    found = [{"n": 1, "url": "a"}]
+
+    assert keyset_page(found, 7, limit=0, fingerprint=FINGERPRINT, keys=("url",)) == Page(
+        [], 7, None
+    )
+
+
+def test_an_exactly_full_last_keyset_page_has_no_next_cursor() -> None:
+    found = [{"url": "a"}, {"url": "b"}]
+
+    assert keyset_page(found, 2, limit=2, fingerprint=FINGERPRINT, keys=("url",)) == Page(
+        found, 2, None
+    )

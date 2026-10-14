@@ -189,7 +189,7 @@ def _recorded_rule(connection: Connection, rule_id: str) -> bool:
 def _affected(connection: Connection, query: Select[Any]) -> list[AffectedUrl]:
     found = query.subquery()
     return [
-        AffectedUrl(url_id=row.url_id, detail=_detail(row.detail))
+        AffectedUrl(url_id=row.url_id, detail=decode_detail(row.detail))
         for row in connection.execute(select(found).order_by(found.c.url_id))
     ]
 
@@ -204,7 +204,7 @@ def _live_url_issues(
             continue
         query = _found(rule)
         found += [
-            UrlIssue(rule_id=rule.id, url_id=url_id, detail=_detail(row.detail))
+            UrlIssue(rule_id=rule.id, url_id=url_id, detail=decode_detail(row.detail))
             for row in connection.execute(select(query).where(query.c.url_id == url_id))
         ]
     return found
@@ -215,7 +215,7 @@ def _stored_url_issues(
 ) -> list[UrlIssue]:
     # By the index affected_urls_url_id (D14).
     stored = {
-        row.rule_id: UrlIssue(rule_id=row.rule_id, url_id=url_id, detail=_detail(row.detail))
+        row.rule_id: UrlIssue(rule_id=row.rule_id, url_id=url_id, detail=decode_detail(row.detail))
         for row in connection.execute(_STORED_URL_ISSUES, {"url_id": url_id})
     }
     return _in_catalogue_order(stored, catalogue)
@@ -234,7 +234,7 @@ def _found(rule: Rule) -> Subquery:
 
 def _affected_urls(connection: Connection, rule: Rule) -> list[AffectedUrl]:
     return [
-        AffectedUrl(url_id=url_id, detail=_detail(detail))
+        AffectedUrl(url_id=url_id, detail=decode_detail(detail))
         for url_id, detail in connection.execute(select(_found(rule)))
     ]
 
@@ -243,7 +243,7 @@ def _enabled_rule_ids(connection: Connection) -> frozenset[str]:
     return frozenset(row.id for row in connection.execute(_ENABLED))
 
 
-def _detail(stored: str | None) -> Any:
+def decode_detail(stored: str | None) -> Any:
     return None if stored is None else orjson.loads(stored)
 
 

@@ -1,5 +1,7 @@
 """The Issues of the Query Service (050-add-query-and-segments, querying; seam 2)."""
 
+from pathlib import Path
+
 import pytest
 
 from spider.output.diagnostics import SpiderError
@@ -121,7 +123,8 @@ def test_detail_of_an_affected_url(temp_workspace: TempWorkspace) -> None:
     assert found.items == [{"url": "https://example.com/gone", "detail": {"status_code": 404}}]
 
 
-GONE = under("gone", 3)
+# Recorded out of url order, so the order of insertion is not the order of url.
+GONE = ["https://example.com/gone/z", "https://example.com/gone/a", "https://example.com/gone/m"]
 
 
 def test_affected_urls_are_paged_in_url_order(temp_workspace: TempWorkspace) -> None:
@@ -136,7 +139,11 @@ def test_affected_urls_are_paged_in_url_order(temp_workspace: TempWorkspace) -> 
         [item["url"] for item in first.items],
         [item["url"] for item in second.items],
         (first.total, second.total, second.next_cursor),
-    ) == (GONE[:2], GONE[2:], (3, 3, None))
+    ) == (
+        ["https://example.com/gone/a", "https://example.com/gone/m"],
+        ["https://example.com/gone/z"],
+        (3, 3, None),
+    )
 
 
 def test_a_cursor_of_another_rule_is_refused(temp_workspace: TempWorkspace) -> None:
@@ -155,7 +162,7 @@ def test_an_empty_filter_value_is_refused() -> None:
 
     assert (raised.value.code, raised.value.diagnostic.message) == (
         "invalid_value",
-        "--type issue,,warning has an empty value.",
+        "--type 'issue,,warning' has an empty value.",
     )
 
 
@@ -164,3 +171,121 @@ def test_the_first_unknown_value_given_is_named() -> None:
         issue_filters(priorities=["urgent", "asap"])
 
     assert raised.value.diagnostic.details["value"] == "urgent"
+
+
+def test_issue_types_then_priorities_are_ordered_as_declared(
+    temp_workspace: TempWorkspace,
+) -> None:
+    # Each fires once, so only the Issue Type and the Priority order them; alphabetical
+    # order would give issue/low, issue/medium, opportunity, warning.
+    crawl_store(
+        temp_workspace,
+        links=(*under("a", 1), *under("b", 1), *under("c", 1), *under("d", 1)),
+        later_rules=(
+            later_rule("rule-a", "opportunity", "high", UNDER_A),
+            later_rule("rule-b", "warning", "high", UNDER_B),
+            later_rule("rule-c", "issue", "low", UNDER_C),
+            later_rule("rule-d", "issue", "medium", UNDER_D),
+        ),
+        completed=True,
+    )
+
+    found = issue_list(request(temp_workspace)).items
+
+    assert [item["rule_id"] for item in found] == ["rule-d", "rule-c", "rule-b", "rule-a"]
+
+
+TWO_ISSUES = (
+    later_rule("rule-a", "issue", "high", UNDER_A),
+    later_rule("rule-b", "warning", "high", UNDER_B),
+)
+
+
+def at(temp_workspace: TempWorkspace, crawl_file: Path) -> QueryRequest:
+    return QueryRequest(
+        cwd=temp_workspace.root, home=temp_workspace.home, workspace=None, crawl=str(crawl_file)
+    )
+
+
+def test_a_cursor_of_the_issue_list_of_another_crawl_is_refused(
+    temp_workspace: TempWorkspace,
+) -> None:
+    links = (*under("a", 1), *under("b", 1))
+    first = crawl_store(temp_workspace, links=links, later_rules=TWO_ISSUES, completed=True)
+    second = crawl_store(temp_workspace, links=links, later_rules=TWO_ISSUES, completed=True)
+    page = issue_list(at(temp_workspace, first), limit=1)
+
+    with pytest.raises(SpiderError) as raised:
+        issue_list(at(temp_workspace, second), limit=1, cursor=page.next_cursor)
+
+    assert raised.value.code == "invalid_cursor"
+
+
+def test_a_cursor_of_the_issue_list_with_other_filters_is_refused(
+    temp_workspace: TempWorkspace,
+) -> None:
+    links = (*under("a", 1), *under("b", 1))
+    crawl_store(temp_workspace, links=links, later_rules=TWO_ISSUES, completed=True)
+    page = issue_list(request(temp_workspace), limit=1)
+
+    with pytest.raises(SpiderError) as raised:
+        issue_list(
+            request(temp_workspace),
+            issue_filters(priorities=["high"]),
+            limit=1,
+            cursor=page.next_cursor,
+        )
+
+    assert raised.value.code == "invalid_cursor"
+
+
+def test_a_cursor_of_the_affected_urls_of_another_crawl_is_refused(
+    temp_workspace: TempWorkspace,
+) -> None:
+    first = crawl_store(temp_workspace, statuses=dict.fromkeys(GONE, 404), completed=True)
+    second = crawl_store(temp_workspace, statuses=dict.fromkeys(GONE, 404), completed=True)
+    page = issue_detail(at(temp_workspace, first), "internal-4xx", limit=1)
+
+    with pytest.raises(SpiderError) as raised:
+        issue_detail(at(temp_workspace, second), "internal-4xx", limit=1, cursor=page.next_cursor)
+
+    assert raised.value.code == "invalid_cursor"
+
+
+def test_the_rule_of_an_issue_is_the_one_the_crawl_recorded(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl_store(temp_workspace, links=under("a", 1), later_rules=TWO_ISSUES[:1], completed=True)
+
+    found = issue_detail(request(temp_workspace), "rule-a")
+
+    assert found.header["rule"] == {
+        "rule_id": "rule-a",
+        "category": "titles",
+        "issue_type": "issue",
+        "priority": "high",
+        "description": "What rule-a checks.",
+        "why_it_matters": "Why rule-a matters.",
+        "how_to_fix": "How to fix rule-a.",
+        "thresholds": {},
+        "reproduce_sql": UNDER_A,
+    }
+
+
+def test_an_issue_is_described_as_the_crawl_recorded_its_rule(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl_store(temp_workspace, links=under("a", 1), later_rules=TWO_ISSUES[:1], completed=True)
+
+    found = issue_list(request(temp_workspace)).items
+
+    assert [item["description"] for item in found] == ["What rule-a checks."]
+
+
+def test_fields_are_checked_before_the_crawl_is_read(temp_workspace: TempWorkspace) -> None:
+    missing = at(temp_workspace, temp_workspace.root / "missing.sqlite")
+
+    with pytest.raises(SpiderError) as raised:
+        issue_list(missing, fields="bogus")
+
+    assert raised.value.code == "unknown_field"

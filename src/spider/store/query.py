@@ -7,7 +7,7 @@ import orjson
 from sqlalchemy import Connection, bindparam, case, func, select
 
 from spider.rules.model import Rule
-from spider.store.issues import affected_urls_in, issues_in
+from spider.store.issues import affected_urls_in, decode_detail, issues_in
 from spider.store.records import IssueFilters, IssueType, Priority
 from spider.store.schema import literal_values, rules, urls
 
@@ -78,8 +78,7 @@ def affected_url_page(
         .limit(limit)
     )
     return total, [
-        {"url": url, "detail": None if detail is None else orjson.loads(detail)}
-        for url, detail in connection.execute(ordered)
+        {"url": url, "detail": decode_detail(detail)} for url, detail in connection.execute(ordered)
     ]
 
 
