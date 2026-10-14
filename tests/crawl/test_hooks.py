@@ -3,41 +3,22 @@
 import sqlite3
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
-from typing import Any
 
 import msgspec
 import pytest
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, text
 
-from spider.cli.app import build_app
 from spider.crawl.hooks import Handler, Hooks, Pass, UrlResult, default_hooks
 from spider.crawl.pages import Extractor, PageInput
-from spider.output.reporter import Collected
-from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
 from spider.store.crawls import crawl_summary
-from spider.store.records import CrawlState, SecretNames
+from spider.store.records import CrawlState
 from spider.store.writer import CrawlWriter, CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
-from tests.support.app import settings_tables
-from tests.support.clock import FakeClock
+from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
-
-
-def _crawl(temp_workspace: TempWorkspace, seed: str, hooks: Hooks, **crawl: Any) -> CrawlResult:
-    request = CrawlRequest(
-        seed=seed,
-        cwd=temp_workspace.root,
-        home=temp_workspace.home,
-        workspace=None,
-        command_argv=["spider", "crawl", seed],
-        secret_names=SecretNames(),
-        flags={"crawl": crawl},
-    )
-    plan = plan_crawl(request, settings_tables(build_app()))
-    return start_crawl(plan, FakeClock(), Collected(), hooks)
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +61,7 @@ def test_a_registered_handler_sees_every_url_once(
         row_writers={**hooks.row_writers, Seen: _write_seen},
     )
 
-    result = _crawl(temp_workspace, server.url("/"), hooks, exclude=["/logout$"])
+    result = crawl_result(server.url("/"), hooks, exclude=["/logout$"])
 
     assert sorted(
         query(
@@ -108,7 +89,7 @@ def test_post_crawl_passes_run_before_a_crawl_is_completed(
     hooks = default_hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("state", record_state)))
 
-    _crawl(temp_workspace, server.url("/"), hooks)
+    crawl_result(server.url("/"), hooks)
 
     assert seen == ["running"]
 
@@ -147,9 +128,7 @@ def test_an_extractor_error_is_recorded(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = _crawl(
-        temp_workspace, server.url("/"), _with_extractors(Extractor("exploding", _exploding))
-    )
+    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
     ((parsed, parse_error, message),) = query(
         result.crawl_file,
         "SELECT parsed, parse_error, parse_error_message FROM urls WHERE url = ?",
@@ -164,9 +143,7 @@ def test_the_crawl_continues_after_an_extractor_error(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = _crawl(
-        temp_workspace, server.url("/"), _with_extractors(Extractor("exploding", _exploding))
-    )
+    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
 
     assert query(
         result.crawl_file, "SELECT parsed FROM urls WHERE url = ?", [server.url("/ok")]
@@ -178,9 +155,7 @@ def test_links_of_a_page_whose_extractor_failed_are_followed(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = _crawl(
-        temp_workspace, server.url("/"), _with_extractors(Extractor("exploding", _exploding))
-    )
+    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
 
     assert query(
         result.crawl_file, "SELECT fetch_state FROM urls WHERE url = ?", [server.url("/deeper")]
@@ -216,7 +191,7 @@ def test_handlers_get_the_outputs_of_the_extractors_that_did_not_fail(
         row_writers={**hooks.row_writers, Outputs: _write_outputs},
     )
 
-    result = _crawl(temp_workspace, server.url("/"), hooks)
+    result = crawl_result(server.url("/"), hooks)
 
     assert query(
         result.crawl_file,
@@ -239,9 +214,7 @@ def test_parse_failures_are_counted_in_one_warning(
         )
     )
 
-    result = _crawl(
-        temp_workspace, server.url("/"), _with_extractors(Extractor("exploding", _exploding))
-    )
+    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
 
     assert [
         (warning["code"], warning["details"]["count"]) for warning in result.to_json()["warnings"]
@@ -273,7 +246,7 @@ def test_a_failing_handler_does_not_stop_the_crawl(
         row_writers={**hooks.row_writers, Seen: _write_seen},
     )
 
-    result = _crawl(temp_workspace, server.url("/"), hooks)
+    result = crawl_result(server.url("/"), hooks)
 
     assert (
         result.summary.state,
@@ -298,7 +271,7 @@ def test_only_the_failing_handlers_rows_are_dropped(
         row_writers={**hooks.row_writers, Seen: _write_seen},
     )
 
-    result = _crawl(temp_workspace, server.url("/"), hooks)
+    result = crawl_result(server.url("/"), hooks)
 
     assert query(
         result.crawl_file,
@@ -339,7 +312,7 @@ def test_a_url_whose_rows_cannot_be_written_is_recorded_as_an_error(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = _crawl(temp_workspace, server.url("/"), _with_row_writer(_refuse))
+    result = crawl_result(server.url("/"), _with_row_writer(_refuse))
 
     assert (
         query(
@@ -365,7 +338,7 @@ def test_a_unit_that_fails_with_the_file_is_never_completed(
     server = fixture_site(BOOM_SITE)
 
     with pytest.raises(sqlite3.OperationalError):
-        _crawl(temp_workspace, server.url("/"), _with_row_writer(_refuse_with_the_file))
+        crawl_result(server.url("/"), _with_row_writer(_refuse_with_the_file))
     (crawl_file,) = temp_workspace.home.rglob("*.sqlite")
 
     assert crawl_row(crawl_file)["state"] == "running"
@@ -388,7 +361,7 @@ def test_a_handler_that_fails_midway_keeps_none_of_its_rows(
         row_writers={**hooks.row_writers, Seen: _write_seen},
     )
 
-    result = _crawl(temp_workspace, server.url("/"), hooks)
+    result = crawl_result(server.url("/"), hooks)
 
     assert query(
         result.crawl_file,
@@ -406,9 +379,7 @@ def test_an_extractor_that_returns_no_struct_is_an_extractor_error(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = _crawl(
-        temp_workspace, server.url("/"), _with_extractors(Extractor("loose", _not_a_struct))
-    )
+    result = crawl_result(server.url("/"), _with_extractors(Extractor("loose", _not_a_struct)))
 
     assert query(
         result.crawl_file,
@@ -450,7 +421,7 @@ def test_a_writer_that_ends_reports_why_it_ended(
     )
 
     with pytest.raises(CrawlWriterReplayError):
-        _crawl(temp_workspace, server.url("/"), hooks)
+        crawl_result(server.url("/"), hooks)
 
 
 @dataclass(frozen=True, slots=True)
@@ -492,7 +463,7 @@ def test_a_handler_gets_the_row_values_of_the_url(
         row_writers={**hooks.row_writers, RowValues: _write_row_values},
     )
 
-    result = _crawl(temp_workspace, server.url("/"), hooks)
+    result = crawl_result(server.url("/"), hooks)
 
     assert query(
         result.crawl_file,
