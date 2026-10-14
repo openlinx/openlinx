@@ -83,7 +83,7 @@ Diagnostics on stderr:
 
 ### Tables and precedence
 
-Settings are grouped in tables. Each change that adds settings registers its own table, for example `[store]` from `015-add-crawl-store`. A table must forbid unknown keys and give every setting a one-line description and a default that TOML can write: a string, number, boolean or list of those, or none at all for a setting that is unset. A table of named entries describes itself with its entry model's one-line docstring, and a table of named tables, such as `[rules.<id>]`, with its own. The template and the error hints depend on these rules, and a test checks every registered table. A setting that mirrors a flag lives in a table the Command reads, usually named after it, under the flag's long name with `-` written as `_`.
+Settings are grouped in tables. Each change that adds settings registers its own table, for example `[store]` from `015-add-crawl-store`. A table must forbid unknown keys and give every setting a one-line description and a default that TOML can write: a string, number, boolean or list of those, or none at all for a setting that is unset. A setting never holds a table, not even in a list, a union or a mapping: only a table of named tables holds tables. A table of named entries describes itself with its entry model's one-line docstring, and a table of named tables, such as `[rules.<id>]`, with its own. The template and the error hints depend on these rules, and a test checks every registered table. A setting that mirrors a flag lives in a table the Command reads, usually named after it, under the flag's long name with `-` written as `_`.
 
 Each setting takes the first value it finds:
 1. its flag on the command line

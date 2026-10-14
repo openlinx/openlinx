@@ -131,8 +131,14 @@ def _check_model(name: str, model: Any) -> None:
     _check_forbids_extra(name, model)
     for key, field in model.model_fields.items():
         _check_one_line(field.description, f"Setting {name}.{key} needs a one-line description.")
+        if _holds_model(field.annotation):
+            raise TypeError(f"Setting {name}.{key} cannot hold a table: a table holds settings.")
         if field.default is not None and not _is_toml_literal(field.default):
             raise TypeError(f"Setting {name}.{key} needs a default TOML can write.")
+
+
+def _holds_model(annotation: Any) -> bool:
+    return _is_model(annotation) or any(_holds_model(arg) for arg in get_args(annotation))
 
 
 def _is_toml_literal(value: Any) -> bool:

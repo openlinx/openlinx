@@ -50,6 +50,24 @@ class Sized(BaseModel):
     size: int = Field(1, description="A size.")
 
 
+class ListedTables(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[Sized] = Field([], description="Some tables.")
+
+
+class OptionalTable(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sized: Sized | None = Field(None, description="A table, unset by default.")
+
+
+class MappedTables(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sized: dict[str, Sized] = Field({}, description="Tables by name.")
+
+
 class NamedTables(BaseModel):
     """Tables of the example, each named by its key."""
 
@@ -117,6 +135,9 @@ class LooseOuterNamedTables(BaseModel):
         Undescribed,
         TwoLineDescription,
         NotANumberDefault,
+        ListedTables,
+        OptionalTable,
+        MappedTables,
         dict[str, Loose],
         dict[int, TomlDefaults],
         dict[str, TomlDefaults],

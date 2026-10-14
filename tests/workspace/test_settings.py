@@ -120,6 +120,9 @@ class ListedEntry(BaseModel):
 class ListedSettings(BaseModel):
     """Settings with a list of tables, whose keys the closest-key hint cannot follow."""
 
+    # The table rules refuse it (check_table), but load_settings loads any table it is
+    # given, and its hint must never turn settings_invalid into internal_error.
+
     model_config = ConfigDict(extra="forbid")
 
     entries: list[ListedEntry] = Field([], description="The entries.")
