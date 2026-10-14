@@ -1,6 +1,10 @@
-"""`spider issues` (050-add-query-and-segments, querying; seam 1)."""
+"""`spider issues` (050-add-query-and-segments, querying; seam 1, and 3 with real processes)."""
 
-from tests.support.cli import run_cli
+import pytest
+
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site, Status
+from tests.support.cli import run_cli, run_cli_process
 from tests.support.crawl_store import (
     UNDER_A,
     UNDER_B,
@@ -57,3 +61,30 @@ def test_unknown_issue_type(temp_workspace: TempWorkspace) -> None:
         "invalid_value",
         ["issue", "warning", "opportunity"],
     )
+
+
+E2E_PAGES = Site(
+    {
+        "/e2e/": Page(
+            body='<title>Home</title><h1>Home</h1><a href="/e2e/notitle">No title</a> '
+            '<a href="/e2e/gone">Gone</a>'
+        ),
+        "/e2e/notitle": Page(body="<h1>No title here</h1>"),
+        "/e2e/gone": Status(404, body="Gone", content_type="text/plain"),
+    }
+)
+
+
+@pytest.mark.slow
+def test_issues_of_a_fixture_crawl_on_every_os(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    crawl = run_cli_process("crawl", fixture_site(E2E_PAGES).url("/e2e/"))
+
+    result = run_cli_process("issues")
+    found = {item["rule_id"]: item["affected_count"] for item in result.json()["items"]}
+
+    assert (
+        crawl.exit_code,
+        {rule_id: found.get(rule_id) for rule_id in ("internal-4xx", "title-missing")},
+    ) == (0, {"internal-4xx": 1, "title-missing": 1})
