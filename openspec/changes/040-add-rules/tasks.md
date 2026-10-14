@@ -30,12 +30,13 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 ## 2. Configuration in spider.toml (slice)
 
 - [x] 2.1 Drive "Override shown by the rules Command" at seam 1, and add `[rules.<id>]` thresholds to `010`'s settings model. They fit neither of `010`'s table kinds (a flat model, or a keyed table with one entry model): each Rule has its own thresholds, and Rule ids hold `-`. So the `rules` table is a model built from the registry, with one field per Rule, aliased by its id, each an `extra="forbid"` model of `enabled` and its thresholds (integers, at least 0), registered in `build_app` beside `crawl` and `store`; `010`'s `check_table`, closest-key suggestion and `init` template learn it (the template gets one commented `[rules.<id>]` that points to `spider rules list`), and `crawl.config` dumps it by alias (design D9).
-- [x] 2.2 Drive "Disabled Rule is listed" at seam 1 (`enabled = false`), and register `h1-missing` with a query that returns no rows until task 4.7.
+- [x] 2.2 Drive "Disabled Rule is listed" at seam 1 (`enabled = false`), and register `h1-missing`, whose query arrives with task 3.3, which gives a Rule registered before the slice of its condition a query that returns no rows until that slice (task 4.7 for `h1-missing`).
 - [x] 2.3 Drive "Misspelt Rule id" at seam 1: `settings_invalid` with a dotted key and a closest-id hint, which names the Rule id (`title-too-long`), never its field name (`title_too_long`).
 - [x] 2.4 Drive "Unknown key" at seam 1, on `h1-missing`. A test named after no scenario pins the suggestion inside a Rule table: `[rules.title-too-long]` `max_char = 70` gives the hint `rules.title-too-long.max_chars`, reached through the alias.
 - [x] 2.5 Drive "Negative threshold" at seam 1. `spider crawl` exits 3, and the fixture site receives 0 requests, on `title-too-long`'s `max_chars`.
 - [x] 2.6 Docs: add `[rules.<id>]` examples to `docs/rules.md`: raising a limit, disabling a Rule, and the error for a misspelt id; the `enabled` field joins the item fields it lists.
 - [x] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
+- [ ] 2.8 Close the approval of group 2: "Disabled Rule is listed" asserts that `h1-missing` is the only Rule that is off, so Rules being on by default is pinned (group 3's pass runs the Rules marked enabled); a Rule table named by the field name, `[rules.title_too_long]`, is `settings_invalid` with the hint `rules.title-too-long`, a guard against reading fields by name; the closest-key hint goes on to the next problem when one key cannot be followed, rather than giving no hint for the whole error; `docs/rules.md` says a threshold is at most 2^63-1, SQLite's largest INTEGER; "Template loads as defaults" runs over the tables of the tool and the fixture app, a table of named tables among them; the rules tests use `pytestmark` for their Workspace rather than an autouse fixture.
 
 ## 3. Rules as queries, stored Issues and live Issues (slice)
 
@@ -66,7 +67,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 4.4 Drive "Server error" at seam 2, with `internal-5xx`'s query (registered in task 1.1).
 - [ ] 4.5 Drive "No response" at seam 2, over `020`'s `fetch_error`, and register `internal-no-response`.
 - [ ] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
-- [ ] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1`, with `h1-missing`'s query (registered in task 2.2).
+- [ ] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1`, replacing the query that returns no rows, which `h1-missing` carries from task 3.3 (registered in task 2.2).
 - [ ] 4.8 Docs: add the slice's five Rules (`internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`) to the catalogue in `docs/rules.md`.
 - [ ] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
