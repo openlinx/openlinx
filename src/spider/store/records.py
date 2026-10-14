@@ -121,6 +121,15 @@ class AffectedUrl:
     detail: Any
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Issue:
+    rule_id: str
+    category: RuleCategory
+    issue_type: IssueType
+    priority: Priority
+    affected_count: int
+
+
 @dataclass(frozen=True, kw_only=True)
 class NewCrawl:
     workspace: Workspace
