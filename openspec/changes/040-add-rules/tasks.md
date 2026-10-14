@@ -74,6 +74,14 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1`, replacing the query that returns no rows, which `h1-missing` carries from task 3.3 (registered in task 2.2).
 - [x] 4.8 Docs: add the slice's five Rules (`internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`) to the catalogue in `docs/rules.md`.
 - [x] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [ ] 4.10 Close the approval of group 4 (the rulings of 2026-10-14):
+  - What the pass runs is exactly a Rule's `reproduce_sql`. The pass ends the wrapped text with a line break, so a trailing `--` comment no longer swallows the subquery's closing parenthesis.
+  - A seam-4 catalogue guard checks that no Rule's query holds a `:name` that SQLAlchemy's `text()` would read as a bind parameter.
+  - "A Rule's query returns its stored Affected URLs" covers all five slice Rules: `RULE_PAGES` gains a 503 and a reset connection.
+  - `internal-no-response`'s description says "its site's robots.txt got no response".
+  - The tests of tasks 3.8, 3.14, 4.3 and 3.21 state their premises: the comments name every page a Rule fires on, the Crawl is `completed`, and the reader's wait returned.
+  - `crawl_with_url` takes `in_scope`, with a guard that an Internal URL outside the Scope is in `internal_urls`.
+  - Design Risks says that a status outside every Rule's range raises no Issue.
 
 ## 5. Title Rules and the post-crawl pass (v0.1, except the tasks marked v0.2)
 
