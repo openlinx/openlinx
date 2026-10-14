@@ -173,7 +173,7 @@ Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 do
 `settings_invalid` (exit 3) comes from `010`, and the `record_failed` warning that the Rule queries leave out is `020`'s.
 
 ### D18. Command groups
-`spider rules list` and `spider rules show` are the first Commands below a group, while `010`'s CLI registers only top-level Commands. Task 1.1 adds groups in general: a group's Commands are registered under it, each with its own `@command_meta`, `spider commands` lists each by its full path, as cli-contract names them (`rules list`), and `--help` shows them. Bare `spider rules` runs `list`. `060`'s `crawls list|show|rm` reuses it.
+`spider rules list` and `spider rules show` are the first Commands below a group, while `010`'s CLI registers only top-level Commands. Task 1.1 adds groups in general: a group's Commands are registered under it, each with its own `@command_meta`, `spider commands` lists each by its full path, as cli-contract names them (`rules list`), and `--help` shows them. A group with no arguments runs its default Command (`spider rules` runs `spider rules list`), and an option given after the group name and before the Command name, other than `--help`, is a `usage_error` whose hint says to put it after the Command name, as cli-contract already asks for a global flag given before the Command name (ruled 2026-10-14). Options are taken in one place only, after the Command name. The mechanism is generic: `060`'s `crawls list|show|rm` inherits it, its default Command and its hint included.
 
 ## Test seams
 

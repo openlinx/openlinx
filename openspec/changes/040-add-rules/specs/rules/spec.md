@@ -727,7 +727,7 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** `health_score` is 75
 
 ### Requirement: List Rules
-`spider rules` and `spider rules list` SHALL print the Rules as configured in the current Workspace, without reading any Crawl. The output SHALL follow the output contract of `010-add-workspace-and-cli-contract`: the paging envelope `{total, items, next_cursor}` and the `--fields`, `--limit`, `--cursor` and `--format` options. Items SHALL be in catalogue order: by category, in the order of the Rule model, then in the order the Rules appear in their category's table. Each item SHALL have these fields:
+`spider rules list` SHALL print the Rules as configured in the current Workspace, without reading any Crawl, and `spider rules` with no arguments SHALL run `spider rules list`. An option given after `spider rules` and before the Command name, other than `--help`, SHALL fail with the error code `usage_error` (exit code 2), whose hint says to put it after the Command name, such as `spider rules list --limit ...`. The output SHALL follow the output contract of `010-add-workspace-and-cli-contract`: the paging envelope `{total, items, next_cursor}` and the `--fields`, `--limit`, `--cursor` and `--format` options. Items SHALL be in catalogue order: by category, in the order of the Rule model, then in the order the Rules appear in their category's table. Each item SHALL have these fields:
 
 - `id`, `category`, `issue_type`, `priority`, `applies_to` and `enabled`
 - `thresholds`: an object that maps each threshold name to `{value, default, unit}`, where the unit is `characters`, `pixels`, `words`, `kilobytes` or `hops`
