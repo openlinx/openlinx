@@ -33,6 +33,10 @@ class ScopeRules:
     include: tuple[re.Pattern[str], ...] = ()
     exclude: tuple[re.Pattern[str], ...] = ()
 
+    @property
+    def section_crawl(self) -> bool:
+        return self.folder is not None
+
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
         host = _without_trailing_dot(url_host(url))
         is_internal = host in self.seed_hosts or (

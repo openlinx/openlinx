@@ -225,7 +225,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 8.6 Drive "A URL that matches no include pattern is checked but not followed" at seam 3+6.
 - [x] 8.7 Drive "An invalid pattern is rejected" at seam 1. Done when: an invalid `--include` pattern is `invalid_pattern`, which task 5.1 declared for `--exclude`, before any crawl file is created.
 - [x] 8.8 Drive "A Seed outside the Scope is rejected" at seam 1. Done when: `seed_out_of_scope` is declared.
-- [ ] 8.9 Drive "A subfolder Crawl is a Section Crawl" at seam 1.
+- [x] 8.9 Drive "A subfolder Crawl is a Section Crawl" at seam 1.
 - [ ] 8.10 Drive "An include pattern makes a Section Crawl" and "Exclude patterns alone do not make a Section Crawl" at seam 3+6, a trivial pair.
 - [ ] 8.11 Drive "A subfolder Scope is recorded" at seam 3+6. Done when: `crawl.scope` is declared NOT NULL, with the Seed hosts in order, and `create_crawl` writes it with the `crawl` row from a `scope` field added to `NewCrawl` (design D18).
 - [ ] 8.12 Drive "A www Seed whose canonical names the apex is reported" at seam 1. Done when: `seed_base_mismatch` is declared, and the Scope is unchanged.

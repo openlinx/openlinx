@@ -342,3 +342,13 @@ def test_a_seed_that_matches_no_include_pattern_is_rejected(temp_workspace: Temp
         result.exit_code,
         [(error["code"], "--include" in error["message"]) for error in _errors(result)],
     ) == (2, [("seed_out_of_scope", True)])
+
+
+def test_a_subfolder_crawl_is_a_section_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/blog/": Page(body="<p>Blog</p>")}))
+
+    result = run_cli("crawl", server.url("/blog/"), "--scope", "subfolder")
+
+    assert (result.exit_code, result.json()["section_crawl"]) == (0, True)

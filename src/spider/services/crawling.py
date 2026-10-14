@@ -131,20 +131,6 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     _seed(request.seed, None)
     workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
     settings = load_settings(workspace, tables, request.flags)
-    settings_file = workspace.settings_file if workspace.settings_file.is_file() else None
-    new_crawl = NewCrawl(
-        workspace=workspace,
-        crawl_mode="spider",
-        # As given: the urls row holds the normalised Seed.
-        seeds=[request.seed],
-        command_argv=request.command_argv,
-        cwd=request.cwd,
-        # Every registered table, resolved (design D11).
-        config=settings.root.model_dump(mode="json"),
-        secret_names=request.secret_names,
-        journal_setting=settings.table(StoreSettings).journal_mode,
-        settings_file=settings_file,
-    )
     crawl_settings = settings.table(CrawlSettings)
     strip_params = strip_params_pattern(crawl_settings.strip_params)
     seed = _seed(request.seed, strip_params)
@@ -159,6 +145,21 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     decision = scope.decide(seed)
     if not decision.in_scope:
         raise _seed_out_of_scope(seed, decision)
+    settings_file = workspace.settings_file if workspace.settings_file.is_file() else None
+    new_crawl = NewCrawl(
+        workspace=workspace,
+        crawl_mode="spider",
+        # As given: the urls row holds the normalised Seed.
+        seeds=[request.seed],
+        command_argv=request.command_argv,
+        cwd=request.cwd,
+        # Every registered table, resolved (design D11).
+        config=settings.root.model_dump(mode="json"),
+        secret_names=request.secret_names,
+        journal_setting=settings.table(StoreSettings).journal_mode,
+        settings_file=settings_file,
+        section_crawl=scope.section_crawl,
+    )
     return CrawlPlan(
         seed=seed,
         settings=crawl_settings,
