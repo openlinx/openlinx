@@ -5,13 +5,13 @@
 See proposal.md (Why) for the motivation. The approach is shaped by these constraints:
 
 - **`020-add-crawl-core`** provides:
-  - the `Fetcher` interface (one hop, no redirects) with a minimal aiohttp implementation
+  - the `Fetcher` Protocol in `spider.crawl.fetcher` (one hop, no redirects), with the minimal `AiohttpFetcher(session, clock)`, which requests `yarl.URL(url, encoded=True)` so the request is the recorded URL, and returns `FetchResult | FetchFailure` without ever raising (`020` D8): `FetchResult` is `kw_only` (`status_code`, `headers`, `body`, `fetched_at`, `response_time_ms`), and `FetchFailure` is a separate record of `fetch_error`, its message and `fetched_at`
   - the per-host politeness gate and the injectable `Clock`
   - the fake Fetcher, and the DNS resolver hook
   - the `urls` and `origins` tables, the depth barrier, and the writer unit per URL
 - **`015-add-crawl-store`** redacts secrets, both whole values and partial ones such as `Cookie: ***` and `user:***@proxy`.
 - **`017-speed-up-crawl-writer`** gives the writer that `020`'s unit per URL goes through. A unit may run twice, so the units of this change follow its D7 contract, including the loop walk of D2.
-- **`018-add-schema-conventions` and ADR-0005** set the schema rules. Every column, index and table of this change is declared through `018`'s declaration helper (D10).
+- **`018-add-schema-conventions` and ADR-0005** set the schema rules. Every column, index and table of this change is declared through `018`'s `public_table()` (D10).
 - **`010-add-workspace-and-cli-contract`** takes settings only from flags and `spider.toml`, never from environment variables.
 - **ADR-0001:** aiohttp has no HTTP/2, so `http_version` is measured with an ALPN handshake.
 - **`000-scaffold-project`** leaves HTTPS, virtual hosts and gzip on the fixture site to this change.
@@ -30,7 +30,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 ## Decisions
 
 ### D1. The aiohttp policy Fetcher
-The Fetcher that replaces `020`'s minimal one keeps its interface:
+The Fetcher that replaces `020`'s `AiohttpFetcher(session, clock)` behind the `Fetcher` Protocol keeps its interface, `FetchResult | FetchFailure` with no exception, and its `yarl.URL(url, encoded=True)` request. Its retries and timeouts end in a `FetchFailure` (`timeout`, `tls_error`, and the other `fetch_error` values), and a host the resolver cannot encode is `dns_error`. It adds its fields to `FetchResult`, which is `kw_only`, so `020`'s call sites do not change:
 - **Redirects:** `allow_redirects=False` on every request.
 - **Decoding:** `auto_decompress=False`, and the Fetcher decodes gzip and deflate (`zlib`), br (`brotli`) and zstd (`zstandard`, or `compression.zstd` on 3.14) itself. That way it measures both `transferred_bytes` and `size_bytes`.
 - **Body limit:** the body is streamed up to 20 MiB. For checked URLs whose response has a `Content-Length` and no `Content-Encoding`, the Fetcher may stop after the headers and take both sizes from `Content-Length`.
@@ -57,6 +57,8 @@ Every hop is a normal `urls` row with its own status and timing, linked through 
 - **Backoff:** 1 s, 2 s, …, with no jitter, so fake-clock tests assert exact times.
 - **Retry-After:** seconds or an HTTP date, capped at 120 s. A 429 without `Retry-After` pauses the host for 10 s.
 - **Pauses** set the host's "next allowed start" in `020`'s gate, so every request to that host waits, not only the retried one.
+- **`020`'s network pause** (decided 2026-10-14): a timeout counts as a request without a response, like a refused connection; a `tls_error` does not count (ruled 2026-10-14), because a certificate failure is an answer of sorts, and a site-wide one would otherwise wait 30 minutes and fail as a misleading `site_unreachable`. While the Crawl is paused, a failing attempt is neither retried nor recorded, and its URL waits in `queued`, so an outage spends no retries and leaves no false `timeout` rows.
+- **robots.txt without a response:** after its retries, a robots.txt that timed out or failed TLS gives its origin's URLs the same `fetch_error` without a request (`020`); one that answered 5xx or 429 stays `robots_unreachable`.
 
 ### D5. TLS trust
 - **The default:** `truststore.SSLContext` uses the OS trust store on Windows, macOS and Linux.
@@ -97,7 +99,7 @@ Each is added test-first in `tests/fixture_site/` by the first slice that needs 
 - **A small forward proxy** helper for the `--proxy` scenarios.
 
 ### D10. The schema under ADR-0005
-This change adds to `020`'s tables and adds one of its own, all through `018`'s declaration helper (`STRICT`, and CHECKs from the declared values and flags).
+This change adds to `020`'s tables and adds one of its own, all through `018`'s `public_table()` (`STRICT`, and CHECKs from the declared values and flags).
 - **`urls` columns:**
   - `attempt_count` (ADR-0005 rule 5: a count ends with `_count`), NOT NULL with a default of 0, so the inserts of `020`'s units need no change
   - `redirect_location`, the raw header text
@@ -131,7 +133,7 @@ Argument errors, such as `--header` without a colon, use `010`'s `invalid_value`
   - **The DNS resolver hook:** for virtual hosts.
   - **A local test proxy:** for the `--proxy` scenarios.
   - **The trustme test CA:** passed into the crawler's TLS setup. It is an approved boundary double.
-- **Store contract (6):** every column, index and table is declared through `018`'s helper and documented in `docs/schema.md` by the slice that needs it. `018`'s contract test also compares the index and STRICT.
+- **Store contract (6):** every column, index and table is declared through `018`'s `public_table()` and documented in `docs/schema.md` by the slice that needs it. `018`'s contract test also compares the index and STRICT.
 
 ## Risks / Trade-offs
 

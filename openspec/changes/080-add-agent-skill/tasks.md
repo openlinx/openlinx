@@ -61,7 +61,7 @@ Every task is one red → green slice and one commit whose message names its sce
 - [ ] 4.3 Drive "Hand-off uses the dry run's command" (CLI seam), using the `command.sh` and `command.powershell` of `060-add-crawl-control`.
 - [ ] 4.4 Drive "Codex network and Workspace" (CLI seam).
 - [ ] 4.5 Drive "Untrusted crawled text and the notice" (CLI seam).
-- [ ] 4.6 Drive "Hygiene section" (CLI seam), with the advice to follow a running Crawl with `spider status`, not `spider summary`.
+- [ ] 4.6 Drive "Hygiene section" (CLI seam), with the advice to follow a running Crawl with `spider status`, not `spider summary`, and to read a non-null `paused_since` as a Crawl waiting for the network.
 - [ ] 4.7 Drive "Line budget" and "Reference links resolve" (CLI seam). This is a trivial pair: both read the structure of the whole SKILL.md.
 - [ ] 4.8 Drive "All command lines parse" (CLI seam). The lint extracts every `spider …` line from the fenced blocks of all installed files, replaces each `<placeholder>` with a sample value, and checks the result against `spider commands --format json`.
 - [ ] 4.9 Docs: describe the Guardrails and output hygiene in `docs/skill.md`.

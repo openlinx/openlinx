@@ -32,7 +32,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 3. Rules as queries, stored Issues and live Issues
 
-- [ ] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Create the `rules` table in `spider.store.issues` through `018`'s declaration helper (`STRICT`, `WITHOUT ROWID`, keyed by the Rule id), and write the configuration snapshot in the transaction that creates the `crawl` row, through a new `NewCrawl.rules` (design D14).
+- [ ] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Create the `rules` table in `spider.store.issues` through `018`'s `public_table()` (`STRICT`, `WITHOUT ROWID`, keyed by the Rule id), and write the configuration snapshot in the transaction that creates the `crawl` row, through a new `NewCrawl.rules` (design D14).
 - [ ] 3.2 Drive "Categories are an enumeration" at seam 6 (`values` on `rules.category`).
 - [ ] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Add `reproduce_sql` to the Rule model, the `rules` table and the Command's items (design D15). A Rule registered before the slice of its condition carries a query that returns no rows until that slice.
 - [ ] 3.4 Drive "Missing title" at seam 2, through the evaluation entry point, which runs one Rule's query over a crawl file.
@@ -49,8 +49,9 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 3.15 Drive "Live and materialised Issues agree" at seam 3+6.
 - [ ] 3.16 Drive "Missing H2" at seam 2.
 - [ ] 3.17 Drive "Disabled Rule produces no Issue" at seam 3+6.
-- [ ] 3.18 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` over a crawl file, and when Issues are live or materialised.
-- [ ] 3.19 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [ ] 3.18 Drive "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2).
+- [ ] 3.19 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` over a crawl file, and when Issues are live or materialised.
+- [ ] 3.20 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. Title Rules and the post-crawl pass
 

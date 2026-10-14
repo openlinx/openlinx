@@ -6,11 +6,11 @@ Each task is one red → green slice and one commit (see docs/testing.md).
 
 Seams: 1 CLI, 2 services and store API, 4 pure-logic modules (including the Page extractor), 6 store contract. "Seam 3+6" means crawl the fixture site, then read the documented tables read-only.
 
-There are no schema-first slices. A table or column is added in the slice whose scenario first needs it, through `018`'s declaration helper (`STRICT`, and CHECKs from the declared values and flags), with its description and its `docs/schema.md` entry in the same commit, so the contract test (`015`'s, extended by `018`) is never red between commits. A seam-4 slice that adds an extractor field also adds its column.
+There are no schema-first slices. A table or column is added in the slice whose scenario first needs it, through `018`'s `public_table()` (`STRICT`, and CHECKs from the declared values and flags), with its description and its `docs/schema.md` entry in the same commit, so the contract test (`015`'s, extended by `018`) is never red between commits. A seam-4 slice that adds an extractor field also adds its column.
 
 **The thin slice** (ROADMAP, Build order) is groups 1–3: the Page rows, titles, meta descriptions and headings that `040`-min's first Rules read (`title-missing` and `h1-missing`; its response-code Rules read only `urls`). None of them reads Indexability, so group 7 widens with the rest. Groups 4–12 widen the change after `022`-min, whose size and redirect columns group 4 copies.
 
-Rows and units follow `020` D9 and D14: the handler returns frozen row values declared in `spider.store`, and `spider.store.pages` and `spider.store.links` write them with statements built once (`017` D9). Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
+Rows and units follow `020` D9 and D14: the handler returns frozen row values declared in `spider.store`, all or none, and `spider.store.pages` and `spider.store.links` write them through the row writers they register in `020`'s `Hooks.row_writers` with statements built once (`017` D9). Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
 
 ## 1. Page rows end to end (slice)
 
@@ -134,8 +134,9 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 - [ ] 10.9 Drive "Discovered URLs are the stored Link targets" at seam 3+6. Write Links from analysed Pages, and return the header Links of other responses from the handler.
 - [ ] 10.10 Drive "Link types are an enumeration" at seam 6 (`values` on `links.type`).
 - [ ] 10.11 Check: the writer's capacity on the chosen `links` layout (`017` D11, moved here from `017`, which records only a 5k-Page smoke run; decided 2026-10-11). Switch `scripts/writer_throughput.py` from its provisional `links` table to the declaration in `spider.store.links`, imported with its key, layout and secondary indexes and never copied into the script, so the check cannot drift from the declared layout; run it at 20,000 Pages on the maintainer's machine, and restate D11's floor (Pages/s, WAL peak, RSS) from that run, in the script and in the "Writer capacity" section of `docs/benchmarks.md`. Done when: the run passes the restated floor, and the section records the machine, the numbers and the layout. If Pages/s falls well below `017`'s 17.2–18.0 on the provisional layout, the work stops and is reported before the floor is lowered.
-- [ ] 10.12 Docs: add the Link columns and the boundary with `020`'s Link discovery to `docs/page-data.md`.
-- [ ] 10.13 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [ ] 10.12 Drive "A Page whose Page extractor failed keeps its response data and Links" at seam 3+6, through the Crawl Service with a raising extractor under the Page extractor's name in `default_hooks()`: the handler writes the `pages` row with the extractor's HTML-derived columns NULL, takes the directive verdicts, the canonical and `indexability`'s other inputs from `PageInput` and the prepared record, and writes the `links` rows from `DiscoveredLink` (design D2).
+- [ ] 10.13 Docs: add the Link columns, the boundary with `020`'s Link discovery, and what a failed Page extractor leaves (`parse_error` = `extractor_error`) to `docs/page-data.md`.
+- [ ] 10.14 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
 
 ## 11. Link counts and Folder Depth
 

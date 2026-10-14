@@ -11,7 +11,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - the `CrawlWriter`, which is the only writer while no Crawl can be resumed or detached
   - redaction of whole and partial secrets, and `--crawl`
   - It does not build the writer claim, `crawl_locked`, control writes by other processes, recording a dead Crawl as `interrupted`, or reserved and chosen ids. They moved to this change on 2026-10-05 (ROADMAP.md), and D12 defines them.
-- **`017-speed-up-crawl-writer` and `018-add-schema-conventions`:** units that may run again (`017` D7), and the schema conventions of ADR-0005 with the declaration helper.
+- **`017-speed-up-crawl-writer` and `018-add-schema-conventions`:** units that may run again (`017` D7), and the schema conventions of ADR-0005 with `public_table()`.
 - **`010-add-workspace-and-cli-contract`:**
   - the result on stdout, events and diagnostics on stderr, and partial results
   - the paging envelope, and the exit-code table (busy 5, usage 2)
@@ -53,7 +53,7 @@ The OS releases the claim when a process dies, so "`running` and nobody holds th
 - *Alternative:* a heartbeat timeout alone. It is slow to notice deaths, and it wrongly declares suspended processes dead. Rejected as the authority.
 
 ### D3. Detach: the parent reserves the id, the child creates the Crawl
-1. **The parent checks** the arguments with `020`'s validation and config resolution.
+1. **The parent checks** the arguments with `020`'s `plan_crawl` (validation and config resolution, in `spider.services.crawling`).
 2. **The parent reserves an id** by creating `<id>.log` exclusively (D12). If creation finds the id taken, it draws another. If the child's create still meets `crawl_id_taken`, the child exits and the parent reports `detach_failed`.
 3. **In List mode, the parent stores the Seeds first.** It also reads the list, from a file or from standard input, with `024`'s reader. It reports list errors such as `empty_list` itself, and stores the Seeds in the hand-over file `<id>.seeds.json` before spawning, because a detached child cannot read the parent's standard input.
 4. **The parent spawns the child** with `sys.executable -m spider crawl --_run-detached <id>`. The child's stdout and stderr go to the log file, and stdin comes from the null device.
@@ -77,7 +77,7 @@ No moment exists in which a Crawl exists without a live writer, so a concurrent 
 `start_new_session=True` (setsid), stdin from `/dev/null`, stdout and stderr to the log file, and `close_fds=True`. SIGHUP and signals to the caller's process group do not reach the Crawl. Some agent sandboxes kill every descendant anyway. `status` then shows `interrupted`, `resume` continues the Crawl, and the Skill prefers Hand-off for large Crawls.
 
 ### D6. Control rows
-- **Marking the table:** `control_requests` is declared through `018`'s helper with `info={"control": True}`. Control writes (D12) are allowed only on tables marked this way.
+- **Marking the table:** `control_requests` is declared through `018`'s `public_table()` with `info={"control": True}`. Control writes (D12) are allowed only on tables marked this way.
 - **Writing a request:** `stop` inserts into `control_requests` through `write_control` (D12): a short transaction with a 5-second busy wait.
 - **Checking for requests:** the crawl process checks for unhandled rows at least once per second, through a writer unit that only reads (`017` D5). A request sets `020`'s stop flag with `stop_reason = requested`, the same path as Ctrl+C.
 - **Marking it handled:** the unit that handles it sets `handled_at` and `handled_by_run_id`.
@@ -88,6 +88,7 @@ No moment exists in which a Crawl exists without a live writer, so a concurrent 
 - **Rate** (ruling Q2): the run's `urls_per_second`, which the crawl process computes from its 60-second window, the `rate` of its progress events, and writes with the heartbeat. `fetched_at` gets no index.
 - **Average rate:** the URLs requested in all runs (`fetched` plus `error`) divided by `elapsed_s`, the time spent in all runs. It shows whether the current `rate` is typical, and it is what a user compares with another crawler's average.
 - **ETA:** a pure function of rate, queued, `max_urls` and requested.
+- **A network pause** (`020`, decided 2026-10-14): while the Crawl waits for the network, it requests nothing but its probes of the Seed. The heartbeat keeps running and writes `paused_since`, and `status` prints it, so an agent tells a waiting Crawl from a slow one. A stop request ends the pause at once, because no request is in flight to wait for.
 - **`error`:** the `error` of the last run of a `failed` Crawl.
 - **Time source:** "now" comes from the injectable clock, so the rules about rate, ETA, heartbeat and elapsed time are tested with a fake clock.
 - *Alternative:* a `(fetch_state)` index or a `fetched_at` index, as the draft assumed. Each costs an index entry for every URL during the Crawl, for a query the counters answer. Rejected by the blueprint's rulings.
@@ -102,7 +103,7 @@ Everything that decides which URLs belong to the Crawl stays fixed: the Crawl Mo
 - **Recording:** accepted overrides update the `crawl` table of `crawl.config`, and the run's `command_argv` records them.
 
 ### D9. The dry run and its estimate
-- **Validation:** it reuses `020`'s validation and config resolution, so dry runs and real runs cannot disagree.
+- **Validation:** it reuses `020`'s `plan_crawl` (validation and config resolution, in `spider.services.crawling`), so dry runs and real runs cannot disagree.
 - **Network use:** only robots.txt and sitemaps are requested (with `024`'s sitemap reader), one at a time and obeying robots.txt, within a budget of 50 files and 60 seconds.
 - **Degrading:** failures lower the confidence and never fail the Command. With the network blocked, `urls` is null and the Skill (`080`) treats the Crawl as large.
 - **Confidence:** Spider-mode estimates are never `high`, because sitemaps undercount Pages and a Crawl also requests Resources and External URLs.
@@ -140,14 +141,14 @@ Everything that decides which URLs belong to the Crawl stays fixed: the Crawl Mo
 - *Alternative:* byte-range locks on the crawl file. POSIX `fcntl` locks are per process, so they would clash with SQLite's own locks on the same file. Rejected.
 
 ### D13. The tables under ADR-0005
-Both tables go through `018`'s declaration helper, so they are `STRICT`, with CHECKs on their enumerations and flags.
+Both tables go through `018`'s `public_table()`, so they are `STRICT`, with CHECKs on their enumerations and flags.
 - **`crawl_runs.id`** (was `run`): the run number is the entity's own key (ADR-0005 rule 2). The Commands' output keeps the field name `run`.
 - **`control_requests.handled_by_run_id`** (was `handled_by_run`): a declared reference to `crawl_runs.id` (rule 3).
 - **`crawl_runs.stop_reason`** takes its values from `020`'s `StopReason`, the one value set it shares with `crawl.stop_reason` (rule 7), including the `failed` reasons.
 - **Two explicit exceptions,** named in their column descriptions:
   - `crawl_runs.end_state` lists the Crawl States without `running` (rule 7: one value set per enumeration), because a run never ends as `running`.
   - `crawl_runs.error` is a JSON diagnostic in `010`'s full shape (rule 10: a code column plus `_message`), because it records the diagnostic the run ended with, as `crawl.warnings` records warnings, and `status` prints it whole.
-- **The counters** end in `_count` (rule 5) and are NOT NULL: the run's row is inserted with the counters seeded at the start of the run. `urls_per_second` is NULL until the first heartbeat.
+- **The counters** end in `_count` (rule 5) and are NOT NULL: the run's row is inserted with the counters seeded at the start of the run. `urls_per_second` is NULL until the first heartbeat. `paused_since` is NULL whenever the Crawl is not paused, like `ended_at` while a run runs.
 
 ### D14. Codes
 Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 does, each by the slice that first raises it. Exit codes follow `010`'s classes and naming rule; every warning has the level `warning` and no exit code.

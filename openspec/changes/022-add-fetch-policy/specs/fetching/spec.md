@@ -116,6 +116,8 @@ The Crawl SHALL NOT send cookies that responses set. After a response with `Set-
 ### Requirement: Timeouts
 A request attempt that has not completed within `--timeout` seconds (default 20, setting `crawl.timeout`) SHALL fail. When no attempt for a URL succeeds, the URL SHALL be recorded with `fetch_state` = `error`, `status_code` NULL and `fetch_error` = `timeout`. `timeout` is a value of `urls.fetch_error` that `020-add-crawl-core` lists.
 
+A timeout is a request without an HTTP response, so it counts towards the network pause of `020-add-crawl-core`. When every attempt at an origin's robots.txt times out, the origin's URLs SHALL be recorded with `fetch_error` = `timeout` without a request, as `020-add-crawl-core` records the URLs behind a robots.txt that got no HTTP response; a robots.txt that answers 5xx or 429 after the retries stays `robots_unreachable`.
+
 #### Scenario: A hanging response times out
 - **WHEN** `/` links to `/hang`, which never answers, and `spider crawl {site}/ --timeout 1 --retries 0` runs
 - **THEN** `{site}/hang` has `fetch_state` = `error` and `fetch_error` = `timeout`
@@ -127,6 +129,7 @@ The Crawl SHALL retry a request attempt, robots.txt included, that gets no respo
 - **429 without Retry-After:** the wait SHALL be 10 seconds.
 - **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start.
 - **Other 4xx statuses** SHALL NOT be retried.
+- **Network pause:** while the Crawl is paused waiting for the network (`020-add-crawl-core`), a request attempt that fails SHALL be neither retried nor recorded; its URL stays `queued` and is requested after the pause.
 
 The URL SHALL record the last attempt's response. This change adds this column to `urls`, under the conventions of `018-add-schema-conventions`:
 
@@ -294,7 +297,7 @@ Every requested Resource SHALL have its `status_code`, `size_bytes` and `transfe
 - **THEN** `{site}/logo.png` has `status_code` = 200, `size_bytes` = 2048 and `transferred_bytes` = 2048
 
 ### Requirement: TLS certificate verification
-HTTPS requests SHALL verify the server certificate and its host name against the operating system's trust store. When that store cannot be used, certifi's bundle SHALL be the fallback. A request whose certificate does not verify SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `tls_error`, a value that `020-add-crawl-core` lists.
+HTTPS requests SHALL verify the server certificate and its host name against the operating system's trust store. When that store cannot be used, certifi's bundle SHALL be the fallback. A request whose certificate does not verify SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `tls_error`, a value that `020-add-crawl-core` lists. When an origin's robots.txt request fails verification, the origin's URLs SHALL be recorded with `fetch_error` = `tls_error` without a request, as `020-add-crawl-core` records the URLs behind a robots.txt that got no HTTP response. A `tls_error` SHALL NOT count towards the network pause of `020-add-crawl-core`: a certificate that fails verification is an answer from the server, and a site-wide certificate failure would otherwise wait out `--network-wait` and fail as `site_unreachable`.
 
 #### Scenario: A certificate for another name is a TLS error
 - **WHEN** `http://site.test/` links to `https://badcert.test/`, whose certificate is issued for `other.test`

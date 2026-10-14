@@ -163,6 +163,8 @@ URLs not completed SHALL stay `queued`.
 
 The Command SHALL wait until the state is `stopped`, or until `--wait <seconds>` (default 60) has passed. It SHALL then print `{"crawl_id", "state", "stop_reason", "stop_requested"}` and exit with code 0. With `--wait 0` it SHALL return as soon as the request is recorded.
 
+A Crawl that is paused waiting for the network (`020-add-crawl-core`) has no request in flight, so a stop request SHALL stop it at once, without waiting for its next probe of the Seed.
+
 For a Crawl that is not `running`, `stop` SHALL change nothing, print its Crawl State and exit with code 0. For a `running` Crawl whose process is gone, it SHALL first record `interrupted`, as "Detecting a dead crawl process" describes.
 
 > **v0.1.**
@@ -179,6 +181,10 @@ For a Crawl that is not `running`, `stop` SHALL change nothing, print its Crawl 
 - **WHEN** a running Crawl has `/hang` (which answers after 60 seconds) in flight, and `spider stop --crawl <id>` runs
 - **THEN** after the Crawl is `stopped`, `{site}/hang` has `fetch_state` = `queued`
 
+#### Scenario: A Crawl waiting for the network stops at once
+- **WHEN** a Crawl in another process has paused because its site stopped answering, and `spider stop --crawl <id>` runs
+- **THEN** it exits with code 0 within 15 seconds and prints `"state": "stopped"` and `"stop_reason": "requested"`
+
 #### Scenario: Stopping a completed Crawl changes nothing
 - **WHEN** `spider stop --crawl <id>` runs for a `completed` Crawl
 - **THEN** it exits with code 0 and prints `"state": "completed"`
@@ -186,6 +192,7 @@ For a Crawl that is not `running`, `stop` SHALL change nothing, print its Crawl 
 ### Requirement: The status Command
 `spider status [--crawl <ref>]` (default `latest`) SHALL print, for a Crawl in any Crawl State, one JSON object with these fields:
 - `crawl_id`, `state`, `stop_reason`, `stop_requested`, `crawl_mode`, `seed`, `seed_count`, `section_crawl`
+- `paused_since`: while a `running` Crawl is paused waiting for the network (`020-add-crawl-core`), when the pause began, as its last heartbeat recorded it; otherwise null
 - `started_at`, `completed_at`, `elapsed_s` (seconds spent in all runs, including the current run up to now)
 - `urls`: `discovered`, `fetched`, `errors`, `skipped` and `queued`
 - `status_classes`: `2xx`, `3xx`, `4xx`, `5xx` and `other`
@@ -221,6 +228,10 @@ Where `urls` and `status_classes` come from depends on the Crawl State:
 #### Scenario: A Crawl stopped by the URL limit hints at a higher limit
 - **WHEN** a Crawl has been stopped by `--max-urls 3`, and `spider status --crawl <id>` runs
 - **THEN** `hint` contains `spider resume --crawl <id> --max-urls`
+
+#### Scenario: Status of a Crawl waiting for the network
+- **WHEN** a Crawl in another process has paused because its site stopped answering, its heartbeat has been written since, and `spider status --crawl <id>` runs
+- **THEN** it prints `"state": "running"` and a timestamp in `paused_since`
 
 #### Scenario: Status of a failed Crawl shows its error
 - **WHEN** a Crawl of `http://127.0.0.1:{closed_port}/` has failed because nothing listened, and `spider status --crawl <id>` runs
@@ -285,7 +296,7 @@ When a process holds the claim but its heartbeat is older than 60 seconds, the s
 `spider resume [--crawl <ref>]` (default `latest`) SHALL continue a Crawl whose Crawl State is `stopped`, `interrupted` or `failed`. It uses the Crawl Service's continue operation (`020-add-crawl-core`) and the recorded config, and SHALL:
 - request the `queued` URLs, after putting back those that ended without a response or behind an unreachable robots.txt
 - fetch robots.txt again for each origin it requests
-- print the result of a foreground `spider crawl`, with the added field `"run"`
+- print the result of a foreground `spider crawl`, in the field order of `020-add-crawl-core`'s result (`docs/crawling.md`, "The result"), with the added field `"run"`
 
 With `--detach`, it SHALL run in the background and print the output of `crawl --detach` with the new `run` number.
 
@@ -543,6 +554,7 @@ Every run of a Crawl SHALL add one row to the table `crawl_runs`: the first `spi
 | `discovered_count`, `fetched_count`, `error_count`, `skipped_count`, `queued_count` | INTEGER | no | | The Crawl's URLs by `fetch_state`, all runs included, as the run's progress counters held them at the start of the run and then at its last heartbeat |
 | `status_2xx_count`, `status_3xx_count`, `status_4xx_count`, `status_5xx_count`, `status_other_count` | INTEGER | no | | The Crawl's responses by status class, counted the same way |
 | `urls_per_second` | REAL | yes | | URLs requested per second over the last 60 seconds at the last heartbeat; NULL before the first heartbeat |
+| `paused_since` | TEXT | yes | timestamp | When the run's Crawl paused to wait for the network (`020-add-crawl-core`), as the last heartbeat recorded it; NULL when it was not paused |
 | `end_state` | TEXT | yes | `completed`, `stopped`, `failed`, `interrupted` | The Crawl State the run ended in; NULL while it runs. An explicit exception to ADR-0005 rule 7: it lists the Crawl States without `running`, because a run never ends as `running` |
 | `stop_reason` | TEXT | yes | `max_urls`, `interrupt`, `requested`, `seed_unreachable`, `site_unreachable`, `write_failed` | Why a stopped or failed run ended: the value set of `crawl.stop_reason` (`020-add-crawl-core`) |
 | `error` | TEXT | yes | json | The error diagnostic of a failed run, in the full shape of `010-add-workspace-and-cli-contract`. An explicit exception to ADR-0005 rule 10: it is a recorded diagnostic, like `crawl.warnings`, not an error code with a message |

@@ -64,10 +64,10 @@ widen:                                        ├─► 022-min ─┐
                                               └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 sql, summary/pages/page ─► 080 ─┴─► 026 benchmark re-run (sizes the pool) ─► 085 ─► v0.1 tag
 ```
 
-- **Where the build is:** 000, 010, 015, 017 and 018 are done (017: PR #4, merge f5abc9e; 018: PR #5, merge 89da89a; both 2026-10-11). Next: 020.
+- **Where the build is:** 000, 010, 015, 017 and 018 are done (017: PR #4, merge f5abc9e; 018: PR #5, merge 89da89a; both 2026-10-11). 020 is in progress. It merges in two pull requests (decided 2026-10-14): the first after its group 6, the slice, while the change stays open, and the second after groups 7–14, with the archive. A parallel coding stream starts 026 on its own branch (`026-add-parse-pool`) in its own worktree: first the part of its task 1.1 that needs no Crawl (the seeded synthetic site and its server), the rest after 020's first pull request, and then 030-min.
 - **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies (settled at 030's re-grounding, 2026-10-11). 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test (settled at 050's re-grounding, 2026-10-11); 040's slice and widening task groups are still to be marked in its tasks.
 - **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
-- **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts once 020's slice is in and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
+- **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts its synthetic site alongside 020 and the rest once 020's slice is in (its first pull request), and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
 - **Release:** 085 comes last, before the v0.1 tag. The product name must be chosen, and checked as free on PyPI and GitHub, before 085 starts.
 - **v0.1.1** comes after the v0.1 release: 090. The v0.2 changes come after that.
 
@@ -157,7 +157,7 @@ If a change needs something another change owns, it depends on that change inste
   - Progress events and the result.
   - **Ctrl+C:** the Crawl becomes `stopped` with `stop_reason: interrupt`, and the command exits 130.
   - **Unreachable Seed:** the Crawl becomes `failed` and resumable, and the command exits 8.
-  - **Robustness and backstops:** one URL never stops the Crawl (counted `parse_failed` and `handler_failed` warnings), parsers tested with hypothesis, hostile fixtures, a lost site (`site_unreachable`, exit 8, resumable), a per-request watchdog, and a stop that waits 10 seconds and then cancels.
+  - **Robustness and backstops:** one URL never stops the Crawl (counted `parse_failed` and `handler_failed` warnings), parsers tested with hypothesis, hostile fixtures, a network pause (decided 2026-10-14: 10 Internal requests in a row without a response pause the Crawl, which probes the Seed at 5, 10, 20 and 40 seconds and then every 60; an answer resumes it, re-queueing the streak once after an outage; nothing within `--network-wait`, default 1800 seconds, fails it with `site_unreachable`, exit 8, resumable), a per-request watchdog, and a stop that waits 10 seconds and then cancels.
   - Parsing runs in-process.
 - **022-add-fetch-policy** (min in v0.1):
   - Timeouts, retries with backoff, and redirects followed hop by hop, with every hop recorded.
@@ -214,7 +214,7 @@ If a change needs something another change owns, it depends on that change inste
     - `-o <file>` writes exactly the stdout bytes, atomically, and leaves stdout empty (`output_written`, `output_not_writable`)
 - **060-add-crawl-control** (min and `resume` in v0.1, rest in v0.2):
   - `crawl --detach` in Spider mode: on Windows it uses CREATE_NO_WINDOW.
-  - `status`, which detects a dead process.
+  - `status`, which detects a dead process, and shows `paused_since` while a Crawl waits for the network (020's network pause, 2026-10-14); a stop request during that pause stops the Crawl at once.
   - `stop` (`--wait`).
   - The recorded runs and control requests behind them. **(v0.1.1)** The command recorded for Crawls started through MCP.
   - The **end-to-end CI test** on Windows, macOS and Linux: `crawl --detach` → `status` → `issues`, with a `sql` query while the Crawl is still running, then `stop`.
@@ -228,6 +228,7 @@ If a change needs something another change owns, it depends on that change inste
   - Report Sections, and `report brief --section <id>` / `--list`.
   - Report Notes, SVG charts, Health Score per Segment, and escaping.
   - The table script, tested at seam 9.
+  - To weigh at its re-grounding (the user's wish of 2026-10-14, not a decision): a polished, terminal-style look with switchable dark palettes and a light one, a monospace and sans-serif pairing, block-character bars, terse copy, and charts richer than a minimal SVG builder; it meets the draft's no-web-fonts rule, its own SVG builder and its offline CSP (070 design, Open Questions).
   - The **end-to-end CI test** on all three OSes: `crawl --detach` → `status` → `issues` → `report`.
 - **080-add-agent-skill** (min in v0.1):
   - **The Skill** (workflows, install instructions and one-liners), generated from `spider commands` by a developer script (`scripts/generate_skill.py`). In v0.1 the one-liner is `uv tool install`, and the workflows use only v0.1 Commands.
@@ -325,7 +326,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 **From a code review of a peer open-source crawler (2026-10-05),** to weigh when each change is re-grounded. Points our drafts already cover are left out.
 - 020:
   - Normalisation keeps the trailing slash: `/a` and `/a/` are distinct URLs, because which one redirects is itself a finding. Say so in the normalisation requirement.
-  - Backstops that end the Crawl with a `stop_reason`: a zero-success breaker (no URL stored after `max(8, 2 × concurrency)` finished requests), a per-URL watchdog, and stop as a grace period followed by cancellation.
+  - Backstops that end the Crawl with a `stop_reason`: a zero-success breaker (no URL stored after `max(8, 2 × concurrency)` finished requests; weighed 2026-10-14: 020 pauses the Crawl and probes the Seed instead, and fails it with `site_unreachable` only after `--network-wait`), a per-URL watchdog, and stop as a grace period followed by cancellation.
   - Invariant tests at seam 3+6: `--max-urls` is never exceeded under concurrency (in-flight URLs count toward it), each URL is fetched once, and link cycles end.
   - A deterministic dispatch order: an explicit insertion sequence as the tie-break, never a timestamp.
   - The apex→www direction joins Scope in one direction only. A `seed_base_mismatch` warning when the Seed's canonical or Links point to the other host. About 20 seed/base cases make a good table test.

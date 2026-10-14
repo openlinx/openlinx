@@ -6,7 +6,7 @@ Each task below is one vertical TDD slice and one commit. It is done when:
 3. ruff, the strict type checker and the full suite (with the coverage gate) pass
 4. the commit message names the scenario
 
-A slice that needs a new table or column adds it through `018`'s declaration helper, with its description, and updates `docs/schema.md` in the same commit, so the contract test never goes red. "The slow fixture site" is the one defined in the spec.
+A slice that needs a new table or column adds it through `018`'s `public_table()`, with its description, and updates `docs/schema.md` in the same commit, so the contract test never goes red. "The slow fixture site" is the one defined in the spec.
 
 Seams (docs/testing.md):
 - **[CLI]**: seam 1, `CliRunner`
@@ -32,8 +32,9 @@ Seams (docs/testing.md):
 - [ ] 1.7 [Subprocess] Drive "Stop can return at once": `--wait 0` and `stop_requested`.
 - [ ] 1.8 [Subprocess] Drive "A request that outlasts the grace period stays queued".
 - [ ] 1.9 [CLI] Drive "Stopping a completed Crawl changes nothing".
-- [ ] 1.10 Docs: start `docs/crawl-control.md` with the Crawl State transitions, `stop_requested` and `spider stop`.
-- [ ] 1.11 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [ ] 1.10 [Subprocess] Drive "A Crawl waiting for the network stops at once": a stop request ends `020`'s network pause without waiting for the next probe.
+- [ ] 1.11 Docs: start `docs/crawl-control.md` with the Crawl State transitions, `stop_requested` and `spider stop`.
+- [ ] 1.12 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Status, rate and ETA
 
@@ -48,8 +49,9 @@ Seams (docs/testing.md):
 - [ ] 2.9 [CLI] Drive "A Crawl stopped by the URL limit hints at a higher limit".
 - [ ] 2.10 [Subprocess] Drive "A pending stop request is reported".
 - [ ] 2.11 [CLI] Drive "Status of a failed Crawl shows its error": the `crawl_runs.error` column.
-- [ ] 2.12 Docs: document every `status` field, where its counts come from, the rate window, the average rate and ETA semantics in `docs/crawl-control.md`.
-- [ ] 2.13 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
+- [ ] 2.12 [Subprocess] Drive "Status of a Crawl waiting for the network": the `crawl_runs.paused_since` column, written by the heartbeat during `020`'s network pause, and `paused_since` in `status`.
+- [ ] 2.13 Docs: document every `status` field, where its counts come from, the rate window, the average rate and ETA semantics in `docs/crawl-control.md`.
+- [ ] 2.14 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. Dead processes
 
@@ -111,7 +113,7 @@ Seams (docs/testing.md):
 
 ## 6. Dry run, estimate and equivalent command
 
-- [ ] 6.1 [CLI] Drive "The resolved config is printed": `--dry-run` reusing `020`'s validation and config resolution.
+- [ ] 6.1 [CLI] Drive "The resolved config is printed": `--dry-run` reusing `020`'s `plan_crawl` (validation and config resolution, `spider.services.crawling`).
 - [ ] 6.2 [CLI] Drive "A dry run writes nothing".
 - [ ] 6.3 [CLI] Drive "Invalid arguments fail as in a real Crawl".
 - [ ] 6.4 [Pure] Drive "Quoting for POSIX shells": the command renderer, with its flag order and default suppression.

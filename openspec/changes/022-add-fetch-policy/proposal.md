@@ -77,7 +77,7 @@ The response headers must also be stored, without cookie values, because `page -
   - `020-add-crawl-core`: the Fetcher interface, the engine, the per-host gate, the fake Fetcher and clock, the DNS resolver hook, and the `urls`/`origins` tables.
   - `015-add-crawl-store`: whole and partial redaction, and secret settings.
   - `017-speed-up-crawl-writer`: the writer through which `020`'s units run, and its unit contract.
-  - `018-add-schema-conventions`: the declaration helper and the schema contract test.
+  - `018-add-schema-conventions`: `public_table()` and the schema contract test.
   - `010-add-workspace-and-cli-contract`: settings and exit codes.
   - `000-scaffold-project`: the fixture site harness.
 - **Used by:**
@@ -85,6 +85,6 @@ The response headers must also be stored, without cookie values, because `page -
   - `050` (`page --headers`, and the `resources` export)
   - `060` (`--auth` on resume)
   - `080` (`doctor`'s TLS check reuses this TLS setup)
-- **Code:** `src/spider/crawl/fetcher/` (aiohttp policy, decoding, TLS and ALPN), redirect handling in the engine, and store columns.
+- **Code:** `spider.crawl.fetcher`, `020`'s module, which becomes a package for the aiohttp policy, decoding, TLS and ALPN, redirect handling in the engine, and store columns.
 - **New dependencies:** `truststore`, `certifi` and `brotli`. `zstandard` is shared with `030`, and `compression.zstd` is used on Python 3.14. `trustme` is a test dependency.
 - **Docs:** the fetching part of `docs/crawling.md` (identity, credentials, proxy, retries, redirects, limits, compression, TLS, HTTP version).
