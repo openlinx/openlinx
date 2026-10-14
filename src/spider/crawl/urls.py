@@ -188,6 +188,12 @@ def _without_dot_segments(path: str) -> str:
     return "/" + "/".join(segments)
 
 
+def without_www(url: NormalizedUrl) -> NormalizedUrl:
+    """The URL on its host without a leading www. label, which keeps the normal form."""
+    scheme, rest = url.split("://", 1)
+    return NormalizedUrl(f"{scheme}://{rest.removeprefix('www.')}")
+
+
 def url_host(url: NormalizedUrl) -> str:
     authority = url.split("/", 3)[2]
     if authority.startswith("["):

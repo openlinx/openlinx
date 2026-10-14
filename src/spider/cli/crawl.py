@@ -64,8 +64,8 @@ def crawl(
         ScopeKind,
         typer.Option(
             "--scope",
-            help="Which Internal URLs are followed: host (the Seed hosts), subdomains (every "
-            "host of their registrable domains) or subfolder (the Seed's folder).",
+            help="Which Internal URLs are in the Scope: host (the Seed hosts), subdomains "
+            "(every host of their registrable domains) or subfolder (the Seed's folder).",
         ),
         OptionMeta(setting="crawl.scope"),
     ] = "host",

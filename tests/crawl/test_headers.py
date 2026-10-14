@@ -128,7 +128,9 @@ _PAGE_WITH_A_CANONICAL_HEADER = FetchResult(
     fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
     response_time_ms=1,
 )
-_SEEING = PageSettings(scope=scope_rules(SITE), extractors=(Extractor("seen", _links_seen),))
+_SEEING = PageSettings(
+    scope=scope_rules(SITE), extractors=(Extractor("seen", _links_seen),), strip_params=None
+)
 
 
 def test_header_links_come_before_the_links_of_the_document() -> None:

@@ -12,7 +12,7 @@ from spider.crawl.hooks import UrlResult
 from spider.crawl.links import DiscoveredLink
 from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
-from spider.crawl.scope import ScopeDecision, seed_base_mismatch
+from spider.crawl.scope import ScopeDecision, apex_seed_named_by_page
 from spider.crawl.urls import NormalizedUrl, url_host
 from spider.output.codes import (
     HANDLER_FAILED,
@@ -108,8 +108,8 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     # Once, with the final Scope: 022 moves this to the end of the Seed's Redirect Chain.
     await context.pages.start(
         PageSettings(
-            context.scope,
-            context.hooks.extractors,
+            scope=context.scope,
+            extractors=context.hooks.extractors,
             strip_params=context.strip_params,
         )
     )
@@ -267,7 +267,7 @@ async def _fetched(
 def _warn_of_seed_base_mismatch(
     context: CrawlContext, seed: NormalizedUrl, links: Iterable[DiscoveredLink]
 ) -> None:
-    apex_seed = seed_base_mismatch(seed, links)
+    apex_seed = apex_seed_named_by_page(seed, links, context.scope)
     if apex_seed is not None:
         context.reporter.warn(
             Diagnostic.of(

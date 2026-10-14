@@ -5,7 +5,7 @@ import re
 import pytest
 
 from spider.crawl.links import DiscoveredLink
-from spider.crawl.scope import ScopeDecision, scope_rules, seed_base_mismatch
+from spider.crawl.scope import ScopeDecision, ScopeKind, apex_seed_named_by_page, scope_rules
 from spider.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url, parse_seed
 from spider.store.records import LinkType
 
@@ -175,42 +175,65 @@ def _link(link_type: LinkType, target: str) -> DiscoveredLink:
     )
 
 
+_TO_THE_APEX_MOSTLY: list[tuple[LinkType, str]] = [
+    ("hyperlink", "http://site.test/a"),
+    ("hyperlink", "http://site.test/b"),
+    ("hyperlink", "http://www.site.test/c"),
+]
+
+
 @pytest.mark.parametrize(
-    ("seed", "links", "apex_seed"),
+    ("seed", "scope", "links", "apex_seed"),
     [
-        ("http://www.site.test/", [("canonical", "http://site.test/")], "http://site.test/"),
-        (
-            "http://www.site.test:8080/blog/",
-            [("canonical", "http://site.test:8080/blog/")],
-            "http://site.test:8080/blog/",
-        ),
         (
             "http://www.site.test/",
-            [
-                ("hyperlink", "http://site.test/a"),
-                ("hyperlink", "http://site.test/b"),
-                ("hyperlink", "http://www.site.test/c"),
-            ],
+            "host",
+            [("canonical", "http://site.test/")],
             "http://site.test/",
         ),
         (
+            "http://www.site.test:8080/blog/",
+            "host",
+            [("canonical", "http://site.test:8080/blog/")],
+            "http://site.test:8080/blog/",
+        ),
+        ("http://www.site.test/", "host", _TO_THE_APEX_MOSTLY, "http://site.test/"),
+        (
             "http://www.site.test/",
+            "host",
             [("hyperlink", "http://site.test/a"), ("hyperlink", "http://www.site.test/c")],
             None,
         ),
-        ("http://www.site.test/", [("canonical", "http://www.site.test/")], None),
-        ("http://www.site.test/", [("misc", "http://site.test/feed")], None),
-        ("http://site.test/", [("canonical", "http://www.site.test/")], None),
+        ("http://www.site.test/", "host", [("canonical", "http://www.site.test/")], None),
+        ("http://www.site.test/", "host", [("misc", "http://site.test/feed")], None),
+        ("http://site.test/", "host", [("canonical", "http://www.site.test/")], None),
         # www followed by a host that is no registrable domain: no apex to report.
-        ("http://www.blog.site.test/", [("canonical", "http://blog.site.test/")], None),
-        ("http://www.127.0.0.1/", [("canonical", "http://127.0.0.1/")], None),
+        ("http://www.blog.site.test/", "host", [("canonical", "http://blog.site.test/")], None),
+        ("http://www.127.0.0.1/", "host", [("canonical", "http://127.0.0.1/")], None),
+        # The subdomains Scope crawls the apex already, so the Crawl misses nothing.
+        ("http://www.site.test/", "subdomains", [("canonical", "http://site.test/")], None),
+        ("http://www.site.test/", "subdomains", _TO_THE_APEX_MOSTLY, None),
+        (
+            "http://www.site.test/blog/",
+            "subfolder",
+            [("canonical", "http://site.test/blog/")],
+            "http://site.test/blog/",
+        ),
     ],
 )
-def test_a_www_seed_is_reported_when_its_links_name_the_apex(
-    seed: str, links: list[tuple[LinkType, str]], apex_seed: str | None
+def test_a_www_seed_is_reported_when_its_links_name_the_apex_outside_the_scope(
+    seed: str, scope: ScopeKind, links: list[tuple[LinkType, str]], apex_seed: str | None
 ) -> None:
-    found = seed_base_mismatch(
-        NormalizedUrl(seed), [_link(link_type, target) for link_type, target in links]
+    rules = scope_rules(NormalizedUrl(seed), scope=scope)
+
+    found = apex_seed_named_by_page(
+        NormalizedUrl(seed), [_link(link_type, target) for link_type, target in links], rules
     )
 
     assert found == apex_seed
+
+
+def test_the_subdomains_scope_records_the_registrable_domain_as_its_hosts() -> None:
+    rules = scope_rules(NormalizedUrl("http://www.site.test/"), scope="subdomains")
+
+    assert rules.to_json()["hosts"] == ["site.test"]

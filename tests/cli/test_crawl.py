@@ -21,7 +21,7 @@ SMALL_SITE = Site(
 
 def test_an_invalid_seed_is_rejected(temp_workspace: TempWorkspace) -> None:
     result = run_cli("crawl", "http://exa mple.test/")
-    errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+    errors = [error["code"] for error in _errors(result)]
 
     assert (result.exit_code, errors, list(temp_workspace.home.rglob("*.sqlite"))) == (
         2,
@@ -238,7 +238,7 @@ def test_an_invalid_exclude_pattern_is_rejected(temp_workspace: TempWorkspace) -
 
 def test_a_concurrency_of_zero_is_rejected(temp_workspace: TempWorkspace) -> None:
     result = run_cli("crawl", "http://site.test/", "--concurrency", "0")
-    errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+    errors = [error["code"] for error in _errors(result)]
 
     assert (result.exit_code, errors) == (2, ["invalid_value"])
 
@@ -249,7 +249,7 @@ def test_a_concurrency_above_50_in_the_settings_file_is_refused(
     (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nconcurrency = 51\n")
 
     result = run_cli("crawl", "http://site.test/")
-    errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+    errors = [error["code"] for error in _errors(result)]
 
     assert (result.exit_code, errors) == (3, ["settings_invalid"])
 
@@ -273,7 +273,7 @@ def test_the_subdomains_shorthand_conflicts_with_a_subfolder_scope(
     temp_workspace: TempWorkspace,
 ) -> None:
     result = run_cli("crawl", "http://site.test/blog/", "--subdomains", "--scope", "subfolder")
-    errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+    errors = [error["code"] for error in _errors(result)]
 
     assert (result.exit_code, errors, list(temp_workspace.home.rglob("*.sqlite"))) == (
         2,

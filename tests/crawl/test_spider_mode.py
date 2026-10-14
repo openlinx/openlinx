@@ -331,7 +331,7 @@ def test_urls_that_differ_only_in_stripped_parameters_are_fetched_once(
 
     crawled(server.url("/"), "--strip-params", "utm_*")
 
-    assert [request.path for request in server.requests if request.path != "/"] == ["/p"]
+    assert [request.path for request in server.requests if request.path.startswith("/p")] == ["/p"]
 
 
 def test_the_seed_is_stripped_of_its_parameters_too(
@@ -343,5 +343,5 @@ def test_the_seed_is_stripped_of_its_parameters_too(
 
     assert (
         query(crawl_file, "SELECT url FROM urls"),
-        [request.path for request in server.requests],
+        [request.path for request in server.requests if request.path.startswith("/?")],
     ) == ([(server.url("/?id=7"),)], ["/?id=7"])

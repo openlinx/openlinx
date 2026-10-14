@@ -57,14 +57,14 @@ class Extractor:
     extract: Callable[[LexborHTMLParser, PageInput], msgspec.Struct]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PageSettings:
     """The settings snapshot: built once per Crawl, and given to each 026 worker once."""
 
     scope: ScopeRules
     extractors: tuple[Extractor, ...] = ()
     robots_token: str = DEFAULT_ROBOTS_TOKEN
-    strip_params: re.Pattern[str] | None = None
+    strip_params: re.Pattern[str] | None
 
 
 class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):

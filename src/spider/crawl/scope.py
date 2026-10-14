@@ -7,7 +7,7 @@ from functools import lru_cache
 from ipaddress import IPv4Address
 from typing import TYPE_CHECKING, Any, Literal
 
-from spider.crawl.urls import NormalizedUrl, url_host, url_path
+from spider.crawl.urls import NormalizedUrl, url_host, url_path, without_www
 from spider.store.records import SkipReason
 
 if TYPE_CHECKING:
@@ -121,25 +121,33 @@ def _is_ipv4(host: str) -> bool:
     return True
 
 
-def seed_base_mismatch(seed: NormalizedUrl, links: Iterable["DiscoveredLink"]) -> str | None:
+def apex_seed_named_by_page(
+    seed: NormalizedUrl, links: Iterable["DiscoveredLink"], rules: ScopeRules
+) -> NormalizedUrl | None:
     """The Seed on its apex host, when the Seed is www. plus a registrable domain and its Page
-    names the apex: by its canonical, or by more hyperlinks than to the Seed's host (D4)."""
+    names the apex outside the Scope: by its canonical, or by more hyperlinks than to the
+    Seed's host (D4)."""
     host = _without_trailing_dot(url_host(seed))
     apex = host.removeprefix("www.")
     if apex == host or _registrable_domain(apex) != apex:
         return None
+    apex_seed = without_www(seed)
+    named = _named_apex_url(links, host, apex, apex_seed)
+    # The warning says the Crawl may miss the site, which is false when the Scope holds it.
+    if named is None or rules.decide(named).in_scope:
+        return None
+    return apex_seed
+
+
+def _named_apex_url(
+    links: Iterable["DiscoveredLink"], host: str, apex: str, apex_seed: NormalizedUrl
+) -> NormalizedUrl | None:
     to_apex = to_seed_host = 0
     for link in links:
         target_host = _without_trailing_dot(url_host(link.target))
         if link.type == "canonical" and target_host == apex:
-            return _on_apex(seed)
+            return link.target
         if link.type == "hyperlink":
             to_apex += target_host == apex
             to_seed_host += target_host == host
-    return _on_apex(seed) if to_apex > to_seed_host else None
-
-
-def _on_apex(url: NormalizedUrl) -> str:
-    scheme, rest = url.split("://", 1)
-    # Only the host's www. label goes: the port and the path stay.
-    return f"{scheme}://{rest.removeprefix('www.')}"
+    return apex_seed if to_apex > to_seed_host else None

@@ -74,7 +74,7 @@ def extract_links(
     url: NormalizedUrl,
     *,
     is_internal: Callable[[NormalizedUrl], bool],
-    strip_params: re.Pattern[str] | None = None,
+    strip_params: re.Pattern[str] | None,
 ) -> list[DiscoveredLink]:
     decoded = decode_html(body, content_type)
     html = parse_html(decoded.text)

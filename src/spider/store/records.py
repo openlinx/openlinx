@@ -82,7 +82,7 @@ class SecretNames:
     settings: frozenset[str] = frozenset()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class NewCrawl:
     workspace: Workspace
     crawl_mode: CrawlMode

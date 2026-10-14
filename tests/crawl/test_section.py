@@ -132,8 +132,12 @@ def test_a_www_seed_whose_canonical_names_the_apex_is_reported(
             (warning.code, "http://site.test/" in (warning.hint or ""))
             for warning in result.warnings
         ],
-        json.loads(crawl_row(result.crawl_file)["scope"])["hosts"],
-    ) == ([("seed_base_mismatch", True)], ["www.site.test"])
+        query(
+            result.crawl_file,
+            "SELECT is_internal, in_scope FROM urls WHERE url = ?",
+            ["http://site.test/"],
+        ),
+    ) == ([("seed_base_mismatch", True)], [(0, 0)])
 
 
 def test_a_www_seed_whose_links_stay_on_www_is_not_reported(

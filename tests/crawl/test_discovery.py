@@ -16,7 +16,7 @@ def test_a_page_records_each_url_it_links_to_once() -> None:
         b'<a href="/a">A</a><img src="/logo.png"><a href="/b">B</a>'
         b'<a href="/a#top">A again</a><a href="http://other.test/">Other</a><a href="/b">B</a>'
     )
-    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True)
+    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True, strip_params=None)
 
     assert discovered_urls(links, scope_rules(SITE), 1) == (
         NewUrl(
@@ -44,7 +44,9 @@ def test_a_page_records_each_url_it_links_to_once() -> None:
 
 
 def _recorded(html: str) -> list[tuple[str, str, str | None]]:
-    links = extract_links(html.encode(), "text/html", SITE, is_internal=lambda url: True)
+    links = extract_links(
+        html.encode(), "text/html", SITE, is_internal=lambda url: True, strip_params=None
+    )
     return [
         (new.url, new.discovered_via, new.skip_reason)
         for new in discovered_urls(links, scope_rules(SITE), 1)
@@ -61,6 +63,7 @@ def _recorded(html: str) -> list[tuple[str, str, str | None]]:
             '<link rel="alternate" hreflang="de" href="/de/">',
             [("http://site.test/de/", "hreflang", None)],
         ),
+        ('<link rel="canonical" href="/c">', [("http://site.test/c", "canonical", None)]),
         ('<iframe src="/f"></iframe>', [("http://site.test/f", "iframe", None)]),
         (
             '<meta http-equiv="refresh" content="0; url=/new">',
@@ -106,7 +109,7 @@ def test_each_link_type_is_followed_or_recorded_as_not_followed(
 
 def test_follow_nofollow_follows_every_nofollow_hyperlink_and_only_those() -> None:
     body = b'<a rel="nofollow" href="/n">N</a><a href="/x">X</a><link rel="icon" href="/i">'
-    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True)
+    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True, strip_params=None)
     scope = scope_rules(SITE)
 
     honoured = discovered_urls(links, scope, 1, nofollow=True)
