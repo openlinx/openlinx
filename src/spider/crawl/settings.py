@@ -21,6 +21,12 @@ class CrawlSettings(BaseModel):
         description="Follow nofollow hyperlinks, and every hyperlink of a Page whose robots "
         "directives say nofollow, like any other hyperlink.",
     )
+    max_depth: int | None = Field(
+        None,
+        ge=0,
+        description="The deepest Crawl Depth whose URLs are requested, the Seed's being 0; "
+        "Resources of followed Pages are requested one deeper. No limit when unset.",
+    )
     scope: ScopeKind = Field(
         "host",
         description="Which Internal URLs are in the Scope: host (the Seed hosts), subdomains "

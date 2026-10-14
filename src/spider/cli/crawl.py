@@ -60,6 +60,17 @@ def crawl(
         ),
         OptionMeta(setting="crawl.follow_nofollow"),
     ] = False,
+    max_depth: Annotated[
+        int | None,
+        typer.Option(
+            "--max-depth",
+            min=0,
+            help="The deepest Crawl Depth whose URLs are requested, the Seed's being 0; "
+            "Resources of followed Pages are requested one deeper. No limit by default.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.max_depth"),
+    ] = None,
     scope: Annotated[
         ScopeKind,
         typer.Option(

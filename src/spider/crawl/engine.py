@@ -198,7 +198,7 @@ async def _unit_of(
     """The unit that records the URL's final state, with its handlers' rows; `decision` is
     taken once, at dispatch, so a URL found on several Pages is recorded once (design D1)."""
     row_writers = context.hooks.row_writers
-    skip_reason = _skip_reason(context, decision)
+    skip_reason = _skip_reason(context, queued, decision)
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
         return record_skipped(
@@ -226,12 +226,17 @@ async def _unit_of(
     return record_fetched(await _fetched(context, queued, decision, response), row_writers)
 
 
-def _skip_reason(context: CrawlContext, decision: ScopeDecision) -> SkipReason | None:
-    if decision.skip_reason is None and not (
-        decision.is_internal or context.settings.check_external
-    ):
+def _skip_reason(
+    context: CrawlContext, queued: QueuedUrl, decision: ScopeDecision
+) -> SkipReason | None:
+    max_depth = context.settings.max_depth
+    if decision.skip_reason is not None:
+        return decision.skip_reason
+    if max_depth is not None and queued.crawl_depth > max_depth:
+        return "max_depth"
+    if not (decision.is_internal or context.settings.check_external):
         return "external_not_checked"
-    return decision.skip_reason
+    return None
 
 
 async def _fetched(

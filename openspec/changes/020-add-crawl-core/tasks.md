@@ -240,7 +240,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 9.2 **Guard:** "A broken image is recorded", at seam 3+6.
 - [x] 9.3 Drive "The shortest path wins over a faster, longer one" at seam 3+6. Done when: followed URLs of depth d+1 wait for every followed URL of depth d, and checks never wait (design D3).
 - [x] 9.4 Drive "A Resource is one deeper than its Page" at seam 3+6.
-- [ ] 9.5 Drive "Links beyond the limit are not requested" at seam 3+6. Done when: `--max-depth` is declared with `OptionMeta(setting="crawl.max_depth")` and the default `None`, no limit (design D11).
+- [x] 9.5 Drive "Links beyond the limit are not requested" at seam 3+6. Done when: `--max-depth` is declared with `OptionMeta(setting="crawl.max_depth")` and the default `None`, no limit (design D11).
 - [ ] 9.6 Drive "Resources are checked beyond the depth limit" at seam 3+6.
 - [ ] 9.7 Drive "The Crawl stops at the limit" at seam 1. Done when: `--max-urls` is declared with `OptionMeta(setting="crawl.max_urls")` and the default `None`, no limit, and the `stopped` end goes through `check_transition` with `max_urls`.
 - [ ] 9.8 Drive "URLs not requested stay queued" at seam 3+6.

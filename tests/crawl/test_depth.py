@@ -138,3 +138,23 @@ def test_a_late_check_lowers_the_depth_of_a_url_still_queued(
     assert query(
         crawl_file, "SELECT fetch_state, crawl_depth FROM urls WHERE url = ?", [server.url("/x")]
     ) == [("fetched", 2)]
+
+
+def test_links_beyond_the_limit_are_not_requested(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/a">A</a>'),
+                "/a": Page(body='<a href="/b">B</a>'),
+                "/b": Page(body="<p>B</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--max-depth", "1")
+
+    assert query(crawl_file, "SELECT skip_reason FROM urls WHERE url = ?", [server.url("/b")]) == [
+        ("max_depth",)
+    ]
