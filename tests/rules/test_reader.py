@@ -19,11 +19,11 @@ from spider.store.issues import (
     read_issues,
     read_url_issues,
 )
-from spider.store.records import UrlIssue
+from spider.store.records import AffectedUrl, UrlIssue
 from spider.store.schema import pages
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
-from tests.support.crawls import default_rule_rows
+from tests.support.crawls import default_rule_rows, query
 from tests.support.rules import crawl_with_page
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing
@@ -54,7 +54,11 @@ def test_a_crawl_without_a_final_pass_is_read_live(temp_workspace: TempWorkspace
         writer.flush()
         failed = issues_of(crawl_file)
 
-    assert (stopped, failed) == (([("title-missing", 1)], [url_id]), ([], []))
+    assert (stopped, failed, query(crawl_file, "SELECT rule_id, url_id FROM affected_urls")) == (
+        ([("title-missing", 1)], [url_id]),
+        ([], []),
+        [("title-missing", url_id)],
+    )
 
 
 def test_a_disabled_rule_has_no_affected_urls_read_live(temp_workspace: TempWorkspace) -> None:
@@ -90,12 +94,33 @@ def test_issues_of_a_rule_the_catalogue_lacks_come_after_its_own(
     ]
 
 
+def test_the_affected_urls_of_a_rule_the_catalogue_lacks_are_read_as_stored(
+    temp_workspace: TempWorkspace,
+) -> None:
+    later = replace(TITLE_MISSING, id="a-later-rule")
+    (missing,) = [row for row in default_rule_rows() if row.id == TITLE_MISSING.id]
+    crawl_file, url_id = crawl_with_page(
+        temp_workspace, more_rules=(replace(missing, id=later.id),), title_count=0
+    )
+    with CrawlWriter(crawl_file, FakeClock()) as writer:
+        asyncio.run(materialise_issues(writer, (*RULES, later)), loop_factory=loop_factory)
+        writer.run(record_state("completed", AT))
+
+    assert read_affected_urls(crawl_file, "a-later-rule", RULES) == [
+        AffectedUrl(url_id=url_id, detail=None)
+    ]
+
+
 def test_the_issues_of_one_url_are_read_live(temp_workspace: TempWorkspace) -> None:
     crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    disabled, disabled_id = crawl_with_page(
+        temp_workspace, disabled={"title-missing"}, title_count=0
+    )
 
-    assert read_url_issues(crawl_file, url_id, RULES) == [
-        UrlIssue(rule_id="title-missing", url_id=url_id, detail=None)
-    ]
+    assert (
+        read_url_issues(crawl_file, url_id, RULES),
+        read_url_issues(disabled, disabled_id, RULES),
+    ) == ([UrlIssue(rule_id="title-missing", url_id=url_id, detail=None)], [])
 
 
 def test_the_issues_of_one_url_are_read_as_stored(temp_workspace: TempWorkspace) -> None:

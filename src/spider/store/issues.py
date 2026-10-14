@@ -19,7 +19,7 @@ from sqlalchemy import (
     text,
 )
 
-from spider.rules.model import Rule, find_rule
+from spider.rules.model import Rule, find_rule, rule_not_found
 from spider.store.reading import reading
 from spider.store.records import AffectedUrl, CrawlState, Issue, UrlIssue
 from spider.store.schema import affected_urls, crawl, issues, rules
@@ -30,6 +30,7 @@ _ENABLED = select(rules.c.id, rules.c.category, rules.c.issue_type, rules.c.prio
     rules.c.enabled == 1
 )
 _STATE = select(crawl.c.state)
+_RECORDED_RULE = select(rules.c.id).where(rules.c.id == bindparam("rule_id"))
 _STORED_URL_ISSUES = select(affected_urls.c.rule_id, affected_urls.c.detail).where(
     affected_urls.c.url_id == bindparam("url_id")
 )
@@ -93,11 +94,10 @@ def read_affected_urls(
 ) -> list[AffectedUrl]:
     """One Rule's Affected URLs by URL id, as stored for a completed or stopped Crawl,
     otherwise computed live (D16)."""
-    rule = find_rule(catalogue, rule_id)
     with reading(crawl_file) as connection:
         if _materialised(connection):
-            return _stored_affected_urls(connection, rule)
-        return _live_affected_urls(connection, rule)
+            return _stored_affected_urls(connection, rule_id)
+        return _live_affected_urls(connection, find_rule(catalogue, rule_id))
 
 
 def live_affected_urls(
@@ -108,12 +108,9 @@ def live_affected_urls(
         return _live_affected_urls(connection, rule)
 
 
-def stored_affected_urls(
-    crawl_file: Path, rule_id: str, catalogue: Sequence[Rule]
-) -> list[AffectedUrl]:
-    rule = find_rule(catalogue, rule_id)
+def stored_affected_urls(crawl_file: Path, rule_id: str) -> list[AffectedUrl]:
     with reading(crawl_file) as connection:
-        return _stored_affected_urls(connection, rule)
+        return _stored_affected_urls(connection, rule_id)
 
 
 def read_url_issues(crawl_file: Path, url_id: int, catalogue: Sequence[Rule]) -> list[UrlIssue]:
@@ -157,10 +154,13 @@ def _live_affected_urls(connection: Connection, rule: Rule) -> list[AffectedUrl]
     return sorted(_affected_urls(connection, rule), key=lambda url: url.url_id)
 
 
-def _stored_affected_urls(connection: Connection, rule: Rule) -> list[AffectedUrl]:
+def _stored_affected_urls(connection: Connection, rule_id: str) -> list[AffectedUrl]:
+    # Known by the file's own rules table: a file of a later tool holds Rules the catalogue lacks.
+    if connection.execute(_RECORDED_RULE, {"rule_id": rule_id}).first() is None:
+        raise rule_not_found(rule_id)
     return [
         AffectedUrl(url_id=row.url_id, detail=_detail(row.detail))
-        for row in connection.execute(_STORED_AFFECTED_URLS, {"rule_id": rule.id})
+        for row in connection.execute(_STORED_AFFECTED_URLS, {"rule_id": rule_id})
     ]
 
 

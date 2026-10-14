@@ -19,9 +19,13 @@ from spider.store.schema import SCHEMA_VERSION, crawl
 def reading(path: Path) -> Iterator[Connection]:
     try:
         with opening(path, role="read") as engine, engine.connect() as connection:
-            # One snapshot for the whole read: pysqlite begins no transaction before a SELECT,
-            # so each statement would see the file as it is then. Closing rolls it back.
-            connection.exec_driver_sql("BEGIN")
+            # One snapshot for the whole read, in WAL mode, where it costs the writer nothing:
+            # pysqlite begins no transaction before a SELECT, so each statement would see the
+            # file as it is then. In rollback-journal mode the read's SHARED lock would hold
+            # the writer's commit for the whole read, so there each statement reads alone.
+            journal_mode: str = connection.exec_driver_sql("PRAGMA journal_mode").scalar_one()
+            if journal_mode == "wal":
+                connection.exec_driver_sql("BEGIN")
             _check_schema_version(connection, path)
             yield connection
     except DBAPIError as error:

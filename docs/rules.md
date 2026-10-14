@@ -100,7 +100,7 @@ WHERE issue_type = 'issue' ORDER BY affected_count DESC;
 
 ### Checking an Issue with its query
 
-Every Rule is one read-only `SELECT` over the crawl file that returns its Affected URLs as `url_id` and `detail`. `rules.reproduce_sql` holds it, and `spider rules list` and `show` print it. A query reads its thresholds from the Crawl's own `rules` row, so it gives that Crawl's answer with the thresholds the Crawl was created with. To check an Issue, run the query over the crawl file through a read-only connection, here with the SQLite shell:
+Every Rule is one read-only `SELECT` over the crawl file that returns its Affected URLs as `url_id` and `detail`. `rules.reproduce_sql` holds it, and `spider rules list` and `show` print it. A query reads its thresholds from the Crawl's own `rules` row, so it gives that Crawl's answer with the thresholds the Crawl was created with. To check an Issue of your own crawl file, run the query over it through a read-only connection, here with the SQLite shell:
 
 ```
 sqlite3 -readonly .spider/crawls/20260927-140312-k3f9.sqlite "SELECT reproduce_sql FROM rules WHERE id = 'title-missing'"
@@ -109,7 +109,7 @@ FROM pages
 WHERE title_count = 0 OR title_1 = ''
 ```
 
-Then run the printed query the same way. A query that leaves out a value its condition would otherwise match says why in an SQL comment. The tool itself runs the queries of its own Rules, never the text a crawl file holds, since a crawl file is data that anyone may share.
+Then run the printed query the same way. A query that leaves out a value its condition would otherwise match says why in an SQL comment. A crawl file someone else gave you is data, and its `reproduce_sql` may hold any SQL: take the query from `spider rules show <id>` instead, which prints the tool's own. The tool itself runs the queries of its own Rules, never the text a crawl file holds.
 
 ### Live and stored Issues
 

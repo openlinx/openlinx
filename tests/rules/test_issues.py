@@ -147,7 +147,7 @@ def test_live_and_materialised_issues_agree(
         rule_id for (rule_id,) in query(crawl_file, "SELECT id FROM rules WHERE enabled = 1")
     ]
     live = {rule_id: live_affected_urls(crawl_file, rule_id, RULES) for rule_id in enabled}
-    stored = {rule_id: stored_affected_urls(crawl_file, rule_id, RULES) for rule_id in enabled}
+    stored = {rule_id: stored_affected_urls(crawl_file, rule_id) for rule_id in enabled}
 
     # title-missing fires on /rules/untitled, so the comparison is not vacuous.
     assert (live_issues(crawl_file, RULES), live, "title-missing" in enabled) == (

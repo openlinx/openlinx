@@ -40,10 +40,14 @@ class Rule:
 def find_rule(catalogue: Sequence[Rule], rule_id: str) -> Rule:
     found = next((rule for rule in catalogue if rule.id == rule_id), None)
     if found is None:
-        raise SpiderError(
-            RULE_NOT_FOUND,
-            f"No Rule has the id {rule_id}.",
-            hint=f"{APP_NAME} rules list lists every Rule id.",
-            details={"id": rule_id},
-        )
+        raise rule_not_found(rule_id)
     return found
+
+
+def rule_not_found(rule_id: str) -> SpiderError:
+    return SpiderError(
+        RULE_NOT_FOUND,
+        f"No Rule has the id {rule_id}.",
+        hint=f"{APP_NAME} rules list lists every Rule id.",
+        details={"id": rule_id},
+    )

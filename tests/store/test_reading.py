@@ -195,3 +195,20 @@ def test_a_read_sees_one_snapshot(temp_workspace: TempWorkspace) -> None:
         after = connection.execute(count).scalar_one()
 
     assert after == before
+
+
+def test_a_read_of_a_rollback_journal_file_lets_the_writer_commit(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace, journal_setting="delete")
+    count = select(func.count()).select_from(seeds)
+
+    with reading(crawl.path) as connection:
+        before = connection.execute(count).scalar_one()
+        # A second connection that would wait at most 0.1 s for the read's SHARED lock.
+        with closing(sqlite3.connect(crawl.path, timeout=0.1)) as other:
+            other.execute("INSERT INTO seeds (position, url) VALUES (2, 'https://example.com/2')")
+            other.commit()
+        after = connection.execute(count).scalar_one()
+
+    assert after == before + 1

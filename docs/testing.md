@@ -40,7 +40,7 @@ A change's `design.md` names the seams it is tested at. Adding a new seam is a d
 | `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API; 4, the store's pure logic, such as crawl ids |
 | `tests/output/` | 4, the output layer's pure logic |
 | `tests/crawl/` | 4, the crawler's pure logic, such as URL normalisation; 3 and 3+6, Crawls of the fixture site; 2, the Crawl Service |
-| `tests/rules/` | 4, the Rule catalogue; 3+6, Crawls of the fixture site read through the Rule tables |
+| `tests/rules/` | 4, the Rule catalogue; 2, Rule queries, the Issues pass and the Issues reader over crawl files; 3+6, Crawls of the fixture site read through the Rule tables |
 | `tests/extract/` | 4, the Page extractor and the Page handler; 3+6, Crawls of the fixture site read through the Page data tables |
 | `tests/contract/` | 6, the store contract (`test_schema.py`, which reads `docs/schema.md` with `spider.services.schema_doc.parse_tables`), and the hand-written expected JSON of the CLI contract tests (`commands/`) |
 | `tests/js/` | 9, the Report script |
@@ -97,7 +97,7 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 - **`crawled(*args)`** (`tests/support/crawling.py`): runs `spider crawl` with `args` through `run_cli` and returns the path of the crawl file its result names, failing with the exit code and stderr when the Command does not exit 0. Seam 3+6 tests then read the file with `query` and `crawl_row`.
 - **`page_row(html, content_type=...)`** (`tests/support/page_data.py`): the Page row of an analysed Page with this body, through page preparation with the built-in extractors and then the Page handler, so a seam-4 test of a Page data column checks the decoding, the extractor and the handler's mapping at once. It fails on an `extractor_error`.
 - **`crawl_result(seed, hooks=None, *, resolver=None, pages=None, **crawl)`** (same module): crawls through the Crawl Service instead, which alone takes test hooks, the DNS resolver hook and a page executor (`pages`, a function that builds one), with `crawl` as settings of the `[crawl]` table, and returns its `CrawlResult`.
-- **`crawl_with_page(temp_workspace, *, disabled=(), parse_error=None, **page_data)`** (`tests/support/rules.py`): a crawl file and the URL id of its one analysed Page, `https://site.test/`, whose Page row has these Page data columns, such as `title_count=0`, written through the store's own units as a Crawl writes them, for seam-2 tests of a Rule's query. Its `rules` table marks the Rules named in `disabled` off, and `parse_error="extractor_error"` makes it a Page on which an extractor failed.
+- **`crawl_with_page(temp_workspace, *, disabled=(), parse_error=None, more_rules=(), **page_data)`** (`tests/support/rules.py`): a crawl file and the URL id of its one analysed Page, `https://site.test/`, whose Page row has these Page data columns, such as `title_count=0`, written through the store's own units as a Crawl writes them, for seam-2 tests of a Rule's query. Its `rules` table marks the Rules named in `disabled` off, `parse_error="extractor_error"` makes it a Page on which an extractor failed, and `more_rules` are `RuleRow`s recorded after the catalogue's, as a file of a later tool holds them.
 - **`FakeClock`** (`tests/support/clock.py`): implements `spider.clock.Clock`.
   - `now()` starts at `2026-01-01T00:00:00+00:00`, or at the `start` given, as in `FakeClock(start=datetime(2026, 9, 27, 14, 3, 12, tzinfo=UTC))`. `monotonic()` starts at `0.0`.
   - `advance(seconds)` moves both.
