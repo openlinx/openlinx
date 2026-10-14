@@ -60,6 +60,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 3.17 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` over a crawl file, and when Issues are live or materialised; the `reproduce_sql` field joins the item fields it lists.
 - [x] 3.18 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 - [x] 3.19 Drive the Issues of one URL at seam 2, a clause with no scenario of its own in "Issues of a Crawl without a final pass" (the reader returns "the Issues of one URL, in the shape of `affected_urls`"), which `050`'s `page <url>` calls: `read_url_issues`, with its path chosen by the Crawl State like the rest of the reader, one test per path, red first (the rulings of 2026-10-14).
+- [ ] 3.20 Close the approval of group 3: a read is one snapshot only in WAL mode, where snapshots are free, since in rollback-journal mode its SHARED lock would hold the writer's commit for the whole read; on the stored path, `read_affected_urls` knows a Rule by the file's own `rules` table, so every Rule that `read_issues` lists can be read; the live Issues of one URL leave out a disabled Rule (pinned); the test of "A Crawl without a final pass is read live" asserts that the first pass's rows remain; `docs/rules.md` runs a file's `reproduce_sql` only on the user's own file, and `docs/testing.md` lists `more_rules` and seam 2 for `tests/rules/`; design Risks says that rollback-mode reads are not one snapshot and that one failing Rule query fails a live read.
 
 ## 4. The slice's response code Rules and Missing H1 (slice)
 
@@ -77,7 +78,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 - [ ] 5.1 Drive "Title too long by characters" at seam 2.
 - [ ] 5.2 Drive "Title at the limit" at seam 2.
-- [ ] 5.3 Drive "Raised title limit" at seam 2, passing effective thresholds to the evaluation entry point.
+- [ ] 5.3 Drive "Raised title limit" at seam 2: a Rule's query reads its thresholds from the Crawl's `rules` row (`json_extract`), so `reproduce_sql` runs on its own, with no threshold bound as a parameter (D15).
 - [ ] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture page `/rules/long-title`.
 - [ ] 5.5 **(v0.2)** Drive "Title too short" and "Title at the minimum" at seam 2. This is a trivial pair: one boundary. Register `title-too-short`.
 - [ ] 5.6 **(v0.2)** Drive "Multiple titles" at seam 2, and register `title-multiple`.
@@ -88,8 +89,9 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
 - [ ] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
 - [ ] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
-- [ ] 5.14 Docs: add `title-too-long` and `title-duplicate` (id, type, priority, condition, detail, guidance) to the catalogue in `docs/rules.md`, with `title-too-long` checking characters only in v0.1. **(v0.2)** The other 3 title Rules.
-- [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [ ] 5.14 Merge `020` at the approved boundary of its group 9, which the rulings give and which includes its task 9.16, the post-crawl passes of a Crawl that `--max-urls` stops: until then such a Crawl ends `stopped` with no pass, and the reader would read its empty `affected_urls` as stored. Drive at seam 3 that a Crawl stopped by `--max-urls` lists its Issues as stored.
+- [ ] 5.15 Docs: add `title-too-long` and `title-duplicate` (id, type, priority, condition, detail, guidance) to the catalogue in `docs/rules.md`, with `title-too-long` checking characters only in v0.1. **(v0.2)** The other 3 title Rules.
+- [ ] 5.16 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Meta description and heading Rules (v0.1, except the tasks marked v0.2)
 
