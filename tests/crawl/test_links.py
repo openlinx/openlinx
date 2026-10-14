@@ -15,7 +15,7 @@ def _on_site(url: NormalizedUrl) -> bool:
 
 
 def _links(html: str, url: NormalizedUrl = SITE) -> list[DiscoveredLink]:
-    return extract_links(html.encode(), "text/html", url, is_internal=_on_site)
+    return extract_links(html.encode(), "text/html", url, is_internal=_on_site, strip_params=None)
 
 
 def test_a_relative_link_is_resolved_against_the_base_href() -> None:
@@ -92,6 +92,10 @@ def test_a_link_element_of_another_rel_is_a_misc_link() -> None:
             ("mobile_alternate", "link", "href", "http://site.test/m/"),
         ),
         (
+            '<link rel="canonical" href="/c">',
+            ("canonical", "link", "href", "http://site.test/c"),
+        ),
+        (
             '<link rel="alternate" type="application/rss+xml" href="/feed">',
             ("misc", "link", "href", "http://site.test/feed"),
         ),
@@ -166,7 +170,9 @@ def test_a_malformed_reference_is_ignored() -> None:
 def test_links_are_read_from_the_decoded_document() -> None:
     body = '<a href="/й">x</a>'.encode("cp1251")
 
-    links = extract_links(body, "text/html; charset=windows-1251", SITE, is_internal=_on_site)
+    links = extract_links(
+        body, "text/html; charset=windows-1251", SITE, is_internal=_on_site, strip_params=None
+    )
 
     assert [link.target for link in links] == ["http://site.test/%D0%B9"]
 
@@ -211,7 +217,9 @@ def test_references_resolve_as_browsers_resolve_them(href: str, expected: list[s
 def test_queries_are_encoded_in_the_page_encoding(html: str, charset: str, expected: str) -> None:
     body = html.encode(charset, "xmlcharrefreplace")
 
-    links = extract_links(body, f"text/html; charset={charset}", SITE, is_internal=_on_site)
+    links = extract_links(
+        body, f"text/html; charset={charset}", SITE, is_internal=_on_site, strip_params=None
+    )
 
     assert [link.target for link in links] == [expected]
 
@@ -271,7 +279,7 @@ _CONTENT_TYPES = (
 
 @given(_BODIES, _CONTENT_TYPES)
 def test_the_link_extractor_accepts_any_bytes(body: bytes, content_type: str | None) -> None:
-    links = extract_links(body, content_type, SITE, is_internal=_on_site)
+    links = extract_links(body, content_type, SITE, is_internal=_on_site, strip_params=None)
 
     assert isinstance(links, list)
 
@@ -289,6 +297,7 @@ def test_deeply_nested_html_gives_its_links() -> None:
     [
         ('<head><link rel="icon" href="/i.ico"></head>', [("misc", "http://site.test/i.ico")]),
         ('<head><noscript><link rel="icon" href="/i.ico"></noscript></head>', []),
+        ('<head><noscript><link rel="canonical" href="/c"></noscript></head>', []),
         (
             '<head><noscript><meta http-equiv="refresh" content="0; url=/no-js"></noscript></head>',
             [],

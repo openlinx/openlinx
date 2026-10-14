@@ -40,7 +40,9 @@ def _prepared(html: str) -> tuple[PreparedPage, _Head]:
         fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
         response_time_ms=1,
     )
-    settings = PageSettings(scope=scope_rules(SITE), extractors=(Extractor("head", _head),))
+    settings = PageSettings(
+        scope=scope_rules(SITE), extractors=(Extractor("head", _head),), strip_params=None
+    )
     page = prepare_page(SITE, response, settings)
     head = dict(page.outputs)["head"]
     assert isinstance(head, _Head)

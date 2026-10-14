@@ -217,21 +217,21 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 8. Scope over HTTP and Section Crawls (widening)
 
-- [ ] 8.1 Drive "URLs that differ only in stripped parameters are fetched once" at seam 3.
-- [ ] 8.2 Drive "The subdomains shorthand conflicts with a subfolder Scope" at seam 1. Done when: `option_conflict` is declared.
-- [ ] 8.3 Drive "A Seed without its trailing slash is rejected" at seam 1. Done when: `subfolder_is_root` is declared, with a hint built from the Seed.
-- [ ] 8.4 Drive "Pages inside the folder are followed" at seam 3+6.
-- [ ] 8.5 Drive "Pages outside the folder are checked but not followed" at seam 3+6.
-- [ ] 8.6 Drive "A URL that matches no include pattern is checked but not followed" at seam 3+6.
-- [ ] 8.7 Drive "An invalid pattern is rejected" at seam 1. Done when: an invalid `--include` pattern is `invalid_pattern`, which task 5.1 declared for `--exclude`, before any crawl file is created.
-- [ ] 8.8 Drive "A Seed outside the Scope is rejected" at seam 1. Done when: `seed_out_of_scope` is declared.
-- [ ] 8.9 Drive "A subfolder Crawl is a Section Crawl" at seam 1.
-- [ ] 8.10 Drive "An include pattern makes a Section Crawl" and "Exclude patterns alone do not make a Section Crawl" at seam 3+6, a trivial pair.
-- [ ] 8.11 Drive "A subfolder Scope is recorded" at seam 3+6. Done when: `crawl.scope` is declared NOT NULL, with the Seed hosts in order, and `create_crawl` writes it with the `crawl` row from a `scope` field added to `NewCrawl` (design D18).
-- [ ] 8.12 Drive "A www Seed whose canonical names the apex is reported" at seam 1. Done when: `seed_base_mismatch` is declared, and the Scope is unchanged.
-- [ ] 8.13 **Guard:** "A www Seed whose Links stay on www is not reported", at seam 1.
-- [ ] 8.14 Docs: document Section Crawls, the recorded Scope and `seed_base_mismatch` in `docs/crawling.md`.
-- [ ] 8.15 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [x] 8.1 Drive "URLs that differ only in stripped parameters are fetched once" at seam 3.
+- [x] 8.2 Drive "The subdomains shorthand conflicts with a subfolder Scope" at seam 1. Done when: `option_conflict` is declared.
+- [x] 8.3 Drive "A Seed without its trailing slash is rejected" at seam 1. Done when: `subfolder_is_root` is declared, with a hint built from the Seed.
+- [x] 8.4 Drive "Pages inside the folder are followed" at seam 3+6.
+- [x] 8.5 Drive "Pages outside the folder are checked but not followed" at seam 3+6.
+- [x] 8.6 Drive "A URL that matches no include pattern is checked but not followed" at seam 3+6.
+- [x] 8.7 Drive "An invalid pattern is rejected" at seam 1. Done when: an invalid `--include` pattern is `invalid_pattern`, which task 5.1 declared for `--exclude`, before any crawl file is created.
+- [x] 8.8 Drive "A Seed outside the Scope is rejected" at seam 1. Done when: `seed_out_of_scope` is declared.
+- [x] 8.9 Drive "A subfolder Crawl is a Section Crawl" at seam 1.
+- [x] 8.10 Drive "An include pattern makes a Section Crawl" and "Exclude patterns alone do not make a Section Crawl" at seam 3+6, a trivial pair.
+- [x] 8.11 Drive "A subfolder Scope is recorded" at seam 3+6. Done when: `crawl.scope` is declared NOT NULL, with the Seed hosts in order, and `create_crawl` writes it with the `crawl` row from a `scope` field added to `NewCrawl` (design D18).
+- [x] 8.12 Drive "A www Seed whose canonical names the apex is reported" at seam 1. Done when: `seed_base_mismatch` is declared, and the Scope is unchanged.
+- [x] 8.13 **Guard:** "A www Seed whose Links stay on www is not reported", at seam 1.
+- [x] 8.14 Docs: document Section Crawls, the recorded Scope and `seed_base_mismatch` in `docs/crawling.md`.
+- [x] 8.15 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
 ## 9. Resources, Crawl Depth, limits and invariants (widening)
 

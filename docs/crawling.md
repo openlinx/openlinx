@@ -169,7 +169,7 @@ http://site.test/p?utm_source=x&id=7&fbclid=y   ->   http://site.test/p?id=7
 http://site.test/p?a=1&b=2 with "*"               ->   http://site.test/p
 ```
 
-URLs that differ only in stripped parameters are one URL, so the Crawl requests it once.
+URLs that differ only in stripped parameters are one URL, so the Crawl requests it once. The Seed is stripped too, and so are the targets of the HTTP `Link` and `Refresh` headers; the `seeds` table keeps the Seed as given.
 
 ## Scope
 
@@ -192,6 +192,8 @@ A URL is internal when its host is a Seed host, whatever its scheme and port: fo
 | `127.0.0.1` | `http://127.1/` | external: another spelling of an address is another host |
 
 **Why the www rule goes one way.** A site on `site.test` usually also answers on `www.site.test`, so an apex Seed covers both. The reverse would quietly widen a Crawl of `www.site.test` to a host the user did not name. When a site really lives on the apex, a `www.` Seed gets a `seed_base_mismatch` warning, and the Crawl stays in its Scope. An IP address and a single-label host such as `localhost` have no `www.` host.
+
+**`seed_base_mismatch`.** The Seed's Page is read for this once, when its response is parsed. The warning comes when the Seed's host is `www.` followed by a registrable domain, its Page names the apex as the site, and the URL it names is outside the Scope. The Page names the apex by a `canonical` Link to it, from `<link rel="canonical">` or a `Link` header, which names that Link's target, or by more `hyperlink` Links to the apex than to the Seed's host, which names the Seed on the apex. So `--scope subdomains`, which crawls the apex already, gives no warning. Its hint gives the Seed on the apex, with the scheme, port and path kept, and `details` holds `seed` and `apex_seed`. For the Seed `http://www.site.test/` whose canonical is `http://site.test/`, the hint is "To crawl the site the Seed names, give the Seed http://site.test/." The Crawl goes on in the Scope it was given; the warning only tells you the Seed may be the wrong one. A Seed whose hyperlinks stay on `www.site.test` gets no warning.
 
 Registrable domains come from a copy of the [Public Suffix List](https://publicsuffix.org/) bundled with the tool, which is never downloaded during a Crawl. So `shop.co.uk` and `user.github.io` are registrable domains, while `co.uk` and `github.io` are public suffixes.
 
@@ -219,7 +221,9 @@ Every URL belongs to an origin: its scheme, host and port, such as `https://site
 | `subdomains`, or the shorthand `--subdomains` | also every host whose registrable domain is the Seed host's: for the Seed `www.site.test`, `blog.site.test` and `a.b.site.test`, but not `othersite.test` |
 | `subfolder` | only Internal URLs whose path starts with the Seed's folder |
 
-The Seed's folder is its path up to and including its last `/`: the Seed `http://site.test/blog/post-1` has the folder `/blog/`. A Seed whose folder would be `/`, such as `http://site.test/blog` without its trailing slash, is rejected with `subfolder_is_root`, whose hint gives the Seed with the slash.
+`--subdomains` with another `--scope` value, such as `--subdomains --scope subfolder`, is rejected with `option_conflict`. `scope` is also a key of the settings file's `[crawl]` table; `--subdomains` has none.
+
+The Seed's folder is its path up to and including its last `/`: the Seed `http://site.test/blog/post-1` has the folder `/blog/`. A Seed whose folder would be `/`, such as `http://site.test/blog` without its trailing slash, is rejected with `subfolder_is_root`, whose hint gives the Seed with the slash. A root Seed, such as `http://site.test/`, is rejected too, since its folder is the whole site.
 
 ### Include and exclude patterns
 
@@ -236,9 +240,31 @@ http://site.test/news/n        internal, outside the Scope: checked, not followe
 http://site.test/blog/draft-1  skipped: excluded
 ```
 
-An invalid pattern is rejected with `invalid_pattern` (the pattern in `details.pattern`) before any crawl file is created. A Seed outside its own Scope, such as one that an exclude pattern matches, is not rejected yet: the Crawl records the Seed as `skipped` and ends. A later slice rejects it as `seed_out_of_scope`.
+An invalid pattern is rejected with `invalid_pattern` (the pattern in `details.pattern`) before any crawl file is created. A Seed outside its own Scope, one that an exclude pattern matches or that no include pattern matches, is rejected with `seed_out_of_scope` before any crawl file is created, since nothing would be crawled.
 
 **Slow patterns.** Every pattern runs against every URL the Crawl finds, and the URLs come from the site. A pattern with nested quantifiers, such as `(a+)+$`, can take seconds on one long URL. Prefer plain substrings and anchors, such as `/logout$` or `\?sessionid=`.
+
+### Section Crawls
+
+A Crawl is a Section Crawl when its Scope is one part of a site: it uses `--scope subfolder` or at least one `--include` pattern. `--exclude` alone keeps a whole-site Crawl, since it only leaves some URLs out. The result's `section_crawl` and the column `crawl.section_crawl` say which it is, so a report can tell that the Pages it counts are a section, not the whole site.
+
+### The recorded Scope
+
+The Crawl records the Scope it resolved in `crawl.scope` when the crawl file is created, as a JSON object:
+
+| Key | Value |
+|---|---|
+| `mode` | `host`, `subdomains` or `subfolder` |
+| `hosts` | the Seed hosts, in the order of [Internal and External URLs](#internal-and-external-urls); with `--scope subdomains`, the registrable domains |
+| `folder` | the Seed's folder with `--scope subfolder`, otherwise `null` |
+| `include`, `exclude` | the patterns, as given |
+
+```
+spider crawl site.test/blog/ --scope subfolder --exclude "/draft"
+{"mode": "subfolder", "hosts": ["site.test", "www.site.test"], "folder": "/blog/", "include": [], "exclude": ["/draft"]}
+```
+
+An agent reads it to know what a Crawl covered without parsing its command line.
 
 ## Links
 

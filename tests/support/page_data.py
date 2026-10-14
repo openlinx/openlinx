@@ -24,7 +24,9 @@ def page_row(html: str | bytes, content_type: str = "text/html; charset=utf-8") 
         fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
         response_time_ms=1,
     )
-    settings = PageSettings(scope=scope_rules(_URL), extractors=default_hooks().extractors)
+    settings = PageSettings(
+        scope=scope_rules(_URL), extractors=default_hooks().extractors, strip_params=None
+    )
     prepared = prepare_page(_URL, response, settings)
     assert prepared.parse_error is None, prepared.parse_error_message
     result = UrlResult(

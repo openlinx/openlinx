@@ -1,5 +1,6 @@
 """One context for a Crawl's dependencies (020-add-crawl-core D15)."""
 
+import re
 from dataclasses import dataclass
 
 from spider.clock import Clock
@@ -19,6 +20,8 @@ class CrawlContext:
     crawl_file: CrawlFile
     settings: CrawlSettings
     scope: ScopeRules
+    # --strip-params, compiled once: the Seed, the engine and page preparation share it.
+    strip_params: re.Pattern[str] | None
     clock: Clock
     reporter: CrawlReporter
     writer: CrawlWriter

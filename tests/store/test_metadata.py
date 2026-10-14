@@ -33,6 +33,13 @@ def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
         command_argv=["spider", "crawl", "https://example.com/"],
         cwd=shop,
         config={"store": {"journal_mode": "auto"}},
+        scope={
+            "mode": "host",
+            "hosts": ["example.com"],
+            "folder": None,
+            "include": [],
+            "exclude": [],
+        },
         secret_names=SecretNames(),
         journal_setting="auto",
         rules=(),

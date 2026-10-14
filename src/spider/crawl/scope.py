@@ -1,18 +1,22 @@
 """Scope decisions: ScopeRules, built once from the Seed (020-add-crawl-core D4)."""
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 from ipaddress import IPv4Address
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from spider.crawl.urls import NormalizedUrl, url_host, url_path
+from spider.crawl.urls import NormalizedUrl, url_host, url_path, without_www
 from spider.store.records import SkipReason
 
 if TYPE_CHECKING:
     from publicsuffixlist import PublicSuffixList
 
-type ScopeKind = Literal["host", "subdomains", "subfolder"]
+    from spider.crawl.links import DiscoveredLink
+
+# A plain alias, not a type statement: Typer reads it as the choices of --scope.
+ScopeKind = Literal["host", "subdomains", "subfolder"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,11 +30,28 @@ class ScopeDecision:
 class ScopeRules:
     # In order: the Seed's host, then its www host, as the recorded Scope lists them.
     seed_hosts: tuple[str, ...]
+    mode: ScopeKind = "host"
     # Filled with --scope subdomains only: a host is internal when its registrable domain is one.
     registrable_domains: frozenset[str] = frozenset()
     folder: str | None = None
     include: tuple[re.Pattern[str], ...] = ()
     exclude: tuple[re.Pattern[str], ...] = ()
+
+    @property
+    def section_crawl(self) -> bool:
+        # --exclude alone narrows a whole-site Crawl; it makes no Section Crawl.
+        return self.folder is not None or bool(self.include)
+
+    def to_json(self) -> dict[str, Any]:
+        """As crawl.scope records it (design D18)."""
+        return {
+            "mode": self.mode,
+            # An IP address or a single label has no registrable domain to list.
+            "hosts": sorted(self.registrable_domains) or list(self.seed_hosts),
+            "folder": self.folder,
+            "include": [pattern.pattern for pattern in self.include],
+            "exclude": [pattern.pattern for pattern in self.exclude],
+        }
 
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
         host = _without_trailing_dot(url_host(url))
@@ -60,6 +81,7 @@ def scope_rules(
     path = url_path(seed)
     return ScopeRules(
         seed_hosts=(host, *www),
+        mode=scope,
         registrable_domains=frozenset({domain})
         if scope == "subdomains" and domain
         else frozenset(),
@@ -97,3 +119,35 @@ def _is_ipv4(host: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def apex_seed_named_by_page(
+    seed: NormalizedUrl, links: Iterable["DiscoveredLink"], rules: ScopeRules
+) -> NormalizedUrl | None:
+    """The Seed on its apex host, when the Seed is www. plus a registrable domain and its Page
+    names the apex outside the Scope: by its canonical, or by more hyperlinks than to the
+    Seed's host (D4)."""
+    host = _without_trailing_dot(url_host(seed))
+    apex = host.removeprefix("www.")
+    if apex == host or _registrable_domain(apex) != apex:
+        return None
+    apex_seed = without_www(seed)
+    named = _named_apex_url(links, host, apex, apex_seed)
+    # The warning says the Crawl may miss the site, which is false when the Scope holds it.
+    if named is None or rules.decide(named).in_scope:
+        return None
+    return apex_seed
+
+
+def _named_apex_url(
+    links: Iterable["DiscoveredLink"], host: str, apex: str, apex_seed: NormalizedUrl
+) -> NormalizedUrl | None:
+    to_apex = to_seed_host = 0
+    for link in links:
+        target_host = _without_trailing_dot(url_host(link.target))
+        if link.type == "canonical" and target_host == apex:
+            return link.target
+        if link.type == "hyperlink":
+            to_apex += target_host == apex
+            to_seed_host += target_host == host
+    return apex_seed if to_apex > to_seed_host else None
