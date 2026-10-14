@@ -36,6 +36,8 @@ type _PipeEnd = _ConnectionBase[Any, Any]
 type _Work = tuple[NormalizedUrl, FetchResult]
 # The PreparedPage, or the exception prepare_page raised, which in-process reaches the engine.
 type _Outcome = PreparedPage | BaseException
+# What crosses for a PreparedPage: the Page without its outputs, and each output's pickle.
+type _Sent = tuple[PreparedPage, tuple[tuple[str, bytes], ...]]
 
 
 class WorkerEndedError(RuntimeError):
@@ -88,31 +90,57 @@ def _work(tasks: _PipeEnd, results: _PipeEnd) -> None:
 
 def _pickled(outcome: _Outcome) -> bytes:
     """What a worker sends: whatever cannot cross to the crawl process costs only itself."""
-    with suppress(Exception):
-        return pickle.dumps(outcome, pickle.HIGHEST_PROTOCOL)
     if isinstance(outcome, PreparedPage):
         with suppress(Exception):
-            return pickle.dumps(_without_unsendable_outputs(outcome), pickle.HIGHEST_PROTOCOL)
+            return pickle.dumps(_sendable(outcome), pickle.HIGHEST_PROTOCOL)
         return pickle.dumps(RuntimeError("The parse worker could not send its PreparedPage."))
+    with suppress(Exception):
+        return pickle.dumps(outcome, pickle.HIGHEST_PROTOCOL)
     return pickle.dumps(RuntimeError(f"{type(outcome).__name__}: {outcome}"))
 
 
-def _without_unsendable_outputs(page: PreparedPage) -> PreparedPage:
-    # In process the output would reach its handler; here it fails as its extractor (020 D16).
-    kept: list[tuple[str, msgspec.Struct]] = []
-    failures = [page.parse_error_message] if page.parse_error_message else []
+def _sendable(page: PreparedPage) -> _Sent:
+    """The Page without its outputs, and each output pickled by itself (design D3)."""
+    outputs: list[tuple[str, bytes]] = []
+    failures: list[str] = []
     for name, output in page.outputs:
         try:
-            pickle.dumps(output, pickle.HIGHEST_PROTOCOL)
+            outputs.append((name, pickle.dumps(output, pickle.HIGHEST_PROTOCOL)))
         except Exception as error:
             failures.append(f"{name}: {type(error).__name__}")
-        else:
-            kept.append((name, output))
+    return _with_failures(page, failures, ()), tuple(outputs)
+
+
+def _received(message: bytes) -> _Outcome:
+    # From our own worker over a pipe of its own, as multiprocessing's recv() would unpickle it.
+    sent: _Sent | BaseException = pickle.loads(message)  # noqa: S301
+    if isinstance(sent, BaseException):
+        return sent
+    page, outputs = sent
+    kept: list[tuple[str, msgspec.Struct]] = []
+    failures: list[str] = []
+    for name, data in outputs:
+        try:
+            kept.append((name, pickle.loads(data)))  # noqa: S301
+        # Such as an output whose class cannot be rebuilt in this process.
+        except Exception as error:
+            failures.append(f"{name}: {type(error).__name__}")
+    return _with_failures(page, failures, tuple(kept))
+
+
+def _with_failures(
+    page: PreparedPage, failures: list[str], outputs: tuple[tuple[str, Any], ...]
+) -> PreparedPage:
+    """In process an output would reach its handler; one that cannot cross fails as its
+    extractor would (020 D16), and the Page keeps its Links."""
+    if not failures:
+        return msgspec.structs.replace(page, outputs=outputs)
+    messages = [page.parse_error_message] if page.parse_error_message else []
     return msgspec.structs.replace(
         page,
-        outputs=tuple(kept),
+        outputs=outputs,
         parse_error="extractor_error",
-        parse_error_message="; ".join(failures),
+        parse_error_message="; ".join([*messages, *failures]),
     )
 
 
@@ -357,11 +385,8 @@ class PoolExecutor:
                     loop.call_soon_threadsafe(self._break, failure)
                     continue
                 try:
-                    # From our own worker over a pipe of its own, as multiprocessing's recv()
-                    # would unpickle it; unpickled here so a failure costs one Page.
-                    outcome = pickle.loads(message)  # noqa: S301
-                # An outcome this process cannot unpickle, such as an extractor's output whose
-                # class cannot be rebuilt here, is that one Page's failure, never the pool's.
+                    outcome = _received(message)
+                # A Page whose own record this process cannot read: that Page's failure only.
                 except Exception as error:
                     outcome = error
                 loop.call_soon_threadsafe(self._finished, worker, outcome)

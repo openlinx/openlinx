@@ -215,15 +215,16 @@ async def test_a_pool_that_never_started_closes_cleanly() -> None:
 
 
 @pytest.mark.slow
-async def test_an_outcome_the_crawl_process_cannot_read_fails_only_its_page() -> None:
+async def test_an_output_the_crawl_process_cannot_read_costs_only_its_extractor() -> None:
     async with started(1, RECORD_PREPARER, UNREADABLE_ON_BAD) as pool:
-        bad, good = await asyncio.gather(
-            pool.prepare(at("/bad"), RESPONSE),
-            pool.prepare(at("/"), RESPONSE),
-            return_exceptions=True,
-        )
+        page = await pool.prepare(at("/bad"), RESPONSE)
 
-    assert (type(bad), isinstance(good, PreparedPage)) == (ValueError, True)
+    assert (
+        [name for name, _ in page.outputs],
+        len(page.document_links),
+        page.parse_error,
+        page.parse_error_message,
+    ) == ([RECORD_PREPARER.name], 2, "extractor_error", "unreadable_on_bad: ValueError")
 
 
 @pytest.mark.slow
