@@ -82,6 +82,12 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
   - The tests of tasks 3.8, 3.14, 4.3 and 3.21 state their premises: the comments name every page a Rule fires on, the Crawl is `completed`, and the reader's wait returned.
   - `crawl_with_url` takes `in_scope`, with a guard that an Internal URL outside the Scope is in `internal_urls`.
   - Design Risks says that a status outside every Rule's range raises no Issue.
+- [ ] 4.11 Read Issues at the connection level, so a Command reads them from one snapshot (the rulings of 2026-10-14, for `050`):
+  - `spider.store.issues` gains `issues_in(connection, catalogue)` and `affected_urls_in(connection, rule_id, catalogue)`. They return Core selects in the shape of the `issues` view and of `affected_urls` for one Rule. The reader still alone chooses the stored or the live path, and `read_issues` and `read_affected_urls` become wrappers that run them in one `reading()`.
+  - A test reads an Issue and its Affected URLs from one snapshot while the writer commits between them; red first.
+  - `rule_not_found` gains `details.suggestions`: the closest ids of the Crawl's `rules` table on both paths, or of the catalogue for `spider rules show`; red first.
+  - On the live path, a Rule that the file records but this tool's catalogue lacks is `rule_not_found`. Its message says that this tool cannot compute that Rule live, and its hint names `spider sql` with the Rule's `reproduce_sql`; red first.
+  - D16 and design Risks follow.
 
 ## 5. Title Rules and the post-crawl pass (v0.1, except the tasks marked v0.2)
 
