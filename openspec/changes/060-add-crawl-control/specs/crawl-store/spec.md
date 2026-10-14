@@ -30,3 +30,14 @@ A process MAY reserve a new id by creating `<id>.log` exclusively, and then crea
 #### Scenario: Character set
 - **WHEN** ids are created with the system random source for any UTC start time from `2000-01-01T00:00:00.000Z` to `2099-12-31T23:59:59.999Z`
 - **THEN** every id matches `^[0-9]{8}-[0-9]{6}-[0-9a-hjkmnp-tv-z]{4}$`
+
+## ADDED Requirements
+
+### Requirement: A Crawl being created is not latest
+While a process creates a Crawl, its file `<id>.sqlite` exists before its schema is written. The schema is complete when `PRAGMA user_version` holds the schema version, which the creating process writes in the same transaction as the schema, the `crawl` row and the Seeds, so a reader sees either no schema or all of it.
+
+`latest` (see "Selecting a Crawl with --crawl") SHALL skip a file whose schema is not complete while its writer claim `<id>.lock` is held (`crawl-control`'s "One writer per Crawl"), and SHALL select the most recent of the other Crawls, or fail with `no_crawls` when none is left. A file whose schema is not complete while no process holds its claim is broken, and SHALL still be reported as `crawl_file_invalid`, as the scenario "A broken newest file is reported, not skipped" says.
+
+#### Scenario: A Crawl being created is not the latest
+- **WHEN** `latest` is resolved in a Workspace holding a valid `20260927-100000-aaaa` and a file `20260927-110000-bbbb.sqlite` whose schema is not written yet, while a process holds the writer claim `20260927-110000-bbbb.lock`
+- **THEN** the Crawl `20260927-100000-aaaa` is selected

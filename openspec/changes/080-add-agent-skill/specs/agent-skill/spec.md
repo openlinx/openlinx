@@ -189,10 +189,11 @@ SKILL.md SHALL also contain a `## Section Crawl or Segments?` section with this 
 - write large outputs to a file with `-o`.
 - avoid `spider page --html` unless the raw HTML is needed.
 - while a Crawl runs, follow its progress with `spider status`, which reads counters, and not with `spider summary`, which counts the stored rows on every call.
+- read a non-null `paused_since` in `spider status` as a Crawl waiting for the network (`020-add-crawl-core`'s network pause): leave it, or stop it and resume it later.
 
 #### Scenario: Hygiene section
 - **WHEN** the `## Output hygiene` section of the installed `SKILL.md` is read
-- **THEN** it contains `--fields`, `--limit`, `--cursor`, `spider sql`, `LIMIT`, `-o`, `spider status` and `spider summary`
+- **THEN** it contains `--fields`, `--limit`, `--cursor`, `spider sql`, `LIMIT`, `-o`, `spider status`, `spider summary` and `paused_since`
 
 ### Requirement: SKILL.md size and reference links
 `SKILL.md` SHALL have at most 500 lines. It SHALL link each reference file by its relative path and say when to read it. The reference files are `references/commands.md`, `references/columns.md`, `references/rules.md`, `references/sql-schema.md` and `references/recipes.md`.

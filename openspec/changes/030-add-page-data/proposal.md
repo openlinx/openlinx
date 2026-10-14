@@ -69,7 +69,7 @@ _None._ This change builds on requirements of `010`, `015`, `017`, `018`, `020` 
   - `docs/schema.md` and its contract test, `spider schema` and the transactional writer
   - the Crawl's recorded config
 - **Depends on `017-speed-up-crawl-writer`** for `submit_async()` and its unit rules: deterministic units that return values only, and statements built once.
-- **Depends on `018-add-schema-conventions`** (ADR-0005) for the declaration helper (`STRICT` tables, CHECKs from listed values and flags), references and indexes in `spider schema`, and the `Derived: ` and `Filled from v<major>.<minor>. ` description prefixes.
+- **Depends on `018-add-schema-conventions`** (ADR-0005) for `public_table()` (`STRICT` tables, CHECKs from listed values and flags), references and indexes in `spider schema`, and the `Derived: ` and `Filled from v<major>.<minor>. ` description prefixes.
 - **Depends on `020-add-crawl-core`** for:
   - the `urls` table: `is_internal`, `in_scope`, `fetch_state`, `content_type`, `parsed`, `blocked_by_robots_txt`, `crawl_depth` and `fetched_at`
   - Link discovery, `DiscoveredLink` and the `LinkType` list, the robots directives parser and page preparation with its extractors

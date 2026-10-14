@@ -27,7 +27,7 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `spider
 - **THEN** every request the fixture site receives, including the one for `/robots.txt`, has `User-Agent` = `AuditBot/1.0`
 
 ### Requirement: Custom headers
-`--header "Name: Value"` SHALL add a request header. It SHALL be accepted more than once, and its setting `crawl.header` SHALL be a list of `Name: Value` strings. A value without `:` SHALL be rejected with exit code 2 and error code `invalid_value`. Custom headers SHALL be sent only with requests for Internal URLs and their robots.txt, never with requests for External URLs.
+**(v0.2)** `--header "Name: Value"` SHALL add a request header. It SHALL be accepted more than once, and its setting `crawl.header` SHALL be a list of `Name: Value` strings. A value without `:` SHALL be rejected with exit code 2 and error code `invalid_value`. Custom headers SHALL be sent only with requests for Internal URLs and their robots.txt, never with requests for External URLs.
 
 `--header` and `crawl.header` SHALL be declared a header secret. `015-add-crawl-store` then records the value of every sensitive header as `Name: ***`: `Cookie`, and every header whose name contains `auth`, `token`, `secret`, `key` or `password`.
 
@@ -48,7 +48,7 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `spider
 - **THEN** the `crawl` table of `crawl.config` has `"header": ["Cookie: ***"]`
 
 ### Requirement: HTTP basic authentication
-`--auth <user:password>` (setting `crawl.auth`, marked secret) SHALL send HTTP basic authentication preemptively with every request for an Internal URL and its robots.txt, never with requests for External URLs. The setting SHALL also be accepted from `spider.toml`. `015-add-crawl-store` records it as `***`.
+**(v0.2)** `--auth <user:password>` (setting `crawl.auth`, marked secret) SHALL send HTTP basic authentication preemptively with every request for an Internal URL and its robots.txt, never with requests for External URLs. The setting SHALL also be accepted from `spider.toml`. `015-add-crawl-store` records it as `***`.
 
 #### Scenario: Credentials are sent to Internal URLs
 - **WHEN** `spider crawl http://site.test/ --auth "alice:s3cret"` runs
@@ -67,14 +67,14 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `spider
 - **THEN** the request for `http://site.test/` has `Authorization` = `Basic YWxpY2U6czNjcmV0`
 
 ### Requirement: Proxy
-`--proxy <url>` (setting `crawl.proxy`) SHALL send every request, robots.txt included, through the given HTTP proxy, with credentials when the URL contains them.
+**(v0.2)** `--proxy <url>` (setting `crawl.proxy`) SHALL send every request, robots.txt included, through the given HTTP proxy, with credentials when the URL contains them.
 
 Without `--proxy` or `[crawl] proxy`, the Crawl SHALL honour the standard proxy variables, as curl, pip and uv do:
 - **Which variable:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs.
 - **Bypass:** `NO_PROXY`, a comma-separated list of host names and domain suffixes, or `*`, names the hosts that bypass the proxy.
 - **Letter case:** each variable is read in any letter case. When both cases are set, the lower-case one wins.
 
-This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. `--proxy` and `[crawl] proxy` SHALL override the variables. A resumed Crawl SHALL read the variables again.
+The proxy variables are honoured from v0.1. This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. From v0.2, `--proxy` and `[crawl] proxy` SHALL override the variables, and the scenarios that pass `--proxy` apply. A resumed Crawl SHALL read the variables again.
 
 The password in a proxy URL SHALL be marked partly secret, whether it comes from `--proxy` or from a variable, and `015-add-crawl-store` records it as `http://<user>:***@<host>:<port>`. The proxy variables in use SHALL be recorded, set ones only, in the `environment` table of `crawl.config` under the lower-case keys `http_proxy`, `https_proxy` and `no_proxy`.
 
@@ -116,6 +116,8 @@ The Crawl SHALL NOT send cookies that responses set. After a response with `Set-
 ### Requirement: Timeouts
 A request attempt that has not completed within `--timeout` seconds (default 20, setting `crawl.timeout`) SHALL fail. When no attempt for a URL succeeds, the URL SHALL be recorded with `fetch_state` = `error`, `status_code` NULL and `fetch_error` = `timeout`. `timeout` is a value of `urls.fetch_error` that `020-add-crawl-core` lists.
 
+A timeout is a request without an HTTP response, so it counts towards the network pause of `020-add-crawl-core`. When every attempt at an origin's robots.txt times out, the origin's URLs SHALL be recorded with `fetch_error` = `timeout` without a request, as `020-add-crawl-core` records the URLs behind a robots.txt that got no HTTP response; a robots.txt that answers 5xx or 429 after the retries stays `robots_unreachable`.
+
 #### Scenario: A hanging response times out
 - **WHEN** `/` links to `/hang`, which never answers, and `spider crawl {site}/ --timeout 1 --retries 0` runs
 - **THEN** `{site}/hang` has `fetch_state` = `error` and `fetch_error` = `timeout`
@@ -127,6 +129,7 @@ The Crawl SHALL retry a request attempt, robots.txt included, that gets no respo
 - **429 without Retry-After:** the wait SHALL be 10 seconds.
 - **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start.
 - **Other 4xx statuses** SHALL NOT be retried.
+- **Network pause:** while the Crawl is paused waiting for the network (`020-add-crawl-core`), a request attempt that fails SHALL be neither retried nor recorded; its URL stays `queued` and is requested after the pause.
 
 The URL SHALL record the last attempt's response. This change adds this column to `urls`, under the conventions of `018-add-schema-conventions`:
 
@@ -270,7 +273,7 @@ URLs longer than 2,000 characters SHALL NOT be requested, and SHALL be recorded 
 - **THEN** that URL has `skip_reason` = `url_too_long`
 
 ### Requirement: Compression
-Every request SHALL send `Accept-Encoding: gzip, deflate, br, zstd`, and the Crawl SHALL decode those encodings itself. This change adds these columns to `urls`:
+Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Accept-Encoding: gzip, deflate, br, zstd`. The Crawl SHALL decode those encodings itself. This change adds these columns to `urls`:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
@@ -280,7 +283,7 @@ Every request SHALL send `Accept-Encoding: gzip, deflate, br, zstd`, and the Cra
 
 #### Scenario: Requests accept compressed bodies
 - **WHEN** `spider crawl {site}/` runs
-- **THEN** the request for `/` has `Accept-Encoding` = `gzip, deflate, br, zstd`
+- **THEN** the request for `/` has `Accept-Encoding` = `gzip, deflate, br`
 
 #### Scenario: A compressed Resource records both sizes
 - **WHEN** `/app.js` returns a 10,000-byte script as a 2,500-byte gzip body with `Content-Encoding: gzip`, and `/` holds `<script src="/app.js">`
@@ -294,7 +297,7 @@ Every requested Resource SHALL have its `status_code`, `size_bytes` and `transfe
 - **THEN** `{site}/logo.png` has `status_code` = 200, `size_bytes` = 2048 and `transferred_bytes` = 2048
 
 ### Requirement: TLS certificate verification
-HTTPS requests SHALL verify the server certificate and its host name against the operating system's trust store. When that store cannot be used, certifi's bundle SHALL be the fallback. A request whose certificate does not verify SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `tls_error`, a value that `020-add-crawl-core` lists.
+HTTPS requests SHALL verify the server certificate and its host name against the operating system's trust store. When that store cannot be used, certifi's bundle SHALL be the fallback. A request whose certificate does not verify SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `tls_error`, a value that `020-add-crawl-core` lists. When an origin's robots.txt request fails verification, the origin's URLs SHALL be recorded with `fetch_error` = `tls_error` without a request, as `020-add-crawl-core` records the URLs behind a robots.txt that got no HTTP response. A `tls_error` SHALL NOT count towards the network pause of `020-add-crawl-core`: a certificate that fails verification is an answer from the server, and a site-wide certificate failure would otherwise wait out `--network-wait` and fail as `site_unreachable`.
 
 #### Scenario: A certificate for another name is a TLS error
 - **WHEN** `http://site.test/` links to `https://badcert.test/`, whose certificate is issued for `other.test`
