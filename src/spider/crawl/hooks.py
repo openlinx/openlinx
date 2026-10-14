@@ -22,6 +22,8 @@ class UrlResult:
     crawl_depth: int
     discovered_via: DiscoveredVia
     found_on_url_id: int | None
+    is_internal: bool
+    in_scope: bool
     fetch_state: FetchState
     skip_reason: SkipReason | None = None
     fetch_error: FetchError | None = None
@@ -62,8 +64,3 @@ class Hooks:
     passes: tuple[Pass, ...] = ()
     # By row type: the store module that owns a table writes its rows (design D14).
     row_writers: Mapping[type, RowWriter] = field(default_factory=dict)
-
-
-def default_hooks() -> Hooks:
-    """The built-in hooks, listed explicitly: 030 and 040 add theirs here."""
-    return Hooks()

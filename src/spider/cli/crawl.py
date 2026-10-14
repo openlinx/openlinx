@@ -39,6 +39,15 @@ def crawl(
         ),
         OptionMeta(setting="crawl.concurrency"),
     ] = 5,
+    check_external: Annotated[
+        bool,
+        typer.Option(
+            "--check-external/--no-check-external",
+            help="Request each External URL once to record its response; with "
+            "--no-check-external it is recorded as skipped, unrequested.",
+        ),
+        OptionMeta(setting="crawl.check_external"),
+    ] = True,
     exclude: Annotated[
         list[str] | None,
         typer.Option(
@@ -58,8 +67,8 @@ def crawl(
     the Workspace. Progress events go to stderr, and the result to stdout when the Crawl ends.
     """
     # Imported here: the crawler stays off the CLI's startup path.
-    from spider.crawl.hooks import default_hooks
     from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
+    from spider.services.hooks import default_hooks
 
     invocation: Invocation = ctx.obj
     request = CrawlRequest(

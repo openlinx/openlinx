@@ -6,7 +6,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.cli import run_cli
 from tests.support.crawling import crawled
-from tests.support.crawls import crawl_row
+from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
 
 SMALL_SITE = Site(
@@ -250,3 +250,18 @@ def test_a_concurrency_above_50_in_the_settings_file_is_refused(
     errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
 
     assert (result.exit_code, errors) == (3, ["settings_invalid"])
+
+
+def test_no_check_external_records_an_external_url_as_skipped(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # Requested, other.test would reach the network guard, which fails the test.
+    server = fixture_site(Site(routes={"/": Page(body='<a href="http://other.test/">O</a>')}))
+
+    crawl_file = crawled(server.url("/"), "--no-check-external")
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, skip_reason FROM urls WHERE url = ?",
+        ["http://other.test/"],
+    ) == [("skipped", "external_not_checked")]

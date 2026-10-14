@@ -40,7 +40,13 @@ def _url(text: str) -> NormalizedUrl:
 
 
 def _new(text: str) -> NewUrl:
-    return NewUrl(url=_url(text), crawl_depth=1, discovered_via="hyperlink")
+    return NewUrl(
+        url=_url(text),
+        crawl_depth=1,
+        discovered_via="hyperlink",
+        is_internal=True,
+        in_scope=True,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,8 +70,8 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
     )
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        seed_id = writer.run(record_seed(seed))
-        writer.run(record_seed(seed))
+        seed_id = writer.run(record_seed(seed, is_internal=True, in_scope=True))
+        writer.run(record_seed(seed, is_internal=True, in_scope=True))
         first = writer.run(queued_batch(0, 0, 10))
         writer.run(
             record_fetched(

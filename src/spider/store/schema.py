@@ -202,6 +202,25 @@ urls = public_table(
         comment="The URL's host in lower-case ASCII (IDNA) form; the key of the per-host "
         "politeness limits.",
     ),
+    Column(
+        "origin_id",
+        Integer,
+        ForeignKey("origins.id"),
+        nullable=False,
+        comment="The URL's origin: its scheme, host and port.",
+    ),
+    Column(
+        "is_internal",
+        Flag,
+        nullable=False,
+        comment="1 for an Internal URL, 0 for an External URL.",
+    ),
+    Column(
+        "in_scope",
+        Flag,
+        nullable=False,
+        comment="1 when the URL is inside the Scope, so it may be followed.",
+    ),
     Column("crawl_depth", Integer, nullable=False, comment="Crawl Depth; 0 for Seeds."),
     Column(
         "discovered_via",
@@ -287,5 +306,40 @@ Index(
     sqlite_where=urls.c.fetch_state == "queued",
     info={
         "description": "The frontier: the next queued URLs of the open Crawl Depth, in id order."
+    },
+)
+
+origins = public_table(
+    "origins",
+    Column("id", Integer, primary_key=True, comment="Row id."),
+    Column(
+        "origin",
+        Text,
+        nullable=False,
+        comment="Scheme, host and port, for example https://site.test, with a default port left "
+        "out; unique.",
+    ),
+    Column(
+        "host",
+        Text,
+        nullable=False,
+        comment="The origin's host in lower-case ASCII (IDNA) form.",
+    ),
+    Column(
+        "is_internal",
+        Flag,
+        nullable=False,
+        comment="1 when the origin's URLs are Internal URLs.",
+    ),
+    comment="One row for each origin of a URL that the Crawl recorded.",
+    change=20,
+)
+Index(
+    "origins_origin",
+    origins.c.origin,
+    unique=True,
+    info={
+        "description": "Recording an origin once (ON CONFLICT (origin)), and finding an "
+        "origin's row."
     },
 )

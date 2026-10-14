@@ -5,7 +5,8 @@ from collections.abc import Callable, Mapping
 from sqlalchemy import Connection, bindparam, func, literal_column, select, update
 from sqlalchemy.dialects.sqlite import insert
 
-from spider.crawl.urls import NormalizedUrl, url_host
+from spider.crawl.urls import NormalizedUrl, url_host, url_origin
+from spider.store.origins import ORIGIN_ID, origin_rows, record_origins
 from spider.store.records import ErroredUrl, FetchedUrl, QueuedUrl, SkippedUrl, UrlCounts
 from spider.store.rows import RowWriter, write_rows
 from spider.store.schema import urls
@@ -13,7 +14,10 @@ from spider.store.schema import urls
 type UrlUnit = Callable[[Connection], None]
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
-_INSERT_URL = insert(urls).on_conflict_do_nothing(index_elements=[urls.c.url])
+# Each row binds its origin, whose row the unit records first (design D18).
+_INSERT_URL = (
+    insert(urls).values(origin_id=ORIGIN_ID).on_conflict_do_nothing(index_elements=[urls.c.url])
+)
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
@@ -72,21 +76,26 @@ _NEXT_DEPTH = select(func.min(urls.c.crawl_depth)).where(
 )
 
 
-def record_seed(url: NormalizedUrl) -> Callable[[Connection], int]:
+def record_seed(
+    url: NormalizedUrl, *, is_internal: bool, in_scope: bool
+) -> Callable[[Connection], int]:
     """A unit that records the Seed as queued, once, and returns its id."""
+    row = {
+        "url": url,
+        "host": url_host(url),
+        "origin": url_origin(url),
+        "is_internal": is_internal,
+        "in_scope": in_scope,
+        "crawl_depth": 0,
+        "discovered_via": "seed",
+        "fetch_state": "queued",
+        "parsed": False,
+    }
+    origins = origin_rows([row])
 
     def unit(connection: Connection) -> int:
-        connection.execute(
-            _INSERT_URL,
-            {
-                "url": url,
-                "host": url_host(url),
-                "crawl_depth": 0,
-                "discovered_via": "seed",
-                "fetch_state": "queued",
-                "parsed": False,
-            },
-        )
+        record_origins(connection, origins)
+        connection.execute(_INSERT_URL, row)
         url_id: int = connection.execute(_URL_ID, {"url": url}).scalar_one()
         return url_id
 
@@ -144,6 +153,9 @@ def record_fetched(
         {
             "url": new.url,
             "host": url_host(new.url),
+            "origin": url_origin(new.url),
+            "is_internal": new.is_internal,
+            "in_scope": new.in_scope,
             "crawl_depth": new.crawl_depth,
             "discovered_via": new.discovered_via,
             "found_on_url_id": url_id,
@@ -152,9 +164,11 @@ def record_fetched(
         }
         for new in fetched.discovered
     ]
+    origins = origin_rows(new_rows)
 
     def unit(connection: Connection) -> None:
         connection.execute(_FETCHED, values)
+        record_origins(connection, origins)
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
             connection.execute(_INSERT_URL, new_rows)

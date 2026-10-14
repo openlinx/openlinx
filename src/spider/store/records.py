@@ -112,13 +112,15 @@ class QueuedUrl:
     found_on_url_id: int | None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class NewUrl:
     """A URL discovered from a response, recorded unless the Crawl has it already."""
 
     url: NormalizedUrl
     crawl_depth: int
     discovered_via: DiscoveredVia
+    is_internal: bool
+    in_scope: bool
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -7,16 +7,18 @@ from pathlib import Path, PureWindowsPath
 import pytest
 
 from spider.cli.app import build_app
-from spider.crawl.hooks import default_hooks
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
+from spider.services.hooks import default_hooks
 from spider.store.records import SecretNames
+from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.app import example_app, settings_tables
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
-from tests.support.crawls import crawl_row
+from tests.support.crawling import crawl_result
+from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
 
 HOME_PAGE = Site(routes={"/": Page(body="<p>Home</p>")})
@@ -41,6 +43,19 @@ def test_the_journal_mode_setting_reaches_the_crawl_file(
     result = start_crawl(plan_crawl(request, tables), FakeClock(), Collected(), default_hooks())
 
     assert crawl_row(result.crawl_file)["journal_mode"] == "delete"
+
+
+def test_the_dns_resolver_hook_reaches_the_crawl(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(HOME_PAGE, Site(routes={}))
+
+    result = crawl_result("http://site.test/", resolver=hosts.resolver)
+
+    assert (
+        query(result.crawl_file, "SELECT url, fetch_state, status_code FROM urls"),
+        [request.path for request in hosts.site.requests],
+    ) == ([("http://site.test/", "fetched", 200)], ["/"])
 
 
 def test_a_secret_setting_is_redacted_in_the_recorded_config(
