@@ -185,7 +185,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 7. Robots directives and Link following (widening)
 
-- [ ] 7.1 Drive "Meta robots directives are read case-insensitively" at seam 4. Done when: the robots directives parser is a pure function that `030` imports, whose fields carry `030`'s column names (design D6).
+- [x] 7.1 Drive "Meta robots directives are read case-insensitively" at seam 4. Done when: the robots directives parser is a pure function that `030` imports, whose fields carry `030`'s column names (design D6).
 - [ ] 7.2 Drive "A header for another crawler does not apply" at seam 4.
 - [ ] 7.3 Drive "A header for the robots user-agent token applies" at seam 4.
 - [ ] 7.4 Drive "none means noindex and nofollow" at seam 4.
