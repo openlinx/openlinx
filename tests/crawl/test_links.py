@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.crawl.links import DiscoveredLink, extract_links
+from spider.crawl.links import DiscoveredLink, extract_links, refresh_url
 from spider.crawl.urls import NormalizedUrl, url_host
 
 SITE = NormalizedUrl("http://site.test/")
@@ -282,3 +282,28 @@ def test_deeply_nested_html_gives_its_links() -> None:
     found = _found("<span>" * depth + '<a href="/after">x</a>' + "</span>" * depth)
 
     assert found == [("hyperlink", "http://site.test/after")]
+
+
+@pytest.mark.parametrize(
+    ("content", "url"),
+    [
+        ("0; url=/new", "/new"),
+        ("0;URL=/new", "/new"),
+        ("5, url = /new", "/new"),
+        ("0 url=/new", "/new"),
+        ("0; /new", "/new"),
+        ("0.5; url='/a b'c", "/a b"),
+        ('  3; URL="/q?x=1"', "/q?x=1"),
+        (".5;url=/a", "/a"),
+        ("0;\turl\t=\t/tab", "/tab"),
+        ("0; url=", None),
+        ("0", None),
+        ("0;", None),
+        ("; url=/new", None),
+        ("x; url=/new", None),
+        ("0x; url=/new", None),
+        ("", None),
+    ],
+)
+def test_a_refresh_names_its_target_as_html_reads_it(content: str, url: str | None) -> None:
+    assert refresh_url(content) == url

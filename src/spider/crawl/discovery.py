@@ -5,7 +5,11 @@ from collections.abc import Iterable
 from spider.crawl.links import DiscoveredLink
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import NewUrl
+from spider.store.records import LinkType, NewUrl
+
+# Every Link of these types is recorded: one in the Scope is followed, any other checked
+# or skipped.
+_FOLLOWED: frozenset[LinkType] = frozenset({"hyperlink", "meta_refresh"})
 
 
 def discovered_urls(
@@ -15,18 +19,17 @@ def discovered_urls(
     # A Page names most URLs several times, and each row costs its unit an insert.
     first: dict[NormalizedUrl, DiscoveredLink] = {}
     for link in links:
-        # Every hyperlink is recorded: one in the Scope is followed, any other checked or skipped.
-        if link.type == "hyperlink":
+        if link.type in _FOLLOWED:
             first.setdefault(link.target, link)
-    return tuple(_new_url(url, scope, depth) for url in first)
+    return tuple(_new_url(link, scope, depth) for link in first.values())
 
 
-def _new_url(url: NormalizedUrl, scope: ScopeRules, depth: int) -> NewUrl:
-    decision = scope.decide(url)
+def _new_url(link: DiscoveredLink, scope: ScopeRules, depth: int) -> NewUrl:
+    decision = scope.decide(link.target)
     return NewUrl(
-        url=url,
+        url=link.target,
         crawl_depth=depth,
-        discovered_via="hyperlink",
+        discovered_via=link.type,
         is_internal=decision.is_internal,
         in_scope=decision.in_scope,
     )

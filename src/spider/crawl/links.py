@@ -23,6 +23,8 @@ _HTTP_SCHEMES = frozenset({"http", "https"})
 _SLASHES = "/\\"
 _QUERY_OR_FRAGMENT = re.compile(r"[?#]")
 _ASCII_TOKEN = re.compile(r"[^\t\n\x0c\r ]+")
+_WHITESPACE = "\t\n\x0c\r "
+_DIGITS = "0123456789"
 # Elements with one URL attribute; link, img, video, source and track have rules of their own.
 _SINGLE_REFERENCES: Mapping[str, tuple[LinkType, str]] = {
     "a": ("hyperlink", "href"),
@@ -37,7 +39,7 @@ _SINGLE_REFERENCES: Mapping[str, tuple[LinkType, str]] = {
 _ELEMENTS = ", ".join(
     [
         *(f"{tag}[{attribute}]" for tag, (_, attribute) in _SINGLE_REFERENCES.items()),
-        "link[href], img, video, source, track",
+        "link[href], img, video, source, track, meta[http-equiv]",
     ]
 )
 _MEDIA_TYPES: Mapping[str, LinkType] = {"video": "video", "audio": "audio"}
@@ -123,6 +125,11 @@ def _references(
     parent: LexborNode | None,
 ) -> Iterator[_Reference]:
     match tag:
+        case "meta":
+            if (attributes.get("http-equiv") or "").lower() == "refresh":
+                raw = refresh_url(attributes.get("content") or "")
+                if raw is not None:
+                    yield "meta_refresh", "content", raw
         case "link":
             link_type = _link_type(rel, attributes)
             if link_type is not None:
@@ -141,6 +148,35 @@ def _references(
                 yield from _srcset(attributes)
         case _:
             yield from _from_attribute(*_SINGLE_REFERENCES[tag], attributes)
+
+
+def refresh_url(content: str) -> str | None:
+    """The reference of a meta refresh or a Refresh header as HTML reads it, or None."""
+    rest = content.lstrip(_WHITESPACE)
+    after_time = rest.lstrip(_DIGITS)
+    if after_time == rest and not rest.startswith("."):
+        return None
+    rest = after_time.lstrip(_DIGITS + ".")
+    if not rest or rest[0] not in ";," + _WHITESPACE:
+        return None
+    rest = rest.lstrip(_WHITESPACE)
+    if rest[:1] in (";", ","):
+        rest = rest[1:].lstrip(_WHITESPACE)
+    rest = _without_url_equals(rest)
+    if rest[:1] in ("'", '"'):
+        rest = rest[1:].partition(rest[0])[0]
+    # No URL refreshes the Page itself, which links to no other URL.
+    return rest or None
+
+
+def _without_url_equals(rest: str) -> str:
+    """HTML skips `url`, white space and `=` as far as they match, and keeps what follows."""
+    for letter in "url":
+        if rest[:1].lower() != letter:
+            return rest
+        rest = rest[1:]
+    rest = rest.lstrip(_WHITESPACE)
+    return rest[1:].lstrip(_WHITESPACE) if rest[:1] == "=" else rest
 
 
 def _link_type(rel: tuple[str, ...], attributes: Mapping[str, str | None]) -> LinkType | None:

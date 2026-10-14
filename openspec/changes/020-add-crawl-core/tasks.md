@@ -191,7 +191,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 7.4 Drive "none means noindex and nofollow" at seam 4.
 - [x] 7.5 Drive "A directive with a value is not a user-agent prefix" at seam 4.
 - [x] 7.6 **Guard:** "The robots directives parser accepts any values", as a hypothesis property at seam 4.
-- [ ] 7.7 Drive "A meta refresh target is followed" at seam 3.
+- [x] 7.7 Drive "A meta refresh target is followed" at seam 3.
 - [ ] 7.8 Drive "amphtml targets are not requested" at seam 3+6.
 - [ ] 7.9 Drive "A canonical in an HTTP header is followed" and "An HTTP Refresh target is followed" at seam 3, a pair. Done when: the HTTP `Link` and `Refresh` headers of in-Scope 2xx responses are read, parsed or not.
 - [ ] 7.10 Drive "Links on an error page are not followed" at seam 3+6. Done when: only in-Scope 2xx HTML responses are parsed. The 2xx and HTML checks exist since group 4's review, so this may pass on its first run; then it shows its red by a mutation, as a guard does.
