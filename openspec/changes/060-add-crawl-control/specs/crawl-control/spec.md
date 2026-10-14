@@ -296,7 +296,7 @@ When a process holds the claim but its heartbeat is older than 60 seconds, the s
 `spider resume [--crawl <ref>]` (default `latest`) SHALL continue a Crawl whose Crawl State is `stopped`, `interrupted` or `failed`. It uses the Crawl Service's continue operation (`020-add-crawl-core`) and the recorded config, and SHALL:
 - request the `queued` URLs, after putting back those that ended without a response or behind an unreachable robots.txt
 - fetch robots.txt again for each origin it requests
-- print the result of a foreground `spider crawl`, with the added field `"run"`
+- print the result of a foreground `spider crawl`, in the field order of `020-add-crawl-core`'s result (`docs/crawling.md`, "The result"), with the added field `"run"`
 
 With `--detach`, it SHALL run in the background and print the output of `crawl --detach` with the new `run` number.
 

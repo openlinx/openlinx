@@ -113,7 +113,7 @@ Seams (docs/testing.md):
 
 ## 6. Dry run, estimate and equivalent command
 
-- [ ] 6.1 [CLI] Drive "The resolved config is printed": `--dry-run` reusing `020`'s validation and config resolution.
+- [ ] 6.1 [CLI] Drive "The resolved config is printed": `--dry-run` reusing `020`'s `plan_crawl` (validation and config resolution, `spider.services.crawling`).
 - [ ] 6.2 [CLI] Drive "A dry run writes nothing".
 - [ ] 6.3 [CLI] Drive "Invalid arguments fail as in a real Crawl".
 - [ ] 6.4 [Pure] Drive "Quoting for POSIX shells": the command renderer, with its flag order and default suppression.

@@ -53,7 +53,7 @@ The OS releases the claim when a process dies, so "`running` and nobody holds th
 - *Alternative:* a heartbeat timeout alone. It is slow to notice deaths, and it wrongly declares suspended processes dead. Rejected as the authority.
 
 ### D3. Detach: the parent reserves the id, the child creates the Crawl
-1. **The parent checks** the arguments with `020`'s validation and config resolution.
+1. **The parent checks** the arguments with `020`'s `plan_crawl` (validation and config resolution, in `spider.services.crawling`).
 2. **The parent reserves an id** by creating `<id>.log` exclusively (D12). If creation finds the id taken, it draws another. If the child's create still meets `crawl_id_taken`, the child exits and the parent reports `detach_failed`.
 3. **In List mode, the parent stores the Seeds first.** It also reads the list, from a file or from standard input, with `024`'s reader. It reports list errors such as `empty_list` itself, and stores the Seeds in the hand-over file `<id>.seeds.json` before spawning, because a detached child cannot read the parent's standard input.
 4. **The parent spawns the child** with `sys.executable -m spider crawl --_run-detached <id>`. The child's stdout and stderr go to the log file, and stdin comes from the null device.
@@ -103,7 +103,7 @@ Everything that decides which URLs belong to the Crawl stays fixed: the Crawl Mo
 - **Recording:** accepted overrides update the `crawl` table of `crawl.config`, and the run's `command_argv` records them.
 
 ### D9. The dry run and its estimate
-- **Validation:** it reuses `020`'s validation and config resolution, so dry runs and real runs cannot disagree.
+- **Validation:** it reuses `020`'s `plan_crawl` (validation and config resolution, in `spider.services.crawling`), so dry runs and real runs cannot disagree.
 - **Network use:** only robots.txt and sitemaps are requested (with `024`'s sitemap reader), one at a time and obeying robots.txt, within a budget of 50 files and 60 seconds.
 - **Degrading:** failures lower the confidence and never fail the Command. With the network blocked, `urls` is null and the Skill (`080`) treats the Crawl as large.
 - **Confidence:** Spider-mode estimates are never `high`, because sitemaps undercount Pages and a Crawl also requests Resources and External URLs.
