@@ -27,6 +27,9 @@ BACKLOG_PER_WORKER = 2
 _WINDOWS_WAIT_HANDLES = 63
 _CGROUP_ROOT = Path("/sys/fs/cgroup")
 _SELF_CGROUP = Path("/proc/self/cgroup")
+# A worker's first answer; an outcome is a pickle, which never starts with these bytes.
+_READY = b"ready"
+_START_FAILED = b"failed:"
 
 # A Connection on POSIX, a PipeConnection on Windows: the one class both pipe ends share.
 type _PipeEnd = _ConnectionBase[Any, Any]
@@ -39,12 +42,29 @@ class WorkerEndedError(RuntimeError):
     """The worker that held a Page ended, or none is left to take it."""
 
 
-def _work(settings: PageSettings, tasks: _PipeEnd, results: _PipeEnd) -> None:
-    """A worker's life; the snapshot is a start argument, so it is pickled once (design D1)."""
+class WorkerStartError(RuntimeError):
+    """A worker could not read its snapshot, or ended before it was ready: the Crawl's error."""
+
+
+def _work(tasks: _PipeEnd, results: _PipeEnd) -> None:
+    """A worker's life; the snapshot is its first message, so it is pickled once (design D1)."""
     # Ctrl+C reaches every process of a console: the crawl process ends its workers in order.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     if sys.platform == "win32":
         signal.signal(signal.SIGBREAK, signal.SIG_IGN)
+    try:
+        settings: PageSettings = tasks.recv()
+    except (EOFError, OSError):
+        return
+    # A snapshot it cannot read, such as an extractor whose module it cannot import.
+    except Exception as error:
+        with suppress(OSError):
+            results.send_bytes(_START_FAILED + f"{type(error).__name__}: {error}".encode())
+        return
+    try:
+        results.send_bytes(_READY)
+    except OSError:
+        return
     while True:
         try:
             work = tasks.recv()
@@ -197,8 +217,9 @@ class PoolExecutor:
             )
         self.backlog = BACKLOG_PER_WORKER * self.workers
         self._workers: list[_Worker] = []
-        # The workers still running, idle or busy.
+        # The workers still running, idle or busy, and those of them that have answered ready.
         self._live: set[_Worker] = set()
+        self._ready: set[_Worker] = set()
         self._idle: deque[_Worker] = deque()
         # The Page each busy worker holds: its URL and its future.
         self._busy: dict[_Worker, tuple[NormalizedUrl, asyncio.Future[PreparedPage]]] = {}
@@ -206,7 +227,7 @@ class PoolExecutor:
         self._started = False
         self._waiter: threading.Thread | None = None
         self._wake_reader, self._wake_writer = multiprocessing.Pipe(duplex=False)
-        self._broken: RuntimeError | None = None
+        self._broken: BaseException | None = None
 
     @property
     def worker_pids(self) -> tuple[int, ...]:
@@ -220,7 +241,9 @@ class PoolExecutor:
             result_reader, result_writer = spawn.Pipe(duplex=False)
             process = spawn.Process(
                 target=_work,
-                args=(settings, task_reader, result_writer),
+                # Its pipe ends alone: on Windows a child that died while it unpickled the
+                # snapshot would leave its result pipe's write end open here (design D1).
+                args=(task_reader, result_writer),
                 name=f"spider-parse-{n}",
                 daemon=True,
             )
@@ -232,6 +255,9 @@ class PoolExecutor:
             self._workers.append(worker)
             self._live.add(worker)
             self._idle.append(worker)
+            # A worker that ended already answers with the end of its result pipe.
+            with suppress(OSError):
+                task_writer.send(settings)
         # A daemon: nothing it waits for may keep the crawl process from exiting.
         self._waiter = threading.Thread(
             target=self._wait_for_outcomes, args=(loop,), name="spider-parse-waiter", daemon=True
@@ -299,8 +325,10 @@ class PoolExecutor:
         # Whatever ends this thread early fails the Pages it would have answered, through their
         # futures, never as a traceback on stderr, which carries JSON lines.
         except BaseException as error:
+            broken = RuntimeError("The parse pool's waiter thread failed.")
+            broken.__cause__ = error
             with suppress(RuntimeError):
-                loop.call_soon_threadsafe(self._fail_all, error)
+                loop.call_soon_threadsafe(self._break, broken)
 
     def _relay_outcomes(self, loop: asyncio.AbstractEventLoop) -> None:
         # By identity: on Windows a pipe end is a PipeConnection, which is no Connection.
@@ -317,6 +345,16 @@ class PoolExecutor:
                     # The worker ended: at close, or a crash, whose Page design D3 records.
                     del pending[id(ready)]
                     loop.call_soon_threadsafe(self._ended, worker)
+                    continue
+                if message == _READY:
+                    loop.call_soon_threadsafe(self._ready.add, worker)
+                    continue
+                if message.startswith(_START_FAILED):
+                    reason = message.removeprefix(_START_FAILED).decode(errors="replace")
+                    failure = WorkerStartError(
+                        f"The parse worker {worker.process.name} could not start: {reason}"
+                    )
+                    loop.call_soon_threadsafe(self._break, failure)
                     continue
                 try:
                     # From our own worker over a pipe of its own, as multiprocessing's recv()
@@ -345,6 +383,11 @@ class PoolExecutor:
         self._live.discard(worker)
         with suppress(ValueError):
             self._idle.remove(worker)
+        if worker not in self._ready:
+            # It would end the same way again: never replaced (design D1).
+            name = worker.process.name
+            self._break(WorkerStartError(f"The parse worker {name} ended before it was ready."))
+            return
         held = self._busy.pop(worker, None)
         if held is not None:
             url, future = held
@@ -359,9 +402,11 @@ class PoolExecutor:
                 future.set_exception(WorkerEndedError(f"No parse worker is left to prepare {url}."))
         self._waiting.clear()
 
-    def _fail_all(self, error: BaseException) -> None:
-        self._broken = RuntimeError("The parse pool's waiter thread failed.")
-        self._broken.__cause__ = error
+    def _break(self, error: BaseException) -> None:
+        """Fails every Page, and every later one: the pool cannot prepare Pages any more."""
+        # The first cause counts: a worker that reported its start failure then ends too.
+        if self._broken is None:
+            self._broken = error
         futures = [future for _, future in self._busy.values()]
         futures += [future for _, future in self._waiting]
         self._busy.clear()

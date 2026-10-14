@@ -27,6 +27,7 @@ from spider.crawl.pages import Extractor, PageInput, PageSettings, PreparedPage,
 from spider.crawl.parse_pool import (
     PoolExecutor,
     WorkerEndedError,
+    WorkerStartError,
     _pickled,
     _work,
     cpu_quota,
@@ -232,12 +233,13 @@ def test_a_worker_whose_crawl_process_has_ended_ends_quietly() -> None:
     spawn = multiprocessing.get_context("spawn")
     task_reader, task_writer = spawn.Pipe(duplex=False)
     result_reader, result_writer = spawn.Pipe(duplex=False)
-    worker = spawn.Process(
-        target=_work, args=(PageSettings(scope_rules(at("/"))), task_reader, result_writer)
-    )
+    worker = spawn.Process(target=_work, args=(task_reader, result_writer))
     worker.start()
     task_reader.close()
     result_writer.close()
+    task_writer.send(PageSettings(scope_rules(at("/"))))
+    # Its ready answer: the outcome's send is the one that must fail.
+    result_reader.recv_bytes()
     # As a second Ctrl+C ends the crawl process while its worker prepares a Page.
     result_reader.close()
     task_writer.send((at("/"), RESPONSE))
@@ -265,6 +267,19 @@ async def test_a_worker_that_ends_fails_only_the_page_it_held() -> None:
         True,
         True,
     )
+
+
+@pytest.mark.slow
+async def test_a_worker_that_cannot_start_fails_the_crawl() -> None:
+    # Imported here: the workers of the other tests import this module.
+    from tests.crawl.unimportable_in_workers import UNIMPORTABLE_IN_WORKERS
+
+    async with started(1, UNIMPORTABLE_IN_WORKERS) as pool:
+        outcome = await asyncio.wait_for(
+            asyncio.gather(pool.prepare(at("/"), RESPONSE), return_exceptions=True), 30
+        )
+
+    assert [type(error) for error in outcome] == [WorkerStartError]
 
 
 @pytest.mark.slow
