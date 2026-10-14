@@ -66,7 +66,7 @@ _None._ No specs exist yet. This change builds on requirements of `010`, `015`, 
   - `010-add-workspace-and-cli-contract` for `spider.toml` validation (`settings_invalid`), the output contract, error codes and exit codes
   - `015-add-crawl-store` for `docs/schema.md`, the `crawl` row, `NewCrawl` and the writer
   - `017-speed-up-crawl-writer` for the contract of a unit that may run again, and `replay_now(writer)`
-  - `018-add-schema-conventions` for the schema conventions (ADR-0005), the declaration helper and the contract test
+  - `018-add-schema-conventions` for the schema conventions (ADR-0005), `public_table()` and the contract test
   - `020-add-crawl-core` for the `urls` table (`is_internal`, `status_code`, `fetch_state`, `fetch_error`, `blocked_by_robots_txt`, `parsed`), the post-crawl passes hook, `default_hooks()`, the injectable clock and resuming through the Crawl Service
   - `022-add-fetch-policy` for `redirect_url_id`, `in_redirect_loop`, `size_bytes` and the Resource checks
   - `030-add-page-data` for `pages`, `links`, the stored Indexability and the link counts
