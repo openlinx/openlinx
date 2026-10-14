@@ -2,6 +2,79 @@
 
 How `spider crawl` decides what a URL is, which URLs it requests and how it records them. The spec is [openspec/changes/020-add-crawl-core/specs/crawling/spec.md](../openspec/changes/020-add-crawl-core/specs/crawling/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
+## The `spider crawl` Command
+
+`spider crawl <url>` crawls a site in Spider mode from one Seed, in the foreground, and records every URL in a new crawl file of the Workspace (`.spider/crawls/<crawl id>.sqlite`). The Seed is an http or https URL, or a host such as `site.test`, which gets `https://` (see [Seeds](#seeds)); it is written to `seeds` as given.
+
+```
+spider crawl site.test
+spider crawl https://site.test/shop/ --concurrency 2
+```
+
+The Crawl requests the Seed, reads the Links of each response it parses, and follows the hyperlinks in its Scope, Crawl Depth by Crawl Depth: every URL at one depth is requested before any URL one deeper, in the order the URLs were first recorded (`urls.id`). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its status is 2xx.
+
+### Options and `[crawl]` settings
+
+Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` table of `spider.toml`, named after the option's long name without its dashes and with `-` as `_`. A flag beats `spider.toml`, which beats the built-in default. `crawl.config` records the resolved value of every setting of every table, secrets as `***`.
+
+| Option | `[crawl]` key | Default | Meaning |
+|---|---|---|---|
+| `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host. |
+
+`--workspace` and `--format` are the global flags of every Command.
+
+### Events
+
+While it runs, the Command writes events to stderr, one JSON object per line, as `{event, ts, data}` (see [the CLI contract](cli.md#progress-events)):
+
+| `event` | When | `data` |
+|---|---|---|
+| `crawl_started` | once the crawl file exists, before any other event | `crawl_id`, `crawl_mode`, `seed_count`, `crawl_file` |
+
+Warnings are written to stderr as diagnostics when they occur, and kept in the result.
+
+### The result
+
+When the Crawl ends, the Command prints one JSON object on stdout. Its counts come from the crawl file, so they are what an agent's own query over `urls` would count.
+
+| Field | Meaning |
+|---|---|
+| `crawl_id` | The crawl id, also the crawl file's name. |
+| `state` | The Crawl State: `completed` when nothing is left `queued`. |
+| `stop_reason` | Why the Crawl ended early, or `null`. |
+| `crawl_mode` | `spider`. |
+| `seed` | The first Seed, as given. |
+| `seed_count` | The number of Seeds. |
+| `section_crawl` | Whether the Scope is one part of a site. |
+| `started_at`, `ended_at` | UTC timestamps, `YYYY-MM-DDTHH:MM:SS.sssZ`. |
+| `duration_s` | Seconds from `started_at` to `ended_at`. |
+| `urls` | The counts of `urls` rows: `discovered` (all of them), and by `fetch_state`: `fetched`, `errors`, `skipped`, `queued`. |
+| `pages` | URLs whose response was parsed (`parsed` = 1). |
+| `status_classes` | URLs by the class of their status code: `2xx`, `3xx`, `4xx`, `5xx`, `other`. |
+| `crawl_file` | The path of the crawl file. |
+| `warnings` | Every warning of the Crawl, in the full diagnostic shape: `level`, `code`, `message`, `hint`, `details`. |
+
+```json
+{"crawl_id": "20261014-101500-k3f9", "state": "completed", "stop_reason": null, "crawl_mode": "spider",
+ "seed": "site.test", "seed_count": 1, "section_crawl": false,
+ "started_at": "2026-10-14T10:15:00.123Z", "ended_at": "2026-10-14T10:15:04.456Z", "duration_s": 4.333,
+ "urls": {"discovered": 4, "fetched": 4, "errors": 0, "skipped": 0, "queued": 0}, "pages": 3,
+ "status_classes": {"2xx": 3, "3xx": 0, "4xx": 1, "5xx": 0, "other": 0},
+ "crawl_file": ".spider/crawls/20261014-101500-k3f9.sqlite", "warnings": []}
+```
+
+### Exit codes
+
+| Exit code | When | Error code |
+|---|---|---|
+| 0 | the Crawl is `completed` | |
+| 2 | the Seed is not a valid http or https URL, or an option value is not allowed; no crawl file is created | `invalid_url` (with `details.reason`: `malformed`, `unsupported_scheme`, `userinfo`, `missing_host` or `invalid_host`), `invalid_value` |
+| 3 | `spider.toml` is invalid | `settings_invalid` |
+| 5 | another connection held the crawl file for longer than the writer waits | `crawl_busy` |
+| 7 | the Workspace or the crawl file cannot be written | `workspace_not_writable`, `crawl_not_writable` |
+
+A Seed with a user name or password is refused, and the error never repeats it: give the URL without them. Credentials for a site will be an option of their own (`--auth`, planned for v0.2).
+
 ## URLs
 
 Every URL is identified by its normalised form. The Crawl requests that form and records it in `urls.url`, so two spellings of one URL are one row.
