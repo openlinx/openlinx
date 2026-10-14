@@ -29,6 +29,8 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | `--exclude <regex>` | `exclude` | `[]` | A URL that the pattern matches is never requested; give the option once per pattern (see [Include and exclude patterns](#include-and-exclude-patterns)). |
 | `--max-depth <n>` | `max_depth` | none | The deepest Crawl Depth whose URLs are requested, 0 or more; Resources of followed Pages are requested one deeper (see [Crawl Depth](#crawl-depth)). |
 | `--max-urls <n>` | `max_urls` | none | The most URL requests the Crawl starts, 1 or more (see [The URL limit](#the-url-limit)). |
+| `--ignore-robots` | `ignore_robots` | `false` | Request URLs that robots.txt disallows; they are still recorded with `blocked_by_robots_txt` = 1 (see [`--ignore-robots`](#--ignore-robots)). |
+| `--robots-user-agent <token>` | `robots_user_agent` | `spider` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
 `--workspace` and `--format` are the global flags of every Command.
 
@@ -248,7 +250,7 @@ With `--no-check-external`, no External URL is requested. Each one is still reco
 
 ### Origins
 
-Every URL belongs to an origin: its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host.
+Every URL belongs to an origin: its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host. The row also records the origin's robots.txt (see [robots.txt](#robotstxt)).
 
 ### `--scope`
 
@@ -302,6 +304,38 @@ spider crawl site.test/blog/ --scope subfolder --exclude "/draft"
 ```
 
 An agent reads it to know what a Crawl covered without parsing its command line.
+
+## robots.txt
+
+Before its first request to an origin, the Crawl requests the origin's `/robots.txt`, once per origin in a run, and obeys it for the robots user-agent token (see [The robots user-agent token](#the-robots-user-agent-token)). Every origin is asked: Internal ones, External ones and those of Resources. A URL recorded without a request, such as an excluded URL or an External URL under `--no-check-external`, never makes its origin's robots.txt be requested.
+
+- A robots.txt request goes through the same per-host limits as a URL's, but it is not recorded as a URL and does not count toward `--max-urls`.
+- A redirected robots.txt is followed for up to 5 hops; a longer chain counts as missing.
+- Only its first 512,000 bytes are parsed, decoded as UTF-8 with replacement; a leading byte order mark is dropped.
+- `Crawl-delay` is recorded, not applied.
+
+### What the response means
+
+| robots.txt response | `origins.robots_state` | The origin's URLs |
+|---|---|---|
+| 2xx | `ok` | Requested, unless its rules disallow them for the token: a disallowed URL is `skipped` with `skip_reason` = `blocked_by_robots_txt`. |
+| 4xx other than 429, or more than 5 redirects | `missing` | All requested. |
+| 5xx or 429 | `unreachable` | None requested: each is `skipped` with `skip_reason` = `robots_unreachable`. An Internal origin gives a `robots_unreachable` warning, once per host, whose hint names `--ignore-robots`. |
+| No HTTP response | `unreachable` | None requested: each is `error`, with the `fetch_error` of the robots.txt request, such as `dns_error`, and a `fetch_error_message` that names that request. |
+
+`urls.blocked_by_robots_txt` is 1 for a URL the rules disallow, 0 for one they allow, and NULL for a URL that was not checked: one skipped before robots.txt mattered, or one of an origin whose rules are unknown.
+
+The origin's row keeps what robots.txt gave: `robots_state`, `robots_status_code` (of the final response), `robots_fetch_error` and `robots_fetch_error_message` (when there was no response), `robots_fetched_at`, `robots_txt` (the text as parsed), `robots_crawl_delay_ms` and `robots_sitemaps` (a JSON array of its `Sitemap:` URLs). They stay NULL while no URL of the origin was requested.
+
+A Seed that robots.txt disallows is reported as a `seed_blocked_by_robots_txt` warning whose hint names `--ignore-robots`.
+
+### `--ignore-robots`
+
+With `--ignore-robots`, the Crawl requests the URLs that robots.txt disallows and still records `blocked_by_robots_txt` = 1 for them, since robots.txt is still read. It also requests the URLs of an origin whose robots.txt answered 5xx or 429, with `blocked_by_robots_txt` NULL. An origin whose robots.txt got no HTTP response still gives each of its URLs that error.
+
+### The robots user-agent token
+
+`--robots-user-agent <token>` (default `spider`) selects the robots.txt group that applies, and the `X-Robots-Tag` values with a crawler prefix (see [Robots directives](#robots-directives)). It is independent of the `User-Agent` request header.
 
 ## Links
 
