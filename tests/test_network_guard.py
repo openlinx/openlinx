@@ -9,6 +9,9 @@ import pytest
 
 from tests.support.network import NetworkAccessBlocked
 
+# These tests are blocked on purpose; any other test that is blocked fails (see the last test).
+pytestmark = pytest.mark.blocks_remote
+
 
 def test_a_socket_cannot_connect_to_a_remote_address() -> None:
     with socket.socket() as sock, pytest.raises(NetworkAccessBlocked):
@@ -58,3 +61,25 @@ def test_gethostbyname_does_not_look_up_a_remote_name() -> None:
 def test_gethostbyname_ex_does_not_look_up_a_remote_name() -> None:
     with pytest.raises(NetworkAccessBlocked):
         socket.gethostbyname_ex("example.com")
+
+
+SWALLOWED = """
+import socket
+
+
+def test_swallows_the_block():
+    try:
+        socket.getaddrinfo("example.com", 80)
+    except OSError:
+        pass
+"""
+
+
+def test_a_test_that_swallows_a_blocked_attempt_still_fails(pytester: pytest.Pytester) -> None:
+    pytester.makepyfile(SWALLOWED)
+
+    result = pytester.runpytest(
+        "-p", "tests.support.isolation", "-o", "asyncio_default_fixture_loop_scope=function"
+    )
+
+    result.assert_outcomes(passed=1, errors=1)

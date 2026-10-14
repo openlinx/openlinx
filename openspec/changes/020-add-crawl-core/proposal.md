@@ -49,7 +49,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 - **Robustness (ROADMAP's rule for every change from 020 on):**
   - one URL never stops the Crawl: request, decoding, extractor, handler and recording failures become the URL's outcome, with counted `parse_failed`, `handler_failed` and `record_failed` warnings
   - parsing never trusts its input: the Seed parser, the normaliser, decoding, the link extractor, the directives parser and the robots.txt reader are tested with hypothesis over arbitrary input
-  - backstops: losing the site (`site_unreachable`, exit 8, resumable), a per-request watchdog that always outlasts the Fetcher's own deadline, recording that fails for 100 URLs in a row (`write_failed`, exit 7), and a stop that waits 10 seconds and then cancels
+  - backstops: a network pause with probes of the Seed when the site stops answering, which tells an outage from a dead section and fails with `site_unreachable` (exit 8, resumable) only after `--network-wait` (default 30 minutes), a per-request watchdog that always outlasts the Fetcher's own deadline, recording that fails for 100 URLs in a row (`write_failed`, exit 7), and a stop that waits 10 seconds and then cancels
   - hostile fixtures on the fixture site: connection resets, deeply nested HTML, bytes invalid in their charset, 429 and 503 robots.txt
 - **Hooks for later changes:**
   - a **per-response hook**, called once for every URL that reaches a final state. Handlers return rows, and the store writes them in the URL's writer unit.
@@ -60,13 +60,13 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - Warnings as diagnostics.
   - One JSON result on stdout with `seed_count` and `status_classes`, its counts derived from the tables.
 - **Ends of a Crawl:**
-  - an unreachable Seed marks the Crawl `failed` with `stop_reason: seed_unreachable` (resumable): result, one `seed_unreachable` error, exit 8
-  - a lost site → `failed` with `site_unreachable`: result, one `site_unreachable` error, exit 8
+  - a Seed that never answers within `--network-wait` marks the Crawl `failed` with `stop_reason: seed_unreachable` (resumable): result, one `seed_unreachable` error, exit 8
+  - a site that stays unreachable through the network pause → `failed` with `site_unreachable`: result, one `site_unreachable` error, exit 8
   - Ctrl+C (Ctrl+Break on Windows) → `stopped` with `stop_reason: interrupt`: result, one `interrupted` error, exit 130
   - a write failure → `failed` with `write_failed` when it can still be recorded: `crawl_write_failed`, exit 7, or `015`'s `crawl_busy`, exit 5
 - **Settings:** this change registers the `[crawl]` table of `spider.toml`, under `010`'s naming rule. Later changes add their keys to its model. The recorded config holds every registered setting.
 - **Store:**
-  - The `urls` and `origins` tables, and the `crawl` columns `scope`, `stop_reason` and `warnings`, under ADR-0005 through `018`'s declaration helper:
+  - The `urls` and `origins` tables, and the `crawl` columns `scope`, `stop_reason` and `warnings`, under ADR-0005 through `018`'s `public_table()`:
     - `STRICT`, with CHECKs that list every value that later changes write
     - `urls.origin_id`, referencing `origins`
     - the indexes `urls_url`, `urls_crawl_depth_id` (the partial frontier index) and `origins_origin`
@@ -129,5 +129,5 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - `src/spider/extract/links.py` and the extractor registry.
   - `src/spider/store/`: `urls`, `origins`, the new `crawl` columns, the units that write them, and the transition check.
   - the Crawl Service in `src/spider/services/`, built on `015`'s `create_crawl`, and its adapter `src/spider/cli/crawl.py`.
-- **New dependencies:** `aiohttp`, `protego`, `selectolax` (1.0 or later, through its lexbor backend), `msgspec` and `publicsuffixlist` (a bundled list, never downloaded at runtime), each added to `tests/dependency_allowlist.txt` and kept off the startup path.
+- **New dependencies:** `aiohttp`, `protego`, `selectolax` (1.0 or later, through its lexbor backend), `msgspec`, `publicsuffixlist` (a bundled list, never downloaded at runtime) and `idna` (UTS46 host names, as aiohttp encodes them), each added to `tests/dependency_allowlist.txt` and kept off the startup path.
 - **Docs:** `docs/crawling.md`, the crawl tables in `docs/schema.md`, and the hook and extractor seams in `docs/architecture.md`.

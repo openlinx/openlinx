@@ -1,5 +1,7 @@
 """The request log (design D9 of 000-scaffold-project)."""
 
+import asyncio
+
 import aiohttp
 
 from tests.fixture_site.plugin import StartSite
@@ -22,3 +24,22 @@ async def test_the_request_log_lists_requests_in_the_order_they_came(
         [("GET", "/"), ("HEAD", "/about")],
         "probe/1.0",
     )
+
+
+async def test_the_request_log_counts_the_most_simultaneous_requests(
+    fixture_site: StartSite,
+) -> None:
+    server = fixture_site(
+        Site(routes={"/slow": Page(body="slow", delay=0.3), "/fast": Page(body="fast")})
+    )
+
+    async with aiohttp.ClientSession() as session:
+
+        async def get(path: str) -> None:
+            async with session.get(server.url(path)) as response:
+                await response.read()
+
+        await asyncio.gather(get("/slow"), get("/slow"), get("/slow"))
+        await get("/fast")
+
+    assert server.most_simultaneous == 3
