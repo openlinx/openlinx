@@ -32,11 +32,23 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 - [x] 2.3 [Subprocess, Windows in CI] Drive "Pages are parsed in worker processes on Windows (Windows)".
 - [x] 2.4 Docs: document the parse pool (start method, worker count, the snapshot sent once when a worker starts, the unchanged extractor interface) in `docs/architecture.md`.
 - [x] 2.5 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
+- [ ] 2.6 Review fixes of group 2's review (2026-10-14), each test-first with its cause:
+  - a worker whose crawl process has ended returns quietly when it cannot send its outcome, and its outcome's fallback pickling never raises
+  - `test_spider_crawl_starts_its_parse_workers` goes: its `>= 1` children also holds for the in-process executor on POSIX, it duplicates `test_a_crawl_marked_parse_pool_prepares_its_pages_in_the_pool`, and it starts `default_workers()` processes
+  - the default worker count is pinned against faked machine facts, no longer against a copy of its own code
+  - `PoolExecutor.close()` without `start()` returns cleanly (`020` D9: close is idempotent, tolerates a never-started executor, never raises)
+  - `docs/architecture.md` no longer says that `default_page_executor()` selects the in-process executor
+  - on Windows before Python 3.13 the worker count is capped at 31, as `multiprocessing.connection.wait` waits on at most 63 handles there (a result pipe and a sentinel per worker, and the wake pipe), named in design D1
+  - a cgroup v2 CPU quota (`cpu.max`) caps the cores the worker count starts from, in design D1 and `docs/architecture.md`
+  - design Risks lists group 2's tests that no scenario names, and the loop thread's pickling of each work item
+  - the proposal's `crawl_started` lines say that `020` reports `parse_workers` and this change sets it to the pool's size
 
 ## 3. Bounded queue and crash containment
 
 - [ ] 3.1 [3+6] Drive "Fetching waits for slow parsing": the task slots of `020`'s global request cap + the executor's backlog, 2 × `parse_workers` (design D2); on the single-host fixture site, `--concurrency` bounds the requests first.
 - [ ] 3.2 [3+6] Drive "A crashed worker is recorded": a dead worker's one Page is `worker_crashed`, and the worker is replaced (design D3).
+
+  Done when: a per-Page failure of the pool never raises out of `prepare()`, which returns a failure `PreparedPage` (no tree, its defaults) with `parse_error` = `worker_crashed` (a worker that ended, an outcome the crawl process cannot read) or `parse_timeout`, and raises only for a programmer's error, such as a Page before `start()` (ruled 2026-10-14; `020`'s task 7.23 derives the header Links in process and records `parsed` = 0 for these values, and is merged before this task); the waiter thread watches each worker's process sentinel besides its result pipe (design D1, needed for D8's deadlines); and a worker answers "ready" once it has started, so a worker that ends before it is ready, such as a spawn child that cannot import an extractor's module, is a Crawl error and never replaced, while one that ends after it is replaced.
 - [ ] 3.3 [3+6] Drive "The Crawl continues after a worker crash".
 - [ ] 3.4 [3+6] Drive "A Page that takes too long to prepare is recorded": `PREPARE_DEADLINE_SECONDS`, from the moment a worker takes the Page; the worker over it is killed and replaced, and the URL gets `parse_timeout` (design D8).
 - [ ] 3.5 [3+6] Drive "The Crawl continues after a preparation timeout".
