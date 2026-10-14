@@ -107,6 +107,9 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `id` | INTEGER | no | PK | | | Row id, stable for the life of the crawl file; it grows in the order URLs are first recorded, and is the dispatch order within a Crawl Depth. |
 | `url` | TEXT | no | | | | The normalised URL, unique. |
 | `host` | TEXT | no | | | | The URL's host in lower-case ASCII (IDNA) form; the key of the per-host politeness limits. |
+| `origin_id` | INTEGER | no | → `origins.id` | | | The URL's origin: its scheme, host and port. |
+| `is_internal` | INTEGER | no | | `boolean` | | 1 for an Internal URL, 0 for an External URL. |
+| `in_scope` | INTEGER | no | | `boolean` | | 1 when the URL is inside the Scope, so it may be followed. |
 | `crawl_depth` | INTEGER | no | | | | Crawl Depth; 0 for Seeds. |
 | `discovered_via` | TEXT | no | | | `seed`, `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`, `redirect`, `list`, `sitemap_input`, `sitemap_index` | How the URL was first found: seed, or the Link type. |
 | `found_on_url_id` | INTEGER | yes | → `urls.id` | | | The URL whose response first revealed this one; NULL for Seeds. |
@@ -128,3 +131,20 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 |---|---|---|---|---|
 | `urls_crawl_depth_id` | `crawl_depth`, `id` | no | `fetch_state = 'queued'` | The frontier: the next queued URLs of the open Crawl Depth, in id order. |
 | `urls_url` | `url` | yes | | Recording a discovered URL once (ON CONFLICT (url)), and finding one URL's row. |
+
+## Table `origins`
+
+One row for each origin of a URL that the Crawl recorded.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `id` | INTEGER | no | PK | | | Row id. |
+| `origin` | TEXT | no | | | | Scheme, host and port, for example https://site.test, with a default port left out; unique. |
+| `host` | TEXT | no | | | | The origin's host in lower-case ASCII (IDNA) form. |
+| `is_internal` | INTEGER | no | | `boolean` | | 1 when the origin's URLs are Internal URLs. |
+
+### Indexes
+
+| Name | Columns | Unique | Where | Description |
+|---|---|---|---|---|
+| `origins_origin` | `origin` | yes | | Recording an origin once (ON CONFLICT (origin)), and finding an origin's row. |

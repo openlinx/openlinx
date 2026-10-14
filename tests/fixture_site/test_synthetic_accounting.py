@@ -3,9 +3,9 @@
 from pathlib import Path
 
 from spider.cli.app import build_app
-from spider.crawl.hooks import default_hooks
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
+from spider.services.hooks import default_hooks
 from spider.store.records import SecretNames
 from tests.fixture_site.synthetic.accounting import CLEAN, UrlRow, account
 from tests.fixture_site.synthetic.serve import SiteProcess, Tally

@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from aiohttp.abc import AbstractResolver
+
 from spider.aio import loop_factory
 from spider.clock import Clock
 from spider.crawl.context import CrawlContext
@@ -150,7 +152,15 @@ def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
     return tuple(patterns)
 
 
-def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter, hooks: Hooks) -> CrawlResult:
+def start_crawl(
+    plan: CrawlPlan,
+    clock: Clock,
+    reporter: Reporter,
+    hooks: Hooks,
+    *,
+    resolver: AbstractResolver | None = None,
+) -> CrawlResult:
+    """`resolver` is the DNS resolver hook of multi-host tests (design D15)."""
     log = WarningLog(reporter)
     crawl_file = create_crawl(plan.new_crawl, clock, log)
     log.event(
@@ -161,7 +171,9 @@ def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter, hooks: Hooks)
         crawl_file=str(crawl_file.path),
     )
     with asyncio.Runner(loop_factory=loop_factory) as runner:
-        ended_at, summary, counts = runner.run(_crawl(plan, crawl_file, clock, log, hooks))
+        ended_at, summary, counts = runner.run(
+            _crawl(plan, crawl_file, clock, log, hooks, resolver)
+        )
     return CrawlResult(
         crawl_id=crawl_file.id,
         summary=summary,
@@ -173,9 +185,14 @@ def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter, hooks: Hooks)
 
 
 async def _crawl(
-    plan: CrawlPlan, crawl_file: CrawlFile, clock: Clock, reporter: WarningLog, hooks: Hooks
+    plan: CrawlPlan,
+    crawl_file: CrawlFile,
+    clock: Clock,
+    reporter: WarningLog,
+    hooks: Hooks,
+    resolver: AbstractResolver | None,
 ) -> tuple[datetime, CrawlSummary, UrlCounts]:
-    async with _crawl_context(crawl_file, plan, clock, reporter, hooks) as context:
+    async with _crawl_context(crawl_file, plan, clock, reporter, hooks, resolver) as context:
         await run_crawl(context, plan.seed)
         if context.stop.is_set:
             # Never completed: 12.9 records a write failure's failed end, 9.7 and 13.1 a stop.
@@ -193,13 +210,18 @@ async def _crawl(
 
 @asynccontextmanager
 async def _crawl_context(
-    crawl_file: CrawlFile, plan: CrawlPlan, clock: Clock, reporter: WarningLog, hooks: Hooks
+    crawl_file: CrawlFile,
+    plan: CrawlPlan,
+    clock: Clock,
+    reporter: WarningLog,
+    hooks: Hooks,
+    resolver: AbstractResolver | None,
 ) -> AsyncIterator[CrawlContext]:
     """The one place a Crawl's context is built, and its resources closed (design D15)."""
     # Opening and closing the writer block, so they run off the event loop.
     writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
     try:
-        async with aiohttp_fetcher(clock) as fetcher:
+        async with aiohttp_fetcher(clock, resolver) as fetcher:
             yield CrawlContext(
                 crawl_file=crawl_file,
                 settings=plan.settings,

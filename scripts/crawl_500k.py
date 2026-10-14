@@ -36,7 +36,7 @@ from spider.crawl import pages
 from spider.crawl.context import CrawlContext
 from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import FetchResult, Request
-from spider.crawl.hooks import Hooks, default_hooks
+from spider.crawl.hooks import Hooks
 from spider.crawl.pages import PageSettings, PreparedPage
 from spider.crawl.scope import ScopeRules
 from spider.crawl.stop import StopSignal
@@ -45,6 +45,7 @@ from spider.crawl.warning_log import WarningLog
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlPlan, CrawlRequest, plan_crawl, start_crawl
 from spider.services.crawls import create_crawl
+from spider.services.hooks import default_hooks
 from spider.store.crawls import record_state
 from spider.store.reading import reading
 from spider.store.records import SecretNames

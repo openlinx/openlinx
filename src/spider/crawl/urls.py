@@ -193,5 +193,10 @@ def url_host(url: NormalizedUrl) -> str:
     return authority.partition(":")[0]
 
 
+def url_origin(url: NormalizedUrl) -> str:
+    """The scheme, host and port: a normalised URL has left out a default port already."""
+    return "/".join(url.split("/", 3)[:3])
+
+
 def url_path(url: NormalizedUrl) -> str:
     return "/" + url.split("/", 3)[3].partition("?")[0]

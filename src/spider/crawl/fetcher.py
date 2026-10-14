@@ -8,6 +8,7 @@ from typing import Protocol
 
 import aiohttp
 import yarl
+from aiohttp.abc import AbstractResolver
 
 from spider.clock import Clock
 from spider.crawl.urls import NormalizedUrl
@@ -101,8 +102,11 @@ def _fetch_error(error: Exception) -> FetchError:
 
 
 @asynccontextmanager
-async def aiohttp_fetcher(clock: Clock) -> AsyncIterator[AiohttpFetcher]:
+async def aiohttp_fetcher(
+    clock: Clock, resolver: AbstractResolver | None = None
+) -> AsyncIterator[AiohttpFetcher]:
     async with aiohttp.ClientSession(
+        connector=aiohttp.TCPConnector(resolver=resolver),
         timeout=aiohttp.ClientTimeout(total=_REQUEST_DEADLINE_SECONDS),
         # No cookie session: a cookie set by one response would change what later ones return.
         cookie_jar=aiohttp.DummyCookieJar(),
