@@ -3,6 +3,7 @@
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawled
+from tests.support.crawls import crawl_row
 from tests.support.workspace import TempWorkspace
 
 
@@ -26,3 +27,17 @@ def test_each_url_is_requested_once(temp_workspace: TempWorkspace, fixture_site:
     paths = [request.path for request in server.requests]
     expected = ["/", *(f"/p{n}" for n in range(1, 11))]
     assert {path: paths.count(path) for path in expected} == dict.fromkeys(expected, 1)
+
+
+def test_a_link_cycle_ends(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/a">A</a>'),
+                "/a": Page(body='<a href="/b">B</a>'),
+                "/b": Page(body='<a href="/a">A</a><a href="/">Home</a>'),
+            }
+        )
+    )
+
+    assert crawl_row(crawled(server.url("/")))["state"] == "completed"

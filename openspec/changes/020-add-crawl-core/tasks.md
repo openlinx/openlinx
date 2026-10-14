@@ -249,7 +249,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 9.11 **Guard:** "There is no limit by default" (seam 1) and "No limit is recorded as null" (seam 3+6), a pair.
 - [x] 9.12 Drive "A limit below one is rejected" at seam 1.
 - [x] 9.13 **Guard:** "Each URL is requested once", at seam 3.
-- [ ] 9.14 **Guard:** "A link cycle ends", at seam 3+6.
+- [x] 9.14 **Guard:** "A link cycle ends", at seam 3+6.
 - [ ] 9.15 **Guard:** "Followed URLs start in discovery order", at seam 3.
 - [ ] 9.16 Drive "Post-crawl passes run when the URL limit stops a Crawl" at seam 2.
 - [ ] 9.17 Docs: document Resources, Crawl Depth, `--max-depth`, `--max-urls` (no default, what counts) and the dispatch order in `docs/crawling.md`.
