@@ -14,11 +14,15 @@ from spider.rules.registry import RULES
 from spider.rules.titles import TITLE_MISSING
 from spider.store.crawls import record_state
 from spider.store.issues import (
+    affected_urls_in,
+    issues_in,
     materialise_issues,
     read_affected_urls,
     read_issues,
     read_url_issues,
+    stored_affected_urls,
 )
+from spider.store.reading import reading
 from spider.store.records import AffectedUrl, UrlIssue
 from spider.store.schema import pages
 from spider.store.writer import CrawlWriter
@@ -134,3 +138,61 @@ def test_the_issues_of_one_url_are_read_as_stored(temp_workspace: TempWorkspace)
     assert read_url_issues(crawl_file, url_id, RULES) == [
         UrlIssue(rule_id="title-missing", url_id=url_id, detail=None)
     ]
+
+
+def test_an_issue_and_its_affected_urls_are_read_from_one_snapshot(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    with CrawlWriter(crawl_file, FakeClock()) as writer, reading(crawl_file) as connection:
+        issues = [
+            (row.rule_id, row.affected_count)
+            for row in connection.execute(issues_in(connection, RULES))
+        ]
+        # Committed between the two reads, while the read is open.
+        writer.run(executing(TITLED))
+        writer.flush()
+        affected = [
+            row.url_id
+            for row in connection.execute(affected_urls_in(connection, "title-missing", RULES))
+        ]
+
+    assert (issues, affected) == ([("title-missing", 1)], [url_id])
+
+
+def later_rule_crawl(temp_workspace: TempWorkspace) -> Path:
+    """A running Crawl whose rules table records a-later-rule, which RULES lacks."""
+    (missing,) = [row for row in default_rule_rows() if row.id == TITLE_MISSING.id]
+    crawl_file, _ = crawl_with_page(
+        temp_workspace, more_rules=(replace(missing, id="a-later-rule"),), title_count=0
+    )
+    return crawl_file
+
+
+def test_an_unknown_rule_id_gets_the_closest_ids_the_crawl_records(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl_file = later_rule_crawl(temp_workspace)
+    with pytest.raises(SpiderError) as live:
+        read_affected_urls(crawl_file, "a-later-rul", RULES)
+    with pytest.raises(SpiderError) as stored:
+        stored_affected_urls(crawl_file, "a-later-rul")
+
+    assert (
+        live.value.diagnostic.details["suggestions"],
+        stored.value.diagnostic.details["suggestions"],
+    ) == (["a-later-rule"], ["a-later-rule"])
+
+
+def test_a_rule_this_tool_lacks_is_not_read_live(temp_workspace: TempWorkspace) -> None:
+    crawl_file = later_rule_crawl(temp_workspace)
+
+    with pytest.raises(SpiderError) as raised:
+        read_affected_urls(crawl_file, "a-later-rule", RULES)
+
+    assert (raised.value.code, raised.value.diagnostic.message, raised.value.diagnostic.hint) == (
+        "rule_not_found",
+        "This version of spider cannot compute the Rule a-later-rule live: another version "
+        "made this Crawl.",
+        "Run the Rule's reproduce_sql, in the Crawl's rules table, with spider sql.",
+    )

@@ -1,5 +1,6 @@
 """The Rule model (040-add-rules D1, D12)."""
 
+import difflib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
@@ -40,14 +41,25 @@ class Rule:
 def find_rule(catalogue: Sequence[Rule], rule_id: str) -> Rule:
     found = next((rule for rule in catalogue if rule.id == rule_id), None)
     if found is None:
-        raise rule_not_found(rule_id)
+        raise rule_not_found(rule_id, [rule.id for rule in catalogue])
     return found
 
 
-def rule_not_found(rule_id: str) -> SpiderError:
+def rule_not_found(rule_id: str, known: Sequence[str]) -> SpiderError:
     return SpiderError(
         RULE_NOT_FOUND,
         f"No Rule has the id {rule_id}.",
         hint=f"{APP_NAME} rules list lists every Rule id.",
+        details={"id": rule_id, "suggestions": difflib.get_close_matches(rule_id, known)},
+    )
+
+
+def rule_not_computable(rule_id: str) -> SpiderError:
+    # The tool never runs a file's own SQL (D15): only the user may choose to.
+    return SpiderError(
+        RULE_NOT_FOUND,
+        f"This version of {APP_NAME} cannot compute the Rule {rule_id} live: another version "
+        "made this Crawl.",
+        hint=f"Run the Rule's reproduce_sql, in the Crawl's rules table, with {APP_NAME} sql.",
         details={"id": rule_id},
     )

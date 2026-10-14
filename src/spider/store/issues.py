@@ -8,38 +8,43 @@ import orjson
 from sqlalchemy import (
     Connection,
     Integer,
+    Select,
     Subquery,
     Text,
     bindparam,
     delete,
+    false,
     func,
     insert,
     literal,
     select,
     text,
+    union_all,
 )
 
-from spider.rules.model import Rule, find_rule, rule_not_found
+from spider.rules.model import Rule, rule_not_computable, rule_not_found
 from spider.store.reading import reading
 from spider.store.records import AffectedUrl, CrawlState, Issue, UrlIssue
 from spider.store.schema import affected_urls, crawl, issues, rules
 from spider.store.writer import CrawlWriter
 
 _DELETE = delete(affected_urls).where(affected_urls.c.rule_id == bindparam("rule_id"))
-_ENABLED = select(rules.c.id, rules.c.category, rules.c.issue_type, rules.c.priority).where(
-    rules.c.enabled == 1
-)
+_ENABLED = select(rules.c.id).where(rules.c.enabled == 1)
 _STATE = select(crawl.c.state)
-_RECORDED_RULE = select(rules.c.id).where(rules.c.id == bindparam("rule_id"))
+_RECORDED_RULE = select(rules.c.enabled).where(rules.c.id == bindparam("rule_id"))
+_RECORDED_IDS = select(rules.c.id)
+_ISSUE_COLUMNS = (
+    rules.c.id.label("rule_id"),
+    rules.c.category,
+    rules.c.issue_type,
+    rules.c.priority,
+)
 _STORED_URL_ISSUES = select(affected_urls.c.rule_id, affected_urls.c.detail).where(
     affected_urls.c.url_id == bindparam("url_id")
 )
 _STORED_ISSUES = select(issues)
-_STORED_AFFECTED_URLS = (
-    select(affected_urls.c.url_id, affected_urls.c.detail)
-    .where(affected_urls.c.rule_id == bindparam("rule_id"))
-    .order_by(affected_urls.c.url_id)
-)
+_STORED_AFFECTED_URLS = select(affected_urls.c.url_id, affected_urls.c.detail)
+_NO_AFFECTED_URLS = _STORED_AFFECTED_URLS.where(false())
 
 
 def evaluate_rule(crawl_file: Path, rule: Rule) -> list[AffectedUrl]:
@@ -69,48 +74,58 @@ async def materialise_issues(writer: CrawlWriter, catalogue: Sequence[Rule]) -> 
             await writer.run_async(affected_urls_unit(rule))
 
 
+def issues_in(connection: Connection, catalogue: Sequence[Rule]) -> Select[Any]:
+    """The Issues, in the shape of the issues view, as stored for a completed or stopped
+    Crawl, otherwise computed live (D16)."""
+    if _materialised(connection):
+        return _STORED_ISSUES
+    return _live_issues(catalogue)
+
+
+def affected_urls_in(
+    connection: Connection, rule_id: str, catalogue: Sequence[Rule]
+) -> Select[Any]:
+    """One Rule's Affected URLs, in the shape of affected_urls, as stored for a completed or
+    stopped Crawl, otherwise computed live (D16)."""
+    if _materialised(connection):
+        return _stored_affected_urls(connection, rule_id)
+    return _live_affected_urls(connection, rule_id, catalogue)
+
+
 def read_issues(crawl_file: Path, catalogue: Sequence[Rule]) -> list[Issue]:
-    """The Issues as stored for a completed or stopped Crawl, otherwise computed live (D16)."""
+    """The Issues of issues_in, in catalogue order, then those of other Rules by id."""
     with reading(crawl_file) as connection:
-        if _materialised(connection):
-            return _stored_issues(connection, catalogue)
-        return _live_issues(connection, catalogue)
+        return _issues(connection, issues_in(connection, catalogue), catalogue)
 
 
 def live_issues(crawl_file: Path, catalogue: Sequence[Rule]) -> list[Issue]:
-    """The Issues that the queries of the Crawl's enabled Rules give now, in catalogue order."""
     with reading(crawl_file) as connection:
-        return _live_issues(connection, catalogue)
+        return _issues(connection, _live_issues(catalogue), catalogue)
 
 
 def stored_issues(crawl_file: Path, catalogue: Sequence[Rule]) -> list[Issue]:
-    """The Issues of the issues view, in catalogue order, then those of other Rules by id."""
     with reading(crawl_file) as connection:
-        return _stored_issues(connection, catalogue)
+        return _issues(connection, _STORED_ISSUES, catalogue)
 
 
 def read_affected_urls(
     crawl_file: Path, rule_id: str, catalogue: Sequence[Rule]
 ) -> list[AffectedUrl]:
-    """One Rule's Affected URLs by URL id, as stored for a completed or stopped Crawl,
-    otherwise computed live (D16)."""
+    """The Affected URLs of affected_urls_in, by URL id."""
     with reading(crawl_file) as connection:
-        if _materialised(connection):
-            return _stored_affected_urls(connection, rule_id)
-        return _live_affected_urls(connection, find_rule(catalogue, rule_id))
+        return _affected(connection, affected_urls_in(connection, rule_id, catalogue))
 
 
 def live_affected_urls(
     crawl_file: Path, rule_id: str, catalogue: Sequence[Rule]
 ) -> list[AffectedUrl]:
-    rule = find_rule(catalogue, rule_id)
     with reading(crawl_file) as connection:
-        return _live_affected_urls(connection, rule)
+        return _affected(connection, _live_affected_urls(connection, rule_id, catalogue))
 
 
 def stored_affected_urls(crawl_file: Path, rule_id: str) -> list[AffectedUrl]:
     with reading(crawl_file) as connection:
-        return _stored_affected_urls(connection, rule_id)
+        return _affected(connection, _stored_affected_urls(connection, rule_id))
 
 
 def read_url_issues(crawl_file: Path, url_id: int, catalogue: Sequence[Rule]) -> list[UrlIssue]:
@@ -122,45 +137,60 @@ def read_url_issues(crawl_file: Path, url_id: int, catalogue: Sequence[Rule]) ->
         return _live_url_issues(connection, url_id, catalogue)
 
 
-def _live_issues(connection: Connection, catalogue: Sequence[Rule]) -> list[Issue]:
-    recorded = {row.id: row for row in connection.execute(_ENABLED)}
-    found = []
-    for rule in catalogue:
-        row = recorded.get(rule.id)
-        if row is None:
-            continue
-        count = connection.execute(select(func.count()).select_from(_found(rule))).scalar_one()
-        if count:
-            found.append(
-                Issue(
-                    rule_id=rule.id,
-                    category=row.category,
-                    issue_type=row.issue_type,
-                    priority=row.priority,
-                    affected_count=count,
-                )
-            )
-    return found
+def _live_issues(catalogue: Sequence[Rule]) -> Select[Any]:
+    counted = union_all(
+        *(
+            select(
+                *_ISSUE_COLUMNS,
+                select(func.count())
+                .select_from(_found(rule))
+                .scalar_subquery()
+                .label("affected_count"),
+            ).where(rules.c.id == rule.id, rules.c.enabled == 1)
+            for rule in catalogue
+        )
+    ).subquery()
+    return select(counted).where(counted.c.affected_count > 0)
 
 
-def _stored_issues(connection: Connection, catalogue: Sequence[Rule]) -> list[Issue]:
-    stored = {row.rule_id: Issue(**row._asdict()) for row in connection.execute(_STORED_ISSUES)}
-    return _in_catalogue_order(stored, catalogue)
+def _issues(connection: Connection, query: Select[Any], catalogue: Sequence[Rule]) -> list[Issue]:
+    found = {row.rule_id: Issue(**row._asdict()) for row in connection.execute(query)}
+    return _in_catalogue_order(found, catalogue)
 
 
-def _live_affected_urls(connection: Connection, rule: Rule) -> list[AffectedUrl]:
-    if rule.id not in _enabled_rule_ids(connection):
-        return []
-    return sorted(_affected_urls(connection, rule), key=lambda url: url.url_id)
+def _live_affected_urls(
+    connection: Connection, rule_id: str, catalogue: Sequence[Rule]
+) -> Select[Any]:
+    enabled = _recorded_rule(connection, rule_id)
+    if not enabled:
+        return _NO_AFFECTED_URLS
+    rule = next((rule for rule in catalogue if rule.id == rule_id), None)
+    if rule is None:
+        raise rule_not_computable(rule_id)
+    return select(_found(rule))
 
 
-def _stored_affected_urls(connection: Connection, rule_id: str) -> list[AffectedUrl]:
+def _stored_affected_urls(connection: Connection, rule_id: str) -> Select[Any]:
     # Known by the file's own rules table: a file of a later tool holds Rules the catalogue lacks.
-    if connection.execute(_RECORDED_RULE, {"rule_id": rule_id}).first() is None:
-        raise rule_not_found(rule_id)
+    _recorded_rule(connection, rule_id)
+    return _STORED_AFFECTED_URLS.where(affected_urls.c.rule_id == rule_id)
+
+
+def _recorded_rule(connection: Connection, rule_id: str) -> bool:
+    """Whether the Crawl's rules table marks the Rule enabled; rule_not_found if it lacks it."""
+    enabled: bool | None = connection.execute(
+        _RECORDED_RULE, {"rule_id": rule_id}
+    ).scalar_one_or_none()
+    if enabled is None:
+        raise rule_not_found(rule_id, connection.execute(_RECORDED_IDS).scalars().all())
+    return enabled
+
+
+def _affected(connection: Connection, query: Select[Any]) -> list[AffectedUrl]:
+    found = query.subquery()
     return [
         AffectedUrl(url_id=row.url_id, detail=_detail(row.detail))
-        for row in connection.execute(_STORED_AFFECTED_URLS, {"rule_id": rule_id})
+        for row in connection.execute(select(found).order_by(found.c.url_id))
     ]
 
 

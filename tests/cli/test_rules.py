@@ -147,6 +147,12 @@ def test_rule_without_thresholds() -> None:
     assert [item["thresholds"] for item in items if item["id"] == "title-missing"] == [{}]
 
 
+def test_an_unknown_rule_id_gets_the_closest_ids() -> None:
+    (error,) = run_cli("rules", "show", "title-mising").stderr_json_lines()
+
+    assert error["details"]["suggestions"][0] == "title-missing"
+
+
 def test_unknown_rule_id() -> None:
     result = run_cli("rules", "show", "nope")
     (error,) = result.stderr_json_lines()

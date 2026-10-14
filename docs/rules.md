@@ -62,7 +62,7 @@ spider rules show title-too-long
 {"id":"title-too-long","category":"titles","issue_type":"opportunity","priority":"medium","applies_to":"internal_pages","enabled":true,"thresholds":{"max_chars":{"value":60,"default":60,"unit":"characters"}},…}
 ```
 
-An id that no Rule has fails with `rule_not_found` (exit code 4), whose hint points to `spider rules list`.
+An id that no Rule has fails with `rule_not_found` (exit code 4), whose hint points to `spider rules list` and whose `details.suggestions` lists the closest Rule ids.
 
 ## Settings: `[rules.<id>]`
 
