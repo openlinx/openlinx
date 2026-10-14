@@ -98,6 +98,7 @@ timeout = 60
 markers = [
     "slow: waits real seconds, such as a reader's 5 s busy timeout",
     "blocks_remote: the network guard blocks the test on purpose",
+    "parse_pool: crawls with the production page executor, the parse pool, instead of in process",
 ]
 
 [tool.coverage.run]

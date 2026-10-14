@@ -3,19 +3,33 @@
 import asyncio
 import multiprocessing
 import os
+import threading
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 
 import msgspec
 import psutil
 import pytest
 from selectolax.lexbor import LexborHTMLParser
 
+from spider.cli.app import build_app
+from spider.clock import SystemClock
 from spider.crawl.fetcher import FetchResult
+from spider.crawl.hooks import Handler, Hooks, UrlResult
 from spider.crawl.pages import Extractor, PageInput, PageSettings, PreparedPage, prepare_page
 from spider.crawl.parse_pool import PoolExecutor, default_workers, worker_count
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
+from spider.output.reporter import Collected
+from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
+from spider.services.hooks import default_page_executor
+from spider.store.records import SecretNames
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site
+from tests.support.app import settings_tables
+from tests.support.crawling import crawl_result, crawled
+from tests.support.workspace import TempWorkspace
 
 URL = NormalizedUrl("https://site.test/")
 BODY = b'<!doctype html><title>Home</title><a href="/about">About</a><img src="/logo.png">'
@@ -155,3 +169,110 @@ def test_the_default_worker_count_is_this_machines() -> None:
         physical=psutil.cpu_count(logical=False), logical=os.cpu_count(), available=available
     )
     assert PoolExecutor().backlog == 2 * default_workers()
+
+
+def test_the_default_page_executor_is_the_pool() -> None:
+    assert isinstance(default_page_executor(), PoolExecutor)
+
+
+def test_pages_are_parsed_outside_the_crawl_process(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/a">A</a><a href="/b">B</a>'),
+                "/a": Page(body="a"),
+                "/b": Page(body="b"),
+            }
+        )
+    )
+    preparers: list[int] = []
+
+    def record_preparer(result: UrlResult) -> tuple[()]:
+        output = result.outputs.get(RECORD_PID.name)
+        if isinstance(output, Prepared):
+            preparers.append(output.pid)
+        return ()
+
+    hooks = Hooks(extractors=(RECORD_PID,), handlers=(Handler("preparers", record_preparer),))
+
+    crawl_result(server.url("/"), hooks, pages=lambda: PoolExecutor(workers=2))
+
+    assert (len(preparers), os.getpid() in preparers) == (3, False)
+
+
+SMALL_SITE = Site(
+    routes={
+        "/": Page(body='<a href="/a">A</a><a href="/b">B</a>'),
+        "/a": Page(body="a"),
+        "/b": Page(body="b"),
+    }
+)
+
+
+def preparers_of_a_service_crawl(seed: str) -> list[int]:
+    """The processes that prepared each Page of a Crawl given no page executor, as the CLI's."""
+    preparers: list[int] = []
+
+    def record_preparer(result: UrlResult) -> tuple[()]:
+        output = result.outputs.get(RECORD_PID.name)
+        if isinstance(output, Prepared):
+            preparers.append(output.pid)
+        return ()
+
+    request = CrawlRequest(
+        seed=seed,
+        cwd=Path.cwd(),
+        home=Path.home(),
+        workspace=None,
+        command_argv=["spider", "crawl", seed],
+        secret_names=SecretNames(),
+        flags={},
+    )
+    hooks = Hooks(extractors=(RECORD_PID,), handlers=(Handler("preparers", record_preparer),))
+    start_crawl(
+        plan_crawl(request, settings_tables(build_app())), SystemClock(), Collected(), hooks
+    )
+    return preparers
+
+
+def test_a_crawl_in_the_suite_prepares_its_pages_in_process(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    preparers = preparers_of_a_service_crawl(fixture_site(SMALL_SITE).url("/"))
+
+    assert preparers == [os.getpid()] * 3
+
+
+@pytest.mark.parse_pool
+def test_a_crawl_marked_parse_pool_prepares_its_pages_in_the_pool(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    preparers = preparers_of_a_service_crawl(fixture_site(SMALL_SITE).url("/"))
+
+    assert (len(preparers), os.getpid() in preparers) == (3, False)
+
+
+@pytest.mark.parse_pool
+def test_spider_crawl_starts_its_parse_workers(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SMALL_SITE)
+    children: set[int] = set()
+    done = threading.Event()
+
+    def watch() -> None:
+        this = psutil.Process()
+        while not done.wait(0.02):
+            children.update(child.pid for child in this.children())
+
+    watcher = threading.Thread(target=watch)
+    watcher.start()
+    try:
+        crawled(server.url("/"))
+    finally:
+        done.set()
+        watcher.join()
+
+    assert len(children) >= 1

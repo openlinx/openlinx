@@ -12,6 +12,7 @@ pytest_plugins = [
     "pytester",
     "tests.fixture_site.plugin",
     "tests.support.isolation",
+    "tests.support.page_executor",
     "tests.support.workspace",
 ]
 

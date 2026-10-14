@@ -57,9 +57,10 @@ These fakes stand in for things outside our code. They are the only test doubles
 - **TLS trust:** a test CA (trustme) passed into the crawler's TLS setup, so the OS trust store is never touched
 - **Processes:** the OS process-spawn call (not our own launcher function)
 - **`doctor`:** network and trust-store probes
+- **The page executor's default:** `tests/support/page_executor.py`, an autouse fixture, has the Crawl Service build an in-process executor instead of `default_page_executor()`'s parse pool, which starts spawn workers for every Crawl, so a CLI-level crawl test would pay their start and memory per crawl. A test marked `parse_pool` keeps the pool; one CLI-level crawl test and the subprocess scenarios of `026` do (ruled 2026-10-14).
 - **SQLite's report of a held `-shm` file:** `SQLITE_IOERR_TRUNCATE`, which a killed writer whose process is still exiting causes on Windows only at random
 
-Never replace our own modules or our own CLI with a double. Installer tests use a real, locally built wheel.
+Never replace our own modules or our own CLI with a double. The page executor's default is the one exception: it chooses between two of our executors, each tested on its own. Installer tests use a real, locally built wheel.
 
 ## Rules
 

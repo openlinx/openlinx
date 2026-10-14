@@ -76,6 +76,7 @@ class PoolExecutor:
 
     def __init__(self, workers: int | None = None) -> None:
         self._count = default_workers() if workers is None else workers
+        self.backlog = BACKLOG_PER_WORKER * self._count
         self._workers: list[_Worker] = []
         self._idle: deque[_Worker] = deque()
         # The Page each busy worker holds.
@@ -85,10 +86,6 @@ class PoolExecutor:
         self._waiter: threading.Thread | None = None
         self._wake_reader, self._wake_writer = multiprocessing.Pipe(duplex=False)
         self._broken: RuntimeError | None = None
-
-    @property
-    def backlog(self) -> int:
-        return BACKLOG_PER_WORKER * self._count
 
     @property
     def worker_pids(self) -> tuple[int, ...]:

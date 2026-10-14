@@ -9,7 +9,7 @@ from aiohttp.abc import AbstractResolver
 from spider.cli.app import build_app
 from spider.clock import SystemClock
 from spider.crawl.hooks import Hooks
-from spider.crawl.pages import PageExecutor
+from spider.crawl.pages import InProcessExecutor, PageExecutor
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
 from spider.services.hooks import default_hooks
@@ -58,5 +58,6 @@ def crawl_result(
         Collected(),
         hooks or default_hooks(),
         resolver=resolver,
-        pages=pages,
+        # In process unless a test asks for another: a pool would start its workers per Crawl.
+        pages=pages or InProcessExecutor,
     )
