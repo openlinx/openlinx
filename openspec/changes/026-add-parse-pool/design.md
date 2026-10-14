@@ -43,7 +43,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 
 ### D2. The work item and the bounded queue
 - **The work item:** the URL and its `FetchResult`, as `prepare_page` takes them. The result is the `PreparedPage`, as the in-process executor returns it, which the engine hands to the per-response handlers in the crawl process.
-- **Bounded queue:** the engine keeps a semaphore of `cap + 2 × n` permits, where `cap` is `020`'s global request cap, `min(100, max(20, 4 × concurrency))`; `--concurrency` itself is a per-host limit, so on one host it bounds the requests first. A permit is taken when a request for a followed URL starts, and given back when its record, or its non-HTML response, is submitted to the writer. Fetching therefore waits whenever page preparation falls behind. Where the permit sits in the engine is settled when `020`'s engine is built.
+- **Bounded queue:** the engine keeps a semaphore of `cap + 2 × n` permits, where `cap` is `020`'s global request cap, `min(100, max(20, 4 × concurrency))`; `--concurrency` itself is a per-host limit, so on one host it bounds the requests first. As `020` builds it (its task cap), each URL holds a task slot from its dispatch to its submit to the writer, and there are `cap + backlog` slots, where the executor's `backlog` is `2 × n` for the pool and 0 in process; the requests themselves stay under `cap`. A slot is held by every dispatched URL, so this is stricter than a permit per request (decided 2026-10-14). Fetching therefore waits whenever page preparation falls behind.
 
 ### D3. Crash containment
 A worker that dies (a segfault in a native parser, or `os._exit`) closes its pipe and signals its process sentinel. The executor then:
@@ -105,7 +105,7 @@ The benchmark (group 1) is a script, not a test seam.
   - the Windows `spawn` scenario
   - worker shutdown after completion and after SIGINT (CTRL_BREAK_EVENT to a new process group on Windows), with child processes listed through `psutil`
   - the Windows console scenario, under CREATE_NO_WINDOW, checked by listing visible top-level windows per process id
-- **New seams or doubles:** none.
+- **New seams or doubles:** one, ruled 2026-10-14. The suite's crawls prepare Pages in process: an autouse fixture (`tests/support/page_executor.py`) has the Crawl Service build `InProcessExecutor` instead of `default_page_executor()`'s pool, where the service calls it, because the pool starts spawn workers for every Crawl and a CLI-level crawl test would pay their start and memory per crawl (about 6 workers and 20 s more over the crawl tests on the maintainer's laptop). A test marked `parse_pool` keeps the pool, as one CLI-level crawl test and the subprocess scenarios do.
 
 ## Risks / Trade-offs
 
