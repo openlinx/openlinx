@@ -60,13 +60,13 @@ For an analysed Page, following the table conventions of `015-add-crawl-store`:
 - A text column SHALL be NULL when its element or header is absent, and the empty string when the element is present but empty.
 - A length column SHALL be NULL exactly when its text column is NULL, and so SHALL a width column from v0.2.
 
-When the Page extractor of this change raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns the Page extractor fills (the title, heading, directive, content and structured-data columns, and the Link attributes it adds) SHALL be NULL. The columns that come from the response, from `020-add-crawl-core`'s discovered Links and from the outlink counts SHALL be set.
+When the Page extractor of this change raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns the Page extractor derives from the HTML (the title and heading, content and structured-data columns, and the Link attributes it adds) SHALL be NULL. The columns that come from the response, from `020-add-crawl-core`'s robots directives parser and discovered Links (the directive and canonical columns), the outlink counts and `indexability` SHALL be set as for any analysed Page.
 
 The columns that a later release fills stay NULL in every Page until then (see "Columns measured by later releases stay NULL").
 
 #### Scenario: A Page whose Page extractor failed keeps its response data and Links
-- **WHEN** the Page extractor raises on `{site}/broken` (a test puts a raising extractor under its name in `default_hooks()`), which responds 200 with `<title>T</title><a href="/a">A</a>`
-- **THEN** `{site}/broken` has `parsed` = 1 and `parse_error` = `extractor_error`, its `pages` row has `status_code` 200, `title_1` NULL and `outlinks` 1, and its `links` row to `{site}/a` has `type` `hyperlink` and `anchor_text` NULL
+- **WHEN** the Page extractor raises on `{site}/broken` (a test puts a raising extractor under its name in `default_hooks()`), which responds 200 with `<title>T</title><meta name="robots" content="noindex"><a href="/a">A</a>`
+- **THEN** `{site}/broken` has `parsed` = 1 and `parse_error` = `extractor_error`, its `pages` row has `status_code` 200, `title_1` NULL, `meta_robots_noindex` 1 and `indexability` `non_indexable`, and its `links` row to `{site}/a` has `type` `hyperlink` and `anchor_text` NULL
 
 #### Scenario: Error Page keeps response data
 - **WHEN** `{site}/missing` responds 404 with `Content-Type: text/html` and the body `<title>Not found</title>`
