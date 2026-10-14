@@ -2,6 +2,7 @@
 
 import json
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -43,6 +44,14 @@ def test_show_a_rule_with_thresholds() -> None:
         "medium",
         {"max_chars": {"value": 60, "default": 60, "unit": "characters"}},
     )
+
+
+def test_override_shown_by_the_rules_command(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
+
+    rule = run_cli("rules", "show", "title-too-long").json()
+
+    assert rule["thresholds"]["max_chars"] == {"value": 70, "default": 60, "unit": "characters"}
 
 
 def test_rule_without_thresholds() -> None:

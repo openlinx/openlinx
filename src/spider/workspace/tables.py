@@ -60,10 +60,32 @@ def keyed_entry(table: Any) -> Any:
     return entry
 
 
+def named_tables(table: Any) -> dict[str, Any] | None:
+    """The tables of a table of named tables, by name, or None for another table."""
+    fields = getattr(table, "model_fields", None)
+    if not fields or not all(_is_model(field.annotation) for field in fields.values()):
+        return None
+    return {field.alias or key: field.annotation for key, field in fields.items()}
+
+
+def _is_model(annotation: Any) -> bool:
+    return isinstance(annotation, type) and hasattr(annotation, "model_fields")
+
+
 def check_table(name: str, table: Table) -> None:
     """Raises TypeError unless the table follows the table rules of design D2."""
     entry = keyed_entry(table)
-    if entry is None:
+    tables = named_tables(table)
+    if tables is not None:
+        # Each named table has settings of its own (040's [rules.<id>]), so the template
+        # describes them all with the table's docstring.
+        if getattr(table, "model_config", {}).get("extra") != "forbid":
+            raise TypeError(f'Settings table [{name}] must set extra="forbid".')
+        if not table.__doc__ or "\n" in table.__doc__:
+            raise TypeError(f"Settings table [{name}] needs a one-line docstring.")
+        for key, model in tables.items():
+            _check_model(f"{name}.{key}", model)
+    elif entry is None:
         _check_model(name, table)
     else:
         # Literal entries (`<name> = <value>`) have no docstring to describe the table in the

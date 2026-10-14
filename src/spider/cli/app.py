@@ -50,6 +50,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
     tables = SettingsTables()
     tables.register("crawl", "spider.crawl.settings:CrawlSettings")
     tables.register("store", "spider.store.settings:StoreSettings")
+    tables.register("rules", "spider.rules.settings:RulesSettings")
     for name, reference in extra.settings_tables.items():
         tables.register(name, reference)
 

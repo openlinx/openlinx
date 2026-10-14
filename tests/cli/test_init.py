@@ -172,6 +172,14 @@ def test_an_unset_setting_in_the_template(shop: Path) -> None:
     assert lines.index("[example]") < lines.index("# token =")
 
 
+def test_a_table_of_named_tables_in_the_template(shop: Path) -> None:
+    run_cli("init")
+
+    lines = (shop / "spider.toml").read_text(encoding="utf-8").splitlines()
+
+    assert "# [rules.<name>]" in lines
+
+
 def test_a_keyed_table_in_the_template(shop: Path) -> None:
     run_cli("init", app=example_app())
 

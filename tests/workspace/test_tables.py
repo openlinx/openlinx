@@ -44,6 +44,34 @@ class TomlDefaults(BaseModel):
     proxy: str | None = Field(None, description="A proxy, unset by default.")
 
 
+class Sized(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    size: int = Field(1, description="A size.")
+
+
+class NamedTables(BaseModel):
+    """Tables of the example, each named by its key."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    first_one: Sized = Field(Sized.model_validate({}), alias="first-one", description="The first.")
+
+
+class UndocumentedNamedTables(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    first: Sized = Field(Sized.model_validate({}), description="The first.")
+
+
+class LooseNamedTables(BaseModel):
+    """Tables of the example."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    first: Loose = Field(Loose.model_validate({}), description="The first.")
+
+
 @pytest.mark.parametrize(
     "table",
     [
@@ -55,6 +83,8 @@ class TomlDefaults(BaseModel):
         dict[int, TomlDefaults],
         dict[str, TomlDefaults],
         dict[str, str],
+        UndocumentedNamedTables,
+        LooseNamedTables,
     ],
 )
 def test_a_table_the_template_cannot_describe_is_refused(table: Table) -> None:
@@ -64,6 +94,10 @@ def test_a_table_the_template_cannot_describe_is_refused(table: Table) -> None:
 
 def test_a_table_with_toml_defaults_follows_the_rules() -> None:
     check_table("example", TomlDefaults)
+
+
+def test_a_table_of_named_tables_follows_the_rules() -> None:
+    check_table("example", NamedTables)
 
 
 @pytest.mark.parametrize("app", [build_app, example_app])

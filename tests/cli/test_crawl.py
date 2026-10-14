@@ -222,6 +222,17 @@ def test_a_flag_overrides_spider_toml(
     assert config["crawl"]["concurrency"] == 3
 
 
+def test_a_rule_setting_is_recorded_by_its_rule_id(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SMALL_SITE)
+    (temp_workspace.root / "spider.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
+
+    config = json.loads(crawl_row(crawled(server.url("/")))["config"])
+
+    assert config["rules"]["title-too-long"]["max_chars"] == 70
+
+
 def test_an_invalid_exclude_pattern_is_rejected(temp_workspace: TempWorkspace) -> None:
     result = run_cli("crawl", "http://site.test/", "--exclude", "(")
     error = result.stderr_json_lines()[-1]
