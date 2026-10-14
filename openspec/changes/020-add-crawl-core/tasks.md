@@ -276,6 +276,14 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: each URL of an origin whose robots.txt request got no HTTP response is recorded with `fetch_state` = `error` and that request's `fetch_error`, without a request of its own, with a `fetch_error_message` that names the robots.txt request; the origin has `robots_state` = `unreachable`, `robots_status_code` NULL, and the request's error in `robots_fetch_error` and `robots_fetch_error_message`, declared with their `docs/schema.md` rows and the CHECK values of the `fetch_error` `Literal`; 5xx and 429 stay `robots_unreachable`; and "An unknown host is a DNS error" still passes (design D6). The Seed's origin pauses the Crawl instead from task 12.6 on.
 - [x] 10.15 Docs: document robots.txt handling (status mapping, no HTTP response, `--ignore-robots`, `--robots-user-agent`, Crawl-delay) in `docs/crawling.md`.
 - [x] 10.16 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [ ] 10.17 Fix the review of group 10 (rulings of 2026-10-15), each red first or red by mutation:
+  - An origin's robots.txt verdict, once known, decides a URL before the URL limit, which guards only a new request, robots.txt's or the URL's own, so a disallowed URL left after the limit is still recorded and the Crawl can end `completed`. `RequestLimits` splits the pure query from the call that marks the limit reached.
+  - A URL skipped as `max_depth` reaches no handler, since a Link found later at a smaller depth re-queues it (design D5).
+  - The robots.txt memo keeps the parsed rules only; the text goes straight to the store.
+  - A line that the 512,000-byte limit cuts is dropped, and a robots.txt status outside 200–599 is `unreachable`, as 500–599 and 429 are.
+  - `--robots-user-agent` must match RFC 9309's `[a-zA-Z_-]+`: refused as `invalid_value` (exit 2), and in the settings file as `settings_invalid` (exit 3).
+  - Tests pin the token on the robots.txt side, one robots.txt request for an origin that two URLs reach at once, no `seed_blocked_by_robots_txt` for a blocked URL that is not the Seed, no `robots_unreachable` for an External origin, and a fallback row whose verdict is 1.
+  - `docs/testing.md` places `tests/crawl/test_warning_log.py` at seam 2, with the Crawl Service's reporter.
 - [ ] 10.18 Extract the Requester (design D7), behaviour unchanged: `spider.crawl.requester` makes every request of a Crawl. It takes the host's slot, then the global cap, and counts a URL's own request toward `--max-urls` or refuses it; a robots.txt request is never counted. The engine and the robots.txt loader call it, and neither holds the Fetcher or takes a slot itself. The engine's per-run dependencies (the outcomes, the limits, the Requester, the robots.txt loader, the checks) are one frozen record.
 
   Done when: a guard in `tests/test_code_style.py` names each call of a Fetcher's `fetch` and each `Request` made in `src/spider` outside the Requester, red by mutation of the robots.txt loader; `--rate` (11.1), the watchdog (12.14), the network pause with its probes (12.11–12.22) and `022`'s retries are written into the Requester, not into its callers.
@@ -338,7 +346,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 13.1 Drive "Ctrl+C stops a Crawl on macOS and Linux" at seam 1, subprocess, POSIX in CI.
 
-  Done when: the signal handlers set the `StopSignal` through `loop.call_soon_threadsafe`, no `KeyboardInterrupt` reaches `010`'s runner during a Crawl, and the `stopped` end goes through `check_transition` with `interrupt`.
+  Done when: the signal handlers set the `StopSignal` through `loop.call_soon_threadsafe`, no `KeyboardInterrupt` reaches `010`'s runner during a Crawl, and the `stopped` end goes through `check_transition` with `interrupt`; a test pins that an interrupt that ends a depth reads no deeper one (the stop's `break` of task 9.19, which nothing could reach before interrupts).
 - [ ] 13.2 Drive "Ctrl+Break stops a Crawl on Windows (Windows)" at seam 1, subprocess, Windows in CI.
 - [ ] 13.3 Drive "An interrupt is reported by one error" at seam 1, subprocess. Done when: `010`'s `interrupted` is the one error, with exit code 130.
 - [ ] 13.4 **Guard:** "An interrupted Crawl keeps its queue", at seam 1, subprocess.
