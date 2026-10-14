@@ -294,7 +294,7 @@ When a process holds the claim but its heartbeat is older than 60 seconds, the s
 
 ### Requirement: Resuming a Crawl
 `spider resume [--crawl <ref>]` (default `latest`) SHALL continue a Crawl whose Crawl State is `stopped`, `interrupted` or `failed`. It uses the Crawl Service's continue operation (`020-add-crawl-core`) and the recorded config, and SHALL:
-- request the `queued` URLs, after putting back those that ended without a response or behind an unreachable robots.txt
+- request the `queued` URLs, after putting back every URL that ended as `error`, or with `skip_reason` = `robots_unreachable`, as `020-add-crawl-core`'s continue operation does
 - fetch robots.txt again for each origin it requests
 - print the result of a foreground `spider crawl`, in the field order of `020-add-crawl-core`'s result (`docs/crawling.md`, "The result"), with the added field `"run"`
 
@@ -397,11 +397,11 @@ A Crawl's writer claim SHALL be an operating-system lock on the file `<crawl id>
 
 #### Scenario: A killed Crawl can be resumed at once (Windows)
 - **WHEN** the process of a running Crawl of the slow fixture site is ended with TerminateProcess on Windows, and `spider resume --crawl <id>` runs right after
-- **THEN** it exits with code 0 and prints `"state": "completed"`
+- **THEN** it exits with code 0 and prints `"state": "completed"`, and the fixture site receives no second request for a URL that was `fetched` before the process ended
 
 #### Scenario: A killed Crawl can be resumed at once (macOS and Linux)
 - **WHEN** the process of a running Crawl of the slow fixture site is killed with SIGKILL, and `spider resume --crawl <id>` runs right after
-- **THEN** it exits with code 0 and prints `"state": "completed"`
+- **THEN** it exits with code 0 and prints `"state": "completed"`, and the fixture site receives no second request for a URL that was `fetched` before the kill
 
 ### Requirement: Dry run
 `spider crawl … --dry-run` SHALL validate its arguments exactly like a real Crawl, with the same error codes and exit codes. It SHALL create no file in the Workspace. It SHALL print `{"dry_run": true, "crawl_mode", "config", "command", "estimate", "warnings"}` and exit with code 0. `config` SHALL be the resolved config, as a Crawl would record it in `crawl.config`, with secrets redacted.

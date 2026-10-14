@@ -11,7 +11,12 @@ The motivation is in proposal.md, and the catalogue and behaviour are in `specs/
 - the `pages` and `links` tables, the stored Indexability and the link counts of `030-add-page-data`
 - the Workspace settings loaded and validated by `010-add-workspace-and-cli-contract`
 
-`020-add-crawl-core` provides (its D9 and D14), through `Hooks` in `spider.crawl.hooks`:
+**Re-grounded on 2026-10-14** for the slice (tasks.md, groups 1–4):
+- **`020`'s `urls`, through its first pull request:** `is_internal` and `in_scope` (NOT NULL flags), `fetch_state`, `skip_reason`, `status_code`, `fetch_error` with `fetch_error_message`, `content_type`, `parsed`, and `parse_error` with `parse_error_message`, declared in `spider.store.schema` with their value lists as `Literal`s in `spider.store.records`. `blocked_by_robots_txt` arrives with `020` task 10.5, and `022`-min adds `redirect_url_id`, `in_redirect_loop` and `size_bytes`.
+- **`030`'s planned names** (its re-grounded design on its branch): `pages` is declared in `spider.store.schema` with the other public tables, its row is the frozen `PageRow` in `spider.store.page_records`, which `write_page` in `spider.store.pages` writes, and its per-response handler is `page_rows` in `spider.extract.page_handler`, listed in `default_hooks()`, which gives a row only to a Page: an Internal URL in the Scope (`is_internal` = 1, `in_scope` = 1), `fetched`, with an HTML media type by `020`'s `is_html_type`, whatever its status (built in its group 1). Its slice (groups 1–3) adds `title_count`, `title_1`, `title_1_length`, `title_2`, the meta description columns and the `h1_*` and `h2_*` columns; Indexability arrives in its group 7, and the link counts in its group 11.
+- **Seam-2 test data** is written through those modules' own row writers, as builders: `020`'s units in `spider.store.urls`, and `030`'s `write_page` with a `PageRow` only for a URL that is a Page by that predicate, so the data is what a real Crawl could leave.
+
+`020-add-crawl-core` provides (its D9 and D14), through `Hooks` in `spider.crawl.hooks`, whose built-in entries `default_hooks()` lists in `spider.services.hooks`, the composition root, so the crawl core never imports its plugins:
 
 - a **per-response hook** of pure handlers, which this change does not use (D1)
 - a **post-crawl passes** hook of store functions (`Pass`: a name and a function of the `CrawlWriter`), which runs when a Crawl ends as `completed` or `stopped`, before its final Crawl State is written, and again after every continued run, so a pass must be safe to re-run
@@ -46,6 +51,7 @@ No Rule runs while a URL is recorded: the Crawl's writer, the bottleneck of a Cr
 - *Alternative: declarative YAML/JSON conditions.* Rejected. Conditions combine several columns, other URLs' outcomes and, for duplicates, grouping. A condition language would duplicate the `--where` language of `050`, and would still need code for Redirect Chains. The YAML approach stays for v0.3's structured-data validators, where the data is naturally declarative.
 
 ### D2. Populations and whose URL is affected
+- **`internal_urls`** is `is_internal` = 1 with `fetch_state` `fetched` or `error`, or `blocked_by_robots_txt` = 1. The robots.txt part joins the queries with `internal-blocked-by-robots-txt` (task 7.1), once `020` task 10.5 has declared the column: a query that names a column the file lacks fails, and adding the part changes nothing for `internal-4xx`, `internal-5xx` and `internal-no-response`, whose conditions need a status or a `fetch_error`.
 - **Page Rules** see only analysed Pages (`urls.parsed` = 1).
 - **A Page whose extractor failed** (`parse_error` = `extractor_error`, the user's decision of 2026-10-14) stays among them. The columns its failed extractor fills are NULL, and a Rule never fires on a NULL value, so it raises no false Issue, while the columns of the extractors that succeeded are still checked. *Alternative:* `parse_error IS NULL` in `internal_pages`. It would hide every Issue of a Page whose unrelated extractor failed. Rejected.
 - **Comparison Rules and thin content** (duplicates, `exact-duplicate`, `low-word-count`) see only Indexable Pages. Pages that are canonicalised or noindexed by intent are then not reported as duplicates of the Pages they point to. Screaming Frog behaves the same way.
@@ -99,7 +105,7 @@ No count of Affected URLs is stored: a count that only repeats the rows of anoth
   - *Alternative: a one-row `health_score` table.* Rejected. ADR-0005 requires table names to be plural nouns, with `crawl` as the only one-row exception.
   - They are derived (ADR-0005): only the post-crawl pass writes them, after the Rules' rows, and each description starts with `Derived: `. They stay NULL until the pass runs.
   - `health_score` has no unit suffix, because a score is not a share (ADR-0005 rule 5; it was `health_score_pct` until ruling Q9). The two counts end in `_count` (rule 5); `050`'s summary shape `{score, internal_pages, affected_pages}` maps them to its own member names.
-  - `health_calculated_at` comes from the injectable clock.
+  - `health_calculated_at` comes from the injectable clock. `020`'s `Pass` (`spider.crawl.hooks`) gets only the `CrawlWriter`, whose clock is private, and a unit cannot read the time itself (`017` D7). So the pass needs the clock: `020`'s `Pass.run` takes one frozen `PassContext` (the writer and the clock, with a field added only when a pass needs one; ruled 2026-10-14), an interface point for `020` before group 10.
 - **Subsets.** The formula is exposed as one pure function taking the set of Internal Pages and the set of URLs affected by Issue-type Rules. `050` (Segments) and `070` (health per Segment) call it, rather than re-implementing it.
 - **Which Issue Types count.** They are read from the Crawl's `rules` table, never from the installed tool.
 
@@ -204,3 +210,4 @@ These can be answered later without changing this change's specs or tasks:
 2. **Overriding Issue Type and Priority.** Should `spider.toml` be able to change a Rule's Issue Type or Priority, and if so, how do Health Scores stay comparable?
 3. **Which redirects `internal-3xx` reports.** Should it report only redirecting URLs that are linked from Pages, or also intermediate hops reached only through other redirects?
 4. **Case-insensitive duplicates.** Should duplicate comparisons (titles, meta descriptions, H1) ignore case?
+5. **Does the pass need the `[rules.<id>]` settings when the Crawl ends?** Recommended: no, so `020`'s `PassContext` carries no settings. Which Rules are enabled, and their effective thresholds, come from the Crawl's own `rules` table, recorded when the Crawl was created (D6): the pass runs a unit per Rule that the table marks enabled, and each query reads its thresholds from its `rules` row (D15). Reading the current `spider.toml` at the end would let an edit made during the Crawl, or before a resume, change Issues that the recorded configuration decides, against D6 and D10, and "Later edits do not change a completed Crawl".

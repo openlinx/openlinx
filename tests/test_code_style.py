@@ -1,4 +1,4 @@
-"""Guard: decidable code rules (018-add-schema-conventions; 020-add-crawl-core D13)."""
+"""Guard: decidable code rules (018-add-schema-conventions; 020-add-crawl-core D9, D13, D14)."""
 
 import ast
 from collections.abc import Mapping
@@ -341,4 +341,71 @@ def positional_bound(x): ...
         "m.py: called_lru is a memo without an explicit bound",
         "m.py: unbounded_lru is a memo without an explicit bound",
         "m.py: positional_none is a memo without an explicit bound",
+    ]
+
+
+# The crawl core never imports the layers that wire it or plug into it (020 design D9).
+PLUGIN_LAYERS = ("spider.services", "spider.extract", "spider.rules", "spider.cli")
+
+
+def _absolute(module: str, level: int, name: str | None) -> str:
+    if not level:
+        return name or ""
+    package = module.removesuffix(".py").split("/")[:-1]
+    base = package[: len(package) - level + 1]
+    return ".".join([*base, name] if name else base)
+
+
+def _plugin_imports(module: str, tree: ast.AST) -> list[str]:
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            base = _absolute(module, node.level, node.module)
+            # `from spider import rules` names the layer in the alias.
+            found += (
+                [f"{base}.{alias.name}" for alias in node.names] if base == "spider" else [base]
+            )
+    return [
+        name
+        for name in found
+        if any(name == layer or name.startswith(f"{layer}.") for layer in PLUGIN_LAYERS)
+    ]
+
+
+def plugin_import_violations(sources: Mapping[str, str]) -> list[str]:
+    """Modules of spider.crawl that import a plugin layer, given every module's source by path."""
+    return [
+        f"{module} imports {name}"
+        for module, source in sources.items()
+        if module.startswith("spider/crawl/")
+        for name in _plugin_imports(module, ast.parse(source))
+    ]
+
+
+def test_the_crawl_core_imports_no_plugin_layer() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert plugin_import_violations(sources) == []
+
+
+def test_an_import_of_a_plugin_layer_in_the_crawl_core_is_named() -> None:
+    sources = {
+        "spider/crawl/engine.py": "from spider.services.hooks import default_hooks\n",
+        "spider/crawl/pages.py": "def late():\n    import spider.extract.page\n",
+        "spider/crawl/scope.py": "from spider import rules, store\n",
+        "spider/crawl/links.py": "from ..cli import app\n",
+        "spider/crawl/hooks.py": "from spider.store import rows\nimport spider.servicesx\n",
+        "spider/services/crawling.py": "from spider.services.hooks import default_hooks\n",
+    }
+
+    assert plugin_import_violations(sources) == [
+        "spider/crawl/engine.py imports spider.services.hooks",
+        "spider/crawl/pages.py imports spider.extract.page",
+        "spider/crawl/scope.py imports spider.rules",
+        "spider/crawl/links.py imports spider.cli",
     ]

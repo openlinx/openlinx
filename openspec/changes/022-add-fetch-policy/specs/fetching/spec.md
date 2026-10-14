@@ -10,7 +10,7 @@ Decide how each request of a Crawl is made, and what is recorded about its respo
 Scenario conventions:
 - `{site}` is the origin of the local fixture site, for example `http://127.0.0.1:8765`.
 - A bare path such as `/about` means `{site}/about`.
-- `site.test`, `www.site.test`, `other.test` and `badcert.test` are virtual hosts of the fixture site, over http and https. The DNS resolver hook maps them to the fixture site, and every other name fails to resolve.
+- `site.test`, `www.site.test`, `en.site.test`, `other.test` and `badcert.test` are virtual hosts of the fixture site, over http and https. The DNS resolver hook maps them to the fixture site, and every other name fails to resolve.
 - The fixture's test CA is added to the crawler's trust anchors through the TLS setup.
 
 ## ADDED Requirements
@@ -27,7 +27,7 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `spider
 - **THEN** every request the fixture site receives, including the one for `/robots.txt`, has `User-Agent` = `AuditBot/1.0`
 
 ### Requirement: Custom headers
-`--header "Name: Value"` SHALL add a request header. It SHALL be accepted more than once, and its setting `crawl.header` SHALL be a list of `Name: Value` strings. A value without `:` SHALL be rejected with exit code 2 and error code `invalid_value`. Custom headers SHALL be sent only with requests for Internal URLs and their robots.txt, never with requests for External URLs.
+**(v0.2)** `--header "Name: Value"` SHALL add a request header. It SHALL be accepted more than once, and its setting `crawl.header` SHALL be a list of `Name: Value` strings. A value without `:` SHALL be rejected with exit code 2 and error code `invalid_value`. Custom headers SHALL be sent only with requests for Internal URLs and their robots.txt, never with requests for External URLs.
 
 `--header` and `crawl.header` SHALL be declared a header secret. `015-add-crawl-store` then records the value of every sensitive header as `Name: ***`: `Cookie`, and every header whose name contains `auth`, `token`, `secret`, `key` or `password`.
 
@@ -48,7 +48,7 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `spider
 - **THEN** the `crawl` table of `crawl.config` has `"header": ["Cookie: ***"]`
 
 ### Requirement: HTTP basic authentication
-`--auth <user:password>` (setting `crawl.auth`, marked secret) SHALL send HTTP basic authentication preemptively with every request for an Internal URL and its robots.txt, never with requests for External URLs. The setting SHALL also be accepted from `spider.toml`. `015-add-crawl-store` records it as `***`.
+**(v0.2)** `--auth <user:password>` (setting `crawl.auth`, marked secret) SHALL send HTTP basic authentication preemptively with every request for an Internal URL and its robots.txt, never with requests for External URLs. The setting SHALL also be accepted from `spider.toml`. `015-add-crawl-store` records it as `***`.
 
 #### Scenario: Credentials are sent to Internal URLs
 - **WHEN** `spider crawl http://site.test/ --auth "alice:s3cret"` runs
@@ -67,14 +67,14 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `spider
 - **THEN** the request for `http://site.test/` has `Authorization` = `Basic YWxpY2U6czNjcmV0`
 
 ### Requirement: Proxy
-`--proxy <url>` (setting `crawl.proxy`) SHALL send every request, robots.txt included, through the given HTTP proxy, with credentials when the URL contains them.
+**(v0.2)** `--proxy <url>` (setting `crawl.proxy`) SHALL send every request, robots.txt included, through the given HTTP proxy, with credentials when the URL contains them.
 
 Without `--proxy` or `[crawl] proxy`, the Crawl SHALL honour the standard proxy variables, as curl, pip and uv do:
 - **Which variable:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs.
 - **Bypass:** `NO_PROXY`, a comma-separated list of host names and domain suffixes, or `*`, names the hosts that bypass the proxy.
 - **Letter case:** each variable is read in any letter case. When both cases are set, the lower-case one wins.
 
-This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. `--proxy` and `[crawl] proxy` SHALL override the variables. A resumed Crawl SHALL read the variables again.
+The proxy variables are honoured from v0.1. This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. From v0.2, `--proxy` and `[crawl] proxy` SHALL override the variables, and the scenarios that pass `--proxy` apply. A resumed Crawl SHALL read the variables again.
 
 The password in a proxy URL SHALL be marked partly secret, whether it comes from `--proxy` or from a variable, and `015-add-crawl-store` records it as `http://<user>:***@<host>:<port>`. The proxy variables in use SHALL be recorded, set ones only, in the `environment` table of `crawl.config` under the lower-case keys `http_proxy`, `https_proxy` and `no_proxy`.
 
@@ -210,9 +210,13 @@ It also adds this index to `urls`, built while the Crawl writes:
 ### Requirement: A Seed that redirects within its site extends the Scope
 When a Seed's Redirect Chain ends on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. When the chain ends on another registrable domain, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_off_site` warning whose hint contains the final URL of the chain.
 
-#### Scenario: A redirect to the www host stays inside the Scope
-- **WHEN** `http://site.test/` redirects with 301 to `http://www.site.test/`, which links to `/a`, and `spider crawl http://site.test/` runs
-- **THEN** `http://www.site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1
+#### Scenario: A www Seed that redirects to its apex keeps the apex inside the Scope
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `spider crawl http://www.site.test/` runs
+- **THEN** `http://site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1
+
+#### Scenario: A redirect to another subdomain stays inside the Scope
+- **WHEN** `http://site.test/` redirects with 301 to `http://en.site.test/`, which links to `/a`, and `spider crawl http://site.test/` runs
+- **THEN** `http://en.site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1, and `crawl.scope` lists `en.site.test` among its hosts
 
 #### Scenario: A redirect to another site is reported
 - **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `spider crawl http://site.test/` runs
@@ -273,7 +277,7 @@ URLs longer than 2,000 characters SHALL NOT be requested, and SHALL be recorded 
 - **THEN** that URL has `skip_reason` = `url_too_long`
 
 ### Requirement: Compression
-Every request SHALL send `Accept-Encoding: gzip, deflate, br, zstd`, and the Crawl SHALL decode those encodings itself. This change adds these columns to `urls`:
+Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Accept-Encoding: gzip, deflate, br, zstd`. The Crawl SHALL decode those encodings itself. This change adds these columns to `urls`:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
@@ -283,7 +287,7 @@ Every request SHALL send `Accept-Encoding: gzip, deflate, br, zstd`, and the Cra
 
 #### Scenario: Requests accept compressed bodies
 - **WHEN** `spider crawl {site}/` runs
-- **THEN** the request for `/` has `Accept-Encoding` = `gzip, deflate, br, zstd`
+- **THEN** the request for `/` has `Accept-Encoding` = `gzip, deflate, br`
 
 #### Scenario: A compressed Resource records both sizes
 - **WHEN** `/app.js` returns a 10,000-byte script as a 2,500-byte gzip body with `Content-Encoding: gzip`, and `/` holds `<script src="/app.js">`
