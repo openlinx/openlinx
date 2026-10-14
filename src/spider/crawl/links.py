@@ -179,6 +179,8 @@ def _references(
 
 
 def _link_type(rel: tuple[str, ...], attributes: Mapping[str, str | None]) -> LinkType | None:
+    if "canonical" in rel:
+        return "canonical"
     if "stylesheet" in rel:
         return "css"
     if "amphtml" in rel:

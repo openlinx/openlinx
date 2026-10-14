@@ -177,6 +177,13 @@ SEED_OUT_OF_SCOPE = _declare(
     "The Seed is outside its own Scope: it matches an --exclude pattern, or no --include "
     "pattern; details.seed holds it.",
 )
+SEED_BASE_MISMATCH = _declare(
+    "seed_base_mismatch",
+    "warning",
+    None,
+    "A www Seed whose Page names its apex host as the site; the hint gives the Seed on the apex "
+    "host, and the Crawl went on in its Scope.",
+)
 PARSE_FAILED = _declare(
     "parse_failed",
     "warning",

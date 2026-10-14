@@ -92,6 +92,10 @@ def test_a_link_element_of_another_rel_is_a_misc_link() -> None:
             ("mobile_alternate", "link", "href", "http://site.test/m/"),
         ),
         (
+            '<link rel="canonical" href="/c">',
+            ("canonical", "link", "href", "http://site.test/c"),
+        ),
+        (
             '<link rel="alternate" type="application/rss+xml" href="/feed">',
             ("misc", "link", "href", "http://site.test/feed"),
         ),
@@ -289,6 +293,7 @@ def test_deeply_nested_html_gives_its_links() -> None:
     [
         ('<head><link rel="icon" href="/i.ico"></head>', [("misc", "http://site.test/i.ico")]),
         ('<head><noscript><link rel="icon" href="/i.ico"></noscript></head>', []),
+        ('<head><noscript><link rel="canonical" href="/c"></noscript></head>', []),
         (
             '<head><noscript><meta http-equiv="refresh" content="0; url=/no-js"></noscript></head>',
             [],

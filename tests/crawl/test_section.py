@@ -115,3 +115,22 @@ def test_a_subfolder_scope_is_recorded(
         "include": [],
         "exclude": ["/draft"],
     }
+
+
+def test_a_www_seed_whose_canonical_names_the_apex_is_reported(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(routes={"/": Page(body='<link rel="canonical" href="http://site.test/">')}),
+        NO_OTHER_SITE,
+    )
+
+    result = crawl_result("http://www.site.test/", resolver=hosts.resolver)
+
+    assert (
+        [
+            (warning.code, "http://site.test/" in (warning.hint or ""))
+            for warning in result.warnings
+        ],
+        json.loads(crawl_row(result.crawl_file)["scope"])["hosts"],
+    ) == ([("seed_base_mismatch", True)], ["www.site.test"])

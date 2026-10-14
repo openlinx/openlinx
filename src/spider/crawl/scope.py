@@ -1,6 +1,7 @@
 """Scope decisions: ScopeRules, built once from the Seed (020-add-crawl-core D4)."""
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 from ipaddress import IPv4Address
@@ -11,6 +12,8 @@ from spider.store.records import SkipReason
 
 if TYPE_CHECKING:
     from publicsuffixlist import PublicSuffixList
+
+    from spider.crawl.links import DiscoveredLink
 
 # A plain alias, not a type statement: Typer reads it as the choices of --scope.
 ScopeKind = Literal["host", "subdomains", "subfolder"]
@@ -116,3 +119,27 @@ def _is_ipv4(host: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def seed_base_mismatch(seed: NormalizedUrl, links: Iterable["DiscoveredLink"]) -> str | None:
+    """The Seed on its apex host, when the Seed is www. plus a registrable domain and its Page
+    names the apex: by its canonical, or by more hyperlinks than to the Seed's host (D4)."""
+    host = _without_trailing_dot(url_host(seed))
+    apex = host.removeprefix("www.")
+    if apex == host or _registrable_domain(apex) != apex:
+        return None
+    to_apex = to_seed_host = 0
+    for link in links:
+        target_host = _without_trailing_dot(url_host(link.target))
+        if link.type == "canonical" and target_host == apex:
+            return _on_apex(seed)
+        if link.type == "hyperlink":
+            to_apex += target_host == apex
+            to_seed_host += target_host == host
+    return _on_apex(seed) if to_apex > to_seed_host else None
+
+
+def _on_apex(url: NormalizedUrl) -> str:
+    scheme, rest = url.split("://", 1)
+    # Only the host's www. label goes: the port and the path stay.
+    return f"{scheme}://{rest.removeprefix('www.')}"

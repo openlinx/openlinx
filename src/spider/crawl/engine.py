@@ -1,6 +1,7 @@
 """The engine: the frontier depth by depth, and each URL's unit (020-add-crawl-core D1, D2, D3)."""
 
 import asyncio
+from collections.abc import Iterable
 from contextlib import suppress
 from typing import Any
 
@@ -8,11 +9,17 @@ from spider.crawl.context import CrawlContext
 from spider.crawl.discovery import discovered_urls
 from spider.crawl.fetcher import FetchFailure, FetchResult, Request
 from spider.crawl.hooks import UrlResult
+from spider.crawl.links import DiscoveredLink
 from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
-from spider.crawl.scope import ScopeDecision
+from spider.crawl.scope import ScopeDecision, seed_base_mismatch
 from spider.crawl.urls import NormalizedUrl, url_host
-from spider.output.codes import HANDLER_FAILED, PARSE_FAILED, RECORD_FAILED
+from spider.output.codes import (
+    HANDLER_FAILED,
+    PARSE_FAILED,
+    RECORD_FAILED,
+    SEED_BASE_MISMATCH,
+)
 from spider.output.diagnostics import Diagnostic
 from spider.store.failures import is_one_urls_failure
 from spider.store.records import (
@@ -222,6 +229,8 @@ async def _fetched(
         nofollow=nofollow,
         follow_nofollow=context.settings.follow_nofollow,
     )
+    if parsed and queued.discovered_via == "seed":
+        _warn_of_seed_base_mismatch(context, queued.url, links)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
@@ -253,6 +262,22 @@ async def _fetched(
         discovered=discovered,
         rows=_handler_rows(context, result),
     )
+
+
+def _warn_of_seed_base_mismatch(
+    context: CrawlContext, seed: NormalizedUrl, links: Iterable[DiscoveredLink]
+) -> None:
+    apex_seed = seed_base_mismatch(seed, links)
+    if apex_seed is not None:
+        context.reporter.warn(
+            Diagnostic.of(
+                SEED_BASE_MISMATCH,
+                f"The Seed {seed} names its apex host as the site: its Page links there by its "
+                "canonical or by most of its hyperlinks, so the Crawl may miss most of the site.",
+                hint=f"To crawl the site the Seed names, give the Seed {apex_seed}.",
+                details={"seed": seed, "apex_seed": apex_seed},
+            )
+        )
 
 
 def _parse_failure(url: NormalizedUrl, parse_error: ParseError, message: str | None) -> str:

@@ -4,8 +4,10 @@ import re
 
 import pytest
 
-from spider.crawl.scope import ScopeDecision, scope_rules
+from spider.crawl.links import DiscoveredLink
+from spider.crawl.scope import ScopeDecision, scope_rules, seed_base_mismatch
 from spider.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url, parse_seed
+from spider.store.records import LinkType
 
 
 def test_the_other_scheme_of_the_seed_host_is_internal() -> None:
@@ -156,3 +158,59 @@ def test_the_subfolder_scope_keeps_urls_inside_the_folder(url: str, in_scope: bo
     rules = scope_rules(NormalizedUrl("http://site.test/blog/"), scope="subfolder")
 
     assert rules.decide(NormalizedUrl(url)).in_scope is in_scope
+
+
+def _link(link_type: LinkType, target: str) -> DiscoveredLink:
+    return DiscoveredLink(
+        type=link_type,
+        target=NormalizedUrl(target),
+        raw=target,
+        element="a",
+        attribute="href",
+        rel=(),
+        nofollow=False,
+        declared_in="html",
+        ordinal=1,
+        is_internal=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("seed", "links", "apex_seed"),
+    [
+        ("http://www.site.test/", [("canonical", "http://site.test/")], "http://site.test/"),
+        (
+            "http://www.site.test:8080/blog/",
+            [("canonical", "http://site.test:8080/blog/")],
+            "http://site.test:8080/blog/",
+        ),
+        (
+            "http://www.site.test/",
+            [
+                ("hyperlink", "http://site.test/a"),
+                ("hyperlink", "http://site.test/b"),
+                ("hyperlink", "http://www.site.test/c"),
+            ],
+            "http://site.test/",
+        ),
+        (
+            "http://www.site.test/",
+            [("hyperlink", "http://site.test/a"), ("hyperlink", "http://www.site.test/c")],
+            None,
+        ),
+        ("http://www.site.test/", [("canonical", "http://www.site.test/")], None),
+        ("http://www.site.test/", [("misc", "http://site.test/feed")], None),
+        ("http://site.test/", [("canonical", "http://www.site.test/")], None),
+        # www followed by a host that is no registrable domain: no apex to report.
+        ("http://www.blog.site.test/", [("canonical", "http://blog.site.test/")], None),
+        ("http://www.127.0.0.1/", [("canonical", "http://127.0.0.1/")], None),
+    ],
+)
+def test_a_www_seed_is_reported_when_its_links_name_the_apex(
+    seed: str, links: list[tuple[LinkType, str]], apex_seed: str | None
+) -> None:
+    found = seed_base_mismatch(
+        NormalizedUrl(seed), [_link(link_type, target) for link_type, target in links]
+    )
+
+    assert found == apex_seed
