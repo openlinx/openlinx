@@ -225,3 +225,39 @@ def test_more_than_five_robots_txt_redirects_count_as_missing(
     assert query(
         crawl_file, "SELECT robots_state FROM origins WHERE origin = ?", [server.base_url]
     ) == [(expected,)]
+
+
+def test_a_dead_external_domain_is_a_dns_error(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(
+            routes={
+                "/": Page(
+                    body='<a href="http://nowhere.test/a">A</a><a href="http://nowhere.test/b">B</a>'
+                )
+            }
+        ),
+        Site(routes={}),
+    )
+
+    crawl_file = crawl_result("http://site.test/", resolver=hosts.resolver).crawl_file
+
+    assert (
+        query(
+            crawl_file,
+            "SELECT url, fetch_state, fetch_error, instr(fetch_error_message, 'robots.txt') > 0 "
+            "FROM urls WHERE url LIKE 'http://nowhere.test/%' ORDER BY id",
+        ),
+        query(
+            crawl_file,
+            "SELECT robots_state, robots_status_code, robots_fetch_error FROM origins "
+            "WHERE origin = 'http://nowhere.test'",
+        ),
+    ) == (
+        [
+            ("http://nowhere.test/a", "error", "dns_error", 1),
+            ("http://nowhere.test/b", "error", "dns_error", 1),
+        ],
+        [("unreachable", None, "dns_error")],
+    )

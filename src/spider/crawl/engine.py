@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Iterable
 from contextlib import suppress
 from dataclasses import replace
+from datetime import datetime
 from typing import Any
 
 from spider.crawl.context import CrawlContext
@@ -13,6 +14,7 @@ from spider.crawl.hooks import UrlResult
 from spider.crawl.links import DiscoveredLink
 from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
+from spider.crawl.robots import OriginRobots
 from spider.crawl.robots_loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision, apex_seed_named_by_page
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
@@ -31,6 +33,7 @@ from spider.store.failures import is_one_urls_failure
 from spider.store.records import (
     ErroredUrl,
     FetchedUrl,
+    FetchError,
     ParseError,
     QueuedUrl,
     SkippedUrl,
@@ -252,7 +255,18 @@ async def _unit_of(
     blocked = None
     if skip_reason is None:
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
-        skip_reason, blocked = await _robots_check(context, robots, queued, decision)
+        origin_robots = await robots.robots_of(queued.url)
+        if origin_robots.fetch_error is not None:
+            # The origin cannot be reached: the URL gets the error without a request of
+            # its own (design D6).
+            message = (
+                f"The robots.txt request of {url_origin(queued.url)} got no HTTP response, "
+                f"so the URL was not requested: {origin_robots.fetch_error_message}"
+            )
+            return _record_error(
+                context, queued, decision, origin_robots.fetch_error, message, None, None
+            )
+        skip_reason, blocked = _robots_check(context, origin_robots, queued, decision)
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
         return record_skipped(
@@ -270,33 +284,52 @@ async def _unit_of(
             return None
         response = await context.fetcher.fetch(Request(queued.url))
     if isinstance(response, FetchFailure):
-        failed = _result(
+        return _record_error(
+            context,
             queued,
             decision,
-            fetch_state="error",
-            fetch_error=response.fetch_error,
-            fetch_error_message=response.message,
-            fetched_at=response.fetched_at,
+            response.fetch_error,
+            response.message,
+            response.fetched_at,
+            blocked,
         )
-        errored = ErroredUrl(
-            url_id=queued.id,
-            fetch_error=response.fetch_error,
-            fetch_error_message=response.message,
-            fetched_at=response.fetched_at,
-            blocked_by_robots_txt=blocked,
-            rows=_handler_rows(context, failed),
-        )
-        return record_error(errored, row_writers)
     fetched = await _fetched(context, queued, decision, response)
     return record_fetched(replace(fetched, blocked_by_robots_txt=blocked), row_writers)
 
 
-async def _robots_check(
-    context: CrawlContext, robots: RobotsLoader, queued: QueuedUrl, decision: ScopeDecision
+def _record_error(
+    context: CrawlContext,
+    queued: QueuedUrl,
+    decision: ScopeDecision,
+    fetch_error: FetchError,
+    message: str,
+    fetched_at: datetime | None,
+    blocked: bool | None,
+) -> UrlUnit:
+    failed = _result(
+        queued,
+        decision,
+        fetch_state="error",
+        fetch_error=fetch_error,
+        fetch_error_message=message,
+        fetched_at=fetched_at,
+    )
+    errored = ErroredUrl(
+        url_id=queued.id,
+        fetch_error=fetch_error,
+        fetch_error_message=message,
+        fetched_at=fetched_at,
+        blocked_by_robots_txt=blocked,
+        rows=_handler_rows(context, failed),
+    )
+    return record_error(errored, context.hooks.row_writers)
+
+
+def _robots_check(
+    context: CrawlContext, origin_robots: OriginRobots, queued: QueuedUrl, decision: ScopeDecision
 ) -> tuple[SkipReason | None, bool | None]:
     """robots.txt's skip of a URL that would be requested, and its blocked_by_robots_txt, NULL
     while the rules are unknown (design D6)."""
-    origin_robots = await robots.robots_of(queued.url)
     ignore = context.settings.ignore_robots
     if origin_robots.unreachable:
         if ignore:

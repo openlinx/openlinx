@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from protego import Protego
 
-from spider.store.records import RobotsState
+from spider.store.records import FetchError, RobotsState
 
 # RFC 9309 2.5: a crawler parses at least the first 500 KiB of a robots.txt.
 ROBOTS_TXT_LIMIT = 512_000
@@ -47,6 +47,9 @@ class OriginRobots:
     unreachable: bool = False
     # Of the final robots.txt response; None without one.
     status_code: int | None = None
+    # Why the robots.txt request got no HTTP response: every URL of the origin gets it.
+    fetch_error: FetchError | None = None
+    fetch_error_message: str | None = None
 
     def allows(self, url: str) -> bool:
         return self.rules is None or self.rules.allows(url)

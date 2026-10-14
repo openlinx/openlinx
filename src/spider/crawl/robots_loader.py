@@ -50,8 +50,8 @@ class RobotsLoader:
                 break
             url = target
             response = await self._request(url)
-        if not isinstance(response, FetchResult):
-            return OriginRobots(None)
+        if isinstance(response, FetchFailure):
+            return await self._unanswered(robots_url, response)
         state = robots_state(response.status_code)
         rules = read_robots_txt(response.body, self._token) if state == "ok" else None
         record = RobotsTxtRecord(
@@ -67,6 +67,26 @@ class RobotsLoader:
         await self._writer.run_async(record_robots_txt(record))
         return OriginRobots(
             rules, unreachable=state == "unreachable", status_code=response.status_code
+        )
+
+    async def _unanswered(self, robots_url: NormalizedUrl, failure: FetchFailure) -> OriginRobots:
+        record = RobotsTxtRecord(
+            origin=url_origin(robots_url),
+            state="unreachable",
+            status_code=None,
+            fetch_error=failure.fetch_error,
+            fetch_error_message=failure.message,
+            fetched_at=failure.fetched_at,
+            text=None,
+            crawl_delay_ms=None,
+            sitemaps=(),
+        )
+        await self._writer.run_async(record_robots_txt(record))
+        return OriginRobots(
+            None,
+            unreachable=True,
+            fetch_error=failure.fetch_error,
+            fetch_error_message=failure.message,
         )
 
     async def _request(self, url: NormalizedUrl) -> FetchResult | FetchFailure:

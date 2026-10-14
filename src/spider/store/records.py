@@ -215,7 +215,8 @@ class ErroredUrl:
     url_id: int
     fetch_error: FetchError
     fetch_error_message: str
-    fetched_at: datetime
+    # None without a request of its own: its origin's robots.txt got no response.
+    fetched_at: datetime | None
     blocked_by_robots_txt: bool | None = None
     rows: tuple[object, ...] = ()
 
