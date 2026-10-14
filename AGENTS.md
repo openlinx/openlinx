@@ -22,7 +22,7 @@ Read this first if you are about to change this repository, whether you are a co
 
 - **ruff:** no `print`, `sys.stdout`, `sys.stderr` or echo outside `spider.output`. No event-loop policies. `typer._click` only in `spider.cli.click_compat`. Lines of at most 100 characters.
 - **mypy:** strict mypy for 3.12. A `# type: ignore` must name its code.
-- **`tests/test_code_style.py`:** frozen records only, no class hierarchy of our own, a bound on every memo, sqlalchemy only in `spider.store`, and the crawl core never imports its plugins.
+- **`tests/test_code_style.py`:** frozen records only, no class hierarchy of our own, a bound on every memo, sqlalchemy only in `spider.store` (and the schema service), and the crawl core never imports its plugins.
 - **`tests/cli/test_startup.py`:** `--help` loads only its allowlist, so heavy imports go inside the function body.
 - **`tests/test_naming.py`:** the settings file and data folder names come from `spider.naming`, never typed as literals in `src/`.
 - **`tests/test_dependencies.py`:** a new runtime dependency goes into `tests/dependency_allowlist.txt`. Telemetry and LLM SDKs are refused.
@@ -31,6 +31,8 @@ Read this first if you are about to change this repository, whether you are a co
 
 ## Rules only review catches (follow them without being asked)
 
+- **Fix the cause, never the symptom.** When there is a bug or a red check, find out why. Don't get to green with a retry, a sleep, a skip, a looser assert or a `# type: ignore`. If a test is wrong, fix the premise it rests on. Where it is cheap, also close the class of bug with a guard, a type or a check.
+- **A guard test that passes at once is proven by a mutation.** If a guard test never went red, break the code on purpose and show the test fails. The commit says which mutation it used.
 - **Comments:** only for a non-obvious *why*. No docstring that repeats a name and its types. Every module starts with a one-line docstring that names the design decision it implements.
 - **[ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md):** logic in pure functions. Data in frozen records, with `slots=True` for records made per URL or Page and `kw_only=True` above three fields. Dependencies passed in, typed by a Protocol. pydantic only at the boundary.
 - **Errors:** an error a user sees is a `SpiderError` with a code from `spider.output.codes`. A broken internal contract raises `TypeError` or `RuntimeError`.

@@ -4,7 +4,7 @@
 
 ## Checklist
 
-- [ ] `uv run scripts/check.py` ends with "All checks passed."
+- [ ] `uv run scripts/check.py` ends with "All checks passed." locally, and CI is green on every OS
 - [ ] Every new behaviour has a test at an agreed seam (docs/testing.md), named after its scenario, that failed before the code
 - [ ] Docs updated in the same pull request: `docs/schema.md` for tables and columns, and the area's doc for new codes, settings, options or Commands
 - [ ] Terms are CONTEXT.md's, and no decision with an ADR is reopened

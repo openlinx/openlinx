@@ -39,10 +39,10 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 018 | `018-add-schema-conventions` | `crawl-store` (modified) | `schema` (`indexes`) | done |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | in progress |
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned, min |
-| 030 | `030-add-page-data` | `page-data` | none (data only) | planned, min |
-| 040 | `040-add-rules` | `rules` | `rules` | planned, 15 Rules |
-| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | planned, min |
-| 026 | `026-add-parse-pool` | `crawl-performance` | none | planned: the parse pool and its benchmark |
+| 030 | `030-add-page-data` | `page-data` | none (data only) | in progress, min |
+| 040 | `040-add-rules` | `rules` | `rules` | in progress, 15 Rules |
+| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | in progress, min |
+| 026 | `026-add-parse-pool` | `crawl-performance` | none | in progress: the parse pool and its benchmark |
 | 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop`, `resume` | planned, min |
 | 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned, min |
 | 085 | `085-add-release` | decided when it is drafted | none (release workflow) | planned, not drafted yet |
