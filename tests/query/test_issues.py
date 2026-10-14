@@ -1,6 +1,6 @@
 """The Issues of the Query Service (050-add-query-and-segments, querying; seam 2)."""
 
-from spider.rules.titles import TITLE_MISSING
+from spider.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
 from spider.services.query import QueryRequest, issue_detail, issue_list
 from spider.store.records import LATEST
 from tests.support.crawl_store import (
@@ -89,3 +89,12 @@ def test_thresholds_recorded_for_the_crawl(temp_workspace: TempWorkspace) -> Non
     found = issue_detail(request(temp_workspace), "title-too-long")
 
     assert found.header["rule"]["thresholds"] == {"max_chars": 70}
+
+
+def test_guidance_of_the_rule(temp_workspace: TempWorkspace) -> None:
+    crawl_store(temp_workspace, completed=True)
+
+    found = issue_detail(request(temp_workspace), "title-too-long")
+
+    # The how_to_fix that spider rules show title-too-long prints.
+    assert found.header["rule"]["how_to_fix"] == TITLE_TOO_LONG.how_to_fix

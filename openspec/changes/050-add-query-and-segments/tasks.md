@@ -22,7 +22,7 @@ Every group ends with a docs task and a review task.
 - [x] 1.6 Drive `Issue list › Unknown Issue Type` (CLI). Verify: red → green; one commit.
 - [x] 1.7 Drive `Issue detail › A Rule that did not fire` (Services): the detail entry point returns a `Page` with `header` `{"rule": ...}`, read from the Crawl's `rules` table, and its Affected URLs from `040`'s `affected_urls_in` on the same connection (design D14). The detail Command's name waits for the user's decision (design, Open Questions); the service call and the item shape do not depend on it. Verify: red → green; one commit.
 - [x] 1.8 Drive `Issue detail › Thresholds recorded for the Crawl` (Services). Verify: red → green; one commit.
-- [ ] 1.9 Drive `Issue detail › Guidance of the Rule` (Services). Verify: red → green; one commit.
+- [x] 1.9 Drive `Issue detail › Guidance of the Rule` (Services). Verify: red → green; one commit.
 - [ ] 1.10 Drive `Issue detail › The reproducing query of the Rule` (Services): `reproduce_sql` in `rule`. Verify: red → green; one commit.
 - [ ] 1.11 Drive `Issue detail › Detail of an Affected URL` (Services). Verify: red → green; one commit.
 - [ ] 1.12 Drive the paging of Affected URLs (Services), a clause with no scenario of its own in `Issue detail` ("`--limit` and `--cursor` SHALL work as they do for `pages`"): items in `urls.url` order, paged by keyset in SQL through `affected_urls_in` joined to `urls`, the test listed in design Risks (design D4, D14). Verify: red → green; one commit.
