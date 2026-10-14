@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Mapping
 
-from sqlalchemy import Connection, bindparam, func, literal_column, select, update
+from sqlalchemy import Connection, bindparam, func, literal_column, null, select, update
 from sqlalchemy.dialects.sqlite import insert
 
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
@@ -15,8 +15,24 @@ type UrlUnit = Callable[[Connection], None]
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
 # Each row binds its origin, whose row the unit records first (design D18).
-_INSERT_URL = (
-    insert(urls).values(origin_id=ORIGIN_ID).on_conflict_do_nothing(index_elements=[urls.c.url])
+_INSERT = insert(urls).values(origin_id=ORIGIN_ID)
+_INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])
+# A followed Link re-queues a URL that only unfollowed Links reached, as found through it;
+# every other conflict changes nothing, so a replayed unit gives the same rows (design D5).
+_INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
+    index_elements=[urls.c.url],
+    set_={
+        "fetch_state": _INSERT.excluded.fetch_state,
+        "skip_reason": null(),
+        "crawl_depth": _INSERT.excluded.crawl_depth,
+        "discovered_via": _INSERT.excluded.discovered_via,
+        "found_on_url_id": _INSERT.excluded.found_on_url_id,
+    },
+    where=(
+        (urls.c.skip_reason == literal_column("'nofollow'"))
+        | (urls.c.skip_reason == literal_column("'link_type_not_followed'"))
+    )
+    & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
 )
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
@@ -172,7 +188,7 @@ def record_fetched(
         record_origins(connection, origins)
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
-            connection.execute(_INSERT_URL, new_rows)
+            connection.execute(_INSERT_DISCOVERED, new_rows)
         write_rows(connection, fetched.rows, row_writers)
 
     return unit

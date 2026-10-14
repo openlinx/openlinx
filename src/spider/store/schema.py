@@ -235,14 +235,16 @@ urls = public_table(
         "discovered_via",
         Text,
         nullable=False,
-        comment="How the URL was first found: seed, or the Link type.",
+        comment="How the URL was first found: seed, or the Link type; through a followed Link "
+        "once one has reached it.",
         info={"values": literal_values(DiscoveredVia)},
     ),
     Column(
         "found_on_url_id",
         Integer,
         ForeignKey("urls.id"),
-        comment="The URL whose response first revealed this one; NULL for Seeds.",
+        comment="The URL whose response first revealed this one, through a followed Link once "
+        "one has reached it; NULL for Seeds.",
     ),
     Column(
         "fetch_state",
