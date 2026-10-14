@@ -47,7 +47,7 @@
 - `rules`: the Rule model, the v0.1 catalogue, threshold overrides and disabling, Rules as SQL queries, live Issues during a Crawl and their materialisation by the post-crawl pass, stored Issues and Affected URLs, the Health Score and the `spider rules` Command.
 
 ### Modified Capabilities
-_None._ No specs exist yet. This change builds on requirements of `010`, `015`, `020`, `022` and `030` and does not modify them.
+- `workspace`: the commented settings template describes a table of named tables, a third kind of settings table that a table opts into, which `[rules.<id>]` is (design D9). This change builds on other requirements of `010`, `015`, `020`, `022` and `030` without modifying them.
 
 ## Non-goals
 
