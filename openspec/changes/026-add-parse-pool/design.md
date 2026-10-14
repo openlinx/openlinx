@@ -51,10 +51,13 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 ### D3. Crash containment
 A worker that dies (a segfault in a native parser, or `os._exit`) closes its result pipe, which the waiter sees as its end of file (D1). The executor then:
 1. records the one Page that worker held as `worker_crashed`
-2. starts a replacement worker with the same arguments
+2. starts a replacement worker with the same snapshot
 3. goes on; no other Page is touched, because each worker holds one Page at a time
 
 Each crash therefore costs one URL and one worker start.
+- **A failure Page, never an exception:** `prepare()` returns `PreparedPage(parse_error="worker_crashed", parse_error_message=...)`, with no Links of the document and no outputs, for a Page whose worker ended and for one whose outcome the crawl process cannot read; `020` records it with `parsed` = 0 and still reads the response's header Links itself (its task 7.23). `prepare()` raises only for a programmer's error, such as a Page before `start()`, for a pool that cannot start its workers (`WorkerStartError`, D1), and for the exception page preparation itself raised, which reaches the engine as it would in process (ruled 2026-10-14).
+- **Each output crosses on its own:** a worker sends the Page without its outputs and each output pickled by itself, so an output the crawl process cannot unpickle, such as one whose class cannot be rebuilt there, costs only its extractor, recorded as `extractor_error` with the Page's Links kept, as an output the worker cannot pickle does (`020` D16); only a Page whose own record cannot be read is `worker_crashed` (ruled 2026-10-14). The cost is one more pickle per output.
+- **The replacement** starts off the event loop's thread, as the first workers do, and the Pages waiting meanwhile wait for it; the waiter thread watches the pipes of the workers alive at each wait, so it runs until the pool closes, not until its first workers have ended. A replacement that ends before it is ready breaks the pool with `WorkerStartError` (D1), so a worker that cannot start is never started again and again. `close()` waits for a replacement still starting, then stops it with the others.
 - *Alternative:* recording every Page in flight as `worker_crashed`, as a broken `ProcessPoolExecutor` would. That punishes innocent URLs. Rejected.
 
 ### D4. Shutdown
