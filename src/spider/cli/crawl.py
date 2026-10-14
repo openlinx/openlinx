@@ -71,6 +71,16 @@ def crawl(
         ),
         OptionMeta(setting="crawl.max_depth"),
     ] = None,
+    max_urls: Annotated[
+        int | None,
+        typer.Option(
+            "--max-urls",
+            help="The most URL requests over the Crawl's whole life; robots.txt requests do "
+            "not count. No limit by default.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.max_urls"),
+    ] = None,
     scope: Annotated[
         ScopeKind,
         typer.Option(

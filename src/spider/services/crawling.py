@@ -232,16 +232,21 @@ async def _crawl(
     context_of = _crawl_context(crawl_file, plan, clock, reporter, hooks, resolver, pages)
     async with context_of as context:
         await run_crawl(context, plan.seed)
-        if context.stop.is_set:
-            # Never completed: 12.9 records a write failure's failed end, 9.7 and 13.1 a stop.
-            raise context.stop.cause or RuntimeError(f"no end is built for {context.stop.reason}")
+        stop_reason = context.stop.reason
+        if stop_reason is not None and stop_reason != "max_urls":
+            # 12.9 records a write failure's failed end, 13.1 an interrupt's.
+            raise context.stop.cause or RuntimeError(f"no end is built for {stop_reason}")
         writer = context.writer
-        # Before completed is written: 040 reads completed as "its Issues are materialised".
-        for crawl_pass in hooks.passes:
-            await crawl_pass.run(writer)
+        if stop_reason is None:
+            # Before completed is written: 040 reads completed as "its Issues are materialised".
+            for crawl_pass in hooks.passes:
+                await crawl_pass.run(writer)
         # One instant: the result's ended_at is the completed_at the file records.
         ended_at = clock.now()
-        await writer.run_async(record_state("completed", ended_at))
+        if stop_reason is None:
+            await writer.run_async(record_state("completed", ended_at))
+        else:
+            await writer.run_async(record_state("stopped", ended_at, stop_reason))
         summary = await writer.run_async(crawl_summary())
         return ended_at, summary, await writer.run_async(url_counts())
 

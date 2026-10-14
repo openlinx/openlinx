@@ -27,6 +27,11 @@ class CrawlSettings(BaseModel):
         description="The deepest Crawl Depth whose URLs are requested, the Seed's being 0; "
         "Resources of followed Pages are requested one deeper. No limit when unset.",
     )
+    max_urls: int | None = Field(
+        None,
+        description="The most URL requests over the Crawl's whole life, those of a continued "
+        "Crawl included; robots.txt requests do not count. No limit when unset.",
+    )
     scope: ScopeKind = Field(
         "host",
         description="Which Internal URLs are in the Scope: host (the Seed hosts), subdomains "

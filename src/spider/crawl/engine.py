@@ -100,7 +100,9 @@ class _Outcomes:
 
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     outcomes = _Outcomes(context)
-    limits = RequestLimits(context.settings.concurrency, context.pages.backlog)
+    limits = RequestLimits(
+        context.settings.concurrency, context.pages.backlog, context.settings.max_urls
+    )
     decision = context.scope.decide(seed)
     await context.writer.run_async(
         record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
@@ -118,6 +120,11 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     try:
         while depth is not None and not context.stop.is_set:
             await _crawl_depth(context, outcomes, limits, checks, depth)
+            if limits.exhausted():
+                # The URL limit: what has started ends and is recorded, and nothing more starts.
+                await asyncio.gather(*checks)
+                context.stop.set("max_urls")
+                break
             # Read after every unit submitted so far, so it sees the URLs they discovered.
             depth = await context.writer.run_async(next_depth(depth))
             if depth is None:
@@ -147,12 +154,17 @@ async def _crawl_depth(
     try:
         # The cursor of this run: a URL in flight is never read twice (design D1).
         after = 0
-        while batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH)):
+        while not limits.exhausted() and (
+            batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH))
+        ):
             for queued in batch:
                 await limits.reserve_task()
                 if context.stop.is_set:
                     limits.task_ended()
                     return
+                if limits.exhausted():
+                    limits.task_ended()
+                    break
                 decision = context.scope.decide(queued.url)
                 task = asyncio.create_task(_crawl_url(context, outcomes, limits, queued, decision))
                 # A check never holds the barrier (design D3); the sweep in run_crawl reads
@@ -186,17 +198,20 @@ async def _crawl_url(
     decision: ScopeDecision,
 ) -> None:
     try:
+        unit = await _unit_of(context, limits, queued, decision)
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
-        await outcomes.submit(queued, await _unit_of(context, limits, queued, decision))
+        if unit is not None:
+            await outcomes.submit(queued, unit)
     finally:
         limits.task_ended()
 
 
 async def _unit_of(
     context: CrawlContext, limits: RequestLimits, queued: QueuedUrl, decision: ScopeDecision
-) -> UrlUnit:
-    """The unit that records the URL's final state, with its handlers' rows; `decision` is
-    taken once, at dispatch, so a URL found on several Pages is recorded once (design D1)."""
+) -> UrlUnit | None:
+    """The unit that records the URL's final state, with its handlers' rows, or None when the
+    URL limit refuses its request, which leaves it queued; `decision` is taken once, at
+    dispatch, so a URL found on several Pages is recorded once (design D1)."""
     row_writers = context.hooks.row_writers
     skip_reason = _skip_reason(context, queued, decision)
     if skip_reason is not None:
@@ -205,6 +220,8 @@ async def _unit_of(
             SkippedUrl(queued.id, skip_reason, _handler_rows(context, skipped)), row_writers
         )
     async with limits.host(url_host(queued.url)), limits.request():
+        if not limits.start_request():
+            return None
         response = await context.fetcher.fetch(Request(queued.url))
     if isinstance(response, FetchFailure):
         failed = _result(

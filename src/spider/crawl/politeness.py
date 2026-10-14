@@ -15,11 +15,27 @@ class RequestLimits:
     preparation may fall behind the requests before fetching waits (design D7, 026 D2).
     """
 
-    def __init__(self, concurrency: int, backlog: int = 0) -> None:
+    def __init__(self, concurrency: int, backlog: int = 0, max_urls: int | None = None) -> None:
         self._concurrency = concurrency
         self._hosts: dict[str, asyncio.Semaphore] = {}
         self._requests = asyncio.Semaphore(global_cap(concurrency))
         self._tasks = asyncio.Semaphore(global_cap(concurrency) + backlog)
+        self._max_urls = max_urls
+        self._started = 0
+        self._refused = False
+
+    def start_request(self) -> bool:
+        """Counts a URL request as it starts, in flight from then on, or refuses it at the URL
+        limit; called with its host's slot and the global cap held, so the count is exact."""
+        if self._max_urls is not None and self._started >= self._max_urls:
+            self._refused = True
+            return False
+        self._started += 1
+        return True
+
+    def exhausted(self) -> bool:
+        """A request was refused at the URL limit, so a URL is left queued."""
+        return self._refused
 
     async def reserve_task(self) -> None:
         """Waits for room under the global cap before a URL's task is created."""
