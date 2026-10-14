@@ -81,3 +81,11 @@ def test_a_rule_that_did_not_fire(temp_workspace: TempWorkspace) -> None:
     found = issue_detail(request(temp_workspace), "h1-missing")
 
     assert (found.total, found.items) == (0, [])
+
+
+def test_thresholds_recorded_for_the_crawl(temp_workspace: TempWorkspace) -> None:
+    crawl_store(temp_workspace, rules={"title-too-long": {"max_chars": 70}}, completed=True)
+
+    found = issue_detail(request(temp_workspace), "title-too-long")
+
+    assert found.header["rule"]["thresholds"] == {"max_chars": 70}

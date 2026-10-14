@@ -5,11 +5,23 @@ from collections.abc import Collection, Sequence
 from typing import Any
 
 import orjson
-from sqlalchemy import Connection, case, select
+from sqlalchemy import Connection, bindparam, case, select
 
 from spider.rules.model import Rule
 from spider.store.issues import affected_urls_in, issues_in
 from spider.store.schema import rules, urls
+
+_RULE = select(
+    rules.c.id.label("rule_id"),
+    rules.c.category,
+    rules.c.issue_type,
+    rules.c.priority,
+    rules.c.description,
+    rules.c.why_it_matters,
+    rules.c.how_to_fix,
+    rules.c.thresholds,
+    rules.c.reproduce_sql,
+).where(rules.c.id == bindparam("rule_id"))
 
 
 def ordered_issues(
@@ -60,3 +72,9 @@ def affected_url_items(
         {"url": url, "detail": None if detail is None else orjson.loads(detail)}
         for url, detail in connection.execute(ordered)
     ]
+
+
+def recorded_rule(connection: Connection, rule_id: str) -> dict[str, Any]:
+    """The Rule as the Crawl's rules table records it, with the thresholds that applied."""
+    row = connection.execute(_RULE, {"rule_id": rule_id}).one()
+    return {**row._asdict(), "thresholds": orjson.loads(row.thresholds)}

@@ -16,7 +16,9 @@ from spider.crawl.urls import NormalizedUrl
 from spider.extract.addresses import display_address
 from spider.rules.model import Rule
 from spider.rules.registry import RULES
+from spider.rules.settings import RulesSettings
 from spider.rules.titles import TITLE_MISSING
+from spider.services.rules import rule_rows
 from spider.store.crawls import record_state
 from spider.store.issues import materialise_issues
 from spider.store.page_records import PageRow
@@ -26,7 +28,7 @@ from spider.store.schema import urls
 from spider.store.urls import record_fetched, record_seed
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
-from tests.support.crawls import create_any_crawl, default_rule_rows
+from tests.support.crawls import create_any_crawl
 from tests.support.rules import responded
 from tests.support.workspace import TempWorkspace
 
@@ -51,6 +53,7 @@ def crawl_store(
     *,
     links: Sequence[str] = (),
     pages: Mapping[str, Mapping[str, Any]] = MappingProxyType({}),
+    rules: Mapping[str, Mapping[str, Any]] = MappingProxyType({}),
     later_rules: Sequence[Rule] = (),
     completed: bool = False,
 ) -> Path:
@@ -58,11 +61,17 @@ def crawl_store(
     `links`, each of which answered 200 as a URL that is no Page, and to `pages`, analysed
     Pages with these Page data columns.
 
-    `later_rules` are Rules of a later tool: the file records them after the catalogue's, and
-    a `completed` Crawl's post-crawl pass stores their Issues too. Otherwise it is `running`.
+    `rules` are the Workspace's [rules.<id>] settings the Crawl was created with, such as
+    {"title-too-long": {"max_chars": 70}}. `later_rules` are Rules of a later tool: the file
+    records them after the catalogue's, and a `completed` Crawl's post-crawl pass stores
+    their Issues too. Otherwise the Crawl is `running`.
     """
     crawl = create_any_crawl(
-        temp_workspace, rules=(*default_rule_rows(), *map(_recorded, later_rules))
+        temp_workspace,
+        rules=(
+            *rule_rows(RulesSettings.model_validate(rules).model_dump(by_alias=True)),
+            *map(_recorded, later_rules),
+        ),
     )
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         seed_id = writer.run(record_seed(SEED, is_internal=True, in_scope=True))

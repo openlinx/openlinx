@@ -103,14 +103,16 @@ def issue_list(
 
 
 def issue_detail(request: QueryRequest, rule_id: str) -> Page:
-    """One Issue: its Rule's Affected URLs."""
+    """One Issue: its Rule as the Crawl recorded it, and the Rule's Affected URLs."""
     from spider.rules.registry import RULES
-    from spider.store.query import affected_url_items
+    from spider.store.query import affected_url_items, recorded_rule
     from spider.store.reading import reading
 
     with reading(_crawl_file(request).path) as connection:
+        # First: the reader refuses a rule id the Crawl's rules table lacks.
         items = affected_url_items(connection, rule_id, RULES)
-    return Page(items, len(items), None)
+        rule = recorded_rule(connection, rule_id)
+    return Page(items, len(items), None, header={"rule": rule})
 
 
 def _crawl_file(request: QueryRequest) -> CrawlFile:
