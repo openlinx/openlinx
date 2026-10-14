@@ -21,7 +21,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [x] 1.3 Drive "Indexes of pages" at seam 6, and add the unique index `pages_address` with the query it serves.
 - [x] 1.4 Drive "Image response is not a Page" at seam 3+6.
 - [x] 1.5 Drive "URL blocked by robots.txt is not a Page" and "URL without a response is not a Page" at seam 4, on the `UrlResult` that `020` records for each: `skipped` with `blocked_by_robots_txt`, and `error` with a `fetch_error`. This is a trivial pair: both expect no row. `020`'s task 10.5 and `022`'s timeout scenario pin those records end to end.
-- [ ] 1.6 Drive "External HTML response is not a Page" at seam 3+6, through `020`'s DNS resolver hook. The Page handler reads `is_internal` and `in_scope` from the `UrlResult`.
+- [x] 1.6 Drive "External HTML response is not a Page" at seam 3+6, through `020`'s DNS resolver hook. The Page handler reads `is_internal` and `in_scope` from the `UrlResult`.
 - [ ] 1.7 Docs: create `docs/page-data.md` covering what a Page is, analysed vs non-analysed Pages, the NULL conventions and the two address forms, with a link from `docs/architecture.md`.
 - [ ] 1.8 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 

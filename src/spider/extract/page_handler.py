@@ -9,7 +9,8 @@ from spider.store.page_records import PageRow
 
 
 def page_rows(result: UrlResult) -> Iterable[PageRow]:
-    if not is_html_type(result.content_type):
+    # A Page is an Internal URL in the Scope with an HTML response, whatever its status (D2).
+    if not (result.is_internal and result.in_scope and is_html_type(result.content_type)):
         return ()
     return (
         PageRow(

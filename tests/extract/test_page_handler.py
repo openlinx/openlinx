@@ -9,7 +9,7 @@ from spider.extract.page_handler import page_rows
 from spider.store.page_records import PageRow
 
 
-def _fetched(url: str, **values: Any) -> UrlResult:
+def _fetched(url: str, *, in_scope: bool = True, **values: Any) -> UrlResult:
     """A fetched Internal HTML URL in the Scope, as the engine gives it to handlers."""
     return UrlResult(
         url_id=1,
@@ -18,7 +18,7 @@ def _fetched(url: str, **values: Any) -> UrlResult:
         discovered_via="seed",
         found_on_url_id=None,
         is_internal=True,
-        in_scope=True,
+        in_scope=in_scope,
         fetch_state="fetched",
         status_code=200,
         content_type="text/html; charset=utf-8",
@@ -82,3 +82,7 @@ def test_url_without_a_response_is_not_a_page() -> None:
     )
 
     assert tuple(page_rows(failed)) == ()
+
+
+def test_an_internal_url_outside_the_scope_is_not_a_page() -> None:
+    assert tuple(page_rows(_fetched("https://site.test/blog/", in_scope=False))) == ()
