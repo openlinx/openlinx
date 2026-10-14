@@ -11,7 +11,7 @@ The motivation is in proposal.md, and the catalogue and behaviour are in `specs/
 - the `pages` and `links` tables, the stored Indexability and the link counts of `030-add-page-data`
 - the Workspace settings loaded and validated by `010-add-workspace-and-cli-contract`
 
-`020-add-crawl-core` provides (its D9 and D14), through `Hooks` in `spider.crawl.hooks`:
+`020-add-crawl-core` provides (its D9 and D14), through `Hooks` in `spider.crawl.hooks`, whose built-in entries `default_hooks()` lists in `spider.services.hooks`, the composition root, so the crawl core never imports its plugins:
 
 - a **per-response hook** of pure handlers, which this change does not use (D1)
 - a **post-crawl passes** hook of store functions (`Pass`: a name and a function of the `CrawlWriter`), which runs when a Crawl ends as `completed` or `stopped`, before its final Crawl State is written, and again after every continued run, so a pass must be safe to re-run
