@@ -35,7 +35,8 @@ class ScopeRules:
 
     @property
     def section_crawl(self) -> bool:
-        return self.folder is not None
+        # --exclude alone narrows a whole-site Crawl; it makes no Section Crawl.
+        return self.folder is not None or bool(self.include)
 
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
         host = _without_trailing_dot(url_host(url))

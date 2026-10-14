@@ -2,8 +2,9 @@
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.support.cli import run_cli
 from tests.support.crawling import crawled
-from tests.support.crawls import query
+from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
 
 
@@ -70,3 +71,23 @@ def test_a_url_that_matches_no_include_pattern_is_checked_but_not_followed(
         "SELECT fetch_state, in_scope, parsed FROM urls WHERE url = ?",
         [server.url("/news/n")],
     ) == [("fetched", 0, 0)]
+
+
+def test_an_include_pattern_makes_a_section_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/blog/": Page(body="<p>Blog</p>")}))
+
+    crawl_file = crawled(server.url("/blog/"), "--include", "/blog/")
+
+    assert crawl_row(crawl_file)["section_crawl"] == 1
+
+
+def test_exclude_patterns_alone_do_not_make_a_section_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
+
+    result = run_cli("crawl", server.url("/"), "--exclude", "/tag/")
+
+    assert (result.exit_code, result.json()["section_crawl"]) == (0, False)
