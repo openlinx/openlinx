@@ -11,7 +11,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - the `CrawlWriter`, which is the only writer while no Crawl can be resumed or detached
   - redaction of whole and partial secrets, and `--crawl`
   - It does not build the writer claim, `crawl_locked`, control writes by other processes, recording a dead Crawl as `interrupted`, or reserved and chosen ids. They moved to this change on 2026-10-05 (ROADMAP.md), and D12 defines them.
-- **`017-speed-up-crawl-writer` and `018-add-schema-conventions`:** units that may run again (`017` D7), and the schema conventions of ADR-0005 with the declaration helper.
+- **`017-speed-up-crawl-writer` and `018-add-schema-conventions`:** units that may run again (`017` D7), and the schema conventions of ADR-0005 with `public_table()`.
 - **`010-add-workspace-and-cli-contract`:**
   - the result on stdout, events and diagnostics on stderr, and partial results
   - the paging envelope, and the exit-code table (busy 5, usage 2)
@@ -77,7 +77,7 @@ No moment exists in which a Crawl exists without a live writer, so a concurrent 
 `start_new_session=True` (setsid), stdin from `/dev/null`, stdout and stderr to the log file, and `close_fds=True`. SIGHUP and signals to the caller's process group do not reach the Crawl. Some agent sandboxes kill every descendant anyway. `status` then shows `interrupted`, `resume` continues the Crawl, and the Skill prefers Hand-off for large Crawls.
 
 ### D6. Control rows
-- **Marking the table:** `control_requests` is declared through `018`'s helper with `info={"control": True}`. Control writes (D12) are allowed only on tables marked this way.
+- **Marking the table:** `control_requests` is declared through `018`'s `public_table()` with `info={"control": True}`. Control writes (D12) are allowed only on tables marked this way.
 - **Writing a request:** `stop` inserts into `control_requests` through `write_control` (D12): a short transaction with a 5-second busy wait.
 - **Checking for requests:** the crawl process checks for unhandled rows at least once per second, through a writer unit that only reads (`017` D5). A request sets `020`'s stop flag with `stop_reason = requested`, the same path as Ctrl+C.
 - **Marking it handled:** the unit that handles it sets `handled_at` and `handled_by_run_id`.
@@ -141,7 +141,7 @@ Everything that decides which URLs belong to the Crawl stays fixed: the Crawl Mo
 - *Alternative:* byte-range locks on the crawl file. POSIX `fcntl` locks are per process, so they would clash with SQLite's own locks on the same file. Rejected.
 
 ### D13. The tables under ADR-0005
-Both tables go through `018`'s declaration helper, so they are `STRICT`, with CHECKs on their enumerations and flags.
+Both tables go through `018`'s `public_table()`, so they are `STRICT`, with CHECKs on their enumerations and flags.
 - **`crawl_runs.id`** (was `run`): the run number is the entity's own key (ADR-0005 rule 2). The Commands' output keeps the field name `run`.
 - **`control_requests.handled_by_run_id`** (was `handled_by_run`): a declared reference to `crawl_runs.id` (rule 3).
 - **`crawl_runs.stop_reason`** takes its values from `020`'s `StopReason`, the one value set it shares with `crawl.stop_reason` (rule 7), including the `failed` reasons.

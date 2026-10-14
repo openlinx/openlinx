@@ -6,7 +6,7 @@ Each task below is one vertical TDD slice and one commit. It is done when:
 3. ruff, the strict type checker and the full suite (with the coverage gate) pass
 4. the commit message names the scenario
 
-A slice that needs a new table or column adds it through `018`'s declaration helper, with its description, and updates `docs/schema.md` in the same commit, so the contract test never goes red. "The slow fixture site" is the one defined in the spec.
+A slice that needs a new table or column adds it through `018`'s `public_table()`, with its description, and updates `docs/schema.md` in the same commit, so the contract test never goes red. "The slow fixture site" is the one defined in the spec.
 
 Seams (docs/testing.md):
 - **[CLI]**: seam 1, `CliRunner`
