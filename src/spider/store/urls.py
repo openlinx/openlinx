@@ -159,7 +159,8 @@ def record_fetched(
             "crawl_depth": new.crawl_depth,
             "discovered_via": new.discovered_via,
             "found_on_url_id": url_id,
-            "fetch_state": "queued",
+            "fetch_state": "queued" if new.skip_reason is None else "skipped",
+            "skip_reason": new.skip_reason,
             "parsed": False,
         }
         for new in fetched.discovered

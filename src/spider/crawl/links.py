@@ -182,6 +182,8 @@ def _without_url_equals(rest: str) -> str:
 def _link_type(rel: tuple[str, ...], attributes: Mapping[str, str | None]) -> LinkType | None:
     if "stylesheet" in rel:
         return "css"
+    if "amphtml" in rel:
+        return "amphtml"
     if not _PAGINATION.isdisjoint(rel):
         return "pagination"
     if "alternate" in rel and "hreflang" in attributes:

@@ -31,3 +31,15 @@ def test_a_meta_refresh_target_is_followed(
     crawl_file = crawled(server.url("/"))
 
     assert _state(crawl_file, server.url("/new")) == [("fetched", None, "meta_refresh")]
+
+
+def test_amphtml_targets_are_not_requested(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body='<link rel="amphtml" href="/amp/">')}))
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _state(crawl_file, server.url("/amp/")) == [
+        ("skipped", "link_type_not_followed", "amphtml")
+    ]

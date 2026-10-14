@@ -121,6 +121,8 @@ class NewUrl:
     discovered_via: DiscoveredVia
     is_internal: bool
     in_scope: bool
+    # Why none of the Page's Links to it is followed; None queues it (design D5).
+    skip_reason: SkipReason | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
