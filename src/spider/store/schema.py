@@ -369,6 +369,12 @@ pages = public_table(
         comment="The Page's URL as the Crawl requested it, equal to urls.url: the host in IDNA "
         "(punycode) form and every non-ASCII character percent-encoded as UTF-8.",
     ),
+    Column(
+        "title_1",
+        Text,
+        comment="The text of the Page's first title element; NULL without one, or when the Page "
+        "is not analysed.",
+    ),
     comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
     "an HTML document, whatever its status code.",
     change=30,

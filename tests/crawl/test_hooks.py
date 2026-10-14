@@ -11,7 +11,6 @@ from sqlalchemy import Connection, text
 
 from spider.crawl.hooks import Handler, Hooks, Pass, UrlResult
 from spider.crawl.pages import Extractor, PageInput
-from spider.services.hooks import default_hooks
 from spider.store.crawls import crawl_summary
 from spider.store.records import CrawlState
 from spider.store.writer import CrawlWriter, CrawlWriterReplayError
@@ -55,7 +54,7 @@ def test_a_registered_handler_sees_every_url_once(
             }
         )
     )
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, Handler("seen", _seen)),
@@ -87,7 +86,7 @@ def test_post_crawl_passes_run_before_a_crawl_is_completed(
     async def record_state(writer: CrawlWriter) -> None:
         seen.append((await writer.run_async(crawl_summary())).state)
 
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("state", record_state)))
 
     crawl_result(server.url("/"), hooks)
@@ -120,7 +119,7 @@ BOOM_SITE = Site(
 
 
 def _with_extractors(*extractors: Extractor) -> Hooks:
-    hooks = default_hooks()
+    hooks = Hooks()
     return replace(hooks, extractors=(*hooks.extractors, *extractors))
 
 
@@ -240,7 +239,7 @@ def test_a_failing_handler_does_not_stop_the_crawl(
             }
         )
     )
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, Handler("boom", _boom)),
@@ -265,7 +264,7 @@ def test_only_the_failing_handlers_rows_are_dropped(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, Handler("boom", _boom_only), Handler("seen", _seen)),
@@ -300,7 +299,7 @@ def _refuse_with_the_file(connection: Connection, row: Unwritable) -> None:
 
 
 def _with_row_writer(writer: Callable[[Connection, Unwritable], None]) -> Hooks:
-    hooks = default_hooks()
+    hooks = Hooks()
     return replace(
         hooks,
         handlers=(*hooks.handlers, Handler("unwritable", _unwritable)),
@@ -355,7 +354,7 @@ def test_a_handler_that_fails_midway_keeps_none_of_its_rows(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, Handler("halfway", _seen_then_boom)),
@@ -414,7 +413,7 @@ def test_a_writer_that_ends_reports_why_it_ended(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, Handler("flaky", _flaky_or_unwritable)),
@@ -459,7 +458,7 @@ def test_a_handler_gets_the_row_values_of_the_url(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, Handler("values", _row_values)),
