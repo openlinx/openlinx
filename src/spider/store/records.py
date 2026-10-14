@@ -54,6 +54,8 @@ type DiscoveredVia = (
     Literal["seed"] | LinkType | Literal["redirect", "list", "sitemap_input", "sitemap_index"]
 )
 type FetchState = Literal["queued", "fetched", "error", "skipped"]
+# extractor_error keeps parsed = 1; the others mean nothing came out of page preparation.
+type ParseError = Literal["extractor_error", "body_too_large", "worker_crashed", "parse_timeout"]
 
 # The --crawl value that selects the Crawl that started last.
 LATEST = "latest"
@@ -147,6 +149,8 @@ class FetchedUrl:
     fetched_at: datetime
     response_time_ms: int
     parsed: bool
+    parse_error: ParseError | None = None
+    parse_error_message: str | None = None
     discovered: tuple[NewUrl, ...] = ()
     # What the handlers returned, written in the same unit (design D9).
     rows: tuple[object, ...] = ()

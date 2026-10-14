@@ -24,6 +24,8 @@ _FETCHED = (
         response_time_ms=bindparam("response_ms"),
         fetched_at=bindparam("request_at"),
         parsed=bindparam("is_parsed"),
+        parse_error=bindparam("parse_failure"),
+        parse_error_message=bindparam("parse_failure_message"),
     )
 )
 _SKIPPED = (
@@ -120,6 +122,8 @@ def record_fetched(
         "response_ms": fetched.response_time_ms,
         "request_at": fetched.fetched_at,
         "is_parsed": fetched.parsed,
+        "parse_failure": fetched.parse_error,
+        "parse_failure_message": fetched.parse_error_message,
     }
     new_rows = [
         {

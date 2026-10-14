@@ -1,8 +1,11 @@
-"""The hooks later changes plug into: handlers, passes and row writers (020-add-crawl-core D9)."""
+"""The hooks later changes plug into: extractors, handlers, passes (020-add-crawl-core D9)."""
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
+import msgspec
+
+from spider.crawl.pages import Extractor
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import FetchState, SkipReason
 from spider.store.rows import RowWriter
@@ -21,6 +24,8 @@ class UrlResult:
     status_code: int | None = None
     # As received: in order, in their letter case, repeated names kept.
     headers: tuple[tuple[str, str], ...] = ()
+    # By extractor name, for a parsed response; an extractor that failed has none.
+    outputs: Mapping[str, msgspec.Struct] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +46,7 @@ class Pass:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Hooks:
+    extractors: tuple[Extractor, ...] = ()
     handlers: tuple[Handler, ...] = ()
     passes: tuple[Pass, ...] = ()
     # By row type: the store module that owns a table writes its rows (design D14).

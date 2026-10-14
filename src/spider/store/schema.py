@@ -19,6 +19,7 @@ from spider.store.records import (
     DiscoveredVia,
     FetchState,
     JournalMode,
+    ParseError,
     SkipReason,
     StopReason,
 )
@@ -248,8 +249,16 @@ urls = public_table(
         "parsed",
         Flag,
         nullable=False,
-        comment="1 when the response was parsed for Links and Page data.",
+        comment="1 when the response was parsed and its Links were found.",
     ),
+    Column(
+        "parse_error",
+        Text,
+        comment="Why parsing failed in whole or in part: a registered extractor failed (parsed "
+        "stays 1), or nothing came out of page preparation (parsed = 0).",
+        info={"values": literal_values(ParseError)},
+    ),
+    Column("parse_error_message", Text, comment="Human-readable detail of parse_error."),
     comment="One row for each distinct normalised URL of the Crawl; the frontier is its "
     "queued rows.",
     change=20,

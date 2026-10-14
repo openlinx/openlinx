@@ -57,10 +57,8 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
         return
     response = await context.fetcher.fetch(Request(queued.url))
     parsed = 200 <= response.status_code < 300 and _is_html(response)
-    discovered: tuple[NewUrl, ...] = ()
-    if parsed:
-        page = await context.pages.prepare(queued.url, response)
-        discovered = _followed(page, context.scope, depth + 1)
+    page = await context.pages.prepare(queued.url, response) if parsed else None
+    discovered = () if page is None else _followed(page, context.scope, depth + 1)
     result = UrlResult(
         url_id=queued.id,
         url=queued.url,
@@ -68,6 +66,7 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
         fetch_state="fetched",
         status_code=response.status_code,
         headers=response.headers,
+        outputs={} if page is None else dict(page.outputs),
     )
     # The URL's task ends here; its outcome arrives at the commit (design D2).
     fetched = FetchedUrl(
@@ -77,6 +76,8 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
         parsed=parsed,
+        parse_error=None if page is None else page.parse_error,
+        parse_error_message=None if page is None else page.parse_error_message,
         discovered=discovered,
         rows=_handled(hooks, result),
     )

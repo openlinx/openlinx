@@ -219,7 +219,7 @@ async def _crawl_context(
                 reporter=reporter,
                 writer=writer,
                 fetcher=fetcher,
-                pages=InProcessExecutor(PageSettings(scope)),
+                pages=InProcessExecutor(PageSettings(scope, hooks.extractors)),
                 hooks=hooks,
             )
     finally:
