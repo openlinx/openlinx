@@ -3,6 +3,10 @@
 from spider.naming import SETTINGS_FILE_NAME
 from spider.rules.model import NO_ROWS, Rule, Threshold
 
+_TITLE_MISSING_SQL = """SELECT url_id, NULL AS detail
+FROM pages
+WHERE title_count = 0"""
+
 TITLE_MISSING = Rule(
     id="title-missing",
     category="titles",
@@ -18,7 +22,7 @@ TITLE_MISSING = Rule(
         "Add one <title> element to the <head> of the page, with a few words that describe "
         "it and set it apart from the site's other pages."
     ),
-    reproduce_sql=NO_ROWS,
+    reproduce_sql=_TITLE_MISSING_SQL,
 )
 TITLE_TOO_LONG = Rule(
     id="title-too-long",

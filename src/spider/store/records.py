@@ -114,6 +114,13 @@ class RuleRow:
     reproduce_sql: str
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AffectedUrl:
+    url_id: int
+    # The JSON object of the measured values, or None when the Rule lists none.
+    detail: Any
+
+
 @dataclass(frozen=True)
 class NewCrawl:
     workspace: Workspace
