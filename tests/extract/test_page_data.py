@@ -1,8 +1,12 @@
 """The columns the Page extractor derives from the HTML (030-add-page-data, page-data; seam 4)."""
 
+import sys
+from types import FrameType
+
 from hypothesis import given
 from hypothesis import strategies as st
 
+from spider.extract.text import element_text
 from tests.support.page_data import page_row
 
 
@@ -131,6 +135,39 @@ def test_absent_and_empty_elements_differ() -> None:
     assert (row.title_1, row.title_1_length, row.h1_1) == ("", 0, None)
 
 
+def test_heading_text_leaves_out_fallbacks_frames_and_pictures() -> None:
+    row = page_row(
+        "<h1>a<noscript>n</noscript><template>t</template><iframe>i</iframe>"
+        "<svg><text>s</text></svg><math><mi>m</mi></math>b</h1>"
+    )
+
+    assert row.h1_1 == "ab"
+
+
+def test_headings_read_the_text_of_their_first_two_elements_only() -> None:
+    # The parser nests an h1 inside a div inside an h1, so each h1 holds every later one:
+    # reading the text of all of them cost their count squared. Calls are counted, not
+    # timed, so the test does not depend on the machine.
+    calls = 0
+
+    def count(frame: FrameType, event: str, arg: object) -> None:
+        nonlocal calls
+        if event == "call" and frame.f_code is element_text.__code__:
+            calls += 1
+
+    sys.setprofile(count)
+    try:
+        row = page_row("<h1><div>" * 100)
+    finally:
+        sys.setprofile(None)
+
+    assert (row.h1_count, calls) == (100, 2)
+
+
+def test_a_deeply_nested_heading_needs_no_recursion() -> None:
+    assert page_row("<h1>" + "<div>" * 5000 + "Deep</h1>").h1_1 == "Deep"
+
+
 def test_a_heading_in_a_template_is_ignored() -> None:
     row = page_row("<template><h1>Template</h1></template><h1>Main</h1>")
 
@@ -138,7 +175,7 @@ def test_a_heading_in_a_template_is_ignored() -> None:
 
 
 # Fragments that build the documents a parser repairs: unclosed, nested in foreign content,
-# commented out, NUL and stray markup.
+# commented out, NUL and stray markup, with each element the extractor reads or walks.
 _FRAGMENTS = st.sampled_from(
     [
         "<html>",
@@ -150,6 +187,14 @@ _FRAGMENTS = st.sampled_from(
         "</svg>",
         "<math><mi>",
         "<template>",
+        "<noscript>",
+        "</noscript>",
+        "<h1>",
+        "<h2>",
+        "<br>",
+        "<p>",
+        "<li>",
+        "<meta name=description content=x>",
         "<!--",
         "-->",
         "<",

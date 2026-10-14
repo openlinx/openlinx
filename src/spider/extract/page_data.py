@@ -9,7 +9,7 @@ from spider.extract.text import element_text, normalized, trimmed
 # An element inside svg or math names a picture or a formula. Inside noscript it is no element
 # at all to a browser that runs scripts, as a search engine's renderer does; the parser here
 # runs with scripting off and builds one. Text inside these is left out too (text._SKIPPED).
-_IGNORED_ANCESTORS = frozenset({"svg", "math", "noscript"})
+_PAGE_ELEMENT = ":not(svg *, math *, noscript *)"
 
 
 class PageData(msgspec.Struct, frozen=True, kw_only=True):
@@ -44,9 +44,9 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
     descriptions = _meta_contents(metas, "description")
     description_1, description_2 = _nth(descriptions, 0), _nth(descriptions, 1)
     keywords_1 = _nth(_meta_contents(metas, "keywords"), 0)
-    h1s = _headings(tree, "h1")
+    h1s, h1_count = _headings(tree, "h1")
     h1_1, h1_2 = _nth(h1s, 0), _nth(h1s, 1)
-    h2s = _headings(tree, "h2")
+    h2s, h2_count = _headings(tree, "h2")
     h2_1, h2_2 = _nth(h2s, 0), _nth(h2s, 1)
     return PageData(
         title_1=title_1,
@@ -65,25 +65,26 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
         h1_1_length=_length(h1_1),
         h1_2=h1_2,
         h1_2_length=_length(h1_2),
-        h1_count=len(h1s),
+        h1_count=h1_count,
         h2_1=h2_1,
         h2_1_length=_length(h2_1),
         h2_2=h2_2,
         h2_2_length=_length(h2_2),
-        h2_count=len(h2s),
+        h2_count=h2_count,
     )
 
 
-def _headings(tree: LexborHTMLParser, tag: str) -> list[str]:
-    return [normalized(element_text(node)) for node in _page_nodes(tree, tag)]
+def _headings(tree: LexborHTMLParser, tag: str) -> tuple[list[str], int]:
+    # Only the first two texts are stored, and the parser nests an h1 inside a div inside an
+    # h1, so each heading may hold every later one: reading them all cost their count squared.
+    nodes = _page_nodes(tree, tag)
+    return [normalized(element_text(node)) for node in nodes[:2]], len(nodes)
 
 
 def _page_nodes(tree: LexborHTMLParser, tag: str) -> list[LexborNode]:
-    # The selector engine finds the left-out ones: walking up from each node in Python cost the
+    # The selector engine tests the ancestors: walking up from each node in Python cost the
     # node count times the depth, seconds per Page on a crafted deep document.
-    left_out = ", ".join(f"{ancestor} {tag}" for ancestor in _IGNORED_ANCESTORS)
-    ignored = {node.mem_id for node in tree.css(left_out)}
-    return [node for node in tree.css(tag) if node.mem_id not in ignored]
+    return tree.css(tag + _PAGE_ELEMENT)
 
 
 def _meta_contents(metas: list[LexborNode], name: str) -> list[str]:

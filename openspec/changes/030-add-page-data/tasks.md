@@ -45,7 +45,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [x] 3.6 Drive "Absent and empty elements differ" at seam 4.
 - [x] 3.7 Docs: add the meta description, meta keywords and heading columns to `docs/page-data.md`.
 - [x] 3.8 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
-- [ ] 3.9 Review fixes of group 3, each test-first with its cause: headings read the text of their first two elements only and count the rest (nested headings made the text walk quadratic); the never-raises property builds headings, breaks, blocks, `noscript` and meta descriptions, and a deep-nesting test runs the walker; a test pins every element of the walker's skip list; the ancestor rule becomes one `:not(svg *, math *, noscript *)` query if that is simpler and not slower.
+- [x] 3.9 Review fixes of group 3, each test-first with its cause: headings read the text of their first two elements only and count the rest (nested headings made the text walk quadratic); the never-raises property builds headings, breaks, blocks, `noscript` and meta descriptions, and a deep-nesting test runs the walker; a test pins every element of the walker's skip list; the ancestor rule becomes one `:not(svg *, math *, noscript *)` query if that is simpler and not slower.
 
 ## 4. Identity, response, size and redirects
 

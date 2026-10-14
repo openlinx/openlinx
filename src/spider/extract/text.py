@@ -8,7 +8,8 @@ from selectolax.lexbor import LexborNode
 _ASCII_WHITESPACE = "\t\n\x0c\r "
 _WHITESPACE_RUN = re.compile(f"[{_ASCII_WHITESPACE}]+")
 # Their content is no text of the Page: code, styles, fallbacks, frames and pictures. The
-# Page extractor leaves out elements inside svg, math and noscript the same way.
+# Page extractor leaves out elements inside svg, math and noscript the same way. lexbor keeps
+# template content out of the tree; template stays here for a parser that does not.
 _SKIPPED = frozenset({"script", "style", "noscript", "template", "iframe", "svg", "math"})
 # A break at their start and end separates the words of the text around them.
 _BLOCKS = frozenset(
