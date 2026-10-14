@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from spider.rules.registry import RULES
-from spider.store.issues import read_affected_urls, read_issues
+from spider.store.issues import evaluate_rule, read_affected_urls, read_issues
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawl_result, crawled
@@ -127,4 +127,24 @@ def test_issue_visible_before_the_crawl_ends(
         [("running",)],
         [("title-missing", 1)],
         [server.url("/notitle")],
+    )
+
+
+def test_live_and_materialised_issues_agree(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    crawl_file = crawled(fixture_site(RULE_PAGES).url("/rules/"))
+    enabled = {
+        rule_id for (rule_id,) in query(crawl_file, "SELECT id FROM rules WHERE enabled = 1")
+    }
+    # Computed live: each enabled Rule's query, run now over the stored rows.
+    live = {rule.id: evaluate_rule(crawl_file, rule) for rule in RULES if rule.id in enabled}
+    # Read as the completed Crawl's pass stored them.
+    read = {issue.rule_id: issue.affected_count for issue in read_issues(crawl_file, RULES)}
+    stored = {rule_id: read_affected_urls(crawl_file, rule_id, RULES) for rule_id in live}
+
+    assert (read, stored, "title-missing" in read) == (
+        {rule_id: len(urls) for rule_id, urls in live.items() if urls},
+        {rule_id: sorted(urls, key=lambda url: url.url_id) for rule_id, urls in live.items()},
+        True,
     )
