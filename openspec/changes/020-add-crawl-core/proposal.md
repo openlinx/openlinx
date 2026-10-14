@@ -66,7 +66,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - a write failure → `failed` with `write_failed` when it can still be recorded: `crawl_write_failed`, exit 7, or `015`'s `crawl_busy`, exit 5
 - **Settings:** this change registers the `[crawl]` table of `spider.toml`, under `010`'s naming rule. Later changes add their keys to its model. The recorded config holds every registered setting.
 - **Store:**
-  - The `urls` and `origins` tables, and the `crawl` columns `scope`, `stop_reason` and `warnings`, under ADR-0005 through `018`'s declaration helper:
+  - The `urls` and `origins` tables, and the `crawl` columns `scope`, `stop_reason` and `warnings`, under ADR-0005 through `018`'s `public_table()`:
     - `STRICT`, with CHECKs that list every value that later changes write
     - `urls.origin_id`, referencing `origins`
     - the indexes `urls_url`, `urls_crawl_depth_id` (the partial frontier index) and `origins_origin`

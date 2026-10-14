@@ -125,7 +125,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 4.10 Drive "The first event line is the start event" at seam 1.
 - [x] 4.11 Drive "The recorded config holds every registered crawl setting" at seam 1, since the scenario reads `spider commands`.
 
-  Done when: `[crawl]` is registered in `build_app` as `"spider.crawl.settings:CrawlSettings"` and passes `010`'s table-rules test, every crawl option declares its setting with `OptionMeta(setting=...)`, and `NewCrawl.config` holds every registered table. Its one option is `--concurrency`, which task 4.13 needs: an option is declared by the task that applies it, so none is inert (ruling of 2026-10-14), and `--max-depth`, `--max-urls` and `--rate` come with tasks 9.5, 9.7 and 11.4.
+  Done when: `[crawl]` is registered in `build_app` as `"spider.crawl.settings:CrawlSettings"` and passes `010`'s table-rules test, every crawl option declares its setting with `OptionMeta(setting=...)`, and `NewCrawl.config` holds every registered table. Its one option is `--concurrency`, which task 4.13 needs: an option is declared by the task that applies it, so none is inert (ruling of 2026-10-14), and `--max-depth`, `--max-urls` and `--rate` come with tasks 9.5, 9.7 and 11.1.
 - [x] 4.12 Wire `015`'s journal mode (group 8) and redaction (group 9), at seam 2.
 
   Done when: the `crawl` adapter always passes `spider.cli.options.secret_names(<its Click command>, <the settings tables>)` to the Crawl Service, which puts it in `NewCrawl.secret_names` (`create_crawl` redacts by itself); and the Crawl Service always sets `NewCrawl.journal_setting` from the resolved `[store] journal_mode`, `"auto"` included, since neither field has a default, so `[store] journal_mode = "delete"` gives `crawl.journal_mode` = `delete`, and a `store_wal_unavailable` warning that `create_crawl` reports reaches the result's `warnings` (and `crawl.warnings` once task 12.3 declares it).
@@ -159,8 +159,13 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - a failed unit gets a fallback unit that records only the URL's state (`fetch_state` = `error`, `fetch_error` = `record_failed`, the error in `fetch_error_message`), and `record_failed` is declared as a value and as a counted warning
   - only design D2's allowlist (after unwrapping `DBAPIError.orig`: `sqlite3.IntegrityError`, `DataError`, `InterfaceError`, and non-database exceptions of our row code, checked after the writer's own errors `CrawlWriterClosedError`, `CrawlWriterReplayError` and the `SpiderError` `crawl_busy`, which are never one row's) leads to `record_failed`; every other `sqlite3.DatabaseError`, a unit that fails or differs in `017`'s replay, a failing fallback, a failed commit or `CrawlWriterClosedError` sets the stop flag with `write_failed` instead
   - no Future that `submit_async` returns is dropped: each one's outcome reaches the engine through its callback (design D2), so a Crawl is never `completed` with a URL whose unit failed, and no "Future exception was never retrieved" reaches stderr (review of group 4)
-- [ ] 5.14 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes in `docs/crawling.md`.
-- [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [ ] 5.14 Fixture: a count of the most simultaneous requests, test-first.
+- [ ] 5.15 Drive "At most five requests to a host by default" and "A lower concurrency is honoured" at seam 3, a trivial pair.
+
+  Done when: the URLs of a frontier batch are crawled by concurrent tasks, bounded by a semaphore per host and the global cap of design D7 (4 × concurrency, clamped to 20–100), and the next Crawl Depth's first frontier read waits until every task of the open depth has submitted its unit or ended (design D3); task 9.3 adds that checks never wait. Tasks 5.14–5.16 were 11.1–11.3: concurrent tasks change the engine's loop, so they come before PR #1, and groups 7–14 never build on a sequential one (ruling of 2026-10-14).
+- [ ] 5.16 Drive "A concurrency of zero is rejected" at seam 1.
+- [ ] 5.17 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes and the per-host and global request limits in `docs/crawling.md`.
+- [ ] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Internal and External URLs over HTTP (slice)
 
@@ -254,16 +259,13 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 11. Politeness (widening)
 
-- [ ] 11.1 Fixture: a count of the most simultaneous requests, test-first.
-- [ ] 11.2 Drive "At most five requests to a host by default" and "A lower concurrency is honoured" at seam 3, a trivial pair. Done when: per-host semaphores and the global cap of design D7 bound requests.
-- [ ] 11.3 Drive "A concurrency of zero is rejected" at seam 1.
-- [ ] 11.4 Drive "Requests to a host are spaced by the rate", fake timing.
+- [ ] 11.1 Drive "Requests to a host are spaced by the rate", fake timing.
 
   Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`.
-- [ ] 11.5 **Guard:** "Crawl-delay is not applied", fake timing.
-- [ ] 11.6 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared.
-- [ ] 11.7 Docs: document politeness defaults in `docs/crawling.md`.
-- [ ] 11.8 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+- [ ] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
+- [ ] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared.
+- [ ] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
+- [ ] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
 
 ## 12. Events, failures and backstops (widening)
 
