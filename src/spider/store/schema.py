@@ -226,6 +226,12 @@ urls = public_table(
         comment="HTTP status code of the URL's own response; NULL without a response.",
     ),
     Column(
+        "response_time_ms",
+        Integer,
+        comment="Time from sending the request to receiving the whole body.",
+    ),
+    Column("fetched_at", Timestamp, comment="UTC time of the request."),
+    Column(
         "parsed",
         Flag,
         nullable=False,

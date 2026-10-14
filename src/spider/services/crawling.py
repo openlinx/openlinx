@@ -183,7 +183,7 @@ async def crawl_context(
     # Opening and closing the writer block, so they run off the event loop.
     writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
     try:
-        async with aiohttp_fetcher() as fetcher:
+        async with aiohttp_fetcher(clock) as fetcher:
             yield CrawlContext(
                 crawl_file=crawl_file,
                 scope=scope,

@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -134,3 +135,15 @@ class CrawlSummary:
     started_at: str
     seed: str
     seed_count: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FetchedUrl:
+    """A URL whose response arrived, with the URLs discovered from it."""
+
+    url_id: int
+    status_code: int
+    fetched_at: datetime
+    response_time_ms: int
+    parsed: bool
+    discovered: tuple[NewUrl, ...] = ()

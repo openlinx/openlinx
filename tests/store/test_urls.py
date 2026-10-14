@@ -1,12 +1,13 @@
 """The units of spider.store.urls (020-add-crawl-core D1, D2, D14; seam 2)."""
 
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Connection, event
 
 from spider.crawl.urls import NormalizedUrl, parse_seed
 from spider.store.connections import opening
-from spider.store.records import NewUrl, QueuedUrl, UrlCounts
+from spider.store.records import FetchedUrl, NewUrl, QueuedUrl, UrlCounts
 from spider.store.urls import next_depth, queued_batch, record_fetched, record_seed, url_counts
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
@@ -28,13 +29,24 @@ def _new(text: str) -> NewUrl:
 def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> None:
     crawl = create_any_crawl(temp_workspace)
     seed = _url("https://site.test/")
-    found = [_new("https://site.test/a"), _new("https://site.test/b"), _new("https://site.test/a")]
+    found = (_new("https://site.test/a"), _new("https://site.test/b"), _new("https://site.test/a"))
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         seed_id = writer.run(record_seed(seed, "site.test"))
         writer.run(record_seed(seed, "site.test"))
         first = writer.run(queued_batch(0, 0, 10))
-        writer.run(record_fetched(seed_id, 200, parsed=True, discovered=found))
+        writer.run(
+            record_fetched(
+                FetchedUrl(
+                    url_id=seed_id,
+                    status_code=200,
+                    fetched_at=datetime(2026, 9, 27, 14, 3, 13, tzinfo=UTC),
+                    response_time_ms=120,
+                    parsed=True,
+                    discovered=found,
+                )
+            )
+        )
         deeper = writer.run(next_depth(0))
         second = writer.run(queued_batch(1, 0, 1))
         counts = writer.run(url_counts())

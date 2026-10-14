@@ -5,7 +5,7 @@ from spider.crawl.fetcher import Request
 from spider.crawl.pages import PreparedPage
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl, url_host
-from spider.store.records import NewUrl, QueuedUrl
+from spider.store.records import FetchedUrl, NewUrl, QueuedUrl
 from spider.store.urls import next_depth, queued_batch, record_fetched, record_seed
 
 # Queued URLs read from the frontier at once.
@@ -38,9 +38,15 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
         page = await context.pages.prepare(queued.url, response)
         discovered = _followed(page, context.scope, depth + 1)
     # The URL's task ends here; its outcome arrives at the commit (design D2).
-    await context.writer.submit_async(
-        record_fetched(queued.id, response.status_code, parsed=parsed, discovered=discovered)
+    fetched = FetchedUrl(
+        url_id=queued.id,
+        status_code=response.status_code,
+        fetched_at=response.fetched_at,
+        response_time_ms=response.response_time_ms,
+        parsed=parsed,
+        discovered=discovered,
     )
+    await context.writer.submit_async(record_fetched(fetched))
 
 
 def _followed(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl, ...]:

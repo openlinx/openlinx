@@ -93,3 +93,20 @@ def test_a_completed_crawl_records_its_state(
     row = crawl_row(crawled(server.url("/")))
 
     assert (row["state"], row["stop_reason"]) == ("completed", None)
+
+
+def test_response_timing_is_recorded(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/slow">Slow</a>'), "/slow": Page(body="", delay=0.5)})
+    )
+
+    crawl_file = crawled(server.url("/"))
+    ((response_time_ms, fetched_at),) = query(
+        crawl_file,
+        "SELECT response_time_ms, fetched_at FROM urls WHERE url = ?",
+        [server.url("/slow")],
+    )
+
+    assert (response_time_ms >= 500, fetched_at is not None) == (True, True)

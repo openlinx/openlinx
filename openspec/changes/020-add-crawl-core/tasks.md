@@ -130,7 +130,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: the `crawl` adapter always passes `spider.cli.options.secret_names(<its Click command>, <the settings tables>)` to the Crawl Service, which puts it in `NewCrawl.secret_names` (`create_crawl` redacts by itself); and the Crawl Service always sets `NewCrawl.journal_setting` from the resolved `[store] journal_mode`, `"auto"` included, since neither field has a default, so `[store] journal_mode = "delete"` gives `crawl.journal_mode` = `delete`, and a `store_wal_unavailable` warning that `create_crawl` reports reaches the result's `warnings` (and `crawl.warnings` once task 12.3 declares it).
 - [x] 4.13 Drive "spider.toml sets a crawl setting" and "A flag overrides spider.toml" at seam 1, a trivial pair.
-- [ ] 4.14 Drive "Response timing is recorded" at seam 3+6.
+- [x] 4.14 Drive "Response timing is recorded" at seam 3+6.
 - [ ] 4.15 Drive "The Content-Type is recorded as received" at seam 3+6.
 - [ ] 4.16 Docs: write the `spider crawl` reference in `docs/crawling.md` (the result fields, the event table, exit codes, `[crawl]` keys), and the `urls` and `crawl` columns and indexes so far in `docs/schema.md`.
 - [ ] 4.17 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) and prebuilt statements (D9), ADR-0005's naming rules and ADR-0006 (slots on per-URL and per-Link records, `kw_only` above three fields), then refactor with the whole suite green.

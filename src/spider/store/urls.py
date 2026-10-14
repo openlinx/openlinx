@@ -1,12 +1,12 @@
 """The units of the urls table: the frontier and each URL's outcome (020 D1, D2, D14)."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 
 from sqlalchemy import Connection, bindparam, func, literal_column, select, update
 from sqlalchemy.dialects.sqlite import insert
 
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import NewUrl, QueuedUrl, UrlCounts
+from spider.store.records import FetchedUrl, QueuedUrl, UrlCounts
 from spider.store.schema import urls
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
@@ -18,6 +18,8 @@ _FETCHED = (
     .values(
         fetch_state="fetched",
         status_code=bindparam("response_status"),
+        response_time_ms=bindparam("response_ms"),
+        fetched_at=bindparam("request_at"),
         parsed=bindparam("is_parsed"),
     )
 )
@@ -97,10 +99,16 @@ def next_depth(depth: int) -> Callable[[Connection], int | None]:
     return unit
 
 
-def record_fetched(
-    url_id: int, status_code: int, *, parsed: bool, discovered: Sequence[NewUrl] = ()
-) -> Callable[[Connection], None]:
+def record_fetched(fetched: FetchedUrl) -> Callable[[Connection], None]:
     """A unit that records the URL's response and the URLs discovered from it."""
+    url_id = fetched.url_id
+    values = {
+        "url_id": url_id,
+        "response_status": fetched.status_code,
+        "response_ms": fetched.response_time_ms,
+        "request_at": fetched.fetched_at,
+        "is_parsed": fetched.parsed,
+    }
     new_rows = [
         {
             "url": new.url,
@@ -111,13 +119,11 @@ def record_fetched(
             "fetch_state": "queued",
             "parsed": False,
         }
-        for new in discovered
+        for new in fetched.discovered
     ]
 
     def unit(connection: Connection) -> None:
-        connection.execute(
-            _FETCHED, {"url_id": url_id, "response_status": status_code, "is_parsed": parsed}
-        )
+        connection.execute(_FETCHED, values)
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
             connection.execute(_INSERT_URL, new_rows)
