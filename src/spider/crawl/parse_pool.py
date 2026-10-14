@@ -2,6 +2,7 @@
 
 import asyncio
 import multiprocessing
+import os
 import signal
 import sys
 import threading
@@ -41,6 +42,26 @@ def _work(settings: PageSettings, tasks: _PipeEnd, results: _PipeEnd) -> None:
         results.send(outcome)
 
 
+def worker_count(*, physical: int | None, logical: int | None, available: int | None) -> int:
+    """Physical cores less two, for the crawl process and the writer (design D1)."""
+    cores = physical or (logical or 0) // 2
+    if available:
+        # A container's CPU limit, which only Python 3.13's os.process_cpu_count reports.
+        cores = min(cores, available)
+    return max(1, cores - 2)
+
+
+def default_workers() -> int:
+    # Imported here: psutil stays off the CLI's startup path (design D1).
+    import psutil
+
+    return worker_count(
+        physical=psutil.cpu_count(logical=False),
+        logical=os.cpu_count(),
+        available=getattr(os, "process_cpu_count", os.cpu_count)(),
+    )
+
+
 @dataclass(frozen=True, eq=False)
 class _Worker:
     process: BaseProcess
@@ -53,8 +74,8 @@ class _Worker:
 class PoolExecutor:
     """Prepares each Page in one of `workers` spawn processes, one Page per worker at a time."""
 
-    def __init__(self, workers: int) -> None:
-        self._count = workers
+    def __init__(self, workers: int | None = None) -> None:
+        self._count = default_workers() if workers is None else workers
         self._workers: list[_Worker] = []
         self._idle: deque[_Worker] = deque()
         # The Page each busy worker holds.

@@ -8,11 +8,12 @@ from datetime import UTC, datetime
 
 import msgspec
 import psutil
+import pytest
 from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.pages import Extractor, PageInput, PageSettings, PreparedPage, prepare_page
-from spider.crawl.parse_pool import PoolExecutor
+from spider.crawl.parse_pool import PoolExecutor, default_workers, worker_count
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 
@@ -126,3 +127,31 @@ async def test_an_outcome_the_crawl_process_cannot_read_fails_only_its_page() ->
     assert (type(bad), str(bad)) == (ValueError, "an Unreadable is built only in a worker")
     assert isinstance(good, PreparedPage)
     assert [pid_of(page.outputs) for page in (good, after)] == list(pool.worker_pids) * 2
+
+
+@pytest.mark.parametrize(
+    ("physical", "logical", "available", "workers"),
+    [
+        # The maintainer's laptop: 8 physical cores of 12 logical ones gives 6 workers.
+        (8, 12, 12, 6),
+        # Without a physical count, half the logical ones.
+        (None, 12, 12, 4),
+        # A container's CPU limit caps the cores.
+        (8, 12, 3, 1),
+        (2, 4, 4, 1),
+        (None, None, None, 1),
+    ],
+)
+def test_the_workers_are_the_cores_less_two(
+    physical: int | None, logical: int | None, available: int | None, workers: int
+) -> None:
+    assert worker_count(physical=physical, logical=logical, available=available) == workers
+
+
+def test_the_default_worker_count_is_this_machines() -> None:
+    available = getattr(os, "process_cpu_count", os.cpu_count)()
+
+    assert default_workers() == worker_count(
+        physical=psutil.cpu_count(logical=False), logical=os.cpu_count(), available=available
+    )
+    assert PoolExecutor().backlog == 2 * default_workers()
