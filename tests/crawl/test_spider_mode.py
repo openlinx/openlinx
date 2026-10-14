@@ -110,3 +110,22 @@ def test_response_timing_is_recorded(
     )
 
     assert (response_time_ms >= 500, fetched_at is not None) == (True, True)
+
+
+def test_the_content_type_is_recorded_as_received(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/doc.pdf">Doc</a>'),
+                "/doc.pdf": Page(body="%PDF-1.7", content_type="application/pdf"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file, "SELECT content_type FROM urls WHERE url = ?", [server.url("/doc.pdf")]
+    ) == [("application/pdf",)]

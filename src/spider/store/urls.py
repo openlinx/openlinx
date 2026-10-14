@@ -18,6 +18,7 @@ _FETCHED = (
     .values(
         fetch_state="fetched",
         status_code=bindparam("response_status"),
+        content_type=bindparam("response_type"),
         response_time_ms=bindparam("response_ms"),
         fetched_at=bindparam("request_at"),
         parsed=bindparam("is_parsed"),
@@ -105,6 +106,7 @@ def record_fetched(fetched: FetchedUrl) -> Callable[[Connection], None]:
     values = {
         "url_id": url_id,
         "response_status": fetched.status_code,
+        "response_type": fetched.content_type,
         "response_ms": fetched.response_time_ms,
         "request_at": fetched.fetched_at,
         "is_parsed": fetched.parsed,

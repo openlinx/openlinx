@@ -143,6 +143,8 @@ class FetchedUrl:
 
     url_id: int
     status_code: int
+    # The Content-Type header as received; NULL without one.
+    content_type: str | None
     fetched_at: datetime
     response_time_ms: int
     parsed: bool

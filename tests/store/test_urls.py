@@ -40,6 +40,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 FetchedUrl(
                     url_id=seed_id,
                     status_code=200,
+                    content_type="text/html",
                     fetched_at=datetime(2026, 9, 27, 14, 3, 13, tzinfo=UTC),
                     response_time_ms=120,
                     parsed=True,
@@ -58,7 +59,9 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
         second,
         counts,
         query(
-            crawl.path, "SELECT url, crawl_depth, fetch_state, status_code FROM urls ORDER BY id"
+            crawl.path,
+            "SELECT url, crawl_depth, fetch_state, status_code, content_type, response_time_ms, "
+            "fetched_at FROM urls ORDER BY id",
         ),
     ) == (
         (QueuedUrl(seed_id, seed),),
@@ -78,9 +81,9 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             status_other=0,
         ),
         [
-            ("https://site.test/", 0, "fetched", 200),
-            ("https://site.test/a", 1, "queued", None),
-            ("https://site.test/b", 1, "queued", None),
+            ("https://site.test/", 0, "fetched", 200, "text/html", 120, "2026-09-27T14:03:13.000Z"),
+            ("https://site.test/a", 1, "queued", None, None, None, None),
+            ("https://site.test/b", 1, "queued", None, None, None, None),
         ],
     )
 

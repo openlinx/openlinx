@@ -41,6 +41,7 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
     fetched = FetchedUrl(
         url_id=queued.id,
         status_code=response.status_code,
+        content_type=response.header("Content-Type"),
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
         parsed=parsed,
