@@ -16,7 +16,7 @@ from spider.rules.settings import RulesSettings
 from spider.services.crawls import create_crawl
 from spider.services.rules import rule_rows
 from spider.store.connections import connect
-from spider.store.records import CrawlFile, NewCrawl, SecretNames
+from spider.store.records import CrawlFile, NewCrawl, RuleRow, SecretNames
 from spider.store.schema import seeds
 from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import Workspace, resolve_workspace
@@ -31,6 +31,11 @@ STARTED_AT = datetime(2026, 9, 27, 14, 3, 12, 345000, tzinfo=UTC)
 
 def current_workspace(temp_workspace: TempWorkspace) -> Workspace:
     return resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+
+
+def default_rule_rows() -> tuple[RuleRow, ...]:
+    """Every Rule as a Crawl records it with no [rules.<id>] settings."""
+    return rule_rows(RulesSettings().model_dump(by_alias=True))
 
 
 def new_crawl(workspace: Workspace) -> NewCrawl:
@@ -51,7 +56,7 @@ def new_crawl(workspace: Workspace) -> NewCrawl:
         },
         secret_names=SecretNames(),
         journal_setting="auto",
-        rules=rule_rows(RulesSettings().model_dump(by_alias=True)),
+        rules=default_rule_rows(),
     )
 
 

@@ -5,16 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from spider.naming import APP_NAME
-from spider.output.codes import RULE_NOT_FOUND
-from spider.output.diagnostics import SpiderError
-from spider.rules.model import Rule
+from spider.rules.model import Rule, find_rule
 from spider.rules.registry import RULES
 from spider.store.records import RuleRow
 from spider.workspace.discovery import resolve_workspace
 from spider.workspace.tables import SettingsTables
 
-_BY_ID = {rule.id: rule for rule in RULES}
 RULE_FIELDS = (
     "id",
     "category",
@@ -44,14 +40,7 @@ def rule_items(request: RulesRequest, tables: SettingsTables) -> list[dict[str, 
 
 def rule_item(request: RulesRequest, tables: SettingsTables, rule_id: str) -> dict[str, Any]:
     configured = _configured(request, tables)
-    rule = _BY_ID.get(rule_id)
-    if rule is None:
-        raise SpiderError(
-            RULE_NOT_FOUND,
-            f"No Rule has the id {rule_id}.",
-            hint=f"{APP_NAME} rules list lists every Rule id.",
-            details={"id": rule_id},
-        )
+    rule = find_rule(RULES, rule_id)
     return _item(rule, configured[rule.id])
 
 

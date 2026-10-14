@@ -7,7 +7,7 @@ import sys
 from contextlib import closing
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import DBAPIError
 
 from spider.output.diagnostics import SpiderError
@@ -22,7 +22,13 @@ from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import resolve_workspace
 from tests.support.cli import PROCESS_TIMEOUT
 from tests.support.clock import FakeClock
-from tests.support.crawls import STARTED_AT, create_any_crawl, new_crawl, sha256_of
+from tests.support.crawls import (
+    STARTED_AT,
+    create_any_crawl,
+    insert_seed,
+    new_crawl,
+    sha256_of,
+)
 from tests.support.randomness import scripted_choice
 from tests.support.sqlite_faults import shm_held
 from tests.support.workspace import TempWorkspace
@@ -176,3 +182,16 @@ def test_a_file_held_past_the_timeout_is_reported_as_crawl_busy(
         5,
         {"file": str(crawl.path)},
     )
+
+
+def test_a_read_sees_one_snapshot(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace)
+    count = select(func.count()).select_from(seeds)
+
+    with reading(crawl.path) as connection, CrawlWriter(crawl.path, FakeClock()) as writer:
+        before = connection.execute(count).scalar_one()
+        writer.run(insert_seed(2, "https://example.com/two"))
+        writer.flush()
+        after = connection.execute(count).scalar_one()
+
+    assert after == before

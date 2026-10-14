@@ -19,6 +19,9 @@ from spider.store.schema import SCHEMA_VERSION, crawl
 def reading(path: Path) -> Iterator[Connection]:
     try:
         with opening(path, role="read") as engine, engine.connect() as connection:
+            # One snapshot for the whole read: pysqlite begins no transaction before a SELECT,
+            # so each statement would see the file as it is then. Closing rolls it back.
+            connection.exec_driver_sql("BEGIN")
             _check_schema_version(connection, path)
             yield connection
     except DBAPIError as error:

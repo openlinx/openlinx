@@ -4,13 +4,19 @@ import json
 import threading
 import time
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 from spider.rules.registry import RULES
-from spider.store.issues import evaluate_rule, read_affected_urls, read_issues
+from spider.store.issues import (
+    live_affected_urls,
+    live_issues,
+    read_affected_urls,
+    read_issues,
+    stored_affected_urls,
+    stored_issues,
+)
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawl_result, crawled
@@ -45,28 +51,31 @@ def test_issue_row_counts_its_affected_urls(
     ) == [("titles", "issue", "high", 2)]
 
 
-def affected_urls_by_rule(crawl_file: Path, sql: str) -> dict[str, list[tuple[int, Any]]]:
-    found: dict[str, list[tuple[int, Any]]] = {}
-    for rule_id, url_id, detail in query(crawl_file, sql):
-        found.setdefault(rule_id, []).append(
-            (url_id, None if detail is None else json.loads(detail))
-        )
-    return {rule_id: sorted(rows) for rule_id, rows in found.items()}
+def decoded(rows: list[tuple[Any, ...]]) -> list[tuple[int, Any]]:
+    return sorted(
+        (url_id, None if detail is None else json.loads(detail)) for url_id, detail in rows
+    )
 
 
 def test_a_rule_s_query_returns_its_stored_affected_urls(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     crawl_file = crawled(fixture_site(RULE_PAGES).url("/rules/"))
-    returned: dict[str, list[tuple[int, Any]]] = {}
-    for rule_id, sql in query(crawl_file, "SELECT id, reproduce_sql FROM rules WHERE enabled = 1"):
-        rows = [
-            (url_id, None if detail is None else json.loads(detail))
-            for url_id, detail in query(crawl_file, sql)
-        ]
-        if rows:
-            returned[rule_id] = sorted(rows)
-    stored = affected_urls_by_rule(crawl_file, "SELECT rule_id, url_id, detail FROM affected_urls")
+    returned = {
+        rule_id: rows
+        for rule_id, sql in query(
+            crawl_file, "SELECT id, reproduce_sql FROM rules WHERE enabled = 1"
+        )
+        if (rows := decoded(query(crawl_file, sql)))
+    }
+    stored = {
+        rule_id: decoded(
+            query(
+                crawl_file, "SELECT url_id, detail FROM affected_urls WHERE rule_id = ?", (rule_id,)
+            )
+        )
+        for (rule_id,) in query(crawl_file, "SELECT DISTINCT rule_id FROM affected_urls")
+    }
 
     # title-missing fires on /rules/untitled, so the comparison is not vacuous.
     assert (returned, "title-missing" in stored) == (stored, True)
@@ -134,18 +143,16 @@ def test_live_and_materialised_issues_agree(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     crawl_file = crawled(fixture_site(RULE_PAGES).url("/rules/"))
-    enabled = {
+    enabled = [
         rule_id for (rule_id,) in query(crawl_file, "SELECT id FROM rules WHERE enabled = 1")
-    }
-    # Computed live: each enabled Rule's query, run now over the stored rows.
-    live = {rule.id: evaluate_rule(crawl_file, rule) for rule in RULES if rule.id in enabled}
-    # Read as the completed Crawl's pass stored them.
-    read = {issue.rule_id: issue.affected_count for issue in read_issues(crawl_file, RULES)}
-    stored = {rule_id: read_affected_urls(crawl_file, rule_id, RULES) for rule_id in live}
+    ]
+    live = {rule_id: live_affected_urls(crawl_file, rule_id, RULES) for rule_id in enabled}
+    stored = {rule_id: stored_affected_urls(crawl_file, rule_id, RULES) for rule_id in enabled}
 
-    assert (read, stored, "title-missing" in read) == (
-        {rule_id: len(urls) for rule_id, urls in live.items() if urls},
-        {rule_id: sorted(urls, key=lambda url: url.url_id) for rule_id, urls in live.items()},
+    # title-missing fires on /rules/untitled, so the comparison is not vacuous.
+    assert (live_issues(crawl_file, RULES), live, "title-missing" in enabled) == (
+        stored_issues(crawl_file, RULES),
+        stored,
         True,
     )
 

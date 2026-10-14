@@ -627,7 +627,6 @@ rules = public_table(
     comment="One row for each Rule of the catalogue, with the configuration the Crawl was "
     "created with, which it uses throughout.",
     change=40,
-    without_rowid=True,
 )
 
 affected_urls = public_table(

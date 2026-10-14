@@ -113,6 +113,6 @@ Then run the printed query the same way. A query that leaves out a value its con
 
 ### Live and stored Issues
 
-- **While a Crawl runs,** no Issue is stored: `affected_urls` stays empty, and the Issues are computed on each read from the queries of the Rules that the Crawl's `rules` table marks enabled. A running Crawl therefore shows its Issues so far, at the cost of running every query on each read.
+- **While a Crawl runs,** it stores no Issue: `affected_urls` is empty, or holds an earlier pass's rows when the Crawl was resumed, and the Issues are computed on each read from the queries of the Rules that the Crawl's `rules` table marks enabled. A running Crawl therefore shows its Issues so far, at the cost of running every query on each read.
 - **When a Crawl ends as `completed` or `stopped`,** its post-crawl pass stores them, before the Crawl State is written: `affected_urls` and `issues` then hold that pass's result, and they are read as stored. A resumed Crawl's pass replaces them.
 - **A Crawl that `failed`, or whose process died,** got no final pass, and its `affected_urls` may still hold an earlier pass's rows. Its Issues are computed as for a running Crawl, so trust `affected_urls` and `issues` only when `crawl.state` is `completed` or `stopped`.

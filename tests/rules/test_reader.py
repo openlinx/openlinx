@@ -1,18 +1,23 @@
 """The Issues reader's two paths (040-add-rules D16; seam 2)."""
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from sqlalchemy import update
 
 from spider.aio import loop_factory
+from spider.output.diagnostics import SpiderError
 from spider.rules.registry import RULES
+from spider.rules.titles import TITLE_MISSING
 from spider.store.crawls import record_state
 from spider.store.issues import materialise_issues, read_affected_urls, read_issues
 from spider.store.schema import pages
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
+from tests.support.crawls import default_rule_rows
 from tests.support.rules import crawl_with_page
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing
@@ -50,3 +55,30 @@ def test_a_disabled_rule_has_no_affected_urls_read_live(temp_workspace: TempWork
     crawl_file, _ = crawl_with_page(temp_workspace, disabled={"title-missing"}, title_count=0)
 
     assert read_affected_urls(crawl_file, "title-missing", RULES) == []
+
+
+def test_an_unknown_rule_id_is_rule_not_found(temp_workspace: TempWorkspace) -> None:
+    crawl_file, _ = crawl_with_page(temp_workspace, title_count=0)
+
+    with pytest.raises(SpiderError) as raised:
+        read_affected_urls(crawl_file, "nope", RULES)
+
+    assert raised.value.code == "rule_not_found"
+
+
+def test_issues_of_a_rule_the_catalogue_lacks_come_after_its_own(
+    temp_workspace: TempWorkspace,
+) -> None:
+    # A Rule of a later tool, recorded and stored by it, which this catalogue does not have.
+    later = replace(TITLE_MISSING, id="a-later-rule")
+    (missing,) = [row for row in default_rule_rows() if row.id == TITLE_MISSING.id]
+    recorded = replace(missing, id=later.id)
+    crawl_file, _ = crawl_with_page(temp_workspace, more_rules=(recorded,), title_count=0)
+    with CrawlWriter(crawl_file, FakeClock()) as writer:
+        asyncio.run(materialise_issues(writer, (*RULES, later)), loop_factory=loop_factory)
+        writer.run(record_state("completed", AT))
+
+    assert [issue.rule_id for issue in read_issues(crawl_file, RULES)] == [
+        "title-missing",
+        "a-later-rule",
+    ]

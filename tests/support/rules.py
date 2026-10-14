@@ -1,21 +1,19 @@
 """Crawl files that hold the rows a Rule reads, for seam-2 tests (040-add-rules, Test seams)."""
 
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from spider.crawl.urls import NormalizedUrl
-from spider.rules.settings import RulesSettings
-from spider.services.rules import rule_rows
 from spider.store.page_records import PageRow
 from spider.store.pages import write_page
-from spider.store.records import FetchedUrl, ParseError
+from spider.store.records import FetchedUrl, ParseError, RuleRow
 from spider.store.urls import record_fetched, record_seed
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
-from tests.support.crawls import create_any_crawl
+from tests.support.crawls import create_any_crawl, default_rule_rows
 from tests.support.workspace import TempWorkspace
 
 PAGE_URL = NormalizedUrl("https://site.test/")
@@ -26,17 +24,21 @@ def crawl_with_page(
     *,
     disabled: Collection[str] = (),
     parse_error: ParseError | None = None,
+    more_rules: Sequence[RuleRow] = (),
     **page_data: Any,
 ) -> tuple[Path, int]:
     """A crawl file and the URL id of its one analysed Page, with these Page data columns,
     whose rules table marks the Rules named in `disabled` off; `extractor_error` as
-    `parse_error` makes it a Page on which an extractor failed.
+    `parse_error` makes it a Page on which an extractor failed, and `more_rules` are
+    recorded after the catalogue's Rules.
 
     The rows go through the store's own units, as a Crawl writes them: the Seed, then its
     HTML response with its Page row.
     """
-    recorded = rule_rows(RulesSettings().model_dump(by_alias=True))
-    rules = tuple(replace(rule, enabled=rule.id not in disabled) for rule in recorded)
+    rules = (
+        *(replace(rule, enabled=rule.id not in disabled) for rule in default_rule_rows()),
+        *more_rules,
+    )
     crawl = create_any_crawl(temp_workspace, rules=rules)
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         url_id = writer.run(record_seed(PAGE_URL, is_internal=True, in_scope=True))

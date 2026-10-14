@@ -1,6 +1,7 @@
 """The units of the Issues pass (040-add-rules D5, D15; seam 2)."""
 
 from spider.rules.titles import TITLE_MISSING
+from spider.services.hooks import default_hooks
 from spider.store.issues import affected_urls_unit
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
@@ -21,3 +22,7 @@ def test_the_units_of_the_issues_pass_run_again_the_same(temp_workspace: TempWor
     assert query(crawl_file, "SELECT rule_id, url_id, detail FROM affected_urls") == [
         ("title-missing", url_id, None)
     ]
+
+
+def test_the_issues_pass_comes_last() -> None:
+    assert [crawl_pass.name for crawl_pass in default_hooks().passes][-1:] == ["issues"]
