@@ -3,8 +3,12 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import get_args
 
+from spider.output.codes import INVALID_VALUE
+from spider.output.diagnostics import SpiderError
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
+from spider.store.records import IssueType, Priority, RuleCategory
 
 ISSUES = "issues"
 ISSUE_ITEM = ("rule_id", "category", "issue_type", "priority", "affected_count", "description")
@@ -32,9 +36,31 @@ class IssueFilters:
 NO_FILTERS = IssueFilters()
 
 
-def filter_values(values: Iterable[str]) -> frozenset[str]:
-    """The values of a repeatable filter flag, each of which may list several by commas."""
-    return frozenset(value.strip().lower() for listed in values for value in listed.split(","))
+def issue_filters(
+    *,
+    issue_types: Iterable[str] = (),
+    priorities: Iterable[str] = (),
+    categories: Iterable[str] = (),
+) -> IssueFilters:
+    """The filters of repeatable flags, each of whose values may list several by commas."""
+    return IssueFilters(
+        issue_types=_filter_values("--type", issue_types, get_args(IssueType.__value__)),
+        priorities=_filter_values("--priority", priorities, get_args(Priority.__value__)),
+        categories=_filter_values("--category", categories, get_args(RuleCategory.__value__)),
+    )
+
+
+def _filter_values(flag: str, values: Iterable[str], accepted: tuple[str, ...]) -> frozenset[str]:
+    found = frozenset(value.strip().lower() for listed in values for value in listed.split(","))
+    unknown = sorted(found - set(accepted))
+    if unknown:
+        raise SpiderError(
+            INVALID_VALUE,
+            f"{flag} {unknown[0]} is not one of the accepted values.",
+            hint=f"Use {flag} with any of: {', '.join(accepted)}.",
+            details={"flag": flag, "value": unknown[0], "accepted": list(accepted)},
+        )
+    return found
 
 
 def issue_list(

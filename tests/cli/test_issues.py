@@ -44,3 +44,16 @@ def test_filter_by_category(temp_workspace: TempWorkspace) -> None:
     result = run_cli("issues", "--category", "headings")
 
     assert [item["rule_id"] for item in result.json()["items"]] == ["h1-missing"]
+
+
+def test_unknown_issue_type(temp_workspace: TempWorkspace) -> None:
+    crawl_store(temp_workspace)
+
+    result = run_cli("issues", "--type", "critical")
+    error = result.stderr_json_lines()[-1]
+
+    assert (result.exit_code, error["code"], error["details"]["accepted"]) == (
+        2,
+        "invalid_value",
+        ["issue", "warning", "opportunity"],
+    )

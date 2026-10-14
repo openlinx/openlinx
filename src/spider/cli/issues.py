@@ -13,9 +13,8 @@ from spider.output.writer import Format
 from spider.services.query import (
     ISSUE_FIELDS,
     ISSUES,
-    IssueFilters,
     QueryRequest,
-    filter_values,
+    issue_filters,
     issue_list,
 )
 from spider.store.records import LATEST
@@ -72,10 +71,10 @@ def issues(
     """List the Issues of a Crawl, the most serious first, with their Affected URL counts."""
     return issue_list(
         QueryRequest(cwd=Path.cwd(), home=Path.home(), workspace=workspace_dir, crawl=crawl),
-        IssueFilters(
-            issue_types=filter_values(issue_types or ()),
-            priorities=filter_values(priorities or ()),
-            categories=filter_values(categories or ()),
+        issue_filters(
+            issue_types=issue_types or (),
+            priorities=priorities or (),
+            categories=categories or (),
         ),
         limit=limit,
         cursor=cursor,
