@@ -15,3 +15,24 @@ def test_html_response_becomes_a_page(
     crawl_file = crawl_result(server.url("/about")).crawl_file
 
     assert query(crawl_file, "SELECT address FROM pages") == [(server.url("/about"),)]
+
+
+def test_image_response_is_not_a_page(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/logo.png">Logo</a>'),
+                "/logo.png": Page(body="PNG", content_type="image/png"),
+            }
+        )
+    )
+    logo = server.url("/logo.png")
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert (
+        query(crawl_file, "SELECT fetch_state, content_type FROM urls WHERE url = ?", [logo]),
+        query(crawl_file, "SELECT url_id FROM pages WHERE address = ?", [logo]),
+    ) == ([("fetched", "image/png")], [])

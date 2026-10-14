@@ -3,11 +3,14 @@
 from collections.abc import Iterable
 
 from spider.crawl.hooks import UrlResult
+from spider.crawl.pages import is_html_type
 from spider.extract.addresses import display_address
 from spider.store.page_records import PageRow
 
 
 def page_rows(result: UrlResult) -> Iterable[PageRow]:
+    if not is_html_type(result.content_type):
+        return ()
     return (
         PageRow(
             url_id=result.url_id,

@@ -19,7 +19,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [x] 1.1 Drive "HTML response becomes a Page" at seam 3+6. Declare `pages` in `spider.store.schema` with `url_id` (references `urls.id`) and `address`. Add the Page row to `spider.store.page_records` and its writer to `spider.store.pages`, and list the Page handler (`spider.extract.page_handler`, a pure function from `020-add-crawl-core`'s `UrlResult` to a Page row) and the writer in `spider.services.hooks.default_hooks()`.
 - [x] 1.2 Drive "Non-ASCII path is decoded for display" and "Punycode host is shown in Unicode" at seam 4 (moved from group 4). This is a trivial pair: two cases of one display-form function. Add `url_encoded_address`, and write `address` in the display form.
 - [x] 1.3 Drive "Indexes of pages" at seam 6, and add the unique index `pages_address` with the query it serves.
-- [ ] 1.4 Drive "Image response is not a Page" at seam 3+6.
+- [x] 1.4 Drive "Image response is not a Page" at seam 3+6.
 - [ ] 1.5 Drive "URL blocked by robots.txt is not a Page" and "URL without a response is not a Page" at seam 4, on the `UrlResult` that `020` records for each: `skipped` with `blocked_by_robots_txt`, and `error` with a `fetch_error`. This is a trivial pair: both expect no row. `020`'s task 10.5 and `022`'s timeout scenario pin those records end to end.
 - [ ] 1.6 Drive "External HTML response is not a Page" at seam 3+6, through `020`'s DNS resolver hook. The Page handler reads `is_internal` and `in_scope` from the `UrlResult`.
 - [ ] 1.7 Docs: create `docs/page-data.md` covering what a Page is, analysed vs non-analysed Pages, the NULL conventions and the two address forms, with a link from `docs/architecture.md`.
