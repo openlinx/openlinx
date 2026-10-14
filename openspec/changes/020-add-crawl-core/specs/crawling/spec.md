@@ -141,7 +141,7 @@ With `--scope subdomains`, a URL SHALL also be internal when its registrable dom
 - **THEN** the URL is external
 
 ### Requirement: Seed host mismatch
-When the Seed's host is `www.` followed by a registrable domain, the Seed's parsed response names the apex (that registrable domain itself) as the site, and the URL it names is outside the Scope, the Crawl SHALL record one `seed_base_mismatch` warning, whose hint gives the Seed on the apex host. The response names the apex by a `canonical` Link to it, which names that Link's target, or else by more `hyperlink` Links to the apex than to the Seed's host, which names the Seed on the apex host. The Crawl SHALL go on in its Scope.
+When the Seed's host is `www.` followed by a registrable domain, the Seed's parsed response names the apex (that registrable domain itself) as the site, and the Seed on the apex host is outside the Scope, the Crawl SHALL record one `seed_base_mismatch` warning, whose hint gives the Seed on the apex host. The response's first `canonical` Link to the apex or to the Seed's host decides: one to the apex names the apex, and one to the Seed's host names no apex. Without such a Link, the response names the apex when more of its `hyperlink` Links target the apex than the Seed's host. The Crawl SHALL go on in its Scope.
 
 #### Scenario: A www Seed whose canonical names the apex is reported
 - **WHEN** `http://www.site.test/` holds `<link rel="canonical" href="http://site.test/">`, and `spider crawl http://www.site.test/` runs

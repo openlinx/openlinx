@@ -228,10 +228,11 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 8.9 Drive "A subfolder Crawl is a Section Crawl" at seam 1.
 - [x] 8.10 Drive "An include pattern makes a Section Crawl" and "Exclude patterns alone do not make a Section Crawl" at seam 3+6, a trivial pair.
 - [x] 8.11 Drive "A subfolder Scope is recorded" at seam 3+6. Done when: `crawl.scope` is declared NOT NULL, with the Seed hosts in order, and `create_crawl` writes it with the `crawl` row from a `scope` field added to `NewCrawl` (design D18).
-- [x] 8.12 Drive "A www Seed whose canonical names the apex is reported" at seam 1. Done when: `seed_base_mismatch` is declared, and the Scope is unchanged.
-- [x] 8.13 **Guard:** "A www Seed whose Links stay on www is not reported", at seam 1.
+- [x] 8.12 Drive "A www Seed whose canonical names the apex is reported" at seam 1, run at seam 2 through the Crawl Service, since `www.site.test` needs the DNS resolver hook, which the CLI cannot take. Done when: `seed_base_mismatch` is declared, and the Scope is unchanged.
+- [x] 8.13 **Guard:** "A www Seed whose Links stay on www is not reported", at seam 1, run at seam 2 for the same reason as 8.12.
 - [x] 8.14 Docs: document Section Crawls, the recorded Scope and `seed_base_mismatch` in `docs/crawling.md`.
 - [x] 8.15 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [ ] 8.16 Review fixes of group 8 (rulings of 2026-10-14). Done when: `ScopeRules.from_json` rebuilds every decision from `crawl.scope`, which a round-trip test over a URL table proves, and `NewCrawl.scope` is a `RecordedScope`; the 8.13 guard proves the Seed was parsed; `seed_base_mismatch` decides on the Seed on the apex host, and a canonical to the Seed's own host ends the check; `NewCrawl.section_crawl` is required; `subfolder_is_root` gives `details.suggested_seed`, and no hint ends with a URL that a period sticks to.
 
 ## 9. Resources, Crawl Depth, limits and invariants (widening)
 
