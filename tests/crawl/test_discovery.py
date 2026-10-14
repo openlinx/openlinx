@@ -27,6 +27,13 @@ def test_a_page_records_each_url_it_links_to_once() -> None:
             in_scope=True,
         ),
         NewUrl(
+            url=NormalizedUrl("http://site.test/logo.png"),
+            crawl_depth=1,
+            discovered_via="image",
+            is_internal=True,
+            in_scope=True,
+        ),
+        NewUrl(
             url=NormalizedUrl("http://site.test/b"),
             crawl_depth=1,
             discovered_via="hyperlink",
@@ -81,11 +88,20 @@ def _recorded(html: str) -> list[tuple[str, str, str | None]]:
             '<link rel="icon" href="/favicon.ico">',
             [("http://site.test/favicon.ico", "misc", "link_type_not_followed")],
         ),
-        ('<img src="/i.png"><link rel="stylesheet" href="/s.css">', []),
-        ('<script src="/s.js"></script><embed src="/e.swf">', []),
+        (
+            '<img src="/i.png"><link rel="stylesheet" href="/s.css">',
+            [("http://site.test/i.png", "image", None), ("http://site.test/s.css", "css", None)],
+        ),
+        (
+            '<script src="/s.js"></script><embed src="/e.swf">',
+            [
+                ("http://site.test/s.js", "javascript", None),
+                ("http://site.test/e.swf", "media", None),
+            ],
+        ),
         (
             '<link rel="icon" href="/x"><img src="/y"><a href="/x">X</a><a href="/y">Y</a>',
-            [("http://site.test/x", "hyperlink", None), ("http://site.test/y", "hyperlink", None)],
+            [("http://site.test/x", "hyperlink", None), ("http://site.test/y", "image", None)],
         ),
         (
             '<a rel="nofollow" href="/n">N</a>',
