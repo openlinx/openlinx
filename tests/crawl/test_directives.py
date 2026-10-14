@@ -3,12 +3,13 @@
 from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.directives import RobotsDirectives, meta_robots_contents, robots_directives
+from spider.naming import DEFAULT_ROBOTS_TOKEN
 
 
 def test_meta_robots_directives_are_read_case_insensitively() -> None:
     tree = LexborHTMLParser('<meta name="ROBOTS" content="NOINDEX, follow">')
 
-    directives = robots_directives(meta_robots_contents(tree), (), "spider")
+    directives = robots_directives(meta_robots_contents(tree), (), DEFAULT_ROBOTS_TOKEN)
 
     assert (
         directives.meta_robots,
@@ -18,7 +19,7 @@ def test_meta_robots_directives_are_read_case_insensitively() -> None:
 
 
 def test_no_directives_give_nulls_and_no_verdicts() -> None:
-    assert robots_directives((), (), "spider") == RobotsDirectives(
+    assert robots_directives((), (), DEFAULT_ROBOTS_TOKEN) == RobotsDirectives(
         meta_robots=None,
         meta_robots_noindex=False,
         meta_robots_nofollow=False,
@@ -29,9 +30,15 @@ def test_no_directives_give_nulls_and_no_verdicts() -> None:
 
 
 def test_a_header_for_another_crawler_does_not_apply() -> None:
-    directives = robots_directives((), ("googlebot: noindex",), "spider")
+    directives = robots_directives((), ("googlebot: noindex",), DEFAULT_ROBOTS_TOKEN)
 
     assert (directives.x_robots_tag, directives.x_robots_tag_noindex) == (
         "googlebot: noindex",
         False,
     )
+
+
+def test_a_header_for_the_robots_user_agent_token_applies() -> None:
+    directives = robots_directives((), ("googlebot: noindex",), "Googlebot")
+
+    assert directives.x_robots_tag_noindex is True

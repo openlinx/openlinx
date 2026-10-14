@@ -36,7 +36,9 @@ def robots_directives(
     meta = [_normalised(content) for content in meta_contents]
     meta_tokens = _directives(meta)
     header = [_normalised(value) for value in header_values]
-    header_tokens = _directives(value for value in header if _PREFIX.match(value) is None)
+    header_tokens = _directives(
+        applying for value in header if (applying := _applying(value, token)) is not None
+    )
     return RobotsDirectives(
         meta_robots=", ".join(meta) if meta else None,
         meta_robots_noindex="noindex" in meta_tokens,
@@ -45,6 +47,14 @@ def robots_directives(
         x_robots_tag_noindex="noindex" in header_tokens,
         x_robots_tag_nofollow="nofollow" in header_tokens,
     )
+
+
+def _applying(value: str, token: str) -> str | None:
+    """The directives of a header value for the robots token; None for another crawler."""
+    prefix = _PREFIX.match(value)
+    if prefix is None:
+        return value
+    return value[prefix.end() :] if prefix[1].lower() == token.lower() else None
 
 
 def _normalised(value: str) -> str:
