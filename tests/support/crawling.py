@@ -1,5 +1,6 @@
 """Crawling the fixture site in tests (020-add-crawl-core, seam 3+6)."""
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,7 @@ from aiohttp.abc import AbstractResolver
 from spider.cli.app import build_app
 from spider.clock import SystemClock
 from spider.crawl.hooks import Hooks
+from spider.crawl.pages import PageExecutor
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
 from spider.services.hooks import default_hooks
@@ -26,9 +28,15 @@ def crawled(*args: str) -> Path:
 
 
 def crawl_result(
-    seed: str, hooks: Hooks | None = None, *, resolver: AbstractResolver | None = None, **crawl: Any
+    seed: str,
+    hooks: Hooks | None = None,
+    *,
+    resolver: AbstractResolver | None = None,
+    pages: Callable[[], PageExecutor] | None = None,
+    **crawl: Any,
 ) -> CrawlResult:
-    """Crawls through the Crawl Service, which alone takes test hooks and the DNS resolver hook.
+    """Crawls through the Crawl Service, which alone takes test hooks, the DNS resolver hook
+    and the page executor.
 
     `crawl` holds settings of the [crawl] table, as their flags would give them. Like the CLI, it
     crawls into the Workspace of the current folder, which `temp_workspace` sets, on the real
@@ -45,5 +53,10 @@ def crawl_result(
     )
     plan = plan_crawl(request, settings_tables(build_app()))
     return start_crawl(
-        plan, SystemClock(), Collected(), hooks or default_hooks(), resolver=resolver
+        plan,
+        SystemClock(),
+        Collected(),
+        hooks or default_hooks(),
+        resolver=resolver,
+        pages=pages,
     )

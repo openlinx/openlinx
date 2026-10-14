@@ -8,7 +8,7 @@ from spider.crawl.context import CrawlContext
 from spider.crawl.discovery import discovered_urls
 from spider.crawl.fetcher import FetchFailure, FetchResult, Request
 from spider.crawl.hooks import UrlResult
-from spider.crawl.pages import is_html_type, response_links
+from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import NormalizedUrl, url_host
@@ -92,11 +92,13 @@ class _Outcomes:
 
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     outcomes = _Outcomes(context)
-    limits = RequestLimits(context.settings.concurrency)
+    limits = RequestLimits(context.settings.concurrency, context.pages.backlog)
     decision = context.scope.decide(seed)
     await context.writer.run_async(
         record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
     )
+    # Once, with the final Scope: 022 moves this to the end of the Seed's Redirect Chain.
+    await context.pages.start(PageSettings(context.scope, context.hooks.extractors))
     depth: int | None = 0
     try:
         while depth is not None and not context.stop.is_set:
@@ -157,7 +159,7 @@ async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedU
         return record_skipped(
             SkippedUrl(queued.id, skip_reason, _handler_rows(context, skipped)), row_writers
         )
-    async with limits.host(url_host(queued.url)):
+    async with limits.host(url_host(queued.url)), limits.request():
         response = await context.fetcher.fetch(Request(queued.url))
     if isinstance(response, FetchFailure):
         failed = _result(

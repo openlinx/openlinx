@@ -128,14 +128,32 @@ def _is_internal(scope: ScopeRules, url: NormalizedUrl) -> bool:
 
 
 class PageExecutor(Protocol):
+    # How many prepared or preparing Pages it may hold beyond the requests in flight (D7).
+    backlog: int
+
+    async def start(self, settings: PageSettings) -> None:
+        """Once, with the snapshot of the final Scope, before the first prepare (design D9)."""
+
     async def prepare(self, url: NormalizedUrl, response: FetchResult) -> PreparedPage: ...
+
+    async def close(self) -> None: ...
 
 
 class InProcessExecutor:
     """Prepares Pages on the event loop's thread; 026 puts a process pool behind the seam."""
 
-    def __init__(self, settings: PageSettings) -> None:
+    backlog = 0
+
+    def __init__(self) -> None:
+        self._settings: PageSettings | None = None
+
+    async def start(self, settings: PageSettings) -> None:
         self._settings = settings
 
     async def prepare(self, url: NormalizedUrl, response: FetchResult) -> PreparedPage:
+        if self._settings is None:
+            raise RuntimeError("the page executor prepares a Page before it is started")
         return prepare_page(url, response, self._settings)
+
+    async def close(self) -> None:
+        pass
