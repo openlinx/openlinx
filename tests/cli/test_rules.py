@@ -46,5 +46,17 @@ def test_rule_without_thresholds() -> None:
     assert [item["thresholds"] for item in items if item["id"] == "title-missing"] == [{}]
 
 
+def test_unknown_rule_id() -> None:
+    result = run_cli("rules", "show", "nope")
+    (error,) = result.stderr_json_lines()
+
+    assert (
+        result.exit_code,
+        error["code"],
+        "nope" in error["message"],
+        "spider rules list" in error["hint"],
+    ) == (4, "rule_not_found", True, True)
+
+
 def test_the_bare_group_lists_the_rules() -> None:
     assert run_cli("rules").json() == run_cli("rules", "list").json()

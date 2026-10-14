@@ -2,6 +2,9 @@
 
 from typing import Any
 
+from spider.naming import APP_NAME
+from spider.output.codes import RULE_NOT_FOUND
+from spider.output.diagnostics import SpiderError
 from spider.rules.model import Rule
 from spider.rules.registry import RULES
 
@@ -13,7 +16,15 @@ def rule_items() -> list[dict[str, Any]]:
 
 
 def rule_item(rule_id: str) -> dict[str, Any]:
-    return _item(_BY_ID[rule_id])
+    rule = _BY_ID.get(rule_id)
+    if rule is None:
+        raise SpiderError(
+            RULE_NOT_FOUND,
+            f"No Rule has the id {rule_id}.",
+            hint=f"{APP_NAME} rules list lists every Rule id.",
+            details={"id": rule_id},
+        )
+    return _item(rule)
 
 
 def _item(rule: Rule) -> dict[str, Any]:
