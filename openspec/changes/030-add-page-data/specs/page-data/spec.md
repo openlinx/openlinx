@@ -18,7 +18,7 @@ The crawl store SHALL hold one row in the `pages` table for every Page of a Craw
 - **When it is written.** The row SHALL be written in the same transaction as the URL's response data.
 - **What gets no row.** There SHALL be no `pages` row for any other URL.
 
-In the scenarios, `{site}` is the origin of the local fixture site.
+In the scenarios, `{site}` is the origin of the local fixture site. In scenarios that use host names, the DNS resolver hook of `020-add-crawl-core` maps `site.test` to one fixture site instance and `other.test` to a second one.
 
 #### Scenario: HTML response becomes a Page
 - **WHEN** a Crawl of the fixture site fetches `{site}/about`, which responds 200 with `Content-Type: text/html; charset=utf-8`
@@ -35,6 +35,10 @@ In the scenarios, `{site}` is the origin of the local fixture site.
 #### Scenario: URL without a response is not a Page
 - **WHEN** `{site}/timeout` never answers within the Crawl's timeout
 - **THEN** `pages` holds 0 rows whose `address` is `{site}/timeout`
+
+#### Scenario: External HTML response is not a Page
+- **WHEN** `http://site.test/` links to `http://other.test/page`, which responds 200 with `Content-Type: text/html`, and the Crawl of `http://site.test/` runs
+- **THEN** `pages` holds 0 rows whose `address` is `http://other.test/page`
 
 ### Requirement: Analysed and non-analysed Pages
 A Page SHALL be *analysed* exactly when `020-add-crawl-core` parsed it (`urls.parsed` = 1), meaning it had a 2xx status and a body that was read in full. For every Page, analysed or not, these columns SHALL be set as their own requirements define:
@@ -370,7 +374,7 @@ Encoding labels SHALL be those of the WHATWG Encoding Standard, and a label outs
 - **THEN** its `canonical_link_element_1` is `https://example.test/docs/page`
 
 ### Requirement: Titles
-Titles SHALL be extracted from HTML-namespace `<title>` elements anywhere in the document. `<title>` elements inside SVG or MathML content SHALL be ignored.
+Titles SHALL be extracted from `<title>` elements anywhere in the document that have no `svg` or `math` ancestor, so `<title>` elements inside SVG or MathML content are ignored.
 
 - `title_count` is the number of such elements.
 - `title_1` and `title_2` are the texts of the first and second, in document order.

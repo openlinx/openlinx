@@ -87,7 +87,7 @@ _None._ This change builds on requirements of `010`, `015`, `017`, `018`, `020` 
   - `060` records the new settings in the equivalent command, or warns when they cannot be written as flags.
   - `070` builds the Report.
   - `080` generates the Skill's column reference from the column descriptions.
-- **Code:** `src/spider/extract/` (the Page extractor, content, readability, pixel widths, structured data, Link attributes), `src/spider/store/` (`spider.store.pages` and `spider.store.links`: the tables, their row values and writers, and the inlink pass) and `docs/schema.md`.
+- **Code:** `src/spider/extract/` (the Page extractor and the Page handler, content, readability, pixel widths, structured data, Link attributes), `src/spider/store/` (the tables in `spider.store.schema`, their row values in `spider.store.page_records`, and their writers and the inlink pass in `spider.store.pages` and `spider.store.links`), `spider.services.hooks` (`default_hooks()` lists them) and `docs/schema.md`.
 - **Dependencies:**
   - `zstandard` (v0.2), shared with `022-add-fetch-policy`
   - `py3langid` (v0.2), imported only when `--detect-language` is set
