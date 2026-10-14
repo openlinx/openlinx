@@ -833,7 +833,7 @@ A failure while one URL is fetched, decoded, parsed, extracted or handled SHALL 
   - a unit that fails, or gives another result, when the writer runs it again (`017-speed-up-crawl-writer`)
   - a fallback unit that fails, a commit that fails, and a writer that has ended
   - 100 URL units in a row that fail on their first run, with no URL unit committed in between
-- **Counted warnings:** each kind of failure SHALL be reported by one warning, `parse_failed` for extractors, `handler_failed` for handlers and `record_failed` for recording. It SHALL be written to stderr when it first occurs, and kept once in the result and `crawl.warnings`, with `details.count` (the number of URLs it affected) and `details.first_url`.
+- **Counted warnings:** each kind of failure SHALL be reported by one warning, `parse_failed` for extractors and for a page preparation that gives nothing (`body_too_large`, `worker_crashed`, `parse_timeout`), `handler_failed` for handlers and `record_failed` for recording. It SHALL be written to stderr when it first occurs, and kept once in the result and `crawl.warnings`, with `details.count` (the number of URLs it affected) and `details.first_url`.
 
 Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, and a crawl file that cannot be written. Page preparation (decoding, parsing, the extractors and the robots directives) SHALL be one function of the response, called through an executor: in this change it runs in the crawl process, and `026-add-parse-pool` runs it in worker processes.
 
