@@ -8,6 +8,8 @@ from selectolax.lexbor import LexborHTMLParser
 
 # A header value that starts with a name and a colon applies only to the crawler it names.
 _PREFIX = re.compile(r"\s*([^\s:,]+)\s*:")
+_NOINDEX = frozenset({"noindex", "none"})
+_NOFOLLOW = frozenset({"nofollow", "none"})
 
 
 class RobotsDirectives(msgspec.Struct, frozen=True, kw_only=True):
@@ -41,11 +43,11 @@ def robots_directives(
     )
     return RobotsDirectives(
         meta_robots=", ".join(meta) if meta else None,
-        meta_robots_noindex="noindex" in meta_tokens,
-        meta_robots_nofollow="nofollow" in meta_tokens,
+        meta_robots_noindex=not meta_tokens.isdisjoint(_NOINDEX),
+        meta_robots_nofollow=not meta_tokens.isdisjoint(_NOFOLLOW),
         x_robots_tag=", ".join(header) if header else None,
-        x_robots_tag_noindex="noindex" in header_tokens,
-        x_robots_tag_nofollow="nofollow" in header_tokens,
+        x_robots_tag_noindex=not header_tokens.isdisjoint(_NOINDEX),
+        x_robots_tag_nofollow=not header_tokens.isdisjoint(_NOFOLLOW),
     )
 
 

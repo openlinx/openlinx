@@ -42,3 +42,9 @@ def test_a_header_for_the_robots_user_agent_token_applies() -> None:
     directives = robots_directives((), ("googlebot: noindex",), "Googlebot")
 
     assert directives.x_robots_tag_noindex is True
+
+
+def test_none_means_noindex_and_nofollow() -> None:
+    directives = robots_directives((), ("none",), DEFAULT_ROBOTS_TOKEN)
+
+    assert (directives.x_robots_tag_noindex, directives.x_robots_tag_nofollow) == (True, True)
