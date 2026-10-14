@@ -38,7 +38,11 @@ def run_cli(
 
 def run_cli_process(*args: str, env: Mapping[str, str] | None = None) -> CliResult:
     completed = subprocess.run(
-        [sys.executable, "-m", "spider", *args], capture_output=True, env=env, check=False
+        [sys.executable, "-m", "spider", *args],
+        capture_output=True,
+        env=env,
+        timeout=PROCESS_TIMEOUT,
+        check=False,
     )
     return CliResult(completed.returncode, completed.stdout, completed.stderr)
 

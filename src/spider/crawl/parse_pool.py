@@ -3,14 +3,18 @@
 import asyncio
 import multiprocessing
 import os
+import pickle
 import signal
 import sys
 import threading
 from collections import deque
+from contextlib import suppress
 from dataclasses import dataclass
 from multiprocessing.connection import _ConnectionBase, wait
 from multiprocessing.process import BaseProcess
 from typing import Any
+
+import msgspec
 
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.pages import PageSettings, PreparedPage, prepare_page
@@ -26,28 +30,69 @@ type _Work = tuple[NormalizedUrl, FetchResult]
 type _Outcome = PreparedPage | BaseException
 
 
+class WorkerEndedError(RuntimeError):
+    """The worker that held a Page ended, or none is left to take it."""
+
+
 def _work(settings: PageSettings, tasks: _PipeEnd, results: _PipeEnd) -> None:
     """A worker's life; the snapshot is a start argument, so it is pickled once (design D1)."""
     # Ctrl+C reaches every process of a console: the crawl process ends its workers in order.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     if sys.platform == "win32":
         signal.signal(signal.SIGBREAK, signal.SIG_IGN)
-    while (work := tasks.recv()) is not None:
+    while True:
+        try:
+            work = tasks.recv()
+        # The crawl process ended without stopping this worker: nothing is left to do.
+        except (EOFError, OSError):
+            return
+        if work is None:
+            return
         url, response = work
         outcome: _Outcome
         try:
             outcome = prepare_page(url, response, settings)
         except Exception as error:
             outcome = error
-        results.send(outcome)
+        results.send_bytes(_pickled(outcome))
+
+
+def _pickled(outcome: _Outcome) -> bytes:
+    """What a worker sends: whatever cannot cross to the crawl process costs only itself."""
+    try:
+        return pickle.dumps(outcome, pickle.HIGHEST_PROTOCOL)
+    except Exception:
+        if isinstance(outcome, PreparedPage):
+            return pickle.dumps(_without_unsendable_outputs(outcome), pickle.HIGHEST_PROTOCOL)
+        return pickle.dumps(RuntimeError(f"{type(outcome).__name__}: {outcome}"))
+
+
+def _without_unsendable_outputs(page: PreparedPage) -> PreparedPage:
+    # In process the output would reach its handler; here it fails as its extractor (020 D16).
+    kept: list[tuple[str, msgspec.Struct]] = []
+    failures = [page.parse_error_message] if page.parse_error_message else []
+    for name, output in page.outputs:
+        try:
+            pickle.dumps(output, pickle.HIGHEST_PROTOCOL)
+        except Exception as error:
+            failures.append(f"{name}: {type(error).__name__}")
+        else:
+            kept.append((name, output))
+    return msgspec.structs.replace(
+        page,
+        outputs=tuple(kept),
+        parse_error="extractor_error",
+        parse_error_message="; ".join(failures),
+    )
 
 
 def worker_count(*, physical: int | None, logical: int | None, available: int | None) -> int:
-    """Physical cores less two, for the crawl process and the writer (design D1)."""
+    """The physical cores available less two, for the crawl process and the writer (design D1)."""
     cores = physical or (logical or 0) // 2
-    if available:
-        # A container's CPU limit, which only Python 3.13's os.process_cpu_count reports.
-        cores = min(cores, available)
+    if available and logical and available < logical:
+        # Only part of the machine is ours (taskset, a container's cpuset): as many physical
+        # cores as its share of the logical ones. A CPU quota is not seen.
+        cores = cores * available // logical
     return max(1, cores - 2)
 
 
@@ -58,8 +103,19 @@ def default_workers() -> int:
     return worker_count(
         physical=psutil.cpu_count(logical=False),
         logical=os.cpu_count(),
-        available=getattr(os, "process_cpu_count", os.cpu_count)(),
+        available=_available_cpus(psutil.Process()),
     )
+
+
+def _available_cpus(process: Any) -> int | None:
+    """The logical CPUs this process may run on: Python 3.13 says, before it psutil does."""
+    process_cpu_count = getattr(os, "process_cpu_count", None)
+    if process_cpu_count is not None:
+        count: int | None = process_cpu_count()
+        return count
+    # macOS has no affinity.
+    affinity = getattr(process, "cpu_affinity", None)
+    return None if affinity is None else len(affinity())
 
 
 @dataclass(frozen=True, eq=False)
@@ -75,15 +131,16 @@ class PoolExecutor:
     """Prepares each Page in one of `workers` spawn processes, one Page per worker at a time."""
 
     def __init__(self, workers: int | None = None) -> None:
-        self._count = default_workers() if workers is None else workers
-        self.workers = self._count
-        self.backlog = BACKLOG_PER_WORKER * self._count
+        self.workers = default_workers() if workers is None else workers
+        self.backlog = BACKLOG_PER_WORKER * self.workers
         self._workers: list[_Worker] = []
+        # The workers still running, idle or busy.
+        self._live: set[_Worker] = set()
         self._idle: deque[_Worker] = deque()
-        # The Page each busy worker holds.
-        self._busy: dict[_Worker, asyncio.Future[PreparedPage]] = {}
+        # The Page each busy worker holds: its URL and its future.
+        self._busy: dict[_Worker, tuple[NormalizedUrl, asyncio.Future[PreparedPage]]] = {}
         self._waiting: deque[tuple[_Work, asyncio.Future[PreparedPage]]] = deque()
-        self._loop: asyncio.AbstractEventLoop | None = None
+        self._started = False
         self._waiter: threading.Thread | None = None
         self._wake_reader, self._wake_writer = multiprocessing.Pipe(duplex=False)
         self._broken: RuntimeError | None = None
@@ -93,9 +150,9 @@ class PoolExecutor:
         return tuple(worker.process.pid for worker in self._workers if worker.process.pid)
 
     async def start(self, settings: PageSettings) -> None:
-        self._loop = asyncio.get_running_loop()
+        loop = asyncio.get_running_loop()
         spawn = multiprocessing.get_context("spawn")
-        for n in range(self._count):
+        for n in range(self.workers):
             task_reader, task_writer = spawn.Pipe(duplex=False)
             result_reader, result_writer = spawn.Pipe(duplex=False)
             process = spawn.Process(
@@ -110,52 +167,77 @@ class PoolExecutor:
             result_writer.close()
             worker = _Worker(process, task_writer, result_reader)
             self._workers.append(worker)
+            self._live.add(worker)
             self._idle.append(worker)
+        # A daemon: nothing it waits for may keep the crawl process from exiting.
         self._waiter = threading.Thread(
-            target=self._wait_for_outcomes, args=(self._loop,), name="spider-parse-waiter"
+            target=self._wait_for_outcomes, args=(loop,), name="spider-parse-waiter", daemon=True
         )
         self._waiter.start()
+        self._started = True
 
     async def prepare(self, url: NormalizedUrl, response: FetchResult) -> PreparedPage:
+        if not self._started:
+            raise RuntimeError("the parse pool prepares a Page before it is started")
         if self._broken is not None:
             raise self._broken
         future: asyncio.Future[PreparedPage] = asyncio.get_running_loop().create_future()
-        if self._idle:
-            self._hand(self._idle.popleft(), (url, response), future)
-        else:
-            self._waiting.append(((url, response), future))
+        self._waiting.append(((url, response), future))
+        self._dispatch()
         return await future
 
     async def close(self) -> None:
-        for worker in self._workers:
-            worker.tasks.send(None)
+        # Nothing waits any more at a normal end; a stop leaves no Page for a worker.
+        for _, future in self._waiting:
+            future.cancel()
+        self._waiting.clear()
+        for worker in self._live:
+            # A worker that ended meanwhile has nothing to stop.
+            with suppress(OSError):
+                worker.tasks.send(None)
         await asyncio.to_thread(self._join)
 
     def _join(self) -> None:
-        for worker in self._workers:
-            worker.process.join()
-        self._wake_writer.send(None)
-        if self._waiter is not None:
-            self._waiter.join()
-        for worker in self._workers:
-            worker.tasks.close()
-            worker.results.close()
-        self._wake_reader.close()
-        self._wake_writer.close()
+        try:
+            for worker in self._workers:
+                worker.process.join()
+        finally:
+            with suppress(OSError):
+                self._wake_writer.send(None)
+            if self._waiter is not None:
+                self._waiter.join()
+            ends = [worker.tasks for worker in self._workers]
+            ends += [worker.results for worker in self._workers]
+            for end in (*ends, self._wake_reader, self._wake_writer):
+                end.close()
 
-    def _hand(self, worker: _Worker, work: _Work, future: asyncio.Future[PreparedPage]) -> None:
-        self._busy[worker] = future
-        worker.tasks.send(work)
+    def _dispatch(self) -> None:
+        """Hands waiting Pages to idle workers, skipping those cancelled while they waited."""
+        while self._waiting and self._idle:
+            work, future = self._waiting.popleft()
+            if future.done():
+                continue
+            worker = self._idle.popleft()
+            try:
+                worker.tasks.send(work)
+            # It ended since it last answered, before the waiter saw it.
+            except OSError:
+                self._waiting.appendleft((work, future))
+                self._ended(worker)
+                continue
+            self._busy[worker] = (work[0], future)
+        if not self._live:
+            self._fail_waiting()
 
     def _wait_for_outcomes(self, loop: asyncio.AbstractEventLoop) -> None:
         """The waiter thread: every worker's outcome, handed to the event loop's thread."""
         try:
             self._relay_outcomes(loop)
-        # Whatever ends this thread early must fail the Pages it would have answered, never
-        # leave them waiting.
+        # Whatever ends this thread early fails the Pages it would have answered, through their
+        # futures, never as a traceback on stderr, which carries JSON lines.
         except BaseException as error:
-            loop.call_soon_threadsafe(self._fail_all, error)
-            raise
+            with suppress(RuntimeError):
+                loop.call_soon_threadsafe(self._fail_all, error)
 
     def _relay_outcomes(self, loop: asyncio.AbstractEventLoop) -> None:
         # By identity: on Windows a pipe end is a PipeConnection, which is no Connection.
@@ -167,37 +249,60 @@ class PoolExecutor:
                 worker = pending[id(ready)]
                 outcome: _Outcome
                 try:
-                    outcome = worker.results.recv()
-                except EOFError:
-                    # The worker ended: at close, or a crash, which design D3 handles.
+                    message = worker.results.recv_bytes()
+                except (EOFError, OSError):
+                    # The worker ended: at close, or a crash, whose Page design D3 records.
                     del pending[id(ready)]
+                    loop.call_soon_threadsafe(self._ended, worker)
                     continue
+                try:
+                    # From our own worker over a pipe of its own, as multiprocessing's recv()
+                    # would unpickle it; unpickled here so a failure costs one Page.
+                    outcome = pickle.loads(message)  # noqa: S301
                 # An outcome this process cannot unpickle, such as an extractor's output whose
                 # class cannot be rebuilt here, is that one Page's failure, never the pool's.
                 except Exception as error:
                     outcome = error
                 loop.call_soon_threadsafe(self._finished, worker, outcome)
 
+    def _finished(self, worker: _Worker, outcome: _Outcome) -> None:
+        _, future = self._busy.pop(worker)
+        # A cancelled Page's outcome only frees its worker.
+        if not future.done():
+            if isinstance(outcome, BaseException):
+                future.set_exception(outcome)
+            else:
+                future.set_result(outcome)
+        self._idle.append(worker)
+        self._dispatch()
+
+    def _ended(self, worker: _Worker) -> None:
+        if worker not in self._live:
+            return
+        self._live.discard(worker)
+        with suppress(ValueError):
+            self._idle.remove(worker)
+        held = self._busy.pop(worker, None)
+        if held is not None:
+            url, future = held
+            if not future.done():
+                future.set_exception(WorkerEndedError(f"The parse worker preparing {url} ended."))
+        if not self._live:
+            self._fail_waiting()
+
+    def _fail_waiting(self) -> None:
+        for (url, _), future in self._waiting:
+            if not future.done():
+                future.set_exception(WorkerEndedError(f"No parse worker is left to prepare {url}."))
+        self._waiting.clear()
+
     def _fail_all(self, error: BaseException) -> None:
         self._broken = RuntimeError("The parse pool's waiter thread failed.")
         self._broken.__cause__ = error
-        futures = [*self._busy.values(), *(future for _, future in self._waiting)]
+        futures = [future for _, future in self._busy.values()]
+        futures += [future for _, future in self._waiting]
         self._busy.clear()
         self._waiting.clear()
         for future in futures:
             if not future.done():
                 future.set_exception(self._broken)
-
-    def _finished(self, worker: _Worker, outcome: _Outcome) -> None:
-        future = self._busy.pop(worker, None)
-        # A cancelled Page's outcome only frees its worker.
-        if future is not None and not future.done():
-            if isinstance(outcome, BaseException):
-                future.set_exception(outcome)
-            else:
-                future.set_result(outcome)
-        if self._waiting:
-            work, waiting = self._waiting.popleft()
-            self._hand(worker, work, waiting)
-        else:
-            self._idle.append(worker)
