@@ -7,6 +7,7 @@ from spider.crawl.fetcher import Fetcher
 from spider.crawl.hooks import Hooks
 from spider.crawl.pages import PageExecutor
 from spider.crawl.scope import ScopeRules
+from spider.crawl.settings import CrawlSettings
 from spider.crawl.stop import StopSignal
 from spider.crawl.warning_log import WarningLog
 from spider.store.records import CrawlFile
@@ -16,6 +17,7 @@ from spider.store.writer import CrawlWriter
 @dataclass(frozen=True, kw_only=True)
 class CrawlContext:
     crawl_file: CrawlFile
+    settings: CrawlSettings
     scope: ScopeRules
     clock: Clock
     reporter: WarningLog

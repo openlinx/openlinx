@@ -58,6 +58,7 @@ class CrawlRequest:
 @dataclass(frozen=True)
 class CrawlPlan:
     seed: NormalizedUrl
+    settings: CrawlSettings
     scope: ScopeRules
     new_crawl: NewCrawl
 
@@ -128,8 +129,9 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
     )
-    exclude = _patterns(settings.table(CrawlSettings).exclude)
-    return CrawlPlan(seed, scope_rules(seed, exclude=exclude), new_crawl)
+    crawl_settings = settings.table(CrawlSettings)
+    scope = scope_rules(seed, exclude=_patterns(crawl_settings.exclude))
+    return CrawlPlan(seed, crawl_settings, scope, new_crawl)
 
 
 def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
@@ -173,7 +175,7 @@ def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter, hooks: Hooks)
 async def _crawl(
     plan: CrawlPlan, crawl_file: CrawlFile, clock: Clock, reporter: WarningLog, hooks: Hooks
 ) -> tuple[datetime, CrawlSummary, UrlCounts]:
-    async with _crawl_context(crawl_file, plan.scope, clock, reporter, hooks) as context:
+    async with _crawl_context(crawl_file, plan, clock, reporter, hooks) as context:
         await run_crawl(context, plan.seed)
         if context.stop.cause is not None:
             # Never completed: 12.9 records the failed end as crawl_write_failed.
@@ -191,7 +193,7 @@ async def _crawl(
 
 @asynccontextmanager
 async def _crawl_context(
-    crawl_file: CrawlFile, scope: ScopeRules, clock: Clock, reporter: WarningLog, hooks: Hooks
+    crawl_file: CrawlFile, plan: CrawlPlan, clock: Clock, reporter: WarningLog, hooks: Hooks
 ) -> AsyncIterator[CrawlContext]:
     """The one place a Crawl's context is built, and its resources closed (design D15)."""
     # Opening and closing the writer block, so they run off the event loop.
@@ -200,12 +202,13 @@ async def _crawl_context(
         async with aiohttp_fetcher(clock) as fetcher:
             yield CrawlContext(
                 crawl_file=crawl_file,
-                scope=scope,
+                settings=plan.settings,
+                scope=plan.scope,
                 clock=clock,
                 reporter=reporter,
                 writer=writer,
                 fetcher=fetcher,
-                pages=InProcessExecutor(PageSettings(scope, hooks.extractors)),
+                pages=InProcessExecutor(PageSettings(plan.scope, hooks.extractors)),
                 hooks=hooks,
                 stop=StopSignal(),
             )

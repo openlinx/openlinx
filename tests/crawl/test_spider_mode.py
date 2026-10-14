@@ -285,3 +285,33 @@ def test_a_connection_reset_in_the_body_is_a_connection_error(
         (server.url("/after"), "fetched", None),
         (server.url("/reset"), "error", "connection_error"),
     ]
+
+
+SLOW_PAGES = Site(
+    routes={
+        "/": Page(body=" ".join(f'<a href="/slow/{n}">{n}</a>' for n in range(1, 21))),
+        **{f"/slow/{n}": Page(body="<p>Slow</p>", delay=0.5) for n in range(1, 21)},
+    }
+)
+
+
+@pytest.mark.slow
+def test_at_most_five_requests_to_a_host_by_default(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SLOW_PAGES)
+
+    crawled(server.url("/"))
+
+    assert server.most_simultaneous == 5
+
+
+@pytest.mark.slow
+def test_a_lower_concurrency_is_honoured(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SLOW_PAGES)
+
+    crawled(server.url("/"), "--concurrency", "2")
+
+    assert server.most_simultaneous == 2

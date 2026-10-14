@@ -8,8 +8,9 @@ from spider.crawl.context import CrawlContext
 from spider.crawl.fetcher import FetchFailure, FetchResult, Request
 from spider.crawl.hooks import UrlResult
 from spider.crawl.pages import PreparedPage
+from spider.crawl.politeness import RequestLimits
 from spider.crawl.scope import ScopeDecision, ScopeRules
-from spider.crawl.urls import NormalizedUrl
+from spider.crawl.urls import NormalizedUrl, url_host
 from spider.output.codes import HANDLER_FAILED, PARSE_FAILED, RECORD_FAILED
 from spider.output.diagnostics import Diagnostic
 from spider.store.failures import is_one_rows_error
@@ -85,28 +86,61 @@ class _Outcomes:
 
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     outcomes = _Outcomes(context)
+    limits = RequestLimits(context.settings.concurrency)
     await context.writer.run_async(record_seed(seed))
     depth: int | None = 0
     while depth is not None and not context.stop.is_set:
-        await _crawl_depth(context, outcomes, depth)
+        await _crawl_depth(context, outcomes, limits, depth)
         # Read after every unit submitted so far, so it sees the URLs they discovered.
         depth = await context.writer.run_async(next_depth(depth))
     await outcomes.settled()
 
 
-async def _crawl_depth(context: CrawlContext, outcomes: _Outcomes, depth: int) -> None:
-    # The cursor of this run: a URL in flight is never read twice (design D1).
-    after = 0
-    while batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH)):
-        for queued in batch:
-            if context.stop.is_set:
-                return
-            # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
-            await outcomes.submit(queued, await _unit_of(context, queued, depth))
-        after = batch[-1].id
+async def _crawl_depth(
+    context: CrawlContext, outcomes: _Outcomes, limits: RequestLimits, depth: int
+) -> None:
+    """Returns once every URL task of the depth has ended, so the next depth sees their URLs."""
+    running: set[asyncio.Task[None]] = set()
+    try:
+        # The cursor of this run: a URL in flight is never read twice (design D1).
+        after = 0
+        while batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH)):
+            for queued in batch:
+                # Held by the URL's task until it ends, so tasks never outgrow the global cap.
+                await limits.tasks.acquire()
+                if context.stop.is_set:
+                    limits.tasks.release()
+                    return
+                task = asyncio.create_task(_crawl_url(context, outcomes, limits, queued, depth))
+                running.add(task)
+                task.add_done_callback(running.discard)
+            after = batch[-1].id
+        if running:
+            await asyncio.gather(*running)
+    finally:
+        for task in running:
+            task.cancel()
+        # Retrieved, so that no "Task exception was never retrieved" reaches stderr.
+        await asyncio.gather(*running, return_exceptions=True)
 
 
-async def _unit_of(context: CrawlContext, queued: QueuedUrl, depth: int) -> UrlUnit:
+async def _crawl_url(
+    context: CrawlContext,
+    outcomes: _Outcomes,
+    limits: RequestLimits,
+    queued: QueuedUrl,
+    depth: int,
+) -> None:
+    try:
+        # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
+        await outcomes.submit(queued, await _unit_of(context, limits, queued, depth))
+    finally:
+        limits.tasks.release()
+
+
+async def _unit_of(
+    context: CrawlContext, limits: RequestLimits, queued: QueuedUrl, depth: int
+) -> UrlUnit:
     """The unit that records the URL's final state, with its handlers' rows."""
     row_writers = context.hooks.row_writers
     # Decided once, at dispatch, so a URL found on several Pages is recorded once (design D1).
@@ -122,7 +156,8 @@ async def _unit_of(context: CrawlContext, queued: QueuedUrl, depth: int) -> UrlU
         return record_skipped(
             SkippedUrl(queued.id, skip_reason, _handled(context, skipped)), row_writers
         )
-    response = await context.fetcher.fetch(Request(queued.url))
+    async with limits.host(url_host(queued.url)):
+        response = await context.fetcher.fetch(Request(queued.url))
     if isinstance(response, FetchFailure):
         failed = UrlResult(
             url_id=queued.id,
