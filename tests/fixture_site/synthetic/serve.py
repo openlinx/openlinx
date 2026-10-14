@@ -1,4 +1,4 @@
-"""The synthetic site served from its own process, with a tally of its requests (026 D6)."""
+"""The synthetic site in its own process, with a tally (design D6 of 026-add-parse-pool)."""
 
 import multiprocessing
 import signal
@@ -9,12 +9,14 @@ from types import TracebackType
 from typing import Self
 
 from tests.fixture_site.hosts import FixtureResolver
-from tests.fixture_site.routes import Route, Site
+from tests.fixture_site.routes import Route, Site, Status
 from tests.fixture_site.server import RequestLog, RunningServer, ServerHandle
 from tests.fixture_site.synthetic.site import EXTERNAL_HOSTS, SyntheticSite, page_number
 
 # A spawned child imports aiohttp and the site first, about a second on Windows.
 START_TIMEOUT = 60
+# Its server cancels the handlers still running, so a stop takes seconds at most.
+STOP_TIMEOUT = 60
 STOP = "stop"
 
 
@@ -22,7 +24,8 @@ STOP = "stop"
 class Tally:
     pages_requested: int
     pages_requested_more_than_once: int
-    resource_requests: int
+    # Every request but a Page's or a 404: Resources, External and not-followed URLs.
+    other_requests: int
     not_found: int
 
 
@@ -49,6 +52,9 @@ class SiteProcess:
 
     def stop(self) -> Tally:
         self._connection.send(STOP)
+        if not self._connection.poll(STOP_TIMEOUT):
+            self._process.kill()
+            raise RuntimeError("The synthetic site's process did not stop.")
         tally: Tally = self._connection.recv()
         self._process.join()
         return tally
@@ -75,15 +81,15 @@ def _serve(site: SyntheticSite, connection: Connection) -> None:
         signal.signal(signal.SIGBREAK, signal.SIG_IGN)
     # One byte per Page, saturating, so 500,000 Pages take 0.5 MB however long the run.
     per_page = bytearray(site.pages)
-    others = {"resources": 0, "not_found": 0}
+    others = {"other": 0, "not_found": 0}
 
-    def counted(path: str) -> Route | None:
+    def counted(path: str) -> Route:
         route = site.route(path)
         n = page_number(path, site.pages)
         if n is not None:
             per_page[n] = min(per_page[n] + 1, 255)
         else:
-            others["resources" if route is not None else "not_found"] += 1
+            others["not_found" if isinstance(route, Status) and route.code == 404 else "other"] += 1
         return route
 
     server = RunningServer(Site(resolve=counted), keep_log=False)
@@ -96,7 +102,7 @@ def _serve(site: SyntheticSite, connection: Connection) -> None:
         Tally(
             pages_requested=site.pages - per_page.count(0),
             pages_requested_more_than_once=site.pages - per_page.count(0) - per_page.count(1),
-            resource_requests=others["resources"],
+            other_requests=others["other"],
             not_found=others["not_found"],
         )
     )

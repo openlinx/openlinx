@@ -1,4 +1,4 @@
-"""A Crawl of the synthetic site checked against its manifest (026-add-parse-pool D6)."""
+"""A Crawl of the synthetic site checked against its manifest (design D6 of 026-add-parse-pool)."""
 
 from pathlib import Path
 
@@ -13,6 +13,7 @@ from tests.fixture_site.synthetic.accounting import (
     CLEAN,
     EXTERNAL_OUTCOME,
     MISSING_OUTCOME,
+    URL_ROWS,
     UrlRow,
     account,
 )
@@ -53,7 +54,6 @@ SITE = SyntheticSite(
         0.05,
     ),
 )
-URL_ROWS = "SELECT url, fetch_state, fetch_error, status_code, parsed, parse_error FROM urls"
 
 
 def crawled(temp_workspace: TempWorkspace, seed: str, resolver: AbstractResolver) -> Path:
@@ -121,7 +121,7 @@ def test_every_url_that_is_not_accounted_for_is_a_problem() -> None:
     tally = Tally(
         pages_requested=SITE.pages - 1,
         pages_requested_more_than_once=2,
-        resource_requests=0,
+        other_requests=0,
         not_found=0,
     )
 

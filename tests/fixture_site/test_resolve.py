@@ -1,4 +1,4 @@
-"""Routes computed per request, for sites too large to declare (026-add-parse-pool D6)."""
+"""Routes computed per request, for sites too large to declare (design D6 of 026-add-parse-pool)."""
 
 import aiohttp
 

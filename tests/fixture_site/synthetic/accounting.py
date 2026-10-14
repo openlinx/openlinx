@@ -1,4 +1,4 @@
-"""A Crawl of the synthetic site checked by counts, every URL accounted for (026 D6)."""
+"""A Crawl of the synthetic site checked by counts (design D6 of 026-add-parse-pool)."""
 
 from collections import Counter
 from collections.abc import Iterable, Mapping, Set
@@ -19,6 +19,7 @@ from tests.fixture_site.synthetic.site import (
 )
 
 CLEAN = "clean"
+URL_ROWS = "SELECT url, fetch_state, fetch_error, status_code, parsed, parse_error FROM urls"
 MISSING_OUTCOME: Mapping[str, Any] = {
     **FETCHED,
     "status_code": 404,

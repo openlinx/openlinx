@@ -1,4 +1,4 @@
-"""The ~500k-Page benchmark and soak run, by hand (026-add-parse-pool D6).
+"""The ~500k-Page benchmark and soak run, by hand (design D6 of 026-add-parse-pool).
 
 Run from the repository root: `uv run python -m scripts.crawl_500k`.
 """
@@ -20,17 +20,15 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urlsplit
 
 import msgspec
 import psutil
-import typer
 from sqlalchemy import text
 
 from spider.aio import loop_factory
 from spider.cli.app import build_app
-from spider.cli.runner import SpiderGroup
 from spider.clock import Clock, SystemClock
 from spider.crawl import pages
 from spider.crawl.context import CrawlContext
@@ -50,8 +48,7 @@ from spider.store.crawls import record_state
 from spider.store.reading import reading
 from spider.store.records import SecretNames
 from spider.store.writer import CrawlWriter
-from spider.workspace.tables import SettingsTables
-from tests.fixture_site.synthetic.accounting import UrlRow, account
+from tests.fixture_site.synthetic.accounting import URL_ROWS, UrlRow, account
 from tests.fixture_site.synthetic.preparation import END_WORKER_EXTRACTOR, prepared_page
 from tests.fixture_site.synthetic.serve import SiteProcess, Tally
 from tests.fixture_site.synthetic.site import (
@@ -63,6 +60,7 @@ from tests.fixture_site.synthetic.site import (
     page_number,
     pool_index,
 )
+from tests.support.app import settings_tables
 
 PAGES = 500_000
 MIB = 2**20
@@ -71,6 +69,7 @@ SAMPLE_SECONDS = 0.5
 # larger of these: the first quarter warms up the caches.
 GROWTH_MIB = 64
 GROWTH_SHARE = 0.10
+MIN_SAMPLES = 8
 # The in-process executor cannot contain these: a nested Page holds the event loop for minutes,
 # and the end-worker extractor would end the crawl process itself.
 BASELINE_SHARES: Mapping[Fault, float] = {
@@ -87,7 +86,6 @@ PERFORMANCE_CLASS = "Win32_PerfFormattedData_Counters_ProcessorInformation"
 PERFORMANCE_SECONDS = 5
 # A variable, so that the type checker of each platform reads the code of the others.
 WINDOWS = sys.platform == "win32"
-URL_ROWS = "SELECT url, fetch_state, fetch_error, status_code, parsed, parse_error FROM urls"
 TABLE_BYTES = (
     "SELECT coalesce(s.tbl_name, d.name), sum(d.pgsize) FROM dbstat AS d"
     " LEFT JOIN sqlite_schema AS s ON s.name = d.name GROUP BY 1 ORDER BY 2 DESC"
@@ -136,7 +134,9 @@ class Sampler:
                     name, peak = samples.children_rss.get(child.pid, (child.name(), 0))
                     samples.children_rss[child.pid] = (name, max(peak, child.memory_info().rss))
             samples.machine_cpu.append(psutil.cpu_percent())
-            samples.clock_mhz.append(psutil.cpu_freq().current)
+            frequency = cpu_frequency()
+            if frequency is not None:
+                samples.clock_mhz.append(frequency.current)
             for wal in self._folder.rglob("*-wal"):
                 with contextlib.suppress(OSError):
                     samples.wal_bytes = max(samples.wal_bytes, wal.stat().st_size)
@@ -275,10 +275,6 @@ class ModelExecutor:
         return msgspec.structs.replace(page, links=tuple(links))
 
 
-def settings_tables() -> SettingsTables:
-    return cast(SpiderGroup, typer.main.get_group(build_app())).settings_tables
-
-
 def plan(folder: Path, seed: str, concurrency: int) -> CrawlPlan:
     request = CrawlRequest(
         seed=seed,
@@ -289,7 +285,7 @@ def plan(folder: Path, seed: str, concurrency: int) -> CrawlPlan:
         secret_names=SecretNames(),
         flags={"crawl": {"concurrency": concurrency}},
     )
-    return plan_crawl(request, settings_tables())
+    return plan_crawl(request, settings_tables(build_app()))
 
 
 def benchmark_hooks() -> Hooks:
@@ -328,6 +324,10 @@ def direct(folder: Path, site: SyntheticSite, concurrency: int, *, new_urls_only
             await run_crawl(context, crawl_plan.seed)
             if context.stop.is_set:
                 raise context.stop.cause or RuntimeError(f"stopped: {context.stop.reason}")
+            # Before completed, as the Crawl Service runs them: 040 reads completed as
+            # "its Issues are materialised".
+            for crawl_pass in context.hooks.passes:
+                await crawl_pass.run(writer)
             await writer.run_async(record_state("completed", clock.now()))
 
     asyncio.run(run(), loop_factory=loop_factory)
@@ -357,15 +357,15 @@ def file_sizes(crawl_file: Path) -> dict[str, Any]:
 
 
 def memory_growth(rss: list[tuple[float, int]]) -> dict[str, Any]:
-    if not rss:
-        return {"grew": False, "samples": 0}
-    end = rss[-1][0]
+    end = rss[-1][0] if rss else 0.0
     second = [size for at, size in rss if end * 0.25 <= at < end * 0.5]
     last = [size for at, size in rss if at >= end * 0.75]
-    if not second or not last:
-        return {"grew": False, "samples": len(rss)}
+    # A sampler that died, or a run too short to tell, must not pass as flat.
+    if len(rss) < MIN_SAMPLES or not second or not last:
+        return {"checked": False, "grew": None, "samples": len(rss)}
     growth = max(last) - max(second)
     return {
+        "checked": True,
         "grew": growth > max(GROWTH_MIB * MIB, GROWTH_SHARE * max(second)),
         "second_quarter_peak_mib": round(max(second) / MIB, 1),
         "last_quarter_peak_mib": round(max(last) / MIB, 1),
@@ -388,8 +388,16 @@ def power_plan() -> str | None:
     return output.strip() or None
 
 
+def cpu_frequency() -> Any:
+    """psutil's clock reading, or None where the OS reports none, as on some Linux VMs."""
+    try:
+        return psutil.cpu_freq()
+    except (NotImplementedError, OSError):
+        return None
+
+
 def machine() -> dict[str, Any]:
-    frequency = psutil.cpu_freq()
+    frequency = cpu_frequency()
     battery = psutil.sensors_battery() if hasattr(psutil, "sensors_battery") else None
     return {
         "platform": platform.platform(),
@@ -430,7 +438,8 @@ def measure(
     site_cpu: float | None = None
     crawl_file: Path | None = None
     started_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    nominal = psutil.cpu_freq().max or psutil.cpu_freq().current
+    frequency = cpu_frequency()
+    nominal = None if frequency is None else frequency.max or frequency.current
     with contextlib.ExitStack() as stack:
         served = stack.enter_context(SiteProcess(site)) if mode == "crawl" else None
         site_process = None if served is None else psutil.Process(served.pid)
@@ -454,8 +463,12 @@ def measure(
         elapsed = time.perf_counter() - started
         crawl_cpu = cpu_seconds(process) - cpu_before
         if served is not None and site_process is not None:
-            site_cpu = cpu_seconds(site_process)
-            tally = served.stop()
+            try:
+                site_cpu = cpu_seconds(site_process)
+                tally = served.stop()
+            # The report still comes out: the failure is part of it.
+            except (psutil.Error, RuntimeError, EOFError, OSError) as error:
+                failures.append(f"the site process failed: {type(error).__name__}: {error}")
     samples = sampler.samples
     report: dict[str, Any] = {
         "started_at": started_at,
@@ -482,14 +495,18 @@ def measure(
         "processor_performance_percent": summary(performance.percent),
         "clock_mhz": summary(
             [nominal * percent / 100 for percent in performance.percent]
-            if performance.percent
+            if performance.percent and nominal
             else samples.clock_mhz
         ),
         "wal_peak_mib": round(samples.wal_bytes / MIB, 1),
         "memory": memory_growth(samples.rss),
         "tally": None if tally is None else asdict(tally),
     }
-    if report["memory"]["grew"]:
+    if not report["memory"]["checked"]:
+        failures.append(
+            f"too few memory samples ({report['memory']['samples']}) to tell whether memory grew"
+        )
+    elif report["memory"]["grew"]:
         failures.append("the crawl process's memory grew")
     if crawl_file is not None:
         origin = DIRECT_SEED.rstrip("/") if served is None else served.base_url

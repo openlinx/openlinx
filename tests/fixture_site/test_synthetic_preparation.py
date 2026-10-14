@@ -1,4 +1,4 @@
-"""The synthetic site's Page model against 020's page preparation (026-add-parse-pool D6)."""
+"""The synthetic Page model against page preparation (design D6 of 026-add-parse-pool)."""
 
 import multiprocessing
 from collections.abc import Callable

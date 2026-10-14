@@ -1,7 +1,7 @@
 """What 020's page preparation gives for a synthetic Page, and the extractor that ends its worker.
 
 The benchmark's direct mode prepares Pages with `prepared_page` instead of parsing them
-(026-add-parse-pool D6).
+(design D6 of 026-add-parse-pool).
 """
 
 import os

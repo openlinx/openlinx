@@ -1,4 +1,4 @@
-"""The synthetic site of the 500k benchmark (026-add-parse-pool D6)."""
+"""The synthetic site of the 500k benchmark (design D6 of 026-add-parse-pool)."""
 
 import http.client
 import os
@@ -22,10 +22,12 @@ from tests.fixture_site.synthetic.serve import SiteProcess, Tally
 from tests.fixture_site.synthetic.site import (
     EXTERNAL_HOSTS,
     NO_FAULTS,
+    REFRESH_EVERY,
     Fault,
     SyntheticSite,
     page_path,
 )
+from tests.fixture_site.synthetic.site import LOSES_LINKS as LOSES_PAGE_LINKS
 
 HYPERLINK = re.compile(rb'<a href="(/[^"]*)"')
 END_WORKER = b'<meta name="spider-benchmark" content="end-worker">'
@@ -335,6 +337,25 @@ def test_a_reset_page_resets_its_connection_inside_the_body(fixture_site: StartS
     assert got.status == RESET
 
 
+def test_the_manifest_counts_each_issue_of_040s_rules_that_the_site_injects() -> None:
+    site = SyntheticSite(seed=3, pages=400, fanout=4, shares=dict.fromkeys(Fault, 0.05))
+    faults = [site.fault(n) for n in range(400)]
+    parsed = [n for n, fault in enumerate(faults) if fault not in LOSES_PAGE_LINKS]
+
+    issues = site.manifest()["issues"]
+
+    assert issues == {
+        "title-missing": faults.count(Fault.NO_TITLE),
+        "h1-missing": faults.count(Fault.NO_H1),
+        # No Page has an <h2>.
+        "h2-missing": len(parsed),
+        "meta-refresh": sum(1 for n in parsed if n % REFRESH_EVERY == 1),
+        "internal-5xx": faults.count(Fault.SERVER_ERROR),
+        "internal-4xx": site.manifest()["urls"]["missing"],
+        "internal-no-response": faults.count(Fault.RESET),
+    }
+
+
 # Renders a few Pages of every kind and the manifest, and prints one digest of them all.
 DIGEST_IN_A_CHILD = (
     "import hashlib, json\n"
@@ -405,7 +426,7 @@ def test_a_slow_page_answers_no_sooner_than_its_delay(fixture_site: StartSite) -
     assert elapsed(server, page_path(slow)) >= 0.5
 
 
-@pytest.mark.parametrize("path", ["/", "/r/i/0.jpg"])
+@pytest.mark.parametrize("path", ["/", "/r/i/0.jpg", "/missing/0", "/robots.txt"])
 def test_the_latency_delays_every_response(fixture_site: StartSite, path: str) -> None:
     server = fixture_site(SyntheticSite(seed=1, pages=20, shares=NO_FAULTS, latency=0.3).as_site())
 
@@ -440,7 +461,7 @@ def test_the_site_process_tallies_the_requests_it_served() -> None:
     assert tally == Tally(
         pages_requested=2,
         pages_requested_more_than_once=1,
-        resource_requests=1,
+        other_requests=1,
         not_found=1,
     )
 
@@ -450,7 +471,6 @@ def test_the_site_process_tallies_the_requests_it_served() -> None:
 def test_the_site_process_outlives_an_interrupt_until_it_is_stopped() -> None:
     with SiteProcess(SyntheticSite(seed=1, pages=20, shares=NO_FAULTS)) as process:
         os.kill(process.pid, signal.SIGINT)
-        time.sleep(0.5)
         connection = connect(process.base_url)
         try:
             status = fetch(connection, "/").status

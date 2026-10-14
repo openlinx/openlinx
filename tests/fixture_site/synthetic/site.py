@@ -1,4 +1,4 @@
-"""A seeded synthetic site of up to 500,000 Pages, computed per request (026-add-parse-pool D6)."""
+"""A seeded synthetic site of up to 500,000 Pages (design D6 of 026-add-parse-pool)."""
 
 import hashlib
 from collections.abc import Iterator, Mapping
@@ -217,7 +217,6 @@ def _number(digits: str, below: int) -> int | None:
 
 
 def pool_index(path: str) -> tuple[Pool, int] | None:
-    """The pool URL at `path` and its index, or None."""
     for pool in POOLS:
         prefix, _, suffix = pool.path.partition("{}")
         if path.startswith(prefix) and path.endswith(suffix):
@@ -227,10 +226,11 @@ def pool_index(path: str) -> tuple[Pool, int] | None:
     return None
 
 
-def _pool_route(path: str, delay: float) -> Route | None:
+def _pool_route(path: str, delay: float) -> Route:
     found = pool_index(path)
     if found is None or found[0] not in SERVED_POOLS:
-        return None
+        # Answered here rather than by the harness, so the latency delays a 404 too.
+        return Status(404, delay=delay)
     pool, index = found
     body = f"{pool.name} {index}".encode()
     return Bytes(body, content_type=pool.content_type, delay=delay)
@@ -471,7 +471,7 @@ class SyntheticSite:
             body = body.replace(b"</body>", MALFORMED + b"</body>", 1)
         return body
 
-    def route(self, path: str) -> Route | None:
+    def route(self, path: str) -> Route:
         n = page_number(path, self.pages)
         if n is None:
             return _pool_route(path, self.latency)
@@ -493,6 +493,7 @@ class SyntheticSite:
     def manifest(self) -> dict[str, Any]:
         """The injected counts and the URLs a Crawl must account for, in one pass of hashes."""
         faults = dict.fromkeys(Fault, 0)
+        refreshes = 0
         seen = {pool: bytearray(pool.size) for pool in POOLS}
         filled = dict.fromkeys(POOLS, 0)
         open_pools = len(POOLS)
@@ -500,6 +501,7 @@ class SyntheticSite:
             fault = self.fault(n)
             if fault is not None:
                 faults[fault] += 1
+            refreshes += n % REFRESH_EVERY == 1 and fault not in LOSES_LINKS
             if not open_pools or fault in LOSES_LINKS:
                 continue
             for pool, indices in pool_refs(n):
@@ -531,8 +533,12 @@ class SyntheticSite:
             "issues": {
                 "title-missing": faults[Fault.NO_TITLE],
                 "h1-missing": faults[Fault.NO_H1],
+                # No Page has an <h2>, so every parsed Page has this one.
+                "h2-missing": self.pages - sum(faults[fault] for fault in LOSES_LINKS),
+                "meta-refresh": refreshes,
                 "internal-5xx": faults[Fault.SERVER_ERROR],
                 "internal-4xx": filled[MISSING],
+                "internal-no-response": faults[Fault.RESET],
             },
             "urls": urls | {"total": sum(urls.values())},
         }

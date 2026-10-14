@@ -98,7 +98,7 @@ The site that the 500k benchmark crawls (design D6 of `026-add-parse-pool`), in 
 - **`manifest()`:** the injected counts, the outcome each fault should leave in `urls`, the Issues it injects, and the URLs a Crawl must account for, in one pass that keeps nothing per Page.
 - **`SiteProcess(site)`** (`synthetic/serve.py`) serves it from its own `spawn` process, so the server's CPU and memory never count against the crawl process's. It keeps no request log. `stop()` returns a `Tally` of the Pages requested, those requested more than once, the other requests and the 404s. It ignores Ctrl+C (and Ctrl+Break on Windows), so the benchmark stops it in order.
 - **`prepared_page(site, url, scope)`** (`synthetic/preparation.py`) is the `PreparedPage` that preparing the Page at `url` gives, built from its model without HTML; the benchmark's direct mode uses it. `END_WORKER_EXTRACTOR` ends its process with exit code 70 on a Page with the end-worker marker.
-- **`account(site, rows, recorded_pools=..., tally=...)`** (`synthetic/accounting.py`) checks a Crawl's `urls` rows against the manifest: each Page's outcome, the count of each kind, no URL that is not the site's, and, with the `Tally`, every Page served once.
+- **`account(site, rows, origin=..., recorded_pools=..., tally=...)`** (`synthetic/accounting.py`) checks a Crawl's `urls` rows against the manifest: each Page's outcome, the count of each kind, no URL that is not the site's, and, with the `Tally`, every Page served once.
 
 ## Extending it
 

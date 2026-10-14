@@ -1,4 +1,4 @@
-"""Bodies given as bytes, for pages whose bytes are broken on purpose (026-add-parse-pool D6)."""
+"""Bodies given as bytes, broken on purpose (design D6 of 026-add-parse-pool)."""
 
 import aiohttp
 
