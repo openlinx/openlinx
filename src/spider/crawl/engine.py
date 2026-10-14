@@ -23,6 +23,7 @@ from spider.output.codes import (
     PARSE_FAILED,
     RECORD_FAILED,
     SEED_BASE_MISMATCH,
+    SEED_BLOCKED_BY_ROBOTS_TXT,
 )
 from spider.output.diagnostics import Diagnostic
 from spider.store.failures import is_one_urls_failure
@@ -253,6 +254,8 @@ async def _unit_of(
         blocked = not (await robots.robots_of(queued.url)).allows(queued.url)
         if blocked:
             skip_reason = "blocked_by_robots_txt"
+            if queued.discovered_via == "seed":
+                _warn_of_a_blocked_seed(context, queued.url)
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
         return record_skipped(
@@ -375,6 +378,20 @@ def _warn_of_the_url_limit(context: CrawlContext, limit: int) -> None:
             # The command itself, as an agent runs it: twice the limit is one higher value.
             hint=f"{APP_NAME} resume --crawl {context.crawl_file.id} --max-urls {2 * limit}",
             details={"max_urls": limit},
+        )
+    )
+
+
+def _warn_of_a_blocked_seed(context: CrawlContext, seed: NormalizedUrl) -> None:
+    context.reporter.warn(
+        Diagnostic.of(
+            SEED_BLOCKED_BY_ROBOTS_TXT,
+            f"robots.txt disallows the Seed {seed} for the robots user-agent token "
+            f"{context.settings.robots_user_agent}, so it was not requested and nothing was "
+            "crawled from it.",
+            hint="Give --ignore-robots to crawl it anyway, or --robots-user-agent with the "
+            "token the site allows.",
+            details={"seed": seed},
         )
     )
 
