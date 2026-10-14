@@ -130,6 +130,14 @@ def option_before_the_command(flag: str, command: str) -> SpiderError:
     )
 
 
+def root_option_after_a_command(flag: str) -> SpiderError:
+    return SpiderError(
+        USAGE_ERROR,
+        f"{flag} is an option of {APP_NAME} itself, given after a Command name.",
+        hint=f"Put {flag} before the Command name: {APP_NAME} {flag}",
+    )
+
+
 def _global_flags(group: TyperGroup) -> set[str]:
     return {
         opt

@@ -132,3 +132,25 @@ def test_a_group_whose_default_is_not_one_of_its_commands_is_refused() -> None:
 
     with pytest.raises(TypeError, match="default"):
         build_app(AppExtra(commands=[group]))
+
+
+@command_meta(name="two words", output="document", formats=[Format.JSON])
+def spaced(output_format: FormatOpt = Format.JSON) -> dict[str, Any]:
+    return {}
+
+
+def test_a_top_level_command_name_with_a_space_is_refused() -> None:
+    with pytest.raises(TypeError, match="space"):
+        build_app(AppExtra(commands=[spaced]))
+
+
+@pytest.mark.parametrize("name", ["init", "rules"])
+def test_a_group_name_already_taken_is_refused(name: str) -> None:
+    @command_meta(name=f"{name} other", output="document", formats=[Format.JSON])
+    def other(output_format: FormatOpt = Format.JSON) -> dict[str, Any]:
+        return {}
+
+    group = CommandGroup(name=name, summary="Taken.", commands=(other,), default=other)
+
+    with pytest.raises(TypeError, match="named"):
+        build_app(AppExtra(commands=[group]))

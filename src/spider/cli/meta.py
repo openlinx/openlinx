@@ -41,7 +41,6 @@ class CommandGroup:
     name: str
     summary: str
     commands: tuple[Callable[..., Any], ...]
-    # What the group name given no arguments runs: one of its Commands.
     default: Callable[..., Any]
 
 

@@ -97,3 +97,35 @@ def test_an_option_after_the_group_name_says_where_it_goes() -> None:
         "usage_error",
         "Put --limit after the Command name: spider rules list --limit ...",
     )
+
+
+def test_an_option_before_a_grouped_command_names_that_command() -> None:
+    result = run_cli("rules", "--format", "table", "show", "title-too-long")
+
+    assert result.stderr_json_lines()[-1]["hint"] == (
+        "Put --format after the Command name: spider rules show --format ..."
+    )
+
+
+def test_a_root_option_after_a_group_name_gets_the_root_hint() -> None:
+    result = run_cli("rules", "--version")
+
+    assert result.stderr_json_lines()[-1]["hint"] == (
+        "Put --version before the Command name: spider --version"
+    )
+
+
+def test_the_root_help_lists_the_group() -> None:
+    result = run_cli("--help")
+
+    assert (result.exit_code, b"rules" in result.stdout) == (0, True)
+
+
+def test_the_group_help_lists_its_commands() -> None:
+    result = run_cli("rules", "--help")
+
+    assert (result.exit_code, b"list" in result.stdout, b"show" in result.stdout) == (
+        0,
+        True,
+        True,
+    )

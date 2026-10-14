@@ -14,7 +14,6 @@ from spider.workspace.discovery import resolve_workspace
 from spider.workspace.tables import SettingsTables
 
 _BY_ID = {rule.id: rule for rule in RULES}
-# The fields of an item, in the order _item gives them.
 RULE_FIELDS = (
     "id",
     "category",

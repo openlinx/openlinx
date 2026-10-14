@@ -14,7 +14,12 @@ from spider.cli.crawl import crawl
 from spider.cli.init import init
 from spider.cli.meta import CommandGroup, check_command
 from spider.cli.rules import RULES_GROUP
-from spider.cli.runner import Invocation, SpiderGroup, option_before_the_command
+from spider.cli.runner import (
+    Invocation,
+    SpiderGroup,
+    option_before_the_command,
+    root_option_after_a_command,
+)
 from spider.cli.schema import schema
 from spider.naming import APP_NAME
 from spider.workspace.tables import SettingsTables
@@ -67,11 +72,19 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
     )
     app.callback()(root)
     registered = [commands, crawl, init, RULES_GROUP, schema, *extra.commands]
+    # Typer keeps the last of two entries of one name without a word.
+    taken: set[str] = set()
     for entry in registered:
+        name = entry.name if isinstance(entry, CommandGroup) else check_command(entry).name
+        if name in taken:
+            raise TypeError(f"Two Commands or groups are named {name}.")
+        taken.add(name)
         if isinstance(entry, CommandGroup):
-            app.add_typer(_group_app(entry), name=entry.name)
+            app.add_typer(_group_app(entry), name=name)
+        elif " " in name:
+            raise TypeError(f"Command {name} has a space in its name but no group.")
         else:
-            app.command(name=check_command(entry).name)(entry)
+            app.command(name=name)(entry)
     return app
 
 
@@ -93,13 +106,26 @@ def _group_app(group: CommandGroup) -> typer.Typer:
             # Options are taken after the Command name only, as global flags are.
             if args[0].startswith("-") and args[0] not in ctx.help_option_names:
                 flag = args[0].partition("=")[0]
-                raise option_before_the_command(flag, f"{group.name} {default}")
+                if flag in _root_options(ctx):
+                    raise root_option_after_a_command(flag)
+                command = next((arg for arg in args if arg in names.values()), default)
+                raise option_before_the_command(flag, f"{group.name} {command}")
             return super().parse_args(ctx, args)
 
     app = typer.Typer(cls=Group, help=group.summary, rich_markup_mode=None)
     for command, name in names.items():
         app.command(name=name)(command)
     return app
+
+
+def _root_options(ctx: Context) -> set[str]:
+    root = ctx.find_root()
+    return {
+        opt
+        for param in root.command.params
+        for opt in param.opts
+        if opt not in root.help_option_names
+    }
 
 
 def main() -> None:
