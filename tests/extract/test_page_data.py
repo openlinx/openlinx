@@ -96,6 +96,27 @@ def test_meta_keywords() -> None:
     assert (row.meta_keywords_1, row.meta_keywords_1_length) == ("shoes, boots", 12)
 
 
+def test_heading_text_includes_nested_elements() -> None:
+    row = page_row("<body><h1>Main <span>Title</span></h1><h1>Second</h1><h2>Sub</h2></body>")
+
+    assert (
+        (row.h1_1, row.h1_1_length, row.h1_2, row.h1_2_length, row.h1_count),
+        (row.h2_1, row.h2_1_length, row.h2_2, row.h2_2_length, row.h2_count),
+    ) == (("Main Title", 10, "Second", 6, 2), ("Sub", 3, None, None, 1))
+
+
+def test_heading_text_leaves_out_scripts_and_styles() -> None:
+    row = page_row("<h1>Price<script>var x = 1</script><style>b {}</style> 10</h1>")
+
+    assert row.h1_1 == "Price 10"
+
+
+def test_a_heading_in_noscript_is_ignored() -> None:
+    row = page_row("<body><noscript><h1>Enable JavaScript</h1></noscript><h1>Main</h1></body>")
+
+    assert (row.h1_1, row.h1_count) == ("Main", 1)
+
+
 # Fragments that build the documents a parser repairs: unclosed, nested in foreign content,
 # commented out, NUL and stray markup.
 _FRAGMENTS = st.sampled_from(

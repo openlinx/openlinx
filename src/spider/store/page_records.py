@@ -21,3 +21,13 @@ class PageRow:
     meta_description_count: int | None = None
     meta_keywords_1: str | None = None
     meta_keywords_1_length: int | None = None
+    h1_1: str | None = None
+    h1_1_length: int | None = None
+    h1_2: str | None = None
+    h1_2_length: int | None = None
+    h1_count: int | None = None
+    h2_1: str | None = None
+    h2_1_length: int | None = None
+    h2_2: str | None = None
+    h2_2_length: int | None = None
+    h2_count: int | None = None

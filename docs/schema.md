@@ -170,6 +170,16 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `meta_description_count` | INTEGER | yes | | | | The number of meta elements named description without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
 | `meta_keywords_1` | TEXT | yes | | | | The content of the Page's first meta keywords element, whitespace-normalised, the empty string for one without content; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `meta_keywords_1_length` | INTEGER | yes | | | | The length of meta_keywords_1 in Unicode code points; NULL exactly when meta_keywords_1 is. |
+| `h1_1` | TEXT | yes | | | | The text of the Page's first h1 element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `h1_1_length` | INTEGER | yes | | | | The length of h1_1 in Unicode code points; NULL exactly when h1_1 is. |
+| `h1_2` | TEXT | yes | | | | The text of the Page's second h1 element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `h1_2_length` | INTEGER | yes | | | | The length of h1_2 in Unicode code points; NULL exactly when h1_2 is. |
+| `h1_count` | INTEGER | yes | | | | The number of h1 elements without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
+| `h2_1` | TEXT | yes | | | | The text of the Page's first h2 element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `h2_1_length` | INTEGER | yes | | | | The length of h2_1 in Unicode code points; NULL exactly when h2_1 is. |
+| `h2_2` | TEXT | yes | | | | The text of the Page's second h2 element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `h2_2_length` | INTEGER | yes | | | | The length of h2_2 in Unicode code points; NULL exactly when h2_2 is. |
+| `h2_count` | INTEGER | yes | | | | The number of h2 elements without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
 
 ### Indexes
 

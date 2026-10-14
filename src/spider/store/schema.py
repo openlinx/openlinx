@@ -444,6 +444,66 @@ pages = public_table(
         comment="The length of meta_keywords_1 in Unicode code points; NULL exactly when "
         "meta_keywords_1 is.",
     ),
+    Column(
+        "h1_1",
+        Text,
+        comment="The text of the Page's first h1 element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "h1_1_length",
+        Integer,
+        comment="The length of h1_1 in Unicode code points; NULL exactly when h1_1 is.",
+    ),
+    Column(
+        "h1_2",
+        Text,
+        comment="The text of the Page's second h1 element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "h1_2_length",
+        Integer,
+        comment="The length of h1_2 in Unicode code points; NULL exactly when h1_2 is.",
+    ),
+    Column(
+        "h1_count",
+        Integer,
+        comment="The number of h1 elements without an svg, math or noscript ancestor; NULL when "
+        "the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "h2_1",
+        Text,
+        comment="The text of the Page's first h2 element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "h2_1_length",
+        Integer,
+        comment="The length of h2_1 in Unicode code points; NULL exactly when h2_1 is.",
+    ),
+    Column(
+        "h2_2",
+        Text,
+        comment="The text of the Page's second h2 element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "h2_2_length",
+        Integer,
+        comment="The length of h2_2 in Unicode code points; NULL exactly when h2_2 is.",
+    ),
+    Column(
+        "h2_count",
+        Integer,
+        comment="The number of h2 elements without an svg, math or noscript ancestor; NULL when "
+        "the Page is not analysed or its Page extractor failed.",
+    ),
     comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
     "an HTML document, whatever its status code.",
     change=30,

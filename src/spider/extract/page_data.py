@@ -4,7 +4,7 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.pages import Extractor, PageInput
-from spider.extract.text import normalized, trimmed
+from spider.extract.text import element_text, normalized, trimmed
 
 _IGNORED_ANCESTORS = frozenset({"svg", "math", "noscript"})
 
@@ -22,6 +22,16 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     meta_description_count: int
     meta_keywords_1: str | None
     meta_keywords_1_length: int | None
+    h1_1: str | None
+    h1_1_length: int | None
+    h1_2: str | None
+    h1_2_length: int | None
+    h1_count: int
+    h2_1: str | None
+    h2_1_length: int | None
+    h2_2: str | None
+    h2_2_length: int | None
+    h2_count: int
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
@@ -30,6 +40,13 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
     descriptions = _meta_contents(tree, "description")
     description_1, description_2 = _nth(descriptions, 0), _nth(descriptions, 1)
     keywords = _nth(_meta_contents(tree, "keywords"), 0)
+    h1s, h2s = _headings(tree, "h1"), _headings(tree, "h2")
+    first_h1, second_h1, first_h2, second_h2 = (
+        _nth(h1s, 0),
+        _nth(h1s, 1),
+        _nth(h2s, 0),
+        _nth(h2s, 1),
+    )
     return PageData(
         title_1=first,
         title_1_length=_length(first),
@@ -43,7 +60,21 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
         meta_description_count=len(descriptions),
         meta_keywords_1=keywords,
         meta_keywords_1_length=_length(keywords),
+        h1_1=first_h1,
+        h1_1_length=_length(first_h1),
+        h1_2=second_h1,
+        h1_2_length=_length(second_h1),
+        h1_count=len(h1s),
+        h2_1=first_h2,
+        h2_1_length=_length(first_h2),
+        h2_2=second_h2,
+        h2_2_length=_length(second_h2),
+        h2_count=len(h2s),
     )
+
+
+def _headings(tree: LexborHTMLParser, tag: str) -> list[str]:
+    return [normalized(element_text(node)) for node in _page_nodes(tree, tag)]
 
 
 def _page_nodes(tree: LexborHTMLParser, selector: str) -> list[LexborNode]:
