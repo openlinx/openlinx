@@ -14,6 +14,7 @@ from spider.clock import Clock
 from spider.crawl.context import CrawlContext
 from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import aiohttp_fetcher
+from spider.crawl.hooks import Hooks
 from spider.crawl.pages import InProcessExecutor, PageSettings
 from spider.crawl.scope import ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
@@ -164,7 +165,7 @@ def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
     return tuple(patterns)
 
 
-def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResult:
+def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter, hooks: Hooks) -> CrawlResult:
     log = _WarningLog(reporter)
     crawl_file = create_crawl(plan.new_crawl, clock, log)
     log.event(
@@ -175,7 +176,7 @@ def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResul
         crawl_file=str(crawl_file.path),
     )
     with asyncio.Runner(loop_factory=loop_factory) as runner:
-        ended_at, summary, counts = runner.run(_crawl(plan, crawl_file, clock, log))
+        ended_at, summary, counts = runner.run(_crawl(plan, crawl_file, clock, log, hooks))
     return CrawlResult(
         crawl_id=crawl_file.id,
         summary=summary,
@@ -187,9 +188,9 @@ def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResul
 
 
 async def _crawl(
-    plan: CrawlPlan, crawl_file: CrawlFile, clock: Clock, reporter: Reporter
+    plan: CrawlPlan, crawl_file: CrawlFile, clock: Clock, reporter: Reporter, hooks: Hooks
 ) -> tuple[datetime, CrawlSummary, UrlCounts]:
-    async with _crawl_context(crawl_file, plan.scope, clock, reporter) as context:
+    async with _crawl_context(crawl_file, plan.scope, clock, reporter, hooks) as context:
         await run_crawl(context, plan.seed)
         writer = context.writer
         # One instant: the result's ended_at is the completed_at the file records.
@@ -201,7 +202,7 @@ async def _crawl(
 
 @asynccontextmanager
 async def _crawl_context(
-    crawl_file: CrawlFile, scope: ScopeRules, clock: Clock, reporter: Reporter
+    crawl_file: CrawlFile, scope: ScopeRules, clock: Clock, reporter: Reporter, hooks: Hooks
 ) -> AsyncIterator[CrawlContext]:
     """The one place a Crawl's context is built, and its resources closed (design D15)."""
     # Opening and closing the writer block, so they run off the event loop.
@@ -216,6 +217,7 @@ async def _crawl_context(
                 writer=writer,
                 fetcher=fetcher,
                 pages=InProcessExecutor(PageSettings(scope)),
+                hooks=hooks,
             )
     finally:
         await asyncio.to_thread(writer.close)

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from spider.clock import Clock
 from spider.crawl.fetcher import Fetcher
+from spider.crawl.hooks import Hooks
 from spider.crawl.pages import PageExecutor
 from spider.crawl.scope import ScopeRules
 from spider.output.reporter import Reporter
@@ -20,3 +21,4 @@ class CrawlContext:
     writer: CrawlWriter
     fetcher: Fetcher
     pages: PageExecutor
+    hooks: Hooks

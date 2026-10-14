@@ -148,3 +148,14 @@ class FetchedUrl:
     response_time_ms: int
     parsed: bool
     discovered: tuple[NewUrl, ...] = ()
+    # What the handlers returned, written in the same unit (design D9).
+    rows: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SkippedUrl:
+    """A URL recorded without a request, with what the handlers returned for it."""
+
+    url_id: int
+    skip_reason: SkipReason
+    rows: tuple[object, ...] = ()

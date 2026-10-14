@@ -2,10 +2,11 @@
 
 from spider.crawl.context import CrawlContext
 from spider.crawl.fetcher import FetchResult, Request
+from spider.crawl.hooks import Hooks, UrlResult
 from spider.crawl.pages import PreparedPage
 from spider.crawl.scope import ScopeDecision, ScopeRules
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import FetchedUrl, NewUrl, QueuedUrl
+from spider.store.records import FetchedUrl, NewUrl, QueuedUrl, SkippedUrl
 from spider.store.urls import (
     next_depth,
     queued_batch,
@@ -39,9 +40,20 @@ async def _crawl_depth(context: CrawlContext, depth: int) -> None:
 
 async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> None:
     # Decided once, at dispatch, so a URL found on several Pages is recorded once (design D1).
+    hooks = context.hooks
     skip_reason = context.scope.decide(queued.url).skip_reason
     if skip_reason is not None:
-        await context.writer.submit_async(record_skipped(queued.id, skip_reason))
+        skipped = UrlResult(
+            url_id=queued.id,
+            url=queued.url,
+            crawl_depth=depth,
+            fetch_state="skipped",
+            skip_reason=skip_reason,
+        )
+        unit = record_skipped(
+            SkippedUrl(queued.id, skip_reason, _handled(hooks, skipped)), hooks.row_writers
+        )
+        await context.writer.submit_async(unit)
         return
     response = await context.fetcher.fetch(Request(queued.url))
     parsed = 200 <= response.status_code < 300 and _is_html(response)
@@ -49,6 +61,14 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
     if parsed:
         page = await context.pages.prepare(queued.url, response)
         discovered = _followed(page, context.scope, depth + 1)
+    result = UrlResult(
+        url_id=queued.id,
+        url=queued.url,
+        crawl_depth=depth,
+        fetch_state="fetched",
+        status_code=response.status_code,
+        headers=response.headers,
+    )
     # The URL's task ends here; its outcome arrives at the commit (design D2).
     fetched = FetchedUrl(
         url_id=queued.id,
@@ -58,8 +78,13 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
         response_time_ms=response.response_time_ms,
         parsed=parsed,
         discovered=discovered,
+        rows=_handled(hooks, result),
     )
-    await context.writer.submit_async(record_fetched(fetched))
+    await context.writer.submit_async(record_fetched(fetched, hooks.row_writers))
+
+
+def _handled(hooks: Hooks, result: UrlResult) -> tuple[object, ...]:
+    return tuple(row for handler in hooks.handlers for row in handler.handle(result))
 
 
 def _followed(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl, ...]:

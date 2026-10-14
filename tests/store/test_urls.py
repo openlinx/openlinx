@@ -7,7 +7,7 @@ from sqlalchemy import Connection, event
 
 from spider.crawl.urls import NormalizedUrl, parse_seed
 from spider.store.connections import opening
-from spider.store.records import FetchedUrl, NewUrl, QueuedUrl, UrlCounts
+from spider.store.records import FetchedUrl, NewUrl, QueuedUrl, SkippedUrl, UrlCounts
 from spider.store.urls import (
     next_depth,
     queued_batch,
@@ -52,10 +52,11 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     response_time_ms=120,
                     parsed=True,
                     discovered=found,
-                )
+                ),
+                {},
             )
         )
-        writer.run(record_skipped(seed_id + 2, "excluded"))
+        writer.run(record_skipped(SkippedUrl(seed_id + 2, "excluded"), {}))
         deeper = writer.run(next_depth(0))
         second = writer.run(queued_batch(1, 0, 1))
         counts = writer.run(url_counts())

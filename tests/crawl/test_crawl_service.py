@@ -7,6 +7,7 @@ from pathlib import Path, PureWindowsPath
 import pytest
 
 from spider.cli.app import build_app
+from spider.crawl.hooks import default_hooks
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
 from spider.store.records import SecretNames
@@ -37,7 +38,7 @@ def test_the_journal_mode_setting_reaches_the_crawl_file(
         flags={},
     )
 
-    result = start_crawl(plan_crawl(request, tables), FakeClock(), Collected())
+    result = start_crawl(plan_crawl(request, tables), FakeClock(), Collected(), default_hooks())
 
     assert crawl_row(result.crawl_file)["journal_mode"] == "delete"
 

@@ -1,12 +1,13 @@
 """The units of the urls table: the frontier and each URL's outcome (020 D1, D2, D14)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from sqlalchemy import Connection, bindparam, func, literal_column, select, update
 from sqlalchemy.dialects.sqlite import insert
 
 from spider.crawl.urls import NormalizedUrl, url_host
-from spider.store.records import FetchedUrl, QueuedUrl, SkipReason, UrlCounts
+from spider.store.records import FetchedUrl, QueuedUrl, SkippedUrl, UrlCounts
+from spider.store.rows import RowWriter, write_rows
 from spider.store.schema import urls
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
@@ -107,8 +108,10 @@ def next_depth(depth: int) -> Callable[[Connection], int | None]:
     return unit
 
 
-def record_fetched(fetched: FetchedUrl) -> Callable[[Connection], None]:
-    """A unit that records the URL's response and the URLs discovered from it."""
+def record_fetched(
+    fetched: FetchedUrl, row_writers: Mapping[type, RowWriter]
+) -> Callable[[Connection], None]:
+    """A unit that records the URL's response, the URLs discovered from it and its rows."""
     url_id = fetched.url_id
     values = {
         "url_id": url_id,
@@ -136,16 +139,20 @@ def record_fetched(fetched: FetchedUrl) -> Callable[[Connection], None]:
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
             connection.execute(_INSERT_URL, new_rows)
+        write_rows(connection, fetched.rows, row_writers)
 
     return unit
 
 
-def record_skipped(url_id: int, reason: SkipReason) -> Callable[[Connection], None]:
-    """A unit that records a URL as not requested, and why."""
-    values = {"url_id": url_id, "reason": reason}
+def record_skipped(
+    skipped: SkippedUrl, row_writers: Mapping[type, RowWriter]
+) -> Callable[[Connection], None]:
+    """A unit that records a URL as not requested, why, and its rows."""
+    values = {"url_id": skipped.url_id, "reason": skipped.skip_reason}
 
     def unit(connection: Connection) -> None:
         connection.execute(_SKIPPED, values)
+        write_rows(connection, skipped.rows, row_writers)
 
     return unit
 
