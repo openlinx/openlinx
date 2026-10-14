@@ -118,7 +118,10 @@ def _options(command: Command, meta: CommandMeta, tables: SettingsTables) -> lis
                 "short": next((opt for opt in param.opts if len(opt) == 2), None),
                 "type": _type(param),
                 "choices": None if choices is None else [_json_value(c) for c in choices],
-                "default": _json_value(param.default),
+                # A repeatable option given no value is empty, as Click passes it.
+                "default": []
+                if param.multiple and param.default is None
+                else _json_value(param.default),
                 "required": param.required,
                 "multiple": param.multiple,
                 "global": extra.is_global,

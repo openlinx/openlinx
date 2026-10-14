@@ -6,7 +6,7 @@ from sqlalchemy import Connection, bindparam, func, literal_column, select, upda
 from sqlalchemy.dialects.sqlite import insert
 
 from spider.crawl.urls import NormalizedUrl, url_host
-from spider.store.records import FetchedUrl, QueuedUrl, UrlCounts
+from spider.store.records import FetchedUrl, QueuedUrl, SkipReason, UrlCounts
 from spider.store.schema import urls
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
@@ -24,6 +24,11 @@ _FETCHED = (
         fetched_at=bindparam("request_at"),
         parsed=bindparam("is_parsed"),
     )
+)
+_SKIPPED = (
+    update(urls)
+    .where(urls.c.id == bindparam("url_id"))
+    .values(fetch_state="skipped", skip_reason=bindparam("reason"))
 )
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
@@ -131,6 +136,16 @@ def record_fetched(fetched: FetchedUrl) -> Callable[[Connection], None]:
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
             connection.execute(_INSERT_URL, new_rows)
+
+    return unit
+
+
+def record_skipped(url_id: int, reason: SkipReason) -> Callable[[Connection], None]:
+    """A unit that records a URL as not requested, and why."""
+    values = {"url_id": url_id, "reason": reason}
+
+    def unit(connection: Connection) -> None:
+        connection.execute(_SKIPPED, values)
 
     return unit
 

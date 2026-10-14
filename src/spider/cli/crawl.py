@@ -37,6 +37,16 @@ def crawl(
         typer.Option("--concurrency", help="The most requests in flight to one host."),
         OptionMeta(setting="crawl.concurrency"),
     ] = 5,
+    exclude: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--exclude",
+            help="A regular expression, searched for in each normalised URL; a URL it matches "
+            "is never requested. Give it more than once for several patterns.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.exclude"),
+    ] = None,
     workspace_dir: WorkspaceOpt = None,
     output_format: FormatOpt = Format.JSON,
 ) -> dict[str, Any]:

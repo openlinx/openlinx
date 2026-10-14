@@ -153,3 +153,32 @@ def test_a_response_that_is_not_html_is_not_parsed(
         (server.url("/"), 1),
         (server.url("/doc.pdf"), 0),
     ]
+
+
+LOGOUT_LINK = Site(
+    routes={"/": Page(body='<a href="/logout">Log out</a>'), "/logout": Page(body="<p>Bye</p>")}
+)
+
+
+def test_an_excluded_url_is_never_requested(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(LOGOUT_LINK)
+
+    crawled(server.url("/"), "--exclude", "/logout$")
+
+    assert [request.path for request in server.requests] == ["/"]
+
+
+def test_an_excluded_url_is_recorded_as_skipped(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(LOGOUT_LINK)
+
+    crawl_file = crawled(server.url("/"), "--exclude", "/logout$")
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, skip_reason FROM urls WHERE url = ?",
+        [server.url("/logout")],
+    ) == [("skipped", "excluded")]

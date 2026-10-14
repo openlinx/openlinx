@@ -137,7 +137,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 5. Hooks, and one URL never stops the Crawl (slice)
 
-- [ ] 5.1 Drive "An excluded URL is never requested" (seam 3) and "An excluded URL is recorded as skipped" (seam 3+6), a trivial pair.
+- [x] 5.1 Drive "An excluded URL is never requested" (seam 3) and "An excluded URL is recorded as skipped" (seam 3+6), a trivial pair.
 
   Done when:
   - `--exclude` is declared, repeatable, with `OptionMeta(setting="crawl.exclude")` and the default `[]`, so it is not inert (ruling of 2026-10-14)

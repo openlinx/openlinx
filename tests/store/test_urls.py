@@ -8,7 +8,14 @@ from sqlalchemy import Connection, event
 from spider.crawl.urls import NormalizedUrl, parse_seed
 from spider.store.connections import opening
 from spider.store.records import FetchedUrl, NewUrl, QueuedUrl, UrlCounts
-from spider.store.urls import next_depth, queued_batch, record_fetched, record_seed, url_counts
+from spider.store.urls import (
+    next_depth,
+    queued_batch,
+    record_fetched,
+    record_seed,
+    record_skipped,
+    url_counts,
+)
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, query
@@ -48,6 +55,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 )
             )
         )
+        writer.run(record_skipped(seed_id + 2, "excluded"))
         deeper = writer.run(next_depth(0))
         second = writer.run(queued_batch(1, 0, 1))
         counts = writer.run(url_counts())
@@ -60,8 +68,8 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
         counts,
         query(
             crawl.path,
-            "SELECT url, crawl_depth, fetch_state, status_code, content_type, response_time_ms, "
-            "fetched_at FROM urls ORDER BY id",
+            "SELECT url, crawl_depth, fetch_state, skip_reason, status_code, content_type, "
+            "response_time_ms, fetched_at FROM urls ORDER BY id",
         ),
     ) == (
         (QueuedUrl(seed_id, seed),),
@@ -71,8 +79,8 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             discovered=3,
             fetched=1,
             errors=0,
-            skipped=0,
-            queued=2,
+            skipped=1,
+            queued=1,
             pages=1,
             status_2xx=1,
             status_3xx=0,
@@ -81,9 +89,18 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             status_other=0,
         ),
         [
-            ("https://site.test/", 0, "fetched", 200, "text/html", 120, "2026-09-27T14:03:13.000Z"),
-            ("https://site.test/a", 1, "queued", None, None, None, None),
-            ("https://site.test/b", 1, "queued", None, None, None, None),
+            (
+                "https://site.test/",
+                0,
+                "fetched",
+                None,
+                200,
+                "text/html",
+                120,
+                "2026-09-27T14:03:13.000Z",
+            ),
+            ("https://site.test/a", 1, "queued", None, None, None, None, None),
+            ("https://site.test/b", 1, "skipped", "excluded", None, None, None, None),
         ],
     )
 

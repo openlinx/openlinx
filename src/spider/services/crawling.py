@@ -1,6 +1,7 @@
 """The Crawl Service: a foreground Spider-mode Crawl (020-add-crawl-core D11, D15)."""
 
 import asyncio
+import re
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -15,8 +16,9 @@ from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import aiohttp_fetcher
 from spider.crawl.pages import InProcessExecutor, PageSettings
 from spider.crawl.scope import ScopeRules, scope_rules
+from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import InvalidUrl, InvalidUrlReason, NormalizedUrl, parse_seed
-from spider.output.codes import INVALID_URL
+from spider.output.codes import INVALID_PATTERN, INVALID_URL
 from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
@@ -142,7 +144,24 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
     )
-    return CrawlPlan(seed, scope_rules(seed), new_crawl)
+    exclude = _patterns(settings.table(CrawlSettings).exclude)
+    return CrawlPlan(seed, scope_rules(seed, exclude=exclude), new_crawl)
+
+
+def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
+    patterns = []
+    for text in texts:
+        try:
+            patterns.append(re.compile(text))
+        except re.error as error:
+            raise SpiderError(
+                INVALID_PATTERN,
+                f"The pattern {text} is not a valid regular expression: {error}.",
+                hint="Give a Python regular expression; escape a literal character such as "
+                "( or ? with a backslash.",
+                details={"pattern": text},
+            ) from None
+    return tuple(patterns)
 
 
 def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter) -> CrawlResult:

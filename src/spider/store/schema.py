@@ -19,6 +19,7 @@ from spider.store.records import (
     DiscoveredVia,
     FetchState,
     JournalMode,
+    SkipReason,
     StopReason,
 )
 from spider.store.types import Flag, Json, Timestamp
@@ -219,6 +220,12 @@ urls = public_table(
         nullable=False,
         comment="Frontier state: waiting, a response was recorded, no response, or not requested.",
         info={"values": literal_values(FetchState)},
+    ),
+    Column(
+        "skip_reason",
+        Text,
+        comment="Why a skipped URL was not requested.",
+        info={"values": literal_values(SkipReason)},
     ),
     Column(
         "status_code",

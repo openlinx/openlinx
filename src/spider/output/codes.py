@@ -151,6 +151,12 @@ INVALID_URL = _declare(
     ExitCode.USAGE,
     "A Seed that is not a valid http or https URL; details.reason says why.",
 )
+INVALID_PATTERN = _declare(
+    "invalid_pattern",
+    "error",
+    ExitCode.USAGE,
+    "A URL pattern that is not a valid Python regular expression; details.pattern holds it.",
+)
 WORKSPACE_NESTED = _declare(
     "workspace_nested", "warning", None, "The new Workspace is inside another Workspace."
 )

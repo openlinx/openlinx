@@ -220,3 +220,15 @@ def test_a_flag_overrides_spider_toml(
     config = json.loads(crawl_row(crawled(server.url("/"), "--concurrency", "3"))["config"])
 
     assert config["crawl"]["concurrency"] == 3
+
+
+def test_an_invalid_exclude_pattern_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--exclude", "(")
+    error = result.stderr_json_lines()[-1]
+
+    assert (
+        result.exit_code,
+        error["code"],
+        error["details"],
+        list(temp_workspace.home.rglob("*.sqlite")),
+    ) == (2, "invalid_pattern", {"pattern": "("}, [])

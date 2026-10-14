@@ -3,10 +3,16 @@
 from spider.crawl.context import CrawlContext
 from spider.crawl.fetcher import FetchResult, Request
 from spider.crawl.pages import PreparedPage
-from spider.crawl.scope import ScopeRules
+from spider.crawl.scope import ScopeDecision, ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import FetchedUrl, NewUrl, QueuedUrl
-from spider.store.urls import next_depth, queued_batch, record_fetched, record_seed
+from spider.store.urls import (
+    next_depth,
+    queued_batch,
+    record_fetched,
+    record_seed,
+    record_skipped,
+)
 
 # Queued URLs read from the frontier at once.
 _FRONTIER_BATCH = 100
@@ -32,6 +38,11 @@ async def _crawl_depth(context: CrawlContext, depth: int) -> None:
 
 
 async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> None:
+    # Decided once, at dispatch, so a URL found on several Pages is recorded once (design D1).
+    skip_reason = context.scope.decide(queued.url).skip_reason
+    if skip_reason is not None:
+        await context.writer.submit_async(record_skipped(queued.id, skip_reason))
+        return
     response = await context.fetcher.fetch(Request(queued.url))
     parsed = 200 <= response.status_code < 300 and _is_html(response)
     discovered: tuple[NewUrl, ...] = ()
@@ -55,8 +66,12 @@ def _followed(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl
     return tuple(
         NewUrl(url=link.target, crawl_depth=depth, discovered_via=link.type)
         for link in page.links
-        if link.type == "hyperlink" and scope.decide(link.target).in_scope
+        if link.type == "hyperlink" and _recorded(scope.decide(link.target))
     )
+
+
+def _recorded(decision: ScopeDecision) -> bool:
+    return decision.in_scope or decision.skip_reason is not None
 
 
 def _is_html(response: FetchResult) -> bool:
