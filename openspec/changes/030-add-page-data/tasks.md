@@ -10,7 +10,7 @@ There are no schema-first slices. A table or column is added in the slice whose 
 
 **The thin slice** (ROADMAP, Build order) is groups 1–3: the Page rows, titles, meta descriptions and headings that `040`-min's first Rules read (`title-missing` and `h1-missing`; its response-code Rules read only `urls`). None of them reads Indexability, so group 7 widens with the rest. Groups 4–12 widen the change after `022`-min, whose size and redirect columns group 4 copies.
 
-Rows and units follow `020` D9 and D14: the handler returns frozen row values declared in `spider.store`, and `spider.store.pages` and `spider.store.links` write them with statements built once (`017` D9). Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
+Rows and units follow `020` D9 and D14: the handler returns frozen row values declared in `spider.store`, all or none, and `spider.store.pages` and `spider.store.links` write them through the row writers they register in `020`'s `Hooks.row_writers` with statements built once (`017` D9). Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
 
 ## 1. Page rows end to end (slice)
 
