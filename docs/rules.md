@@ -30,6 +30,22 @@ The Priority says how urgently to fix it: `high`, `medium` or `low`.
 
 Categories are snake_case, such as `meta_descriptions`, because they are stored values of an enumeration, and every stored enumeration value is snake_case. Rule ids are kebab-case, such as `meta-description-missing`, because people type them as command arguments and as `spider.toml` table names, where `-` is allowed.
 
+## The catalogue
+
+Each Rule fires for a URL of its population when the condition holds, and records the measured values named under `detail` as a JSON object, or NULL when it names none. A Rule never fires on a value that was not measured (NULL).
+
+| id | Category | Issue Type | Priority | Fires for… | `detail` |
+|---|---|---|---|---|---|
+| `internal-4xx` | `response_codes` | `issue` | `high` | an Internal URL with a `status_code` from 400 to 499 | `status_code` |
+| `internal-5xx` | `response_codes` | `issue` | `high` | an Internal URL with a `status_code` from 500 to 599 | `status_code` |
+| `internal-no-response` | `response_codes` | `issue` | `high` | an Internal URL with `fetch_state` `error`, whatever its `fetch_error` but `record_failed` | `error`: the URL's `fetch_error` |
+| `title-missing` | `titles` | `issue` | `high` | an analysed Page whose `title_count` is 0 or whose `title_1` is the empty string | none |
+| `h1-missing` | `headings` | `warning` | `medium` | an analysed Page whose `h1_count` is 0 or whose `h1_1` is the empty string | none |
+
+`record_failed` means that the Crawl received a response but could not record it. That is the tool's failure, not the site's, so it is no Issue: the `record_failed` warning reports it, and continuing the Crawl requests the URL again. The query of `internal-no-response` says so in an SQL comment.
+
+`spider rules show <id>` prints each Rule's guidance: what it checks, why it matters and how to fix it.
+
 ## Reading `spider rules`
 
 `spider rules list` lists the Rules in catalogue order: by category, in the order above, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`, and `--workspace` for a Workspace other than the nearest one. `spider rules` with no arguments runs `spider rules list`; options go after `list`. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `enabled`, `thresholds`, `description`, `why_it_matters`, `how_to_fix` and `reproduce_sql`:
