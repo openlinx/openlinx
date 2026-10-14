@@ -2,18 +2,23 @@
 Test seams)."""
 
 import asyncio
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
+from typing import Any
 
 from sqlalchemy import Connection, select
 
 from spider.aio import loop_factory
 from spider.crawl.urls import NormalizedUrl
+from spider.extract.addresses import display_address
 from spider.rules.model import Rule
 from spider.rules.registry import RULES
 from spider.store.crawls import record_state
 from spider.store.issues import materialise_issues
+from spider.store.page_records import PageRow
+from spider.store.pages import write_page
 from spider.store.records import FetchedUrl, NewUrl, RuleRow
 from spider.store.schema import urls
 from spider.store.urls import record_fetched, record_seed
@@ -25,17 +30,26 @@ from tests.support.workspace import TempWorkspace
 
 SEED = NormalizedUrl("https://example.com/")
 _AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+_PAGE_WRITER: Mapping[type, Callable[[Connection, Any], None]] = MappingProxyType(
+    {PageRow: write_page}
+)
+# The Seed is an analysed Page on which no Rule of the catalogue fires.
+_SEED_PAGE = MappingProxyType(
+    {"title_count": 1, "title_1": "Home", "title_1_length": 4, "h1_count": 1, "h1_1": "Home"}
+)
 
 
 def crawl_store(
     temp_workspace: TempWorkspace,
     *,
     links: Sequence[str] = (),
+    pages: Mapping[str, Mapping[str, Any]] = MappingProxyType({}),
     later_rules: Sequence[Rule] = (),
     completed: bool = False,
 ) -> Path:
-    """A crawl file in the current Workspace whose Seed, SEED, links to `links`, each of which
-    answered 200 as a URL that is no Page.
+    """A crawl file in the current Workspace whose Seed, SEED, an analysed Page, links to
+    `links`, each of which answered 200 as a URL that is no Page, and to `pages`, analysed
+    Pages with these Page data columns.
 
     `later_rules` are Rules of a later tool: the file records them after the catalogue's, and
     a `completed` Crawl's post-crawl pass stores their Issues too. Otherwise it is `running`.
@@ -53,11 +67,13 @@ def crawl_store(
                 is_internal=True,
                 in_scope=True,
             )
-            for link in links
+            for link in (*links, *pages)
         )
-        writer.run(record_fetched(_html(seed_id, found), {}))
+        writer.run(record_fetched(_html(seed_id, SEED, _SEED_PAGE, found), _PAGE_WRITER))
         for url_id in writer.run(_ids_of(links)):
             writer.run(responded(200)(url_id))
+        for url_id, url in writer.run(_urls_of(pages)):
+            writer.run(record_fetched(_html(url_id, url, pages[url], ()), _PAGE_WRITER))
         if completed:
             asyncio.run(
                 materialise_issues(writer, (*RULES, *later_rules)), loop_factory=loop_factory
@@ -82,7 +98,15 @@ def _recorded(rule: Rule) -> RuleRow:
     )
 
 
-def _html(url_id: int, discovered: tuple[NewUrl, ...]) -> FetchedUrl:
+def _html(
+    url_id: int, url: str, page_data: Mapping[str, Any], discovered: tuple[NewUrl, ...]
+) -> FetchedUrl:
+    page = PageRow(
+        url_id=url_id,
+        address=display_address(NormalizedUrl(url)),
+        url_encoded_address=url,
+        **page_data,
+    )
     return FetchedUrl(
         url_id=url_id,
         status_code=200,
@@ -91,11 +115,20 @@ def _html(url_id: int, discovered: tuple[NewUrl, ...]) -> FetchedUrl:
         response_time_ms=1,
         parsed=True,
         discovered=discovered,
+        rows=(page,),
     )
 
 
 def _ids_of(links: Sequence[str]) -> Callable[[Connection], list[int]]:
     def unit(connection: Connection) -> list[int]:
         return list(connection.execute(select(urls.c.id).where(urls.c.url.in_(links))).scalars())
+
+    return unit
+
+
+def _urls_of(urls_: Iterable[str]) -> Callable[[Connection], list[tuple[int, str]]]:
+    def unit(connection: Connection) -> list[tuple[int, str]]:
+        found = connection.execute(select(urls.c.id, urls.c.url).where(urls.c.url.in_(urls_)))
+        return [(url_id, url) for url_id, url in found]
 
     return unit

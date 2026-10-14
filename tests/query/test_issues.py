@@ -72,3 +72,23 @@ def test_order(temp_workspace: TempWorkspace) -> None:
     found = issue_list(request(temp_workspace))
 
     assert [item["rule_id"] for item in found] == ["rule-d", "rule-c", "rule-b", "rule-a"]
+
+
+def test_item_fields(temp_workspace: TempWorkspace) -> None:
+    crawl_store(
+        temp_workspace, pages={url: {"title_count": 0} for url in under("p", 4)}, completed=True
+    )
+
+    found = issue_list(request(temp_workspace))
+
+    # The description that spider rules show title-missing prints.
+    assert found == [
+        {
+            "rule_id": "title-missing",
+            "category": "titles",
+            "issue_type": "issue",
+            "priority": "high",
+            "affected_count": 4,
+            "description": TITLE_MISSING.description,
+        }
+    ]
