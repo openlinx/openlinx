@@ -177,7 +177,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 6.1 Fixture: a second fixture site instance and the DNS resolver hook, which maps `site.test` and `www.site.test` to the first instance and `other.test` to the second, and fails every other name, test-first. Done when: the hook goes into the Crawl through the context builder (design D15).
 - [x] 6.2 Drive "An External URL is checked" at seam 3+6. Done when: `is_internal` and `in_scope` are declared.
 - [x] 6.3 Drive "An External origin gets its own row" at seam 3+6. Done when: the `origins` table is declared with `public_table(..., change=20)`: `id`, `origin` (with the named unique index `origins_origin`, never `unique=True`), `host` and `is_internal`, with its `docs/schema.md` section; `urls.origin_id` is declared NOT NULL with a foreign key to `origins.id`; and the unit that records a URL records its origin (design D18).
-- [ ] 6.4 Drive "External checks can be turned off" at seam 3.
+- [x] 6.4 Drive "External checks can be turned off" at seam 3.
 - [ ] 6.5 Drive "An unknown host is a DNS error" at seam 3+6.
 - [ ] 6.6 Docs: document External URL checks and the `fetch_error` codes in `docs/crawling.md`.
 - [ ] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.

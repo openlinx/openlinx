@@ -14,7 +14,14 @@ from spider.crawl.urls import NormalizedUrl, url_host
 from spider.output.codes import HANDLER_FAILED, PARSE_FAILED, RECORD_FAILED
 from spider.output.diagnostics import Diagnostic
 from spider.store.failures import is_one_urls_failure
-from spider.store.records import ErroredUrl, FetchedUrl, NewUrl, QueuedUrl, SkippedUrl
+from spider.store.records import (
+    ErroredUrl,
+    FetchedUrl,
+    NewUrl,
+    QueuedUrl,
+    SkippedUrl,
+    SkipReason,
+)
 from spider.store.urls import (
     UrlUnit,
     next_depth,
@@ -145,7 +152,7 @@ async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedU
     row_writers = context.hooks.row_writers
     # Decided once, at dispatch, so a URL found on several Pages is recorded once (design D1).
     decision = context.scope.decide(queued.url)
-    skip_reason = decision.skip_reason
+    skip_reason = _skip_reason(context, decision)
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
         return record_skipped(
@@ -171,6 +178,14 @@ async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedU
         )
         return record_error(errored, row_writers)
     return record_fetched(await _fetched(context, queued, decision, response), row_writers)
+
+
+def _skip_reason(context: CrawlContext, decision: ScopeDecision) -> SkipReason | None:
+    if decision.skip_reason is None and not (
+        decision.is_internal or context.settings.check_external
+    ):
+        return "external_not_checked"
+    return decision.skip_reason
 
 
 async def _fetched(

@@ -108,3 +108,13 @@ def test_each_url_points_to_its_origin(
         ("http://site.test/", "http://site.test", "site.test"),
         ("http://site.test/about", "http://site.test", "site.test"),
     ]
+
+
+def test_external_checks_can_be_turned_off(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(LINKS_TO_OTHER, OTHER_PAGE)
+
+    crawl_result("http://site.test/", resolver=hosts.resolver, check_external=False)
+
+    assert hosts.other.requests == ()

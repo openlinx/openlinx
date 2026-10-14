@@ -39,6 +39,15 @@ def crawl(
         ),
         OptionMeta(setting="crawl.concurrency"),
     ] = 5,
+    check_external: Annotated[
+        bool,
+        typer.Option(
+            "--check-external/--no-check-external",
+            help="Request each External URL once to record its response; with "
+            "--no-check-external it is recorded as skipped, unrequested.",
+        ),
+        OptionMeta(setting="crawl.check_external"),
+    ] = True,
     exclude: Annotated[
         list[str] | None,
         typer.Option(
