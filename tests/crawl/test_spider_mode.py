@@ -182,3 +182,18 @@ def test_an_excluded_url_is_recorded_as_skipped(
         "SELECT fetch_state, skip_reason FROM urls WHERE url = ?",
         [server.url("/logout")],
     ) == [("skipped", "excluded")]
+
+
+def test_a_skipped_url_has_no_response_data(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(LOGOUT_LINK)
+
+    crawl_file = crawled(server.url("/"), "--exclude", "/logout$")
+
+    assert query(
+        crawl_file,
+        "SELECT status_code, content_type, response_time_ms, fetched_at, parsed FROM urls "
+        "WHERE url = ?",
+        [server.url("/logout")],
+    ) == [(None, None, None, None, 0)]

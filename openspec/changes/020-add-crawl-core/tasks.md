@@ -143,7 +143,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - `--exclude` is declared, repeatable, with `OptionMeta(setting="crawl.exclude")` and the default `[]`, so it is not inert (ruling of 2026-10-14)
   - its patterns are compiled before any crawl file is created, and an invalid one is `invalid_pattern` (exit 2, the pattern in `details`), declared here, with a non-scenario test at seam 1; task 8.7 adds `--include`'s
   - `skip_reason` is declared, and an excluded URL is decided when it is dispatched and recorded in its own unit without a request, so it is decided once; a skipped URL never holds up the depth barrier (design D3) and is never counted as a request
-- [ ] 5.2 **Guard:** "A skipped URL has no response data", at seam 3+6.
+- [x] 5.2 **Guard:** "A skipped URL has no response data", at seam 3+6.
 - [ ] 5.3 Drive "A registered handler sees every URL once" at seam 2.
 
   Done when: `Hooks` and `default_hooks()` exist (design D9), the Crawl Service takes the `Hooks` to use, a handler is pure and returns store rows, and the store writes them in the unit that records the URL's final state (design D14).
