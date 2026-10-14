@@ -1,5 +1,6 @@
 """Home, proxy and network isolation as a pytest plugin (design D13 of 000-scaffold-project)."""
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -17,8 +18,14 @@ def no_proxy_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def network_guard(monkeypatch: pytest.MonkeyPatch) -> None:
-    block_remote_connections(monkeypatch)
+def network_guard(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> Iterator[None]:
+    blocked = block_remote_connections(monkeypatch)
+    yield
+    # The crawler records a refused request as a URL's error, so the block alone may stay unseen.
+    if blocked and request.node.get_closest_marker("blocks_remote") is None:
+        pytest.fail(f"the test tried to reach the network: {'; '.join(blocked)}")
 
 
 @pytest.fixture(autouse=True)

@@ -1,17 +1,45 @@
 """The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2, D3)."""
 
-from typing import Any, get_args
+from typing import Any, Literal, get_args, get_origin
 
-from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, Text
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    MetaData,
+    Table,
+    Text,
+)
 
-from spider.store.records import CrawlMode, CrawlState, JournalMode
+from spider.store.records import (
+    CrawlMode,
+    CrawlState,
+    DiscoveredVia,
+    FetchError,
+    FetchState,
+    JournalMode,
+    ParseError,
+    SkipReason,
+    StopReason,
+)
 from spider.store.types import Flag, Json, Timestamp
+
+
+def literal_values(alias: Any) -> list[str]:
+    """The values of a Literal alias in order, through unions of Literals and other aliases."""
+    value = getattr(alias, "__value__", alias)
+    if get_origin(value) is Literal:
+        return list(get_args(value))
+    return [item for member in get_args(value) for item in literal_values(member)]
+
 
 # Stays 1 until the first schema change after v0.1, which brings migrations (design D5).
 SCHEMA_VERSION = 1
-CRAWL_MODES = list(get_args(CrawlMode.__value__))
-CRAWL_STATES = list(get_args(CrawlState.__value__))
-JOURNAL_MODES = list(get_args(JournalMode.__value__))
+CRAWL_MODES = literal_values(CrawlMode)
+CRAWL_STATES = literal_values(CrawlState)
+JOURNAL_MODES = literal_values(JournalMode)
 
 metadata = MetaData()
 
@@ -83,6 +111,14 @@ crawl = public_table(
         comment="When the state became completed; NULL in every other state.",
     ),
     Column(
+        "stop_reason",
+        Text,
+        comment="Why the Crawl ended early: max_urls, interrupt or requested for a stopped Crawl, "
+        "seed_unreachable, site_unreachable or write_failed for a failed one; NULL while it "
+        "runs and when it is completed.",
+        info={"values": literal_values(StopReason)},
+    ),
+    Column(
         "command_argv",
         Json,
         nullable=False,
@@ -147,4 +183,163 @@ seeds = public_table(
     Column("url", Text, nullable=False, comment="The Seed URL as given."),
     comment="The Seeds the Crawl started from, in the order they were given.",
     change=15,
+)
+
+urls = public_table(
+    "urls",
+    Column(
+        "id",
+        Integer,
+        primary_key=True,
+        comment="Row id, stable for the life of the crawl file; it grows in the order URLs are "
+        "first recorded, and is the dispatch order within a Crawl Depth.",
+    ),
+    Column("url", Text, nullable=False, comment="The normalised URL, unique."),
+    Column(
+        "host",
+        Text,
+        nullable=False,
+        comment="The URL's host in lower-case ASCII (IDNA) form; the key of the per-host "
+        "politeness limits.",
+    ),
+    Column(
+        "origin_id",
+        Integer,
+        ForeignKey("origins.id"),
+        nullable=False,
+        comment="The URL's origin: its scheme, host and port.",
+    ),
+    Column(
+        "is_internal",
+        Flag,
+        nullable=False,
+        comment="1 for an Internal URL, 0 for an External URL.",
+    ),
+    Column(
+        "in_scope",
+        Flag,
+        nullable=False,
+        comment="1 when the URL is inside the Scope, so it may be followed.",
+    ),
+    Column("crawl_depth", Integer, nullable=False, comment="Crawl Depth; 0 for Seeds."),
+    Column(
+        "discovered_via",
+        Text,
+        nullable=False,
+        comment="How the URL was first found: seed, or the Link type.",
+        info={"values": literal_values(DiscoveredVia)},
+    ),
+    Column(
+        "found_on_url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        comment="The URL whose response first revealed this one; NULL for Seeds.",
+    ),
+    Column(
+        "fetch_state",
+        Text,
+        nullable=False,
+        comment="Frontier state: waiting, a response was recorded, no response, or not requested.",
+        info={"values": literal_values(FetchState)},
+    ),
+    Column(
+        "skip_reason",
+        Text,
+        comment="Why a skipped URL was not requested.",
+        info={"values": literal_values(SkipReason)},
+    ),
+    Column(
+        "status_code",
+        Integer,
+        comment="HTTP status code of the URL's own response; NULL without a response.",
+    ),
+    Column(
+        "fetch_error",
+        Text,
+        comment="Why no response is recorded for the URL.",
+        info={"values": literal_values(FetchError)},
+    ),
+    Column("fetch_error_message", Text, comment="Human-readable detail of fetch_error."),
+    Column(
+        "content_type",
+        Text,
+        comment="The Content-Type response header as received; NULL without a response or "
+        "without the header.",
+    ),
+    Column(
+        "response_time_ms",
+        Integer,
+        comment="Time from sending the request to receiving the whole body.",
+    ),
+    Column("fetched_at", Timestamp, comment="UTC time of the request."),
+    Column(
+        "parsed",
+        Flag,
+        nullable=False,
+        comment="1 when the response was parsed and its Links were found.",
+    ),
+    Column(
+        "parse_error",
+        Text,
+        comment="Why parsing failed in whole or in part: a registered extractor failed (parsed "
+        "stays 1), or nothing came out of page preparation (parsed = 0).",
+        info={"values": literal_values(ParseError)},
+    ),
+    Column("parse_error_message", Text, comment="Human-readable detail of parse_error."),
+    comment="One row for each distinct normalised URL of the Crawl; the frontier is its "
+    "queued rows.",
+    change=20,
+)
+Index(
+    "urls_url",
+    urls.c.url,
+    unique=True,
+    info={
+        "description": "Recording a discovered URL once (ON CONFLICT (url)), and finding one "
+        "URL's row."
+    },
+)
+Index(
+    "urls_crawl_depth_id",
+    urls.c.crawl_depth,
+    urls.c.id,
+    sqlite_where=urls.c.fetch_state == "queued",
+    info={
+        "description": "The frontier: the next queued URLs of the open Crawl Depth, in id order."
+    },
+)
+
+origins = public_table(
+    "origins",
+    Column("id", Integer, primary_key=True, comment="Row id."),
+    Column(
+        "origin",
+        Text,
+        nullable=False,
+        comment="Scheme, host and port, for example https://site.test, with a default port left "
+        "out; unique.",
+    ),
+    Column(
+        "host",
+        Text,
+        nullable=False,
+        comment="The origin's host in lower-case ASCII (IDNA) form.",
+    ),
+    Column(
+        "is_internal",
+        Flag,
+        nullable=False,
+        comment="1 when the origin's URLs are Internal URLs.",
+    ),
+    comment="One row for each origin of a URL that the Crawl recorded.",
+    change=20,
+)
+Index(
+    "origins_origin",
+    origins.c.origin,
+    unique=True,
+    info={
+        "description": "Recording an origin once (ON CONFLICT (origin)), and finding an "
+        "origin's row."
+    },
 )

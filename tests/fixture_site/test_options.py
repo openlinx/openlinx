@@ -1,4 +1,4 @@
-"""Route options: headers, content_type, delay, hang (design D9 of 000-scaffold-project)."""
+"""Route options: headers, content_type, delay, hang, reset_after (design D9 of 000)."""
 
 import time
 
@@ -66,3 +66,14 @@ async def test_hang_never_answers_and_the_server_still_stops_quickly() -> None:
         stopped_in = time.monotonic() - started
 
     assert stopped_in < 2
+
+
+async def test_reset_after_resets_the_connection_inside_the_body(fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/reset": Page(body="x" * 100_000, reset_after=100)}))
+
+    async with aiohttp.ClientSession() as session, session.get(server.url("/reset")) as response:
+        received = (response.status, response.content_length)
+        with pytest.raises(aiohttp.ClientError):
+            await response.read()
+
+    assert received == (200, 100_000)

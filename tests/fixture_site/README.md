@@ -48,6 +48,7 @@ Every route takes these as keyword arguments:
 - `content_type="..."`: replaces the route's own `Content-Type`.
 - `delay=0.5`: seconds to wait before the response headers.
 - `hang=True`: never answer.
+- `reset_after=100`: send the headers, with the whole body's `Content-Length`, and that many bytes of the body, then reset the connection (TCP RST).
 
 When the server stops, it cancels every handler still running (hanging or delayed) before aiohttp's cleanup, which would otherwise wait up to 60 s for them.
 
@@ -55,9 +56,13 @@ When the server stops, it cancels every handler still running (hanging or delaye
 
 - **`fixture_site`** (function-scoped): `server = fixture_site(SITE)` starts the site and returns a `ServerHandle`. Every site it started stops after the test.
 - **`module_fixture_site`**: the same, stopped after the module. It is for hypothesis tests, which cannot use function-scoped fixtures.
+- **`fixture_hosts`** (function-scoped), for multi-host Crawls: `hosts = fixture_hosts(SITE, OTHER)` starts two instances and returns a `FixtureHosts`:
+  - `site`, the `ServerHandle` that `site.test` and `www.site.test` name, and `other`, the one that `other.test` names
+  - `resolver`, the DNS resolver hook: an aiohttp resolver that maps those names, on any port, to their instance's address and port, and fails every other name as the system resolver does, so aiohttp reports `ClientConnectorDNSError`. It goes into a Crawl through the Crawl Service, `start_crawl(..., resolver=hosts.resolver)`, which `tests.support.crawling.crawl_result` calls.
 - **`ServerHandle`**:
   - `base_url`, such as `http://127.0.0.1:53124`
   - `url(path)`
+  - `most_simultaneous`, the most requests the site has handled at once, from a request's arrival until its handler returned
   - `requests`, a snapshot of the request log. Each entry is a `LoggedRequest(method, path, headers, received_at)`: the path includes the query, and `received_at` is `time.monotonic()`.
 
 Clients in tests:

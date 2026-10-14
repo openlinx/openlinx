@@ -78,6 +78,7 @@ The Crawl's metadata, in exactly one row.
 | `state` | TEXT | no | | | `running`, `stopped`, `completed`, `failed`, `interrupted` | The Crawl State. |
 | `started_at` | TEXT | no | | `timestamp` | | When the Crawl started. |
 | `completed_at` | TEXT | yes | | `timestamp` | | When the state became completed; NULL in every other state. |
+| `stop_reason` | TEXT | yes | | | `max_urls`, `interrupt`, `requested`, `seed_unreachable`, `site_unreachable`, `write_failed` | Why the Crawl ended early: max_urls, interrupt or requested for a stopped Crawl, seed_unreachable, site_unreachable or write_failed for a failed one; NULL while it runs and when it is completed. |
 | `command_argv` | TEXT | no | | `json` | | The command line as an array that starts with the command name, secrets redacted. |
 | `cwd` | TEXT | no | | | | The absolute folder the Command ran in. |
 | `settings_file` | TEXT | yes | | | | The absolute path of the settings file that was read, or NULL without one. |
@@ -96,3 +97,54 @@ The Seeds the Crawl started from, in the order they were given.
 |---|---|---|---|---|---|---|
 | `position` | INTEGER | no | PK | | | The 1-based order in which the Seed was given. |
 | `url` | TEXT | no | | | | The Seed URL as given. |
+
+## Table `urls`
+
+One row for each distinct normalised URL of the Crawl; the frontier is its queued rows.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `id` | INTEGER | no | PK | | | Row id, stable for the life of the crawl file; it grows in the order URLs are first recorded, and is the dispatch order within a Crawl Depth. |
+| `url` | TEXT | no | | | | The normalised URL, unique. |
+| `host` | TEXT | no | | | | The URL's host in lower-case ASCII (IDNA) form; the key of the per-host politeness limits. |
+| `origin_id` | INTEGER | no | → `origins.id` | | | The URL's origin: its scheme, host and port. |
+| `is_internal` | INTEGER | no | | `boolean` | | 1 for an Internal URL, 0 for an External URL. |
+| `in_scope` | INTEGER | no | | `boolean` | | 1 when the URL is inside the Scope, so it may be followed. |
+| `crawl_depth` | INTEGER | no | | | | Crawl Depth; 0 for Seeds. |
+| `discovered_via` | TEXT | no | | | `seed`, `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`, `redirect`, `list`, `sitemap_input`, `sitemap_index` | How the URL was first found: seed, or the Link type. |
+| `found_on_url_id` | INTEGER | yes | → `urls.id` | | | The URL whose response first revealed this one; NULL for Seeds. |
+| `fetch_state` | TEXT | no | | | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested. |
+| `skip_reason` | TEXT | yes | | | `excluded`, `blocked_by_robots_txt`, `robots_unreachable`, `nofollow`, `link_type_not_followed`, `external_not_checked`, `max_depth`, `max_redirects`, `url_too_long` | Why a skipped URL was not requested. |
+| `status_code` | INTEGER | yes | | | | HTTP status code of the URL's own response; NULL without a response. |
+| `fetch_error` | TEXT | yes | | | `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`, `record_failed`, `timeout`, `tls_error` | Why no response is recorded for the URL. |
+| `fetch_error_message` | TEXT | yes | | | | Human-readable detail of fetch_error. |
+| `content_type` | TEXT | yes | | | | The Content-Type response header as received; NULL without a response or without the header. |
+| `response_time_ms` | INTEGER | yes | | | | Time from sending the request to receiving the whole body. |
+| `fetched_at` | TEXT | yes | | `timestamp` | | UTC time of the request. |
+| `parsed` | INTEGER | no | | `boolean` | | 1 when the response was parsed and its Links were found. |
+| `parse_error` | TEXT | yes | | | `extractor_error`, `body_too_large`, `worker_crashed`, `parse_timeout` | Why parsing failed in whole or in part: a registered extractor failed (parsed stays 1), or nothing came out of page preparation (parsed = 0). |
+| `parse_error_message` | TEXT | yes | | | | Human-readable detail of parse_error. |
+
+### Indexes
+
+| Name | Columns | Unique | Where | Description |
+|---|---|---|---|---|
+| `urls_crawl_depth_id` | `crawl_depth`, `id` | no | `fetch_state = 'queued'` | The frontier: the next queued URLs of the open Crawl Depth, in id order. |
+| `urls_url` | `url` | yes | | Recording a discovered URL once (ON CONFLICT (url)), and finding one URL's row. |
+
+## Table `origins`
+
+One row for each origin of a URL that the Crawl recorded.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `id` | INTEGER | no | PK | | | Row id. |
+| `origin` | TEXT | no | | | | Scheme, host and port, for example https://site.test, with a default port left out; unique. |
+| `host` | TEXT | no | | | | The origin's host in lower-case ASCII (IDNA) form. |
+| `is_internal` | INTEGER | no | | `boolean` | | 1 when the origin's URLs are Internal URLs. |
+
+### Indexes
+
+| Name | Columns | Unique | Where | Description |
+|---|---|---|---|---|
+| `origins_origin` | `origin` | yes | | Recording an origin once (ON CONFLICT (origin)), and finding an origin's row. |

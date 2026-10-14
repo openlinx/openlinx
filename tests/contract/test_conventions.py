@@ -83,22 +83,27 @@ def test_column_types_are_those_strict_allows() -> None:
 
 
 def test_reference_columns_are_declared() -> None:
-    # Vacuous until 020's found_on_url_id, whose task adds an assertion that one was seen.
-    assert [
-        column["name"]
-        for column in all_columns()
-        if column["name"].endswith("_id") and column["references"] is None
-    ] == []
+    references = [column for column in all_columns() if column["name"].endswith("_id")]
+
+    # Seen at least once, so the rule is not passing vacuously.
+    assert (
+        [column["name"] for column in references if column["references"] is None],
+        bool(references),
+    ) == ([], True)
 
 
 def test_index_names_start_with_their_table() -> None:
-    # Vacuous until 020's urls_url, whose task adds an assertion that one was seen.
-    assert [
-        index["name"]
-        for table in listed_tables()
-        for index in table["indexes"]
-        if not index["name"].startswith(f"{table['name']}_") or blank(index["description"])
-    ] == []
+    indexes = [(table["name"], index) for table in listed_tables() for index in table["indexes"]]
+
+    # Seen at least once, so the rule is not passing vacuously.
+    assert (
+        [
+            index["name"]
+            for table, index in indexes
+            if not index["name"].startswith(f"{table}_") or blank(index["description"])
+        ],
+        bool(indexes),
+    ) == ([], True)
 
 
 def test_derived_and_later_columns_may_hold_null() -> None:

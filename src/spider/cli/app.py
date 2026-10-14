@@ -8,6 +8,7 @@ import typer
 
 from spider import __version__
 from spider.cli.commands import commands
+from spider.cli.crawl import crawl
 from spider.cli.init import init
 from spider.cli.meta import check_command
 from spider.cli.runner import Invocation, SpiderGroup
@@ -44,6 +45,7 @@ class AppExtra:
 def build_app(extra: AppExtra | None = None) -> typer.Typer:
     extra = extra or AppExtra()
     tables = SettingsTables()
+    tables.register("crawl", "spider.crawl.settings:CrawlSettings")
     tables.register("store", "spider.store.settings:StoreSettings")
     for name, reference in extra.settings_tables.items():
         tables.register(name, reference)
@@ -60,7 +62,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         rich_markup_mode=None,
     )
     app.callback()(root)
-    registered: list[Callable[..., Any]] = [commands, init, schema, *extra.commands]
+    registered: list[Callable[..., Any]] = [commands, crawl, init, schema, *extra.commands]
     for command in registered:
         app.command(name=check_command(command).name)(command)
     return app
