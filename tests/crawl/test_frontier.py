@@ -41,3 +41,24 @@ def test_a_link_cycle_ends(temp_workspace: TempWorkspace, fixture_site: StartSit
     )
 
     assert crawl_row(crawled(server.url("/")))["state"] == "completed"
+
+
+def test_followed_urls_start_in_discovery_order(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/c">C</a><a href="/a">A</a><a href="/b">B</a>'),
+                **{path: Page(body="<p>Page</p>") for path in ("/c", "/a", "/b")},
+            }
+        )
+    )
+
+    crawled(server.url("/"), "--concurrency", "1")
+
+    assert [request.path for request in server.requests if request.path in {"/a", "/b", "/c"}] == [
+        "/c",
+        "/a",
+        "/b",
+    ]
