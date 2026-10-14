@@ -3,6 +3,22 @@
 from spider.naming import SETTINGS_FILE_NAME
 from spider.rules.model import Rule, Threshold
 
+TITLE_MISSING = Rule(
+    id="title-missing",
+    category="titles",
+    issue_type="issue",
+    priority="high",
+    applies_to="internal_pages",
+    description="A Page has no title, or its first title is empty.",
+    why_it_matters=(
+        "The title names the page in search results and in browser tabs. Without one, "
+        "search engines make up a title from the page, which rarely says what it offers."
+    ),
+    how_to_fix=(
+        "Add one <title> element to the <head> of the page, with a few words that describe "
+        "it and set it apart from the site's other pages."
+    ),
+)
 TITLE_TOO_LONG = Rule(
     id="title-too-long",
     category="titles",
@@ -21,4 +37,4 @@ TITLE_TOO_LONG = Rule(
     thresholds=(Threshold("max_chars", 60, "characters"),),
 )
 
-RULES = (TITLE_TOO_LONG,)
+RULES = (TITLE_MISSING, TITLE_TOO_LONG)

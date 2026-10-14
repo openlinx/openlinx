@@ -40,5 +40,11 @@ def test_show_a_rule_with_thresholds() -> None:
     )
 
 
+def test_rule_without_thresholds() -> None:
+    items = run_cli("rules", "list", "--limit", "50").json()["items"]
+
+    assert [item["thresholds"] for item in items if item["id"] == "title-missing"] == [{}]
+
+
 def test_the_bare_group_lists_the_rules() -> None:
     assert run_cli("rules").json() == run_cli("rules", "list").json()
