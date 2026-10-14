@@ -131,6 +131,12 @@ def test_absent_and_empty_elements_differ() -> None:
     assert (row.title_1, row.title_1_length, row.h1_1) == ("", 0, None)
 
 
+def test_a_heading_in_a_template_is_ignored() -> None:
+    row = page_row("<template><h1>Template</h1></template><h1>Main</h1>")
+
+    assert (row.h1_1, row.h1_count) == ("Main", 1)
+
+
 # Fragments that build the documents a parser repairs: unclosed, nested in foreign content,
 # commented out, NUL and stray markup.
 _FRAGMENTS = st.sampled_from(

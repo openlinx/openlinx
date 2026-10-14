@@ -44,7 +44,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 - [x] 3.5 Drive "Line break separates heading words" at seam 4 (block breaks at `br` and at block-level elements).
 - [x] 3.6 Drive "Absent and empty elements differ" at seam 4.
 - [x] 3.7 Docs: add the meta description, meta keywords and heading columns to `docs/page-data.md`.
-- [ ] 3.8 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [x] 3.8 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. Identity, response, size and redirects
 

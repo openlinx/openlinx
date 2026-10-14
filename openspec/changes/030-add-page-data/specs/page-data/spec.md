@@ -405,7 +405,7 @@ Titles SHALL be extracted from `<title>` elements anywhere in the document that 
 - **THEN** `title_count` is 0 and `title_1` and `title_1_length` are NULL
 
 ### Requirement: Meta description and meta keywords
-Meta descriptions SHALL be extracted from `<meta>` elements anywhere in the document whose trimmed `name` equals `description`, compared case-insensitively.
+Meta descriptions SHALL be extracted from `<meta>` elements anywhere in the document that have no `svg`, `math` or `noscript` ancestor, as titles are, and whose trimmed `name` equals `description`, compared ASCII case-insensitively.
 
 - `meta_description_count` is the number of such elements.
 - `meta_description_1` and `meta_description_2` are the normalised `content` values of the first two. An element without `content` gives the empty string.
@@ -426,7 +426,7 @@ Meta descriptions SHALL be extracted from `<meta>` elements anywhere in the docu
 - **THEN** `meta_keywords_1` is `shoes, boots` and `meta_keywords_1_length` is 12
 
 ### Requirement: Headings
-Headings SHALL be extracted from `<h1>` and `<h2>` elements anywhere in the document.
+Headings SHALL be extracted from `<h1>` and `<h2>` elements anywhere in the document that have no `svg`, `math` or `noscript` ancestor, as titles are.
 
 - `h1_count` and `h2_count` are the numbers of such elements.
 - `h1_1`, `h1_2`, `h2_1` and `h2_2` are the texts of the first and second of each, in document order.

@@ -7,7 +7,8 @@ from selectolax.lexbor import LexborNode
 # ASCII whitespace only, as document.title has it: a no-break space is text.
 _ASCII_WHITESPACE = "\t\n\x0c\r "
 _WHITESPACE_RUN = re.compile(f"[{_ASCII_WHITESPACE}]+")
-# Their content is no text of the Page: code, styles, fallbacks, frames and pictures.
+# Their content is no text of the Page: code, styles, fallbacks, frames and pictures. The
+# Page extractor leaves out elements inside svg, math and noscript the same way.
 _SKIPPED = frozenset({"script", "style", "noscript", "template", "iframe", "svg", "math"})
 # A break at their start and end separates the words of the text around them.
 _BLOCKS = frozenset(
@@ -68,8 +69,7 @@ def trimmed(text: str) -> str:
 
 
 def element_text(element: LexborNode) -> str:
-    """Its text nodes in document order, with a break at every br and around every block-level
-    element; an explicit stack, so a deep tree needs no recursion."""
+    # An explicit stack, so a deep tree needs no recursion.
     parts: list[str] = []
     pending: list[LexborNode | str | None] = [element.first_child]
     while pending:
