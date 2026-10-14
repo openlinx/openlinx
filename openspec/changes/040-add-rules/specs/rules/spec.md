@@ -46,8 +46,8 @@ A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). 
 - **THEN** `internal-4xx` has no Affected URL for it
 
 #### Scenario: Non-analysed Pages are skipped by Page Rules
-- **WHEN** a Page responded 404 with an HTML body and no `<title>`
-- **THEN** `title-missing` has no Affected URL for it
+- **WHEN** a Page responded 404 with an HTML body and the header `X-Robots-Tag: noindex`
+- **THEN** `noindex` has no Affected URL for it
 
 #### Scenario: A failed extractor raises no Issue for its missing columns
 - **WHEN** an analysed Page has `parse_error` = `extractor_error`, and its title and heading columns (`title_count`, `title_1`, `h1_count`, `h1_1`) NULL

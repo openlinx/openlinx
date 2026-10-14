@@ -17,46 +17,45 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 1. Rule model and the rules Command (slice)
 
-- [ ] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. This is a trivial pair: both fail until the registry and the Command exist. Add the Rule model, the registry, `internal-4xx` with its guidance texts and a query that returns no rows until task 4.1, and `spider rules list` on `010`'s output contract.
+- [ ] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. This is a trivial pair: both fail until the registry and the Command exist. Add the Rule model, the registry, `internal-4xx` with its guidance texts, and `spider rules list` on `010`'s output contract, with bare `spider rules` running `list`. `010`'s CLI has no Command groups yet, so this slice adds them in general (design D18): a group's Commands are registered under it, each with its own `@command_meta`, `spider commands` lists each by its full path (cli-contract: `rules list`), `--help` shows them, and the global-flag check works under a group. `060`'s `crawls list` reuses it.
 - [ ] 1.2 Drive "Show a Rule with thresholds" at seam 1. Register `title-too-long` with its thresholds and texts, and add `spider rules show <id>`.
 - [ ] 1.3 Drive "Rule without thresholds" at seam 1, and register `title-missing`.
 - [ ] 1.4 Drive "Unknown Rule id" at seam 1: `rule_not_found`, exit code 4, and a hint naming `spider rules list`.
 - [ ] 1.5 Drive "Windows console output" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
 - [ ] 1.6 Docs: create `docs/rules.md` covering the Rule model, what Issue Type and Priority mean, the Issue-type principle with `http-url` as Warning/High (design D3), category and id naming (D12) and how to read `spider rules` output.
-- [ ] 1.7 **Guard:** every code this change declares (design D17) is listed by `spider commands` with its level and exit code, at seam 1.
+- [ ] 1.7 **Guard:** every code this change declares (design D17) is listed by `spider commands` with its level and exit code, and its Commands by their full paths, `rules list` and `rules show`, at seam 1.
 - [ ] 1.8 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Configuration in spider.toml (slice)
 
-- [ ] 2.1 Drive "Override shown by the rules Command" at seam 1, and add `[rules.<id>]` thresholds to `010`'s settings model.
+- [ ] 2.1 Drive "Override shown by the rules Command" at seam 1, and add `[rules.<id>]` thresholds to `010`'s settings model. They fit neither of `010`'s table kinds (a flat model, or a keyed table with one entry model): each Rule has its own thresholds, and Rule ids hold `-`. So the `rules` table is a model built from the registry, with one field per Rule, aliased by its id, each an `extra="forbid"` model of `enabled` and its thresholds (integers, at least 0), registered in `build_app` beside `crawl` and `store`; `010`'s `check_table`, closest-key suggestion and `init` template learn it (the template gets one commented `[rules.<id>]` that points to `spider rules list`), and `crawl.config` dumps it by alias (design D9).
 - [ ] 2.2 Drive "Disabled Rule is listed" at seam 1 (`enabled = false`), and register `h1-missing` with a query that returns no rows until task 4.7.
-- [ ] 2.3 Drive "Misspelt Rule id" at seam 1: `settings_invalid` with a dotted key and a closest-id hint.
-- [ ] 2.4 Drive "Unknown key" at seam 1, on `h1-missing`.
+- [ ] 2.3 Drive "Misspelt Rule id" at seam 1: `settings_invalid` with a dotted key and a closest-id hint, which names the Rule id (`title-too-long`), never its field name (`title_too_long`).
+- [ ] 2.4 Drive "Unknown key" at seam 1, on `h1-missing`. A test named after no scenario pins the suggestion inside a Rule table: `[rules.title-too-long]` `max_char = 70` gives the hint `rules.title-too-long.max_chars`, reached through the alias.
 - [ ] 2.5 Drive "Negative threshold" at seam 1. `spider crawl` exits 3, and the fixture site receives 0 requests, on `title-too-long`'s `max_chars`.
 - [ ] 2.6 Docs: add `[rules.<id>]` examples to `docs/rules.md`: raising a limit, disabling a Rule, and the error for a misspelt id.
 - [ ] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. Rules as queries, stored Issues and live Issues (slice)
 
-- [ ] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Create the `rules` table in `spider.store.issues` through `018`'s `public_table()` (`STRICT`, `WITHOUT ROWID`, keyed by the Rule id), and write the configuration snapshot in the transaction that creates the `crawl` row, through a new `NewCrawl.rules` (design D14).
-- [ ] 3.2 Drive "Categories are an enumeration" at seam 6 (`values` on `rules.category`).
+- [ ] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Create the `rules` table with every column of the spec but `reproduce_sql` (task 3.3), declared in `spider.store.schema` with the other public tables through `018`'s `public_table()`, which gains a `without_rowid` keyword here, its first user (`STRICT`, `WITHOUT ROWID`, keyed by the Rule id; the contract test already compares `without_rowid`). Write the configuration snapshot in the transaction that creates the `crawl` row, through a new `rules` field on `015`'s `NewCrawl`, beside `section_crawl` (design D14).
+- [ ] 3.2 **Guard:** "Categories are an enumeration" at seam 6 (`values` on `rules.category`). Task 3.1 declares the values, which the column's CHECK needs, so it passes at once; red by mutation.
 - [ ] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Add `reproduce_sql` to the Rule model, the `rules` table and the Command's items (design D15). A Rule registered before the slice of its condition carries a query that returns no rows until that slice.
-- [ ] 3.4 Drive "Missing title" at seam 2, through the evaluation entry point, which runs one Rule's query over a crawl file. The query reads `030`'s `title_count` and `title_1` (its group 2) from `pages`, joined to `urls` for `parsed` = 1 (design D2). The test writes `urls` rows through `020`'s store units and `pages` rows through `030`'s `write_page` (`spider.store.pages`) with a `PageRow` (`spider.store.page_records`), only for a URL that is a Page by `030`'s predicate, as builders, after `030` task 2.3.
+- [ ] 3.4 Drive "Missing title" at seam 2, through the evaluation entry point, which runs one Rule's query over a crawl file. The query reads `030`'s `title_count` and `title_1` from `pages` alone (design D2: the `urls.parsed` = 1 join waits for task 8.11). The test writes `urls` rows through `020`'s store units and `pages` rows through `030`'s `write_page` (`spider.store.pages`) with a `PageRow` (`spider.store.page_records`), only for a URL that is a Page by `030`'s predicate, as builders.
 - [ ] 3.5 Drive "Empty title counts as missing" at seam 2.
-- [ ] 3.6 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2.
-- [ ] 3.7 Drive "Issue row counts its Affected URLs" at seam 3+6. Create `affected_urls` and the `issues` view in `spider.store.issues`, and add the post-crawl pass to `020`'s `default_hooks()` in `spider.services.hooks`: one unit per enabled Rule that replaces its rows with `INSERT … SELECT` from its query (design D5, D15). Check the units with `017`'s `replay_now(writer)`.
+- [ ] 3.6 Drive "Issues is a view" at seam 6. Create `affected_urls` and the `issues` view, declared in `spider.store.schema`. It is the schema's first view, so `018`'s declaration learns views: `spider schema` gives their `kind` `view`, the contract test compares the file's views, and `docs/schema.md` documents them (design D7).
+- [ ] 3.7 Drive "Issue row counts its Affected URLs" at seam 3+6. Add the post-crawl pass, in `spider.store.issues`, to `020`'s `default_hooks()` in `spider.services.hooks`: one unit per Rule that the Crawl's `rules` table marks enabled, which replaces its rows with `INSERT … SELECT` from the registry's query (design D5, D15). Check the units with `017`'s `replay_now(writer)`.
 - [ ] 3.8 Drive "A Rule's query returns its stored Affected URLs" at seam 3+6, over every enabled Rule. From here on it checks every Rule registered later.
 - [ ] 3.9 Drive "Keys of the Rule tables" at seam 6.
-- [ ] 3.10 Drive "Issues is a view" at seam 6. It is the schema's first view, so extend `018`'s declaration and contract test to views (design D7).
-- [ ] 3.11 Drive "Indexes of affected_urls" at seam 6.
-- [ ] 3.12 Drive "Issue Types are an enumeration" at seam 6 (`values` on `issues.issue_type`).
-- [ ] 3.13 Drive "Issue visible before the Crawl ends" at seam 3+6, with a fixture page that delays its response by 5 s: the Issues reader and its live path (design D16).
-- [ ] 3.14 Drive "A Crawl without a final pass is read live" at seam 2: the path chosen by the Crawl State.
-- [ ] 3.15 Drive "Live and materialised Issues agree" at seam 3+6.
-- [ ] 3.16 Drive "Disabled Rule produces no Issue" at seam 3+6.
-- [ ] 3.17 Drive "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2).
-- [ ] 3.18 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` over a crawl file, and when Issues are live or materialised.
-- [ ] 3.19 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [ ] 3.10 Drive "Indexes of affected_urls" at seam 6.
+- [ ] 3.11 Drive "Issue Types are an enumeration" at seam 6 (`values` on `issues.issue_type`).
+- [ ] 3.12 Drive "Issue visible before the Crawl ends" at seam 3+6, with a fixture page that delays its response by 5 s: the Issues reader and its live path (design D16).
+- [ ] 3.13 Drive "A Crawl without a final pass is read live" at seam 2: the path chosen by the Crawl State. `resume` comes with `060`, so the test calls the pass, then writes `running` → `stopped` → `running` → `failed` with `020`'s `record_state`, which its transitions allow.
+- [ ] 3.14 Drive "Live and materialised Issues agree" at seam 3+6.
+- [ ] 3.15 Drive "Disabled Rule produces no Issue" at seam 3+6.
+- [ ] 3.16 **Guard:** "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2). It passes at once; red by mutation: the rejected `parse_error IS NULL` filter.
+- [ ] 3.17 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` over a crawl file, and when Issues are live or materialised.
+- [ ] 3.18 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. The slice's response code Rules and Missing H1 (slice)
 
@@ -124,11 +123,12 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 8.8 Drive "Canonical to an indexable Page" and "Canonical to a non-HTML 200 response" at seam 2. This is a trivial pair: both targets count as indexable.
 - [ ] 8.9 Drive "Canonical target never requested" at seam 2.
 - [ ] 8.10 Drive "Noindex from X-Robots-Tag only" and "Noindex from both sources" at seam 2. This is a trivial pair: `detail.sources`. Register `noindex`.
-- [ ] 8.11 **(v0.2)** Drive "Nofollow from meta robots" at seam 2, and register `nofollow`.
-- [ ] 8.12 **(v0.2)** Drive "Meta refresh used" at seam 2, and register `meta-refresh`.
-- [ ] 8.13 Drive "Catalogue size" (15) and "Rule ids are unique kebab-case" at seam 1, once `noindex`, the last of the 15 v0.1 Rules, is registered; group 9 raises the size to 42 in v0.2.
-- [ ] 8.14 Docs: add `canonical-to-non-indexable` and `noindex` to the catalogue in `docs/rules.md`, and check that it lists exactly the 15 ids that `spider rules list` returns. **(v0.2)** The other 4 canonical Rules and the other 2 directive Rules.
-- [ ] 8.15 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [ ] 8.11 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2, with a Page that responded 404 with an HTML body and `X-Robots-Tag: noindex`, whose `x_robots_tag_noindex` `030` reads from the headers of any Page (its task 6.2). Every Page Rule's query gains the `urls.parsed` = 1 join here, the first slice where it changes an outcome (design D2; moved from group 3).
+- [ ] 8.12 **(v0.2)** Drive "Nofollow from meta robots" at seam 2, and register `nofollow`.
+- [ ] 8.13 **(v0.2)** Drive "Meta refresh used" at seam 2, and register `meta-refresh`.
+- [ ] 8.14 Drive "Catalogue size" (15) and "Rule ids are unique kebab-case" at seam 1, once `noindex`, the last of the 15 v0.1 Rules, is registered; group 9 raises the size to 42 in v0.2.
+- [ ] 8.15 Docs: add `canonical-to-non-indexable` and `noindex` to the catalogue in `docs/rules.md`, and check that it lists exactly the 15 ids that `spider rules list` returns. **(v0.2)** The other 4 canonical Rules and the other 2 directive Rules.
+- [ ] 8.16 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
 ## 9. (v0.2) Content, URL and image Rules
 
@@ -145,7 +145,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 9.11 Drive "Srcset candidates are not counted twice" at seam 2.
 - [ ] 9.12 Drive "All images described" at seam 2.
 - [ ] 9.13 Drive "Image over the size limit" and "Image at the size limit" at seam 2. This is a trivial pair: one boundary. Register `image-too-large`.
-- [ ] 9.14 Drive "Broken external image" at seam 2 by registering `image-broken`, the 42nd Rule. In the same red step, "Catalogue size" moves to 42 (v0.2) and "Rule ids are unique kebab-case" checks every id, both of task 8.13.
+- [ ] 9.14 Drive "Broken external image" at seam 2 by registering `image-broken`, the 42nd Rule. In the same red step, "Catalogue size" moves to 42 (v0.2) and "Rule ids are unique kebab-case" checks every id, both of task 8.14.
 - [ ] 9.15 Drive "An image that failed to be recorded is not broken" at seam 2, with the reason in the query's SQL comment.
 - [ ] 9.16 Docs: add the 2 content Rules, 5 URL Rules and 3 image Rules to the catalogue in `docs/rules.md`, and check that the catalogue lists exactly the 42 ids that `spider rules list` returns.
 - [ ] 9.17 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
