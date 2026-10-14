@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 from tests.fixture_site.synthetic.serve import Tally
 from tests.fixture_site.synthetic.site import (
+    FETCHED,
     OUTCOMES,
     PARSED,
     SyntheticSite,
@@ -16,7 +17,12 @@ from tests.fixture_site.synthetic.site import (
 )
 
 CLEAN = "clean"
-MISSING_OUTCOME: Mapping[str, Any] = {"status_code": 404, "parsed": 0, "parse_error": None}
+MISSING_OUTCOME: Mapping[str, Any] = {
+    **FETCHED,
+    "status_code": 404,
+    "parsed": 0,
+    "parse_error": None,
+}
 # Wrong rows named in the problems, at most.
 EXAMPLES = 10
 
@@ -24,6 +30,7 @@ EXAMPLES = 10
 class UrlRow(NamedTuple):
     url: str
     fetch_state: str
+    fetch_error: str | None
     status_code: int | None
     parsed: int
     parse_error: str | None
@@ -98,7 +105,7 @@ def account(
                 problems.append(f"{row.url} is no URL of the synthetic site")
             continue
         got = _outcome(row)
-        if got == {"fetch_state": "fetched", **expected}:
+        if got == expected:
             as_expected[kind] += 1
         else:
             wrong += 1
@@ -135,6 +142,7 @@ _URL_KEYS = {"resource": "resources", "not_followed": "not_followed", "missing":
 def _outcome(row: UrlRow) -> dict[str, Any]:
     return {
         "fetch_state": row.fetch_state,
+        "fetch_error": row.fetch_error,
         "status_code": row.status_code,
         "parsed": row.parsed,
         "parse_error": row.parse_error,

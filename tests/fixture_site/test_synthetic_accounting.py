@@ -7,7 +7,7 @@ from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
 from spider.services.hooks import default_hooks
 from spider.store.records import SecretNames
-from tests.fixture_site.synthetic.accounting import CLEAN, UrlRow, account
+from tests.fixture_site.synthetic.accounting import CLEAN, MISSING_OUTCOME, UrlRow, account
 from tests.fixture_site.synthetic.serve import SiteProcess, Tally
 from tests.fixture_site.synthetic.site import (
     LOSES_LINKS,
@@ -39,11 +39,12 @@ SITE = SyntheticSite(
             Fault.SLOW,
             Fault.NO_TITLE,
             Fault.NO_H1,
+            Fault.RESET,
         ),
         0.05,
     ),
 )
-URL_ROWS = "SELECT url, fetch_state, status_code, parsed, parse_error FROM urls"
+URL_ROWS = "SELECT url, fetch_state, fetch_error, status_code, parsed, parse_error FROM urls"
 
 
 def crawled(temp_workspace: TempWorkspace, seed: str) -> Path:
@@ -81,10 +82,10 @@ def expected_rows() -> list[UrlRow]:
     for n in range(SITE.pages):
         fault = SITE.fault(n)
         outcome = PARSED if fault is None else OUTCOMES[fault]
-        rows.append(UrlRow(BASE + page_path(n), "fetched", *outcome.values()))
+        rows.append(UrlRow(url=BASE + page_path(n), **outcome))
         if fault not in LOSES_LINKS:
             missing |= set(dict(pool_refs(n))[MISSING])
-    rows += [UrlRow(BASE + MISSING.url(i), "fetched", 404, 0, None) for i in sorted(missing)]
+    rows += [UrlRow(url=BASE + MISSING.url(i), **MISSING_OUTCOME) for i in sorted(missing)]
     return rows
 
 
@@ -95,8 +96,8 @@ def test_every_url_that_is_not_accounted_for_is_a_problem() -> None:
     rows[clean] = rows[clean]._replace(fetch_state="queued", status_code=None, parsed=0)
     rows = [row for row in rows if row.url != BASE + page_path(server_error)]
     rows += [
-        UrlRow(BASE + "/elsewhere", "fetched", 200, 1, None),
-        UrlRow(BASE + "/r/i/3.jpg", "fetched", 200, 0, None),
+        UrlRow(BASE + "/elsewhere", "fetched", None, 200, 1, None),
+        UrlRow(BASE + "/r/i/3.jpg", "fetched", None, 200, 0, None),
     ]
     tally = Tally(
         pages_requested=SITE.pages - 1,
@@ -107,7 +108,13 @@ def test_every_url_that_is_not_accounted_for_is_a_problem() -> None:
 
     accounting = account(SITE, rows, recorded_pools={"missing"}, tally=tally)
 
-    queued = {"fetch_state": "queued", "status_code": None, "parsed": 0, "parse_error": None}
+    queued = {
+        "fetch_state": "queued",
+        "fetch_error": None,
+        "status_code": None,
+        "parsed": 0,
+        "parse_error": None,
+    }
     servers = accounting.pages[Fault.SERVER_ERROR.value][0]
     clean_pages = accounting.pages[CLEAN][0]
     assert accounting.problems == (

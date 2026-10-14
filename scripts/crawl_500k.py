@@ -35,7 +35,7 @@ from spider.clock import Clock, SystemClock
 from spider.crawl import pages
 from spider.crawl.context import CrawlContext
 from spider.crawl.engine import run_crawl
-from spider.crawl.fetcher import FetchResult, Request
+from spider.crawl.fetcher import FetchFailure, FetchResult, Request
 from spider.crawl.hooks import Hooks
 from spider.crawl.pages import PageSettings, PreparedPage
 from spider.crawl.scope import ScopeRules
@@ -87,7 +87,7 @@ PERFORMANCE_CLASS = "Win32_PerfFormattedData_Counters_ProcessorInformation"
 PERFORMANCE_SECONDS = 5
 # A variable, so that the type checker of each platform reads the code of the others.
 WINDOWS = sys.platform == "win32"
-URL_ROWS = "SELECT url, fetch_state, status_code, parsed, parse_error FROM urls"
+URL_ROWS = "SELECT url, fetch_state, fetch_error, status_code, parsed, parse_error FROM urls"
 TABLE_BYTES = (
     "SELECT coalesce(s.tbl_name, d.name), sum(d.pgsize) FROM dbstat AS d"
     " LEFT JOIN sqlite_schema AS s ON s.name = d.name GROUP BY 1 ORDER BY 2 DESC"
@@ -223,11 +223,19 @@ class ModelFetcher:
         self._site = site
         self._clock = clock
 
-    async def fetch(self, request: Request) -> FetchResult:
+    async def fetch(self, request: Request) -> FetchResult | FetchFailure:
         path = urlsplit(request.url).path
         n = page_number(path, self._site.pages)
+        fault = None if n is None else self._site.fault(n)
+        if fault is Fault.RESET:
+            # As 020's Fetcher reports a connection reset inside the body.
+            return FetchFailure(
+                fetch_error="connection_error",
+                message="ClientPayloadError: the connection was reset",
+                fetched_at=self._clock.now(),
+            )
         if n is not None:
-            status = 500 if self._site.fault(n) is Fault.SERVER_ERROR else 200
+            status = 500 if fault is Fault.SERVER_ERROR else 200
             content_type = HTML
         else:
             found = pool_index(path)

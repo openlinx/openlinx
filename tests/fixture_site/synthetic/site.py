@@ -85,6 +85,8 @@ class Fault(StrEnum):
     SLOW = "slow"
     NO_TITLE = "no_title"
     NO_H1 = "no_h1"
+    # Added last: the draw order follows the enum, so a new kind moves no other fault.
+    RESET = "reset"
 
 
 NO_FAULTS: Mapping[Fault, float] = {}
@@ -99,16 +101,30 @@ DEFAULT_SHARES: Mapping[Fault, float] = {
     Fault.SLOW: 2e-4,
     Fault.NO_TITLE: 2e-3,
     Fault.NO_H1: 2e-3,
+    Fault.RESET: 2e-4,
 }
 # Their Links are lost: the Page is not parsed, or its preparation never ends.
-LOSES_LINKS = frozenset({Fault.NESTED_DIVS, Fault.ENDS_WORKER, Fault.SERVER_ERROR})
-PARSED = {"status_code": 200, "parsed": 1, "parse_error": None}
+LOSES_LINKS = frozenset({Fault.NESTED_DIVS, Fault.ENDS_WORKER, Fault.SERVER_ERROR, Fault.RESET})
+FETCHED = {"fetch_state": "fetched", "fetch_error": None}
+PARSED = {**FETCHED, "status_code": 200, "parsed": 1, "parse_error": None}
 # What each fault should leave in `urls`; the Pages over the deadline and those that end their
 # worker are contained only by 026's pool.
 OUTCOMES: Mapping[Fault, Mapping[str, Any]] = {
-    Fault.NESTED_DIVS: {"status_code": 200, "parsed": 0, "parse_error": "parse_timeout"},
-    Fault.ENDS_WORKER: {"status_code": 200, "parsed": 0, "parse_error": "worker_crashed"},
-    Fault.SERVER_ERROR: {"status_code": 500, "parsed": 0, "parse_error": None},
+    Fault.NESTED_DIVS: {**FETCHED, "status_code": 200, "parsed": 0, "parse_error": "parse_timeout"},
+    Fault.ENDS_WORKER: {
+        **FETCHED,
+        "status_code": 200,
+        "parsed": 0,
+        "parse_error": "worker_crashed",
+    },
+    Fault.SERVER_ERROR: {**FETCHED, "status_code": 500, "parsed": 0, "parse_error": None},
+    Fault.RESET: {
+        "fetch_state": "error",
+        "fetch_error": "connection_error",
+        "status_code": None,
+        "parsed": 0,
+        "parse_error": None,
+    },
     **dict.fromkeys(
         (
             Fault.INVALID_UTF8,
@@ -128,6 +144,8 @@ END_WORKER = '<meta name="spider-benchmark" content="end-worker">'
 NESTED_DEPTH = 100_000
 CYRILLIC = bytes(range(0xC0, 0x100)).decode("cp1251")
 INVALID_BYTES = b"<p>broken \x98\xff\xfe bytes</p>"
+# Bytes of the body sent before the connection is reset: the headers and the start of the Page.
+RESET_AFTER = 4_096
 MALFORMED = b'<div class="open><p>nul\x00byte<table><td>cell<b><i>misnested</b></i>'
 
 
@@ -448,7 +466,13 @@ class SyntheticSite:
         refresh = self._http_refresh(n)
         headers = [] if refresh is None else [("Refresh", f"30; url={refresh}")]
         content_type = "text/html; charset=nonsense" if fault is Fault.UNKNOWN_CHARSET else HTML
-        return Bytes(self.render(n), content_type=content_type, headers=headers, delay=delay)
+        return Bytes(
+            self.render(n),
+            content_type=content_type,
+            headers=headers,
+            delay=delay,
+            reset_after=RESET_AFTER if fault is Fault.RESET else None,
+        )
 
     def manifest(self) -> dict[str, Any]:
         """The injected counts and the URLs a Crawl must account for, in one pass of hashes."""

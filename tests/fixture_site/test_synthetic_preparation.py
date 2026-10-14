@@ -105,7 +105,8 @@ def test_a_page_whose_links_are_lost_is_prepared_with_its_expected_failure() -> 
     prepared = {
         fault: prepared_page(SITE, url(with_fault(fault)), SCOPE)
         for fault in LOSES_LINKS
-        if fault is not Fault.SERVER_ERROR
+        # The others never reach preparation: their response is a 500 or a reset.
+        if OUTCOMES[fault]["status_code"] == 200
     }
 
     assert {fault: (page.links, page.parse_error) for fault, page in prepared.items()} == {

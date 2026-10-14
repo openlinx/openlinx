@@ -92,6 +92,7 @@ The site that the 500k benchmark crawls (design D6 of `026-add-parse-pool`), in 
   - NULs and unclosed markup after the last Link
   - a slow answer after `slow_seconds`
   - no `<title>` or no `<h1>`
+  - a connection reset after the first 4,096 bytes of the body (`reset_after`), which 020 records as a `connection_error`
 
   Only leaves of the spanning tree carry a fault, so no fault cuts other Pages off. `latency` delays every response.
 - **`manifest()`:** the injected counts, the outcome each fault should leave in `urls`, the Issues it injects, and the URLs a Crawl must account for, in one pass that keeps nothing per Page.

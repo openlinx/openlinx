@@ -31,10 +31,18 @@ class Fetched:
     body: bytes
 
 
+# The status a client records for a response whose connection was reset inside its body.
+RESET = 0
+
+
 def fetch(connection: http.client.HTTPConnection, path: str) -> Fetched:
     connection.request("GET", path)
     response = connection.getresponse()
-    body = response.read()
+    try:
+        body = response.read()
+    except (http.client.IncompleteRead, ConnectionError):
+        connection.close()
+        return Fetched(RESET, {}, b"")
     return Fetched(response.status, {k.lower(): v for k, v in response.getheaders()}, body)
 
 
@@ -195,6 +203,8 @@ def test_every_page_is_reached_from_the_seed_by_its_hyperlinks(fixture_site: Sta
 
 def observed_fault(page: Fetched) -> str | None:
     """The fault a client sees in a response, from the response alone."""
+    if page.status == RESET:
+        return "reset"
     if page.status == 500:
         return "server_error"
     if b"<div>" * 1_000 in page.body:
@@ -220,7 +230,7 @@ def observed_fault(page: Fetched) -> str | None:
     return None
 
 
-LOSES_LINKS = {"server_error", "nested_divs", "ends_worker"}
+LOSES_LINKS = {"server_error", "nested_divs", "ends_worker", "reset"}
 # A slow Page looks like any other but for its time, which a timing test bounds only from below.
 SEEN_FAULTS = [fault for fault in Fault if fault is not Fault.SLOW]
 FAULTY = SyntheticSite(seed=3, pages=400, fanout=4, shares=dict.fromkeys(SEEN_FAULTS, 0.05))
@@ -267,11 +277,38 @@ def test_the_urls_the_pages_reference_are_the_url_totals_of_the_manifest(
 def test_the_manifest_names_the_outcome_each_fault_leaves_in_urls() -> None:
     outcomes = SyntheticSite(seed=1, pages=10).manifest()["outcomes"]
 
-    assert (outcomes["nested_divs"], outcomes["ends_worker"], outcomes["server_error"]) == (
-        {"status_code": 200, "parsed": 0, "parse_error": "parse_timeout"},
-        {"status_code": 200, "parsed": 0, "parse_error": "worker_crashed"},
-        {"status_code": 500, "parsed": 0, "parse_error": None},
-    )
+    fetched = {"fetch_state": "fetched", "fetch_error": None}
+    assert {kind: outcomes[kind] for kind in LOSES_LINKS} == {
+        "nested_divs": {**fetched, "status_code": 200, "parsed": 0, "parse_error": "parse_timeout"},
+        "ends_worker": {
+            **fetched,
+            "status_code": 200,
+            "parsed": 0,
+            "parse_error": "worker_crashed",
+        },
+        "server_error": {**fetched, "status_code": 500, "parsed": 0, "parse_error": None},
+        "reset": {
+            "fetch_state": "error",
+            "fetch_error": "connection_error",
+            "status_code": None,
+            "parsed": 0,
+            "parse_error": None,
+        },
+    }
+
+
+def test_a_reset_page_resets_its_connection_inside_the_body(fixture_site: StartSite) -> None:
+    site = SyntheticSite(seed=1, pages=20, fanout=4, shares={Fault.RESET: 1.0})
+    reset = next(n for n in range(20) if site.fault(n) is Fault.RESET)
+    server = fixture_site(site.as_site())
+
+    connection = connect(server.base_url)
+    try:
+        got = fetch(connection, page_path(reset))
+    finally:
+        connection.close()
+
+    assert got.status == RESET
 
 
 # Renders a few Pages of every kind and the manifest, and prints one digest of them all.
