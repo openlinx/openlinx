@@ -4,7 +4,7 @@ from spider.rules.model import NO_ROWS, Rule
 
 _INTERNAL_4XX_SQL = """SELECT id AS url_id, json_object('status_code', status_code) AS detail
 FROM urls
-WHERE status_code BETWEEN 400 AND 499"""
+WHERE is_internal = 1 AND status_code BETWEEN 400 AND 499"""
 
 INTERNAL_4XX = Rule(
     id="internal-4xx",
