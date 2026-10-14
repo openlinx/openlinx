@@ -221,3 +221,25 @@ def test_handlers_get_the_outputs_of_the_extractors_that_did_not_fail(
         "JOIN urls ON urls.id = test_outputs.url_id WHERE urls.url IN (?, ?) ORDER BY urls.id",
         [server.url("/boom"), server.url("/ok")],
     ) == [(server.url("/boom"), "found"), (server.url("/ok"), "exploding,found")]
+
+
+def test_parse_failures_are_counted_in_one_warning(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/boom">1</a> <a href="/2/boom">2</a>'),
+                "/boom": Page(body="<p>1</p>"),
+                "/2/boom": Page(body="<p>2</p>"),
+            }
+        )
+    )
+
+    result = _crawl(
+        temp_workspace, server.url("/"), _with_extractors(Extractor("exploding", _exploding))
+    )
+
+    assert [
+        (warning["code"], warning["details"]["count"]) for warning in result.to_json()["warnings"]
+    ] == [("parse_failed", 2)]

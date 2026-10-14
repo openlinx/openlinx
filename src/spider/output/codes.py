@@ -157,6 +157,13 @@ INVALID_PATTERN = _declare(
     ExitCode.USAGE,
     "A URL pattern that is not a valid Python regular expression; details.pattern holds it.",
 )
+PARSE_FAILED = _declare(
+    "parse_failed",
+    "warning",
+    None,
+    "A registered extractor raised an error, so a Page was recorded without its output; "
+    "details.count says for how many URLs, details.first_url for which first.",
+)
 WORKSPACE_NESTED = _declare(
     "workspace_nested", "warning", None, "The new Workspace is inside another Workspace."
 )

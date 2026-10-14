@@ -19,6 +19,7 @@ from spider.crawl.pages import InProcessExecutor, PageSettings
 from spider.crawl.scope import ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import InvalidUrl, InvalidUrlReason, NormalizedUrl, parse_seed
+from spider.crawl.warning_log import WarningLog
 from spider.output.codes import INVALID_PATTERN, INVALID_URL
 from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
@@ -105,25 +106,6 @@ class CrawlResult:
         }
 
 
-class _WarningLog:
-    """The Crawl's Reporter: passes everything on, and keeps the warnings for the result (D10)."""
-
-    def __init__(self, reporter: Reporter) -> None:
-        self._reporter = reporter
-        self._warnings: list[Diagnostic] = []
-
-    @property
-    def warnings(self) -> tuple[Diagnostic, ...]:
-        return tuple(self._warnings)
-
-    def warn(self, diagnostic: Diagnostic) -> None:
-        self._warnings.append(diagnostic)
-        self._reporter.warn(diagnostic)
-
-    def event(self, name: str, **data: Any) -> None:
-        self._reporter.event(name, **data)
-
-
 def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     """Validation and config resolution, before anything is created (design D11)."""
     seed = parse_seed(request.seed)
@@ -166,7 +148,7 @@ def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
 
 
 def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter, hooks: Hooks) -> CrawlResult:
-    log = _WarningLog(reporter)
+    log = WarningLog(reporter)
     crawl_file = create_crawl(plan.new_crawl, clock, log)
     log.event(
         "crawl_started",
@@ -188,7 +170,7 @@ def start_crawl(plan: CrawlPlan, clock: Clock, reporter: Reporter, hooks: Hooks)
 
 
 async def _crawl(
-    plan: CrawlPlan, crawl_file: CrawlFile, clock: Clock, reporter: Reporter, hooks: Hooks
+    plan: CrawlPlan, crawl_file: CrawlFile, clock: Clock, reporter: WarningLog, hooks: Hooks
 ) -> tuple[datetime, CrawlSummary, UrlCounts]:
     async with _crawl_context(crawl_file, plan.scope, clock, reporter, hooks) as context:
         await run_crawl(context, plan.seed)
@@ -205,7 +187,7 @@ async def _crawl(
 
 @asynccontextmanager
 async def _crawl_context(
-    crawl_file: CrawlFile, scope: ScopeRules, clock: Clock, reporter: Reporter, hooks: Hooks
+    crawl_file: CrawlFile, scope: ScopeRules, clock: Clock, reporter: WarningLog, hooks: Hooks
 ) -> AsyncIterator[CrawlContext]:
     """The one place a Crawl's context is built, and its resources closed (design D15)."""
     # Opening and closing the writer block, so they run off the event loop.

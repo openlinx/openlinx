@@ -6,6 +6,8 @@ from spider.crawl.hooks import Hooks, UrlResult
 from spider.crawl.pages import PreparedPage
 from spider.crawl.scope import ScopeDecision, ScopeRules
 from spider.crawl.urls import NormalizedUrl
+from spider.output.codes import PARSE_FAILED
+from spider.output.diagnostics import Diagnostic
 from spider.store.records import FetchedUrl, NewUrl, QueuedUrl, SkippedUrl
 from spider.store.urls import (
     next_depth,
@@ -59,6 +61,15 @@ async def _crawl_url(context: CrawlContext, queued: QueuedUrl, depth: int) -> No
     parsed = 200 <= response.status_code < 300 and _is_html(response)
     page = await context.pages.prepare(queued.url, response) if parsed else None
     discovered = () if page is None else _followed(page, context.scope, depth + 1)
+    if page is not None and page.parse_error is not None:
+        context.reporter.count(
+            Diagnostic.of(
+                PARSE_FAILED,
+                f"An extractor failed on {queued.url} ({page.parse_error_message}); the Page "
+                "was recorded without its output, and its Links were followed.",
+            ),
+            queued.url,
+        )
     result = UrlResult(
         url_id=queued.id,
         url=queued.url,
