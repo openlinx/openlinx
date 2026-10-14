@@ -387,6 +387,11 @@ pages = public_table(
         "without one, or when the Page is not analysed.",
     ),
     Column(
+        "title_2_length",
+        Integer,
+        comment="The length of title_2 in Unicode code points; NULL exactly when title_2 is.",
+    ),
+    Column(
         "title_count",
         Integer,
         comment="The number of title elements outside svg and math; NULL when the Page is not "
