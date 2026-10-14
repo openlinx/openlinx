@@ -37,7 +37,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | done |
 | 017 | `017-speed-up-crawl-writer` | `crawl-store` (modified) | none | done |
 | 018 | `018-add-schema-conventions` | `crawl-store` (modified) | `schema` (`indexes`) | done |
-| 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | planned |
+| 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | in progress |
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned, min |
 | 030 | `030-add-page-data` | `page-data` | none (data only) | planned, min |
 | 040 | `040-add-rules` | `rules` | `rules` | planned, 15 Rules |

@@ -14,7 +14,7 @@ A Skill teaches the agent when and how to use each Command. The tool itself neve
 ## Status
 
 Pre-release: there is no release yet.
-- **Progress:** the scaffold (`000-scaffold-project`), `010-add-workspace-and-cli-contract` and `015-add-crawl-store` are done and archived: Workspaces, `spider.toml` settings, `spider init`, `spider commands`, the CLI contract that every later Command follows, and the crawl store: one SQLite file per Crawl with a documented schema, `--crawl` and `spider schema`. Next is `020-add-crawl-core`. There is no crawling yet.
+- **Progress:** done and archived: the scaffold (`000`), Workspaces and the CLI contract (`010`), the crawl store (`015`), the faster crawl writer (`017`) and the schema conventions (`018`). That is `spider init`, `spider commands`, `spider schema`, `--crawl`, and one SQLite file per Crawl with a documented schema. `020-add-crawl-core` is in progress: its first part is merged, so `spider crawl <url>` crawls a site in the foreground. [ROADMAP.md](ROADMAP.md) says where the build is.
 - **Name:** the product name is still open. `spider` is a placeholder for the command, the Python package, `spider.toml` and the `.spider/` directory of each Workspace.
 
 ## Development quick start
@@ -50,15 +50,16 @@ It prints one JSON document with every Command, its options and output, the exit
 
 ## Learn more
 
+- [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md): how to make a change and open a pull request, for people and coding agents.
 - [ROADMAP.md](ROADMAP.md): the changes planned for v0.1 and v0.1.1, and their build order.
 - [CONTEXT.md](CONTEXT.md): the glossary. Every doc, test and piece of code uses its terms.
 - [docs/architecture.md](docs/architecture.md): how the pieces fit together.
+- [docs/crawling.md](docs/crawling.md): `spider crawl`, its options, and how URLs, Scope and Links work.
 - [docs/crawl-store.md](docs/crawl-store.md): how each Crawl is stored as one SQLite file, and how it is written and read.
 - [docs/schema.md](docs/schema.md): the public schema of a crawl file, for querying it with SQL.
 - [docs/adr/](docs/adr/): the decisions behind them.
 - [docs/testing.md](docs/testing.md): how everything is tested.
 - [docs/benchmarks.md](docs/benchmarks.md): measured capacity, and the machine it was measured on.
-- [CONTRIBUTING.md](CONTRIBUTING.md): setting up, running the checks and making a change.
 
 ## License
 
