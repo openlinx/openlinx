@@ -63,8 +63,9 @@ Seams (docs/testing.md):
 - [ ] 3.2 [Subprocess, Windows in CI] Drive "A Crawl ended with TerminateProcess is reported as interrupted (Windows)".
 - [ ] 3.3 [3+6] Drive "The interrupted state is recorded": the `crawl_runs.end_state` column.
 - [ ] 3.4 [Services + Fake clock] Drive "A stale heartbeat is reported as a warning", with the test process holding the claim through `spider.store.claim`.
-- [ ] 3.5 Docs: document dead-process detection and `heartbeat_stale` in `docs/crawl-control.md`.
-- [ ] 3.6 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [ ] 3.5 [Services] Drive "A Crawl being created is not the latest" (`crawl-store`): `_latest` skips a newest file whose `user_version` is 0 while its claim is held, with the test process holding the claim through `spider.store.claim`; `015`'s "A broken newest file is reported, not skipped" still passes (design D12).
+- [ ] 3.6 Docs: document dead-process detection, `heartbeat_stale` and a Crawl being created in `docs/crawl-control.md`.
+- [ ] 3.7 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. Resume
 
@@ -82,8 +83,8 @@ Seams (docs/testing.md):
 - [ ] 4.12 [3+6] Drive "Each run is recorded": the `ended_at` and `stop_reason` columns of `crawl_runs`.
 - [ ] 4.13 [CLI] Drive "Runs share the stop reasons of the Crawl": `stop_reason` from `020`'s `StopReason`.
 - [ ] 4.14 [Subprocess] Drive "Two resumes at the same time": claim acquisition with a 2-second retry.
-- [ ] 4.15 [Subprocess, Windows in CI] Drive "A killed Crawl can be resumed at once (Windows)".
-- [ ] 4.16 [Subprocess, POSIX in CI] Drive "A killed Crawl can be resumed at once (macOS and Linux)".
+- [ ] 4.15 [Subprocess, Windows in CI] Drive "A killed Crawl can be resumed at once (Windows)", including that no URL `fetched` before the kill is requested again.
+- [ ] 4.16 [Subprocess, POSIX in CI] Drive "A killed Crawl can be resumed at once (macOS and Linux)", with the same check.
 - [ ] 4.17 Docs: document `spider resume` (the Crawl States it accepts, what may change, the URL limit, the proxy variables) in `docs/crawl-control.md`.
 - [ ] 4.18 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
@@ -111,7 +112,7 @@ Seams (docs/testing.md):
 
 ## 6. Change check (v0.1)
 
-- [ ] 6.1 Verify that every `#### Scenario:` that groups 1–5 drive, in `specs/crawl-control/spec.md` and `specs/crawl-store/spec.md`, has exactly one test named after it, with a small script over the test ids. The scenarios of groups 7–11 are checked when their release builds them.
+- [ ] 6.1 Verify that every `#### Scenario:` that groups 1–5 drive, in `specs/crawl-control/spec.md` and `specs/crawl-store/spec.md` (its three new ones included), has exactly one test named after it, with a small script over the test ids. The scenarios of groups 7–11 are checked when their release builds them.
 - [ ] 6.2 [Subprocess] The end-to-end CI test on Windows, macOS and Linux (ROADMAP, 060-min): `crawl --detach` → `status` → `issues`, with a `sql` query while the Crawl is still running, then `stop`, after `050`'s `issues` and `sql`.
 - [ ] 6.3 Verify that the whole suite, including the subprocess scenarios, passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
 - [ ] 6.4 **Guard:** every v0.1 code this change declares (design D14) is listed by `spider commands` with its level and exit code, at the CLI seam. The v0.2 codes join the guard in the slices that raise them.
