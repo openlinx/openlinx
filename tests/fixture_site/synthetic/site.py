@@ -186,15 +186,24 @@ def _number(digits: str, below: int) -> int | None:
     return n if n < below else None
 
 
-def _pool_route(path: str, delay: float) -> Route | None:
-    for pool in SERVED_POOLS:
+def pool_index(path: str) -> tuple[Pool, int] | None:
+    """The pool URL at `path` and its index, or None."""
+    for pool in POOLS:
         prefix, _, suffix = pool.path.partition("{}")
         if path.startswith(prefix) and path.endswith(suffix):
             index = _number(path[len(prefix) : len(path) - len(suffix)], pool.size)
             if index is not None:
-                body = f"{pool.name} {index}".encode()
-                return Bytes(body, content_type=pool.content_type, delay=delay)
+                return pool, index
     return None
+
+
+def _pool_route(path: str, delay: float) -> Route | None:
+    found = pool_index(path)
+    if found is None or found[0] not in SERVED_POOLS:
+        return None
+    pool, index = found
+    body = f"{pool.name} {index}".encode()
+    return Bytes(body, content_type=pool.content_type, delay=delay)
 
 
 def pool_refs(n: int) -> Iterator[tuple[Pool, tuple[int, ...]]]:

@@ -3,6 +3,7 @@
 import http.client
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -381,3 +382,19 @@ def test_the_site_process_tallies_the_requests_it_served() -> None:
         resource_requests=1,
         not_found=1,
     )
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(sys.platform == "win32", reason="Ctrl+C reaches a whole console on Windows")
+def test_the_site_process_outlives_an_interrupt_until_it_is_stopped() -> None:
+    with SiteProcess(SyntheticSite(seed=1, pages=20, shares=NO_FAULTS)) as process:
+        os.kill(process.pid, signal.SIGINT)
+        time.sleep(0.5)
+        connection = connect(process.base_url)
+        try:
+            status = fetch(connection, "/").status
+        finally:
+            connection.close()
+        tally = process.stop()
+
+    assert (status, tally.pages_requested) == (200, 1)

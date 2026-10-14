@@ -1,6 +1,8 @@
 """The synthetic site served from its own process, with a tally of its requests (026 D6)."""
 
 import multiprocessing
+import signal
+import sys
 from dataclasses import dataclass
 from multiprocessing.connection import Connection
 from types import TracebackType
@@ -36,7 +38,8 @@ class SiteProcess:
             self._process.kill()
             raise RuntimeError("The synthetic site's process did not start.")
         self.base_url: str = self._connection.recv()
-        self.pid = self._process.pid
+        assert self._process.pid is not None
+        self.pid: int = self._process.pid
 
     def stop(self) -> Tally:
         self._connection.send(STOP)
@@ -60,6 +63,10 @@ class SiteProcess:
 
 
 def _serve(site: SyntheticSite, connection: Connection) -> None:
+    # Ctrl+C reaches every process of a console: the benchmark stops the site in order instead.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    if sys.platform == "win32":
+        signal.signal(signal.SIGBREAK, signal.SIG_IGN)
     # One byte per Page, saturating, so 500,000 Pages take 0.5 MB however long the run.
     per_page = bytearray(site.pages)
     others = {"resources": 0, "not_found": 0}
