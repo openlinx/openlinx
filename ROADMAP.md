@@ -153,7 +153,7 @@ If a change needs something another change owns, it depends on that change inste
   - The frontier: the `urls` table, deduplicated by its unique URL with no in-memory URL map, dispatched depth by depth in `urls.id` order.
   - **Link discovery and the Link type table**, with `--follow-nofollow` and `--check-external`.
   - Crawl Depth.
-  - **Hooks:** a per-response hook for every recorded URL, whose handlers return rows that the store writes in the URL's unit, and the **post-crawl passes** hook, which runs for `completed` or `stopped` Crawls and is safe to re-run.
+  - **Hooks:** a per-response hook for every URL that reaches a final state when it is dispatched (a URL that only Links that are not followed reach is recorded `skipped` at discovery and reaches no handler, since a later followed Link may still queue it), whose handlers return rows that the store writes in the URL's unit, and the **post-crawl passes** hook, which runs for `completed` or `stopped` Crawls and is safe to re-run.
   - **Design points of 2026-10-05:** guarded Crawl State transitions (one table and check; 060 adds `interrupted`), a `NormalizedUrl` type, writer units defined only in `spider.store.*`, and one Crawl context object.
   - The `[crawl]` settings table, which 022 and 030 extend.
   - Progress events and the result.
