@@ -88,9 +88,9 @@ Seams (docs/testing.md):
 
 ## 6. TLS
 
-- [ ] 6.1 [Fixture] Add HTTPS listeners with a `trustme` CA to the fixture site, which the DNS resolver hook maps from port 443 of a name: one for `site.test`, one with a certificate for `other.test` served as `badcert.test`, and one with a certificate from an untrusted CA. The crawler's TLS setup takes extra trust anchors for the test CA through the context builder (design D5).
-- [ ] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback in `spider.crawl.tls`, and `aiohttp.ClientSSLError` → `tls_error` (design D1).
-- [ ] 6.3 [3+6] Drive "A certificate from an unknown CA is a TLS error".
+- [ ] 6.1 [Fixture] Add HTTPS listeners with a `trustme` CA to the fixture site, which the DNS resolver hook maps from port 443 of a name: one for `site.test`, one with a certificate for `other.test` served as `badcert.test`, one with a certificate from an untrusted CA, and one with a self-signed certificate served as `selfsigned.test`. The crawler's TLS setup takes extra trust anchors for the test CA through the context builder (design D5).
+- [ ] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback in `spider.crawl.tls`, and `aiohttp.ClientSSLError` → `tls_error`, before `020`'s `ClientConnectorError` branch, so `ClientConnectorCertificateError`, a subclass of both, is no longer `connection_error` (design D1). Done when: a [Pure] table maps each aiohttp exception class to its `fetch_error` (`test_each_request_error_has_its_fetch_error`, design Risks).
+- [ ] 6.3 [3+6] Drive "A certificate from an unknown CA is a TLS error". Done when: a self-signed certificate is `tls_error` too, through the OS trust store, on Windows, macOS and Linux in CI (`test_a_self_signed_certificate_is_a_tls_error`, design D5 and Risks).
 - [ ] 6.4 Speed test: measure TLS handshake time with truststore and with certifi on Windows, macOS and Linux. Record the results in `docs/crawling.md`, and change the default path only if truststore is measurably slower (design D5).
 - [ ] 6.5 [CLI] Drive "The HTTP version is a later column" (v0.1): `origins.http_version` declared NULL in every row, with its values and a description that starts with `Filled from v0.2. `. If it is the first later column in the schema, `018`'s guard over derived and later columns switches on its assertion that it saw one.
 - [ ] 6.6 Docs: document TLS trust, the speed-test result and `http_version` (NULL in v0.1) in `docs/crawling.md`.

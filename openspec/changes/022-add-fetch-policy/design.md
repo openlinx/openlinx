@@ -38,7 +38,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 
 ### D1. The aiohttp policy Fetcher
 `aiohttp_fetcher` opens the policy Fetcher in the context builder, from the resolved `CrawlSettings`, behind the same Protocol: one attempt per `fetch`, one hop, `FetchResult | FetchFailure` with nothing raised but cancellation, and the `yarl.URL(url, encoded=True)` request. The fields it adds to `FetchResult` have defaults, so `020`'s call sites and its fake Fetcher keep working. `UrlResult` gains the same row values (`content_encoding`, `size_bytes`, `transferred_bytes`, `redirect_url_id`), which `030`'s handler copies.
-- **Errors:** `TimeoutError`, from which aiohttp's timeouts derive, is `timeout`. `aiohttp.ClientSSLError` (a certificate that does not verify, or another TLS failure) is `tls_error`, tested before `020`'s `ClientConnectorError` branch, which would make it `connection_error`. The rest stay as `020` D8 maps them, a host the resolver cannot encode included (`dns_error`).
+- **Errors:** `TimeoutError`, from which aiohttp's timeouts derive, is `timeout`. `aiohttp.ClientSSLError` is `tls_error`. It covers `ClientConnectorCertificateError`, which aiohttp raises when a certificate does not verify (a self-signed or unknown chain, a wrong name, an expired certificate), and `ClientConnectorSSLError`, for the other TLS failures. `ClientConnectorCertificateError` is a subclass of both `ClientSSLError` and `ClientConnectorError`, and `020`'s `_fetch_error` has only the `ClientConnectorError` branch, where a certificate failure falls through to `connection_error`. So the `ClientSSLError` branch comes first. A table test maps every aiohttp exception class this change meets to its `fetch_error` (`test_each_request_error_has_its_fetch_error`), so the next subclass that an earlier branch would catch fails a test, not a Crawl. The rest stay as `020` D8 maps them, a host the resolver cannot encode included (`dns_error`).
 - **Timeout:** `--timeout` replaces `_REQUEST_DEADLINE_SECONDS` in `aiohttp.ClientTimeout(total=...)`, which covers the body read too, so a stalled or trickling body times out. It also feeds `020`'s `watchdog_seconds`, `max(120, timeout + 30)` (`020` D16).
 - **Identity:** the session's `User-Agent` is built from `spider.naming` and the tool's version, and `--user-agent` replaces it. Its project URL is a `PROJECT_URL` constant next to `APP_NAME` in `spider.naming`, set with the product name (ruled 2026-10-14).
 - **Redirects:** `allow_redirects=False` on every request, as `020`'s Fetcher does already.
@@ -100,6 +100,7 @@ A chain that ends on another registrable domain (SSO, parking pages) only raises
 
 ### D5. TLS trust
 - **The default:** `truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)`, in a module of its own (`spider.crawl.tls`), uses the OS trust store on Windows, macOS and Linux.
+- **A self-signed chain** is in no OS trust store and not in certifi's bundle, so either path refuses it as it refuses an unknown CA: `ssl.SSLCertVerificationError`, which aiohttp raises as `ClientConnectorCertificateError`, recorded as `tls_error` (D1). A test pins it on each OS (task 6.3), since each OS verifies through its own platform API.
 - **The fallback:** if truststore cannot be loaded, `ssl.create_default_context(cafile=certifi.where())`.
 - **Speed test:** a benchmark task measures handshake cost with truststore and with certifi on each OS, and records the result in the docs. If truststore is measurably slower, only the default path changes, not the behaviour.
 - **Shared setup:** the same context is used for requests and robots.txt, and from v0.2 for the ALPN check. `080`'s `doctor` TLS check reuses it.
@@ -133,6 +134,7 @@ Each is added test-first in `tests/fixture_site/` or `tests/support/` by the fir
   - one for `site.test`
   - one whose certificate names `other.test`, served as `badcert.test`
   - one with a certificate from a CA the test never trusts
+  - one with a self-signed certificate (no CA), served as `selfsigned.test`, made with `cryptography`, which `trustme` already brings
   - **(v0.2)** one that selects `h2`, and one that offers only `http/1.1`
 - **Response sequences,** a new route kind: for example 503 once and then 200.
 - **Stalled and trickling bodies,** a new route option: the hostile fixtures that `020` D16 leaves to this change, with the huge page (`LargeFile`) and the compressed one.
@@ -192,7 +194,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
 - [A developer's or CI machine's proxy variables leak into tests] → `000`'s proxy isolation removes them before every test, so the fixture site is never proxied unless a scenario sets them.
 - [`response_headers` takes a large share of a 500k-URL crawl file] → `026`'s 500k run reports its share; above 10%, the table keeps Internal URLs only (decided 2026-10-11).
 - [A retry waiting for `Retry-After` (up to 120 s) keeps its URL task, and its place under `020`'s global cap] → The host pause makes that host's other requests wait anyway, and the cap of 20–100 tasks leaves room for other hosts.
-- [Tests of this change named after no scenario, which the scenario count of task 8.1 ignores] → `test_a_trickling_body_times_out` (task 3.6), `test_a_location_that_is_no_http_url_has_no_target` (task 4.3), `test_a_compressed_body_is_capped_after_decoding` (task 5.5) and the replay test of `spider.store.response_headers` (task 7.1).
+- [Tests of this change named after no scenario, which the scenario count of task 8.1 ignores] → `test_a_trickling_body_times_out` (task 3.6), `test_a_location_that_is_no_http_url_has_no_target` (task 4.3), `test_a_compressed_body_is_capped_after_decoding` (task 5.5), `test_each_request_error_has_its_fetch_error` (task 6.2), `test_a_self_signed_certificate_is_a_tls_error` (task 6.3) and the replay test of `spider.store.response_headers` (task 7.1).
 
 ## Migration Plan
 
