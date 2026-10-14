@@ -177,6 +177,13 @@ SEED_OUT_OF_SCOPE = _declare(
     "The Seed is outside its own Scope: it matches an --exclude pattern, or no --include "
     "pattern; details.seed holds it.",
 )
+MAX_URLS_REACHED = _declare(
+    "max_urls_reached",
+    "warning",
+    None,
+    "The Crawl reached --max-urls and stopped with URLs left queued; the hint is the command "
+    "that continues it with a higher limit.",
+)
 SEED_BASE_MISMATCH = _declare(
     "seed_base_mismatch",
     "warning",

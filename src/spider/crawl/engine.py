@@ -14,8 +14,10 @@ from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
 from spider.crawl.scope import ScopeDecision, apex_seed_named_by_page
 from spider.crawl.urls import NormalizedUrl, url_host
+from spider.naming import APP_NAME
 from spider.output.codes import (
     HANDLER_FAILED,
+    MAX_URLS_REACHED,
     PARSE_FAILED,
     RECORD_FAILED,
     SEED_BASE_MISMATCH,
@@ -124,6 +126,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
                 # The URL limit: what has started ends and is recorded, and nothing more starts.
                 await asyncio.gather(*checks)
                 context.stop.set("max_urls")
+                _warn_of_the_url_limit(context)
                 break
             # Read after every unit submitted so far, so it sees the URLs they discovered.
             depth = await context.writer.run_async(next_depth(depth))
@@ -319,6 +322,20 @@ async def _fetched(
         parse_error_message=parse_error_message,
         discovered=discovered,
         rows=_handler_rows(context, result),
+    )
+
+
+def _warn_of_the_url_limit(context: CrawlContext) -> None:
+    limit = context.settings.max_urls
+    context.reporter.warn(
+        Diagnostic.of(
+            MAX_URLS_REACHED,
+            f"The Crawl reached its limit of {limit} URL requests, so it stopped with URLs left "
+            "queued.",
+            # The command itself, as an agent runs it: twice the limit is one higher value.
+            hint=f"{APP_NAME} resume --crawl {context.crawl_file.id} --max-urls {2 * (limit or 1)}",
+            details={"max_urls": limit},
+        )
     )
 
 

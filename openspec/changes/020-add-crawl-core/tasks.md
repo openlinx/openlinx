@@ -244,7 +244,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 9.6 Drive "Resources are checked beyond the depth limit" at seam 3+6.
 - [x] 9.7 Drive "The Crawl stops at the limit" at seam 1. Done when: `--max-urls` is declared with `OptionMeta(setting="crawl.max_urls")` and the default `None`, no limit, and the `stopped` end goes through `check_transition` with `max_urls`.
 - [x] 9.8 Drive "URLs not requested stay queued" at seam 3+6.
-- [ ] 9.9 Drive "The limit warning says how to continue" at seam 1. Done when: `max_urls_reached` is declared, with a hint built from `spider.naming`.
+- [x] 9.9 Drive "The limit warning says how to continue" at seam 1. Done when: `max_urls_reached` is declared, with a hint built from `spider.naming`.
 - [ ] 9.10 Drive "The limit holds under concurrency" at seam 3. Done when: requests in flight count toward the limit.
 - [ ] 9.11 **Guard:** "There is no limit by default" (seam 1) and "No limit is recorded as null" (seam 3+6), a pair.
 - [ ] 9.12 Drive "A limit below one is rejected" at seam 1.
