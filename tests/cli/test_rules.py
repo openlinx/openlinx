@@ -9,6 +9,8 @@ import pytest
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.cli import run_cli, run_cli_process
+from tests.support.crawling import crawled
+from tests.support.crawls import query
 
 GUIDANCE = ("description", "why_it_matters", "how_to_fix")
 HOME_PAGE = Site({"/": Page(body="<title>Home</title>")})
@@ -243,3 +245,13 @@ def test_a_rule_id_in_capitals_gets_the_closest_id(shop: Path) -> None:
     error = run_cli("rules", "list").stderr_json_lines()[-1]
 
     assert error["hint"] == "Did you mean rules.title-too-long?"
+
+
+def test_the_rules_command_prints_the_reproducing_query(fixture_site: StartSite) -> None:
+    crawl_file = crawled(fixture_site(HOME_PAGE).url("/"))
+
+    shown = run_cli("rules", "show", "title-missing").json()["reproduce_sql"]
+
+    assert [(shown,)] == query(
+        crawl_file, "SELECT reproduce_sql FROM rules WHERE id = 'title-missing'"
+    )

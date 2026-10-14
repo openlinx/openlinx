@@ -1,6 +1,6 @@
 """The response_codes Rules (040-add-rules D3, D4)."""
 
-from spider.rules.model import Rule
+from spider.rules.model import NO_ROWS, Rule
 
 INTERNAL_4XX = Rule(
     id="internal-4xx",
@@ -17,6 +17,7 @@ INTERNAL_4XX = Rule(
         "Restore the content, redirect the URL with a 301 to the closest equivalent page, or "
         "change the links that point to it. Answer 410 only for content that is gone for good."
     ),
+    reproduce_sql=NO_ROWS,
 )
 INTERNAL_5XX = Rule(
     id="internal-5xx",
@@ -33,6 +34,7 @@ INTERNAL_5XX = Rule(
         "Find the failure in the server's error log for the URL, fix it, then request the URL "
         "again. A 503 during maintenance should carry a Retry-After header."
     ),
+    reproduce_sql=NO_ROWS,
 )
 
 RULES = (INTERNAL_4XX, INTERNAL_5XX)

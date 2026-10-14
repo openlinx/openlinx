@@ -111,6 +111,7 @@ class RuleRow:
     description: str
     why_it_matters: str
     how_to_fix: str
+    reproduce_sql: str
 
 
 @dataclass(frozen=True)

@@ -203,3 +203,4 @@ One row for each Rule of the catalogue, with the configuration the Crawl was cre
 | `description` | TEXT | no | | | | What the Rule checks. |
 | `why_it_matters` | TEXT | no | | | | Why its Issues matter. |
 | `how_to_fix` | TEXT | no | | | | How to fix its Issues. |
+| `reproduce_sql` | TEXT | no | | | | The Rule's reproducing query: a read-only SELECT over this file that returns its Affected URLs as url_id and detail. |

@@ -1,7 +1,7 @@
 """The titles Rules (040-add-rules D3, D4)."""
 
 from spider.naming import SETTINGS_FILE_NAME
-from spider.rules.model import Rule, Threshold
+from spider.rules.model import NO_ROWS, Rule, Threshold
 
 TITLE_MISSING = Rule(
     id="title-missing",
@@ -18,6 +18,7 @@ TITLE_MISSING = Rule(
         "Add one <title> element to the <head> of the page, with a few words that describe "
         "it and set it apart from the site's other pages."
     ),
+    reproduce_sql=NO_ROWS,
 )
 TITLE_TOO_LONG = Rule(
     id="title-too-long",
@@ -35,6 +36,7 @@ TITLE_TOO_LONG = Rule(
         f"max_chars in {SETTINGS_FILE_NAME} if the site's titles are meant to be longer."
     ),
     thresholds=(Threshold("max_chars", 60, "characters"),),
+    reproduce_sql=NO_ROWS,
 )
 
 RULES = (TITLE_MISSING, TITLE_TOO_LONG)
