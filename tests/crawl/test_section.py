@@ -134,3 +134,27 @@ def test_a_www_seed_whose_canonical_names_the_apex_is_reported(
         ],
         json.loads(crawl_row(result.crawl_file)["scope"])["hosts"],
     ) == ([("seed_base_mismatch", True)], ["www.site.test"])
+
+
+def test_a_www_seed_whose_links_stay_on_www_is_not_reported(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(
+            routes={
+                "/": Page(
+                    body='<a href="http://www.site.test/a">A</a>'
+                    '<a href="http://www.site.test/b">B</a>'
+                ),
+                "/a": Page(body="<p>A</p>"),
+                "/b": Page(body="<p>B</p>"),
+            }
+        ),
+        NO_OTHER_SITE,
+    )
+
+    result = crawl_result("http://www.site.test/", resolver=hosts.resolver)
+
+    assert [
+        warning.code for warning in result.warnings if warning.code == "seed_base_mismatch"
+    ] == []
