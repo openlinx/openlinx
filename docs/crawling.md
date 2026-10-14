@@ -41,7 +41,7 @@ While it runs, the Command writes events to stderr, one JSON object per line, as
 
 | `event` | When | `data` |
 |---|---|---|
-| `crawl_started` | once the crawl file exists, before any other event | `crawl_id`, `crawl_mode`, `seed_count`, `crawl_file` |
+| `crawl_started` | once the crawl file exists, before any other event | `crawl_id`, `crawl_mode`, `seed_count`, `crawl_file`, `parse_workers` (the processes that prepare Pages besides the crawl process; 0 while Pages are prepared in it) |
 
 Warnings are written to stderr as diagnostics when they occur, and kept in the result.
 

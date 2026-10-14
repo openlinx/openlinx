@@ -128,8 +128,14 @@ def _is_internal(scope: ScopeRules, url: NormalizedUrl) -> bool:
 
 
 class PageExecutor(Protocol):
-    # How many prepared or preparing Pages it may hold beyond the requests in flight (D7).
-    backlog: int
+    # Read-only, so a plain attribute or a property both make a PageExecutor.
+    @property
+    def backlog(self) -> int:
+        """How many Pages it may hold beyond the requests in flight (design D7)."""
+
+    @property
+    def workers(self) -> int:
+        """The processes that prepare Pages besides the crawl process (crawl_started)."""
 
     async def start(self, settings: PageSettings) -> None:
         """Once, with the snapshot of the final Scope, before the first prepare (design D9)."""
@@ -143,6 +149,7 @@ class InProcessExecutor:
     """Prepares Pages on the event loop's thread; 026 puts a process pool behind the seam."""
 
     backlog = 0
+    workers = 0
 
     def __init__(self) -> None:
         self._settings: PageSettings | None = None
