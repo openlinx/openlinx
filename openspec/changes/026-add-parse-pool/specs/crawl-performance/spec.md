@@ -26,11 +26,11 @@ The Crawl SHALL run page preparation (parsing, the link extractor and every regi
 - **THEN** it exits with code 0, and `{site}/about` has `parsed` = 1
 
 ### Requirement: Bounded parse queue
-When page preparation falls behind, fetching SHALL wait. At no time SHALL more than the global request cap of `020-add-crawl-core` (`min(100, max(20, 4 × --concurrency))`) + 2 × `parse_workers` Pages be requested but not yet prepared. `--concurrency` limits the requests to one host, so on a single host the bound is `--concurrency` + 2 × `parse_workers`.
+When page preparation falls behind, fetching SHALL wait. At no time SHALL more than the global request cap of `020-add-crawl-core` (`min(100, max(20, 4 × --concurrency))`) + 2 × `parse_workers` Pages be requested but not yet prepared, on one host as on many.
 
 #### Scenario: Fetching waits for slow parsing
 - **WHEN** an extractor added for the test takes 1 second per Page, `/` links to `/p1` to `/p50`, and a Crawl of `{site}/` runs with the default `--concurrency`
-- **THEN** the highest number of Pages requested but not yet prepared is at most 5 + 2 × `parse_workers`
+- **THEN** the highest number of Pages requested but not yet prepared is at most the global request cap (20 at the default `--concurrency`) + 2 × `parse_workers`
 
 ### Requirement: A crashed parse worker is replaced
 When a worker process dies while it prepares a response, the Crawl SHALL:
