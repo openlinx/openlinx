@@ -43,7 +43,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 
 ### D2. The work item and the bounded queue
 - **The work item:** the URL and its `FetchResult`, as `prepare_page` takes them. The result is the `PreparedPage`, as the in-process executor returns it, which the engine hands to the per-response handlers in the crawl process.
-- **Bounded queue:** the engine keeps a semaphore of `concurrency + 2 × n` permits. A permit is taken when a request for a followed URL starts, and given back when its record, or its non-HTML response, is submitted to the writer. Fetching therefore waits whenever page preparation falls behind. Where the permit sits in the engine is settled when `020`'s engine is built.
+- **Bounded queue:** the engine keeps a semaphore of `cap + 2 × n` permits, where `cap` is `020`'s global request cap, `min(100, max(20, 4 × concurrency))`; `--concurrency` itself is a per-host limit, so on one host it bounds the requests first. A permit is taken when a request for a followed URL starts, and given back when its record, or its non-HTML response, is submitted to the writer. Fetching therefore waits whenever page preparation falls behind. Where the permit sits in the engine is settled when `020`'s engine is built.
 
 ### D3. Crash containment
 A worker that dies (a segfault in a native parser, or `os._exit`) closes its pipe and signals its process sentinel. The executor then:

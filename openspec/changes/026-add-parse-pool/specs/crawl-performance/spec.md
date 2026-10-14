@@ -26,7 +26,7 @@ The Crawl SHALL run page preparation (parsing, the link extractor and every regi
 - **THEN** it exits with code 0, and `{site}/about` has `parsed` = 1
 
 ### Requirement: Bounded parse queue
-When page preparation falls behind, fetching SHALL wait. At no time SHALL more than `--concurrency` + 2 × `parse_workers` Pages be requested but not yet prepared.
+When page preparation falls behind, fetching SHALL wait. At no time SHALL more than the global request cap of `020-add-crawl-core` (`min(100, max(20, 4 × --concurrency))`) + 2 × `parse_workers` Pages be requested but not yet prepared. `--concurrency` limits the requests to one host, so on a single host the bound is `--concurrency` + 2 × `parse_workers`.
 
 #### Scenario: Fetching waits for slow parsing
 - **WHEN** an extractor added for the test takes 1 second per Page, `/` links to `/p1` to `/p50`, and a Crawl of `{site}/` runs with the default `--concurrency`

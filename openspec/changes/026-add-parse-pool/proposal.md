@@ -13,7 +13,7 @@
 - **Page preparation moves into `spawn` worker processes of our own** behind `020`'s executor seam, one Page per worker at a time, with one worker per physical core minus 2, at least 1, on every OS. `020`'s extractors run unchanged in the workers; the per-response handlers stay in the crawl process and get the records back.
 - **The settings snapshot reaches each worker once,** as an argument the worker starts with, together with the registered extractors. A work item carries only the fetched response.
 - **`crawl_started` event:** its `data` gains `parse_workers`.
-- **A bounded queue:** when page preparation falls behind, fetching waits. At most `--concurrency` + 2 × `parse_workers` Pages are requested but not yet prepared.
+- **A bounded queue:** when page preparation falls behind, fetching waits. At most `020`'s global request cap + 2 × `parse_workers` Pages are requested but not yet prepared (`--concurrency` + 2 × `parse_workers` on one host).
 - **A crashed worker is replaced.** The URL it was preparing gets `parse_error` = `worker_crashed`, a value `020` already lists, and the Crawl goes on.
 - **A deadline of 30 seconds per Page,** from the moment a worker takes it: a worker over it is killed and replaced, the URL gets `parse_error` = `parse_timeout`, a value `020` lists, and no other Page is charged. It is a constant, with no flag (the user's decision of 2026-10-14, over a depth pre-scan in `020`).
 - **Workers end with their Crawl,** after a normal end, a stop or an interrupt.

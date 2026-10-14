@@ -32,7 +32,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 
 ## 3. Bounded queue and crash containment
 
-- [ ] 3.1 [3+6] Drive "Fetching waits for slow parsing": the permit semaphore of `concurrency + 2 × parse_workers`.
+- [ ] 3.1 [3+6] Drive "Fetching waits for slow parsing": the permit semaphore of `020`'s global request cap + 2 × `parse_workers` (design D2); on the single-host fixture site, `--concurrency` bounds the requests first.
 - [ ] 3.2 [3+6] Drive "A crashed worker is recorded": a dead worker's one Page is `worker_crashed`, and the worker is replaced (design D3).
 - [ ] 3.3 [3+6] Drive "The Crawl continues after a worker crash".
 - [ ] 3.4 [3+6] Drive "A Page that takes too long to prepare is recorded": `PREPARE_DEADLINE_SECONDS`, from the moment a worker takes the Page; the worker over it is killed and replaced, and the URL gets `parse_timeout` (design D8).
