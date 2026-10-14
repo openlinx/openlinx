@@ -995,14 +995,19 @@ def test_closing_waits_for_an_open_read_and_leaves_no_wal(temp_workspace: TempWo
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         writer.run(insert_seed(2, "https://example.com/two"))
         reader.start()
-        reading_seeds.wait(PROCESS_TIMEOUT)
+        read_began = reading_seeds.wait(PROCESS_TIMEOUT)
         started = time.monotonic()
         writer.close()
         closing_took = time.monotonic() - started
     reader.join()
 
     # A read-only connection never checkpoints: once the writer gives up, the WAL stays.
-    assert (closing_took < 5.0, crawl.path.with_name(crawl.path.name + "-wal").exists()) == (
+    assert (
+        read_began,
+        closing_took < 5.0,
+        crawl.path.with_name(crawl.path.name + "-wal").exists(),
+    ) == (
+        True,
         True,
         False,
     )

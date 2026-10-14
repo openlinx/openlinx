@@ -57,7 +57,8 @@ INTERNAL_NO_RESPONSE = Rule(
     applies_to="internal_urls",
     description=(
         "An Internal URL got no HTTP response: a timeout, a DNS, connection or TLS error, an "
-        "answer that was no valid HTTP, or its site's robots.txt failed so it was not requested."
+        "answer that was no valid HTTP, or its site's robots.txt got no response so it was "
+        "not requested."
     ),
     why_it_matters=(
         "Visitors and search engines that follow a link to the URL get nothing at all, and a "

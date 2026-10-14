@@ -1,5 +1,7 @@
 """The units of the Issues pass (040-add-rules D5, D15; seam 2)."""
 
+from dataclasses import replace
+
 from spider.rules.titles import TITLE_MISSING
 from spider.services.hooks import default_hooks
 from spider.store.issues import affected_urls_unit
@@ -26,3 +28,19 @@ def test_the_units_of_the_issues_pass_run_again_the_same(temp_workspace: TempWor
 
 def test_the_issues_pass_comes_last() -> None:
     assert [crawl_pass.name for crawl_pass in default_hooks().passes][-1:] == ["issues"]
+
+
+def test_a_rule_query_ending_in_a_comment_is_run_as_written(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    commented = replace(
+        TITLE_MISSING, reproduce_sql=TITLE_MISSING.reproduce_sql + "\n-- A comment ends it."
+    )
+
+    with CrawlWriter(crawl_file, FakeClock()) as writer:
+        writer.run(affected_urls_unit(commented))
+
+    assert query(crawl_file, "SELECT rule_id, url_id FROM affected_urls") == [
+        ("title-missing", url_id)
+    ]

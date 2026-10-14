@@ -35,14 +35,23 @@ RULE_PAGES = Site(
     {
         "/rules/": Page(
             body='<title>Rules</title><a href="/rules/untitled">Untitled</a> '
-            '<a href="/rules/gone">Gone</a>'
+            '<a href="/rules/gone">Gone</a> <a href="/rules/down">Down</a> '
+            '<a href="/rules/reset">Reset</a>'
         ),
         "/rules/untitled": Page(body="<p>No title here.</p>"),
         "/rules/gone": Status(404, body="Gone", content_type="text/plain"),
+        "/rules/down": Status(503, body="Down", content_type="text/plain"),
+        "/rules/reset": Page(body="<p>" + "x" * 100_000 + "</p>", reset_after=100),
     }
 )
 # Every Rule that fires on RULE_PAGES: neither Page has an h1.
-FIRING_ON_RULE_PAGES = ("h1-missing", "internal-4xx", "title-missing")
+FIRING_ON_RULE_PAGES = (
+    "h1-missing",
+    "internal-4xx",
+    "internal-5xx",
+    "internal-no-response",
+    "title-missing",
+)
 
 
 def test_issue_row_counts_its_affected_urls(
@@ -83,7 +92,7 @@ def test_a_rule_s_query_returns_its_stored_affected_urls(
         for (rule_id,) in query(crawl_file, "SELECT DISTINCT rule_id FROM affected_urls")
     }
 
-    # They fire on /rules/untitled and /rules/gone, so the comparison is not vacuous.
+    # Every slice Rule fires on RULE_PAGES, so the comparison is not vacuous.
     assert (returned, sorted(stored)) == (stored, sorted(FIRING_ON_RULE_PAGES))
 
 
@@ -161,7 +170,7 @@ def test_live_and_materialised_issues_agree(
 
     stored_found = stored_issues(crawl_file, RULES)
 
-    # They fire on /rules/untitled and /rules/gone, so the comparison is not vacuous.
+    # Every slice Rule fires on RULE_PAGES, so the comparison is not vacuous.
     assert (
         live_issues(crawl_file, RULES),
         live,
@@ -192,12 +201,15 @@ def test_client_error_recorded_by_a_crawl(
     )
     crawl_file = crawled(server.url("/"))
 
-    assert [
-        json.loads(detail)
-        for (detail,) in query(
-            crawl_file,
-            "SELECT detail FROM affected_urls JOIN urls ON urls.id = affected_urls.url_id "
-            "WHERE affected_urls.rule_id = 'internal-4xx' AND urls.url = ?",
-            (server.url("/gone"),),
-        )
-    ] == [{"status_code": 404}]
+    assert (
+        query(crawl_file, "SELECT state FROM crawl"),
+        [
+            json.loads(detail)
+            for (detail,) in query(
+                crawl_file,
+                "SELECT detail FROM affected_urls JOIN urls ON urls.id = affected_urls.url_id "
+                "WHERE affected_urls.rule_id = 'internal-4xx' AND urls.url = ?",
+                (server.url("/gone"),),
+            )
+        ],
+    ) == ([("completed",)], [{"status_code": 404}])

@@ -2,6 +2,8 @@
 
 from typing import get_args
 
+from sqlalchemy import text
+
 from spider.rules.registry import RULES
 from spider.store.records import RuleCategory
 
@@ -23,3 +25,11 @@ def test_thresholds_have_unique_names_and_defaults_of_at_least_0() -> None:
         [rule_names for rule_names in names if len(set(rule_names)) != len(rule_names)],
         [default for default in defaults if default < 0],
     ) == ([], [])
+
+
+def test_no_rule_query_holds_a_bind_parameter() -> None:
+    # The pass runs a query through text(), which reads :name, even in a comment or a string,
+    # as a parameter: the query would then differ from the reproduce_sql an agent runs.
+    assert {
+        rule.id: params for rule in RULES if (params := text(rule.reproduce_sql).compile().params)
+    } == {}

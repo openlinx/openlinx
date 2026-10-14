@@ -198,7 +198,8 @@ def _in_catalogue_order[T](by_rule_id: Mapping[str, T], catalogue: Sequence[Rule
 
 
 def _found(rule: Rule) -> Subquery:
-    return text(rule.reproduce_sql).columns(url_id=Integer, detail=Text).subquery()
+    # The line break ends a trailing -- comment before the subquery's closing parenthesis.
+    return text(rule.reproduce_sql + "\n").columns(url_id=Integer, detail=Text).subquery()
 
 
 def _affected_urls(connection: Connection, rule: Rule) -> list[AffectedUrl]:

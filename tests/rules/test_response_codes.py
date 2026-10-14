@@ -23,6 +23,19 @@ def test_external_urls_are_not_internal_urls(temp_workspace: TempWorkspace) -> N
     assert evaluate_rule(crawl_file, INTERNAL_4XX) == []
 
 
+def test_an_internal_url_outside_the_scope_is_an_internal_url(
+    temp_workspace: TempWorkspace,
+) -> None:
+    # A Section Crawl requests the Internal URLs outside its folder that its Pages link to.
+    crawl_file, url_id = crawl_with_url(
+        temp_workspace, "https://example.test/gone", responded(404), in_scope=False
+    )
+
+    assert evaluate_rule(crawl_file, INTERNAL_4XX) == [
+        AffectedUrl(url_id=url_id, detail={"status_code": 404})
+    ]
+
+
 def test_server_error(temp_workspace: TempWorkspace) -> None:
     crawl_file, url_id = crawl_with_url(temp_workspace, "https://example.test/err", responded(503))
 

@@ -67,11 +67,13 @@ def crawl_with_url(
     outcome: Callable[[int], UrlUnit],
     *,
     is_internal: bool = True,
+    in_scope: bool | None = None,
 ) -> tuple[Path, int]:
     """A crawl file whose Seed, https://example.test/, links to `url`, and the URL's id.
 
     `outcome` makes the unit that records how the URL's request ended, from its id, such as
     `responded(404)`; the rows go through the store's own units, as a Crawl writes them.
+    The URL is in the Scope when it is Internal, unless `in_scope` says otherwise.
     """
     crawl = create_any_crawl(temp_workspace)
     target = NormalizedUrl(url)
@@ -82,7 +84,7 @@ def crawl_with_url(
             crawl_depth=1,
             discovered_via="hyperlink",
             is_internal=is_internal,
-            in_scope=is_internal,
+            in_scope=is_internal if in_scope is None else in_scope,
         )
         writer.run(record_fetched(_html(seed_id, discovered=(found,)), {}))
         url_id = writer.run(_url_id(target))
