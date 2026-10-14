@@ -123,3 +123,22 @@ def test_a_nofollow_link_is_not_requested(
     crawl_file = crawled(server.url("/"))
 
     assert _state(crawl_file, server.url("/private")) == [("skipped", "nofollow", "hyperlink")]
+
+
+def test_a_page_level_nofollow_applies_to_every_hyperlink(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(
+                    body='<meta name="robots" content="noindex, nofollow"><a href="/x">X</a>'
+                ),
+                "/x": Page(body="<p>X</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _state(crawl_file, server.url("/x")) == [("skipped", "nofollow", "hyperlink")]

@@ -24,6 +24,11 @@ class RobotsDirectives(msgspec.Struct, frozen=True, kw_only=True):
     x_robots_tag_noindex: bool
     x_robots_tag_nofollow: bool
 
+    @property
+    def nofollow(self) -> bool:
+        """A page-level nofollow, from either source: no hyperlink of the Page is followed."""
+        return self.meta_robots_nofollow or self.x_robots_tag_nofollow
+
 
 def meta_robots_contents(tree: LexborHTMLParser) -> list[str]:
     """The `content` of every `<meta name="robots">`, in document order."""

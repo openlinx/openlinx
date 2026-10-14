@@ -9,10 +9,12 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.decoding import decode_html
+from spider.crawl.directives import RobotsDirectives, meta_robots_contents, robots_directives
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.links import DiscoveredLink, base_url, header_links, links_in_tree
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
+from spider.naming import DEFAULT_ROBOTS_TOKEN
 from spider.store.records import ParseError
 
 _HTML_TYPES = frozenset({"text/html", "application/xhtml+xml"})
@@ -34,6 +36,7 @@ class PageInput(msgspec.Struct, frozen=True, kw_only=True):
     # Of the decoded document, in characters.
     length: int
     links: tuple[DiscoveredLink, ...]
+    directives: RobotsDirectives
     # A reference to the snapshot the process holds, never a copy.
     settings: "PageSettings"
 
@@ -52,10 +55,12 @@ class PageSettings:
 
     scope: ScopeRules
     extractors: tuple[Extractor, ...] = ()
+    robots_token: str = DEFAULT_ROBOTS_TOKEN
 
 
 class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
     links: tuple[DiscoveredLink, ...]
+    directives: RobotsDirectives
     # By extractor name, without the outputs of extractors that failed.
     outputs: tuple[tuple[str, msgspec.Struct], ...] = ()
     parse_error: ParseError | None = None
@@ -76,12 +81,18 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
         is_internal=is_internal,
         first_ordinal=len(links) + 1,
     )
+    directives = robots_directives(
+        meta_robots_contents(tree),
+        [value for name, value in response.headers if name.lower() == "x-robots-tag"],
+        settings.robots_token,
+    )
     page = PageInput(
         url=url,
         status_code=response.status_code,
         headers=response.headers,
         length=len(decoded.text),
         links=tuple(links),
+        directives=directives,
         settings=settings,
     )
     outputs: list[tuple[str, msgspec.Struct]] = []
@@ -98,6 +109,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
             failures.append(f"{extractor.name}: {type(error).__name__}")
     return PreparedPage(
         links=page.links,
+        directives=directives,
         outputs=tuple(outputs),
         parse_error="extractor_error" if failures else None,
         parse_error_message="; ".join(failures) or None,

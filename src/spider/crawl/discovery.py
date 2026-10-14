@@ -15,16 +15,19 @@ _NOT_FOLLOWED: frozenset[LinkType] = frozenset({"amphtml", "mobile_alternate", "
 
 
 def discovered_urls(
-    links: Iterable[DiscoveredLink], scope: ScopeRules, depth: int
+    links: Iterable[DiscoveredLink], scope: ScopeRules, depth: int, *, nofollow: bool = False
 ) -> tuple[NewUrl, ...]:
-    """One row per URL, followed when any of its Links is, in document order (design D5)."""
+    """One row per URL, followed when any of its Links is, in document order (design D5).
+
+    `nofollow` is a page-level nofollow, which applies to every hyperlink of the Page.
+    """
     # A Page names most URLs several times, and each row costs its unit an insert.
     chosen: dict[NormalizedUrl, tuple[DiscoveredLink, SkipReason | None]] = {}
     for link in links:
         # Resources are requested with group 9; until then they are not recorded.
         if link.type not in _FOLLOWED and link.type not in _NOT_FOLLOWED:
             continue
-        reason = _skip_reason(link)
+        reason = _skip_reason(link, nofollow)
         known = chosen.get(link.target)
         # A followed Link gives the URL's provenance; it keeps its first place in the order.
         if known is None or (known[1] is not None and reason is None):
@@ -32,10 +35,10 @@ def discovered_urls(
     return tuple(_new_url(link, reason, scope, depth) for link, reason in chosen.values())
 
 
-def _skip_reason(link: DiscoveredLink) -> SkipReason | None:
+def _skip_reason(link: DiscoveredLink, nofollow: bool) -> SkipReason | None:
     if link.type not in _FOLLOWED:
         return "link_type_not_followed"
-    if link.type == "hyperlink" and link.nofollow:
+    if link.type == "hyperlink" and (link.nofollow or nofollow):
         return "nofollow"
     return None
 

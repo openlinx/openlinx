@@ -202,7 +202,8 @@ async def _fetched(
         links = response_links(queued.url, response, context.scope)
     else:
         links = ()
-    discovered = discovered_urls(links, context.scope, queued.crawl_depth + 1)
+    nofollow = page is not None and page.directives.nofollow
+    discovered = discovered_urls(links, context.scope, queued.crawl_depth + 1, nofollow=nofollow)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
