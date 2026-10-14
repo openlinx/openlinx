@@ -10,6 +10,7 @@ from spider.output.codes import RULE_NOT_FOUND
 from spider.output.diagnostics import SpiderError
 from spider.rules.model import Rule
 from spider.rules.registry import RULES
+from spider.store.records import RuleRow
 from spider.workspace.discovery import resolve_workspace
 from spider.workspace.tables import SettingsTables
 
@@ -85,3 +86,24 @@ def _item(rule: Rule, configured: Mapping[str, Any]) -> dict[str, Any]:
         "why_it_matters": rule.why_it_matters,
         "how_to_fix": rule.how_to_fix,
     }
+
+
+def rule_rows(configured: Mapping[str, Mapping[str, Any]]) -> tuple[RuleRow, ...]:
+    """Every Rule as a Crawl records it, from the [rules.<id>] settings dumped by Rule id."""
+    return tuple(
+        RuleRow(
+            id=rule.id,
+            category=rule.category,
+            issue_type=rule.issue_type,
+            priority=rule.priority,
+            applies_to=rule.applies_to,
+            enabled=configured[rule.id]["enabled"],
+            thresholds={
+                threshold.name: configured[rule.id][threshold.name] for threshold in rule.thresholds
+            },
+            description=rule.description,
+            why_it_matters=rule.why_it_matters,
+            how_to_fix=rule.how_to_fix,
+        )
+        for rule in RULES
+    )

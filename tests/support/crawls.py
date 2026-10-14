@@ -12,7 +12,9 @@ from typing import Any
 from sqlalchemy import Connection, delete, insert
 
 from spider.output.reporter import Collected
+from spider.rules.settings import RulesSettings
 from spider.services.crawls import create_crawl
+from spider.services.rules import rule_rows
 from spider.store.connections import connect
 from spider.store.records import CrawlFile, NewCrawl, SecretNames
 from spider.store.schema import seeds
@@ -42,6 +44,7 @@ def new_crawl(workspace: Workspace) -> NewCrawl:
         config={},
         secret_names=SecretNames(),
         journal_setting="auto",
+        rules=rule_rows(RulesSettings().model_dump(by_alias=True)),
     )
 
 

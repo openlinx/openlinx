@@ -4,6 +4,7 @@ import platform
 import sqlite3
 from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from spider.store.connections import connect, not_writable_name, opening
 from spider.store.ids import Choice, crawl_path, new_crawl_id
 from spider.store.journal import JournalChoice, confirm_journal_mode
 from spider.store.records import CrawlFile, CrawlState, CrawlSummary, NewCrawl, StopReason
-from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
+from spider.store.schema import SCHEMA_VERSION, crawl, metadata, rules, seeds
 from spider.store.transitions import check_transition
 from spider.workspace.creation import as_workspace_not_writable, create_data_folder
 
@@ -150,6 +151,8 @@ def _write_new_file(
                 for position, url in enumerate(request.seeds, start=1)
             ],
         )
+        if request.rules:
+            connection.execute(insert(rules), [asdict(rule) for rule in request.rules])
 
 
 @contextmanager

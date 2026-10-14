@@ -27,8 +27,10 @@ from spider.output.codes import INVALID_PATTERN, INVALID_URL
 from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
+from spider.rules.settings import RulesSettings
 from spider.services.crawls import create_crawl
 from spider.services.hooks import default_page_executor
+from spider.services.rules import rule_rows
 from spider.store.crawls import crawl_summary, record_state
 from spider.store.records import CrawlFile, CrawlSummary, NewCrawl, SecretNames, UrlCounts
 from spider.store.settings import StoreSettings
@@ -130,6 +132,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         config=settings.root.model_dump(mode="json"),
         secret_names=request.secret_names,
         journal_setting=settings.table(StoreSettings).journal_mode,
+        rules=rule_rows(settings.table(RulesSettings).model_dump(by_alias=True)),
         settings_file=settings_file,
     )
     crawl_settings = settings.table(CrawlSettings)

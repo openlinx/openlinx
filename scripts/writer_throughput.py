@@ -405,6 +405,8 @@ def measure(folder: Path, page_count: int) -> dict[str, Any]:
             config={},
             secret_names=SecretNames(),
             journal_setting="auto",
+            # The writer's throughput needs no Rule.
+            rules=(),
         ),
         SystemClock(),
         Collected(),

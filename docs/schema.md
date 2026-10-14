@@ -186,3 +186,20 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | Name | Columns | Unique | Where | Description |
 |---|---|---|---|---|
 | `pages_address` | `address` | yes | | Finding a Page by its display address, and the tie-breaker of keyset paging over Pages. |
+
+## Table `rules`
+
+One row for each Rule of the catalogue, with the configuration the Crawl was created with, which it uses throughout.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `id` | TEXT | no | PK | | | The Rule id, as typed in spider rules show and spider.toml. |
+| `category` | TEXT | no | | | `response_codes`, `security`, `titles`, `meta_descriptions`, `headings`, `canonicals`, `directives`, `content`, `urls`, `images` | The Rule's category. |
+| `issue_type` | TEXT | no | | | `issue`, `warning`, `opportunity` | The Issue Type of the Rule's Issues. |
+| `priority` | TEXT | no | | | `high`, `medium`, `low` | The Priority of the Rule's Issues. |
+| `applies_to` | TEXT | no | | | `internal_urls`, `internal_pages`, `resources` | The population the Rule is evaluated over. |
+| `enabled` | INTEGER | no | | `boolean` | | 1 when the Rule was evaluated in this Crawl. |
+| `thresholds` | TEXT | no | | `json` | | The effective thresholds, as an object of names to integers; {} for a Rule without thresholds. |
+| `description` | TEXT | no | | | | What the Rule checks. |
+| `why_it_matters` | TEXT | no | | | | Why its Issues matter. |
+| `how_to_fix` | TEXT | no | | | | How to fix its Issues. |

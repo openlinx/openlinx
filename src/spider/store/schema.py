@@ -15,14 +15,19 @@ from sqlalchemy import (
     or_,
 )
 
+from spider.naming import APP_NAME, SETTINGS_FILE_NAME
 from spider.store.records import (
+    AppliesTo,
     CrawlMode,
     CrawlState,
     DiscoveredVia,
     FetchError,
     FetchState,
+    IssueType,
     JournalMode,
     ParseError,
+    Priority,
+    RuleCategory,
     SkipReason,
     StopReason,
 )
@@ -74,7 +79,9 @@ def public_tables() -> list[Table]:
     return [table for table in metadata.tables.values() if not table.name.startswith("_")]
 
 
-def public_table(name: str, *columns: Column[Any], comment: str, change: int) -> Table:
+def public_table(
+    name: str, *columns: Column[Any], comment: str, change: int, without_rowid: bool = False
+) -> Table:
     """The one way to declare a public table: STRICT, with the CHECKs its columns' values call for.
 
     STRICT refuses the FLOAT and DOUBLE that `Float` and `Double` declare: a real number is `REAL`.
@@ -87,6 +94,7 @@ def public_table(name: str, *columns: Column[Any], comment: str, change: int) ->
         comment=comment,
         info={"change": change},
         sqlite_strict=True,
+        sqlite_with_rowid=not without_rowid,
     )
 
 
@@ -527,4 +535,57 @@ Index(
         "description": "Finding a Page by its display address, and the tie-breaker of keyset "
         "paging over Pages."
     },
+)
+
+rules = public_table(
+    "rules",
+    Column(
+        "id",
+        Text,
+        primary_key=True,
+        comment=f"The Rule id, as typed in {APP_NAME} rules show and {SETTINGS_FILE_NAME}.",
+    ),
+    Column(
+        "category",
+        Text,
+        nullable=False,
+        comment="The Rule's category.",
+        info={"values": literal_values(RuleCategory)},
+    ),
+    Column(
+        "issue_type",
+        Text,
+        nullable=False,
+        comment="The Issue Type of the Rule's Issues.",
+        info={"values": literal_values(IssueType)},
+    ),
+    Column(
+        "priority",
+        Text,
+        nullable=False,
+        comment="The Priority of the Rule's Issues.",
+        info={"values": literal_values(Priority)},
+    ),
+    Column(
+        "applies_to",
+        Text,
+        nullable=False,
+        comment="The population the Rule is evaluated over.",
+        info={"values": literal_values(AppliesTo)},
+    ),
+    Column("enabled", Flag, nullable=False, comment="1 when the Rule was evaluated in this Crawl."),
+    Column(
+        "thresholds",
+        Json,
+        nullable=False,
+        comment="The effective thresholds, as an object of names to integers; {} for a Rule "
+        "without thresholds.",
+    ),
+    Column("description", Text, nullable=False, comment="What the Rule checks."),
+    Column("why_it_matters", Text, nullable=False, comment="Why its Issues matter."),
+    Column("how_to_fix", Text, nullable=False, comment="How to fix its Issues."),
+    comment="One row for each Rule of the catalogue, with the configuration the Crawl was "
+    "created with, which it uses throughout.",
+    change=40,
+    without_rowid=True,
 )

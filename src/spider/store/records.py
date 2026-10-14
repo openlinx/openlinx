@@ -97,6 +97,22 @@ class SecretNames:
     settings: frozenset[str] = frozenset()
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RuleRow:
+    """A Rule as a Crawl records it: its metadata and its configuration in the Workspace."""
+
+    id: str
+    category: RuleCategory
+    issue_type: IssueType
+    priority: Priority
+    applies_to: AppliesTo
+    enabled: bool
+    thresholds: Mapping[str, int]
+    description: str
+    why_it_matters: str
+    how_to_fix: str
+
+
 @dataclass(frozen=True)
 class NewCrawl:
     workspace: Workspace
@@ -109,6 +125,9 @@ class NewCrawl:
     # store.journal_mode setting would silently ignore it.
     secret_names: SecretNames
     journal_setting: JournalSetting
+    # No default either: a creator that forgot it would record no Rule, and its Crawl would
+    # raise no Issue (040-add-rules D6).
+    rules: Sequence[RuleRow]
     settings_file: Path | None = None
     section_crawl: bool = False
 
