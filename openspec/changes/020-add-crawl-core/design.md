@@ -135,6 +135,8 @@ Two independent decisions:
   - **`is_internal`:** the extractor takes a keyword parameter `is_internal: Callable[[NormalizedUrl], bool]` and imports nothing of `spider.crawl.scope`. Page preparation passes a function over `ScopeRules.decide` from its settings snapshot (D9); seam-4 tests pass a plain function.
 - the page-level robots directives
 
+**`<noscript>`** (the user's decision of 2026-10-14): Links inside a body `<noscript>` are discovered and followed, since a crawler without rendering finds every URL the raw HTML holds; head metadata inside `<noscript>`, such as a robots meta or a canonical declaration, is ignored, as a browser that runs scripts never sees it.
+
 The engine's discovery step consumes them. **`030` enriches** each `DiscoveredLink` with analysis attributes through its own extractor over the same parsed tree, and stores them. It never redefines discovery.
 
 **The Link types** (the rulings of 2026-10-11 on Screaming Frog's ~28 types):
@@ -376,7 +378,7 @@ Boundary doubles used, all from the approved list:
 - [`docs/crawling.md` links the change's delta spec, `openspec/changes/020-add-crawl-core/specs/crawling/spec.md`, which the archive moves] → The archive commit points the link at `openspec/specs/crawling/spec.md`; `tests/test_docs_links.py` fails until it does.
 - [A URL that only unfollowed Links reach is recorded as `skipped` at discovery (`nofollow`, `link_type_not_followed`, D5), so it passes through no dispatch and no handler gets a `UrlResult` for it] → Its state is not final until the Crawl ends, since a later followed Link may re-queue it; `030` stores rows for Pages only, and a later change that needs rows for such URLs reads `urls` in a pass.
 - [7.16's message reported 111.5 → 40.5 µs per `urls` row at 475,063 rows, which read as a cost that grows with the table] → After 7.16 the `urls` insert stays at about 6 µs a row through SQLAlchemy up to about 475,000 rows in a fresh process (026's measurement with the same script); the 40.5 µs of 7.16's message was a measurement under memory pressure.
-- [lexbor parses with scripting off, so the content of `<noscript>` is elements to it, while browsers and Google's renderer read it as text] → A robots meta inside `<noscript>` is not read (task 7.19). A head `<link>` inside `<noscript>` is still a Link: `<link rel="canonical">` is a `misc` Link until 8.12, inside `<noscript>` or not, and 8.12 decides that a canonical inside `<noscript>` is no declaration. Whether the Links of a body `<noscript>` stay discovery hints is a product decision queued for the user; until then they are followed.
+- [lexbor parses with scripting off, so the content of `<noscript>` is elements to it, while browsers and Google's renderer read it as text] → A robots meta inside `<noscript>` is not read (task 7.19). A head `<link>` inside `<noscript>` is still a Link: `<link rel="canonical">` is a `misc` Link until 8.12, inside `<noscript>` or not, and 8.12 decides that a canonical inside `<noscript>` is no declaration. The Links of a body `<noscript>` are discovered and followed, by the user's decision (D5).
 - [Post-crawl passes take only the writer, `Pass.run(writer)`, and `040` needs a clock in them] → A scheduled task gives `Pass.run` one frozen `PassContext(writer, clock)`; nothing in this change may assume that `Pass.run` takes the writer alone.
 
 ## Migration Plan
