@@ -25,6 +25,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 1.6 Docs: create `docs/rules.md` covering the Rule model, what Issue Type and Priority mean, the Issue-type principle with `http-url` as Warning/High (design D3), category and id naming (D12) and how to read `spider rules` output.
 - [x] 1.7 **Guard:** every code this change declares (design D17) is listed by `spider commands` with its level and exit code, at seam 1.
 - [x] 1.8 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [ ] 1.9 Fixes from the approval of group 1, test-first: an option given before a grouped Command's name gets a hint that names that Command (the first argument that is one of the group's Commands, else the default), and a root option such as `--version` gets the root's hint; `spider --help` lists the group and `spider rules --help` exits 0; `build_app` refuses a top-level Command name with a space and a group name that a Command or another group already has (guard, red by mutation); the catalogue guard also checks that threshold defaults are at least 0 and that a Rule's threshold names are unique; two comments that restate the code go, and design Risks lists `test_rule_codes_are_self_described`.
 
 ## 2. Configuration in spider.toml (slice)
 
@@ -126,7 +127,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 8.11 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2, with a Page that responded 404 with an HTML body and `X-Robots-Tag: noindex`, whose `x_robots_tag_noindex` `030` reads from the headers of any Page (its task 6.2). Every Page Rule's query gains the `urls.parsed` = 1 join here, the first slice where it changes an outcome (design D2; moved from group 3).
 - [ ] 8.12 **(v0.2)** Drive "Nofollow from meta robots" at seam 2, and register `nofollow`.
 - [ ] 8.13 **(v0.2)** Drive "Meta refresh used" at seam 2, and register `meta-refresh`.
-- [ ] 8.14 Drive "Catalogue size" (15) and "Rule ids are unique kebab-case" at seam 1, once `noindex`, the last of the 15 v0.1 Rules, is registered; group 9 raises the size to 42 in v0.2.
+- [ ] 8.14 Drive "Catalogue size" (15), and add "Rule ids are unique kebab-case" as a guard (the catalogue guard of task 1.8 already holds unique ids), at seam 1, once `noindex`, the last of the 15 v0.1 Rules, is registered; group 9 raises the size to 42 in v0.2.
 - [ ] 8.15 Docs: add `canonical-to-non-indexable` and `noindex` to the catalogue in `docs/rules.md`, and check that it lists exactly the 15 ids that `spider rules list` returns. **(v0.2)** The other 4 canonical Rules and the other 2 directive Rules.
 - [ ] 8.16 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
