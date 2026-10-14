@@ -77,7 +77,7 @@ The response headers must also be stored, without cookie values, because `page -
   - `020-add-crawl-core`: the Fetcher interface, the engine, the per-host gate, the fake Fetcher and clock, the DNS resolver hook, and the `urls`/`origins` tables.
   - `015-add-crawl-store`: whole and partial redaction, and secret settings.
   - `017-speed-up-crawl-writer`: the writer through which `020`'s units run, and its unit contract.
-  - `018-add-schema-conventions`: the declaration helper and the schema contract test.
+  - `018-add-schema-conventions`: `public_table()` and the schema contract test.
   - `010-add-workspace-and-cli-contract`: settings and exit codes.
   - `000-scaffold-project`: the fixture site harness.
 - **Used by:**

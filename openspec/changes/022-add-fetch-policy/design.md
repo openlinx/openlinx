@@ -11,7 +11,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - the `urls` and `origins` tables, the depth barrier, and the writer unit per URL
 - **`015-add-crawl-store`** redacts secrets, both whole values and partial ones such as `Cookie: ***` and `user:***@proxy`.
 - **`017-speed-up-crawl-writer`** gives the writer that `020`'s unit per URL goes through. A unit may run twice, so the units of this change follow its D7 contract, including the loop walk of D2.
-- **`018-add-schema-conventions` and ADR-0005** set the schema rules. Every column, index and table of this change is declared through `018`'s declaration helper (D10).
+- **`018-add-schema-conventions` and ADR-0005** set the schema rules. Every column, index and table of this change is declared through `018`'s `public_table()` (D10).
 - **`010-add-workspace-and-cli-contract`** takes settings only from flags and `spider.toml`, never from environment variables.
 - **ADR-0001:** aiohttp has no HTTP/2, so `http_version` is measured with an ALPN handshake.
 - **`000-scaffold-project`** leaves HTTPS, virtual hosts and gzip on the fixture site to this change.
@@ -99,7 +99,7 @@ Each is added test-first in `tests/fixture_site/` by the first slice that needs 
 - **A small forward proxy** helper for the `--proxy` scenarios.
 
 ### D10. The schema under ADR-0005
-This change adds to `020`'s tables and adds one of its own, all through `018`'s declaration helper (`STRICT`, and CHECKs from the declared values and flags).
+This change adds to `020`'s tables and adds one of its own, all through `018`'s `public_table()` (`STRICT`, and CHECKs from the declared values and flags).
 - **`urls` columns:**
   - `attempt_count` (ADR-0005 rule 5: a count ends with `_count`), NOT NULL with a default of 0, so the inserts of `020`'s units need no change
   - `redirect_location`, the raw header text
@@ -133,7 +133,7 @@ Argument errors, such as `--header` without a colon, use `010`'s `invalid_value`
   - **The DNS resolver hook:** for virtual hosts.
   - **A local test proxy:** for the `--proxy` scenarios.
   - **The trustme test CA:** passed into the crawler's TLS setup. It is an approved boundary double.
-- **Store contract (6):** every column, index and table is declared through `018`'s helper and documented in `docs/schema.md` by the slice that needs it. `018`'s contract test also compares the index and STRICT.
+- **Store contract (6):** every column, index and table is declared through `018`'s `public_table()` and documented in `docs/schema.md` by the slice that needs it. `018`'s contract test also compares the index and STRICT.
 
 ## Risks / Trade-offs
 

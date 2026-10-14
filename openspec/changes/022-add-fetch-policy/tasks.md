@@ -6,7 +6,7 @@ Each task below is one vertical TDD slice and one commit. It is done when:
 3. ruff, the strict type checker and the full suite (with the coverage gate) pass
 4. the commit message names the scenario
 
-A slice that needs a new column, index or table adds it through `018`'s declaration helper (STRICT, and CHECKs from the declared values), with its description, and updates `docs/schema.md` in the same commit. The enumeration values this change writes are already listed by `020` (design D10).
+A slice that needs a new column, index or table adds it through `018`'s `public_table()` (STRICT, and CHECKs from the declared values), with its description, and updates `docs/schema.md` in the same commit. The enumeration values this change writes are already listed by `020` (design D10).
 
 Seams (docs/testing.md):
 - **[Pure]**: seam 4, pure-logic modules
@@ -102,7 +102,7 @@ Seams (docs/testing.md):
 
 ## 7. Response headers
 
-- [ ] 7.1 [3+6] Drive "Response headers are stored as received", and [CLI] "Columns of response_headers", a pair: the `response_headers` table, declared through `018`'s helper with `url_id` as its primary key and a declared reference, and no secondary index.
+- [ ] 7.1 [3+6] Drive "Response headers are stored as received", and [CLI] "Columns of response_headers", a pair: the `response_headers` table, declared through `018`'s `public_table()` with `url_id` as its primary key and a declared reference, and no secondary index.
 - [ ] 7.2 [3+6] Drive "A cookie value is not stored": `Set-Cookie` values become `***` before storage.
 - [ ] 7.3 [Pure] Drive "A Cookie header is redacted pair by pair".
 - [ ] 7.4 Docs: document `response_headers` and the cookie redaction format in `docs/crawling.md`.
