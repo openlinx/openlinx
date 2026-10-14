@@ -10,7 +10,7 @@ from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.decoding import decode_html
 from spider.crawl.fetcher import FetchResult
-from spider.crawl.links import DiscoveredLink, base_url, links_in_tree
+from spider.crawl.links import DiscoveredLink, base_url, header_links, links_in_tree
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import ParseError
@@ -66,11 +66,15 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     """Decodes and parses once; the link extractor and later extractors share the tree."""
     decoded = decode_html(response.body, response.header("Content-Type"))
     tree = LexborHTMLParser(decoded.text)
-    links = links_in_tree(
+    is_internal = partial(_is_internal, settings.scope)
+    # The header Links come first, as 030's ordinals count them (design D5).
+    links = header_links(response.headers, url, is_internal=is_internal)
+    links += links_in_tree(
         tree,
         base=base_url(tree, url, decoded.encoding),
         encoding=decoded.encoding,
-        is_internal=partial(_is_internal, settings.scope),
+        is_internal=is_internal,
+        first_ordinal=len(links) + 1,
     )
     page = PageInput(
         url=url,
@@ -98,6 +102,13 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
         parse_error="extractor_error" if failures else None,
         parse_error_message="; ".join(failures) or None,
     )
+
+
+def response_links(
+    url: NormalizedUrl, response: FetchResult, scope: ScopeRules
+) -> tuple[DiscoveredLink, ...]:
+    """The Links of a response that is not parsed: those of its headers (design D5)."""
+    return tuple(header_links(response.headers, url, is_internal=partial(_is_internal, scope)))
 
 
 def _is_internal(scope: ScopeRules, url: NormalizedUrl) -> bool:

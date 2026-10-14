@@ -8,7 +8,7 @@ from spider.crawl.context import CrawlContext
 from spider.crawl.discovery import discovered_urls
 from spider.crawl.fetcher import FetchFailure, FetchResult, Request
 from spider.crawl.hooks import UrlResult
-from spider.crawl.pages import is_html_type
+from spider.crawl.pages import is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import NormalizedUrl, url_host
@@ -192,11 +192,17 @@ async def _fetched(
 ) -> FetchedUrl:
     content_type = response.header("Content-Type")
     # An External URL or one outside the Scope is checked, never parsed (design D5).
-    parsed = decision.in_scope and 200 <= response.status_code < 300 and is_html_type(content_type)
+    followed = decision.in_scope and 200 <= response.status_code < 300
+    parsed = followed and is_html_type(content_type)
     page = await context.pages.prepare(queued.url, response) if parsed else None
-    discovered = (
-        () if page is None else discovered_urls(page.links, context.scope, queued.crawl_depth + 1)
-    )
+    if page is not None:
+        links = page.links
+    elif followed:
+        # The Link and Refresh headers of an in-Scope 2xx response count, parsed or not.
+        links = response_links(queued.url, response, context.scope)
+    else:
+        links = ()
+    discovered = discovered_urls(links, context.scope, queued.crawl_depth + 1)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:

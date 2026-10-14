@@ -1,7 +1,7 @@
 """The link extractor (020-add-crawl-core D5)."""
 
 import re
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from urllib.parse import urljoin
 
 import msgspec
@@ -25,6 +25,13 @@ _QUERY_OR_FRAGMENT = re.compile(r"[?#]")
 _ASCII_TOKEN = re.compile(r"[^\t\n\x0c\r ]+")
 _WHITESPACE = "\t\n\x0c\r "
 _DIGITS = "0123456789"
+# A link-value of RFC 8288: a target in angle brackets, then its parameters, each a name
+# with an optional token or quoted string; a comma outside them ends the value.
+_LINK_VALUE = re.compile(
+    r'<([^>]*)>((?:[\t ]*;[\t ]*[^;,=\t ]+[\t ]*(?:=[\t ]*(?:"(?:[^"\\]|\\.)*"|[^;,]*))?)*)'
+)
+_LINK_PARAM = re.compile(r';[\t ]*([^;,=\t ]+)[\t ]*(?:=[\t ]*("(?:[^"\\]|\\.)*"|[^;,]*))?')
+_QUOTED_PAIR = re.compile(r"\\(.)")
 # Elements with one URL attribute; link, img, video, source and track have rules of their own.
 _SINGLE_REFERENCES: Mapping[str, tuple[LinkType, str]] = {
     "a": ("hyperlink", "href"),
@@ -84,12 +91,78 @@ def base_url(tree: LexborHTMLParser, url: NormalizedUrl, encoding: str) -> str:
     return _base(tree, url, query_codec(encoding))
 
 
+def header_links(
+    headers: Iterable[tuple[str, str]],
+    url: NormalizedUrl,
+    *,
+    is_internal: Callable[[NormalizedUrl], bool],
+) -> list[DiscoveredLink]:
+    """The Links of the `Link` and `Refresh` headers, in the order received (design D5)."""
+    links: list[DiscoveredLink] = []
+    for name, value in headers:
+        for link_type, raw, rel in _header_references(name.lower(), value):
+            # Against the response URL: a header knows no base href.
+            target = _resolved(url, raw, None)
+            if target is None:
+                continue
+            links.append(
+                DiscoveredLink(
+                    type=link_type,
+                    target=target,
+                    raw=raw,
+                    element=None,
+                    attribute=None,
+                    rel=rel,
+                    nofollow="nofollow" in rel,
+                    declared_in="http_header",
+                    ordinal=len(links) + 1,
+                    is_internal=is_internal(target),
+                )
+            )
+    return links
+
+
+def _header_references(name: str, value: str) -> Iterator[tuple[LinkType, str, tuple[str, ...]]]:
+    if name == "refresh":
+        raw = refresh_url(value)
+        if raw is not None:
+            yield "http_refresh", raw, ()
+    elif name == "link":
+        for link_value in _LINK_VALUE.finditer(value):
+            params = {
+                param[1].lower(): _unquoted(param[2] or "")
+                for param in _LINK_PARAM.finditer(link_value[2])
+            }
+            rel = tuple(_ASCII_TOKEN.findall(params.get("rel", "").lower()))
+            link_type = _header_link_type(rel, params)
+            if link_type is not None:
+                yield link_type, link_value[1], rel
+
+
+def _header_link_type(rel: tuple[str, ...], params: Mapping[str, str]) -> LinkType | None:
+    if "canonical" in rel:
+        return "canonical"
+    if not _PAGINATION.isdisjoint(rel):
+        return "pagination"
+    if "alternate" in rel and "hreflang" in params:
+        return "hreflang"
+    return None
+
+
+def _unquoted(value: str) -> str:
+    value = value.strip("\t ")
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return _QUOTED_PAIR.sub(r"\1", value[1:-1])
+    return value
+
+
 def links_in_tree(
     tree: LexborHTMLParser,
     *,
     base: str,
     encoding: str,
     is_internal: Callable[[NormalizedUrl], bool],
+    first_ordinal: int = 1,
 ) -> list[DiscoveredLink]:
     """The Links of a parsed document, for page preparation, which parses once (design D9)."""
     codec = query_codec(encoding)
@@ -111,7 +184,7 @@ def links_in_tree(
                     rel=rel,
                     nofollow="nofollow" in rel,
                     declared_in="html",
-                    ordinal=len(links) + 1,
+                    ordinal=first_ordinal + len(links),
                     is_internal=is_internal(target),
                 )
             )
