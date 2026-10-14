@@ -67,7 +67,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 4.1 Drive "Client error" at seam 2, over `urls` rows: `020`'s `is_internal`, `fetch_state` and `status_code`. The `internal_urls` population reads `blocked_by_robots_txt` only from task 7.1, after `020` task 10.5 declares the column (design D2).
 - [x] 4.2 Drive "External URLs are not Internal URLs" at seam 2.
 - [x] 4.3 Drive "Client error recorded by a Crawl" at seam 3+6, with an Internal URL that is not a Page. `020`'s Crawl records it, Internal and not parsed, since group 6 of `020`.
-- [ ] 4.4 Drive "Server error" at seam 2, with `internal-5xx`'s query (registered in task 1.1).
+- [x] 4.4 Drive "Server error" at seam 2, with `internal-5xx`'s query (registered in task 1.1).
 - [ ] 4.5 Drive "No response" at seam 2, over `020`'s `fetch_error`, and register `internal-no-response`.
 - [ ] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
 - [ ] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1`, replacing the query that returns no rows, which `h1-missing` carries from task 3.3 (registered in task 2.2).
