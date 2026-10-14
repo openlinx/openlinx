@@ -10,3 +10,4 @@ class PageRow:
     url_encoded_address: str
     # From the HTML: NULL for a Page that is not analysed (design D2).
     title_1: str | None = None
+    title_1_length: int | None = None
