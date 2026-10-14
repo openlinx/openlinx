@@ -59,6 +59,27 @@ def test_missing_title() -> None:
     assert (row.title_count, row.title_1, row.title_1_length) == (0, None, None)
 
 
+def test_meta_description_is_normalised() -> None:
+    row = page_row('<meta name="Description" content="  Buy   shoes ">')
+
+    assert (row.meta_description_1, row.meta_description_1_length) == ("Buy shoes", 9)
+
+
+def test_a_meta_description_without_content_is_empty() -> None:
+    row = page_row('<meta name=" description ">')
+
+    assert (row.meta_description_1, row.meta_description_1_length) == ("", 0)
+
+
+def test_a_meta_description_in_noscript_is_ignored() -> None:
+    row = page_row(
+        '<head><noscript><meta name="description" content="No script"></noscript>'
+        '<meta name="description" content="Main"></head>'
+    )
+
+    assert row.meta_description_1 == "Main"
+
+
 # Fragments that build the documents a parser repairs: unclosed, nested in foreign content,
 # commented out, NUL and stray markup.
 _FRAGMENTS = st.sampled_from(

@@ -163,6 +163,8 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `title_2` | TEXT | yes | | | | The text of the Page's second title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `title_2_length` | INTEGER | yes | | | | The length of title_2 in Unicode code points; NULL exactly when title_2 is. |
 | `title_count` | INTEGER | yes | | | | The number of title elements without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
+| `meta_description_1` | TEXT | yes | | | | The content of the Page's first meta description, whitespace-normalised, the empty string for one without content; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `meta_description_1_length` | INTEGER | yes | | | | The length of meta_description_1 in Unicode code points; NULL exactly when meta_description_1 is. |
 
 ### Indexes
 

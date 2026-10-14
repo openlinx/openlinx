@@ -14,3 +14,5 @@ class PageRow:
     title_2: str | None = None
     title_2_length: int | None = None
     title_count: int | None = None
+    meta_description_1: str | None = None
+    meta_description_1_length: int | None = None

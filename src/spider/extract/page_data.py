@@ -4,7 +4,7 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.pages import Extractor, PageInput
-from spider.extract.text import normalized
+from spider.extract.text import normalized, trimmed
 
 _IGNORED_ANCESTORS = frozenset({"svg", "math", "noscript"})
 
@@ -15,20 +15,42 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     title_2: str | None
     title_2_length: int | None
     title_count: int
+    meta_description_1: str | None
+    meta_description_1_length: int | None
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
-    titles = [
-        normalized(node.text()) for node in tree.css("title") if not _has_ignored_ancestor(node)
-    ]
+    titles = [normalized(node.text()) for node in _page_nodes(tree, "title")]
     first, second = _nth(titles, 0), _nth(titles, 1)
+    description = _nth(_meta_contents(tree, "description"), 0)
     return PageData(
         title_1=first,
         title_1_length=_length(first),
         title_2=second,
         title_2_length=_length(second),
         title_count=len(titles),
+        meta_description_1=description,
+        meta_description_1_length=_length(description),
     )
+
+
+def _page_nodes(tree: LexborHTMLParser, selector: str) -> list[LexborNode]:
+    return [node for node in tree.css(selector) if not _has_ignored_ancestor(node)]
+
+
+def _meta_contents(tree: LexborHTMLParser, name: str) -> list[str]:
+    """The normalised content of each meta element of that name; one without content gives ""."""
+    return [
+        normalized(node.attributes.get("content") or "")
+        for node in _page_nodes(tree, "meta")
+        if _is_named(node, name)
+    ]
+
+
+def _is_named(node: LexborNode, name: str) -> bool:
+    value = trimmed(node.attributes.get("name") or "")
+    # HTML compares attribute values ASCII case-insensitively, so a Kelvin sign is no k.
+    return value.isascii() and value.lower() == name
 
 
 def _nth(texts: list[str], index: int) -> str | None:

@@ -37,7 +37,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 
 ## 3. Meta descriptions and headings (slice)
 
-- [ ] 3.1 Drive "Meta description is normalised" at seam 4, and add `meta_description_1` and `meta_description_1_length`.
+- [x] 3.1 Drive "Meta description is normalised" at seam 4, and add `meta_description_1` and `meta_description_1_length`.
 - [ ] 3.2 Drive "Multiple meta descriptions" at seam 4, and add `meta_description_count`, `meta_description_2` and `meta_description_2_length`.
 - [ ] 3.3 Drive "Meta keywords" at seam 4, and add `meta_keywords_1` and `meta_keywords_1_length`.
 - [ ] 3.4 Drive "Heading text includes nested elements" at seam 4. Add the element-text algorithm (text nodes in document order, without the contents of the skipped elements) and the ten `h1_*` and `h2_*` columns.

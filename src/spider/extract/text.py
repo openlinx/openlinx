@@ -8,4 +8,8 @@ _WHITESPACE_RUN = re.compile(f"[{_ASCII_WHITESPACE}]+")
 
 
 def normalized(text: str) -> str:
-    return _WHITESPACE_RUN.sub(" ", text).strip(_ASCII_WHITESPACE)
+    return trimmed(_WHITESPACE_RUN.sub(" ", text))
+
+
+def trimmed(text: str) -> str:
+    return text.strip(_ASCII_WHITESPACE)
