@@ -1,18 +1,24 @@
 """`spider rules` (040-add-rules, rules)."""
 
+from typing import Annotated, Any
+
+import typer
+
 from spider.cli.meta import CommandGroup, command_meta
 from spider.cli.options import CursorOpt, FieldsOpt, FormatOpt, LimitOpt
 from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from spider.output.writer import Format
-from spider.services.rules import rule_items
+from spider.services.rules import rule_item, rule_items
 
 LIST = "rules list"
+SHOW = "rules show"
 RULE_FIELDS = (
     "id",
     "category",
     "issue_type",
     "priority",
     "applies_to",
+    "thresholds",
     "description",
     "why_it_matters",
     "how_to_fix",
@@ -42,6 +48,18 @@ def list_rules(
     )
 
 
+@command_meta(name=SHOW, output="document", formats=[Format.JSON, Format.TABLE])
+def show_rule(
+    rule_id: Annotated[str, typer.Argument(metavar="ID", help="The Rule id.")],
+    output_format: FormatOpt = Format.JSON,
+) -> dict[str, Any]:
+    """Show one Rule, with the fields of a rules list item."""
+    return rule_item(rule_id)
+
+
 RULES = CommandGroup(
-    "rules", "Describe the Rules that turn a Crawl's data into Issues.", (list_rules,), "list"
+    "rules",
+    "Describe the Rules that turn a Crawl's data into Issues.",
+    (list_rules, show_rule),
+    "list",
 )

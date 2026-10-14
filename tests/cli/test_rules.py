@@ -21,5 +21,24 @@ def test_every_rule_has_its_guidance() -> None:
     assert [item["id"] for item in items if not all(item[key] for key in GUIDANCE)] == []
 
 
+def test_show_a_rule_with_thresholds() -> None:
+    result = run_cli("rules", "show", "title-too-long")
+    rule = result.json()
+
+    assert (
+        result.exit_code,
+        rule["category"],
+        rule["issue_type"],
+        rule["priority"],
+        rule["thresholds"],
+    ) == (
+        0,
+        "titles",
+        "opportunity",
+        "medium",
+        {"max_chars": {"value": 60, "default": 60, "unit": "characters"}},
+    )
+
+
 def test_the_bare_group_lists_the_rules() -> None:
     assert run_cli("rules").json() == run_cli("rules", "list").json()
