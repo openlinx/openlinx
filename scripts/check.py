@@ -20,7 +20,8 @@ PYTHON_GATES: list[list[str]] = [
     # alone misses the others' errors. A cache per platform keeps the passes warm.
     ["mypy", "--platform", "linux", "--cache-dir", ".mypy_cache/linux"],
     ["mypy", "--platform", "darwin", "--cache-dir", ".mypy_cache/darwin"],
-    ["pytest"],
+    # The slowest tests, so a gate's log names where its time went.
+    ["pytest", "--durations=15"],
 ]
 
 
