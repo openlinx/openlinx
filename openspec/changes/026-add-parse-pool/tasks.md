@@ -29,7 +29,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 
   Done when: the pool executor in `spider.crawl.parse_pool` implements `020`'s `PageExecutor.prepare(url, response)` with its own `spawn` workers, one Page per worker at a time; each worker starts with the settings snapshot and the registered extractors, and a work item carries only the response (design D1); extractors and handlers are unchanged.
 - [ ] 2.2 [CLI] Drive "The number of parse workers is reported": `parse_workers` in `crawl_started`, from the physical core count of design D1. Done when: `psutil` is a runtime dependency, imported in `spider.crawl.parse_pool` only, and `tests/cli/test_startup.py` still passes.
-- [ ] 2.3 [Subprocess, Windows in CI] Drive "Pages are parsed in worker processes on Windows (Windows)".
+- [x] 2.3 [Subprocess, Windows in CI] Drive "Pages are parsed in worker processes on Windows (Windows)".
 - [ ] 2.4 Docs: document the parse pool (start method, worker count, the snapshot sent once when a worker starts, the unchanged extractor interface) in `docs/architecture.md`.
 - [ ] 2.5 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 

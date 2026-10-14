@@ -3,6 +3,7 @@
 import asyncio
 import multiprocessing
 import os
+import sys
 import threading
 import time
 from datetime import UTC, datetime
@@ -28,7 +29,9 @@ from spider.store.records import SecretNames
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.app import settings_tables
+from tests.support.cli import run_cli_process
 from tests.support.crawling import crawl_result, crawled
+from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
 URL = NormalizedUrl("https://site.test/")
@@ -276,3 +279,22 @@ def test_spider_crawl_starts_its_parse_workers(
         watcher.join()
 
     assert len(children) >= 1
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="spawn's Windows path: a new interpreter")
+def test_pages_are_parsed_in_worker_processes_on_windows(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/about">About</a>'), "/about": Page(body="about")})
+    )
+
+    # A real spider process, which the suite's in-process double does not reach.
+    result = run_cli_process("crawl", server.url("/"))
+
+    parsed = query(
+        Path(result.json()["crawl_file"]),
+        "SELECT parsed FROM urls WHERE url = ?",
+        (server.url("/about"),),
+    )
+    assert (result.exit_code, parsed) == (0, [(1,)])
