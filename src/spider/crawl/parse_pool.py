@@ -76,6 +76,7 @@ class PoolExecutor:
 
     def __init__(self, workers: int | None = None) -> None:
         self._count = default_workers() if workers is None else workers
+        self.workers = self._count
         self.backlog = BACKLOG_PER_WORKER * self._count
         self._workers: list[_Worker] = []
         self._idle: deque[_Worker] = deque()

@@ -253,6 +253,8 @@ class ModelExecutor:
     """The direct mode's page preparation: the Page model, never the HTML (design D6)."""
 
     backlog = 0
+    # It prepares in the crawl process.
+    workers = 0
 
     def __init__(self, site: SyntheticSite, *, new_urls_only: bool) -> None:
         self._site = site

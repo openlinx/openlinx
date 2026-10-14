@@ -20,6 +20,16 @@ def test_meta_robots_directives_are_read_case_insensitively() -> None:
     ) == ("NOINDEX, follow", True, False)
 
 
+def test_a_robots_meta_inside_noscript_does_not_apply() -> None:
+    tree = LexborHTMLParser(
+        '<head><noscript><meta name="robots" content="noindex"></noscript></head>'
+    )
+
+    directives = robots_directives(meta_robots_contents(tree), (), DEFAULT_ROBOTS_TOKEN)
+
+    assert (directives.meta_robots, directives.meta_robots_noindex) == (None, False)
+
+
 def test_no_directives_give_nulls_and_no_verdicts() -> None:
     assert robots_directives((), (), DEFAULT_ROBOTS_TOKEN) == RobotsDirectives(
         meta_robots=None,

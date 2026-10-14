@@ -86,6 +86,16 @@ def extract_links(
     return links_in_tree(tree, base=base, encoding=decoded.encoding, is_internal=is_internal)
 
 
+def inside_noscript(node: LexborNode) -> bool:
+    """Parsed with scripting on, as browsers and Google's renderer do, it would be text."""
+    parent = node.parent
+    while parent is not None:
+        if parent.tag == "noscript":
+            return True
+        parent = parent.parent
+    return False
+
+
 def base_url(tree: LexborHTMLParser, url: NormalizedUrl, encoding: str) -> str:
     """What the Page's references resolve against: its base href, else the response URL."""
     return _base(tree, url, query_codec(encoding))
@@ -168,6 +178,9 @@ def links_in_tree(
     codec = query_codec(encoding)
     links: list[DiscoveredLink] = []
     for node in tree.css(_ELEMENTS):
+        # Head metadata inside <noscript> is ignored; other elements there give their Links.
+        if node.tag in ("link", "meta") and inside_noscript(node):
+            continue
         attributes = node.attributes
         rel = tuple(_ASCII_TOKEN.findall((attributes.get("rel") or "").lower()))
         for link_type, attribute, raw in _references(node.tag or "", attributes, rel, node.parent):

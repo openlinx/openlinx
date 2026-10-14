@@ -6,6 +6,8 @@ from collections.abc import Iterable
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
 
+from spider.crawl.links import inside_noscript
+
 # A header value that starts with a name and a colon applies only to the crawler it names.
 _PREFIX = re.compile(r"\s*([^\s:,]+)\s*:")
 # Directives that take a value after a colon, which no user-agent prefix is named after.
@@ -36,6 +38,7 @@ def meta_robots_contents(tree: LexborHTMLParser) -> list[str]:
         node.attributes.get("content") or ""
         for node in tree.css("meta[name]")
         if (node.attributes.get("name") or "").strip().lower() == "robots"
+        and not inside_noscript(node)
     ]
 
 

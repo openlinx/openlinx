@@ -102,3 +102,28 @@ def test_each_link_type_is_followed_or_recorded_as_not_followed(
     html: str, recorded: list[tuple[str, str, str | None]]
 ) -> None:
     assert _recorded(html) == recorded
+
+
+def test_follow_nofollow_follows_every_nofollow_hyperlink_and_only_those() -> None:
+    body = b'<a rel="nofollow" href="/n">N</a><a href="/x">X</a><link rel="icon" href="/i">'
+    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True)
+    scope = scope_rules(SITE)
+
+    honoured = discovered_urls(links, scope, 1, nofollow=True)
+    followed = discovered_urls(links, scope, 1, nofollow=True, follow_nofollow=True)
+
+    assert (
+        [(new.url, new.skip_reason) for new in honoured],
+        [(new.url, new.skip_reason) for new in followed],
+    ) == (
+        [
+            ("http://site.test/n", "nofollow"),
+            ("http://site.test/x", "nofollow"),
+            ("http://site.test/i", "link_type_not_followed"),
+        ],
+        [
+            ("http://site.test/n", None),
+            ("http://site.test/x", None),
+            ("http://site.test/i", "link_type_not_followed"),
+        ],
+    )

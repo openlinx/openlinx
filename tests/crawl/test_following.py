@@ -142,3 +142,38 @@ def test_a_page_level_nofollow_applies_to_every_hyperlink(
     crawl_file = crawled(server.url("/"))
 
     assert _state(crawl_file, server.url("/x")) == [("skipped", "nofollow", "hyperlink")]
+
+
+def test_a_nofollow_target_reached_through_a_followed_link_is_fetched(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a rel="nofollow" href="/p">P</a><a href="/about">About</a>'),
+                "/about": Page(body='<a href="/p">P</a>'),
+                "/p": Page(body="<p>P</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _state(crawl_file, server.url("/p")) == [("fetched", None, "hyperlink")]
+
+
+def test_nofollow_links_are_followed_on_request(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a rel="nofollow" href="/private">Private</a>'),
+                "/private": Page(body="<p>Private</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--follow-nofollow")
+
+    assert _state(crawl_file, server.url("/private")) == [("fetched", None, "hyperlink")]

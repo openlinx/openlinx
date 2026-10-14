@@ -260,6 +260,7 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 
 - **Later Link types:** the Link type enumeration SHALL also list, from v0.1, the types that later releases discover: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap), both from `024-add-list-and-sitemap-modes` (v0.2), and `javascript_redirect` (v1.1, with JavaScript rendering).
 
+- **`<noscript>`:** a `<link>` or `<meta>` element inside `<noscript>` SHALL give no Link, since a browser that runs scripts reads the content of `<noscript>` as text; the other elements inside `<noscript>` SHALL give their Links as anywhere else, since a crawler without rendering finds every URL the raw HTML holds.
 - **Link types that are not requested:** a URL reached only through them SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`.
 - **Provenance:** a URL's `discovered_via` SHALL be how it was first found: `seed`, or the Link type. `found_on_url_id` SHALL point to the URL whose response revealed it. For a URL reached through a Link that is not followed and later through one that is, its `discovered_via`, `found_on_url_id` and `crawl_depth` SHALL be those of the first followed Link. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
 
@@ -952,7 +953,7 @@ While a foreground Crawl runs, the Command SHALL write progress events to stderr
 
 | `event` | When | `data` |
 |---|---|---|
-| `crawl_started` | once, before any other event | `crawl_id`, `crawl_mode`, `seed_count`, `crawl_file` |
+| `crawl_started` | once, before any other event | `crawl_id`, `crawl_mode`, `seed_count`, `crawl_file`, `parse_workers` (the processes that prepare Pages besides the crawl process: 0 in this change, the size of `026-add-parse-pool`'s pool) |
 | `progress` | every 10 seconds, during a network pause too | `crawl_id`, `elapsed_s`, `urls` (`discovered`, `fetched`, `errors`, `skipped`, `queued`), `rate` (URLs requested per second over the last 60 seconds), `paused` (true while the Crawl is paused) |
 | `crawl_paused` | when the Crawl pauses (see "Backstops") | `crawl_id`, `reason` (the `fetch_error` of the request that paused it), `urls` (the URLs whose requests made up the count) |
 | `crawl_resumed` | when a probe answers | `crawl_id`, `duration_s` (the time paused), `outcome` (`outage` or `dead_section`) |
