@@ -11,6 +11,7 @@ A Rule is a deterministic check with fixed guidance. Every Rule has:
 - `applies_to`: the population the Rule checks. `internal_urls` are the Internal URLs that were requested, or that robots.txt disallows; `internal_pages` are the analysed Pages ([page-data.md](page-data.md#analysed-and-non-analysed-pages)); `resources` are the Resources that Pages reference, in v0.2 the images.
 - `thresholds`: the named limits of the Rule, each a non-negative integer with a default and a unit (`characters`, `pixels`, `words`, `kilobytes` or `hops`). A Rule without limits has none.
 - `description`, `why_it_matters` and `how_to_fix`: fixed English guidance, the same in every Crawl, so an agent can explain an Issue without judgement calls.
+- `reproduce_sql`: the Rule's reproducing query, the only form of its condition (see [Checking an Issue with its query](#checking-an-issue-with-its-query)).
 
 v0.1 ships 15 Rules. The other 27 of the catalogue come in v0.2.
 
@@ -31,11 +32,11 @@ Categories are snake_case, such as `meta_descriptions`, because they are stored 
 
 ## Reading `spider rules`
 
-`spider rules list` lists the Rules in catalogue order: by category, in the order above, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`, and `--workspace` for a Workspace other than the nearest one. `spider rules` with no arguments runs `spider rules list`; options go after `list`. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `enabled`, `thresholds`, `description`, `why_it_matters` and `how_to_fix`:
+`spider rules list` lists the Rules in catalogue order: by category, in the order above, then in the order of the spec's tables. It is a list Command ([cli.md](cli.md#lists-paging-fields-and-cursors)), so it takes `--limit` (50 by default), `--cursor`, `--fields` and `--format`, and `--workspace` for a Workspace other than the nearest one. `spider rules` with no arguments runs `spider rules list`; options go after `list`. Each item has `id`, `category`, `issue_type`, `priority`, `applies_to`, `enabled`, `thresholds`, `description`, `why_it_matters`, `how_to_fix` and `reproduce_sql`:
 
 ```
 spider rules list --limit 1
-{"total":…,"items":[{"id":"internal-4xx","category":"response_codes","issue_type":"issue","priority":"high","applies_to":"internal_urls","enabled":true,"thresholds":{},"description":"An Internal URL responded with a client error, a status code from 400 to 499.","why_it_matters":"…","how_to_fix":"…"}],"next_cursor":"…"}
+{"total":…,"items":[{"id":"internal-4xx","category":"response_codes","issue_type":"issue","priority":"high","applies_to":"internal_urls","enabled":true,"thresholds":{},"description":"An Internal URL responded with a client error, a status code from 400 to 499.","why_it_matters":"…","how_to_fix":"…","reproduce_sql":"…"}],"next_cursor":"…"}
 ```
 
 `spider rules show <id>` prints one Rule as a document with the same fields. `enabled` is false for a Rule that the Workspace turns off, and `thresholds` maps each limit's name to its `value` in the Workspace, its `default` and its `unit`:
@@ -71,3 +72,47 @@ A table may hold `enabled`, a boolean, and the Rule's thresholds by name, each a
 spider rules list
 {"level":"error","code":"settings_invalid","message":"The settings file …/spider.toml is invalid.","hint":"Did you mean rules.title-too-long?","details":{"file":"…/spider.toml","errors":[{"key":"rules.title-to-long","message":"Extra inputs are not permitted"}]}}
 ```
+
+## Issues in a crawl file
+
+A Crawl records the configuration of its Rules when it is created, and its Issues when it ends, in its crawl file ([schema.md](schema.md)). Editing `spider.toml` later changes neither.
+
+`rules` has one row for each Rule, as the Crawl uses it: its metadata, `enabled`, the `thresholds` it uses as a JSON object of names to integers, its guidance and `reproduce_sql`. The title limit a Crawl used:
+
+```sql
+SELECT json_extract(thresholds, '$.max_chars') FROM rules WHERE id = 'title-too-long';
+```
+
+`affected_urls` has one row for each Rule and Affected URL, with `detail`, the measured values as a JSON object, or NULL for a Rule that measures none. The Pages without a title:
+
+```sql
+SELECT urls.url
+FROM affected_urls JOIN urls ON urls.id = affected_urls.url_id
+WHERE affected_urls.rule_id = 'title-missing';
+```
+
+`issues` is a view with one row for each Rule that has at least one Affected URL: `rule_id`, `category`, `issue_type`, `priority`, and `affected_count`, counted from `affected_urls`. The Issue-type Issues, largest first:
+
+```sql
+SELECT rule_id, priority, affected_count FROM issues
+WHERE issue_type = 'issue' ORDER BY affected_count DESC;
+```
+
+### Checking an Issue with its query
+
+Every Rule is one read-only `SELECT` over the crawl file that returns its Affected URLs as `url_id` and `detail`. `rules.reproduce_sql` holds it, and `spider rules list` and `show` print it. A query reads its thresholds from the Crawl's own `rules` row, so it gives that Crawl's answer with the thresholds the Crawl was created with. To check an Issue, run the query over the crawl file through a read-only connection, here with the SQLite shell:
+
+```
+sqlite3 -readonly .spider/crawls/20260927-140312-k3f9.sqlite "SELECT reproduce_sql FROM rules WHERE id = 'title-missing'"
+SELECT url_id, NULL AS detail
+FROM pages
+WHERE title_count = 0 OR title_1 = ''
+```
+
+Then run the printed query the same way. A query that leaves out a value its condition would otherwise match says why in an SQL comment. The tool itself runs the queries of its own Rules, never the text a crawl file holds, since a crawl file is data that anyone may share.
+
+### Live and stored Issues
+
+- **While a Crawl runs,** no Issue is stored: `affected_urls` stays empty, and the Issues are computed on each read from the queries of the Rules that the Crawl's `rules` table marks enabled. A running Crawl therefore shows its Issues so far, at the cost of running every query on each read.
+- **When a Crawl ends as `completed` or `stopped`,** its post-crawl pass stores them, before the Crawl State is written: `affected_urls` and `issues` then hold that pass's result, and they are read as stored. A resumed Crawl's pass replaces them.
+- **A Crawl that `failed`, or whose process died,** got no final pass, and its `affected_urls` may still hold an earlier pass's rows. Its Issues are computed as for a running Crawl, so trust `affected_urls` and `issues` only when `crawl.state` is `completed` or `stopped`.
