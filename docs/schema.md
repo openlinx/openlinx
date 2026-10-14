@@ -220,6 +220,12 @@ One row for each Rule and its Affected URL, written only by the post-crawl pass:
 | `url_id` | INTEGER | no | PK, → `urls.id` | | | The Affected URL. |
 | `detail` | TEXT | yes | | `json` | | The measured values, as an object with the keys listed for the Rule; NULL when the Rule lists none. |
 
+### Indexes
+
+| Name | Columns | Unique | Where | Description |
+|---|---|---|---|---|
+| `affected_urls_url_id` | `url_id` | no | | The Issues of one URL, and the Health Score's count of affected Pages. |
+
 ## View `issues`
 
 The Issues: one row for each Rule with at least one Affected URL, counted from affected_urls, so it holds the result of the last post-crawl pass.

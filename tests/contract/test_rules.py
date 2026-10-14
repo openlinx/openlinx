@@ -58,3 +58,18 @@ def test_keys_of_the_rule_tables() -> None:
         "rules": [("id", "TEXT", None)],
         "affected_urls": [("rule_id", "TEXT", "rules.id"), ("url_id", "INTEGER", "urls.id")],
     }
+
+
+def test_indexes_of_affected_urls() -> None:
+    (item,) = run_cli("schema", "affected_urls", "--fields", "indexes").json()["items"]
+    reduced = [
+        {key: index[key] for key in ("name", "columns", "unique", "where")}
+        for index in item["indexes"]
+    ]
+
+    assert {
+        "name": "affected_urls_url_id",
+        "columns": ["url_id"],
+        "unique": False,
+        "where": None,
+    } in (reduced)
