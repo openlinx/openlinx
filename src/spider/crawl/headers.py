@@ -23,7 +23,7 @@ def header_links(
     *,
     is_internal: Callable[[NormalizedUrl], bool],
 ) -> list[DiscoveredLink]:
-    """The Links of the `Link` and `Refresh` headers, in the order received (design D5)."""
+    """In the order received, numbered from 1: they come before the document's (design D5)."""
     links: list[DiscoveredLink] = []
     for name, value in headers:
         for link_type, raw, rel in _header_references(name.lower(), value):

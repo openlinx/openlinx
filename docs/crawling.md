@@ -109,7 +109,7 @@ Each of the three failures of the tool's own code is reported by one counted war
 
 | Code | Counts URLs where | `details` |
 |---|---|---|
-| `parse_failed` | an extractor failed | `count`, `first_url` |
+| `parse_failed` | an extractor failed, or a Page's preparation gave nothing (`body_too_large`, `worker_crashed`, `parse_timeout`) | `count`, `first_url` |
 | `handler_failed` | a handler failed | `count`, `first_url` |
 | `record_failed` | the rows could not be written | `count`, `first_url` |
 

@@ -89,7 +89,7 @@ def inside_noscript(node: LexborNode) -> bool:
 
 
 def rel_tokens(rel: str) -> tuple[str, ...]:
-    """The tokens of a rel value, in lower case, as HTML and RFC 8288 compare them."""
+    """HTML and RFC 8288 compare them without ASCII case."""
     return tuple(_ASCII_TOKEN.findall(rel.lower()))
 
 

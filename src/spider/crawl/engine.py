@@ -18,6 +18,7 @@ from spider.store.failures import is_one_urls_failure
 from spider.store.records import (
     ErroredUrl,
     FetchedUrl,
+    ParseError,
     QueuedUrl,
     SkippedUrl,
     SkipReason,
@@ -195,15 +196,14 @@ async def _fetched(
     content_type = response.header("Content-Type")
     # An External URL or one outside the Scope is checked, never parsed (design D5).
     followed = decision.in_scope and 200 <= response.status_code < 300
-    parsed = followed and is_html_type(content_type)
-    page = await context.pages.prepare(queued.url, response) if parsed else None
+    prepared = followed and is_html_type(content_type)
+    page = await context.pages.prepare(queued.url, response) if prepared else None
+    parsed = page is not None and page.parsed
+    # The Link and Refresh headers of an in-Scope 2xx response count, whatever became of its
+    # preparation (design D9).
+    links = response_links(queued.url, response, context.scope) if followed else ()
     if page is not None:
-        links = page.links
-    elif followed:
-        # The Link and Refresh headers of an in-Scope 2xx response count, parsed or not.
-        links = response_links(queued.url, response, context.scope)
-    else:
-        links = ()
+        links += page.document_links
     nofollow = page is not None and page.directives.nofollow
     discovered = discovered_urls(
         links,
@@ -215,14 +215,8 @@ async def _fetched(
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
-        context.reporter.count(
-            Diagnostic.of(
-                PARSE_FAILED,
-                f"An extractor failed on {queued.url} ({parse_error_message}); the Page was "
-                "recorded without its output, and its Links were followed.",
-            ),
-            queued.url,
-        )
+        failure = _parse_failure(queued.url, parse_error, parse_error_message)
+        context.reporter.count(Diagnostic.of(PARSE_FAILED, failure), queued.url)
     result = _result(
         queued,
         decision,
@@ -248,6 +242,19 @@ async def _fetched(
         parse_error_message=parse_error_message,
         discovered=discovered,
         rows=_handler_rows(context, result),
+    )
+
+
+def _parse_failure(url: NormalizedUrl, parse_error: ParseError, message: str | None) -> str:
+    if parse_error == "extractor_error":
+        return (
+            f"An extractor failed on {url} ({message}); the Page was recorded without its "
+            "output, and its Links were followed."
+        )
+    detail = parse_error if message is None else f"{parse_error}: {message}"
+    return (
+        f"Preparing {url} gave nothing ({detail}); it was recorded unparsed, with only the "
+        "Links of its headers."
     )
 
 

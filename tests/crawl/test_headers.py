@@ -3,13 +3,23 @@ seam 4)."""
 
 from datetime import UTC, datetime
 
+import msgspec
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.headers import header_links
-from spider.crawl.pages import PageSettings, prepare_page
+from spider.crawl.links import DiscoveredLink
+from spider.crawl.pages import (
+    Extractor,
+    PageInput,
+    PageSettings,
+    PreparedPage,
+    prepare_page,
+    response_links,
+)
 from spider.crawl.refresh import refresh_url
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl, url_host
@@ -97,21 +107,45 @@ def test_the_link_and_refresh_headers_give_links(
     ) == (found, [("http_header", n) for n in range(1, len(found) + 1)])
 
 
+class _Seen(msgspec.Struct, frozen=True):
+    links: tuple[DiscoveredLink, ...]
+
+
+def _links_seen(tree: LexborHTMLParser, page: PageInput) -> _Seen:
+    return _Seen(page.links)
+
+
+def _seen(page: PreparedPage) -> tuple[DiscoveredLink, ...]:
+    seen = dict(page.outputs)["seen"]
+    assert isinstance(seen, _Seen)
+    return seen.links
+
+
+_PAGE_WITH_A_CANONICAL_HEADER = FetchResult(
+    status_code=200,
+    headers=(("Content-Type", "text/html"), ("Link", "</c>; rel=canonical")),
+    body=b'<a href="/a">A</a>',
+    fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
+    response_time_ms=1,
+)
+_SEEING = PageSettings(scope=scope_rules(SITE), extractors=(Extractor("seen", _links_seen),))
+
+
 def test_header_links_come_before_the_links_of_the_document() -> None:
-    response = FetchResult(
-        status_code=200,
-        headers=(("Content-Type", "text/html"), ("Link", "</c>; rel=canonical")),
-        body=b'<a href="/a">A</a>',
-        fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
-        response_time_ms=1,
-    )
+    page = prepare_page(SITE, _PAGE_WITH_A_CANONICAL_HEADER, _SEEING)
 
-    page = prepare_page(SITE, response, PageSettings(scope=scope_rules(SITE)))
-
-    assert [(link.ordinal, link.declared_in, link.target) for link in page.links] == [
+    assert [(link.ordinal, link.declared_in, link.target) for link in _seen(page)] == [
         (1, "http_header", "http://site.test/c"),
         (2, "html", "http://site.test/a"),
     ]
+
+
+def test_the_engine_finds_the_links_that_the_extractors_see() -> None:
+    page = prepare_page(SITE, _PAGE_WITH_A_CANONICAL_HEADER, _SEEING)
+
+    # As the engine joins them: its own header Links, then the prepared document's.
+    joined = response_links(SITE, _PAGE_WITH_A_CANONICAL_HEADER, _SEEING.scope)
+    assert joined + page.document_links == _seen(page)
 
 
 _HEADER_PIECES = st.sampled_from(

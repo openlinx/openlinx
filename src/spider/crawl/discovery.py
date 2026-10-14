@@ -7,7 +7,8 @@ from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import DiscoverySkipReason, LinkType, NewUrl
 
-# The spec's Link type table: through these a URL in the Scope is followed, any other checked.
+# The spec's Link type table: through these a URL in the Scope is followed, through
+# _NOT_FOLLOWED it is recorded skipped, and Resources wait for group 9.
 _FOLLOWED: frozenset[LinkType] = frozenset(
     {"hyperlink", "canonical", "pagination", "hreflang", "iframe", "meta_refresh", "http_refresh"}
 )
