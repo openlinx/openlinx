@@ -187,6 +187,8 @@ class FetchedUrl:
     parsed: bool
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
+    # NULL when robots.txt was not checked (design D6).
+    blocked_by_robots_txt: bool | None = None
     discovered: tuple[NewUrl, ...] = ()
     # What the handlers returned, written in the same unit (design D9).
     rows: tuple[object, ...] = ()
@@ -200,6 +202,7 @@ class SkippedUrl:
     skip_reason: SkipReason
     # The depth the skip was decided on: a URL lowered since then is decided again (design D5).
     crawl_depth: int
+    blocked_by_robots_txt: bool | None = None
     rows: tuple[object, ...] = ()
 
 
@@ -211,4 +214,5 @@ class ErroredUrl:
     fetch_error: FetchError
     fetch_error_message: str
     fetched_at: datetime
+    blocked_by_robots_txt: bool | None = None
     rows: tuple[object, ...] = ()

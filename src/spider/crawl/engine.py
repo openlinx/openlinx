@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Iterable
 from contextlib import suppress
+from dataclasses import replace
 from typing import Any
 
 from spider.crawl.context import CrawlContext
@@ -121,7 +122,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             strip_params=context.strip_params,
         )
     )
-    robots = RobotsLoader(context.fetcher, limits)
+    robots = RobotsLoader(context.fetcher, limits, context.settings.robots_user_agent)
     checks: set[asyncio.Task[None]] = set()
     depth: int | None = 0
     try:
@@ -243,14 +244,25 @@ async def _unit_of(
     dispatch, so a URL found on several Pages is recorded once (design D1)."""
     row_writers = context.hooks.row_writers
     skip_reason = _skip_reason(context, queued, decision)
+    # Only a URL that would be requested is checked, so a skip never requests robots.txt.
+    blocked = None
+    if skip_reason is None:
+        # Before the URL's own host slot, which the robots.txt request of its origin takes.
+        blocked = not (await robots.robots_of(queued.url)).allows(queued.url)
+        if blocked:
+            skip_reason = "blocked_by_robots_txt"
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
         return record_skipped(
-            SkippedUrl(queued.id, skip_reason, queued.crawl_depth, _handler_rows(context, skipped)),
+            SkippedUrl(
+                queued.id,
+                skip_reason,
+                queued.crawl_depth,
+                blocked_by_robots_txt=blocked,
+                rows=_handler_rows(context, skipped),
+            ),
             row_writers,
         )
-    # Before the URL's own host slot, which the robots.txt request of its origin takes.
-    await robots.robots_txt(queued.url)
     async with limits.host(url_host(queued.url)), limits.request():
         if not limits.start_request():
             return None
@@ -269,10 +281,12 @@ async def _unit_of(
             fetch_error=response.fetch_error,
             fetch_error_message=response.message,
             fetched_at=response.fetched_at,
+            blocked_by_robots_txt=blocked,
             rows=_handler_rows(context, failed),
         )
         return record_error(errored, row_writers)
-    return record_fetched(await _fetched(context, queued, decision, response), row_writers)
+    fetched = await _fetched(context, queued, decision, response)
+    return record_fetched(replace(fetched, blocked_by_robots_txt=blocked), row_writers)
 
 
 def _skip_reason(

@@ -322,7 +322,7 @@ def test_a_skip_decided_on_a_depth_lowered_meanwhile_leaves_the_url_queued_witho
         writer.run(executing(text("CREATE TABLE test_notes (url_id INTEGER)")))
         ids = _target_at_depth_three(writer)
         writer.run(record_fetched(_fetched(ids["/s"], _new(_TARGET)), {}))
-        skipped = SkippedUrl(ids["/t"], "max_depth", 3, (Note(ids["/t"]),))
+        skipped = SkippedUrl(ids["/t"], "max_depth", 3, rows=(Note(ids["/t"]),))
         writer.run(record_skipped(skipped, {Note: _write_note}))
         replay_now(writer)
 

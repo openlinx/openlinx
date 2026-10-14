@@ -19,6 +19,17 @@ class RobotsTxt:
         return self._rules.can_fetch(url, self._token)
 
 
+@dataclass(frozen=True, slots=True)
+class OriginRobots:
+    """What an origin's robots.txt says for the URLs of the origin."""
+
+    # None: everything is allowed.
+    rules: RobotsTxt | None
+
+    def allows(self, url: str) -> bool:
+        return self.rules is None or self.rules.allows(url)
+
+
 def read_robots_txt(body: bytes, token: str) -> RobotsTxt:
     # utf-8-sig: a byte order mark would otherwise hide the first line's directive.
     text = body[:ROBOTS_TXT_LIMIT].decode("utf-8-sig", errors="replace")

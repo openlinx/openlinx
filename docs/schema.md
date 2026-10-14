@@ -116,6 +116,7 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `found_on_url_id` | INTEGER | yes | → `urls.id` | | | The URL whose response first revealed this one, through a followed Link once one has reached it; NULL for Seeds. |
 | `fetch_state` | TEXT | no | | | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested. |
 | `skip_reason` | TEXT | yes | | | `excluded`, `blocked_by_robots_txt`, `robots_unreachable`, `nofollow`, `link_type_not_followed`, `external_not_checked`, `max_depth`, `max_redirects`, `url_too_long` | Why a skipped URL was not requested. |
+| `blocked_by_robots_txt` | INTEGER | yes | | `boolean` | | 1 when robots.txt disallows the URL for the robots user-agent token (also with --ignore-robots), 0 when it allows it; NULL when not checked. |
 | `status_code` | INTEGER | yes | | | | HTTP status code of the URL's own response; NULL without a response. |
 | `fetch_error` | TEXT | yes | | | `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`, `record_failed`, `timeout`, `tls_error` | Why no response is recorded for the URL. |
 | `fetch_error_message` | TEXT | yes | | | | Human-readable detail of fetch_error. |

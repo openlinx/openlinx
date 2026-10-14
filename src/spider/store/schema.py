@@ -266,6 +266,12 @@ urls = public_table(
         info={"values": literal_values(SkipReason)},
     ),
     Column(
+        "blocked_by_robots_txt",
+        Flag,
+        comment="1 when robots.txt disallows the URL for the robots user-agent token (also "
+        "with --ignore-robots), 0 when it allows it; NULL when not checked.",
+    ),
+    Column(
         "status_code",
         Integer,
         comment="HTTP status code of the URL's own response; NULL without a response.",

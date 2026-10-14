@@ -262,7 +262,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 10.2 Drive "Another token can be chosen" at seam 4. Done when: `--robots-user-agent` also sets `PageSettings.robots_token` in the snapshot the engine starts the page executor with, so the prefixes of `X-Robots-Tag` follow the chosen token, and a test pins it.
 - [x] 10.3 **Guard:** "Any robots.txt gives a decision", as a hypothesis property at seam 4.
 - [x] 10.4 Drive "robots.txt is fetched once per origin" at seam 3.
-- [ ] 10.5 Drive "A disallowed URL is not requested" (seam 3) and "A disallowed URL is recorded as blocked" (seam 3+6), a trivial pair. Done when: `blocked_by_robots_txt` is declared.
+- [x] 10.5 Drive "A disallowed URL is not requested" (seam 3) and "A disallowed URL is recorded as blocked" (seam 3+6), a trivial pair. Done when: `blocked_by_robots_txt` is declared.
 - [ ] 10.6 Drive "robots.txt is stored with its origin" and "A URL that is not requested still points to its origin" at seam 3+6, a pair. Done when: the `robots_*` columns of `origins` are declared, with `robots_state` and `robots_sitemaps` NULL until robots.txt is fetched.
 - [ ] 10.7 Drive "A blocked Seed is reported" at seam 1. Done when: `seed_blocked_by_robots_txt` is declared.
 - [ ] 10.8 Drive "Disallowed URLs are crawled and still labelled" at seam 3+6.
