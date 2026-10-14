@@ -21,7 +21,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 |---|---|---|---|
 | `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host, 1 to 50. |
 | `--check-external` / `--no-check-external` | `check_external` | `true` | Request each External URL once to record its response; with `--no-check-external`, record it as skipped, unrequested (see [External URLs](#external-urls)). |
-| `--follow-nofollow` | `follow_nofollow` | `false` | Follow nofollow hyperlinks like any other hyperlink (see [Nofollow](#nofollow)). |
+| `--follow-nofollow` | `follow_nofollow` | `false` | Follow nofollow hyperlinks, and every hyperlink of a Page whose robots directives say nofollow, like any other hyperlink (see [Nofollow](#nofollow)). |
 | `--exclude <regex>` | `exclude` | `[]` | A URL that the pattern matches is never requested; give the option once per pattern (see [Include and exclude patterns](#include-and-exclude-patterns)). |
 
 `--workspace` and `--format` are the global flags of every Command.
@@ -100,7 +100,7 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 | A registered extractor raises an error | `parsed` stays 1 and the Page's Links are followed; `parse_error` = `extractor_error`, and `parse_error_message` names the extractor and the error's type, such as `title: ValueError`. Only that extractor's output is missing. |
 | A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |
 | The URL's rows cannot be written | The URL alone is recorded, with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs found on it or its handlers' rows. This holds for a value the file refuses (a constraint, a value too big, a value that cannot be bound) and for an error of the tool's own row code; any other database error stops the Crawl, as above. |
-| The URL matches an `--exclude` pattern | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `excluded`, and no response columns. |
+| The URL matches an `--exclude` pattern | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `excluded`, and no response columns. When only Links that are not followed reach it, its `skip_reason` is `nofollow` or `link_type_not_followed` instead. |
 | Only nofollow Links reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `nofollow` (see [Nofollow](#nofollow)). |
 | Only Links of a type that is not requested reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `link_type_not_followed` (see [Link types](#link-types)). |
 | The URL is External, with `--no-check-external` | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `external_not_checked`; an External URL that an `--exclude` pattern matches is `excluded`. |
@@ -109,7 +109,7 @@ Each of the three failures of the tool's own code is reported by one counted war
 
 | Code | Counts URLs where | `details` |
 |---|---|---|
-| `parse_failed` | an extractor failed | `count`, `first_url` |
+| `parse_failed` | an extractor failed, or a Page's preparation gave nothing (`body_too_large`, `worker_crashed`, `parse_timeout`) | `count`, `first_url` |
 | `handler_failed` | a handler failed | `count`, `first_url` |
 | `record_failed` | the rows could not be written | `count`, `first_url` |
 
@@ -225,7 +225,7 @@ The Seed's folder is its path up to and including its last `/`: the Seed `http:/
 
 `--include <regex>` and `--exclude <regex>` take Python regular expressions. Each can be given more than once, and each pattern is searched for anywhere in the normalised URL, with case counting.
 
-- **`--exclude`:** a URL that matches is never requested, internal or external. It is recorded with `fetch_state` = `skipped` and `skip_reason` = `excluded`. Use it to keep a Crawl away from logout links, cart actions and endless calendars.
+- **`--exclude`:** a URL that matches is never requested, internal or external. It is recorded with `fetch_state` = `skipped` and `skip_reason` = `excluded`, unless only Links that are not followed reach it, which record it as `nofollow` or `link_type_not_followed`. Use it to keep a Crawl away from logout links, cart actions and endless calendars.
 - **`--include`:** when given, an Internal URL that matches no include pattern is outside the Scope. It is still requested once to record its response, but it is not followed.
 - **Exclude wins:** a URL that matches both is skipped.
 
@@ -278,6 +278,7 @@ The Crawl reads Links from every response it parses: an in-Scope 2xx HTML respon
 - A URL reached only through Links that are not requested is recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`. A Link that is requested, on the same Page or a later one, still requests it.
 - `<link rel="preconnect">` and `rel="dns-prefetch"` name an origin to connect to, not a file, so they give no Link.
 - `rel` tokens are compared without case: `rel="NoFollow"` is `nofollow`.
+- In an HTTP `Link` header, a link-value with an `anchor` parameter describes another resource than the response, as RFC 8288 says, so it gives no Link.
 - Inside `<noscript>`, a `<link>` or `<meta>` gives no Link, as a browser that runs scripts never sees it; the other elements there, such as `<a>` and `<img>`, give their Links as anywhere else, since a crawler without rendering finds every URL the raw HTML holds.
 
 The same list of types also holds, from v0.1, the types of later releases: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap) in v0.2, and `javascript_redirect` in v1.1, with JavaScript rendering. A URL's `discovered_via` is the type of the Link it was first found through, or `seed`, and `found_on_url_id` points to the URL whose response revealed it. A Page that links to a URL several times records it once. When Links that are not followed reach a URL first and a followed Link reaches it later, its `discovered_via`, `found_on_url_id` and `crawl_depth` are those of the followed Link, so its depth and where it was found tell one story.

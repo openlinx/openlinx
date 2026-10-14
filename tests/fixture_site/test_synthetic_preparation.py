@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from spider.crawl.directives import RobotsDirectives
 from spider.crawl.fetcher import FetchResult
-from spider.crawl.pages import PageSettings, PreparedPage, prepare_page
+from spider.crawl.pages import PageSettings, PreparedPage, prepare_page, response_links
 from spider.crawl.scope import ScopeRules, scope_rules
 from spider.crawl.urls import NormalizedUrl
 from tests.fixture_site.routes import Bytes
@@ -70,6 +70,17 @@ def samples() -> dict[str, int]:
     }
 
 
+def model_response(n: int) -> FetchResult:
+    """What the benchmark's direct mode fetches: the headers without the body."""
+    return FetchResult(
+        status_code=200,
+        headers=(("Content-Type", "text/html"), *SITE.response_headers(n)),
+        body=b"",
+        fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
+        response_time_ms=0,
+    )
+
+
 def response(n: int) -> FetchResult:
     route = SITE.route(page_path(n))
     assert isinstance(route, Bytes)
@@ -82,10 +93,13 @@ def response(n: int) -> FetchResult:
     )
 
 
-def projected(page: PreparedPage) -> tuple[list[tuple[object, ...]], RobotsDirectives]:
+def projected(
+    n: int, response: FetchResult, page: PreparedPage
+) -> tuple[list[tuple[object, ...]], RobotsDirectives]:
+    # As the engine takes them: the response's header Links, then the document's.
     links: list[tuple[object, ...]] = [
-        (link.target, link.type, link.element, link.attribute, link.declared_in)
-        for link in page.links
+        (link.target, link.type, link.element, link.attribute, link.declared_in, link.ordinal)
+        for link in (*response_links(url(n), response, SCOPE), *page.document_links)
     ]
     return (links, page.directives)
 
@@ -97,9 +111,13 @@ def url(n: int) -> NormalizedUrl:
 def test_the_page_model_is_what_preparing_the_page_gives() -> None:
     kinds = samples()
 
-    prepared = {kind: projected(prepared_page(SITE, url(n), SETTINGS)) for kind, n in kinds.items()}
+    prepared = {
+        kind: projected(n, model_response(n), prepared_page(SITE, url(n), SETTINGS))
+        for kind, n in kinds.items()
+    }
     parsed = {
-        kind: projected(prepare_page(url(n), response(n), SETTINGS)) for kind, n in kinds.items()
+        kind: projected(n, response(n), prepare_page(url(n), response(n), SETTINGS))
+        for kind, n in kinds.items()
     }
 
     assert prepared == parsed
@@ -114,7 +132,7 @@ def test_a_page_whose_links_are_lost_is_prepared_with_its_expected_failure() -> 
         if OUTCOMES[fault]["status_code"] == 200
     }
 
-    assert {fault: (page.links, page.parse_error) for fault, page in prepared.items()} == {
+    assert {fault: (page.document_links, page.parse_error) for fault, page in prepared.items()} == {
         Fault.NESTED_DIVS: ((), OUTCOMES[Fault.NESTED_DIVS]["parse_error"]),
         Fault.ENDS_WORKER: ((), OUTCOMES[Fault.ENDS_WORKER]["parse_error"]),
     }

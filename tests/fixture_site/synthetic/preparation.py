@@ -25,7 +25,8 @@ from tests.fixture_site.synthetic.site import (
 )
 
 END_WORKER_EXIT = 70
-# The model's Links that a response header declares; the others are the HTML's.
+# The model's Links that a response header declares, which the engine reads from the response
+# itself (020's task 7.23); the others are the HTML's, numbered after them.
 HEADER_TYPES = frozenset({"http_refresh"})
 # 020 builds an HTML <link rel="canonical"> as a canonical Link in its task 8.12; until then it
 # is a misc Link, which the equivalence test checks, so it fails here once 8.12 lands.
@@ -42,13 +43,15 @@ def prepared_page(site: SyntheticSite, url: NormalizedUrl, settings: PageSetting
     # No Page of the site has a meta robots or an X-Robots-Tag.
     directives = robots_directives((), (), settings.robots_token)
     if fault in LOSES_LINKS:
-        return PreparedPage(
-            links=(), directives=directives, parse_error=OUTCOMES[fault]["parse_error"]
-        )
+        return PreparedPage(directives=directives, parse_error=OUTCOMES[fault]["parse_error"])
     # A target of the model is an absolute URL or a path from the root, which joins the origin.
     origin = f"{parts.scheme}://{parts.netloc}"
+    model = site.page_model(n)
+    from_headers = sum(1 for link in model if link.type in HEADER_TYPES)
     links: list[DiscoveredLink] = []
-    for link in site.page_model(n):
+    for link in model:
+        if link.type in HEADER_TYPES:
+            continue
         target = normalize_url(link.target if "://" in link.target else origin + link.target)
         assert isinstance(target, str)
         links.append(
@@ -61,12 +64,12 @@ def prepared_page(site: SyntheticSite, url: NormalizedUrl, settings: PageSetting
                 attribute=link.attribute,
                 rel=(),
                 nofollow=False,
-                declared_in="http_header" if link.type in HEADER_TYPES else "html",
-                ordinal=len(links) + 1,
+                declared_in="html",
+                ordinal=from_headers + len(links) + 1,
                 is_internal=settings.scope.decide(target).is_internal,
             )
         )
-    return PreparedPage(links=tuple(links), directives=directives)
+    return PreparedPage(document_links=tuple(links), directives=directives)
 
 
 class Continued(msgspec.Struct, frozen=True):

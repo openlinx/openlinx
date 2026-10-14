@@ -144,7 +144,10 @@ async def test_a_page_is_prepared_in_a_worker_as_in_process() -> None:
         workers = pool.worker_pids
     in_process = prepare_page(at("/"), RESPONSE, PageSettings(scope_rules(at("/"))))
 
-    assert (page.links, preparer(page).pid in workers) == (in_process.links, True)
+    assert (page.document_links, preparer(page).pid in workers) == (
+        in_process.document_links,
+        True,
+    )
 
 
 @pytest.mark.slow
@@ -204,7 +207,7 @@ async def test_an_output_a_worker_cannot_send_costs_only_its_extractor() -> None
 
 def test_an_outcome_that_cannot_cross_even_without_its_outputs_fails_its_page() -> None:
     page = prepare_page(at("/"), RESPONSE, PageSettings(scope_rules(at("/"))))
-    unsendable = msgspec.structs.replace(page, links=(lambda: None,))
+    unsendable = msgspec.structs.replace(page, document_links=(lambda: None,))
 
     assert type(pickle.loads(_pickled(unsendable))) is RuntimeError  # noqa: S301
 

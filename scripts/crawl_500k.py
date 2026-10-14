@@ -240,9 +240,11 @@ class ModelFetcher:
             found = pool_index(path)
             status = 404 if found is None or found[0] is MISSING else 200
             content_type = HTML if found is None else found[0].content_type
+        # The Refresh header too, whose Link the engine reads from the response (020 D9).
+        headers = [] if n is None else self._site.response_headers(n)
         return FetchResult(
             status_code=status,
-            headers=(("Content-Type", content_type),),
+            headers=(("Content-Type", content_type), *headers),
             body=b"",
             fetched_at=self._clock.now(),
             response_time_ms=0,
@@ -275,9 +277,9 @@ class ModelExecutor:
             return page
         # Only the URLs earlier Pages recorded, which the insert's ON CONFLICT would drop: within
         # a Page, 020's discovery chooses between a URL's Links itself.
-        links = tuple(link for link in page.links if link.target not in seen)
-        seen.update(link.target for link in page.links)
-        return msgspec.structs.replace(page, links=links)
+        links = tuple(link for link in page.document_links if link.target not in seen)
+        seen.update(link.target for link in page.document_links)
+        return msgspec.structs.replace(page, document_links=links)
 
     async def close(self) -> None:
         pass

@@ -1,6 +1,7 @@
 """The page executor's lifecycle, through the Crawl Service (020-add-crawl-core D9; seam 3)."""
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 import pytest
 
@@ -8,11 +9,13 @@ from spider.crawl.fetcher import FetchResult
 from spider.crawl.hooks import Hooks, Pass
 from spider.crawl.pages import PageSettings, PreparedPage, prepare_page
 from spider.crawl.urls import NormalizedUrl
+from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Collected
 from spider.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawl_result
+from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
 TWO_PAGES = Site(routes={"/": Page(body='<a href="/a">A</a>'), "/a": Page(body="<p>A</p>")})
@@ -95,3 +98,74 @@ def test_crawl_started_reports_the_workers_of_the_page_executor(
     assert [data["parse_workers"] for name, data in reporter.events if name == "crawl_started"] == [
         3
     ]
+
+
+class FailingStartReporter:
+    """A reporter whose crawl_started event fails, as a closed stderr would."""
+
+    def warn(self, diagnostic: Diagnostic) -> None:
+        pass
+
+    def event(self, name: str, **data: Any) -> None:
+        if name == "crawl_started":
+            raise OSError("stderr is closed")
+
+
+def test_the_page_executor_closes_when_the_start_event_fails(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(TWO_PAGES)
+    executor = RecordingExecutor()
+
+    with pytest.raises(OSError, match="stderr is closed"):
+        crawl_result(server.url("/"), pages=lambda: executor, reporter=FailingStartReporter())
+
+    assert executor.events == ["close"]
+
+
+class CrashingExecutor:
+    """Prepares nothing, as 026's pool reports a worker that ended while it held a Page."""
+
+    backlog = 0
+    workers = 0
+
+    async def start(self, settings: PageSettings) -> None:
+        pass
+
+    async def prepare(self, url: NormalizedUrl, response: FetchResult) -> PreparedPage:
+        return PreparedPage(parse_error="worker_crashed", parse_error_message="worker 1 ended")
+
+    async def close(self) -> None:
+        pass
+
+
+def test_a_page_whose_preparation_failed_keeps_the_links_of_its_headers(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(
+                    body='<a href="/a">A</a>',
+                    headers=[("Link", "</c>; rel=canonical"), ("Refresh", "5; url=/r")],
+                )
+            }
+        )
+    )
+
+    result = crawl_result(server.url("/"), pages=CrashingExecutor)
+
+    assert (
+        query(
+            result.crawl_file,
+            "SELECT url, parsed, parse_error, discovered_via FROM urls ORDER BY id",
+        ),
+        [(warning.code, "worker_crashed" in warning.message) for warning in result.warnings],
+    ) == (
+        [
+            (server.url("/"), 0, "worker_crashed", "seed"),
+            (server.url("/c"), 0, None, "canonical"),
+            (server.url("/r"), 0, None, "http_refresh"),
+        ],
+        [("parse_failed", True)],
+    )

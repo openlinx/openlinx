@@ -32,8 +32,18 @@ class RobotsDirectives(msgspec.Struct, frozen=True, kw_only=True):
         return self.meta_robots_nofollow or self.x_robots_tag_nofollow
 
 
+# A Page without robots metas or an X-Robots-Tag header, and a preparation that gave nothing.
+NO_DIRECTIVES = RobotsDirectives(
+    meta_robots=None,
+    meta_robots_noindex=False,
+    meta_robots_nofollow=False,
+    x_robots_tag=None,
+    x_robots_tag_noindex=False,
+    x_robots_tag_nofollow=False,
+)
+
+
 def meta_robots_contents(tree: LexborHTMLParser) -> list[str]:
-    """The `content` of every `<meta name="robots">`, in document order."""
     return [
         node.attributes.get("content") or ""
         for node in tree.css("meta[name]")

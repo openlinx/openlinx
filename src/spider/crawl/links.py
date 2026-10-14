@@ -1,13 +1,14 @@
 """The link extractor (020-add-crawl-core D5)."""
 
 import re
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from urllib.parse import urljoin
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.decoding import decode_html, query_codec
+from spider.crawl.refresh import refresh_url
 from spider.crawl.urls import NormalizedUrl, normalize_url
 from spider.store.records import DeclaredIn, LinkType
 
@@ -23,15 +24,6 @@ _HTTP_SCHEMES = frozenset({"http", "https"})
 _SLASHES = "/\\"
 _QUERY_OR_FRAGMENT = re.compile(r"[?#]")
 _ASCII_TOKEN = re.compile(r"[^\t\n\x0c\r ]+")
-_WHITESPACE = "\t\n\x0c\r "
-_DIGITS = "0123456789"
-# A link-value of RFC 8288: a target in angle brackets, then its parameters, each a name
-# with an optional token or quoted string; a comma outside them ends the value.
-_LINK_VALUE = re.compile(
-    r'<([^>]*)>((?:[\t ]*;[\t ]*[^;,=\t ]+[\t ]*(?:=[\t ]*(?:"(?:[^"\\]|\\.)*"|[^;,]*))?)*)'
-)
-_LINK_PARAM = re.compile(r';[\t ]*([^;,=\t ]+)[\t ]*(?:=[\t ]*("(?:[^"\\]|\\.)*"|[^;,]*))?')
-_QUOTED_PAIR = re.compile(r"\\(.)")
 # Elements with one URL attribute; link, img, video, source and track have rules of their own.
 _SINGLE_REFERENCES: Mapping[str, tuple[LinkType, str]] = {
     "a": ("hyperlink", "href"),
@@ -50,7 +42,7 @@ _ELEMENTS = ", ".join(
     ]
 )
 _MEDIA_TYPES: Mapping[str, LinkType] = {"video": "video", "audio": "audio"}
-_PAGINATION = frozenset({"next", "prev", "previous"})
+PAGINATION_RELS = frozenset({"next", "prev", "previous"})
 # These name an origin to connect to, not a file.
 _ORIGIN_HINTS = frozenset({"preconnect", "dns-prefetch"})
 # The srcset grammar of HTML: a URL ends at white space, or at the commas closing it, which
@@ -96,74 +88,14 @@ def inside_noscript(node: LexborNode) -> bool:
     return False
 
 
+def rel_tokens(rel: str) -> tuple[str, ...]:
+    """HTML and RFC 8288 compare them without ASCII case."""
+    return tuple(_ASCII_TOKEN.findall(rel.lower()))
+
+
 def base_url(tree: LexborHTMLParser, url: NormalizedUrl, encoding: str) -> str:
     """What the Page's references resolve against: its base href, else the response URL."""
     return _base(tree, url, query_codec(encoding))
-
-
-def header_links(
-    headers: Iterable[tuple[str, str]],
-    url: NormalizedUrl,
-    *,
-    is_internal: Callable[[NormalizedUrl], bool],
-) -> list[DiscoveredLink]:
-    """The Links of the `Link` and `Refresh` headers, in the order received (design D5)."""
-    links: list[DiscoveredLink] = []
-    for name, value in headers:
-        for link_type, raw, rel in _header_references(name.lower(), value):
-            # Against the response URL: a header knows no base href.
-            target = _resolved(url, raw, None)
-            if target is None:
-                continue
-            links.append(
-                DiscoveredLink(
-                    type=link_type,
-                    target=target,
-                    raw=raw,
-                    element=None,
-                    attribute=None,
-                    rel=rel,
-                    nofollow="nofollow" in rel,
-                    declared_in="http_header",
-                    ordinal=len(links) + 1,
-                    is_internal=is_internal(target),
-                )
-            )
-    return links
-
-
-def _header_references(name: str, value: str) -> Iterator[tuple[LinkType, str, tuple[str, ...]]]:
-    if name == "refresh":
-        raw = refresh_url(value)
-        if raw is not None:
-            yield "http_refresh", raw, ()
-    elif name == "link":
-        for link_value in _LINK_VALUE.finditer(value):
-            params = {
-                param[1].lower(): _unquoted(param[2] or "")
-                for param in _LINK_PARAM.finditer(link_value[2])
-            }
-            rel = tuple(_ASCII_TOKEN.findall(params.get("rel", "").lower()))
-            link_type = _header_link_type(rel, params)
-            if link_type is not None:
-                yield link_type, link_value[1], rel
-
-
-def _header_link_type(rel: tuple[str, ...], params: Mapping[str, str]) -> LinkType | None:
-    if "canonical" in rel:
-        return "canonical"
-    if not _PAGINATION.isdisjoint(rel):
-        return "pagination"
-    if "alternate" in rel and "hreflang" in params:
-        return "hreflang"
-    return None
-
-
-def _unquoted(value: str) -> str:
-    value = value.strip("\t ")
-    if len(value) >= 2 and value[0] == value[-1] == '"':
-        return _QUOTED_PAIR.sub(r"\1", value[1:-1])
-    return value
 
 
 def links_in_tree(
@@ -182,9 +114,9 @@ def links_in_tree(
         if node.tag in ("link", "meta") and inside_noscript(node):
             continue
         attributes = node.attributes
-        rel = tuple(_ASCII_TOKEN.findall((attributes.get("rel") or "").lower()))
+        rel = rel_tokens(attributes.get("rel") or "")
         for link_type, attribute, raw in _references(node.tag or "", attributes, rel, node.parent):
-            target = _resolved(base, raw, codec)
+            target = resolve_reference(base, raw, codec)
             if target is None:
                 continue
             links.append(
@@ -236,41 +168,12 @@ def _references(
             yield from _from_attribute(*_SINGLE_REFERENCES[tag], attributes)
 
 
-def refresh_url(content: str) -> str | None:
-    """The reference of a meta refresh or a Refresh header as HTML reads it, or None."""
-    rest = content.lstrip(_WHITESPACE)
-    after_time = rest.lstrip(_DIGITS)
-    if after_time == rest and not rest.startswith("."):
-        return None
-    rest = after_time.lstrip(_DIGITS + ".")
-    if not rest or rest[0] not in ";," + _WHITESPACE:
-        return None
-    rest = rest.lstrip(_WHITESPACE)
-    if rest[:1] in (";", ","):
-        rest = rest[1:].lstrip(_WHITESPACE)
-    rest = _without_url_equals(rest)
-    if rest[:1] in ("'", '"'):
-        rest = rest[1:].partition(rest[0])[0]
-    # No URL refreshes the Page itself, which links to no other URL.
-    return rest or None
-
-
-def _without_url_equals(rest: str) -> str:
-    """HTML skips `url`, white space and `=` as far as they match, and keeps what follows."""
-    for letter in "url":
-        if rest[:1].lower() != letter:
-            return rest
-        rest = rest[1:]
-    rest = rest.lstrip(_WHITESPACE)
-    return rest[1:].lstrip(_WHITESPACE) if rest[:1] == "=" else rest
-
-
 def _link_type(rel: tuple[str, ...], attributes: Mapping[str, str | None]) -> LinkType | None:
     if "stylesheet" in rel:
         return "css"
     if "amphtml" in rel:
         return "amphtml"
-    if not _PAGINATION.isdisjoint(rel):
+    if not PAGINATION_RELS.isdisjoint(rel):
         return "pagination"
     if "alternate" in rel and "hreflang" in attributes:
         return "hreflang"
@@ -309,7 +212,8 @@ def _base(tree: LexborHTMLParser, url: NormalizedUrl, codec: str | None) -> str:
     return _joined(url, href, codec) or url
 
 
-def _resolved(base: str, raw: str, codec: str | None) -> NormalizedUrl | None:
+def resolve_reference(base: str, raw: str, codec: str | None) -> NormalizedUrl | None:
+    """The normalised URL a browser makes of a reference against `base`, or None."""
     joined = _joined(base, _cleaned(raw), codec)
     if joined is None:
         return None

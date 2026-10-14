@@ -1,4 +1,4 @@
-"""The aiohttp Fetcher: every request failure is returned (020-add-crawl-core D8; seam 3)."""
+"""The aiohttp Fetcher: each request failure is returned with its code (020 D8; seams 3, 4)."""
 
 import socket
 import ssl
@@ -64,6 +64,9 @@ _ERRORS: list[tuple[Exception, str]] = [
     ),
     (aiohttp.ConnectionTimeoutError(), "connection_error"),
     (aiohttp.SocketTimeoutError(), "connection_error"),
+    # aiohttp's total timeout raises a plain TimeoutError; 022 maps it to timeout.
+    (TimeoutError(), "connection_error"),
+    (aiohttp.InvalidURL("http://[bad"), "connection_error"),
 ]
 
 

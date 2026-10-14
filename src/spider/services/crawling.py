@@ -166,19 +166,9 @@ def start_crawl(
     executor instead of `default_page_executor` (design D9, D15)."""
     log = WarningLog(reporter)
     crawl_file = create_crawl(plan.new_crawl, clock, log)
-    # Built before crawl_started reports its workers: nothing spawns before its start.
-    executor = (pages or default_page_executor)()
-    log.event(
-        "crawl_started",
-        crawl_id=crawl_file.id,
-        crawl_mode=plan.new_crawl.crawl_mode,
-        seed_count=len(plan.new_crawl.seeds),
-        crawl_file=str(crawl_file.path),
-        parse_workers=executor.workers,
-    )
     with asyncio.Runner(loop_factory=loop_factory) as runner:
         ended_at, summary, counts = runner.run(
-            _crawl(plan, crawl_file, clock, log, hooks, resolver, executor)
+            _crawl(plan, crawl_file, clock, log, hooks, resolver, pages or default_page_executor)
         )
     return CrawlResult(
         crawl_id=crawl_file.id,
@@ -197,9 +187,9 @@ async def _crawl(
     reporter: WarningLog,
     hooks: Hooks,
     resolver: AbstractResolver | None,
-    executor: PageExecutor,
+    pages: Callable[[], PageExecutor],
 ) -> tuple[datetime, CrawlSummary, UrlCounts]:
-    context_of = _crawl_context(crawl_file, plan, clock, reporter, hooks, resolver, executor)
+    context_of = _crawl_context(crawl_file, plan, clock, reporter, hooks, resolver, pages)
     async with context_of as context:
         await run_crawl(context, plan.seed)
         if context.stop.is_set:
@@ -224,10 +214,20 @@ async def _crawl_context(
     reporter: WarningLog,
     hooks: Hooks,
     resolver: AbstractResolver | None,
-    executor: PageExecutor,
+    pages: Callable[[], PageExecutor],
 ) -> AsyncIterator[CrawlContext]:
     """The one place a Crawl's context is built, and its resources closed (design D15)."""
+    # Built before crawl_started reports its workers: nothing spawns before its start.
+    executor = pages()
     try:
+        reporter.event(
+            "crawl_started",
+            crawl_id=crawl_file.id,
+            crawl_mode=plan.new_crawl.crawl_mode,
+            seed_count=len(plan.new_crawl.seeds),
+            crawl_file=str(crawl_file.path),
+            parse_workers=executor.workers,
+        )
         # Opening and closing the writer block, so they run off the event loop.
         writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
         try:

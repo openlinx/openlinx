@@ -333,6 +333,11 @@ class SyntheticSite:
         first = n * self.fanout + 1
         return range(min(first, self.pages), min(first + self.fanout, self.pages))
 
+    def response_headers(self, n: int) -> list[tuple[str, str]]:
+        """The headers a Page is served with besides its Content-Type."""
+        refresh = self._http_refresh(n)
+        return [] if refresh is None else [("Refresh", f"30; url={refresh}")]
+
     def _http_refresh(self, n: int) -> str | None:
         if n % REFRESH_EVERY != 2:
             return None
@@ -481,13 +486,11 @@ class SyntheticSite:
         if fault is Fault.SERVER_ERROR:
             return Status(500, delay=self.latency)
         delay = self.latency + (self.slow_seconds if fault is Fault.SLOW else 0.0)
-        refresh = self._http_refresh(n)
-        headers = [] if refresh is None else [("Refresh", f"30; url={refresh}")]
         content_type = "text/html; charset=nonsense" if fault is Fault.UNKNOWN_CHARSET else HTML
         return Bytes(
             self.render(n),
             content_type=content_type,
-            headers=headers,
+            headers=self.response_headers(n),
             delay=delay,
             reset_after=RESET_AFTER if fault is Fault.RESET else None,
         )

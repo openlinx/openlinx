@@ -9,9 +9,15 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.decoding import decode_html
-from spider.crawl.directives import RobotsDirectives, meta_robots_contents, robots_directives
+from spider.crawl.directives import (
+    NO_DIRECTIVES,
+    RobotsDirectives,
+    meta_robots_contents,
+    robots_directives,
+)
 from spider.crawl.fetcher import FetchResult
-from spider.crawl.links import DiscoveredLink, base_url, header_links, links_in_tree
+from spider.crawl.headers import header_links
+from spider.crawl.links import DiscoveredLink, base_url, links_in_tree
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import DEFAULT_ROBOTS_TOKEN
@@ -59,12 +65,18 @@ class PageSettings:
 
 
 class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
-    links: tuple[DiscoveredLink, ...]
-    directives: RobotsDirectives
+    # Numbered after the Links of the response's headers, which the engine reads itself.
+    document_links: tuple[DiscoveredLink, ...] = ()
+    directives: RobotsDirectives = NO_DIRECTIVES
     # By extractor name, without the outputs of extractors that failed.
     outputs: tuple[tuple[str, msgspec.Struct], ...] = ()
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
+
+    @property
+    def parsed(self) -> bool:
+        # Only an extractor's failure leaves a Page that something came out of (design D16).
+        return self.parse_error in (None, "extractor_error")
 
 
 def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettings) -> PreparedPage:
@@ -73,13 +85,15 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     tree = LexborHTMLParser(decoded.text)
     is_internal = partial(_is_internal, settings.scope)
     # The header Links come first, as 030's ordinals count them (design D5).
-    links = header_links(response.headers, url, is_internal=is_internal)
-    links += links_in_tree(
-        tree,
-        base=base_url(tree, url, decoded.encoding),
-        encoding=decoded.encoding,
-        is_internal=is_internal,
-        first_ordinal=len(links) + 1,
+    from_headers = response_links(url, response, settings.scope)
+    from_document = tuple(
+        links_in_tree(
+            tree,
+            base=base_url(tree, url, decoded.encoding),
+            encoding=decoded.encoding,
+            is_internal=is_internal,
+            first_ordinal=len(from_headers) + 1,
+        )
     )
     directives = robots_directives(
         meta_robots_contents(tree),
@@ -91,7 +105,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
         status_code=response.status_code,
         headers=response.headers,
         length=len(decoded.text),
-        links=tuple(links),
+        links=from_headers + from_document,
         directives=directives,
         settings=settings,
     )
@@ -108,7 +122,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
         except Exception as error:
             failures.append(f"{extractor.name}: {type(error).__name__}")
     return PreparedPage(
-        links=page.links,
+        document_links=from_document,
         directives=directives,
         outputs=tuple(outputs),
         parse_error="extractor_error" if failures else None,
@@ -119,7 +133,8 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
 def response_links(
     url: NormalizedUrl, response: FetchResult, scope: ScopeRules
 ) -> tuple[DiscoveredLink, ...]:
-    """The Links of a response that is not parsed: those of its headers (design D5)."""
+    """The engine reads them whatever became of the preparation, which reads them for
+    `PageInput`, so both number them alike (design D9)."""
     return tuple(header_links(response.headers, url, is_internal=partial(_is_internal, scope)))
 
 

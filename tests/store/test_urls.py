@@ -10,6 +10,7 @@ from spider.crawl.urls import NormalizedUrl, parse_seed
 from spider.store.connections import opening
 from spider.store.records import (
     DiscoveredVia,
+    DiscoverySkipReason,
     ErroredUrl,
     FetchedUrl,
     NewUrl,
@@ -18,6 +19,7 @@ from spider.store.records import (
     SkipReason,
     UrlCounts,
 )
+from spider.store.schema import literal_values
 from spider.store.urls import (
     next_depth,
     queued_batch,
@@ -46,7 +48,7 @@ def _new(
     *,
     crawl_depth: int = 1,
     discovered_via: DiscoveredVia = "hyperlink",
-    skip_reason: SkipReason | None = None,
+    skip_reason: DiscoverySkipReason | None = None,
 ) -> NewUrl:
     return NewUrl(
         url=_url(text),
@@ -252,6 +254,15 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
         ("https://site.test/out", 1, "hyperlink", seed_id, "skipped", "excluded"),
         ("https://site.test/about", 1, "hyperlink", seed_id, "fetched", None),
     ]
+
+
+def test_each_reason_of_a_skip_at_discovery_is_a_skip_reason() -> None:
+    discovery = literal_values(DiscoverySkipReason)
+
+    assert (discovery, set(discovery) <= set(literal_values(SkipReason))) == (
+        ["nofollow", "link_type_not_followed"],
+        True,
+    )
 
 
 def _plan_of_first_statement(connection: Connection, run: Any) -> str:
