@@ -207,6 +207,13 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 7.20 Seam: the page executor's `workers`, reported by `crawl_started` as `parse_workers`, for `026`'s pool (design D9; the rulings). `workers` is the number of processes that prepare Pages besides the crawl process: 0 for the in-process executor. `start_crawl` builds the executor before it reports `crawl_started` (nothing spawns before `start`), and hands it to the context builder, which closes it. Done when: `crawl_started` carries `parse_workers` 0 with the in-process executor, and a fake executor's count when one is passed as `pages=`; `docs/crawling.md` lists the field.
 - [x] 7.21 Docs: add the robots directives rules, nofollow handling and which responses are parsed to `docs/crawling.md`.
 - [x] 7.22 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [ ] 7.23 Review fixes of group 7 (the rulings on the 7.22 review), each test first, with its cause in its commit:
+  - An `X-Robots-Tag` nofollow alone applies to every hyperlink of the Page: no test failed when the page-level nofollow read the meta alone. Done when: a test with the header only fails under that mutation, in `RobotsDirectives.nofollow` or in the engine.
+  - Response-level Links never depend on the body parse (design D9): the engine derives the Links of the `Link` and `Refresh` headers from the response for every in-Scope 2xx response, and `PreparedPage` carries only the document's Links, numbered after them. A preparation that gives nothing (`worker_crashed`, `parse_timeout`, `body_too_large`) records `parsed` = 0 and keeps the header Links; `extractor_error` keeps `parsed` = 1. A failed `PreparedPage` needs no tree: its fields have defaults. Done when: an engine-seam test with an executor that returns `PreparedPage(parse_error="worker_crashed")` finds `parsed` = 0, the header canonical and Refresh target discovered and the `parse_failed` text for the kind, and a test pins that the engine's header Links and those of `PageInput` have the same ordinals.
+  - RFC 8288's `anchor` parameter makes a link-value describe another resource, so such a link-value gives no Link. Done when: a case of the header Links table pins it.
+  - An excluded URL that only unfollowed Links reach is recorded `nofollow`, not `excluded` (the spec's Exclude rule). Done when: a test pins it, and `docs/crawling.md` states the exception where it describes `--exclude`.
+  - The noscript ancestor walk of `<link>` and `<meta>` is measured on a deep page, and replaced by one selector pass only if the walk matters; the commit gives the numbers either way.
+  - Comments and docstrings say what is true: `_FOLLOWED` in `spider.crawl.discovery`, `response_links`, and no docstring that restates its function's name.
 
 ## 8. Scope over HTTP and Section Crawls (widening)
 
@@ -250,7 +257,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 ## 10. robots.txt (widening)
 
 - [ ] 10.1 Drive "The group for the tool's token applies" at seam 4. Done when: the robots.txt reader is on Protego and reads at most 512,000 bytes, decoded with replacement.
-- [ ] 10.2 Drive "Another token can be chosen" at seam 4.
+- [ ] 10.2 Drive "Another token can be chosen" at seam 4. Done when: `--robots-user-agent` also sets `PageSettings.robots_token` in the snapshot the engine starts the page executor with, so the prefixes of `X-Robots-Tag` follow the chosen token, and a test pins it.
 - [ ] 10.3 **Guard:** "Any robots.txt gives a decision", as a hypothesis property at seam 4.
 - [ ] 10.4 Drive "robots.txt is fetched once per origin" at seam 3.
 - [ ] 10.5 Drive "A disallowed URL is not requested" (seam 3) and "A disallowed URL is recorded as blocked" (seam 3+6), a trivial pair. Done when: `blocked_by_robots_txt` is declared.
