@@ -10,8 +10,8 @@ The motivation is in proposal.md. The exact column definitions are in `specs/pag
 - **`018-add-schema-conventions` and ADR-0005:** every table is declared through `018`'s declaration helper, so it is `STRICT` and its enumerations and flags get CHECKs; `spider schema` lists references and indexes, and the contract test compares them. The schema blueprint of 2026-10-11 and its rulings decide this change's tables.
 - **`020-add-crawl-core`:**
   - the `urls` table (the frontier, `is_internal`, `in_scope`, `fetch_state`, `content_type`, `parsed`, `blocked_by_robots_txt`, `crawl_depth`, `fetched_at`)
-  - Link discovery, its `DiscoveredLink` values and the `LinkType` list in `spider.store.records`, and the robots directives parser
-  - page preparation (`020` D9): one pure function of a fetched response that decodes, parses once and runs the registered extractors, in-process or in `026`'s pool
+  - Link discovery, its `DiscoveredLink` values and the `LinkType` list in `spider.store.records`, and the robots directives parser. This change reads the `DiscoveredLink` values from `links_in_tree(...)` (`spider.crawl.links`) on page preparation's tree, and `base_url(tree, url, encoding)` gives the base it resolves its own references against; the bytes wrapper `extract_links` stays for tests
+  - page preparation (`020` D9): `prepare_page(url, response, settings)` in `spider.crawl.pages`, one pure function of a fetched response that decodes, parses once and runs the registered extractors, in-process or in `026`'s pool
   - the hooks of `020` D9 and D14, listed in `default_hooks()`: a **per-response handler** is a pure function from the URL's `UrlResult` to store rows, which the URL's writer unit writes; a **post-crawl pass** is a store function that submits its own units. Passes run when a Crawl ends as `completed` or `stopped`, before its final Crawl State is written, and again after every continued run, so they must be safe to re-run.
   - the injectable clock
 - **`022-add-fetch-policy`:**
