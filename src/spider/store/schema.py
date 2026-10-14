@@ -373,3 +373,12 @@ pages = public_table(
     "an HTML document, whatever its status code.",
     change=30,
 )
+Index(
+    "pages_address",
+    pages.c.address,
+    unique=True,
+    info={
+        "description": "Finding a Page by its display address, and the tie-breaker of keyset "
+        "paging over Pages."
+    },
+)
