@@ -7,7 +7,7 @@ import pickle
 import sys
 import threading
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,8 +26,8 @@ from spider.crawl.hooks import Handler, Hooks, UrlResult
 from spider.crawl.pages import Extractor, PageInput, PageSettings, PreparedPage, prepare_page
 from spider.crawl.parse_pool import (
     PoolExecutor,
-    WorkerEndedError,
     WorkerStartError,
+    _outcome,
     _pickled,
     _work,
     cpu_quota,
@@ -268,22 +268,52 @@ def test_a_worker_whose_crawl_process_has_ended_ends_quietly() -> None:
 
 
 @pytest.mark.slow
-async def test_a_worker_that_ends_fails_only_the_page_it_held() -> None:
+async def test_a_worker_that_ends_costs_only_the_page_it_held() -> None:
     async with started(2) as pool:
         ended, other = await asyncio.wait_for(
-            asyncio.gather(
-                pool.prepare(at("/die"), RESPONSE),
-                pool.prepare(at("/"), RESPONSE),
-                return_exceptions=True,
-            ),
+            asyncio.gather(pool.prepare(at("/die"), RESPONSE), pool.prepare(at("/"), RESPONSE)),
             timeout=30,
         )
-        after = await asyncio.wait_for(pool.prepare(at("/"), RESPONSE), timeout=30)
 
-    assert (type(ended), isinstance(other, PreparedPage), isinstance(after, PreparedPage)) == (
-        WorkerEndedError,
-        True,
-        True,
+    assert (ended.parse_error, ended.document_links, other.parse_error) == (
+        "worker_crashed",
+        (),
+        None,
+    )
+
+
+@pytest.mark.slow
+async def test_a_worker_that_ends_is_replaced() -> None:
+    async with started(1) as pool:
+        first = preparer(await pool.prepare(at("/"), RESPONSE)).pid
+        # The Page after it waits for the replacement.
+        _, after = await asyncio.wait_for(
+            asyncio.gather(pool.prepare(at("/die"), RESPONSE), pool.prepare(at("/"), RESPONSE)),
+            timeout=30,
+        )
+
+    assert preparer(after).pid not in (first, os.getpid())
+
+
+class RaisesOnLoad:
+    """A record that pickles in a worker and cannot be rebuilt in the crawl process."""
+
+    def __reduce__(self) -> tuple[Callable[[], None], tuple[()]]:
+        return (_refuse, ())
+
+
+def _refuse() -> None:
+    raise ValueError("this record cannot be rebuilt here")
+
+
+def test_a_page_whose_record_cannot_be_read_is_recorded_as_crashed() -> None:
+    page = _outcome(pickle.dumps(RaisesOnLoad()))
+
+    assert isinstance(page, PreparedPage)
+    assert (page.parse_error, page.parse_error_message) == (
+        "worker_crashed",
+        "The Page's record from its parse worker could not be read: ValueError: this record "
+        "cannot be rebuilt here",
     )
 
 
@@ -301,7 +331,7 @@ async def test_a_worker_that_cannot_start_fails_the_crawl() -> None:
 
 
 @pytest.mark.slow
-async def test_a_worker_ended_from_outside_fails_its_page_at_once() -> None:
+async def test_a_worker_ended_from_outside_costs_its_page_at_once() -> None:
     async with started(1) as pool:
         # Answered, so the worker has started and is idle.
         await pool.prepare(at("/"), RESPONSE)
@@ -310,24 +340,9 @@ async def test_a_worker_ended_from_outside_fails_its_page_at_once() -> None:
         await asyncio.sleep(0)
         psutil.Process(pool.worker_pids[0]).terminate()
         # Seen through its result pipe's end, long before any deadline (design D1).
-        outcome = await asyncio.wait_for(asyncio.gather(held, return_exceptions=True), 10)
+        outcome = await asyncio.wait_for(asyncio.gather(held), 10)
 
-    assert [type(error) for error in outcome] == [WorkerEndedError]
-
-
-@pytest.mark.slow
-async def test_the_pages_waiting_for_the_last_worker_fail_when_it_ends() -> None:
-    async with started(1) as pool:
-        outcomes = await asyncio.wait_for(
-            asyncio.gather(
-                pool.prepare(at("/die"), RESPONSE),
-                pool.prepare(at("/"), RESPONSE),
-                return_exceptions=True,
-            ),
-            timeout=30,
-        )
-
-    assert [type(outcome) for outcome in outcomes] == [WorkerEndedError, WorkerEndedError]
+    assert [page.parse_error for page in outcome] == ["worker_crashed"]
 
 
 @pytest.mark.slow
@@ -544,6 +559,31 @@ def test_fetching_waits_for_slow_parsing(
     requested = [r.received_at for r in server.requests if server.url(r.path) in pages]
     most = max(sum(t <= at for t in requested) - sum(t <= at for t in prepared) for at in requested)
     assert most <= global_cap(CrawlSettings.model_validate({}).concurrency) + 2 * 2
+
+
+CRASH_SITE = Site(
+    routes={
+        "/": Page(body='<a href="/die">Die</a><a href="/ok">OK</a>'),
+        "/die": Page(body="die"),
+        "/ok": Page(body="ok"),
+    }
+)
+
+
+@pytest.mark.slow
+def test_a_crashed_worker_is_recorded(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(CRASH_SITE)
+    hooks, _ = recording_preparers()
+
+    crawl_file = crawl_result(
+        server.url("/"), hooks, pages=lambda: PoolExecutor(workers=1)
+    ).crawl_file
+
+    assert query(
+        crawl_file, "SELECT parsed, parse_error FROM urls WHERE url = ?", (server.url("/die"),)
+    ) == [(0, "worker_crashed")]
 
 
 @pytest.mark.slow

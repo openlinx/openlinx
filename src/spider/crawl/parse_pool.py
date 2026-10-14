@@ -40,10 +40,6 @@ type _Outcome = PreparedPage | BaseException
 type _Sent = tuple[PreparedPage, tuple[tuple[str, bytes], ...]]
 
 
-class WorkerEndedError(RuntimeError):
-    """The worker that held a Page ended, or none is left to take it."""
-
-
 class WorkerStartError(RuntimeError):
     """A worker could not read its snapshot, or ended before it was ready: the Crawl's error."""
 
@@ -109,6 +105,22 @@ def _sendable(page: PreparedPage) -> _Sent:
         except Exception as error:
             failures.append(f"{name}: {type(error).__name__}")
     return _with_failures(page, failures, ()), tuple(outputs)
+
+
+def _outcome(message: bytes) -> _Outcome:
+    try:
+        return _received(message)
+    # A Page whose own record this process cannot read is that one Page's failure (design D3).
+    except Exception as error:
+        return _crashed(
+            "The Page's record from its parse worker could not be read: "
+            f"{type(error).__name__}: {error}"
+        )
+
+
+def _crashed(message: str) -> PreparedPage:
+    """Nothing came out of the Page's preparation: 020 records it with parsed = 0."""
+    return PreparedPage(parse_error="worker_crashed", parse_error_message=message)
 
 
 def _received(message: bytes) -> _Outcome:
@@ -244,51 +256,41 @@ class PoolExecutor:
                 + ("" if limit is None else f" and at most {limit} here")
             )
         self.backlog = BACKLOG_PER_WORKER * self.workers
+        self._settings: PageSettings | None = None
+        # Every worker started, and those still running, idle or busy, or ready.
         self._workers: list[_Worker] = []
-        # The workers still running, idle or busy, and those of them that have answered ready.
         self._live: set[_Worker] = set()
         self._ready: set[_Worker] = set()
         self._idle: deque[_Worker] = deque()
         # The Page each busy worker holds: its URL and its future.
         self._busy: dict[_Worker, tuple[NormalizedUrl, asyncio.Future[PreparedPage]]] = {}
         self._waiting: deque[tuple[_Work, asyncio.Future[PreparedPage]]] = deque()
+        self._replacing: set[asyncio.Task[None]] = set()
         self._started = False
-        self._waiter: threading.Thread | None = None
-        self._wake_reader, self._wake_writer = multiprocessing.Pipe(duplex=False)
+        self._closing = False
         self._broken: BaseException | None = None
+        # The result pipes the waiter thread reads, by identity: on Windows a pipe end is a
+        # PipeConnection, which is no Connection. The waiter reads it; the loop's thread adds.
+        self._watched: dict[int, _Worker] = {}
+        self._watched_lock = threading.Lock()
+        self._waiter: threading.Thread | None = None
+        # True: watch the pipes again, for a replacement; None: stop.
+        self._wake_reader, self._wake_writer = multiprocessing.Pipe(duplex=False)
 
     @property
     def worker_pids(self) -> tuple[int, ...]:
         return tuple(worker.process.pid for worker in self._workers if worker.process.pid)
 
     async def start(self, settings: PageSettings) -> None:
-        loop = asyncio.get_running_loop()
-        spawn = multiprocessing.get_context("spawn")
-        for n in range(self.workers):
-            task_reader, task_writer = spawn.Pipe(duplex=False)
-            result_reader, result_writer = spawn.Pipe(duplex=False)
-            process = spawn.Process(
-                target=_work,
-                # Its pipe ends alone: on Windows a child that died while it unpickled the
-                # snapshot would leave its result pipe's write end open here (design D1).
-                args=(task_reader, result_writer),
-                name=f"spider-parse-{n}",
-                daemon=True,
-            )
-            # Starting a spawn process blocks while it pickles its arguments across.
-            await asyncio.to_thread(process.start)
-            task_reader.close()
-            result_writer.close()
-            worker = _Worker(process, task_writer, result_reader)
-            self._workers.append(worker)
-            self._live.add(worker)
-            self._idle.append(worker)
-            # A worker that ended already answers with the end of its result pipe.
-            with suppress(OSError):
-                task_writer.send(settings)
+        self._settings = settings
+        for _ in range(self.workers):
+            await self._spawn()
         # A daemon: nothing it waits for may keep the crawl process from exiting.
         self._waiter = threading.Thread(
-            target=self._wait_for_outcomes, args=(loop,), name="spider-parse-waiter", daemon=True
+            target=self._wait_for_outcomes,
+            args=(asyncio.get_running_loop(),),
+            name="spider-parse-waiter",
+            daemon=True,
         )
         self._waiter.start()
         self._started = True
@@ -304,10 +306,13 @@ class PoolExecutor:
         return await future
 
     async def close(self) -> None:
+        self._closing = True
         # Nothing waits any more at a normal end; a stop leaves no Page for a worker.
         for _, future in self._waiting:
             future.cancel()
         self._waiting.clear()
+        # A replacement still starting is stopped with the others once it has started.
+        await asyncio.gather(*self._replacing, return_exceptions=True)
         for worker in self._live:
             # A worker that ended meanwhile has nothing to stop.
             with suppress(OSError):
@@ -328,9 +333,50 @@ class PoolExecutor:
             for end in (*ends, self._wake_reader, self._wake_writer):
                 end.close()
 
+    async def _spawn(self) -> None:
+        """Starts a worker and hands it the snapshot; the first ones and each replacement."""
+        if self._settings is None:
+            raise RuntimeError("the parse pool starts a worker before it has its snapshot")
+        spawn = multiprocessing.get_context("spawn")
+        task_reader, task_writer = spawn.Pipe(duplex=False)
+        result_reader, result_writer = spawn.Pipe(duplex=False)
+        process = spawn.Process(
+            target=_work,
+            # Its pipe ends alone: on Windows a child that died while it unpickled the snapshot
+            # would leave its result pipe's write end open here (design D1).
+            args=(task_reader, result_writer),
+            name=f"spider-parse-{len(self._workers)}",
+            daemon=True,
+        )
+        # Starting a spawn process blocks while it pickles its arguments across.
+        await asyncio.to_thread(process.start)
+        task_reader.close()
+        result_writer.close()
+        worker = _Worker(process, task_writer, result_reader)
+        self._workers.append(worker)
+        self._live.add(worker)
+        self._idle.append(worker)
+        with self._watched_lock:
+            self._watched[id(result_reader)] = worker
+        if self._started:
+            self._wake_writer.send(True)
+        # A worker that ended already answers with the end of its result pipe.
+        with suppress(OSError):
+            task_writer.send(self._settings)
+        self._dispatch()
+
+    async def _replace(self) -> None:
+        try:
+            await self._spawn()
+        # Starting it failed in this process: the pool cannot keep its workers.
+        except Exception as error:
+            failure = WorkerStartError("A parse worker could not be started in place of one.")
+            failure.__cause__ = error
+            self._break(failure)
+
     def _dispatch(self) -> None:
         """Hands waiting Pages to idle workers, skipping those cancelled while they waited."""
-        while self._waiting and self._idle:
+        while self._waiting and self._idle and self._broken is None:
             work, future = self._waiting.popleft()
             if future.done():
                 continue
@@ -343,8 +389,6 @@ class PoolExecutor:
                 self._ended(worker)
                 continue
             self._busy[worker] = (work[0], future)
-        if not self._live:
-            self._fail_waiting()
 
     def _wait_for_outcomes(self, loop: asyncio.AbstractEventLoop) -> None:
         """The waiter thread: every worker's outcome, handed to the event loop's thread."""
@@ -359,40 +403,41 @@ class PoolExecutor:
                 loop.call_soon_threadsafe(self._break, broken)
 
     def _relay_outcomes(self, loop: asyncio.AbstractEventLoop) -> None:
-        # By identity: on Windows a pipe end is a PipeConnection, which is no Connection.
-        pending = {id(worker.results): worker for worker in self._workers}
-        while pending:
-            for ready in wait([*(w.results for w in pending.values()), self._wake_reader]):
+        # Until close: a replacement's pipe joins the watched ones at the next wait.
+        while True:
+            with self._watched_lock:
+                watched = dict(self._watched)
+            for ready in wait([*(w.results for w in watched.values()), self._wake_reader]):
                 if ready is self._wake_reader:
-                    return
-                worker = pending[id(ready)]
-                outcome: _Outcome
+                    if self._wake_reader.recv() is None:
+                        return
+                    continue
+                worker = watched[id(ready)]
                 try:
                     message = worker.results.recv_bytes()
                 except (EOFError, OSError):
                     # The worker ended: at close, or a crash, whose Page design D3 records.
-                    del pending[id(ready)]
+                    with self._watched_lock:
+                        del self._watched[id(ready)]
                     loop.call_soon_threadsafe(self._ended, worker)
                     continue
                 if message == _READY:
                     loop.call_soon_threadsafe(self._ready.add, worker)
-                    continue
-                if message.startswith(_START_FAILED):
+                elif message.startswith(_START_FAILED):
                     reason = message.removeprefix(_START_FAILED).decode(errors="replace")
                     failure = WorkerStartError(
                         f"The parse worker {worker.process.name} could not start: {reason}"
                     )
                     loop.call_soon_threadsafe(self._break, failure)
-                    continue
-                try:
-                    outcome = _received(message)
-                # A Page whose own record this process cannot read: that Page's failure only.
-                except Exception as error:
-                    outcome = error
-                loop.call_soon_threadsafe(self._finished, worker, outcome)
+                else:
+                    loop.call_soon_threadsafe(self._finished, worker, _outcome(message))
 
     def _finished(self, worker: _Worker, outcome: _Outcome) -> None:
-        _, future = self._busy.pop(worker)
+        held = self._busy.pop(worker, None)
+        # None once the pool broke, which failed the Page already.
+        if held is None:
+            return
+        _, future = held
         # A cancelled Page's outcome only frees its worker.
         if not future.done():
             if isinstance(outcome, BaseException):
@@ -415,17 +460,15 @@ class PoolExecutor:
             return
         held = self._busy.pop(worker, None)
         if held is not None:
-            url, future = held
+            _, future = held
             if not future.done():
-                future.set_exception(WorkerEndedError(f"The parse worker preparing {url} ended."))
-        if not self._live:
-            self._fail_waiting()
-
-    def _fail_waiting(self) -> None:
-        for (url, _), future in self._waiting:
-            if not future.done():
-                future.set_exception(WorkerEndedError(f"No parse worker is left to prepare {url}."))
-        self._waiting.clear()
+                future.set_result(_crashed(f"The parse worker {worker.process.name} ended."))
+        if self._closing or self._broken is not None:
+            return
+        # The Pages waiting meanwhile wait for it (design D3).
+        replacement = asyncio.ensure_future(self._replace())
+        self._replacing.add(replacement)
+        replacement.add_done_callback(self._replacing.discard)
 
     def _break(self, error: BaseException) -> None:
         """Fails every Page, and every later one: the pool cannot prepare Pages any more."""
