@@ -85,6 +85,14 @@ def _recorded(html: str) -> list[tuple[str, str, str | None]]:
             [("http://site.test/x", "hyperlink", None), ("http://site.test/y", "hyperlink", None)],
         ),
         (
+            '<a rel="nofollow" href="/n">N</a>',
+            [("http://site.test/n", "hyperlink", "nofollow")],
+        ),
+        (
+            '<a rel="nofollow" href="/x">X</a><a href="/x">X</a>',
+            [("http://site.test/x", "hyperlink", None)],
+        ),
+        (
             '<a href="/x">X</a><link rel="amphtml" href="/x">',
             [("http://site.test/x", "hyperlink", None)],
         ),

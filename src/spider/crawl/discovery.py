@@ -24,12 +24,20 @@ def discovered_urls(
         # Resources are requested with group 9; until then they are not recorded.
         if link.type not in _FOLLOWED and link.type not in _NOT_FOLLOWED:
             continue
-        reason: SkipReason | None = None if link.type in _FOLLOWED else "link_type_not_followed"
+        reason = _skip_reason(link)
         known = chosen.get(link.target)
         # A followed Link gives the URL's provenance; it keeps its first place in the order.
         if known is None or (known[1] is not None and reason is None):
             chosen[link.target] = (link, reason)
     return tuple(_new_url(link, reason, scope, depth) for link, reason in chosen.values())
+
+
+def _skip_reason(link: DiscoveredLink) -> SkipReason | None:
+    if link.type not in _FOLLOWED:
+        return "link_type_not_followed"
+    if link.type == "hyperlink" and link.nofollow:
+        return "nofollow"
+    return None
 
 
 def _new_url(

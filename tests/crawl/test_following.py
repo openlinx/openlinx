@@ -106,3 +106,20 @@ def test_links_on_an_error_page_are_not_followed(
         query(crawl_file, "SELECT parsed FROM urls WHERE url = ?", [server.url("/gone")]),
         query(crawl_file, "SELECT id FROM urls WHERE url = ?", [server.url("/secret")]),
     ) == ([(0,)], [])
+
+
+def test_a_nofollow_link_is_not_requested(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a rel="nofollow" href="/private">Private</a>'),
+                "/private": Page(body="<p>Private</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _state(crawl_file, server.url("/private")) == [("skipped", "nofollow", "hyperlink")]
