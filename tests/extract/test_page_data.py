@@ -125,6 +125,12 @@ def test_block_elements_separate_heading_words() -> None:
     assert page_row("<h1>One<p>Two</p>Three<span>Four</span></h1>").h1_1 == "One Two ThreeFour"
 
 
+def test_absent_and_empty_elements_differ() -> None:
+    row = page_row("<head><title></title></head><body></body>")
+
+    assert (row.title_1, row.title_1_length, row.h1_1) == ("", 0, None)
+
+
 # Fragments that build the documents a parser repairs: unclosed, nested in foreign content,
 # commented out, NUL and stray markup.
 _FRAGMENTS = st.sampled_from(
