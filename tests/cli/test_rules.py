@@ -6,9 +6,12 @@ from pathlib import Path
 
 import pytest
 
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site
 from tests.support.cli import run_cli, run_cli_process
 
 GUIDANCE = ("description", "why_it_matters", "how_to_fix")
+HOME_PAGE = Site({"/": Page(body="<title>Home</title>")})
 
 
 def test_first_rule_in_the_list() -> None:
@@ -93,6 +96,32 @@ def test_a_misspelt_threshold_gets_the_closest_name(shop: Path) -> None:
     error = run_cli("rules", "list").stderr_json_lines()[-1]
 
     assert error["hint"] == "Did you mean rules.title-too-long.max_chars?"
+
+
+def test_negative_threshold(shop: Path, fixture_site: StartSite) -> None:
+    server = fixture_site(HOME_PAGE)
+    (shop / "spider.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = -5\n")
+
+    result = run_cli("crawl", server.url("/"))
+
+    assert (
+        result.exit_code,
+        result.stderr_json_lines()[-1]["details"]["errors"][0]["key"],
+        len(server.requests),
+    ) == (3, "rules.title-too-long.max_chars", 0)
+
+
+def test_a_rule_setting_of_another_type_is_invalid(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(
+        b'[rules.title-too-long]\nmax_chars = "70"\nenabled = "no"\n'
+    )
+
+    errors = run_cli("rules", "list").stderr_json_lines()[-1]["details"]["errors"]
+
+    assert [error["key"] for error in errors] == [
+        "rules.title-too-long.max_chars",
+        "rules.title-too-long.enabled",
+    ]
 
 
 def test_rule_without_thresholds() -> None:

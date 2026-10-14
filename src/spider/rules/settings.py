@@ -10,12 +10,22 @@ from spider.rules.registry import RULES
 
 def _rule_table(rule: Rule) -> type[BaseModel]:
     fields: dict[str, Any] = {
-        "enabled": (bool, Field(True, description="false leaves the Rule out of every Crawl.")),
+        # Strict: the spec refuses a threshold that is no integer and an enabled that is no
+        # boolean, which pydantic would otherwise read from text such as "70" or "no".
+        "enabled": (
+            bool,
+            Field(True, strict=True, description="false leaves the Rule out of every Crawl."),
+        ),
     }
     for threshold in rule.thresholds:
         fields[threshold.name] = (
             int,
-            Field(threshold.default, ge=0, description=f"The limit, in {threshold.unit}."),
+            Field(
+                threshold.default,
+                ge=0,
+                strict=True,
+                description=f"The limit, in {threshold.unit}.",
+            ),
         )
     name = "".join(word.title() for word in rule.id.split("-")) + "Settings"
     return create_model(name, __config__=ConfigDict(extra="forbid"), **fields)
