@@ -21,6 +21,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 |---|---|---|---|
 | `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host, 1 to 50. |
 | `--check-external` / `--no-check-external` | `check_external` | `true` | Request each External URL once to record its response; with `--no-check-external`, record it as skipped, unrequested (see [External URLs](#external-urls)). |
+| `--follow-nofollow` | `follow_nofollow` | `false` | Follow nofollow hyperlinks like any other hyperlink (see [Nofollow](#nofollow)). |
 | `--exclude <regex>` | `exclude` | `[]` | A URL that the pattern matches is never requested; give the option once per pattern (see [Include and exclude patterns](#include-and-exclude-patterns)). |
 
 `--workspace` and `--format` are the global flags of every Command.
@@ -94,12 +95,14 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 
 | What fails | How the URL is recorded |
 |---|---|
-| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `connection_error` (any other failure, a connection reset in the middle of the body included) |
+| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `tls_error` (the TLS handshake failed, such as a self-signed or expired certificate), `connection_error` (any other failure, a connection reset in the middle of the body included) |
 | The body has bytes its character encoding cannot hold | Nothing: they are decoded as replacement characters, and the Page is parsed as usual. |
 | A registered extractor raises an error | `parsed` stays 1 and the Page's Links are followed; `parse_error` = `extractor_error`, and `parse_error_message` names the extractor and the error's type, such as `title: ValueError`. Only that extractor's output is missing. |
 | A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |
 | The URL's rows cannot be written | The URL alone is recorded, with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs found on it or its handlers' rows. This holds for a value the file refuses (a constraint, a value too big, a value that cannot be bound) and for an error of the tool's own row code; any other database error stops the Crawl, as above. |
 | The URL matches an `--exclude` pattern | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `excluded`, and no response columns. |
+| Only nofollow Links reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `nofollow` (see [Nofollow](#nofollow)). |
+| Only Links of a type that is not requested reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `link_type_not_followed` (see [Link types](#link-types)). |
 | The URL is External, with `--no-check-external` | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `external_not_checked`; an External URL that an `--exclude` pattern matches is `excluded`. |
 
 Each of the three failures of the tool's own code is reported by one counted warning, written to stderr when it first occurs and kept once in the result's `warnings`, however many URLs it affects:
@@ -272,13 +275,39 @@ The Crawl reads Links from every response it parses: an in-Scope 2xx HTML respon
 | `misc` | `<link href>` with any other `rel`, such as `icon`, `manifest`, `preload`, or a feed's `alternate` | no |
 
 - A Resource is checked: requested once to record its response, and parsed only when it turns out to be in-Scope HTML.
-- A URL reached only through Links that are not requested is recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`.
+- A URL reached only through Links that are not requested is recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`. A Link that is requested, on the same Page or a later one, still requests it.
 - `<link rel="preconnect">` and `rel="dns-prefetch"` name an origin to connect to, not a file, so they give no Link.
 - `rel` tokens are compared without case: `rel="NoFollow"` is `nofollow`.
+- Inside `<noscript>`, a `<link>` or `<meta>` gives no Link, as a browser that runs scripts never sees it; the other elements there, such as `<a>` and `<img>`, give their Links as anywhere else, since a crawler without rendering finds every URL the raw HTML holds.
 
-The same list of types also holds, from v0.1, the types of later releases: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap) in v0.2, and `javascript_redirect` in v1.1, with JavaScript rendering. A URL's `discovered_via` is the type of the Link it was first found through, or `seed`.
+The same list of types also holds, from v0.1, the types of later releases: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap) in v0.2, and `javascript_redirect` in v1.1, with JavaScript rendering. A URL's `discovered_via` is the type of the Link it was first found through, or `seed`, and `found_on_url_id` points to the URL whose response revealed it. A Page that links to a URL several times records it once. When Links that are not followed reach a URL first and a followed Link reaches it later, its `discovered_via`, `found_on_url_id` and `crawl_depth` are those of the followed Link, so its depth and where it was found tell one story.
 
 HTTP redirects, HSTS, fonts in CSS, SWF and PDF are not Link types: a redirect is the redirecting URL's `redirect_url_id`, and a PDF is a content type.
+
+### Nofollow
+
+These Links are not followed:
+
+- a `hyperlink` whose `rel` holds `nofollow`, in any letter case, such as `<a rel="nofollow sponsored">`
+- every `hyperlink` of a Page whose robots directives say `nofollow` or `none` (see [Robots directives](#robots-directives))
+
+A URL that only such Links reach is recorded with `fetch_state` = `skipped` and `skip_reason` = `nofollow`, and it is never requested, even when it is External. Nofollow is a property of a Link, not of a URL: once any followed Link reaches the URL, on the same Page or a later one, it is requested. With `--follow-nofollow`, nofollow Links are followed like any other hyperlink.
+
+### Robots directives
+
+The Crawl reads the robots directives of every parsed Page from two sources:
+
+| Source | Read from |
+|---|---|
+| `meta_robots` | the `content` of every `<meta name="robots">`, in any letter case, joined with `, ` in document order |
+| `x_robots_tag` | every `X-Robots-Tag` response header, joined with `, ` in the order received |
+
+- Directives are comma-separated tokens, compared without case: `NOINDEX` is `noindex`, and `none` means `noindex, nofollow`.
+- A header value that starts with a name and a colon, such as `googlebot: noindex`, applies only to the crawler it names. It applies to this Crawl when the name equals the robots user-agent token (`spider` by default), compared without case.
+- `unavailable_after:`, `max-snippet:`, `max-image-preview:` and `max-video-preview:` are directives with a value, not crawler names: `unavailable_after: 25 Jun 2030 15:00:00 PST, noindex` gives `noindex`.
+- `<meta>` elements named after one crawler, such as `<meta name="googlebot">`, are not read, nor a robots `<meta>` inside `<noscript>`, which a browser that runs scripts never sees.
+
+A page-level `nofollow` stops the Page's hyperlinks from being followed (see [Nofollow](#nofollow)).
 
 ### Decoding
 
