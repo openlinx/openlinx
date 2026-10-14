@@ -2,9 +2,11 @@
 
 from pathlib import Path
 
+import pytest
+
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status
+from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status, redirect_chain
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.sites import NINE_PAGES
@@ -200,3 +202,26 @@ def test_a_redirected_robots_txt_is_followed(
     assert query(
         crawl_file, "SELECT skip_reason FROM urls WHERE url = ?", [server.url("/private/a")]
     ) == [("blocked_by_robots_txt",)]
+
+
+@pytest.mark.parametrize(("redirects", "expected"), [(5, "ok"), (6, "missing")])
+def test_more_than_five_robots_txt_redirects_count_as_missing(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, redirects: int, expected: str
+) -> None:
+    # /robots.txt -> /r1 -> ... -> /robots-real.txt: `redirects` redirects.
+    server = fixture_site(
+        Site(
+            routes={
+                "/robots.txt": Redirect("/r1"),
+                **redirect_chain("/r", redirects - 1, "/robots-real.txt"),
+                "/robots-real.txt": Robots("User-agent: *\nDisallow: /private/\n"),
+                "/": Page(body="<p>/</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file, "SELECT robots_state FROM origins WHERE origin = ?", [server.base_url]
+    ) == [(expected,)]

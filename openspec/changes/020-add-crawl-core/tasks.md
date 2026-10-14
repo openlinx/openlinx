@@ -270,7 +270,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 10.10 Drive "An unreachable robots.txt blocks its origin" at seam 3+6.
 - [x] 10.11 Drive "An unreachable robots.txt of the site is reported" at seam 1. Done when: `robots_unreachable` is declared.
 - [x] 10.12 Drive "A redirected robots.txt is followed" at seam 3+6.
-- [ ] 10.13 Drive "More than five robots.txt redirects count as missing" at seam 3+6.
+- [x] 10.13 Drive "More than five robots.txt redirects count as missing" at seam 3+6.
 - [ ] 10.14 Drive "A dead External domain is a DNS error" at seam 3+6, with the DNS resolver hook of task 6.1.
 
   Done when: each URL of an origin whose robots.txt request got no HTTP response is recorded with `fetch_state` = `error` and that request's `fetch_error`, without a request of its own, with a `fetch_error_message` that names the robots.txt request; the origin has `robots_state` = `unreachable`, `robots_status_code` NULL, and the request's error in `robots_fetch_error` and `robots_fetch_error_message`, declared with their `docs/schema.md` rows and the CHECK values of the `fetch_error` `Literal`; 5xx and 429 stay `robots_unreachable`; and "An unknown host is a DNS error" still passes (design D6). The Seed's origin pauses the Crawl instead from task 12.6 on.
