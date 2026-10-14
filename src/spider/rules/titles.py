@@ -5,7 +5,7 @@ from spider.rules.model import NO_ROWS, Rule, Threshold
 
 _TITLE_MISSING_SQL = """SELECT url_id, NULL AS detail
 FROM pages
-WHERE title_count = 0"""
+WHERE title_count = 0 OR title_1 = ''"""
 
 TITLE_MISSING = Rule(
     id="title-missing",
