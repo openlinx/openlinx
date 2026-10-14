@@ -188,7 +188,8 @@ def test_a_read_sees_one_snapshot(temp_workspace: TempWorkspace) -> None:
     crawl = create_any_crawl(temp_workspace)
     count = select(func.count()).select_from(seeds)
 
-    with reading(crawl.path) as connection, CrawlWriter(crawl.path, FakeClock()) as writer:
+    # The read ends before the writer closes: its closing checkpoint waits for open reads.
+    with CrawlWriter(crawl.path, FakeClock()) as writer, reading(crawl.path) as connection:
         before = connection.execute(count).scalar_one()
         writer.run(insert_seed(2, "https://example.com/two"))
         writer.flush()
