@@ -20,6 +20,7 @@ RULE_FIELDS = (
     "issue_type",
     "priority",
     "applies_to",
+    "enabled",
     "thresholds",
     "description",
     "why_it_matters",
@@ -69,6 +70,7 @@ def _item(rule: Rule, configured: Mapping[str, Any]) -> dict[str, Any]:
         "issue_type": rule.issue_type,
         "priority": rule.priority,
         "applies_to": rule.applies_to,
+        "enabled": configured["enabled"],
         "thresholds": {
             threshold.name: {
                 "value": configured[threshold.name],

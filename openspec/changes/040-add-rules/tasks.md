@@ -30,7 +30,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 ## 2. Configuration in spider.toml (slice)
 
 - [x] 2.1 Drive "Override shown by the rules Command" at seam 1, and add `[rules.<id>]` thresholds to `010`'s settings model. They fit neither of `010`'s table kinds (a flat model, or a keyed table with one entry model): each Rule has its own thresholds, and Rule ids hold `-`. So the `rules` table is a model built from the registry, with one field per Rule, aliased by its id, each an `extra="forbid"` model of `enabled` and its thresholds (integers, at least 0), registered in `build_app` beside `crawl` and `store`; `010`'s `check_table`, closest-key suggestion and `init` template learn it (the template gets one commented `[rules.<id>]` that points to `spider rules list`), and `crawl.config` dumps it by alias (design D9).
-- [ ] 2.2 Drive "Disabled Rule is listed" at seam 1 (`enabled = false`), and register `h1-missing` with a query that returns no rows until task 4.7.
+- [x] 2.2 Drive "Disabled Rule is listed" at seam 1 (`enabled = false`), and register `h1-missing` with a query that returns no rows until task 4.7.
 - [ ] 2.3 Drive "Misspelt Rule id" at seam 1: `settings_invalid` with a dotted key and a closest-id hint, which names the Rule id (`title-too-long`), never its field name (`title_too_long`).
 - [ ] 2.4 Drive "Unknown key" at seam 1, on `h1-missing`. A test named after no scenario pins the suggestion inside a Rule table: `[rules.title-too-long]` `max_char = 70` gives the hint `rules.title-too-long.max_chars`, reached through the alias.
 - [ ] 2.5 Drive "Negative threshold" at seam 1. `spider crawl` exits 3, and the fixture site receives 0 requests, on `title-too-long`'s `max_chars`.

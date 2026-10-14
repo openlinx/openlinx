@@ -54,6 +54,14 @@ def test_override_shown_by_the_rules_command(shop: Path) -> None:
     assert rule["thresholds"]["max_chars"] == {"value": 70, "default": 60, "unit": "characters"}
 
 
+def test_disabled_rule_is_listed(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[rules.h1-missing]\nenabled = false\n")
+
+    items = run_cli("rules", "list", "--limit", "50").json()["items"]
+
+    assert [item["enabled"] for item in items if item["id"] == "h1-missing"] == [False]
+
+
 def test_rule_without_thresholds() -> None:
     items = run_cli("rules", "list", "--limit", "50").json()["items"]
 
