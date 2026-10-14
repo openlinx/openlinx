@@ -98,3 +98,13 @@ def test_guidance_of_the_rule(temp_workspace: TempWorkspace) -> None:
 
     # The how_to_fix that spider rules show title-too-long prints.
     assert found.header["rule"]["how_to_fix"] == TITLE_TOO_LONG.how_to_fix
+
+
+def test_the_reproducing_query_of_the_rule(temp_workspace: TempWorkspace) -> None:
+    crawl_file = crawl_store(temp_workspace, completed=True)
+
+    found = issue_detail(request(temp_workspace), "title-missing")
+
+    assert [(found.header["rule"]["reproduce_sql"],)] == query(
+        crawl_file, "SELECT reproduce_sql FROM rules WHERE id = 'title-missing'"
+    )
