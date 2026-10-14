@@ -52,14 +52,16 @@ def crawl_store(
     temp_workspace: TempWorkspace,
     *,
     links: Sequence[str] = (),
+    statuses: Mapping[str, int] = MappingProxyType({}),
     pages: Mapping[str, Mapping[str, Any]] = MappingProxyType({}),
     rules: Mapping[str, Mapping[str, Any]] = MappingProxyType({}),
     later_rules: Sequence[Rule] = (),
     completed: bool = False,
 ) -> Path:
     """A crawl file in the current Workspace whose Seed, SEED, an analysed Page, links to
-    `links`, each of which answered 200 as a URL that is no Page, and to `pages`, analysed
-    Pages with these Page data columns.
+    `links`, each of which answered 200 as a URL that is no Page, to `statuses`, URLs that
+    are no Page by the status they answered with, and to `pages`, analysed Pages with these
+    Page data columns.
 
     `rules` are the Workspace's [rules.<id>] settings the Crawl was created with, such as
     {"title-too-long": {"max_chars": 70}}. `later_rules` are Rules of a later tool: the file
@@ -83,11 +85,13 @@ def crawl_store(
                 is_internal=True,
                 in_scope=True,
             )
-            for link in (*links, *pages)
+            for link in (*links, *statuses, *pages)
         )
         writer.run(record_fetched(_html(seed_id, SEED, _SEED_PAGE, found), _PAGE_WRITER))
         for url_id in writer.run(_ids_of(links)):
             writer.run(responded(200)(url_id))
+        for url_id, url in writer.run(_urls_of(statuses)):
+            writer.run(responded(statuses[url])(url_id))
         for url_id, url in writer.run(_urls_of(pages)):
             writer.run(record_fetched(_html(url_id, url, pages[url], ()), _PAGE_WRITER))
         if completed:

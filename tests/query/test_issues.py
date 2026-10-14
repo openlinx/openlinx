@@ -108,3 +108,11 @@ def test_the_reproducing_query_of_the_rule(temp_workspace: TempWorkspace) -> Non
     assert [(found.header["rule"]["reproduce_sql"],)] == query(
         crawl_file, "SELECT reproduce_sql FROM rules WHERE id = 'title-missing'"
     )
+
+
+def test_detail_of_an_affected_url(temp_workspace: TempWorkspace) -> None:
+    crawl_store(temp_workspace, statuses={"https://example.com/gone": 404}, completed=True)
+
+    found = issue_detail(request(temp_workspace), "internal-4xx")
+
+    assert found.items == [{"url": "https://example.com/gone", "detail": {"status_code": 404}}]
