@@ -1,6 +1,10 @@
 """The headings Rules (040-add-rules D3, D4)."""
 
-from spider.rules.model import NO_ROWS, Rule
+from spider.rules.model import Rule
+
+_H1_MISSING_SQL = """SELECT url_id, NULL AS detail
+FROM pages
+WHERE h1_count = 0 OR h1_1 = ''"""
 
 H1_MISSING = Rule(
     id="h1-missing",
@@ -16,7 +20,7 @@ H1_MISSING = Rule(
     how_to_fix=(
         "Give the page one <h1> element that names its main topic, near the top of its content."
     ),
-    reproduce_sql=NO_ROWS,
+    reproduce_sql=_H1_MISSING_SQL,
 )
 
 RULES = (H1_MISSING,)

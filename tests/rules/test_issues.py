@@ -128,7 +128,11 @@ def test_issue_visible_before_the_crawl_ends(
             )
         )
         state = query(crawl_file, "SELECT state FROM crawl")
-        issues = [(issue.rule_id, issue.affected_count) for issue in read_issues(crawl_file, RULES)]
+        issues = [
+            (issue.rule_id, issue.affected_count)
+            for issue in read_issues(crawl_file, RULES)
+            if issue.rule_id == "title-missing"
+        ]
         affected = [
             query(crawl_file, "SELECT url FROM urls WHERE id = ?", (url.url_id,))[0][0]
             for url in read_affected_urls(crawl_file, "title-missing", RULES)
