@@ -11,10 +11,10 @@ The motivation is in proposal.md, and the catalogue and behaviour are in `specs/
 - the `pages` and `links` tables, the stored Indexability and the link counts of `030-add-page-data`
 - the Workspace settings loaded and validated by `010-add-workspace-and-cli-contract`
 
-`020-add-crawl-core` provides (its D9 and D14):
+`020-add-crawl-core` provides (its D9 and D14), through `Hooks` in `spider.crawl.hooks`:
 
 - a **per-response hook** of pure handlers, which this change does not use (D1)
-- a **post-crawl passes** hook of store functions, which runs when a Crawl ends as `completed` or `stopped`, before its final Crawl State is written, and again after every continued run, so a pass must be safe to re-run
+- a **post-crawl passes** hook of store functions (`Pass`: a name and a function of the `CrawlWriter`), which runs when a Crawl ends as `completed` or `stopped`, before its final Crawl State is written, and again after every continued run, so a pass must be safe to re-run
 
 `015-add-crawl-store` provides the `crawl` row and the writer. `017-speed-up-crawl-writer` sets the contract of a unit (its D7): a unit may run again before its commit, so it is deterministic, has no effect outside its connection and returns values only. `018-add-schema-conventions` sets the schema conventions of [ADR-0005](../../../docs/adr/0005-crawl-file-schema-conventions.md) and `public_table()`, which every public table goes through. Issues must be queryable while a Crawl runs. Crawls can reach about 500k URLs.
 
