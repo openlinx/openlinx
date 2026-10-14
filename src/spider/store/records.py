@@ -110,8 +110,8 @@ class NewCrawl:
     # store.journal_mode setting would silently ignore it.
     secret_names: SecretNames
     journal_setting: JournalSetting
-    settings_file: Path | None = None
     section_crawl: bool
+    settings_file: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -133,10 +133,10 @@ class QueuedUrl:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewUrl:
-    """A URL discovered from a response, recorded unless the Crawl has it already."""
+    """A URL discovered from a response, recorded unless the Crawl has it already, one
+    deeper than the URL it was found on as the store holds it (design D3)."""
 
     url: NormalizedUrl
-    crawl_depth: int
     discovered_via: DiscoveredVia
     is_internal: bool
     in_scope: bool

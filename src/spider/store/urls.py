@@ -49,6 +49,7 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
 )
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
+_DEPTH = select(urls.c.crawl_depth).where(urls.c.id == bindparam("url_id"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
 _FETCHED = _URL_ROW.values(
@@ -186,7 +187,6 @@ def record_fetched(
             "origin": url_origin(new.url),
             "is_internal": new.is_internal,
             "in_scope": new.in_scope,
-            "crawl_depth": new.crawl_depth,
             "discovered_via": new.discovered_via,
             "found_on_url_id": url_id,
             "fetch_state": "queued" if new.skip_reason is None else "skipped",
@@ -202,7 +202,11 @@ def record_fetched(
         record_origins(connection, origins)
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
-            connection.execute(_INSERT_DISCOVERED, new_rows)
+            # The stored depth, which a late check may have lowered while the URL was in
+            # flight, so what it links to stays one deeper than it (design D3).
+            depth = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one() + 1
+            rows = [{**row, "crawl_depth": depth} for row in new_rows]
+            connection.execute(_INSERT_DISCOVERED, rows)
         write_rows(connection, fetched.rows, row_writers)
 
     return unit

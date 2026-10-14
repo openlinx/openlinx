@@ -28,6 +28,10 @@ class CliResult:
     def stderr_json_lines(self) -> list[Any]:
         return [json.loads(line) for line in self.stderr.splitlines()]
 
+    def errors(self) -> list[Any]:
+        """The stderr lines that are error diagnostics."""
+        return [line for line in self.stderr_json_lines() if line.get("level") == "error"]
+
 
 def run_cli(
     *args: str, input: str | bytes | None = None, app: typer.Typer | None = None

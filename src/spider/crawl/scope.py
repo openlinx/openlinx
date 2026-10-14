@@ -44,9 +44,9 @@ class ScopeRules:
         """The rules crawl.scope was recorded from, for the continue (design D1)."""
         hosts = recorded["hosts"]
         return cls(
-            # The subdomains record lists registrable domains, or the Seed host when it has none.
             seed_hosts=tuple(hosts),
             mode=recorded["mode"],
+            # The subdomains record lists registrable domains, or the Seed host when it has none.
             registrable_domains=frozenset(
                 host for host in hosts if _registrable_domain(host) == host
             )

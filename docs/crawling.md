@@ -45,12 +45,13 @@ The Seed has `crawl_depth` = 0, and every other URL the fewest Links followed fr
 
 - **The depth barrier:** a Crawl Depth ends only when every followed URL of it is done, an Internal URL in the Scope reached by a Link that is not a Resource. A followed URL one deeper never starts before that, so a slow Page holds the next depth back, and the depth stays the shortest path.
 - **Checks never wait:** External URLs, URLs outside the Scope and Resources are checks. They start in their depth's turn but never hold the next depth back, so a slow image or a slow outbound link costs no time.
-- **A check that is HTML:** a Resource Link to in-Scope HTML is parsed when it answers, even after its depth has ended. When nothing is left to start, the Crawl waits for every check and reads the queue again from the smallest depth, so what such a check found is still crawled. A URL it reaches that is still `queued` takes the shorter depth; one already requested keeps its depth.
+- **A check that is HTML:** a Resource Link to in-Scope HTML is parsed when it answers, even after its depth has ended. When nothing is left to start, the Crawl waits for every check and reads the queue again from the smallest depth, so what such a check found is still crawled. A URL it reaches that is still `queued`, or in flight, takes the shorter depth, and the URLs found on a URL are recorded one deeper than its depth as the crawl file holds it; a URL already fetched keeps its depth.
 
-With `--max-depth <n>`, a URL deeper than `n` is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_depth`. Resources of followed Pages are the exception, so with `--max-depth 0` the Seed's images are still checked. There is no depth limit by default.
+With `--max-depth <n>`, a URL deeper than `n` is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_depth`. Resources of followed Pages are the exception, one deeper than `n` and no deeper, so with `--max-depth 0` the Seed's images are still checked. A URL that a Page reaches through a Resource Link is a Resource, even when the Page also hyperlinks it; one that another Page hyperlinked first stays a followed URL. There is no depth limit by default.
+
+The rows of `spider crawl site.test --max-depth 1`, for a Seed that links to `/a` and holds `/logo.png`, where `/a` links to `/b` and holds `/a.png`:
 
 ```
-spider crawl site.test --max-depth 1
 http://site.test/          depth 0, fetched
 http://site.test/a         depth 1, fetched
 http://site.test/logo.png  depth 1, fetched (a Resource of /)

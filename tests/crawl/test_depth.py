@@ -158,3 +158,30 @@ def test_links_beyond_the_limit_are_not_requested(
     assert query(crawl_file, "SELECT skip_reason FROM urls WHERE url = ?", [server.url("/b")]) == [
         ("max_depth",)
     ]
+
+
+@pytest.mark.slow
+def test_the_urls_found_on_a_url_lowered_in_flight_are_one_deeper_than_it(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<img src="/late.html"><a href="/a">A</a>'),
+                "/late.html": Page(body='<a href="/x">X</a>', delay=SLOW / 2),
+                "/a": Page(body='<a href="/b">B</a>'),
+                "/b": Page(body='<a href="/x">X</a>'),
+                # In flight at depth 3 when the late check lowers it to 2.
+                "/x": Page(body='<a href="/y">Y</a>', delay=SLOW),
+                "/y": Page(body="<p>Y</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT url, crawl_depth FROM urls WHERE url IN (?, ?) ORDER BY id",
+        [server.url("/x"), server.url("/y")],
+    ) == [(server.url("/x"), 2), (server.url("/y"), 3)]

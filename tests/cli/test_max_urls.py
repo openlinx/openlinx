@@ -1,7 +1,9 @@
 """The URL limit at the CLI (020-add-crawl-core D10, crawling; seam 1)."""
 
+import pytest
+
 from tests.fixture_site.plugin import StartSite
-from tests.support.cli import CliResult, run_cli
+from tests.support.cli import run_cli
 from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
@@ -49,7 +51,10 @@ def test_there_is_no_limit_by_default(
 def test_a_limit_below_one_is_rejected(temp_workspace: TempWorkspace) -> None:
     result = run_cli("crawl", "http://site.test/", "--max-urls", "0")
 
-    assert (result.exit_code, _error_codes(result)) == (2, ["invalid_value"])
+    assert (result.exit_code, [error["code"] for error in result.errors()]) == (
+        2,
+        ["invalid_value"],
+    )
 
 
 def test_a_limit_below_one_in_the_settings_file_is_refused(temp_workspace: TempWorkspace) -> None:
@@ -57,8 +62,25 @@ def test_a_limit_below_one_in_the_settings_file_is_refused(temp_workspace: TempW
 
     result = run_cli("crawl", "http://site.test/")
 
-    assert (result.exit_code, _error_codes(result)) == (3, ["settings_invalid"])
+    assert (result.exit_code, [error["code"] for error in result.errors()]) == (
+        3,
+        ["settings_invalid"],
+    )
 
 
-def _error_codes(result: CliResult) -> list[str]:
-    return [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+@pytest.mark.parametrize(
+    ("max_urls", "state", "stop_reason"),
+    [("10", "completed", None), ("9", "stopped", "max_urls")],
+)
+def test_the_limit_is_reached_only_when_it_refuses_a_request(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    max_urls: str,
+    state: str,
+    stop_reason: str | None,
+) -> None:
+    server = fixture_site(NINE_PAGES)
+
+    document = run_cli("crawl", server.url("/"), "--max-urls", max_urls).json()
+
+    assert (document["state"], document["stop_reason"]) == (state, stop_reason)

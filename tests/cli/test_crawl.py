@@ -1,11 +1,10 @@
 """`spider crawl` (020-add-crawl-core, crawling)."""
 
 import json
-from typing import Any
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
-from tests.support.cli import CliResult, run_cli
+from tests.support.cli import run_cli
 from tests.support.crawling import crawled
 from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
@@ -21,7 +20,7 @@ SMALL_SITE = Site(
 
 def test_an_invalid_seed_is_rejected(temp_workspace: TempWorkspace) -> None:
     result = run_cli("crawl", "http://exa mple.test/")
-    errors = [error["code"] for error in _errors(result)]
+    errors = [error["code"] for error in result.errors()]
 
     assert (result.exit_code, errors, list(temp_workspace.home.rglob("*.sqlite"))) == (
         2,
@@ -238,7 +237,7 @@ def test_an_invalid_exclude_pattern_is_rejected(temp_workspace: TempWorkspace) -
 
 def test_a_concurrency_of_zero_is_rejected(temp_workspace: TempWorkspace) -> None:
     result = run_cli("crawl", "http://site.test/", "--concurrency", "0")
-    errors = [error["code"] for error in _errors(result)]
+    errors = [error["code"] for error in result.errors()]
 
     assert (result.exit_code, errors) == (2, ["invalid_value"])
 
@@ -249,7 +248,7 @@ def test_a_concurrency_above_50_in_the_settings_file_is_refused(
     (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nconcurrency = 51\n")
 
     result = run_cli("crawl", "http://site.test/")
-    errors = [error["code"] for error in _errors(result)]
+    errors = [error["code"] for error in result.errors()]
 
     assert (result.exit_code, errors) == (3, ["settings_invalid"])
 
@@ -273,7 +272,7 @@ def test_the_subdomains_shorthand_conflicts_with_a_subfolder_scope(
     temp_workspace: TempWorkspace,
 ) -> None:
     result = run_cli("crawl", "http://site.test/blog/", "--subdomains", "--scope", "subfolder")
-    errors = [error["code"] for error in _errors(result)]
+    errors = [error["code"] for error in result.errors()]
 
     assert (result.exit_code, errors, list(temp_workspace.home.rglob("*.sqlite"))) == (
         2,
@@ -292,10 +291,6 @@ def test_the_subdomains_shorthand_is_the_subdomains_scope(
     assert config["crawl"]["scope"] == "subdomains"
 
 
-def _errors(result: CliResult) -> list[dict[str, Any]]:
-    return [line for line in result.stderr_json_lines() if line.get("level") == "error"]
-
-
 def test_a_seed_without_its_trailing_slash_is_rejected(temp_workspace: TempWorkspace) -> None:
     result = run_cli("crawl", "http://site.test/blog", "--scope", "subfolder")
 
@@ -307,7 +302,7 @@ def test_a_seed_without_its_trailing_slash_is_rejected(temp_workspace: TempWorks
                 error["details"]["suggested_seed"],
                 "http://site.test/blog/ " in error["hint"],
             )
-            for error in _errors(result)
+            for error in result.errors()
         ],
     ) == (2, [("subfolder_is_root", "http://site.test/blog/", True)])
 
@@ -323,7 +318,7 @@ def test_a_root_seed_with_a_subfolder_scope_is_rejected(temp_workspace: TempWork
                 error["details"]["suggested_seed"],
                 "--scope subfolder" in error["hint"],
             )
-            for error in _errors(result)
+            for error in result.errors()
         ],
         list(temp_workspace.home.rglob("*.sqlite")),
     ) == (2, [("subfolder_is_root", None, True)], [])
@@ -334,7 +329,7 @@ def test_an_invalid_pattern_is_rejected(temp_workspace: TempWorkspace) -> None:
 
     assert (
         result.exit_code,
-        [(error["code"], "--include" in error["hint"]) for error in _errors(result)],
+        [(error["code"], "--include" in error["hint"]) for error in result.errors()],
         list(temp_workspace.home.rglob("*.sqlite")),
     ) == (2, [("invalid_pattern", True)], [])
 
@@ -344,7 +339,7 @@ def test_a_seed_outside_the_scope_is_rejected(temp_workspace: TempWorkspace) -> 
 
     assert (
         result.exit_code,
-        [error["code"] for error in _errors(result)],
+        [error["code"] for error in result.errors()],
         list(temp_workspace.home.rglob("*.sqlite")),
     ) == (2, ["seed_out_of_scope"], [])
 
@@ -354,7 +349,7 @@ def test_a_seed_that_matches_no_include_pattern_is_rejected(temp_workspace: Temp
 
     assert (
         result.exit_code,
-        [(error["code"], "--include" in error["message"]) for error in _errors(result)],
+        [(error["code"], "--include" in error["message"]) for error in result.errors()],
     ) == (2, [("seed_out_of_scope", True)])
 
 

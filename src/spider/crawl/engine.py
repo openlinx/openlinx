@@ -46,6 +46,8 @@ from spider.store.writer import CrawlWriterClosedError
 
 # Queued URLs read from the frontier at once.
 _FRONTIER_BATCH = 100
+# next_depth gives the smallest queued depth above it, so above this one, any depth.
+_ABOVE_NO_DEPTH = -1
 
 
 class _Outcomes:
@@ -122,11 +124,12 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     try:
         while depth is not None and not context.stop.is_set:
             await _crawl_depth(context, outcomes, limits, checks, depth)
-            if limits.exhausted():
+            limit = limits.limit_reached()
+            if limit is not None:
                 # The URL limit: what has started ends and is recorded, and nothing more starts.
                 await asyncio.gather(*checks)
                 context.stop.set("max_urls")
-                _warn_of_the_url_limit(context)
+                _warn_of_the_url_limit(context, limit)
                 break
             # Read after every unit submitted so far, so it sees the URLs they discovered.
             depth = await context.writer.run_async(next_depth(depth))
@@ -135,12 +138,12 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
                 # at a depth the frontier has passed: once every check has ended, the queue is
                 # read from the top.
                 await asyncio.gather(*checks)
-                depth = await context.writer.run_async(next_depth(-1))
+                depth = await context.writer.run_async(next_depth(_ABOVE_NO_DEPTH))
     # An ended writer refuses every unit; its cause says why it ended (017 D6).
     except CrawlWriterClosedError as closed:
         context.stop.set("write_failed", closed.__cause__ or closed)
     finally:
-        await _cancelled(checks)
+        await _cancel_all(checks)
     await outcomes.settled()
 
 
@@ -157,7 +160,7 @@ async def _crawl_depth(
     try:
         # The cursor of this run: a URL in flight is never read twice (design D1).
         after = 0
-        while not limits.exhausted() and (
+        while limits.limit_reached() is None and (
             batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH))
         ):
             for queued in batch:
@@ -165,7 +168,7 @@ async def _crawl_depth(
                 if context.stop.is_set:
                     limits.task_ended()
                     return
-                if limits.exhausted():
+                if limits.limit_reached() is not None:
                     limits.task_ended()
                     break
                 decision = context.scope.decide(queued.url)
@@ -179,10 +182,10 @@ async def _crawl_depth(
         if running:
             await asyncio.gather(*running)
     finally:
-        await _cancelled(running)
+        await _cancel_all(running)
 
 
-async def _cancelled(tasks: set[asyncio.Task[None]]) -> None:
+async def _cancel_all(tasks: set[asyncio.Task[None]]) -> None:
     for task in tasks:
         task.cancel()
     # Retrieved, so that no "Task exception was never retrieved" reaches stderr.
@@ -190,7 +193,11 @@ async def _cancelled(tasks: set[asyncio.Task[None]]) -> None:
 
 
 def _is_check(queued: QueuedUrl, decision: ScopeDecision) -> bool:
-    return not decision.in_scope or queued.discovered_via in RESOURCES
+    return not decision.in_scope or _via_resource(queued)
+
+
+def _via_resource(queued: QueuedUrl) -> bool:
+    return queued.discovered_via in RESOURCES
 
 
 async def _crawl_url(
@@ -252,12 +259,9 @@ def _skip_reason(
     max_depth = context.settings.max_depth
     if decision.skip_reason is not None:
         return decision.skip_reason
-    # A followed Page's Resources are requested one deeper than the limit (design D5).
-    if (
-        max_depth is not None
-        and queued.crawl_depth > max_depth
-        and queued.discovered_via not in RESOURCES
-    ):
+    # A followed Page's Resources are requested one deeper than the limit, no deeper: what
+    # a check that was HTML links to is two deeper (design D5).
+    if max_depth is not None and queued.crawl_depth > max_depth + _via_resource(queued):
         return "max_depth"
     if not (decision.is_internal or context.settings.check_external):
         return "external_not_checked"
@@ -286,7 +290,6 @@ async def _fetched(
     discovered = discovered_urls(
         links,
         context.scope,
-        queued.crawl_depth + 1,
         nofollow=nofollow,
         follow_nofollow=context.settings.follow_nofollow,
     )
@@ -325,15 +328,14 @@ async def _fetched(
     )
 
 
-def _warn_of_the_url_limit(context: CrawlContext) -> None:
-    limit = context.settings.max_urls
+def _warn_of_the_url_limit(context: CrawlContext, limit: int) -> None:
     context.reporter.warn(
         Diagnostic.of(
             MAX_URLS_REACHED,
             f"The Crawl reached its limit of {limit} URL requests, so it stopped with URLs left "
             "queued.",
             # The command itself, as an agent runs it: twice the limit is one higher value.
-            hint=f"{APP_NAME} resume --crawl {context.crawl_file.id} --max-urls {2 * (limit or 1)}",
+            hint=f"{APP_NAME} resume --crawl {context.crawl_file.id} --max-urls {2 * limit}",
             details={"max_urls": limit},
         )
     )

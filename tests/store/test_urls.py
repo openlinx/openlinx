@@ -46,13 +46,11 @@ def _url(text: str) -> NormalizedUrl:
 def _new(
     text: str,
     *,
-    crawl_depth: int = 1,
     discovered_via: DiscoveredVia = "hyperlink",
     skip_reason: DiscoverySkipReason | None = None,
 ) -> NewUrl:
     return NewUrl(
         url=_url(text),
-        crawl_depth=crawl_depth,
         discovered_via=discovered_via,
         is_internal=True,
         in_scope=True,
@@ -231,11 +229,11 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
             record_fetched(
                 _fetched(
                     about_id,
-                    _new("https://site.test/amp", crawl_depth=2),
-                    _new("https://site.test/p", crawl_depth=2, discovered_via="meta_refresh"),
-                    _new("https://site.test/q", crawl_depth=2, skip_reason="nofollow"),
-                    _new("https://site.test/out", crawl_depth=2),
-                    _new("https://site.test/", crawl_depth=2),
+                    _new("https://site.test/amp"),
+                    _new("https://site.test/p", discovered_via="meta_refresh"),
+                    _new("https://site.test/q", skip_reason="nofollow"),
+                    _new("https://site.test/out"),
+                    _new("https://site.test/"),
                 ),
                 {},
             )

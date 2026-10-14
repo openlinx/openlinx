@@ -43,7 +43,14 @@ from spider.output.reporter import Reporter
 from spider.services.crawls import create_crawl
 from spider.services.hooks import default_page_executor
 from spider.store.crawls import crawl_summary, record_state
-from spider.store.records import CrawlFile, CrawlSummary, NewCrawl, SecretNames, UrlCounts
+from spider.store.records import (
+    CrawlFile,
+    CrawlState,
+    CrawlSummary,
+    NewCrawl,
+    SecretNames,
+    UrlCounts,
+)
 from spider.store.settings import StoreSettings
 from spider.store.urls import url_counts
 from spider.store.writer import CrawlWriter, CrawlWriterClosedError
@@ -233,7 +240,7 @@ async def _crawl(
     async with context_of as context:
         await run_crawl(context, plan.seed)
         stop_reason = context.stop.reason
-        if stop_reason is not None and stop_reason != "max_urls":
+        if stop_reason not in (None, "max_urls"):
             # 12.9 records a write failure's failed end, 13.1 an interrupt's.
             raise context.stop.cause or RuntimeError(f"no end is built for {stop_reason}")
         writer = context.writer
@@ -241,12 +248,10 @@ async def _crawl(
         # "its Issues are materialised".
         for crawl_pass in hooks.passes:
             await crawl_pass.run(writer)
-        # One instant: the result's ended_at is the completed_at the file records.
+        # One instant: the result's ended_at is the time the file records for the end.
         ended_at = clock.now()
-        if stop_reason is None:
-            await writer.run_async(record_state("completed", ended_at))
-        else:
-            await writer.run_async(record_state("stopped", ended_at, stop_reason))
+        state: CrawlState = "completed" if stop_reason is None else "stopped"
+        await writer.run_async(record_state(state, ended_at, stop_reason))
         summary = await writer.run_async(crawl_summary())
         return ended_at, summary, await writer.run_async(url_counts())
 
