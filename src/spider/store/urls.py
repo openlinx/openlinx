@@ -24,7 +24,8 @@ type UrlUnit = Callable[[Connection], None]
 # Each row binds its origin, whose row the unit records first (design D18).
 _INSERT = insert(urls).values(origin_id=ORIGIN_ID)
 _INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])
-# A followed Link re-queues a URL that only unfollowed Links reached, as found through it;
+# A followed Link re-queues a URL that only unfollowed Links reached, as found through it, and
+# gives a URL still queued the shorter path a check found after its depth closed (design D3);
 # every other conflict changes nothing, so a replayed unit gives the same rows (design D5).
 _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     index_elements=[urls.c.url],
@@ -35,10 +36,14 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
         "discovered_via": _INSERT.excluded.discovered_via,
         "found_on_url_id": _INSERT.excluded.found_on_url_id,
     },
-    where=or_(
-        *(
-            urls.c.skip_reason == literal_column(f"'{reason}'")
-            for reason in literal_values(DiscoverySkipReason)
+    where=(
+        or_(
+            *(
+                urls.c.skip_reason == literal_column(f"'{reason}'")
+                for reason in literal_values(DiscoverySkipReason)
+            ),
+            (urls.c.fetch_state == literal_column("'queued'"))
+            & (urls.c.crawl_depth > _INSERT.excluded.crawl_depth),
         )
     )
     & (_INSERT.excluded.fetch_state == literal_column("'queued'")),

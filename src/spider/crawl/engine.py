@@ -120,9 +120,10 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             await _crawl_depth(context, outcomes, limits, checks, depth)
             # Read after every unit submitted so far, so it sees the URLs they discovered.
             depth = await context.writer.run_async(next_depth(depth))
-            if depth is None and checks:
-                # A check that was in-Scope HTML may have found URLs at a depth the frontier
-                # has passed: once every check has ended, the queue is read from the top.
+            if depth is None:
+                # A check that was in-Scope HTML may have found URLs, or a shorter path to them,
+                # at a depth the frontier has passed: once every check has ended, the queue is
+                # read from the top.
                 await asyncio.gather(*checks)
                 depth = await context.writer.run_async(next_depth(-1))
     # An ended writer refuses every unit; its cause says why it ended (017 D6).
