@@ -62,6 +62,20 @@ def test_disabled_rule_is_listed(shop: Path) -> None:
     assert [item["enabled"] for item in items if item["id"] == "h1-missing"] == [False]
 
 
+def test_misspelt_rule_id(shop: Path) -> None:
+    (shop / "spider.toml").write_bytes(b"[rules.title-to-long]\nmax_chars = 70\n")
+
+    result = run_cli("rules", "list")
+    error = result.stderr_json_lines()[-1]
+
+    assert (
+        result.exit_code,
+        error["code"],
+        error["details"]["errors"][0]["key"],
+        "title-too-long" in (error["hint"] or ""),
+    ) == (3, "settings_invalid", "rules.title-to-long", True)
+
+
 def test_rule_without_thresholds() -> None:
     items = run_cli("rules", "list", "--limit", "50").json()["items"]
 

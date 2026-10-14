@@ -124,7 +124,9 @@ def _suggestion(error: ValidationError, root_model: type[BaseModel]) -> str | No
             # A keyed table's part is an entry's name: the next level is the entry model.
             entry = keyed_entry(model)
             model = entry if entry is not None else model.model_fields[part].annotation
-        matches = difflib.get_close_matches(unknown, list(model.model_fields), n=1)
+        # A key in the settings file is a field's alias when it has one, such as a Rule id.
+        keys = [field.alias or name for name, field in model.model_fields.items()]
+        matches = difflib.get_close_matches(unknown, keys, n=1)
         if matches:
             return f"Did you mean {'.'.join([*parents, matches[0]])}?"
     return None
