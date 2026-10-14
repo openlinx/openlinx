@@ -5,7 +5,7 @@
 See proposal.md (Why) for the motivation. The approach is shaped by these constraints:
 
 - **`020-add-crawl-core`** provides:
-  - the `Fetcher` Protocol in `spider.crawl.fetcher` (one hop, no redirects), with the minimal `AiohttpFetcher(session, clock)`, which requests `yarl.URL(url, encoded=True)` so the request is the recorded URL, and the `FetchResult` record, `kw_only`: `status_code`, `headers`, `body`, `fetched_at` and `response_time_ms`
+  - the `Fetcher` Protocol in `spider.crawl.fetcher` (one hop, no redirects), with the minimal `AiohttpFetcher(session, clock)`, which requests `yarl.URL(url, encoded=True)` so the request is the recorded URL, and returns `FetchResult | FetchFailure` without ever raising (`020` D8): `FetchResult` is `kw_only` (`status_code`, `headers`, `body`, `fetched_at`, `response_time_ms`), and `FetchFailure` is a separate record of `fetch_error`, its message and `fetched_at`
   - the per-host politeness gate and the injectable `Clock`
   - the fake Fetcher, and the DNS resolver hook
   - the `urls` and `origins` tables, the depth barrier, and the writer unit per URL
@@ -30,7 +30,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 ## Decisions
 
 ### D1. The aiohttp policy Fetcher
-The Fetcher that replaces `020`'s `AiohttpFetcher(session, clock)` behind the `Fetcher` Protocol keeps its interface and its `yarl.URL(url, encoded=True)` request. It adds its fields to `FetchResult`, which is `kw_only`, so `020`'s call sites do not change:
+The Fetcher that replaces `020`'s `AiohttpFetcher(session, clock)` behind the `Fetcher` Protocol keeps its interface, `FetchResult | FetchFailure` with no exception, and its `yarl.URL(url, encoded=True)` request. Its retries and timeouts end in a `FetchFailure` (`timeout`, `tls_error`, and the other `fetch_error` values), and a host the resolver cannot encode is `dns_error`. It adds its fields to `FetchResult`, which is `kw_only`, so `020`'s call sites do not change:
 - **Redirects:** `allow_redirects=False` on every request.
 - **Decoding:** `auto_decompress=False`, and the Fetcher decodes gzip and deflate (`zlib`), br (`brotli`) and zstd (`zstandard`, or `compression.zstd` on 3.14) itself. That way it measures both `transferred_bytes` and `size_bytes`.
 - **Body limit:** the body is streamed up to 20 MiB. For checked URLs whose response has a `Content-Length` and no `Content-Encoding`, the Fetcher may stop after the headers and take both sizes from `Content-Length`.
