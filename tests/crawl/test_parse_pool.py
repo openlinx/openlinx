@@ -29,7 +29,7 @@ from spider.store.records import SecretNames
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.app import settings_tables
-from tests.support.cli import run_cli_process
+from tests.support.cli import run_cli, run_cli_process
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -279,6 +279,19 @@ def test_spider_crawl_starts_its_parse_workers(
         watcher.join()
 
     assert len(children) >= 1
+
+
+@pytest.mark.parse_pool
+def test_the_number_of_parse_workers_is_reported(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    result = run_cli("crawl", fixture_site(SMALL_SITE).url("/"))
+
+    started = next(line for line in result.stderr_json_lines() if line.get("event"))
+    assert (started["event"], started["data"]["parse_workers"]) == (
+        "crawl_started",
+        default_workers(),
+    )
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="spawn's Windows path: a new interpreter")
