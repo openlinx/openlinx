@@ -34,6 +34,17 @@ class CommandMeta:
     examples: tuple[Example, ...]
 
 
+@dataclass(frozen=True)
+class CommandGroup:
+    """Commands below one name, each named by its full path, such as `rules list`."""
+
+    name: str
+    summary: str
+    commands: Sequence[Callable[..., Any]]
+    # What the bare group name runs.
+    default: str
+
+
 @runtime_checkable
 class CommandWithMeta[**P](Protocol):
     command_meta: CommandMeta

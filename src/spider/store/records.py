@@ -64,6 +64,21 @@ type FetchError = Literal[
     "timeout",
     "tls_error",
 ]
+type RuleCategory = Literal[
+    "response_codes",
+    "security",
+    "titles",
+    "meta_descriptions",
+    "headings",
+    "canonicals",
+    "directives",
+    "content",
+    "urls",
+    "images",
+]
+type IssueType = Literal["issue", "warning", "opportunity"]
+type Priority = Literal["high", "medium", "low"]
+type AppliesTo = Literal["internal_urls", "internal_pages", "resources"]
 # extractor_error keeps parsed = 1; the others mean nothing came out of page preparation.
 type ParseError = Literal["extractor_error", "body_too_large", "worker_crashed", "parse_timeout"]
 

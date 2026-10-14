@@ -1,7 +1,7 @@
 """`spider commands`, the self-description (design D7 of 010-add-workspace-and-cli-contract)."""
 
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from enum import Enum
 from pathlib import PurePath
 from typing import Any, cast
@@ -56,9 +56,7 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
         "tool": {"name": APP_NAME, "version": __version__},
         "commands": [
             _entry(name, command, invocation.settings_tables)
-            for name, command in sorted(root.commands.items())
-            # Hidden Commands are not part of the contract: --help does not show them either.
-            if not command.hidden
+            for name, command in sorted(_commands(root))
         ],
         "exit_codes": [
             {"code": code.value, "name": code.name.lower(), "description": code.description}
@@ -67,6 +65,18 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
         "diagnostics": [declared.to_json() for declared in DECLARED],
         "environment": ENVIRONMENT,
     }
+
+
+def _commands(group: TyperGroup, prefix: str = "") -> Iterator[tuple[str, Command]]:
+    for name, command in group.commands.items():
+        # Hidden Commands are not part of the contract: --help does not show them either.
+        if command.hidden:
+            continue
+        if isinstance(command, TyperGroup):
+            # A group's Commands are named by their full path, such as `rules list`.
+            yield from _commands(command, f"{prefix}{name} ")
+        else:
+            yield prefix + name, command
 
 
 def _entry(name: str, command: Command, tables: SettingsTables) -> dict[str, Any]:

@@ -20,6 +20,12 @@ def test_the_command_lists_itself() -> None:
     assert "commands" in names
 
 
+def test_a_command_in_a_group_is_listed_by_its_full_path() -> None:
+    names = [entry["name"] for entry in run_cli("commands").json()["commands"]]
+
+    assert ("rules list" in names, "rules" in names) == (True, False)
+
+
 def test_tool_is_spider_with_the_project_version() -> None:
     tool = run_cli("commands").json()["tool"]
 

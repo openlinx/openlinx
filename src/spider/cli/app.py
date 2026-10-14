@@ -5,12 +5,15 @@ from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 import typer
+from typer.core import TyperGroup
 
 from spider import __version__
+from spider.cli.click_compat import Context
 from spider.cli.commands import commands
 from spider.cli.crawl import crawl
 from spider.cli.init import init
-from spider.cli.meta import check_command
+from spider.cli.meta import CommandGroup, check_command
+from spider.cli.rules import RULES
 from spider.cli.runner import Invocation, SpiderGroup
 from spider.cli.schema import schema
 from spider.naming import APP_NAME
@@ -39,7 +42,7 @@ def root(
 class AppExtra:
     # Table name to its "module:Class" reference.
     settings_tables: Mapping[str, str] = field(default_factory=dict)
-    commands: Sequence[Callable[..., Any]] = ()
+    commands: Sequence[Callable[..., Any] | CommandGroup] = ()
 
 
 def build_app(extra: AppExtra | None = None) -> typer.Typer:
@@ -62,9 +65,27 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         rich_markup_mode=None,
     )
     app.callback()(root)
-    registered: list[Callable[..., Any]] = [commands, crawl, init, schema, *extra.commands]
-    for command in registered:
-        app.command(name=check_command(command).name)(command)
+    registered = [commands, crawl, init, RULES, schema, *extra.commands]
+    for entry in registered:
+        if isinstance(entry, CommandGroup):
+            app.add_typer(_group_app(entry), name=entry.name)
+        else:
+            app.command(name=check_command(entry).name)(entry)
+    return app
+
+
+def _group_app(group: CommandGroup) -> typer.Typer:
+    class Group(TyperGroup):
+        def parse_args(self, ctx: Context, args: list[str]) -> list[str]:
+            # The bare group name runs its default Command.
+            return super().parse_args(ctx, args or [group.default])
+
+    app = typer.Typer(cls=Group, help=group.summary, rich_markup_mode=None)
+    for command in group.commands:
+        parent, _, name = check_command(command).name.rpartition(" ")
+        if parent != group.name:
+            raise TypeError(f"Command {command.__name__} is not named under {group.name}.")
+        app.command(name=name)(command)
     return app
 
 
