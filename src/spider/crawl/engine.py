@@ -122,7 +122,9 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             strip_params=context.strip_params,
         )
     )
-    robots = RobotsLoader(context.fetcher, limits, context.settings.robots_user_agent)
+    robots = RobotsLoader(
+        context.fetcher, limits, context.writer, context.settings.robots_user_agent
+    )
     checks: set[asyncio.Task[None]] = set()
     depth: int | None = 0
     try:

@@ -144,6 +144,14 @@ One row for each origin of a URL that the Crawl recorded.
 | `origin` | TEXT | no | | | | Scheme, host and port, for example https://site.test, with a default port left out; unique. |
 | `host` | TEXT | no | | | | The origin's host in lower-case ASCII (IDNA) form. |
 | `is_internal` | INTEGER | no | | `boolean` | | 1 when the origin's URLs are Internal URLs. |
+| `robots_state` | TEXT | yes | | | `ok`, `missing`, `unreachable` | Rules applied, everything allowed, or everything disallowed or unanswered; NULL while robots.txt has not been fetched, because no URL of the origin was requested. |
+| `robots_status_code` | INTEGER | yes | | | | Status code of the final robots.txt response; NULL without a response. |
+| `robots_fetch_error` | TEXT | yes | | | `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`, `record_failed`, `timeout`, `tls_error` | Why the robots.txt request got no HTTP response; NULL when it got one, or while robots.txt has not been fetched. |
+| `robots_fetch_error_message` | TEXT | yes | | | | Human-readable detail of robots_fetch_error. |
+| `robots_fetched_at` | TEXT | yes | | `timestamp` | | UTC time robots.txt was last fetched. |
+| `robots_txt` | TEXT | yes | | | | The robots.txt body as parsed, up to 512,000 bytes. |
+| `robots_crawl_delay_ms` | INTEGER | yes | | | | The Crawl-delay for the robots user-agent token; recorded, not applied. |
+| `robots_sitemaps` | TEXT | yes | | `json` | | JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not been fetched. |
 
 ### Indexes
 

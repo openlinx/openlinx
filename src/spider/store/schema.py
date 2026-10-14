@@ -23,6 +23,7 @@ from spider.store.records import (
     FetchState,
     JournalMode,
     ParseError,
+    RobotsState,
     SkipReason,
     StopReason,
 )
@@ -353,6 +354,43 @@ origins = public_table(
         Flag,
         nullable=False,
         comment="1 when the origin's URLs are Internal URLs.",
+    ),
+    Column(
+        "robots_state",
+        Text,
+        comment="Rules applied, everything allowed, or everything disallowed or unanswered; NULL "
+        "while robots.txt has not been fetched, because no URL of the origin was requested.",
+        info={"values": literal_values(RobotsState)},
+    ),
+    Column(
+        "robots_status_code",
+        Integer,
+        comment="Status code of the final robots.txt response; NULL without a response.",
+    ),
+    Column(
+        "robots_fetch_error",
+        Text,
+        comment="Why the robots.txt request got no HTTP response; NULL when it got one, or "
+        "while robots.txt has not been fetched.",
+        info={"values": literal_values(FetchError)},
+    ),
+    Column(
+        "robots_fetch_error_message",
+        Text,
+        comment="Human-readable detail of robots_fetch_error.",
+    ),
+    Column("robots_fetched_at", Timestamp, comment="UTC time robots.txt was last fetched."),
+    Column("robots_txt", Text, comment="The robots.txt body as parsed, up to 512,000 bytes."),
+    Column(
+        "robots_crawl_delay_ms",
+        Integer,
+        comment="The Crawl-delay for the robots user-agent token; recorded, not applied.",
+    ),
+    Column(
+        "robots_sitemaps",
+        Json,
+        comment="JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not "
+        "been fetched.",
     ),
     comment="One row for each origin of a URL that the Crawl recorded.",
     change=20,

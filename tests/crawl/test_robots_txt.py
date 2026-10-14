@@ -1,8 +1,9 @@
 """robots.txt over HTTP (020-add-crawl-core D6, crawling; seam 3 and 3+6)."""
 
+from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site
-from tests.support.crawling import crawled
+from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
@@ -65,3 +66,51 @@ def test_a_requested_url_is_allowed_and_a_url_skipped_before_robots_txt_is_unche
         (server.url("/"), 0),
         (server.url("/private/a"), None),
     ]
+
+
+def test_robots_txt_is_stored_with_its_origin(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    text = "User-agent: *\nCrawl-delay: 5\nDisallow: /private/\nSitemap: {{base_url}}/sitemap.xml"
+    server = fixture_site(
+        Site(routes={"/robots.txt": Page(body=text, template=True), "/": Page(body="<p>/</p>")})
+    )
+    site = server.base_url
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT robots_state, robots_status_code, robots_txt, robots_crawl_delay_ms, "
+        "robots_sitemaps, robots_fetched_at IS NOT NULL FROM origins WHERE origin = ?",
+        [site],
+    ) == [
+        (
+            "ok",
+            200,
+            text.replace("{{base_url}}", site),
+            5000,
+            f'["{site}/sitemap.xml"]',
+            1,
+        )
+    ]
+
+
+def test_a_url_that_is_not_requested_still_points_to_its_origin(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(routes={"/": Page(body='<a href="http://other.test/page">Other</a>')}),
+        Site(routes={"/robots.txt": Robots("User-agent: *\nAllow: /\n")}),
+    )
+
+    crawl_file = crawl_result(
+        "http://site.test/", resolver=hosts.resolver, check_external=False
+    ).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT origins.origin, robots_state, robots_fetched_at, robots_sitemaps FROM urls "
+        "JOIN origins ON origins.id = urls.origin_id WHERE url = ?",
+        ["http://other.test/page"],
+    ) == [("http://other.test", None, None, None)]

@@ -74,6 +74,7 @@ _PIECES = st.sampled_from(
         "\r\n",
         "\r",
         "1e309",
+        "1e306",
         "-1",
         "nan",
         "1/0s",
@@ -87,4 +88,28 @@ _TEXT = st.lists(_PIECES | st.text(max_size=5), max_size=40).map("".join)
 
 @given(_TEXT.map(str.encode) | st.binary(), _TEXT, _TEXT | st.just(DEFAULT_ROBOTS_TOKEN))
 def test_any_robots_txt_gives_a_decision(body: bytes, path: str, token: str) -> None:
-    assert read_robots_txt(body, token).allows(f"http://site.test/{path}") in {True, False}
+    robots = read_robots_txt(body, token)
+
+    assert (
+        robots.allows(f"http://site.test/{path}") in {True, False},
+        robots.crawl_delay_ms is None or 0 <= robots.crawl_delay_ms < 2**63,
+        len(robots.sitemaps) >= 0,
+    ) == (True, True, True)
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("Crawl-delay: 5", 5000),
+        ("Crawl-delay: 0.5", 500),
+        ("Crawl-delay: 1e306", 2**63 - 1),
+        ("Crawl-delay: soon", None),
+        ("Allow: /", None),
+    ],
+)
+def test_the_crawl_delay_is_in_whole_milliseconds_that_fit_an_integer(
+    line: str, expected: int | None
+) -> None:
+    robots = read_robots_txt(f"User-agent: *\n{line}".encode(), DEFAULT_ROBOTS_TOKEN)
+
+    assert robots.crawl_delay_ms == expected

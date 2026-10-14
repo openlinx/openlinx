@@ -6,12 +6,18 @@ from spider.crawl.fetcher import Fetcher, FetchResult, Request
 from spider.crawl.politeness import RequestLimits
 from spider.crawl.robots import OriginRobots, read_robots_txt
 from spider.crawl.urls import NormalizedUrl, robots_txt_url, url_host, url_origin
+from spider.store.origins import record_robots_txt
+from spider.store.records import RobotsTxtRecord
+from spider.store.writer import CrawlWriter
 
 
 class RobotsLoader:
-    def __init__(self, fetcher: Fetcher, limits: RequestLimits, token: str) -> None:
+    def __init__(
+        self, fetcher: Fetcher, limits: RequestLimits, writer: CrawlWriter, token: str
+    ) -> None:
         self._fetcher = fetcher
         self._limits = limits
+        self._writer = writer
         self._token = token
         self._origins: dict[str, asyncio.Task[OriginRobots]] = {}
 
@@ -33,6 +39,18 @@ class RobotsLoader:
         # The host's politeness gate, but never the URL limit, which counts only URLs (D6).
         async with self._limits.host(url_host(url)), self._limits.request():
             response = await self._fetcher.fetch(Request(url))
-        if isinstance(response, FetchResult) and 200 <= response.status_code < 300:
-            return OriginRobots(read_robots_txt(response.body, self._token))
-        return OriginRobots(None)
+        if not (isinstance(response, FetchResult) and 200 <= response.status_code < 300):
+            return OriginRobots(None)
+        rules = read_robots_txt(response.body, self._token)
+        record = RobotsTxtRecord(
+            # The URL's origin row exists: the URL that requests robots.txt was recorded first.
+            origin=url_origin(url),
+            state="ok",
+            status_code=response.status_code,
+            fetched_at=response.fetched_at,
+            text=rules.text,
+            crawl_delay_ms=rules.crawl_delay_ms,
+            sitemaps=rules.sitemaps,
+        )
+        await self._writer.run_async(record_robots_txt(record))
+        return OriginRobots(rules)
