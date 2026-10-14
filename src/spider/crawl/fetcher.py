@@ -74,7 +74,7 @@ class AiohttpFetcher:
         # Cancellation is no Exception, so it passes through.
         except Exception as error:
             return FetchFailure(
-                fetch_error=_fetch_error(error),
+                fetch_error=fetch_error_of(error),
                 message=f"{type(error).__name__}: {error}",
                 fetched_at=fetched_at,
             )
@@ -88,7 +88,11 @@ class AiohttpFetcher:
         )
 
 
-def _fetch_error(error: Exception) -> FetchError:
+def fetch_error_of(error: Exception) -> FetchError:
+    # First: aiohttp's TLS errors are ClientConnectorErrors too, and a certificate failure is
+    # an answer of sorts, which the network pause must never count (design D16).
+    if isinstance(error, aiohttp.ClientSSLError):
+        return "tls_error"
     # The system resolver cannot encode a name such as a..b.test, and aiohttp passes that on.
     if isinstance(error, aiohttp.ClientConnectorDNSError | UnicodeError):
         return "dns_error"
