@@ -15,18 +15,18 @@ Every Page has exactly one `pages` row, keyed by `url_id`, which is `urls.id`. I
 
 ## Analysed and non-analysed Pages
 
-A Page is *analysed* when the Crawl parsed it (`urls.parsed` = 1): its status is 2xx and its body was read in full. Only an analysed Page has values in the columns that come from its HTML, such as its titles and headings. A Page that is not analysed, such as a 404 or a redirect, has NULL in them; the columns that come from the URL and its response are set for every Page.
+A Page is *analysed* when the Crawl parsed it (`urls.parsed` = 1): its status is 2xx and its body was read in full. Only an analysed Page has values in the columns that come from its HTML, such as its titles and headings. A Page that is not analysed, such as a 404 or a redirect, has NULL in them; the columns that come from the URL and its response are set for every Page. When the Page extractor fails on an analysed Page (`urls.parse_error` = `extractor_error`), only the columns it derives from the HTML are NULL.
 
 ## NULL, empty and zero
 
 The columns follow the conventions of [schema.md](schema.md#conventions):
 - NULL means not measured, or not applicable: an HTML column of a Page that is not analysed, an element the HTML does not have, or a column that a later release fills.
 - The empty string is an element that is present but empty, such as `<title></title>`.
-- 0 is a measured zero: a count of an analysed Page is 0 or more, never NULL.
+- 0 is a measured zero: a count of an analysed Page is 0 or more, and NULL only when the Page extractor failed on it.
 
 ## The two address forms
 
 - **`url_encoded_address`** is the URL as the Crawl requested it, equal to `urls.url`: the host in IDNA (punycode) form and every non-ASCII character percent-encoded as UTF-8, such as `https://xn--bcher-kva.test/%C3%BCber%20uns`.
-- **`address`** is the same URL for people: the host in Unicode, and every percent-encoded UTF-8 sequence of a non-ASCII character decoded, such as `https://bücher.test/über%20uns`. Percent-encoded ASCII characters, such as `%20` and `%2F`, stay encoded, and so does what does not decode: a byte that is no UTF-8, or a punycode label that is not valid.
+- **`address`** is the same URL for people: the host in Unicode, and every percent-encoded UTF-8 sequence of a non-ASCII character decoded, such as `https://bücher.test/über%20uns`. Percent-encoded ASCII characters, such as `%20` and `%2F`, stay encoded, and so does what does not decode: a byte that is no UTF-8, or a punycode label that is not valid. Controls, format characters such as a right-to-left override, and spaces and separators such as the no-break space stay encoded too (Unicode categories `Cc`, `Cf`, `Zs`, `Zl` and `Zp`), so an address never hides or spoofs what was requested.
 
-`address` is unique, through the index `pages_address`, so a Page can be found by the URL a person reads.
+`address` is unique, through the index `pages_address`, so a Page can be found by the URL a person reads: normalising an `address` gives back its `url_encoded_address`, so two URLs never share one.

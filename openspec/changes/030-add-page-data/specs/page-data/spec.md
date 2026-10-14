@@ -205,9 +205,9 @@ Each Page row SHALL store two forms of the Page's URL, and the path and query of
 - **`url_encoded_address`** is the URL as the Crawl requested it, equal to `urls.url`. The host is in IDNA (punycode) form, and every non-ASCII character is percent-encoded as UTF-8.
 - **`address`** is `url_encoded_address` with two changes:
   - the host is converted to Unicode
-  - every percent-encoded byte sequence that decodes as UTF-8 to a non-ASCII character is replaced by that character
+  - every percent-encoded byte sequence that decodes as UTF-8 to a non-ASCII character is replaced by that character, unless the character's Unicode general category is `Cc`, `Cf`, `Zs`, `Zl` or `Zp`: a control, a format character such as a bidi override, or a space or separator
   
-  Percent-encoded ASCII characters SHALL stay encoded.
+  Percent-encoded ASCII characters, and characters of those five categories, SHALL stay encoded, so that nothing in an address hides or spoofs what was requested.
 - **`url_path`** is the path of `address`: from the first `/` after the host up to the first `?`, or to the end.
 - **`url_query`** is the query of `address`: the text after the first `?`. It is NULL when `address` has no `?`, and the empty string when nothing follows it.
 
@@ -218,6 +218,10 @@ Each Page row SHALL store two forms of the Page's URL, and the path and query of
 #### Scenario: Punycode host is shown in Unicode
 - **WHEN** the Page's `url_encoded_address` is `https://xn--bcher-kva.test/`
 - **THEN** its `address` is `https://bücher.test/`
+
+#### Scenario: Invisible and control characters stay encoded
+- **WHEN** the Page's `url_encoded_address` is `https://example.test/a%C2%A0b%E2%80%AEc%C2%9Bd%C3%BC`
+- **THEN** its `address` is `https://example.test/a%C2%A0b%E2%80%AEc%C2%9Bdü`: the no-break space, the right-to-left override and the C1 control stay encoded
 
 #### Scenario: Path and query of the address
 - **WHEN** Pages have the `url_encoded_address` values `https://example.test/%D0%9A%D0%B0%D1%82/a%2Fb?x=1&y=%C3%BC`, `https://example.test/a?` and `https://example.test/a`

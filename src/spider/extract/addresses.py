@@ -1,13 +1,19 @@
-"""The display form of a URL (030-add-page-data, Address columns)."""
+"""The display form of a Page's address (design D17 of 030-add-page-data)."""
 
 import re
+import unicodedata
 from contextlib import suppress
+
+import idna
 
 from spider.crawl.urls import NormalizedUrl
 
 _ESCAPES = re.compile(r"(?:%[0-9A-Fa-f]{2})+")
 # Where surrogateescape puts the bytes that are no UTF-8.
 _LOW_SURROGATES = range(0xDC80, 0xDD00)
+# Controls, format characters such as bidi overrides, and spaces and separators: shown raw,
+# they hide or spoof what the address says, so they stay encoded.
+_KEPT_ENCODED = frozenset({"Cc", "Cf", "Zs", "Zl", "Zp"})
 
 
 def display_address(url: NormalizedUrl) -> str:
@@ -27,8 +33,6 @@ def _unicode_host(host: str) -> str:
 
 def _unicode_label(label: str) -> str:
     if label.startswith("xn--"):
-        import idna  # off the startup path
-
         # A label that does not decode stays as it was requested.
         with suppress(idna.IDNAError):
             return idna.decode(label)
@@ -42,11 +46,11 @@ def _decoded(match: re.Match[str]) -> str:
     parts = []
     position = 0
     for character in text:
+        size = 1 if ord(character) in _LOW_SURROGATES else len(character.encode())
         # ASCII and bytes that are no UTF-8 stay escaped, as they were requested.
-        if ord(character) < 0x80 or ord(character) in _LOW_SURROGATES:
-            parts.append(escapes[position])
-            position += 1
+        if size == 1 or unicodedata.category(character) in _KEPT_ENCODED:
+            parts.append("".join(escapes[position : position + size]))
         else:
             parts.append(character)
-            position += len(character.encode())
+        position += size
     return "".join(parts)

@@ -9,8 +9,7 @@ from spider.store.page_records import PageRow
 
 
 def page_rows(result: UrlResult) -> Iterable[PageRow]:
-    # A Page is an Internal URL in the Scope with an HTML response, whatever its status (D2).
-    if not (result.is_internal and result.in_scope and is_html_type(result.content_type)):
+    if not _is_page(result):
         return ()
     return (
         PageRow(
@@ -18,4 +17,14 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             address=display_address(result.url),
             url_encoded_address=result.url,
         ),
+    )
+
+
+def _is_page(result: UrlResult) -> bool:
+    # The status code does not matter: a 404 or a 301 with an HTML body is a Page (design D2).
+    return (
+        result.is_internal
+        and result.in_scope
+        and result.fetch_state == "fetched"
+        and is_html_type(result.content_type)
     )
