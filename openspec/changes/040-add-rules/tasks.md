@@ -51,7 +51,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 3.8 Drive "A Rule's query returns its stored Affected URLs" at seam 3+6, over every enabled Rule. From here on it checks every Rule registered later.
 - [x] 3.9 Drive "Keys of the Rule tables" at seam 6.
 - [x] 3.10 Drive "Indexes of affected_urls" at seam 6.
-- [ ] 3.11 Drive "Issue Types are an enumeration" at seam 6 (`values` on `issues.issue_type`).
+- [x] 3.11 Drive "Issue Types are an enumeration" at seam 6 (`values` on `issues.issue_type`).
 - [ ] 3.12 Drive "Issue visible before the Crawl ends" at seam 3+6, with a fixture page that delays its response by 5 s: the Issues reader and its live path (design D16).
 - [ ] 3.13 Drive "A Crawl without a final pass is read live" at seam 2: the path chosen by the Crawl State. `resume` comes with `060`, so the test calls the pass, then writes `running` → `stopped` → `running` → `failed` with `020`'s `record_state`, which its transitions allow.
 - [ ] 3.14 Drive "Live and materialised Issues agree" at seam 3+6.

@@ -233,7 +233,7 @@ The Issues: one row for each Rule with at least one Affected URL, counted from a
 | Column | Type | Null | Key | Format | Values | Description |
 |---|---|---|---|---|---|---|
 | `rule_id` | TEXT | no | → `rules.id` | | | The Rule that fired. |
-| `category` | TEXT | no | | | | The Rule's category. |
-| `issue_type` | TEXT | no | | | | The Issue Type of the Rule's Issues. |
-| `priority` | TEXT | no | | | | The Priority of the Rule's Issues. |
+| `category` | TEXT | no | | | `response_codes`, `security`, `titles`, `meta_descriptions`, `headings`, `canonicals`, `directives`, `content`, `urls`, `images` | The Rule's category. |
+| `issue_type` | TEXT | no | | | `issue`, `warning`, `opportunity` | The Issue Type of the Rule's Issues. |
+| `priority` | TEXT | no | | | `high`, `medium`, `low` | The Priority of the Rule's Issues. |
 | `affected_count` | INTEGER | no | | | | The number of the Rule's rows in affected_urls. |
