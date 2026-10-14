@@ -1,6 +1,8 @@
 """The robots.txt reader (020-add-crawl-core D6; seam 4)."""
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from spider.crawl.robots import read_robots_txt
 from spider.naming import DEFAULT_ROBOTS_TOKEN
@@ -46,3 +48,43 @@ def test_another_token_can_be_chosen() -> None:
     robots = read_robots_txt(b"User-agent: Googlebot\nDisallow: /g", "Googlebot")
 
     assert robots.allows("http://site.test/g") is False
+
+
+_PIECES = st.sampled_from(
+    [
+        "User-agent:",
+        "Allow:",
+        "Disallow:",
+        "Crawl-delay:",
+        "Request-rate:",
+        "Visit-time:",
+        "Sitemap:",
+        "Host:",
+        "spider",
+        "*",
+        "$",
+        "%",
+        "%zz",
+        "%E9",
+        "/",
+        "#",
+        ":",
+        " ",
+        "\n",
+        "\r\n",
+        "\r",
+        "1e309",
+        "-1",
+        "nan",
+        "1/0s",
+        "0400-0845",
+        "﻿",
+        "é",
+    ]
+)
+_TEXT = st.lists(_PIECES | st.text(max_size=5), max_size=40).map("".join)
+
+
+@given(_TEXT.map(str.encode) | st.binary(), _TEXT, _TEXT | st.just(DEFAULT_ROBOTS_TOKEN))
+def test_any_robots_txt_gives_a_decision(body: bytes, path: str, token: str) -> None:
+    assert read_robots_txt(body, token).allows(f"http://site.test/{path}") in {True, False}
