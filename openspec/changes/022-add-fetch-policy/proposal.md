@@ -85,6 +85,6 @@ The response headers must also be stored, without cookie values, because `page -
   - `050` (`page --headers`, and the `resources` export)
   - `060` (`--auth` on resume)
   - `080` (`doctor`'s TLS check reuses this TLS setup)
-- **Code:** `src/spider/crawl/fetcher/` (aiohttp policy, decoding, TLS and ALPN), redirect handling in the engine, and store columns.
+- **Code:** `spider.crawl.fetcher`, `020`'s module, which becomes a package for the aiohttp policy, decoding, TLS and ALPN, redirect handling in the engine, and store columns.
 - **New dependencies:** `truststore`, `certifi` and `brotli`. `zstandard` is shared with `030`, and `compression.zstd` is used on Python 3.14. `trustme` is a test dependency.
 - **Docs:** the fetching part of `docs/crawling.md` (identity, credentials, proxy, retries, redirects, limits, compression, TLS, HTTP version).
