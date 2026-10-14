@@ -137,7 +137,12 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 5. Hooks, and one URL never stops the Crawl (slice)
 
-- [ ] 5.1 Drive "An excluded URL is never requested" (seam 3) and "An excluded URL is recorded as skipped" (seam 3+6), a trivial pair. Done when: `skip_reason` is declared, and an excluded URL gets its row without a request.
+- [ ] 5.1 Drive "An excluded URL is never requested" (seam 3) and "An excluded URL is recorded as skipped" (seam 3+6), a trivial pair.
+
+  Done when:
+  - `--exclude` is declared, repeatable, with `OptionMeta(setting="crawl.exclude")` and the default `[]`, so it is not inert (ruling of 2026-10-14)
+  - its patterns are compiled before any crawl file is created, and an invalid one is `invalid_pattern` (exit 2, the pattern in `details`), declared here, with a non-scenario test at seam 1; task 8.7 adds `--include`'s
+  - `skip_reason` is declared, and an excluded URL is decided when it is dispatched and recorded in its own unit without a request, so it is decided once; a skipped URL never holds up the depth barrier (design D3) and is never counted as a request
 - [ ] 5.2 **Guard:** "A skipped URL has no response data", at seam 3+6.
 - [ ] 5.3 Drive "A registered handler sees every URL once" at seam 2.
 
@@ -205,7 +210,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 8.4 Drive "Pages inside the folder are followed" at seam 3+6.
 - [ ] 8.5 Drive "Pages outside the folder are checked but not followed" at seam 3+6.
 - [ ] 8.6 Drive "A URL that matches no include pattern is checked but not followed" at seam 3+6.
-- [ ] 8.7 Drive "An invalid pattern is rejected" at seam 1. Done when: `invalid_pattern` is declared, and patterns are compiled before any crawl file is created.
+- [ ] 8.7 Drive "An invalid pattern is rejected" at seam 1. Done when: an invalid `--include` pattern is `invalid_pattern`, which task 5.1 declared for `--exclude`, before any crawl file is created.
 - [ ] 8.8 Drive "A Seed outside the Scope is rejected" at seam 1. Done when: `seed_out_of_scope` is declared.
 - [ ] 8.9 Drive "A subfolder Crawl is a Section Crawl" at seam 1.
 - [ ] 8.10 Drive "An include pattern makes a Section Crawl" and "Exclude patterns alone do not make a Section Crawl" at seam 3+6, a trivial pair.
