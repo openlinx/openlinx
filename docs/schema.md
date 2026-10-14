@@ -156,4 +156,5 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | Column | Type | Null | Key | Format | Values | Description |
 |---|---|---|---|---|---|---|
 | `url_id` | INTEGER | no | PK, → `urls.id` | | | The Page's URL. |
-| `address` | TEXT | no | | | | The Page's URL as the Crawl requested it. |
+| `address` | TEXT | no | | | | The Page's URL for display: url_encoded_address with the host in Unicode and every percent-encoded UTF-8 sequence of a non-ASCII character decoded; percent-encoded ASCII characters stay encoded. |
+| `url_encoded_address` | TEXT | no | | | | The Page's URL as the Crawl requested it, equal to urls.url: the host in IDNA (punycode) form and every non-ASCII character percent-encoded as UTF-8. |

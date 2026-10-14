@@ -3,8 +3,15 @@
 from collections.abc import Iterable
 
 from spider.crawl.hooks import UrlResult
+from spider.extract.addresses import display_address
 from spider.store.page_records import PageRow
 
 
 def page_rows(result: UrlResult) -> Iterable[PageRow]:
-    return (PageRow(url_id=result.url_id, address=result.url),)
+    return (
+        PageRow(
+            url_id=result.url_id,
+            address=display_address(result.url),
+            url_encoded_address=result.url,
+        ),
+    )

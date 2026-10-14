@@ -18,7 +18,7 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         url_id = writer.run(record_seed(url, is_internal=True, in_scope=True))
-        row = PageRow(url_id=url_id, address=url)
+        row = PageRow(url_id=url_id, address=url, url_encoded_address=url)
         writer.run(lambda connection: write_page(connection, row))
         replay_now(writer)
 

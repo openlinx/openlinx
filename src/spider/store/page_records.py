@@ -7,3 +7,4 @@ from dataclasses import dataclass
 class PageRow:
     url_id: int
     address: str
+    url_encoded_address: str

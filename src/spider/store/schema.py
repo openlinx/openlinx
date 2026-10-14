@@ -354,7 +354,21 @@ pages = public_table(
         autoincrement=False,
         comment="The Page's URL.",
     ),
-    Column("address", Text, nullable=False, comment="The Page's URL as the Crawl requested it."),
+    Column(
+        "address",
+        Text,
+        nullable=False,
+        comment="The Page's URL for display: url_encoded_address with the host in Unicode and "
+        "every percent-encoded UTF-8 sequence of a non-ASCII character decoded; percent-encoded "
+        "ASCII characters stay encoded.",
+    ),
+    Column(
+        "url_encoded_address",
+        Text,
+        nullable=False,
+        comment="The Page's URL as the Crawl requested it, equal to urls.url: the host in IDNA "
+        "(punycode) form and every non-ASCII character percent-encoded as UTF-8.",
+    ),
     comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
     "an HTML document, whatever its status code.",
     change=30,
