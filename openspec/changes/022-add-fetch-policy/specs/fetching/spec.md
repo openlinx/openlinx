@@ -10,7 +10,7 @@ Decide how each request of a Crawl is made, and what is recorded about its respo
 Scenario conventions:
 - `{site}` is the origin of the local fixture site, for example `http://127.0.0.1:8765`.
 - A bare path such as `/about` means `{site}/about`.
-- `site.test`, `www.site.test`, `other.test` and `badcert.test` are virtual hosts of the fixture site, over http and https. The DNS resolver hook maps them to the fixture site, and every other name fails to resolve.
+- `site.test`, `www.site.test`, `en.site.test`, `other.test` and `badcert.test` are virtual hosts of the fixture site, over http and https. The DNS resolver hook maps them to the fixture site, and every other name fails to resolve.
 - The fixture's test CA is added to the crawler's trust anchors through the TLS setup.
 
 ## ADDED Requirements
@@ -210,9 +210,13 @@ It also adds this index to `urls`, built while the Crawl writes:
 ### Requirement: A Seed that redirects within its site extends the Scope
 When a Seed's Redirect Chain ends on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. When the chain ends on another registrable domain, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_off_site` warning whose hint contains the final URL of the chain.
 
-#### Scenario: A redirect to the www host stays inside the Scope
-- **WHEN** `http://site.test/` redirects with 301 to `http://www.site.test/`, which links to `/a`, and `spider crawl http://site.test/` runs
-- **THEN** `http://www.site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1
+#### Scenario: A www Seed that redirects to its apex keeps the apex inside the Scope
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `spider crawl http://www.site.test/` runs
+- **THEN** `http://site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1
+
+#### Scenario: A redirect to another subdomain stays inside the Scope
+- **WHEN** `http://site.test/` redirects with 301 to `http://en.site.test/`, which links to `/a`, and `spider crawl http://site.test/` runs
+- **THEN** `http://en.site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1, and `crawl.scope` lists `en.site.test` among its hosts
 
 #### Scenario: A redirect to another site is reported
 - **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `spider crawl http://site.test/` runs

@@ -8,7 +8,7 @@ Each task below is one vertical TDD slice and one commit. It is done when:
 
 A slice that needs a new column, index or table adds it through `018`'s `public_table()` (STRICT, and CHECKs from the declared values), with its description and `info={"change": 22}`, and updates `docs/schema.md` in the same commit. The enumeration values this change writes are already listed by `020` (design D10).
 
-An option and its setting are declared by the task that applies them (`020` D11, no inert option), each with `OptionMeta(setting="crawl.<key>")` and its key in `CrawlSettings`: `--user-agent` in 1.2, `--retries` in 3.2, `--timeout` in 3.5 and `--max-redirects` in 4.10.
+An option and its setting are declared by the task that applies them (`020` D11, no inert option), each with `OptionMeta(setting="crawl.<key>")` and its key in `CrawlSettings`: `--user-agent` in 1.2, `--retries` in 3.2, `--timeout` in 3.5 and `--max-redirects` in 4.11.
 
 `response_headers` rows follow `020` D9 and D14: this change's handler returns them, and `spider.store.response_headers` writes them through the row writer it registers in `Hooks.row_writers`, with statements built once (`017` D9), both listed in `default_hooks()` (`spider.services.hooks`).
 
@@ -65,14 +65,15 @@ Seams (docs/testing.md):
 - [ ] 4.5 [3+6] Drive "A redirect to an excluded URL is not followed".
 - [ ] 4.6 [3+6] Drive "A redirect to an External URL is checked", on `020`'s `fixture_hosts`.
 - [ ] 4.7 [Fixture] Let `fixture_hosts` take a site per name (design D9), test-first in `tests/fixture_site/test_hosts.py`.
-- [ ] 4.8 [3+6] Drive "A redirect to the www host stays inside the Scope", after `020` tasks 8.11 and 14.2: the Seed's Redirect Chain widens the Scope once, at its end and before its final Page is prepared, with the wider `ScopeRules`, the page executor's new settings snapshot, `crawl.scope.hosts` and the chain's earlier rows updated in the final hop's unit, and a continue that builds the Scope from `crawl.scope` (design D3, the user's decision of 2026-10-14). The scenario's www→apex and subdomain cases are proposed for the spec (design Open Questions); until they are ruled, this scenario passes on `020`'s www rule alone, so the slice shows its red on the www→apex case.
-- [ ] 4.9 [CLI] Drive "A redirect to another site is reported". Done when: `seed_redirected_off_site` is declared.
-- [ ] 4.10 [3+6] Drive "The eleventh redirect is not followed": `--max-redirects` and `crawl.max_redirects`, the hop count walked back over `found_on_url_id` (design D2), on the fixture's `redirect_chain("/r", 11, "/r12")`, and writing the value `max_redirects`.
-- [ ] 4.11 [3+6] Drive "A loop of two URLs is marked": the `in_redirect_loop` column.
-- [ ] 4.12 [HTTP] Drive "A looping URL is requested once".
-- [ ] 4.13 [3+6] Drive "A meta refresh is not recorded as a redirect", after `020` task 7.7.
-- [ ] 4.14 Docs: document Redirect Chains, hop limits, loops, Seed redirects and the meta refresh boundary in `docs/crawling.md`.
-- [ ] 4.15 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) for the redirect, hop-count and loop units, then refactor with the whole suite green.
+- [ ] 4.8 [3+6] Drive "A www Seed that redirects to its apex keeps the apex inside the Scope", after `020` tasks 8.11 and 14.2: the Seed's Redirect Chain widens the Scope once, at its end and before its final Page is prepared, with the wider `ScopeRules`, the page executor's new settings snapshot, `crawl.scope.hosts` and the chain's earlier rows updated in the final hop's unit, and a continue that builds the Scope from `crawl.scope` (design D3, the user's decision of 2026-10-14).
+- [ ] 4.9 [3+6] Drive "A redirect to another subdomain stays inside the Scope": the added host without a `www.` host, since `en.site.test` is no registrable domain, and `crawl.scope` lists it.
+- [ ] 4.10 [CLI] Drive "A redirect to another site is reported". Done when: `seed_redirected_off_site` is declared.
+- [ ] 4.11 [3+6] Drive "The eleventh redirect is not followed": `--max-redirects` and `crawl.max_redirects`, the hop count walked back over `found_on_url_id` (design D2), on the fixture's `redirect_chain("/r", 11, "/r12")`, and writing the value `max_redirects`.
+- [ ] 4.12 [3+6] Drive "A loop of two URLs is marked": the `in_redirect_loop` column.
+- [ ] 4.13 [HTTP] Drive "A looping URL is requested once".
+- [ ] 4.14 [3+6] Drive "A meta refresh is not recorded as a redirect", after `020` task 7.7.
+- [ ] 4.15 Docs: document Redirect Chains, hop limits, loops, Seed redirects and the meta refresh boundary in `docs/crawling.md`.
+- [ ] 4.16 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) for the redirect, hop-count and loop units, then refactor with the whole suite green.
 
 ## 5. Limits, compression and Resource sizes
 

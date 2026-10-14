@@ -200,10 +200,6 @@ None. Before v0.1 the schema is not yet public. This change adds its columns, it
 
 ## Open Questions
 
-**Spec changes to rule** (D3, the user's decision of 2026-10-14):
-- The scenario "A redirect to the www host stays inside the Scope" passes on `020`'s www rule alone. Proposed: it becomes the `www.` Seed case, renamed "A www Seed that redirects to its apex keeps the apex inside the Scope": WHEN `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `spider crawl http://www.site.test/` runs; THEN `http://site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1.
-- An added scenario for the subdomain case, "A redirect to another subdomain stays inside the Scope": WHEN `http://site.test/` redirects with 301 to `http://en.site.test/`, which links to `/a`, and `spider crawl http://site.test/` runs; THEN `http://en.site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1, and `crawl.scope` lists `en.site.test` among its hosts.
-
 **To add when `020`'s network pause lands** (its group 12), with its final numbers then (ruled 2026-10-14 as a draft):
 - A scenario under "Retries with backoff": "A request that fails during a network pause is not retried". WHEN `/` links to `/p1` to `/p20`, a fake Fetcher gets no response for any request after the one for `/`, and the Crawl runs with `--concurrency 1`, `--network-wait 30` and a fake clock; THEN no URL is requested again after the pause began until the Crawl ends, and the URL whose attempt failed during the pause stays `queued`.
 
