@@ -18,7 +18,7 @@ from spider.store.issues import (
     stored_issues,
 )
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -33,8 +33,12 @@ TWO_UNTITLED_PAGES = Site(
 # The fixture pages under /rules/: each later Rule's slice adds the pages its Rule fires on.
 RULE_PAGES = Site(
     {
-        "/rules/": Page(body='<title>Rules</title><a href="/rules/untitled">Untitled</a>'),
+        "/rules/": Page(
+            body='<title>Rules</title><a href="/rules/untitled">Untitled</a> '
+            '<a href="/rules/gone">Gone</a>'
+        ),
         "/rules/untitled": Page(body="<p>No title here.</p>"),
+        "/rules/gone": Status(404, body="Gone", content_type="text/plain"),
     }
 )
 
@@ -165,3 +169,27 @@ def test_disabled_rule_produces_no_issue(
     crawl_file = crawled(fixture_site(TWO_UNTITLED_PAGES).url("/"))
 
     assert query(crawl_file, "SELECT rule_id FROM issues WHERE rule_id = 'title-missing'") == []
+
+
+def test_client_error_recorded_by_a_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Home</title><a href="/gone">Gone</a>'),
+                "/gone": Status(404, body="Gone", content_type="text/plain"),
+            }
+        )
+    )
+    crawl_file = crawled(server.url("/"))
+
+    assert [
+        json.loads(detail)
+        for (detail,) in query(
+            crawl_file,
+            "SELECT detail FROM affected_urls JOIN urls ON urls.id = affected_urls.url_id "
+            "WHERE affected_urls.rule_id = 'internal-4xx' AND urls.url = ?",
+            (server.url("/gone"),),
+        )
+    ] == [{"status_code": 404}]
