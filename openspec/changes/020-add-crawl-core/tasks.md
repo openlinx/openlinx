@@ -269,7 +269,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 10.9 Drive "A missing robots.txt allows everything" at seam 3+6.
 - [x] 10.10 Drive "An unreachable robots.txt blocks its origin" at seam 3+6.
 - [x] 10.11 Drive "An unreachable robots.txt of the site is reported" at seam 1. Done when: `robots_unreachable` is declared.
-- [ ] 10.12 Drive "A redirected robots.txt is followed" at seam 3+6.
+- [x] 10.12 Drive "A redirected robots.txt is followed" at seam 3+6.
 - [ ] 10.13 Drive "More than five robots.txt redirects count as missing" at seam 3+6.
 - [ ] 10.14 Drive "A dead External domain is a DNS error" at seam 3+6, with the DNS resolver hook of task 6.1.
 

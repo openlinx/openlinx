@@ -4,7 +4,7 @@ from pathlib import Path
 
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Robots, Site, Status
+from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.sites import NINE_PAGES
@@ -179,3 +179,24 @@ def test_ignore_robots_requests_the_urls_of_an_unreachable_robots_txt_unlabelled
         "SELECT fetch_state, blocked_by_robots_txt FROM urls WHERE url = ?",
         [server.url("/")],
     ) == [("fetched", None)]
+
+
+def test_a_redirected_robots_txt_is_followed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/robots.txt": Redirect("/robots-real.txt"),
+                "/robots-real.txt": Robots("User-agent: *\nDisallow: /private/\n"),
+                "/": Page(body='<a href="/private/a">A</a>'),
+                "/private/a": Page(body="<p>A</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file, "SELECT skip_reason FROM urls WHERE url = ?", [server.url("/private/a")]
+    ) == [("blocked_by_robots_txt",)]
