@@ -7,7 +7,16 @@ from typing import get_args
 
 from spider.output.codes import INVALID_VALUE
 from spider.output.diagnostics import SpiderError
-from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
+from spider.output.paging import (
+    Fields,
+    Page,
+    decode_cursor,
+    encode_cursor,
+    fingerprint,
+    invalid_cursor,
+    paginate,
+    select_fields,
+)
 from spider.store.records import CrawlFile, IssueType, Priority, RuleCategory
 
 # Each function imports the store inside its body: sqlalchemy stays off the CLI's startup path.
@@ -102,17 +111,32 @@ def issue_list(
     )
 
 
-def issue_detail(request: QueryRequest, rule_id: str) -> Page:
-    """One Issue: its Rule as the Crawl recorded it, and the Rule's Affected URLs."""
+def issue_detail(
+    request: QueryRequest, rule_id: str, *, limit: int = 50, cursor: str | None = None
+) -> Page:
+    """One Issue: its Rule as the Crawl recorded it, and a page of the Rule's Affected URLs,
+    by keyset in URL order (design D4, D14)."""
     from spider.rules.registry import RULES
-    from spider.store.query import affected_url_items, recorded_rule
+    from spider.store.query import affected_url_count, affected_url_items, recorded_rule
     from spider.store.reading import reading
 
-    with reading(_crawl_file(request).path) as connection:
+    crawl_file = _crawl_file(request)
+    # The resolved id, never latest: a cursor reused after a new Crawl started is refused.
+    bound = fingerprint(ISSUES, {"crawl": crawl_file.id, "rule_id": rule_id})
+    after = None if cursor is None else decode_cursor(cursor, bound)
+    # The fingerprint matched, so only a hand-made cursor gets here with another keyset.
+    if not (after is None or isinstance(after, str)):
+        raise invalid_cursor()
+    with reading(crawl_file.path) as connection:
         # First: the reader refuses a rule id the Crawl's rules table lacks.
-        items = affected_url_items(connection, rule_id, RULES)
+        found = affected_url_items(connection, rule_id, RULES, after=after, limit=limit + 1)
+        total = affected_url_count(connection, rule_id, RULES)
         rule = recorded_rule(connection, rule_id)
-    return Page(items, len(items), None, header={"rule": rule})
+    items = found[:limit]
+    # A limit of 0 asks only for the count, so there is no next page to point to.
+    more = limit > 0 and len(found) > limit
+    next_cursor = encode_cursor(bound, items[-1]["url"]) if more else None
+    return Page(items, total, next_cursor, header={"rule": rule})
 
 
 def _crawl_file(request: QueryRequest) -> CrawlFile:

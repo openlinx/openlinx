@@ -47,7 +47,7 @@ def paginate(
     start = 0 if cursor is None else decode_cursor(cursor, fingerprint)
     # The fingerprint matched, so only a hand-made cursor gets here with another keyset.
     if type(start) is not int or start < 0:
-        raise _invalid_cursor()
+        raise invalid_cursor()
     end = start + limit
     # A limit of 0 asks only for the count, so there is no next page to point to.
     more = limit > 0 and end < len(items)
@@ -98,22 +98,22 @@ def encode_cursor(fingerprint: str, keyset: Any) -> str:
 def decode_cursor(cursor: str, fingerprint: str) -> Any:
     # urlsafe_b64decode would silently drop characters outside the alphabet.
     if not CURSOR_CHARACTERS.fullmatch(cursor):
-        raise _invalid_cursor()
+        raise invalid_cursor()
     try:
         payload = orjson.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
     except ValueError as error:
-        raise _invalid_cursor() from error
+        raise invalid_cursor() from error
     if (
         not isinstance(payload, dict)
         or payload.get("v") != CURSOR_VERSION
         or payload.get("q") != fingerprint
         or "k" not in payload
     ):
-        raise _invalid_cursor()
+        raise invalid_cursor()
     return payload["k"]
 
 
-def _invalid_cursor() -> SpiderError:
+def invalid_cursor() -> SpiderError:
     return SpiderError(
         INVALID_CURSOR,
         "The cursor was not made by this request, or it was altered.",

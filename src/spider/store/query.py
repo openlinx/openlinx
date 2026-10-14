@@ -5,7 +5,7 @@ from collections.abc import Collection, Sequence
 from typing import Any
 
 import orjson
-from sqlalchemy import Connection, bindparam, case, select
+from sqlalchemy import Connection, bindparam, case, func, select
 
 from spider.rules.model import Rule
 from spider.store.issues import affected_urls_in, issues_in
@@ -59,14 +59,22 @@ def ordered_issues(
 
 
 def affected_url_items(
-    connection: Connection, rule_id: str, catalogue: Sequence[Rule]
+    connection: Connection,
+    rule_id: str,
+    catalogue: Sequence[Rule],
+    *,
+    after: str | None,
+    limit: int,
 ) -> list[dict[str, Any]]:
-    """The Rule's Affected URLs as {url, detail}, in URL order."""
+    """At most `limit` of the Rule's Affected URLs as {url, detail}, in URL order, after the
+    URL `after`: a keyset page, which reads only its rows of the ordered URLs (design D4)."""
     found = affected_urls_in(connection, rule_id, catalogue).subquery()
     ordered = (
         select(urls.c.url, found.c.detail)
         .join_from(found, urls, urls.c.id == found.c.url_id)
+        .where(*([] if after is None else [urls.c.url > after]))
         .order_by(urls.c.url)
+        .limit(limit)
     )
     return [
         {"url": url, "detail": None if detail is None else orjson.loads(detail)}
@@ -78,3 +86,9 @@ def recorded_rule(connection: Connection, rule_id: str) -> dict[str, Any]:
     """The Rule as the Crawl's rules table records it, with the thresholds that applied."""
     row = connection.execute(_RULE, {"rule_id": rule_id}).one()
     return {**row._asdict(), "thresholds": orjson.loads(row.thresholds)}
+
+
+def affected_url_count(connection: Connection, rule_id: str, catalogue: Sequence[Rule]) -> int:
+    found = affected_urls_in(connection, rule_id, catalogue).subquery()
+    count: int = connection.execute(select(func.count()).select_from(found)).scalar_one()
+    return count
