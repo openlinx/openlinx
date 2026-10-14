@@ -953,7 +953,7 @@ While a foreground Crawl runs, the Command SHALL write progress events to stderr
 
 | `event` | When | `data` |
 |---|---|---|
-| `crawl_started` | once, before any other event | `crawl_id`, `crawl_mode`, `seed_count`, `crawl_file` |
+| `crawl_started` | once, before any other event | `crawl_id`, `crawl_mode`, `seed_count`, `crawl_file`, `parse_workers` (the processes that prepare Pages besides the crawl process: 0 in this change, the size of `026-add-parse-pool`'s pool) |
 | `progress` | every 10 seconds, during a network pause too | `crawl_id`, `elapsed_s`, `urls` (`discovered`, `fetched`, `errors`, `skipped`, `queued`), `rate` (URLs requested per second over the last 60 seconds), `paused` (true while the Crawl is paused) |
 | `crawl_paused` | when the Crawl pauses (see "Backstops") | `crawl_id`, `reason` (the `fetch_error` of the request that paused it), `urls` (the URLs whose requests made up the count) |
 | `crawl_resumed` | when a probe answers | `crawl_id`, `duration_s` (the time paused), `outcome` (`outage` or `dead_section`) |
