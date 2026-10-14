@@ -1,29 +1,29 @@
 """The Query Service: reading a Crawl for the query Commands (050-add-query-and-segments D14)."""
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 
 from spider.output.codes import INVALID_VALUE
 from spider.output.diagnostics import SpiderError
 from spider.output.paging import (
     Fields,
     Page,
-    decode_cursor,
-    encode_cursor,
     fingerprint,
-    invalid_cursor,
+    keyset_after,
+    keyset_page,
     paginate,
     select_fields,
 )
-from spider.store.records import CrawlFile, IssueType, Priority, RuleCategory
-
-# Each function imports the store inside its body: sqlalchemy stays off the CLI's startup path.
+from spider.rules.registry import RULES
+from spider.store.records import CrawlFile, IssueFilters, IssueType, Priority, RuleCategory
+from spider.workspace.discovery import resolve_workspace
 
 ISSUES = "issues"
 ISSUE_ITEM = ("rule_id", "category", "issue_type", "priority", "affected_count", "description")
 ISSUE_FIELDS = Fields(available=ISSUE_ITEM, default=ISSUE_ITEM)
+NO_FILTERS = IssueFilters()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33,18 +33,6 @@ class QueryRequest:
     workspace: Path | None
     # The --crawl reference: latest, a crawl id or the path of a crawl file.
     crawl: str
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class IssueFilters:
-    """The accepted values of each filter; an empty set accepts every value."""
-
-    issue_types: frozenset[str] = frozenset()
-    priorities: frozenset[str] = frozenset()
-    categories: frozenset[str] = frozenset()
-
-
-NO_FILTERS = IssueFilters()
 
 
 def issue_filters(
@@ -62,8 +50,19 @@ def issue_filters(
 
 
 def _filter_values(flag: str, values: Iterable[str], accepted: tuple[str, ...]) -> frozenset[str]:
-    found = frozenset(value.strip().lower() for listed in values for value in listed.split(","))
-    unknown = sorted(found - set(accepted))
+    found = []
+    for listed in values:
+        given = [value.strip().lower() for value in listed.split(",")]
+        if "" in given:
+            raise SpiderError(
+                INVALID_VALUE,
+                f"{flag} {listed} has an empty value.",
+                hint=f"Separate the values with single commas, such as {flag} "
+                f"{accepted[0]},{accepted[1]}.",
+                details={"flag": flag, "value": listed, "accepted": list(accepted)},
+            )
+        found += given
+    unknown = [value for value in found if value not in accepted]
     if unknown:
         raise SpiderError(
             INVALID_VALUE,
@@ -71,7 +70,7 @@ def _filter_values(flag: str, values: Iterable[str], accepted: tuple[str, ...]) 
             hint=f"Use {flag} with any of: {', '.join(accepted)}.",
             details={"flag": flag, "value": unknown[0], "accepted": list(accepted)},
         )
-    return found
+    return frozenset(found)
 
 
 def issue_list(
@@ -82,31 +81,23 @@ def issue_list(
     cursor: str | None = None,
     fields: str | None = None,
 ) -> Page:
-    from spider.rules.registry import RULES
+    # Imported here, as every store module: sqlalchemy stays off the CLI's startup path.
     from spider.store.query import ordered_issues
     from spider.store.reading import reading
 
     crawl_file = _crawl_file(request)
     with reading(crawl_file.path) as connection:
-        items = ordered_issues(
-            connection,
-            RULES,
-            issue_types=filters.issue_types,
-            priorities=filters.priorities,
-            categories=filters.categories,
-        )
-    # The resolved id, never latest: a cursor reused after a new Crawl started is refused.
-    selection = {
-        "crawl": crawl_file.id,
-        "type": sorted(filters.issue_types),
-        "priority": sorted(filters.priorities),
-        "category": sorted(filters.categories),
-    }
+        items = ordered_issues(connection, RULES, filters)
     return paginate(
         items,
         limit=limit,
         cursor=cursor,
-        fingerprint=fingerprint(ISSUES, selection),
+        fingerprint=_fingerprint(
+            crawl_file,
+            type=sorted(filters.issue_types),
+            priority=sorted(filters.priorities),
+            category=sorted(filters.categories),
+        ),
         fields=select_fields(fields, ISSUE_FIELDS),
     )
 
@@ -116,32 +107,27 @@ def issue_detail(
 ) -> Page:
     """One Issue: its Rule as the Crawl recorded it, and a page of the Rule's Affected URLs,
     by keyset in URL order (design D4, D14)."""
-    from spider.rules.registry import RULES
-    from spider.store.query import affected_url_count, affected_url_items, recorded_rule
+    from spider.store.query import affected_url_page, recorded_rule
     from spider.store.reading import reading
 
     crawl_file = _crawl_file(request)
-    # The resolved id, never latest: a cursor reused after a new Crawl started is refused.
-    bound = fingerprint(ISSUES, {"crawl": crawl_file.id, "rule_id": rule_id})
-    after = None if cursor is None else decode_cursor(cursor, bound)
-    # The fingerprint matched, so only a hand-made cursor gets here with another keyset.
-    if not (after is None or isinstance(after, str)):
-        raise invalid_cursor()
+    bound = _fingerprint(crawl_file, rule_id=rule_id)
+    after = keyset_after(cursor, bound, str)
     with reading(crawl_file.path) as connection:
         # First: the reader refuses a rule id the Crawl's rules table lacks.
-        found = affected_url_items(connection, rule_id, RULES, after=after, limit=limit + 1)
-        total = affected_url_count(connection, rule_id, RULES)
+        total, found = affected_url_page(connection, rule_id, RULES, after=after, limit=limit + 1)
         rule = recorded_rule(connection, rule_id)
-    items = found[:limit]
-    # A limit of 0 asks only for the count, so there is no next page to point to.
-    more = limit > 0 and len(found) > limit
-    next_cursor = encode_cursor(bound, items[-1]["url"]) if more else None
-    return Page(items, total, next_cursor, header={"rule": rule})
+    page = keyset_page(found, total, limit=limit, fingerprint=bound, key="url")
+    return replace(page, header={"rule": rule})
 
 
 def _crawl_file(request: QueryRequest) -> CrawlFile:
     from spider.store.selection import resolve_crawl
-    from spider.workspace.discovery import resolve_workspace
 
     workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
     return resolve_crawl(request.crawl, workspace=workspace, cwd=request.cwd)
+
+
+def _fingerprint(crawl_file: CrawlFile, **selection: Any) -> str:
+    # The resolved id, never latest: a cursor reused after a new Crawl started is refused.
+    return fingerprint(ISSUES, {"crawl": crawl_file.id, **selection})

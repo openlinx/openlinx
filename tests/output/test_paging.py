@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from spider.output.diagnostics import SpiderError
-from spider.output.paging import decode_cursor, encode_cursor, paginate
+from spider.output.paging import decode_cursor, encode_cursor, keyset_after, paginate
 
 FINGERPRINT = "0123456789abcdef"
 # Payloads of every length modulo 3, and bytes that plain base64 writes as + and /.
@@ -54,5 +54,13 @@ def test_a_cursor_whose_position_is_not_an_index_is_undecodable(keyset: Any) -> 
 
     with pytest.raises(SpiderError) as raised:
         paginate([{"n": 1}], limit=1, cursor=cursor, fingerprint=FINGERPRINT, fields=("n",))
+
+    assert raised.value.code == "invalid_cursor"
+
+
+def test_a_keyset_cursor_whose_keyset_has_another_type_is_refused() -> None:
+    # The fingerprint matches: only a hand-made cursor has another keyset.
+    with pytest.raises(SpiderError) as raised:
+        keyset_after(encode_cursor(FINGERPRINT, 5), FINGERPRINT, str)
 
     assert raised.value.code == "invalid_cursor"

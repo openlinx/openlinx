@@ -175,7 +175,8 @@ src/spider/
   services/     workspace (init), query, crawl, report
   workspace/    Workspace discovery, settings (spider.toml)
   output/       JSON/table/CSV serialisation, the Reporter, paging, diagnostic codes, exit codes
-  store/        schema (Core tables), writer, migrations/, read-only access, the queries
+  store/        schema (Core tables), writer, migrations/, read-only access, the queries of
+                the query Commands (the --where compiler, sorting, paging, Segments)
   crawl/        frontier, scheduler, fetcher/, robots, scope, engine
   extract/      Page data extractors, links, content, readability, pixel widths
   rules/        Rule registry, rule modules, thresholds, Health Score

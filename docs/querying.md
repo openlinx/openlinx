@@ -2,7 +2,7 @@
 
 How to read a Crawl's Issues with `spider issues`. The spec is [openspec/changes/050-add-query-and-segments/specs/querying/spec.md](../openspec/changes/050-add-query-and-segments/specs/querying/spec.md), and terms follow [CONTEXT.md](../CONTEXT.md). The Rules behind the Issues are described in [rules.md](rules.md).
 
-Every query Command reads the Crawl that `--crawl` selects: `latest` (the default, the Crawl that started last), a crawl id, or the path of a crawl file. It never changes the crawl file, and each run reads one snapshot of it, so its numbers agree with each other even while the Crawl is still writing.
+Every query Command reads the Crawl that `--crawl` selects: `latest` (the default, the Crawl that started last), a crawl id, or the path of a crawl file. It never changes the crawl file. In WAL mode, the default, each run reads one snapshot of it, so its numbers agree with each other even while the Crawl is still writing. A crawl file in rollback-journal mode, such as one on a network share, is read statement by statement instead, so a run during a Crawl may see rows that one of its statements missed.
 
 ## Live and stored Issues
 
@@ -37,8 +37,9 @@ Each item is:
 
 **Filters:**
 - `--type`, `--priority` and `--category` take comma-separated values, and each can be repeated: `--type issue,warning` is the same as `--type issue --type warning`. Values are case-insensitive.
-- The values of one flag are alternatives, and different flags must all match: `--type issue,warning --priority high` lists the high-Priority Issues and Warnings.
-- An unknown value fails with `invalid_value` (exit code 2), whose `details.accepted` lists every accepted value of the flag, in order.
+- The values of one flag are alternatives, and different flags must all match: `--type issue,warning --priority high` lists the Issues of Issue Type `issue` or `warning` with high Priority.
+- An unknown value fails with `invalid_value` (exit code 2), which names the first unknown value given and whose `details.accepted` lists every accepted value of the flag, in order. An empty value, as in `--type issue,,warning`, fails the same way.
+- `--category` accepts the categories of this version of the tool, so a category that only a later version's Rule has cannot be filtered on.
 
 **Global flags:** `--crawl`, `--workspace` and `--format` (`json`, `jsonl` or `table`) work as in every Command ([cli.md](cli.md)).
 
@@ -55,7 +56,7 @@ Given a Rule id, the detail of one Issue returns the Rule and a page of its Affe
 - `rule` is the Rule as the Crawl's `rules` table records it: `rule_id`, `category`, `issue_type`, `priority`, `description`, `why_it_matters`, `how_to_fix`, `thresholds` and `reproduce_sql`. `thresholds` maps each threshold name to the value that applied to this Crawl. `reproduce_sql` is the Rule's query: run it with `spider sql` to read the Affected URLs as they are now.
 - Each item is `{url, detail}`. `url` is the URL as the `urls` table records it, the form that `spider sql` returns. `detail` is the JSON object of the values the Rule measured for that URL, or `null` for a Rule that measures none.
 - `total` counts every Affected URL. A Rule that did not fire has `total` 0 and no items.
-- **Order and paging:** the Affected URLs come in `url` order, paged by keyset with `--limit` and `--cursor`: each page starts after the last URL of the one before, so pages never repeat or skip a URL. A cursor is bound to the Crawl and the Rule.
+- **Order and paging:** the Affected URLs come in `url` order, paged by keyset with `--limit` and `--cursor`: each page starts after the last URL of the one before, so the pages of a stored Issue never repeat or skip a URL. On an Issue computed live, an Affected URL that appears between two pages and sorts before the cursor is not shown, and `total` can change from page to page. A cursor is bound to the Crawl and the Rule.
 - **Unknown rule id:** it fails with `rule_not_found` (exit code 4), whose hint points to `spider rules list` and whose `details.suggestions` lists the closest Rule ids of the Crawl's `rules` table.
 
 ## What a query costs

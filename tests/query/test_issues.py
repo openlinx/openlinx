@@ -1,14 +1,10 @@
 """The Issues of the Query Service (050-add-query-and-segments, querying; seam 2)."""
 
-import base64
-
-import orjson
 import pytest
 
 from spider.output.diagnostics import SpiderError
-from spider.output.paging import encode_cursor
 from spider.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
-from spider.services.query import QueryRequest, issue_detail, issue_list
+from spider.services.query import QueryRequest, issue_detail, issue_filters, issue_list
 from spider.store.records import LATEST
 from tests.support.crawl_store import (
     UNDER_A,
@@ -143,20 +139,6 @@ def test_affected_urls_are_paged_in_url_order(temp_workspace: TempWorkspace) -> 
     ) == (GONE[:2], GONE[2:], (3, 3, None))
 
 
-def test_a_cursor_whose_keyset_is_no_url_is_refused(temp_workspace: TempWorkspace) -> None:
-    crawl_store(temp_workspace, statuses=dict.fromkeys(GONE, 404), completed=True)
-    first = issue_detail(request(temp_workspace), "internal-4xx", limit=2)
-    assert first.next_cursor is not None
-    # The same query's fingerprint, with a keyset that no page of it gives.
-    payload = orjson.loads(base64.urlsafe_b64decode(first.next_cursor + "=="))
-    made = encode_cursor(payload["q"], 5)
-
-    with pytest.raises(SpiderError) as raised:
-        issue_detail(request(temp_workspace), "internal-4xx", limit=2, cursor=made)
-
-    assert raised.value.code == "invalid_cursor"
-
-
 def test_a_cursor_of_another_rule_is_refused(temp_workspace: TempWorkspace) -> None:
     crawl_store(temp_workspace, statuses=dict.fromkeys(GONE, 404), completed=True)
     first = issue_detail(request(temp_workspace), "internal-4xx", limit=2)
@@ -165,3 +147,20 @@ def test_a_cursor_of_another_rule_is_refused(temp_workspace: TempWorkspace) -> N
         issue_detail(request(temp_workspace), "internal-5xx", limit=2, cursor=first.next_cursor)
 
     assert raised.value.code == "invalid_cursor"
+
+
+def test_an_empty_filter_value_is_refused() -> None:
+    with pytest.raises(SpiderError) as raised:
+        issue_filters(issue_types=["issue,,warning"])
+
+    assert (raised.value.code, raised.value.diagnostic.message) == (
+        "invalid_value",
+        "--type issue,,warning has an empty value.",
+    )
+
+
+def test_the_first_unknown_value_given_is_named() -> None:
+    with pytest.raises(SpiderError) as raised:
+        issue_filters(priorities=["urgent", "asap"])
+
+    assert raised.value.diagnostic.details["value"] == "urgent"

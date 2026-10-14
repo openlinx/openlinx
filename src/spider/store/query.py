@@ -1,7 +1,6 @@
-"""The reads of the query Commands (050-add-query-and-segments D14; data access stays in the
-store, 020-add-crawl-core D14)."""
+"""The reads of the query Commands (050-add-query-and-segments D14, 020-add-crawl-core D14)."""
 
-from collections.abc import Collection, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 import orjson
@@ -9,7 +8,8 @@ from sqlalchemy import Connection, bindparam, case, func, select
 
 from spider.rules.model import Rule
 from spider.store.issues import affected_urls_in, issues_in
-from spider.store.schema import rules, urls
+from spider.store.records import IssueFilters, IssueType, Priority
+from spider.store.schema import literal_values, rules, urls
 
 _RULE = select(
     rules.c.id.label("rule_id"),
@@ -22,25 +22,23 @@ _RULE = select(
     rules.c.thresholds,
     rules.c.reproduce_sql,
 ).where(rules.c.id == bindparam("rule_id"))
+# The Issue list's order is the order in which the types declare their values.
+_ISSUE_TYPE_PLACES = {value: place for place, value in enumerate(literal_values(IssueType))}
+_PRIORITY_PLACES = {value: place for place, value in enumerate(literal_values(Priority))}
 
 
 def ordered_issues(
-    connection: Connection,
-    catalogue: Sequence[Rule],
-    *,
-    issue_types: Collection[str] = (),
-    priorities: Collection[str] = (),
-    categories: Collection[str] = (),
+    connection: Connection, catalogue: Sequence[Rule], filters: IssueFilters
 ) -> list[dict[str, Any]]:
-    """The Issues with their Rules' descriptions, from the Crawl's rules table, by Issue Type,
-    Priority, affected_count descending, then rule id; an empty filter accepts every value."""
+    """The Issues that pass `filters`, with their Rules' descriptions from the Crawl's rules
+    table, by Issue Type, Priority, affected_count descending, then rule id."""
     found = issues_in(connection, catalogue).subquery()
     accepted = [
         column.in_(values)
         for column, values in (
-            (found.c.issue_type, issue_types),
-            (found.c.priority, priorities),
-            (found.c.category, categories),
+            (found.c.issue_type, filters.issue_types),
+            (found.c.priority, filters.priorities),
+            (found.c.category, filters.categories),
         )
         if values
     ]
@@ -49,8 +47,8 @@ def ordered_issues(
         .join_from(found, rules, rules.c.id == found.c.rule_id)
         .where(*accepted)
         .order_by(
-            case({"issue": 0, "warning": 1, "opportunity": 2}, value=found.c.issue_type),
-            case({"high": 0, "medium": 1, "low": 2}, value=found.c.priority),
+            case(_ISSUE_TYPE_PLACES, value=found.c.issue_type),
+            case(_PRIORITY_PLACES, value=found.c.priority),
             found.c.affected_count.desc(),
             found.c.rule_id,
         )
@@ -58,17 +56,20 @@ def ordered_issues(
     return [dict(row._mapping) for row in connection.execute(ordered)]
 
 
-def affected_url_items(
+def affected_url_page(
     connection: Connection,
     rule_id: str,
     catalogue: Sequence[Rule],
     *,
     after: str | None,
     limit: int,
-) -> list[dict[str, Any]]:
-    """At most `limit` of the Rule's Affected URLs as {url, detail}, in URL order, after the
-    URL `after`: a keyset page, which reads only its rows of the ordered URLs (design D4)."""
+) -> tuple[int, list[dict[str, Any]]]:
+    """The number of the Rule's Affected URLs, and at most `limit` of them as {url, detail},
+    in URL order after the URL `after`: a keyset page, which never repeats a URL of an earlier
+    page, though finding it sorts all the Issue's rows (design D4, D15)."""
+    # One select for both reads: the reader chooses the stored or the live path once.
     found = affected_urls_in(connection, rule_id, catalogue).subquery()
+    total: int = connection.execute(select(func.count()).select_from(found)).scalar_one()
     ordered = (
         select(urls.c.url, found.c.detail)
         .join_from(found, urls, urls.c.id == found.c.url_id)
@@ -76,7 +77,7 @@ def affected_url_items(
         .order_by(urls.c.url)
         .limit(limit)
     )
-    return [
+    return total, [
         {"url": url, "detail": None if detail is None else orjson.loads(detail)}
         for url, detail in connection.execute(ordered)
     ]
@@ -86,9 +87,3 @@ def recorded_rule(connection: Connection, rule_id: str) -> dict[str, Any]:
     """The Rule as the Crawl's rules table records it, with the thresholds that applied."""
     row = connection.execute(_RULE, {"rule_id": rule_id}).one()
     return {**row._asdict(), "thresholds": orjson.loads(row.thresholds)}
-
-
-def affected_url_count(connection: Connection, rule_id: str, catalogue: Sequence[Rule]) -> int:
-    found = affected_urls_in(connection, rule_id, catalogue).subquery()
-    count: int = connection.execute(select(func.count()).select_from(found)).scalar_one()
-    return count

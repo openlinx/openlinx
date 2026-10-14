@@ -29,7 +29,7 @@ Every group ends with a docs task and a review task.
 - [ ] 1.13 Drive `Issue detail › Unknown rule id` (CLI): `040`'s `rule_not_found`, which its reader raises on both paths against the Crawl's `rules` table, with `details.suggestions` from that table (its task 4.11; design D14). Verify: red → green; one commit.
 - [x] 1.14 Drive `Issue list › Issues of a fixture Crawl on every OS` (CLI and 3, real subprocesses on the Windows, macOS and Linux CI jobs, through `run_cli_process`, marked `slow`): add the `/e2e/` fixture pages, with `/e2e/gone` a `Status(404)` route; `spider crawl` then `spider issues`. This is the thin slice's end-to-end test. Verify: red → green on all three OSes; one commit.
 - [ ] 1.15 Docs: in `docs/querying.md`, document `spider issues` and `spider issues <rule-id>`: the order, the filters, `affected_count`, `detail`, `reproduce_sql`, and that a `running`, `failed` or `interrupted` Crawl's Issues are computed live on every call. Until group 6, Affected URLs come in `url` order. Verify: every flag is documented.
-- [ ] 1.16 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green. Verify: suite green; one commit.
+- [x] 1.16 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 2. The basic `--where` language (seam 4: Pure-logic)
 

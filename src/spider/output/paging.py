@@ -47,12 +47,34 @@ def paginate(
     start = 0 if cursor is None else decode_cursor(cursor, fingerprint)
     # The fingerprint matched, so only a hand-made cursor gets here with another keyset.
     if type(start) is not int or start < 0:
-        raise invalid_cursor()
+        raise _invalid_cursor()
     end = start + limit
     # A limit of 0 asks only for the count, so there is no next page to point to.
     more = limit > 0 and end < len(items)
     next_cursor = encode_cursor(fingerprint, end) if more else None
     return Page(project(items[start:end], fields), len(items), next_cursor)
+
+
+def keyset_after(cursor: str | None, fingerprint: str, keyset: type) -> Any:
+    """The keyset that a cursor of keyset_page holds, or None without a cursor."""
+    if cursor is None:
+        return None
+    after = decode_cursor(cursor, fingerprint)
+    # The fingerprint matched, so only a hand-made cursor gets here with another keyset.
+    if not isinstance(after, keyset):
+        raise _invalid_cursor()
+    return after
+
+
+def keyset_page(
+    found: Sequence[Mapping[str, Any]], total: int, *, limit: int, fingerprint: str, key: str
+) -> Page:
+    """A Page of the items read after a cursor's keyset in keyset order, `found` holding up to
+    limit + 1 of them: one more than the page says whether a next page exists."""
+    items = found[:limit]
+    # A limit of 0 asks only for the count, so there is no next page to point to.
+    more = limit > 0 and len(found) > limit
+    return Page(items, total, encode_cursor(fingerprint, items[-1][key]) if more else None)
 
 
 def fingerprint(command: str, selection: Mapping[str, Any]) -> str:
@@ -98,22 +120,22 @@ def encode_cursor(fingerprint: str, keyset: Any) -> str:
 def decode_cursor(cursor: str, fingerprint: str) -> Any:
     # urlsafe_b64decode would silently drop characters outside the alphabet.
     if not CURSOR_CHARACTERS.fullmatch(cursor):
-        raise invalid_cursor()
+        raise _invalid_cursor()
     try:
         payload = orjson.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
     except ValueError as error:
-        raise invalid_cursor() from error
+        raise _invalid_cursor() from error
     if (
         not isinstance(payload, dict)
         or payload.get("v") != CURSOR_VERSION
         or payload.get("q") != fingerprint
         or "k" not in payload
     ):
-        raise invalid_cursor()
+        raise _invalid_cursor()
     return payload["k"]
 
 
-def invalid_cursor() -> SpiderError:
+def _invalid_cursor() -> SpiderError:
     return SpiderError(
         INVALID_CURSOR,
         "The cursor was not made by this request, or it was altered.",

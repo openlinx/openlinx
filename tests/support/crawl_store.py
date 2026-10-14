@@ -1,5 +1,4 @@
-"""The crawl_store factory: crawl files a Crawl could leave behind (050-add-query-and-segments,
-Test seams)."""
+"""The crawl_store factory of 050-add-query-and-segments (design, Test seams)."""
 
 import asyncio
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -88,7 +87,7 @@ def crawl_store(
             for link in (*links, *statuses, *pages)
         )
         writer.run(record_fetched(_html(seed_id, SEED, _SEED_PAGE, found), _PAGE_WRITER))
-        for url_id in writer.run(_ids_of(links)):
+        for url_id, _ in writer.run(_urls_of(links)):
             writer.run(responded(200)(url_id))
         for url_id, url in writer.run(_urls_of(statuses)):
             writer.run(responded(statuses[url])(url_id))
@@ -153,13 +152,6 @@ def _html(
         discovered=discovered,
         rows=(page,),
     )
-
-
-def _ids_of(links: Sequence[str]) -> Callable[[Connection], list[int]]:
-    def unit(connection: Connection) -> list[int]:
-        return list(connection.execute(select(urls.c.id).where(urls.c.url.in_(links))).scalars())
-
-    return unit
 
 
 def _urls_of(urls_: Iterable[str]) -> Callable[[Connection], list[tuple[int, str]]]:

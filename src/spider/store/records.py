@@ -132,6 +132,15 @@ class UrlIssue:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class IssueFilters:
+    """The accepted values of each filter of an Issue list; an empty set accepts every value."""
+
+    issue_types: frozenset[str] = frozenset()
+    priorities: frozenset[str] = frozenset()
+    categories: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Issue:
     rule_id: str
     category: RuleCategory
