@@ -194,3 +194,27 @@ def test_an_x_robots_tag_nofollow_applies_to_every_hyperlink(
     crawl_file = crawled(server.url("/"))
 
     assert _state(crawl_file, server.url("/x")) == [("skipped", "nofollow", "hyperlink")]
+
+
+def test_an_excluded_url_that_only_unfollowed_links_reach_is_recorded_as_not_followed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(
+                    body='<a rel="nofollow" href="/private">P</a><link rel="amphtml" href="/amp">'
+                ),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--exclude", "/private$", "--exclude", "/amp$")
+
+    assert (
+        _state(crawl_file, server.url("/private")),
+        _state(crawl_file, server.url("/amp")),
+    ) == (
+        [("skipped", "nofollow", "hyperlink")],
+        [("skipped", "link_type_not_followed", "amphtml")],
+    )
