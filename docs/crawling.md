@@ -238,7 +238,7 @@ http://site.test/news/n        internal, outside the Scope: checked, not followe
 http://site.test/blog/draft-1  skipped: excluded
 ```
 
-An invalid pattern is rejected with `invalid_pattern` (the pattern in `details.pattern`) before any crawl file is created. A Seed outside its own Scope, such as one that an exclude pattern matches, is not rejected yet: the Crawl records the Seed as `skipped` and ends. A later slice rejects it as `seed_out_of_scope`.
+An invalid pattern is rejected with `invalid_pattern` (the pattern in `details.pattern`) before any crawl file is created. A Seed outside its own Scope, one that an exclude pattern matches or that no include pattern matches, is rejected with `seed_out_of_scope` before any crawl file is created, since nothing would be crawled.
 
 **Slow patterns.** Every pattern runs against every URL the Crawl finds, and the URLs come from the site. A pattern with nested quantifiers, such as `(a+)+$`, can take seconds on one long URL. Prefer plain substrings and anchors, such as `/logout$` or `\?sessionid=`.
 

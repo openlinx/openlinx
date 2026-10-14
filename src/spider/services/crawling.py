@@ -18,7 +18,7 @@ from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import aiohttp_fetcher
 from spider.crawl.hooks import Hooks
 from spider.crawl.pages import PageExecutor
-from spider.crawl.scope import ScopeRules, scope_rules
+from spider.crawl.scope import ScopeDecision, ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.stop import StopSignal
 from spider.crawl.urls import (
@@ -31,7 +31,12 @@ from spider.crawl.urls import (
     url_path,
 )
 from spider.crawl.warning_log import WarningLog
-from spider.output.codes import INVALID_PATTERN, INVALID_URL, SUBFOLDER_IS_ROOT
+from spider.output.codes import (
+    INVALID_PATTERN,
+    INVALID_URL,
+    SEED_OUT_OF_SCOPE,
+    SUBFOLDER_IS_ROOT,
+)
 from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
@@ -151,6 +156,9 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     )
     if scope.folder == "/":
         raise _subfolder_is_root(seed)
+    decision = scope.decide(seed)
+    if not decision.in_scope:
+        raise _seed_out_of_scope(seed, decision)
     return CrawlPlan(
         seed=seed,
         settings=crawl_settings,
@@ -284,6 +292,21 @@ async def _crawl_context(
     finally:
         # 026's pool shuts its workers down here, however the Crawl ended.
         await executor.close()
+
+
+def _seed_out_of_scope(seed: NormalizedUrl, decision: ScopeDecision) -> SpiderError:
+    # A Seed is always internal and inside its own folder: only the patterns leave it out.
+    why = (
+        "it matches an --exclude pattern"
+        if decision.skip_reason == "excluded"
+        else "it matches no --include pattern"
+    )
+    return SpiderError(
+        SEED_OUT_OF_SCOPE,
+        f"The Seed {seed} is outside the Scope: {why}, so nothing would be crawled.",
+        hint="Change the patterns, or give a Seed that the Scope holds.",
+        details={"seed": seed},
+    )
 
 
 def _subfolder_is_root(seed: NormalizedUrl) -> SpiderError:

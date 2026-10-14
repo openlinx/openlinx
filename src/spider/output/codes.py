@@ -170,6 +170,13 @@ INVALID_PATTERN = _declare(
     ExitCode.USAGE,
     "A URL pattern that is not a valid Python regular expression; details.pattern holds it.",
 )
+SEED_OUT_OF_SCOPE = _declare(
+    "seed_out_of_scope",
+    "error",
+    ExitCode.USAGE,
+    "The Seed is outside its own Scope: it matches an --exclude pattern, or no --include "
+    "pattern; details.seed holds it.",
+)
 PARSE_FAILED = _declare(
     "parse_failed",
     "warning",

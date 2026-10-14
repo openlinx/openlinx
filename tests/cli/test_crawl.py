@@ -323,3 +323,22 @@ def test_an_invalid_pattern_is_rejected(temp_workspace: TempWorkspace) -> None:
         [(error["code"], "--include" in error["hint"]) for error in _errors(result)],
         list(temp_workspace.home.rglob("*.sqlite")),
     ) == (2, [("invalid_pattern", True)], [])
+
+
+def test_a_seed_outside_the_scope_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--exclude", "site")
+
+    assert (
+        result.exit_code,
+        [error["code"] for error in _errors(result)],
+        list(temp_workspace.home.rglob("*.sqlite")),
+    ) == (2, ["seed_out_of_scope"], [])
+
+
+def test_a_seed_that_matches_no_include_pattern_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--include", "/blog/")
+
+    assert (
+        result.exit_code,
+        [(error["code"], "--include" in error["message"]) for error in _errors(result)],
+    ) == (2, [("seed_out_of_scope", True)])
