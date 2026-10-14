@@ -9,7 +9,7 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
-from spider.naming import APP_NAME
+from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN
 from spider.output.codes import OPTION_CONFLICT
 from spider.output.diagnostics import SpiderError
 from spider.output.writer import Format
@@ -82,6 +82,15 @@ def crawl(
         ),
         OptionMeta(setting="crawl.max_urls"),
     ] = None,
+    robots_user_agent: Annotated[
+        str,
+        typer.Option(
+            "--robots-user-agent",
+            help="The token that selects robots.txt groups and user-agent-prefixed "
+            "X-Robots-Tag values; independent of the User-Agent request header.",
+        ),
+        OptionMeta(setting="crawl.robots_user_agent"),
+    ] = DEFAULT_ROBOTS_TOKEN,
     scope: Annotated[
         ScopeKind,
         typer.Option(

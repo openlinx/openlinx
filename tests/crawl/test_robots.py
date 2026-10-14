@@ -40,3 +40,9 @@ def test_only_the_first_512000_bytes_of_robots_txt_are_read() -> None:
 )
 def test_robots_txt_is_read_as_utf_8_with_replacement(body: bytes) -> None:
     assert read_robots_txt(body, DEFAULT_ROBOTS_TOKEN).allows("http://site.test/a") is False
+
+
+def test_another_token_can_be_chosen() -> None:
+    robots = read_robots_txt(b"User-agent: Googlebot\nDisallow: /g", "Googlebot")
+
+    assert robots.allows("http://site.test/g") is False

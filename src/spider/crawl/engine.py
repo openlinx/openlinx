@@ -116,6 +116,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         PageSettings(
             scope=context.scope,
             extractors=context.hooks.extractors,
+            robots_token=context.settings.robots_user_agent,
             strip_params=context.strip_params,
         )
     )

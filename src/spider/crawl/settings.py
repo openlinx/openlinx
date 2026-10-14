@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from spider.naming import DEFAULT_ROBOTS_TOKEN
 from spider.store.records import ScopeKind
 
 
@@ -32,6 +33,11 @@ class CrawlSettings(BaseModel):
         ge=1,
         description="The most URL requests over the Crawl's whole life, those of a continued "
         "Crawl included; robots.txt requests do not count. No limit when unset.",
+    )
+    robots_user_agent: str = Field(
+        DEFAULT_ROBOTS_TOKEN,
+        description="The token that selects robots.txt groups and user-agent-prefixed "
+        "X-Robots-Tag values; independent of the User-Agent request header.",
     )
     scope: ScopeKind = Field(
         "host",

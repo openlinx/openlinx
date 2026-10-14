@@ -258,7 +258,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 ## 10. robots.txt (widening)
 
 - [x] 10.1 Drive "The group for the tool's token applies" at seam 4. Done when: the robots.txt reader is on Protego and reads at most 512,000 bytes, decoded with replacement.
-- [ ] 10.2 Drive "Another token can be chosen" at seam 4. Done when: `--robots-user-agent` also sets `PageSettings.robots_token` in the snapshot the engine starts the page executor with, so the prefixes of `X-Robots-Tag` follow the chosen token, and a test pins it.
+- [x] 10.2 Drive "Another token can be chosen" at seam 4. Done when: `--robots-user-agent` also sets `PageSettings.robots_token` in the snapshot the engine starts the page executor with, so the prefixes of `X-Robots-Tag` follow the chosen token, and a test pins it.
 - [ ] 10.3 **Guard:** "Any robots.txt gives a decision", as a hypothesis property at seam 4.
 - [ ] 10.4 Drive "robots.txt is fetched once per origin" at seam 3.
 - [ ] 10.5 Drive "A disallowed URL is not requested" (seam 3) and "A disallowed URL is recorded as blocked" (seam 3+6), a trivial pair. Done when: `blocked_by_robots_txt` is declared.
