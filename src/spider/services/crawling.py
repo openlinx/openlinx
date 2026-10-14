@@ -146,8 +146,8 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     scope = scope_rules(
         seed,
         scope=crawl_settings.scope,
-        include=_patterns(crawl_settings.include),
-        exclude=_patterns(crawl_settings.exclude),
+        include=_patterns(crawl_settings.include, "include"),
+        exclude=_patterns(crawl_settings.exclude, "exclude"),
     )
     if scope.folder == "/":
         raise _subfolder_is_root(seed)
@@ -167,7 +167,7 @@ def _seed(text: str, strip_params: re.Pattern[str] | None) -> NormalizedUrl:
     return seed
 
 
-def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
+def _patterns(texts: Sequence[str], key: str) -> tuple[re.Pattern[str], ...]:
     patterns = []
     for text in texts:
         try:
@@ -176,7 +176,7 @@ def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
             raise SpiderError(
                 INVALID_PATTERN,
                 f"The pattern {text} is not a valid regular expression: {error}.",
-                hint="Fix it in --exclude or in exclude of the settings file's [crawl] table: "
+                hint=f"Fix it in --{key} or in {key} of the settings file's [crawl] table: "
                 "a Python regular expression, with a literal character such as ( or ? escaped.",
                 details={"pattern": text},
             ) from None

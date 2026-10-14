@@ -313,3 +313,13 @@ def test_a_root_seed_with_a_subfolder_scope_is_rejected(temp_workspace: TempWork
         [(error["code"], "--scope subfolder" in error["hint"]) for error in _errors(result)],
         list(temp_workspace.home.rglob("*.sqlite")),
     ) == (2, [("subfolder_is_root", True)], [])
+
+
+def test_an_invalid_pattern_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--include", "(")
+
+    assert (
+        result.exit_code,
+        [(error["code"], "--include" in error["hint"]) for error in _errors(result)],
+        list(temp_workspace.home.rglob("*.sqlite")),
+    ) == (2, [("invalid_pattern", True)], [])
