@@ -24,6 +24,9 @@ from spider.crawl.urls import NormalizedUrl
 
 # Pages that may wait for a busy worker, per worker (design D2).
 BACKLOG_PER_WORKER = 2
+# From the moment a worker takes a Page; no flag (design D8). Also how long a worker may take
+# to answer ready.
+PREPARE_DEADLINE_SECONDS = 30.0
 _WINDOWS_WAIT_HANDLES = 63
 _CGROUP_ROOT = Path("/sys/fs/cgroup")
 _SELF_CGROUP = Path("/proc/self/cgroup")
@@ -244,10 +247,22 @@ class _Worker:
     results: _PipeEnd
 
 
+@dataclass(frozen=True, eq=False)
+class _Held:
+    url: NormalizedUrl
+    future: asyncio.Future[PreparedPage]
+    deadline: asyncio.TimerHandle
+
+
 class PoolExecutor:
     """Prepares each Page in one of `workers` spawn processes, one Page per worker at a time."""
 
-    def __init__(self, workers: int | None = None) -> None:
+    def __init__(
+        self,
+        workers: int | None = None,
+        deadline: float = PREPARE_DEADLINE_SECONDS,
+        ready_deadline: float = PREPARE_DEADLINE_SECONDS,
+    ) -> None:
         self.workers = default_workers() if workers is None else workers
         limit = _waiter_limit()
         if self.workers < 1 or (limit is not None and self.workers > limit):
@@ -256,14 +271,18 @@ class PoolExecutor:
                 + ("" if limit is None else f" and at most {limit} here")
             )
         self.backlog = BACKLOG_PER_WORKER * self.workers
+        self._deadline = deadline
+        self._ready_deadline = ready_deadline
         self._settings: PageSettings | None = None
         # Every worker started, and those still running, idle or busy, or ready.
         self._workers: list[_Worker] = []
         self._live: set[_Worker] = set()
         self._ready: set[_Worker] = set()
         self._idle: deque[_Worker] = deque()
-        # The Page each busy worker holds: its URL and its future.
-        self._busy: dict[_Worker, tuple[NormalizedUrl, asyncio.Future[PreparedPage]]] = {}
+        # The Page each busy worker holds, and the timer of its deadline (design D8).
+        self._busy: dict[_Worker, _Held] = {}
+        # The timer of each worker's ready answer.
+        self._readiness: dict[_Worker, asyncio.TimerHandle] = {}
         self._waiting: deque[tuple[_Work, asyncio.Future[PreparedPage]]] = deque()
         self._replacing: set[asyncio.Task[None]] = set()
         self._started = False
@@ -307,6 +326,9 @@ class PoolExecutor:
 
     async def close(self) -> None:
         self._closing = True
+        timers = [*self._readiness.values(), *(held.deadline for held in self._busy.values())]
+        for timer in timers:
+            timer.cancel()
         # Nothing waits any more at a normal end; a stop leaves no Page for a worker.
         for _, future in self._waiting:
             future.cancel()
@@ -354,16 +376,19 @@ class PoolExecutor:
         result_writer.close()
         worker = _Worker(process, task_writer, result_reader)
         self._workers.append(worker)
+        # Idle only once ready: a Page sent earlier would wait for the worker's start, and its
+        # deadline would count that wait (design D8).
         self._live.add(worker)
-        self._idle.append(worker)
         with self._watched_lock:
             self._watched[id(result_reader)] = worker
+        self._readiness[worker] = asyncio.get_running_loop().call_later(
+            self._ready_deadline, self._not_ready, worker
+        )
         if self._started:
             self._wake_writer.send(True)
         # A worker that ended already answers with the end of its result pipe.
         with suppress(OSError):
             task_writer.send(self._settings)
-        self._dispatch()
 
     async def _replace(self) -> None:
         try:
@@ -388,7 +413,11 @@ class PoolExecutor:
                 self._waiting.appendleft((work, future))
                 self._ended(worker)
                 continue
-            self._busy[worker] = (work[0], future)
+            # From the moment the worker takes it, never from its time in the queue (D8).
+            deadline = asyncio.get_running_loop().call_later(
+                self._deadline, self._overdue, worker, future
+            )
+            self._busy[worker] = _Held(work[0], future, deadline)
 
     def _wait_for_outcomes(self, loop: asyncio.AbstractEventLoop) -> None:
         """The waiter thread: every worker's outcome, handed to the event loop's thread."""
@@ -422,7 +451,7 @@ class PoolExecutor:
                     loop.call_soon_threadsafe(self._ended, worker)
                     continue
                 if message == _READY:
-                    loop.call_soon_threadsafe(self._ready.add, worker)
+                    loop.call_soon_threadsafe(self._on_ready, worker)
                 elif message.startswith(_START_FAILED):
                     reason = message.removeprefix(_START_FAILED).decode(errors="replace")
                     failure = WorkerStartError(
@@ -432,12 +461,53 @@ class PoolExecutor:
                 else:
                     loop.call_soon_threadsafe(self._finished, worker, _outcome(message))
 
+    def _on_ready(self, worker: _Worker) -> None:
+        self._ready.add(worker)
+        timer = self._readiness.pop(worker, None)
+        if timer is not None:
+            timer.cancel()
+        if worker in self._live:
+            self._idle.append(worker)
+            self._dispatch()
+
+    def _not_ready(self, worker: _Worker) -> None:
+        self._readiness.pop(worker, None)
+        if worker not in self._live or worker in self._ready or self._closing:
+            return
+        name = worker.process.name
+        worker.process.kill()
+        # Never replaced: a replacement would wait as long (design D1).
+        self._break(
+            WorkerStartError(
+                f"The parse worker {name} was not ready within {self._ready_deadline} s."
+            )
+        )
+
+    def _overdue(self, worker: _Worker, future: asyncio.Future[PreparedPage]) -> None:
+        held = self._busy.get(worker)
+        # Its outcome came first; or the pool broke.
+        if held is None or held.future is not future:
+            return
+        del self._busy[worker]
+        # Its end of file brings the replacement (design D3); an outcome it sent meanwhile
+        # finds no Page held and is dropped.
+        worker.process.kill()
+        if not future.done():
+            future.set_result(
+                PreparedPage(
+                    parse_error="parse_timeout",
+                    parse_error_message=f"Preparing it took more than {self._deadline} s, so its "
+                    f"parse worker {worker.process.name} was ended.",
+                )
+            )
+
     def _finished(self, worker: _Worker, outcome: _Outcome) -> None:
         held = self._busy.pop(worker, None)
-        # None once the pool broke, which failed the Page already.
+        # None once the pool broke, which failed the Page already, or its deadline passed.
         if held is None:
             return
-        _, future = held
+        held.deadline.cancel()
+        future = held.future
         # A cancelled Page's outcome only frees its worker.
         if not future.done():
             if isinstance(outcome, BaseException):
@@ -460,9 +530,9 @@ class PoolExecutor:
             return
         held = self._busy.pop(worker, None)
         if held is not None:
-            _, future = held
-            if not future.done():
-                future.set_result(_crashed(f"The parse worker {worker.process.name} ended."))
+            held.deadline.cancel()
+            if not held.future.done():
+                held.future.set_result(_crashed(f"The parse worker {worker.process.name} ended."))
         if self._closing or self._broken is not None:
             return
         # The Pages waiting meanwhile wait for it (design D3).
@@ -475,7 +545,9 @@ class PoolExecutor:
         # The first cause counts: a worker that reported its start failure then ends too.
         if self._broken is None:
             self._broken = error
-        futures = [future for _, future in self._busy.values()]
+        for held in self._busy.values():
+            held.deadline.cancel()
+        futures = [held.future for held in self._busy.values()]
         futures += [future for _, future in self._waiting]
         self._busy.clear()
         self._waiting.clear()

@@ -54,7 +54,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 
   Done when: a per-Page failure of the pool never raises out of `prepare()`, which returns a failure `PreparedPage` (no tree, its defaults) with `parse_error` = `worker_crashed` (a worker that ended, a Page record the crawl process cannot read; an output it cannot read is task 2.10's `extractor_error`) or `parse_timeout`, and raises only for a programmer's error, such as a Page before `start()` (ruled 2026-10-14; `020`'s task 7.23 derives the header Links in process and records `parsed` = 0 for these values, and is merged before this task); and a worker that ends after it is ready (task 2.8) is replaced.
 - [x] 3.3 [3+6] Drive "The Crawl continues after a worker crash".
-- [ ] 3.4 [3+6] Drive "A Page that takes too long to prepare is recorded": `PREPARE_DEADLINE_SECONDS`, from the moment a worker takes the Page; the worker over it is killed and replaced, and the URL gets `parse_timeout` (design D8).
+- [x] 3.4 [3+6] Drive "A Page that takes too long to prepare is recorded": `PREPARE_DEADLINE_SECONDS`, from the moment a worker takes the Page; the worker over it is killed and replaced, and the URL gets `parse_timeout` (design D8).
 
   Done when, besides: a worker that has not answered "ready" within the deadline is a `WorkerStartError`, the Crawl's error, and is never replaced, with its own test (a worker that never answers ready; ruled 2026-10-14).
 - [ ] 3.5 [3+6] Drive "The Crawl continues after a preparation timeout".

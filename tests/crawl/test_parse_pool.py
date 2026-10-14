@@ -25,6 +25,7 @@ from spider.crawl.fetcher import FetchResult
 from spider.crawl.hooks import Handler, Hooks, UrlResult
 from spider.crawl.pages import Extractor, PageInput, PageSettings, PreparedPage, prepare_page
 from spider.crawl.parse_pool import (
+    PREPARE_DEADLINE_SECONDS,
     PoolExecutor,
     WorkerStartError,
     _outcome,
@@ -40,7 +41,7 @@ from spider.crawl.scope import scope_rules
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import NormalizedUrl
 from spider.output.reporter import Collected
-from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
+from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
 from spider.services.hooks import default_page_executor
 from spider.store.records import SecretNames
 from tests.fixture_site.plugin import StartSite
@@ -70,6 +71,9 @@ SMALL_SITE = Site(
 BUSY_SECONDS = 0.3
 # Longer than any test waits for a Page: such a Page ends only with its worker.
 HANG_SECONDS = 120
+# A deadline short enough for a test, and a Page that ends after it (design D8).
+LATE_DEADLINE = 1.0
+LATE_SECONDS = LATE_DEADLINE + 0.5
 
 
 def at(path: str) -> NormalizedUrl:
@@ -84,6 +88,18 @@ class Preparer(msgspec.Struct, frozen=True):
 
 # Per process: each worker counts its own Pages.
 _prepared_here = 0
+# A folder where the workers holding a /meet Page leave their pid, named in the environment that
+# a spawn worker inherits; each waits there until MEETING_WORKERS of them hold one at once.
+MEETING_FOLDER = "SPIDER_TEST_MEETING_FOLDER"
+MEETING_WORKERS = 2
+
+
+def _meet(folder: Path) -> None:
+    (folder / str(os.getpid())).touch()
+    # Bounded, so a pool that never gives a second worker a Page fails the test, not hangs it.
+    give_up = time.monotonic() + 20
+    while len(list(folder.iterdir())) < MEETING_WORKERS and time.monotonic() < give_up:
+        time.sleep(0.01)
 
 
 def _record_preparer(tree: LexborHTMLParser, page: PageInput) -> Preparer:
@@ -92,10 +108,14 @@ def _record_preparer(tree: LexborHTMLParser, page: PageInput) -> Preparer:
     if page.url.endswith("/die"):
         # As a crashing native parser would: no exception, no cleanup.
         os._exit(3)
+    if page.url.endswith("/meet"):
+        _meet(Path(os.environ[MEETING_FOLDER]))
     if page.url.endswith("/busy"):
         time.sleep(BUSY_SECONDS)
     if page.url.endswith("/hang"):
         time.sleep(HANG_SECONDS)
+    if page.url.endswith("/late"):
+        time.sleep(LATE_SECONDS)
     return Preparer(os.getpid(), _prepared_here)
 
 
@@ -141,6 +161,17 @@ def _slow_everywhere(tree: LexborHTMLParser, page: PageInput) -> Slept:
 
 SLOW_EVERYWHERE = Extractor("slow_everywhere", _slow_everywhere)
 
+# The scenarios' deadline, shortened as the spec allows; every other Page takes a third of it.
+TEST_DEADLINE = 1.5
+
+
+def _never_ends_on_slow(tree: LexborHTMLParser, page: PageInput) -> Slept:
+    time.sleep(HANG_SECONDS if page.url.endswith("/slow") else TEST_DEADLINE / 3)
+    return Slept()
+
+
+NEVER_ENDS_ON_SLOW = Extractor("never_ends_on_slow", _never_ends_on_slow)
+
 
 def preparer(page: PreparedPage | BaseException) -> Preparer:
     assert isinstance(page, PreparedPage)
@@ -150,8 +181,13 @@ def preparer(page: PreparedPage | BaseException) -> Preparer:
 
 
 @asynccontextmanager
-async def started(workers: int, *extractors: Extractor) -> AsyncIterator[PoolExecutor]:
-    pool = PoolExecutor(workers=workers)
+async def started(
+    workers: int,
+    *extractors: Extractor,
+    deadline: float = PREPARE_DEADLINE_SECONDS,
+    ready_deadline: float = PREPARE_DEADLINE_SECONDS,
+) -> AsyncIterator[PoolExecutor]:
+    pool = PoolExecutor(workers=workers, deadline=deadline, ready_deadline=ready_deadline)
     await pool.start(PageSettings(scope_rules(at("/")), extractors or (RECORD_PREPARER,)))
     try:
         yield pool
@@ -173,9 +209,17 @@ async def test_a_page_is_prepared_in_a_worker_as_in_process() -> None:
 
 
 @pytest.mark.slow
-async def test_pages_in_flight_are_spread_over_the_workers() -> None:
-    async with started(2) as pool:
-        pages = await asyncio.gather(*(pool.prepare(at("/"), RESPONSE) for _ in range(4)))
+async def test_pages_in_flight_are_spread_over_the_workers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A worker takes Pages once it is ready, so the first one ready could otherwise take them
+    # all: each holds its /meet Page until the other holds one too.
+    meeting = tmp_path / "meeting"
+    meeting.mkdir()
+    monkeypatch.setenv(MEETING_FOLDER, str(meeting))
+    async with started(MEETING_WORKERS) as pool:
+        meetings = (pool.prepare(at("/meet"), RESPONSE) for _ in range(MEETING_WORKERS))
+        pages = await asyncio.gather(*meetings)
         workers = pool.worker_pids
 
     assert sorted({preparer(page).pid for page in pages}) == sorted(workers)
@@ -343,6 +387,45 @@ async def test_a_worker_ended_from_outside_costs_its_page_at_once() -> None:
         outcome = await asyncio.wait_for(asyncio.gather(held), 10)
 
     assert [page.parse_error for page in outcome] == ["worker_crashed"]
+
+
+@pytest.mark.slow
+async def test_an_outcome_that_comes_after_its_deadline_is_dropped() -> None:
+    loop = asyncio.get_running_loop()
+    # A loop callback that raises only reaches the handler, never the test.
+    errors: list[dict[str, Any]] = []
+    loop.set_exception_handler(lambda _, context: errors.append(context))
+    async with started(1, deadline=LATE_DEADLINE) as pool:
+        # Answered, so the worker is ready and idle.
+        await pool.prepare(at("/"), RESPONSE)
+        late = asyncio.ensure_future(pool.prepare(at("/late"), RESPONSE))
+        await asyncio.sleep(0)
+        due = loop.time() + LATE_DEADLINE
+        # The first hold spans the deadline, so its timer and the second hold, due just before
+        # it, run in one pass of the loop, the hold first; the worker sends its outcome during
+        # the second hold, so the outcome reaches the loop after the deadline's timer has run.
+        loop.call_at(due - 0.1, time.sleep, 0.2)
+        loop.call_at(due - 0.05, time.sleep, LATE_SECONDS)
+        page = await asyncio.wait_for(late, 30)
+        # The replacement prepares the next Page.
+        await asyncio.wait_for(pool.prepare(at("/"), RESPONSE), 30)
+        started_workers = len(pool.worker_pids)
+
+    assert (page.parse_error, started_workers, errors) == ("parse_timeout", 2, [])
+
+
+@pytest.mark.slow
+async def test_a_worker_that_is_never_ready_fails_the_crawl() -> None:
+    # Imported here: the workers of the other tests import this module.
+    from tests.crawl.hangs_in_workers import HANGS_IN_WORKERS
+
+    async with started(1, HANGS_IN_WORKERS, ready_deadline=LATE_DEADLINE) as pool:
+        outcome = await asyncio.wait_for(
+            asyncio.gather(pool.prepare(at("/"), RESPONSE), return_exceptions=True), 30
+        )
+        started_workers = len(pool.worker_pids)
+
+    assert ([type(error) for error in outcome], started_workers) == ([WorkerStartError], 1)
 
 
 @pytest.mark.slow
@@ -598,6 +681,35 @@ def test_the_crawl_continues_after_a_worker_crash(
 
     parsed = query(result.crawl_file, "SELECT parsed FROM urls WHERE url = ?", (server.url("/ok"),))
     assert (parsed, result.summary.state) == ([(1,)], "completed")
+
+
+SLOW_SITE = Site(
+    routes={
+        "/": Page(body='<a href="/slow">Slow</a><a href="/ok">OK</a>'),
+        "/slow": Page(body="slow"),
+        "/ok": Page(body="ok"),
+    }
+)
+
+
+def crawl_with_a_short_deadline(seed: str, workers: int = 1) -> CrawlResult:
+    hooks = Hooks(extractors=(NEVER_ENDS_ON_SLOW,))
+    return crawl_result(
+        seed, hooks, pages=lambda: PoolExecutor(workers=workers, deadline=TEST_DEADLINE)
+    )
+
+
+@pytest.mark.slow
+def test_a_page_that_takes_too_long_to_prepare_is_recorded(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SLOW_SITE)
+
+    crawl_file = crawl_with_a_short_deadline(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file, "SELECT parsed, parse_error FROM urls WHERE url = ?", (server.url("/slow"),)
+    ) == [(0, "parse_timeout")]
 
 
 @pytest.mark.slow
