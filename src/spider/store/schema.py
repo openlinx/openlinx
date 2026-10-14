@@ -431,6 +431,19 @@ pages = public_table(
         comment="The number of meta elements named description without an svg, math or "
         "noscript ancestor; NULL when the Page is not analysed or its Page extractor failed.",
     ),
+    Column(
+        "meta_keywords_1",
+        Text,
+        comment="The content of the Page's first meta keywords element, whitespace-normalised, "
+        "the empty string for one without content; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "meta_keywords_1_length",
+        Integer,
+        comment="The length of meta_keywords_1 in Unicode code points; NULL exactly when "
+        "meta_keywords_1 is.",
+    ),
     comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
     "an HTML document, whatever its status code.",
     change=30,

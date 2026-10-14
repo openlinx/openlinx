@@ -19,3 +19,5 @@ class PageRow:
     meta_description_2: str | None = None
     meta_description_2_length: int | None = None
     meta_description_count: int | None = None
+    meta_keywords_1: str | None = None
+    meta_keywords_1_length: int | None = None

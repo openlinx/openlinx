@@ -20,6 +20,8 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     meta_description_2: str | None
     meta_description_2_length: int | None
     meta_description_count: int
+    meta_keywords_1: str | None
+    meta_keywords_1_length: int | None
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
@@ -27,6 +29,7 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
     first, second = _nth(titles, 0), _nth(titles, 1)
     descriptions = _meta_contents(tree, "description")
     description_1, description_2 = _nth(descriptions, 0), _nth(descriptions, 1)
+    keywords = _nth(_meta_contents(tree, "keywords"), 0)
     return PageData(
         title_1=first,
         title_1_length=_length(first),
@@ -38,6 +41,8 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput) -> PageData:
         meta_description_2=description_2,
         meta_description_2_length=_length(description_2),
         meta_description_count=len(descriptions),
+        meta_keywords_1=keywords,
+        meta_keywords_1_length=_length(keywords),
     )
 
 

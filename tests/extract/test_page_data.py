@@ -90,6 +90,12 @@ def test_multiple_meta_descriptions() -> None:
     ) == (2, "B", 1)
 
 
+def test_meta_keywords() -> None:
+    row = page_row('<meta name="keywords" content="shoes, boots">')
+
+    assert (row.meta_keywords_1, row.meta_keywords_1_length) == ("shoes, boots", 12)
+
+
 # Fragments that build the documents a parser repairs: unclosed, nested in foreign content,
 # commented out, NUL and stray markup.
 _FRAGMENTS = st.sampled_from(
