@@ -1,11 +1,13 @@
 """The URL limit over HTTP (020-add-crawl-core D7, crawling; seam 3 and 3+6)."""
 
+import json
+
 import pytest
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawled
-from tests.support.crawls import query
+from tests.support.crawls import crawl_row, query
 from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
@@ -36,3 +38,13 @@ def test_the_limit_holds_under_concurrency(
     crawled(server.url("/"), "--max-urls", "5", "--concurrency", "5")
 
     assert len([request for request in server.requests if request.path != "/robots.txt"]) == 5
+
+
+def test_no_limit_is_recorded_as_null(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+
+    config = json.loads(crawl_row(crawled(server.url("/")))["config"])
+
+    assert config["crawl"]["max_urls"] is None

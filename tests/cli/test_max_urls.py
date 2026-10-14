@@ -34,3 +34,13 @@ def test_the_limit_warning_says_how_to_continue(
         for warning in result.json()["warnings"]
         if warning["code"] == "max_urls_reached"
     ] == [True]
+
+
+def test_there_is_no_limit_by_default(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+
+    document = run_cli("crawl", server.url("/")).json()
+
+    assert (document["state"], document["urls"]["fetched"]) == ("completed", 10)
