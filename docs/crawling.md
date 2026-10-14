@@ -11,7 +11,7 @@ spider crawl site.test
 spider crawl https://site.test/shop/ --concurrency 2
 ```
 
-The Crawl requests the Seed, reads the Links of each response it parses, and follows the hyperlinks in its Scope, Crawl Depth by Crawl Depth: every URL at one depth is done before any URL one deeper starts, and the URLs of a depth start in the order they were first recorded (`urls.id`), several at a time (see [Requests in flight](#requests-in-flight)). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its status is 2xx and its `Content-Type` is HTML (`text/html` or `application/xhtml+xml`); a PDF, an image or a response without a `Content-Type` is recorded but not parsed.
+The Crawl requests the Seed, reads the Links of each response it parses, follows the hyperlinks in its Scope and checks the others (see [External URLs](#external-urls)), Crawl Depth by Crawl Depth: every URL at one depth is done before any URL one deeper starts, and the URLs of a depth start in the order they were first recorded (`urls.id`), several at a time (see [Requests in flight](#requests-in-flight)). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its URL is in the Scope, its status is 2xx and its `Content-Type` is HTML (`text/html` or `application/xhtml+xml`); a PDF, an image, a response without a `Content-Type` or the response of an External URL is recorded but not parsed.
 
 ### Options and `[crawl]` settings
 
@@ -20,6 +20,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | Option | `[crawl]` key | Default | Meaning |
 |---|---|---|---|
 | `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host, 1 to 50. |
+| `--check-external` / `--no-check-external` | `check_external` | `true` | Request each External URL once to record its response; with `--no-check-external`, record it as skipped, unrequested (see [External URLs](#external-urls)). |
 | `--exclude <regex>` | `exclude` | `[]` | A URL that the pattern matches is never requested; give the option once per pattern (see [Include and exclude patterns](#include-and-exclude-patterns)). |
 
 `--workspace` and `--format` are the global flags of every Command.
@@ -99,6 +100,7 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 | A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |
 | The URL's rows cannot be written | The URL alone is recorded, with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs found on it or its handlers' rows. This holds for a value the file refuses (a constraint, a value too big, a value that cannot be bound) and for an error of the tool's own row code; any other database error stops the Crawl, as above. |
 | The URL matches an `--exclude` pattern | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `excluded`, and no response columns. |
+| The URL is External, with `--no-check-external` | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `external_not_checked`. |
 
 Each of the three failures of the tool's own code is reported by one counted warning, written to stderr when it first occurs and kept once in the result's `warnings`, however many URLs it affects:
 
@@ -191,6 +193,20 @@ A URL is internal when its host is a Seed host, whatever its scheme and port: fo
 Registrable domains come from a copy of the [Public Suffix List](https://publicsuffix.org/) bundled with the tool, which is never downloaded during a Crawl. So `shop.co.uk` and `user.github.io` are registrable domains, while `co.uk` and `github.io` are public suffixes.
 
 Hosts are compared ignoring one trailing dot, because DNS treats `site.test.` and `site.test` as one name. The two URLs are still recorded as two rows. Other spellings of an IP address, such as `127.1` or `0x7f.0.0.1`, are not converted: they are internal only when they are written exactly as the Seed host is.
+
+Each URL's row says what it is: `urls.is_internal` is 1 for an Internal URL, and `urls.in_scope` is 1 when the URL is in the Scope, so it may be followed. An excluded URL has `in_scope` = 0.
+
+### External URLs
+
+A hyperlink to an External URL is checked, not followed: the URL is requested once, its response is recorded (`status_code`, `content_type`, `response_time_ms`), and it is never parsed, so `parsed` = 0 and nothing it links to is recorded. A broken outbound link therefore shows as a 4xx or 5xx `status_code`, or as a `fetch_error`, such as `dns_error` for a host that no longer exists (see [When one URL fails](#when-one-url-fails)).
+
+External URLs count against the same limits as internal ones: at most `--concurrency` requests to each External host, and the cap on URLs in progress in all.
+
+With `--no-check-external`, no External URL is requested. Each one is still recorded, with `fetch_state` = `skipped` and `skip_reason` = `external_not_checked`, so the Links to it can be counted.
+
+### Origins
+
+Every URL belongs to an origin: its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host.
 
 ### `--scope`
 
