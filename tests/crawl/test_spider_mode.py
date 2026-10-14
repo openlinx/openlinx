@@ -4,6 +4,7 @@ import pytest
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.sites.hostile import site as hostile
 from tests.support.crawling import crawled
 from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
@@ -223,3 +224,15 @@ def test_deeply_nested_html_does_not_stop_the_crawl(
         "completed",
         True,
     )
+
+
+def test_undecodable_bytes_do_not_stop_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(hostile.SITE)
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file, "SELECT fetch_state FROM urls WHERE url = ?", [server.url("/after")]
+    ) == [("fetched",)]
