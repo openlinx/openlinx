@@ -165,6 +165,7 @@ The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is 
 - [A Crawl started without `--store-html` has no HTML for `page --html` (v0.2)] → The decision is made at start and kept on resume, so the docs say to choose it up front.
 - [Our directive reading follows `020`'s parser, which can differ from Google's in edge cases] → Documented in `020`, with bot-specific directives listed under Open Questions.
 - [Language detection is unreliable on short texts] → Detection is opt-in and returns NULL when there are no words. Readability never uses it.
+- [Tests of group 1 named after no scenario, which the scenario count ignores] → In `tests/store/test_pages.py`: `test_the_units_of_pages_run_again_the_same`, which replays the Page row's writer with `replay_now` (task 1.1).
 
 ## Migration Plan
 

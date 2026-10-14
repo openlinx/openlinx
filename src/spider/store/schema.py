@@ -343,3 +343,19 @@ Index(
         "origin's row."
     },
 )
+
+pages = public_table(
+    "pages",
+    Column(
+        "url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        autoincrement=False,
+        comment="The Page's URL.",
+    ),
+    Column("address", Text, nullable=False, comment="The Page's URL as the Crawl requested it."),
+    comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
+    "an HTML document, whatever its status code.",
+    change=30,
+)

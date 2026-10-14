@@ -148,3 +148,12 @@ One row for each origin of a URL that the Crawl recorded.
 | Name | Columns | Unique | Where | Description |
 |---|---|---|---|---|
 | `origins_origin` | `origin` | yes | | Recording an origin once (ON CONFLICT (origin)), and finding an origin's row. |
+
+## Table `pages`
+
+One row for each Page of the Crawl: an Internal URL in the Scope whose response is an HTML document, whatever its status code.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | PK, → `urls.id` | | | The Page's URL. |
+| `address` | TEXT | no | | | | The Page's URL as the Crawl requested it. |
