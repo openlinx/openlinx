@@ -197,3 +197,29 @@ def test_a_skipped_url_has_no_response_data(
         "WHERE url = ?",
         [server.url("/logout")],
     ) == [(None, None, None, None, 0)]
+
+
+def test_deeply_nested_html_does_not_stop_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # 10,000 deep: lexbor's tree builder parses it in about 50 ms (design Risks).
+    nested = "<div>" * 10_000 + '<a href="/after">After</a>' + "</div>" * 10_000
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/deep">Deep</a>'),
+                "/deep": Page(body=nested),
+                "/after": Page(body="<p>After</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+    ((parsed, parse_error),) = query(
+        crawl_file, "SELECT parsed, parse_error FROM urls WHERE url = ?", [server.url("/deep")]
+    )
+
+    assert (crawl_row(crawl_file)["state"], parsed == 1 or parse_error is not None) == (
+        "completed",
+        True,
+    )
