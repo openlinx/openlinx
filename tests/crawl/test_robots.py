@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.crawl.robots import read_robots_txt
+from spider.crawl.robots import read_robots_txt, robots_state
 from spider.naming import DEFAULT_ROBOTS_TOKEN
 
 _LAST_RULE = b"\nDisallow: /x"
@@ -113,3 +113,11 @@ def test_the_crawl_delay_is_in_whole_milliseconds_that_fit_an_integer(
     robots = read_robots_txt(f"User-agent: *\n{line}".encode(), DEFAULT_ROBOTS_TOKEN)
 
     assert robots.crawl_delay_ms == expected
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected"),
+    [(200, "ok"), (204, "ok"), (299, "ok"), (301, "missing"), (404, "missing"), (410, "missing")],
+)
+def test_the_final_robots_txt_response_gives_its_state(status_code: int, expected: str) -> None:
+    assert robots_state(status_code) == expected

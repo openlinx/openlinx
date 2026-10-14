@@ -1,8 +1,10 @@
 """robots.txt over HTTP (020-add-crawl-core D6, crawling; seam 3 and 3+6)."""
 
+from pathlib import Path
+
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Robots, Site
+from tests.fixture_site.routes import Page, Robots, Site, Status
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.sites import NINE_PAGES
@@ -128,3 +130,24 @@ def test_disallowed_urls_are_crawled_and_still_labelled(
         "SELECT fetch_state, blocked_by_robots_txt FROM urls WHERE url = ?",
         [server.url("/private/a")],
     ) == [("fetched", 1)]
+
+
+def _seed_and_origin(crawl_file: Path, site: str) -> tuple[object, ...]:
+    """The Seed's fetch_state and skip_reason, and its origin's robots_state."""
+    ((fetch_state, skip_reason, robots_state),) = query(
+        crawl_file,
+        "SELECT fetch_state, skip_reason, robots_state FROM urls "
+        "JOIN origins ON origins.id = urls.origin_id WHERE url = ?",
+        [f"{site}/"],
+    )
+    return fetch_state, skip_reason, robots_state
+
+
+def test_a_missing_robots_txt_allows_everything(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/robots.txt": Status(404), "/": Page(body="<p>/</p>")}))
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _seed_and_origin(crawl_file, server.base_url) == ("fetched", None, "missing")

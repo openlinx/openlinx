@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from protego import Protego
 
+from spider.store.records import RobotsState
+
 # RFC 9309 2.5: a crawler parses at least the first 500 KiB of a robots.txt.
 ROBOTS_TXT_LIMIT = 512_000
 # SQLite's largest INTEGER: a Crawl-delay of any size still fits robots_crawl_delay_ms.
@@ -45,6 +47,11 @@ class OriginRobots:
 
     def allows(self, url: str) -> bool:
         return self.rules is None or self.rules.allows(url)
+
+
+def robots_state(status_code: int) -> RobotsState:
+    """RFC 9309's mapping of the final robots.txt response."""
+    return "ok" if 200 <= status_code < 300 else "missing"
 
 
 def read_robots_txt(body: bytes, token: str) -> RobotsTxt:
