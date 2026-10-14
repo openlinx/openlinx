@@ -59,6 +59,7 @@ When the server stops, it cancels every handler still running (hanging or delaye
 - **`ServerHandle`**:
   - `base_url`, such as `http://127.0.0.1:53124`
   - `url(path)`
+  - `most_simultaneous`, the most requests the site has handled at once, from a request's arrival until its handler returned
   - `requests`, a snapshot of the request log. Each entry is a `LoggedRequest(method, path, headers, received_at)`: the path includes the query, and `received_at` is `time.monotonic()`.
 
 Clients in tests:

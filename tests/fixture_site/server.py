@@ -41,6 +41,8 @@ class RequestLog:
     def __init__(self) -> None:
         self._entries: list[LoggedRequest] = []
         self._lock = threading.Lock()
+        self._in_flight = 0
+        self._most_in_flight = 0
 
     def add(self, request: web.Request) -> None:
         entry = LoggedRequest(
@@ -51,6 +53,17 @@ class RequestLog:
         )
         with self._lock:
             self._entries.append(entry)
+            self._in_flight += 1
+            self._most_in_flight = max(self._most_in_flight, self._in_flight)
+
+    def answered(self) -> None:
+        with self._lock:
+            self._in_flight -= 1
+
+    @property
+    def most_in_flight(self) -> int:
+        with self._lock:
+            return self._most_in_flight
 
     def snapshot(self) -> tuple[LoggedRequest, ...]:
         with self._lock:
@@ -68,6 +81,11 @@ class ServerHandle:
     @property
     def requests(self) -> tuple[LoggedRequest, ...]:
         return self._log.snapshot()
+
+    @property
+    def most_simultaneous(self) -> int:
+        """The most requests the site has handled at once."""
+        return self._log.most_in_flight
 
 
 def _page_response(site: Site, page: Page, base_url: str) -> web.Response:
@@ -161,6 +179,7 @@ def _build_app(
             return await handler(request)
         finally:
             in_flight.discard(task)
+            log.answered()
 
     async def handle(request: web.Request) -> web.StreamResponse:
         route = site.routes.get(request.path)
