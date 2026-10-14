@@ -35,14 +35,16 @@ from spider.crawl.parse_pool import (
     worker_count,
     worker_limit,
 )
+from spider.crawl.politeness import global_cap
 from spider.crawl.scope import scope_rules
+from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import NormalizedUrl
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
 from spider.services.hooks import default_page_executor
 from spider.store.records import SecretNames
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Route, Site
 from tests.support.app import settings_tables
 from tests.support.cli import run_cli, run_cli_process
 from tests.support.crawling import crawl_result
@@ -123,6 +125,21 @@ def _unpicklable_on_odd(tree: LexborHTMLParser, page: PageInput) -> Holder:
 RECORD_PREPARER = Extractor("record_preparer", _record_preparer)
 UNREADABLE_ON_BAD = Extractor("unreadable_on_bad", _unreadable_on_bad)
 UNPICKLABLE_ON_ODD = Extractor("unpicklable_on_odd", _unpicklable_on_odd)
+
+# The scenario's slow parsing, against fetches of a few milliseconds from the fixture site.
+SLOW_SECONDS = 1.0
+
+
+class Slept(msgspec.Struct, frozen=True):
+    pass
+
+
+def _slow_everywhere(tree: LexborHTMLParser, page: PageInput) -> Slept:
+    time.sleep(SLOW_SECONDS)
+    return Slept()
+
+
+SLOW_EVERYWHERE = Extractor("slow_everywhere", _slow_everywhere)
 
 
 def preparer(page: PreparedPage | BaseException) -> Preparer:
@@ -500,6 +517,32 @@ def test_a_crawl_marked_parse_pool_prepares_its_pages_in_the_pool(
     crawl_without_a_page_executor(fixture_site(SMALL_SITE).url("/"), hooks)
 
     assert (len(preparers), os.getpid() in preparers) == (3, False)
+
+
+@pytest.mark.slow
+def test_fetching_waits_for_slow_parsing(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    paths = [f"/p{n}" for n in range(1, 51)]
+    links = "".join(f'<a href="{path}">{path}</a>' for path in paths)
+    routes: dict[str, Route] = {"/": Page(body=links)}
+    routes |= {path: Page(body=path) for path in paths}
+    server = fixture_site(Site(routes=routes))
+    pages = {server.url(path) for path in ["/", *paths]}
+    # Seen by a handler in the crawl process, after the Page's preparation has ended.
+    prepared: list[float] = []
+
+    def record(result: UrlResult) -> tuple[()]:
+        if result.url in pages:
+            prepared.append(time.monotonic())
+        return ()
+
+    hooks = Hooks(extractors=(SLOW_EVERYWHERE,), handlers=(Handler("prepared", record),))
+    crawl_result(server.url("/"), hooks, pages=lambda: PoolExecutor(workers=2))
+
+    requested = [r.received_at for r in server.requests if server.url(r.path) in pages]
+    most = max(sum(t <= at for t in requested) - sum(t <= at for t in prepared) for at in requested)
+    assert most <= global_cap(CrawlSettings.model_validate({}).concurrency) + 2 * 2
 
 
 @pytest.mark.slow

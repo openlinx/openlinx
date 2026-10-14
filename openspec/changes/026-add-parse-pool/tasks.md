@@ -48,7 +48,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 
 ## 3. Bounded queue and crash containment
 
-- [ ] 3.1 [3+6] Drive "Fetching waits for slow parsing": the task slots of `020`'s global request cap + the executor's backlog, 2 × `parse_workers` (design D2), on the single-host fixture site too (ruled 2026-10-14).
+- [x] 3.1 [3+6] Drive "Fetching waits for slow parsing": the task slots of `020`'s global request cap + the executor's backlog, 2 × `parse_workers` (design D2), on the single-host fixture site too (ruled 2026-10-14).
 - [ ] 3.2 [3+6] Drive "A crashed worker is recorded": a dead worker's one Page is `worker_crashed`, and the worker is replaced (design D3).
 
   Done when: a per-Page failure of the pool never raises out of `prepare()`, which returns a failure `PreparedPage` (no tree, its defaults) with `parse_error` = `worker_crashed` (a worker that ended, an outcome the crawl process cannot read) or `parse_timeout`, and raises only for a programmer's error, such as a Page before `start()` (ruled 2026-10-14; `020`'s task 7.23 derives the header Links in process and records `parsed` = 0 for these values, and is merged before this task); and a worker that ends after it is ready (task 2.8) is replaced.
