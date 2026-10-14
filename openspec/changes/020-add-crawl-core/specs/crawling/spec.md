@@ -371,7 +371,7 @@ The Crawl SHALL parse a response only when all of these hold:
 - its status code is 2xx
 - its Content-Type is `text/html` or `application/xhtml+xml`
 
-It SHALL record `parsed` = 1 for such a URL and 0 for every other URL.
+It SHALL record `parsed` = 1 for such a URL once its document is parsed and its Links are found, and 0 for every other URL. A URL whose page preparation gives nothing, with `parse_error` = `body_too_large`, `worker_crashed` or `parse_timeout`, SHALL have `parsed` = 0 too.
 
 #### Scenario: Links on an error page are not followed
 - **WHEN** `/` links to `/gone`, which returns 404 with an HTML body that links to `/secret`
@@ -637,8 +637,8 @@ The crawl store SHALL hold one row for each distinct normalised URL of the Crawl
 | `content_type` | TEXT | yes | | The `Content-Type` response header as received |
 | `response_time_ms` | INTEGER | yes | | Time from sending the request to receiving the whole body |
 | `fetched_at` | TEXT | yes | timestamp | UTC time of the request |
-| `parsed` | INTEGER | no | boolean | 1 when the response was parsed for Links and Page data |
-| `parse_error` | TEXT | yes | listed below | Why a response that should have been parsed was not |
+| `parsed` | INTEGER | no | boolean | 1 when the response was parsed and its Links were found |
+| `parse_error` | TEXT | yes | listed below | Why parsing failed in whole or in part: a registered extractor failed (`parsed` stays 1), or nothing came out of page preparation (`parsed` = 0) |
 | `parse_error_message` | TEXT | yes | | Human-readable detail of `parse_error` |
 
 The listed values SHALL include, from v0.1, the values that later changes write, so that no later change adds one:
@@ -821,7 +821,7 @@ The Crawl SHALL run every registered post-crawl pass when it ends as `completed`
 A failure while one URL is fetched, decoded, parsed, extracted or handled SHALL become that URL's recorded outcome, and the Crawl SHALL go on:
 - **Requests:** a request without a response is recorded as "Requests without a response" says.
 - **Decoding:** bytes that are invalid in the response's character encoding SHALL be decoded with replacement characters.
-- **Extractors:** when an extractor raises an error, the URL SHALL be recorded with `parsed` = 0, `parse_error` = `extractor_error`, and a `parse_error_message` that names the extractor and the error's type.
+- **Extractors:** when a registered extractor raises an error, the URL SHALL be recorded with `parsed` = 1, `parse_error` = `extractor_error`, and a `parse_error_message` that names the extractor and the error's type. The link extractor never raises, so the Page's Links SHALL still be followed, and handlers SHALL receive every extractor output except the failed one's.
 - **Handlers:** when a per-response handler raises an error, the URL SHALL be recorded without that handler's rows.
 - **Recording:** when the writer unit that records a URL fails on its first run with an error of one row, the URL SHALL be recorded by a fallback unit with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs discovered from it and without its handler rows. An error of one row is a value that the file refuses (a constraint, a value too big, or a value that cannot be bound), or an error that the tool's own row code raises. Each of these SHALL instead fail the Crawl as a write failure (see "Result of a Crawl"):
   - any other error that SQLite reports, such as a full disk, an I/O error, or a read-only, corrupt or busy file
@@ -834,11 +834,15 @@ Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, an
 
 #### Scenario: An extractor error is recorded
 - **WHEN** an extractor registered for the test raises an error on `{site}/boom`, `/` links to `/boom` and `/ok`, and `spider crawl {site}/` runs
-- **THEN** `{site}/boom` has `parsed` = 0, `parse_error` = `extractor_error`, and a `parse_error_message` that contains the extractor's name
+- **THEN** `{site}/boom` has `parsed` = 1, `parse_error` = `extractor_error`, and a `parse_error_message` that contains the extractor's name
 
 #### Scenario: The Crawl continues after an extractor error
 - **WHEN** an extractor registered for the test raises an error on `{site}/boom`, `/` links to `/boom` and `/ok`, and `spider crawl {site}/` runs
 - **THEN** `{site}/ok` has `parsed` = 1
+
+#### Scenario: Links of a Page whose extractor failed are followed
+- **WHEN** an extractor registered for the test raises an error on `{site}/boom`, `/` links to `/boom`, `/boom` links to `/deeper`, and `spider crawl {site}/` runs
+- **THEN** `{site}/deeper` has `fetch_state` = `fetched`
 
 #### Scenario: Parse failures are counted in one warning
 - **WHEN** an extractor registered for the test raises an error on `{site}/boom1` and `{site}/boom2`, `/` links to both, and `spider crawl {site}/` ends
