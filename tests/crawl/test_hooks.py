@@ -21,7 +21,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
-from tests.support.sites import NINE_PAGES
+from tests.support.sites import LATE_SHORTER_PATH, NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
 
@@ -79,6 +79,28 @@ def test_a_registered_handler_sees_every_url_once(
         (server.url("/logout"), "skipped"),
         (server.url("/missing"), "fetched"),
     ]
+
+
+@pytest.mark.slow
+def test_a_url_skipped_beyond_the_depth_limit_reaches_its_handlers_once_requeued(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(LATE_SHORTER_PATH)
+    hooks = default_hooks()
+    hooks = replace(
+        hooks,
+        handlers=(*hooks.handlers, Handler("seen", _seen)),
+        row_writers={**hooks.row_writers, Seen: _write_seen},
+    )
+
+    result = crawl_result(server.url("/"), hooks, max_depth=2)
+
+    assert query(
+        result.crawl_file,
+        "SELECT test_seen.state FROM test_seen JOIN urls ON urls.id = test_seen.url_id "
+        "WHERE urls.url = ?",
+        [server.url("/c")],
+    ) == [("fetched",)]
 
 
 def test_post_crawl_passes_run_before_a_crawl_is_completed(

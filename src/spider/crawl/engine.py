@@ -293,7 +293,8 @@ async def _unit_of(
                 skip_reason=skip_reason,
                 crawl_depth=queued.crawl_depth,
                 blocked_by_robots_txt=blocked,
-                rows=_handler_rows(context, skipped),
+                # Not final: a shorter path re-queues it, and its handlers see it then (D5).
+                rows=() if skip_reason == "max_depth" else _handler_rows(context, skipped),
             ),
             row_writers,
         )
