@@ -1,0 +1,96 @@
+"""The in-process double crosses a pickle as the pool does (design D1 of 026-add-parse-pool)."""
+
+import pickle
+
+import pytest
+
+from spider.crawl.pages import PageSettings
+from spider.crawl.scope import scope_rules
+from spider.crawl.urls import NormalizedUrl
+from spider.services.hooks import default_hooks
+
+INNER_HELPERS = """
+import asyncio
+from datetime import UTC, datetime
+
+import msgspec
+
+from spider.aio import loop_factory
+from spider.crawl.fetcher import FetchResult
+from spider.crawl.pages import Extractor, PageSettings
+from spider.crawl.scope import scope_rules
+from spider.crawl.urls import NormalizedUrl
+from spider.services import crawling
+
+SEED = NormalizedUrl("https://site.test/")
+RESPONSE = FetchResult(
+    status_code=200,
+    headers=(("Content-Type", "text/html; charset=utf-8"),),
+    body=b"<title>Home</title>",
+    fetched_at=datetime(2026, 10, 16, tzinfo=UTC),
+    response_time_ms=0,
+)
+
+
+class Marker(msgspec.Struct, frozen=True):
+    pass
+
+
+def prepared(extractor):
+    async def prepare():
+        executor = crawling.default_page_executor()
+        await executor.start(PageSettings(scope_rules(SEED), (extractor,)))
+        try:
+            return await executor.prepare(SEED, RESPONSE)
+        finally:
+            await executor.close()
+
+    return asyncio.run(prepare(), loop_factory=loop_factory)
+"""
+
+UNPICKLABLE_OUTPUT = """
+def _local_class(tree, page):
+    class Local(msgspec.Struct, frozen=True):
+        pass
+
+    return Local()
+
+
+def test_an_output_of_a_local_class():
+    prepared(Extractor("local_class", _local_class))
+"""
+
+LOCAL_EXTRACTOR = """
+def test_a_local_extractor():
+    def local(tree, page):
+        return Marker()
+
+    prepared(Extractor("local", local))
+"""
+
+
+def inner_run(pytester: pytest.Pytester, test: str) -> pytest.RunResult:
+    pytester.makepyfile(INNER_HELPERS + test)
+    return pytester.runpytest(
+        "-p", "tests.support.page_executor", "-o", "asyncio_default_fixture_loop_scope=function"
+    )
+
+
+def test_an_output_that_cannot_be_pickled_fails_the_test(pytester: pytest.Pytester) -> None:
+    result = inner_run(pytester, UNPICKLABLE_OUTPUT)
+
+    result.assert_outcomes(passed=1, errors=1)
+
+
+def test_an_extractor_that_cannot_be_pickled_fails_the_test(pytester: pytest.Pytester) -> None:
+    result = inner_run(pytester, LOCAL_EXTRACTOR)
+
+    result.assert_outcomes(passed=1, errors=1)
+
+
+def test_the_built_in_extractors_reach_a_worker_as_they_are() -> None:
+    settings = PageSettings(
+        scope_rules(NormalizedUrl("https://site.test/")), default_hooks().extractors
+    )
+
+    assert pickle.loads(pickle.dumps(settings, pickle.HIGHEST_PROTOCOL)) == settings  # noqa: S301
