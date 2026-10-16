@@ -451,8 +451,7 @@ class PoolExecutor:
         if held is None or held.future is not future:
             return
         del self._busy[worker]
-        # Its end of file brings the replacement (design D3); an outcome it sent meanwhile
-        # finds no Page held and is dropped.
+        # An outcome it sent meanwhile finds no Page held and is dropped.
         worker.process.kill()
         if not future.done():
             future.set_result(
@@ -462,6 +461,9 @@ class PoolExecutor:
                     f"s, so its parse worker {worker.process.name} was ended.",
                 )
             )
+        # Retired and replaced now, never on its end of file: a process that inherited its
+        # result pipe would hold that off for as long as it runs (design D8).
+        self._ended(worker)
 
     def _finished(self, worker: _Worker, outcome: Outcome) -> None:
         held = self._busy.pop(worker, None)

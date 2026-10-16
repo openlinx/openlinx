@@ -106,6 +106,17 @@ def _meet(folder: Path) -> None:
         time.sleep(0.01)
 
 
+# Longer than the test waits for the Page after /inherit, which only a replacement prepares.
+INHERITED_SECONDS = 25
+
+
+def _fork_a_child_that_holds_the_pipes() -> None:
+    # A forked child inherits every descriptor of the worker, its result pipe's write end too.
+    if sys.platform != "win32" and os.fork() == 0:
+        time.sleep(INHERITED_SECONDS)
+        os._exit(0)
+
+
 def _record_preparer(tree: LexborHTMLParser, page: PageInput) -> Preparer:
     global _prepared_here
     _prepared_here += 1
@@ -120,6 +131,9 @@ def _record_preparer(tree: LexborHTMLParser, page: PageInput) -> Preparer:
         time.sleep(HANG_SECONDS)
     if page.url.endswith("/late"):
         time.sleep(LATE_SECONDS)
+    if page.url.endswith("/inherit"):
+        _fork_a_child_that_holds_the_pipes()
+        time.sleep(HANG_SECONDS)
     return Preparer(os.getpid(), _prepared_here)
 
 
@@ -374,6 +388,20 @@ async def test_replacements_started_together_get_names_of_their_own() -> None:
         "The parse worker spider-parse-2 ended while it prepared https://site.test/die.",
         "The parse worker spider-parse-3 ended while it prepared https://site.test/die.",
     ]
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="no child of an extractor can hold a worker's pipe on Windows: the pool's pipe "
+    "handles are not inheritable, so killing the worker ends them",
+)
+async def test_a_worker_over_its_deadline_is_replaced_while_a_child_holds_its_pipe() -> None:
+    async with started(1, deadline=LATE_DEADLINE) as pool:
+        held = await asyncio.wait_for(pool.prepare(at("/inherit"), RESPONSE), 30)
+        after = await asyncio.wait_for(pool.prepare(at("/"), RESPONSE), INHERITED_SECONDS - 5)
+
+    assert (held.parse_error, after.parse_error) == ("parse_timeout", None)
 
 
 def _refuse_to_release(process: BaseProcess) -> None:
