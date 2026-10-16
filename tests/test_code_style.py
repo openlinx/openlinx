@@ -497,3 +497,45 @@ def test_a_request_outside_the_requester_is_named() -> None:
         "spider/crawl/engine.py:1 calls a Fetcher outside the Requester",
         "spider/crawl/engine.py:2 makes a Request outside the Requester",
     ]
+
+
+# Built only through their generic factories, which check the type parameter where the hooks are
+# registered: one built in place inside Hooks(...) takes it as Any (020 D9).
+FACTORIES = {"Handler": "src/spider/crawl/hooks.py"}
+
+
+def factory_violations(sources: Mapping[str, str]) -> list[str]:
+    """Hooks built outside their factories, given every module's source by its path."""
+    found = []
+    for module, source in sources.items():
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Call):
+                continue
+            name = _base_name(node.func)
+            if name in FACTORIES and module != FACTORIES[name]:
+                found.append(f"{module}:{node.lineno} builds {name}(...) outside its factory")
+    return found
+
+
+def test_hooks_are_built_only_through_their_factories() -> None:
+    root = SRC.parent
+    sources = {
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for folder in (SRC / "spider", root / "tests")
+        for path in sorted(folder.rglob("*.py"))
+    }
+
+    assert factory_violations(sources) == []
+
+
+def test_a_hook_built_outside_its_factory_is_named() -> None:
+    sources = {
+        "tests/crawl/test_hooks.py": "hooks = Hooks(handlers=(Handler('x', rows, write),))\n",
+        "src/spider/services/hooks.py": "h = hooks.Handler('x', rows, write)\n",
+        "src/spider/crawl/hooks.py": "def handler(n, h, w):\n    return Handler(n, h, w)\n",
+    }
+
+    assert factory_violations(sources) == [
+        "tests/crawl/test_hooks.py:1 builds Handler(...) outside its factory",
+        "src/spider/services/hooks.py:1 builds Handler(...) outside its factory",
+    ]

@@ -11,7 +11,8 @@ import pytest
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, text
 
-from spider.crawl.hooks import Handler, Hooks, Pass, PassContext, UrlResult
+from spider.clock import Clock
+from spider.crawl.hooks import Hooks, Pass, PassContext, UrlResult, handler
 from spider.crawl.pages import Extractor, PageInput
 from spider.output.reporter import Collected
 from spider.services.hooks import default_hooks
@@ -20,11 +21,11 @@ from spider.store.records import CrawlState
 from spider.store.writer import CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site
+from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
 from tests.support.sites import LATE_SHORTER_PATH, NINE_PAGES
 from tests.support.workspace import TempWorkspace
-from tests.support.writer import executing
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +64,7 @@ def test_a_registered_handler_sees_every_url_once(
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("seen", _seen, _write_seen)),
+        handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)),
     )
 
     result = crawl_result(server.url("/"), hooks, exclude=["/logout$"])
@@ -90,7 +91,7 @@ def test_a_url_skipped_beyond_the_depth_limit_reaches_its_handlers_once_requeued
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("seen", _seen, _write_seen)),
+        handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)),
     )
 
     result = crawl_result(server.url("/"), hooks, max_depth=2)
@@ -120,32 +121,42 @@ def test_post_crawl_passes_run_before_a_crawl_is_completed(
     assert seen == ["running"]
 
 
-def _counted_notes(connection: Connection) -> int:
-    return int(connection.execute(text("SELECT count(*) FROM test_pass_notes")).scalar_one())
-
-
 def test_post_crawl_passes_run_in_the_order_the_hooks_declare(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
-    counts: list[int] = []
+    ran: list[str] = []
 
-    async def write_a_note(context: PassContext) -> None:
-        await context.writer.run_async(executing(text("CREATE TABLE test_pass_notes (n INTEGER)")))
-        await context.writer.run_async(executing(text("INSERT INTO test_pass_notes VALUES (1)")))
+    async def first(context: PassContext) -> None:
+        ran.append("first")
 
-    async def count_the_notes(context: PassContext) -> None:
-        counts.append(await context.writer.run_async(_counted_notes))
+    async def second(context: PassContext) -> None:
+        ran.append("second")
 
     hooks = default_hooks()
-    hooks = replace(
-        hooks,
-        passes=(*hooks.passes, Pass("write", write_a_note), Pass("count", count_the_notes)),
-    )
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("first", first), Pass("second", second)))
 
     crawl_result(server.url("/"), hooks)
 
-    assert counts == [1]
+    assert ran == ["first", "second"]
+
+
+def test_a_post_crawl_pass_gets_the_clock_of_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
+    clock = FakeClock()
+    clocks: list[Clock] = []
+
+    async def record_the_clock(context: PassContext) -> None:
+        clocks.append(context.clock)
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("clock", record_the_clock)))
+
+    crawl_result(server.url("/"), hooks, clock=clock)
+
+    assert clocks == [clock]
 
 
 def test_post_crawl_passes_run_when_the_url_limit_stops_a_crawl(
@@ -266,7 +277,7 @@ def test_handlers_get_the_outputs_of_the_extractors_that_did_not_fail(
     )
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("outputs", _outputs, _write_outputs)),
+        handlers=(*hooks.handlers, handler("outputs", _outputs, _write_outputs)),
     )
 
     result = crawl_result(server.url("/"), hooks)
@@ -322,7 +333,7 @@ def test_a_failing_handler_does_not_stop_the_crawl(
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("boom", _boom, _write_seen)),
+        handlers=(*hooks.handlers, handler("boom", _boom, _write_seen)),
     )
 
     result = crawl_result(server.url("/"), hooks)
@@ -348,8 +359,8 @@ def test_only_the_failing_handlers_rows_are_dropped(
         hooks,
         handlers=(
             *hooks.handlers,
-            Handler("boom", _boom_only, _write_outputs),
-            Handler("seen", _seen, _write_seen),
+            handler("boom", _boom_only, _write_outputs),
+            handler("seen", _seen, _write_seen),
         ),
     )
 
@@ -384,7 +395,7 @@ def _with_row_writer(writer: Callable[[Connection, Unwritable], None]) -> Hooks:
     hooks = default_hooks()
     return replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("unwritable", _unwritable, writer)),
+        handlers=(*hooks.handlers, handler("unwritable", _unwritable, writer)),
     )
 
 
@@ -438,7 +449,7 @@ def test_a_handler_that_fails_midway_keeps_none_of_its_rows(
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("halfway", _seen_then_boom, _write_seen)),
+        handlers=(*hooks.handlers, handler("halfway", _seen_then_boom, _write_seen)),
     )
 
     result = crawl_result(server.url("/"), hooks)
@@ -498,8 +509,8 @@ def test_a_writer_that_ends_reports_why_it_ended(
         hooks,
         handlers=(
             *hooks.handlers,
-            Handler("flaky", _flaky, _write_flaky([])),
-            Handler("unwritable", _unwritable, _refuse),
+            handler("flaky", _flaky, _write_flaky([])),
+            handler("unwritable", _unwritable, _refuse),
         ),
     )
 
@@ -544,7 +555,7 @@ def test_a_handler_gets_the_row_values_of_the_url(
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("values", _row_values, _write_row_values)),
+        handlers=(*hooks.handlers, handler("values", _row_values, _write_row_values)),
     )
 
     result = crawl_result(server.url("/"), hooks)
@@ -663,4 +674,4 @@ def test_a_url_recorded_as_unwritten_keeps_its_robots_txt_verdict(
 
 def test_a_handler_without_its_writer_cannot_be_built() -> None:
     with pytest.raises(TypeError):
-        Handler("seen", _seen)  # type: ignore[call-arg]
+        handler("seen", _seen)  # type: ignore[call-arg]

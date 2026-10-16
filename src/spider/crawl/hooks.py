@@ -53,6 +53,14 @@ class Handler[R]:
     write: RowWriter[R]
 
 
+def handler[R](
+    name: str, handle: Callable[[UrlResult], Iterable[R]], write: RowWriter[R]
+) -> Handler[Any]:
+    """The one way to build a handler: mypy checks R here, where the handler is registered,
+    since a Handler built in place inside Hooks(...) takes R as Any (design D9)."""
+    return Handler(name, handle, write)
+
+
 @dataclass(frozen=True, slots=True)
 class PassContext:
     """What a post-crawl pass gets: a later dependency is a new field, not a new signature."""

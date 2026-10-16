@@ -1,14 +1,14 @@
-"""Guard: a handler and a writer of different row types fail mypy (020-add-crawl-core D9).
+"""Guard: a hook whose types disagree fails mypy where it is registered (020-add-crawl-core D9).
 
 The check is mypy's, in the same run as the rest of the suite: strict mode reports an unused
-ignore, so the ignore below fails the checks the day the mismatch is no longer caught.
+ignore, so an ignore below fails the checks the day its mismatch is no longer caught.
 """
 
 from dataclasses import dataclass
 
 from sqlalchemy import Connection
 
-from spider.crawl.hooks import Handler, UrlResult
+from spider.crawl.hooks import Hooks, UrlResult, handler
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +30,7 @@ def _write_cookie(connection: Connection, row: CookieRow) -> None:
 
 
 def test_a_handler_and_a_writer_of_different_row_types_fail_mypy() -> None:
-    # The mismatch on purpose: no R is both a PageRow and a CookieRow.
-    handler = Handler("pages", _page_rows, _write_cookie)  # type: ignore[misc]
+    # The mismatch on purpose, registered as default_hooks() registers: no R is both rows.
+    hooks = Hooks(handlers=(handler("pages", _page_rows, _write_cookie),))  # type: ignore[misc]
 
-    assert handler.name == "pages"
+    assert [registered.name for registered in hooks.handlers] == ["pages"]
