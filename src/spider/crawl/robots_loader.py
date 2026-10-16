@@ -3,16 +3,16 @@
 import asyncio
 from datetime import datetime
 
-from spider.crawl.fetcher import Fetcher, FetchFailure, FetchResult, Request
+from spider.crawl.fetcher import FetchFailure, FetchResult
 from spider.crawl.links import resolve_reference
-from spider.crawl.politeness import RequestLimits
+from spider.crawl.requester import Requester
 from spider.crawl.robots import (
     OriginRobots,
     read_robots_txt,
     robots_state,
     robots_txt_text,
 )
-from spider.crawl.urls import NormalizedUrl, robots_txt_url, url_host, url_origin
+from spider.crawl.urls import NormalizedUrl, robots_txt_url, url_origin
 from spider.store.origins import record_robots_txt
 from spider.store.records import RobotsTxtRecord
 from spider.store.writer import CrawlWriter
@@ -23,11 +23,8 @@ _REDIRECTS = frozenset({301, 302, 303, 307, 308})
 
 
 class RobotsLoader:
-    def __init__(
-        self, fetcher: Fetcher, limits: RequestLimits, writer: CrawlWriter, token: str
-    ) -> None:
-        self._fetcher = fetcher
-        self._limits = limits
+    def __init__(self, requester: Requester, writer: CrawlWriter, token: str) -> None:
+        self._requester = requester
         self._writer = writer
         self._token = token
         self._origins: dict[str, asyncio.Task[OriginRobots]] = {}
@@ -52,24 +49,19 @@ class RobotsLoader:
 
     async def _load(self, robots_url: NormalizedUrl) -> OriginRobots:
         url = robots_url
-        response = await self._request(url)
+        response = await self._requester.request_robots_txt(url)
         # Up to five hops, as RFC 9309 asks; a longer chain ends on a 3xx, which is missing.
         for _ in range(_REDIRECT_HOPS):
             target = _redirect_target(url, response)
             if target is None:
                 break
             url = target
-            response = await self._request(url)
+            response = await self._requester.request_robots_txt(url)
         robots, text = _origin_robots(response, self._token)
         # The URL's origin row exists: the URL that requests robots.txt was recorded first.
         record = _robots_txt_record(url_origin(robots_url), robots, text, response.fetched_at)
         await self._writer.run_async(record_robots_txt(record))
         return robots
-
-    async def _request(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
-        # The host's politeness gate, but never the URL limit, which counts only URLs (D6).
-        async with self._limits.host(url_host(url)), self._limits.request():
-            return await self._fetcher.fetch(Request(url))
 
 
 def _redirect_target(

@@ -284,7 +284,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - `--robots-user-agent` must match RFC 9309's `[a-zA-Z_-]+`: refused as `invalid_value` (exit 2), and in the settings file as `settings_invalid` (exit 3).
   - Tests pin the token on the robots.txt side, one robots.txt request for an origin that two URLs reach at once, no `seed_blocked_by_robots_txt` for a blocked URL that is not the Seed, no `robots_unreachable` for an External origin, and a fallback row whose verdict is 1.
   - `docs/testing.md` places `tests/crawl/test_warning_log.py` at seam 2, with the Crawl Service's reporter.
-- [ ] 10.18 Extract the Requester (design D7), behaviour unchanged: `spider.crawl.requester` makes every request of a Crawl. It takes the host's slot, then the global cap, and counts a URL's own request toward `--max-urls` or refuses it; a robots.txt request is never counted. The engine and the robots.txt loader call it, and neither holds the Fetcher or takes a slot itself. The engine's per-run dependencies (the outcomes, the limits, the Requester, the robots.txt loader, the checks) are one frozen record.
+- [x] 10.18 Extract the Requester (design D7), behaviour unchanged: `spider.crawl.requester` makes every request of a Crawl. It takes the host's slot, then the global cap, and counts a URL's own request toward `--max-urls` or refuses it; a robots.txt request is never counted. The engine and the robots.txt loader call it, and neither holds the Fetcher or takes a slot itself. The engine's per-run dependencies (the outcomes, the limits, the Requester, the robots.txt loader, the checks) are one frozen record.
 
   Done when: a guard in `tests/test_code_style.py` names each call of a Fetcher's `fetch` and each `Request` made in `src/spider` outside the Requester, red by mutation of the robots.txt loader; `--rate` (11.1), the watchdog (12.14), the network pause with its probes (12.11–12.22) and `022`'s retries are written into the Requester, not into its callers.
 - [ ] 10.19 Rework the hooks (design D9, D14): `Handler(name, handle, write)` names the store function that writes its rows, generic in the row type, so a handler and a writer of different row types fail mypy; `Hooks.row_writers` is gone, and the URL's unit writes each handler's rows with that handler's writer, with no dispatch on a row's type, so the `TypeError` of a missing writer and its test go. One handler gives one row type for one table. `Pass.run` takes one frozen `PassContext(writer, clock)`, and passes run in the order `Hooks` declares them. Red first: a `Handler` without `write` cannot be built.
@@ -295,7 +295,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 11.1 Drive "Requests to a host are spaced by the rate", fake timing.
 
-  Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`.
+  Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`. The spacing is the Requester's (design D7), so it holds for robots.txt requests too.
 - [ ] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
 - [ ] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared.
 - [ ] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
@@ -326,14 +326,14 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
 - [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing.
 
-  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without an HTTP response for the network pause.
+  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without an HTTP response for the network pause. The watchdog is the Requester's (design D7), around every request it makes.
 - [ ] 12.15 Drive "Probes back off to once a minute" at seam 4. Done when: one pure function gives the probe times of a network wait: 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, none later than the wait.
 - [ ] 12.16 Drive "A dead section does not stop the Crawl", fake timing.
 
-  Done when: probes request the Seed URL through the per-host gate on the context's `Clock`, are not recorded and do not count toward `--max-urls`; the first answering probe resumes the Crawl with the errors kept; and `network_paused` is declared and counted, with `details.count` and `details.total_seconds`.
+  Done when: probes request the Seed URL through the Requester (design D7) on the context's `Clock`, are not recorded and do not count toward `--max-urls`; the first answering probe resumes the Crawl with the errors kept; and `network_paused` is declared and counted, with `details.count` and `details.total_seconds`.
 - [ ] 12.17 Drive "An outage pauses and resumes the Crawl", fake timing.
 
-  Done when: the `crawl_paused` and `crawl_resumed` events carry the data of the spec's event table; no request starts while paused; and a request that ends without an HTTP response while paused is not recorded, so its URL stays `queued` and is requested again when the Crawl resumes.
+  Done when: the `crawl_paused` and `crawl_resumed` events carry the data of the spec's event table; no request starts while paused, which the Requester holds (design D7); and a request that ends without an HTTP response while paused is not recorded, so its URL stays `queued` and is requested again when the Crawl resumes.
 - [ ] 12.18 Drive "URLs that failed in an outage are requested again", fake timing. Done when: a later answering probe re-queues the URLs of the count, each at most once in a run, and the engine dispatches them ahead of the frontier read.
 - [ ] 12.19 Drive "A Crawl that waits longer than the network wait fails", fake timing.
 - [ ] 12.20 Drive "Progress events say when the Crawl is paused", fake timing. Done when: `progress` carries `paused`, and its events go on during a pause.
