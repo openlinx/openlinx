@@ -14,11 +14,20 @@ type Outcome = PreparedPage | BaseException
 type _Sent = tuple[PreparedPage, tuple[tuple[str, bytes], ...]]
 
 
+def pickled(value: object) -> bytes:
+    """Raises PicklingError for whatever cannot be pickled, on every supported Python."""
+    try:
+        return pickle.dumps(value, pickle.HIGHEST_PROTOCOL)
+    # pickle raises AttributeError for a local class before 3.14, and TypeError for a lock.
+    except Exception as error:
+        raise pickle.PicklingError(str(error)) from error
+
+
 def encode_outcome(outcome: Outcome) -> bytes:
     """What a worker sends: whatever cannot cross to the crawl process costs only itself."""
     if isinstance(outcome, PreparedPage):
         try:
-            return pickle.dumps(_sendable(outcome), pickle.HIGHEST_PROTOCOL)
+            return pickled(_sendable(outcome))
         # That one Page's failure, as a record the crawl process cannot read is (design D3).
         except Exception as error:
             message = f"The parse worker could not send the Page's record: {type(error).__name__}"
@@ -35,7 +44,7 @@ def _sendable(page: PreparedPage) -> _Sent:
     failures: list[str] = []
     for name, output in page.outputs:
         try:
-            outputs.append((name, pickle.dumps(output, pickle.HIGHEST_PROTOCOL)))
+            outputs.append((name, pickled(output)))
         except Exception as error:
             failures.append(f"{name}: {type(error).__name__}")
     return _with_failures(page, failures, ()), tuple(outputs)

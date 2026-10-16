@@ -409,12 +409,16 @@ def test_a_synthetic_site_is_checked_when_it_is_declared(changes: dict[str, Any]
         SyntheticSite(**{"seed": 1, "pages": 10, **changes})
 
 
+# asyncio runs a timer up to one tick of the monotonic clock early: 15.6 ms on Windows.
+EARLY = time.get_clock_info("monotonic").resolution
+
+
 def elapsed(server: ServerHandle, path: str) -> float:
     connection = connect(server.base_url)
     try:
-        started = time.monotonic()
+        started = time.perf_counter()
         fetch(connection, path)
-        return time.monotonic() - started
+        return time.perf_counter() - started
     finally:
         connection.close()
 
@@ -424,14 +428,14 @@ def test_a_slow_page_answers_no_sooner_than_its_delay(fixture_site: StartSite) -
     slow = next(n for n in range(20) if site.fault(n) is Fault.SLOW)
     server = fixture_site(site.as_site())
 
-    assert elapsed(server, page_path(slow)) >= 0.5
+    assert elapsed(server, page_path(slow)) >= 0.5 - EARLY
 
 
 @pytest.mark.parametrize("path", ["/", "/r/i/0.jpg", "/missing/0", "/robots.txt"])
 def test_the_latency_delays_every_response(fixture_site: StartSite, path: str) -> None:
     server = fixture_site(SyntheticSite(seed=1, pages=20, shares=NO_FAULTS, latency=0.3).as_site())
 
-    assert elapsed(server, path) >= 0.3
+    assert elapsed(server, path) >= 0.3 - EARLY
 
 
 def test_the_manifest_keeps_nothing_per_page() -> None:

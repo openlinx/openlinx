@@ -15,13 +15,14 @@ import pytest
 
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.pages import InProcessExecutor, PageSettings, PreparedPage
+from spider.crawl.parse_wire import pickled
 from spider.crawl.urls import NormalizedUrl
 from spider.services import crawling
 
 
 def _round_trip[T](value: T, what: str, failures: list[str]) -> T:
     try:
-        copy: T = pickle.loads(pickle.dumps(value, pickle.HIGHEST_PROTOCOL))  # noqa: S301
+        copy: T = pickle.loads(pickled(value))  # noqa: S301
     # Kept as it is, so the Crawl goes on and the test fails at its teardown.
     except Exception as error:
         failures.append(f"{what}: {type(error).__name__}: {error}")

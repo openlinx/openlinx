@@ -79,6 +79,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 - [x] 4.4 [Subprocess, Windows in CI] Drive "Parse workers open no console window (Windows)".
 - [ ] 4.5 Docs: document shutdown and Windows console behaviour (why `060` uses CREATE_NO_WINDOW) in `docs/architecture.md`.
 - [ ] 4.6 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [x] 4.7 Fix: what cannot be pickled is named `PicklingError` on every supported Python, in the pool's messages and in the in-process double's; run red on 3.12 first.
 
 ## 5. Change check
 

@@ -8,7 +8,11 @@ You need [uv](https://docs.astral.sh/uv/). It installs the Python version from `
 uv sync
 ```
 
-`.python-version` is the newest supported Python, 3.14, because some problems show only on newer Pythons: since 3.13, an unclosed SQLite connection is reported, and the tests treat that as an error. mypy checks against 3.12, the oldest, and CI runs all three.
+`.python-version` is the newest supported Python, 3.14, because some problems show only on newer Pythons: since 3.13, an unclosed SQLite connection is reported, and the tests treat that as an error. mypy checks against 3.12, the oldest, and CI runs all three, while `check.py` runs 3.14 only. To run tests on an older Python, give it a venv of its own, outside the repository, so `.venv` stays 3.14:
+
+```sh
+UV_PROJECT_ENVIRONMENT=../venv-3.12 uv run --python 3.12 pytest tests/crawl
+```
 
 ## How a change is made
 
