@@ -1,5 +1,4 @@
-"""Politeness: how many requests may be in flight, to one host and in all, and how often
-they may start (020 D7)."""
+"""Politeness: the request limits, the URL limit, --rate and the run of 403s (020 D7)."""
 
 import asyncio
 import math

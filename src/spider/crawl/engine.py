@@ -304,9 +304,10 @@ async def _unit_of(
     response = await run.requester.request_url(queued.url)
     if isinstance(response, UrlLimitRefused):
         return None
+    host = url_host(queued.url)
     status_code = None if isinstance(response, FetchFailure) else response.status_code
-    if decision.is_internal and run.blocking.responded(url_host(queued.url), status_code):
-        _warn_of_possible_blocking(context, url_host(queued.url))
+    if decision.is_internal and run.blocking.responded(host, status_code):
+        _warn_of_possible_blocking(context, host)
     if isinstance(response, FetchFailure):
         unit = _record_error(
             context,

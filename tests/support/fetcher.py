@@ -14,6 +14,9 @@ class FakePage:
     content_type: str = "text/html"
 
 
+_NOT_FOUND = FakePage("")
+
+
 class FakeFetcher:
     """Answers at once from `pages`, by path, and 404 for any other path; `starts` records each
     request's path and the clock's monotonic time when it started."""
@@ -27,10 +30,12 @@ class FakeFetcher:
         path = urlsplit(request.url).path or "/"
         self.starts.append((path, self._clock.monotonic()))
         page = self._pages.get(path)
+        status_code = 200 if page is not None else 404
+        page = page or _NOT_FOUND
         return FetchResult(
-            status_code=200 if page is not None else 404,
-            headers=(("Content-Type", "text/html" if page is None else page.content_type),),
-            body=b"" if page is None else page.body.encode(),
+            status_code=status_code,
+            headers=(("Content-Type", page.content_type),),
+            body=page.body.encode(),
             fetched_at=self._clock.now(),
             response_time_ms=0,
         )

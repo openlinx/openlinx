@@ -41,7 +41,7 @@ URLs are requested concurrently, and three limits bound them:
 
 - **Per host:** at most `--concurrency` requests to one host at a time, 5 by default. The host is the URL's host, whatever its scheme or port.
 - **In all:** at most 4 × `--concurrency` URLs in progress at once, kept within 20 to 100, so a Page that links to many External hosts never opens hundreds of connections.
-- **Per host in time:** with `--rate <n>`, requests to one host start at least 1/n seconds apart, its robots.txt request included, so `--rate 2` starts at most two a second. A request waiting for its turn takes no place in the limit in all. Without `--rate`, only `--concurrency` holds requests back.
+- **Per host in time:** with `--rate <n>`, requests to one host start at least 1/n seconds apart, its robots.txt request included, so `--rate 2` starts at most two a second. Without `--rate`, only `--concurrency` holds requests back.
 
 So by default a Crawl sends at most 5 requests at once to a host, as fast as the host answers. robots.txt's `Crawl-delay` is not applied (see [robots.txt](#robotstxt)): give `--rate` to slow a Crawl down.
 
