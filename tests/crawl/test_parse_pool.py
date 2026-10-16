@@ -887,6 +887,66 @@ def test_no_parse_worker_outlives_a_completed_crawl(
     assert (json.loads(stdout)["state"], len(children) > 0, running) == ("completed", True, [])
 
 
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
+
+    def visible_window_owners() -> set[int]:
+        """The process ids that own a visible top-level window."""
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        owners: set[int] = set()
+
+        def found(window: int, _: int) -> bool:
+            if user32.IsWindowVisible(window):
+                owner = wintypes.DWORD()
+                user32.GetWindowThreadProcessId(window, ctypes.byref(owner))
+                owners.add(owner.value)
+            return True
+
+        callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(found)
+        user32.EnumWindows(callback, 0)
+        return owners
+
+
+# Thirty Pages, each linked from /, which the workers prepare while /held is answered.
+THIRTY_PAGES = Site(
+    routes={
+        "/": Page(
+            body='<a href="/held">Held</a>'
+            + "".join(f'<a href="/p{n}">{n}</a>' for n in range(1, 31))
+        ),
+        "/held": Page(body="held", delay=HELD_SECONDS),
+        **{f"/p{n}": Page(body=f"page {n}") for n in range(1, 31)},
+    }
+)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(sys.platform != "win32", reason="console windows exist only on Windows")
+def test_parse_workers_open_no_console_window(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # The marker skips it elsewhere; the block keeps the type checker's other platforms off it.
+    if sys.platform == "win32":
+        server = fixture_site(THIRTY_PAGES)
+        command = python_command("-m", "spider", "crawl", server.url("/"))
+        # As 060 starts a background Crawl: a hidden console that every child inherits (design D5).
+        with subprocess.Popen(
+            command.argv,
+            env=command.env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        ) as crawl:
+            requested(server, "/held")
+            # The console host of a window is a child process too.
+            children = {child.pid for child in psutil.Process(crawl.pid).children(recursive=True)}
+            windows = visible_window_owners() & children
+            crawl.communicate(timeout=PROCESS_TIMEOUT)
+
+        assert (len(children) > 0, windows) == (True, set())
+
+
 @pytest.mark.slow
 @pytest.mark.skipif(sys.platform != "win32", reason="spawn's Windows path: a new interpreter")
 def test_pages_are_parsed_in_worker_processes_on_windows(
