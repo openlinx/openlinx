@@ -305,7 +305,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`. The spacing is the Requester's `RateGate` (design D7), so it holds for robots.txt requests too; `--rate` and `crawl.rate` refuse a value that is not a finite number above 0, through one rule function; and a guard in `tests/test_code_style.py` names any wait outside the `Clock`, red by mutation.
 - [x] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
 - [x] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared, and the run of consecutive 403 and 429 responses is kept per Internal host as the spec says.
-- [ ] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
+- [x] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
 - [ ] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
 
 ## 12. Events, failures and backstops (widening)
