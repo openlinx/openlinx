@@ -91,16 +91,17 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 5. Title Rules and the post-crawl pass (v0.1, except the tasks marked v0.2)
 
+- [ ] 5.0 Drive "A Page that was not parsed is not analysed" at seam 2 and "Populations are views" at seam 6 (design D19): every Rule's query selects from the view of its `population`, and one seam-2 test runs every Rule over a file with rows outside each population and checks that its Affected URLs are rows of its view.
 - [ ] 5.1 Drive "Title too long by characters" at seam 2.
 - [ ] 5.2 Drive "Title at the limit" at seam 2.
 - [ ] 5.3 Drive "Raised title limit" at seam 2: a Rule's query reads its thresholds from the Crawl's `rules` row (`json_extract`), so `reproduce_sql` runs on its own, with no threshold bound as a parameter (D15).
 - [ ] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture page `/rules/long-title`.
 - [ ] 5.5 **(v0.2)** Drive "Title too short" and "Title at the minimum" at seam 2. This is a trivial pair: one boundary. Register `title-too-short`.
 - [ ] 5.6 **(v0.2)** Drive "Multiple titles" at seam 2, and register `title-multiple`.
-- [ ] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6. Its `title-multiple` is v0.2: re-target the scenario to a v0.1 Rule first.
+- [ ] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
 - [ ] 5.8 **(v0.2)** Drive "Title equals H1" and "Comparison with H1 is case-sensitive" at seam 2. This is a trivial pair: the same comparison. Register `title-same-as-h1`.
 - [ ] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
-- [ ] 5.10 Drive "Non-indexable Pages are not compared" at seam 2.
+- [ ] 5.10 Drive "Non-indexable Pages are not compared" at seam 2. Its test is written in this group as a strict xfail that waits for `030`'s Indexability, which narrows `indexable_pages` (design D19); the task is done when the mark is gone, and v0.1 does not ship before.
 - [ ] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
 - [ ] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
 - [ ] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
@@ -144,7 +145,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 8.8 Drive "Canonical to an indexable Page" and "Canonical to a non-HTML 200 response" at seam 2. This is a trivial pair: both targets count as indexable.
 - [ ] 8.9 Drive "Canonical target never requested" at seam 2.
 - [ ] 8.10 Drive "Noindex from X-Robots-Tag only" and "Noindex from both sources" at seam 2. This is a trivial pair: `detail.sources`. Register `noindex`.
-- [ ] 8.11 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2, with a Page that responded 404 with an HTML body and `X-Robots-Tag: noindex`, whose `x_robots_tag_noindex` `030` reads from the headers of any Page (its task 6.2). Every Page Rule's query gains the `urls.parsed` = 1 join here, the first slice where it changes an outcome (design D2; moved from group 3).
+- [ ] 8.11 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2, with a Page that responded 404 with an HTML body and `X-Robots-Tag: noindex`, whose `x_robots_tag_noindex` `030` reads from the headers of any Page (its task 6.2). `analysed_pages` holds the `urls.parsed` = 1 join since task 5.0, so the test is red by mutation of the view.
 - [ ] 8.12 **(v0.2)** Drive "Nofollow from meta robots" at seam 2, and register `nofollow`.
 - [ ] 8.13 **(v0.2)** Drive "Meta refresh used" at seam 2, and register `meta-refresh`.
 - [ ] 8.14 Drive "Catalogue size" (15), and add "Rule ids are unique kebab-case" as a guard (the catalogue guard of task 1.8 already holds unique ids), at seam 1, once `noindex`, the last of the 15 v0.1 Rules, is registered; group 9 raises the size to 42 in v0.2.

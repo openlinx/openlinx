@@ -52,7 +52,7 @@ No Rule runs while a URL is recorded: the Crawl's writer, the bottleneck of a Cr
 
 ### D2. Populations and whose URL is affected
 - **`internal_urls`** is `is_internal` = 1 with `fetch_state` `fetched` or `error`, or `blocked_by_robots_txt` = 1. The robots.txt part joins the queries with `internal-blocked-by-robots-txt` (task 7.1), once `020` task 10.5 has declared the column: a query that names a column the file lacks fails, and adding the part changes nothing for `internal-4xx`, `internal-5xx` and `internal-no-response`, whose conditions need a status or a `fetch_error`.
-- **Page Rules** see only analysed Pages (`urls.parsed` = 1). The join waits for task 8.11: `020` parses only 2xx HTML responses, and `030` stores NULL in every HTML column of a Page it did not analyse, on which no Rule fires, so until a Page column is non-NULL on such a Page no red test can ask for the join. The first is `x_robots_tag_noindex`, which `030` reads from the headers of any Page (its task 6.2), so a 404 HTML Page with `X-Robots-Tag: noindex` would otherwise be a `noindex` Issue; `030`'s Indexability (its group 7) is the next. The population is the same set either way.
+- **Page Rules** see only analysed Pages (`urls.parsed` = 1), through `analysed_pages` (D19).
 - **A Page whose extractor failed** (`parse_error` = `extractor_error`, the user's decision of 2026-10-14) stays among them. The columns its failed extractor fills are NULL, and a Rule never fires on a NULL value, so it raises no false Issue, while the columns of the extractors that succeeded are still checked. *Alternative:* `parse_error IS NULL` in `internal_pages`. It would hide every Issue of a Page whose unrelated extractor failed. Rejected.
 - **Comparison Rules and thin content** (duplicates, `exact-duplicate`, `low-word-count`) see only Indexable Pages. Pages that are canonicalised or noindexed by intent are then not reported as duplicates of the Pages they point to. Screaming Frog behaves the same way.
 - **`image-too-large` and `image-broken`** affect the image URL, because one fix to one file clears every Page that uses it.
@@ -176,6 +176,15 @@ Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 do
 ### D18. Command groups
 `spider rules list` and `spider rules show` are the first Commands below a group, while `010`'s CLI registers only top-level Commands. Task 1.1 adds groups in general: a group's Commands are registered under it, each with its own `@command_meta`, `spider commands` lists each by its full path, as cli-contract names them (`rules list`), and `--help` shows them. A group with no arguments runs its default Command (`spider rules` runs `spider rules list`), and an option given after the group name and before the Command name, other than `--help`, is a `usage_error` whose hint says to put it after the Command name, as cli-contract already asks for a global flag given before the Command name (ruled 2026-10-14). Options are taken in one place only, after the Command name. The mechanism is generic: `060`'s `crawls list|show|rm` inherits it, its default Command and its hint included.
 
+### D19. Populations are views
+**In short:** each population is a view of the crawl file, and a Rule's query selects from the view of its own.
+- `internal_urls`, `analysed_pages` and `indexable_pages` are public views of the one column `url_id`, declared in `spider.store.schema` beside `issues`: a population is a set of URLs, and a Rule joins its view to the tables it reads. A population is then defined once for some 30 Page Rules, and one test checks every Rule's Affected URLs against its view.
+- `reproduce_sql` stays self-contained, since every crawl file holds the views.
+- A Rule declares `population`, the name of its view, and `applies_to` is derived from it: `analysed_pages` and `indexable_pages` both give `internal_pages`, the population the Health Score counts.
+- *Alternative: each query joins its population itself.* Every Page Rule repeats the `parsed` = 1 join, and every Indexable-only Rule adds another, so a wrong copy shows only in that Rule's own tests. Rejected.
+- *Alternative: `applies_to` takes the view names.* The stored enumeration would then split `internal_pages` in two for the Health Score, which counts both as one. Rejected.
+- *Alternative: views with every column of `urls` or `pages`.* A Rule would read its view alone, but each column would stand in the public schema two or three times, and so would every later `pages` column. Rejected.
+
 ## Test seams
 
 The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is introduced:
@@ -197,6 +206,8 @@ The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is 
 - [An `http`-only site gets `http-url` on every Page] → It is a Warning/High, so it tops the Warnings in Reports without lowering the Health Score, as the maintainer decided. The guidance explains the fix.
 - [Broken internal images are reported by both `internal-4xx` and `image-broken`] → Accepted, as in Screaming Frog. One is about the URL and one about its use as an image. The fixes point to the same file.
 - [Resource and non-Page URL Issues, such as no response or blocked, do not lower the Health Score] → This follows the glossary definition, which is Page-centric. It is documented, and listed under Open Questions.
+- [`indexable_pages` holds every analysed Page until `030` stores Indexability] → `title-duplicate` compares non-indexable Pages too until then. The strict xfail test of task 5.10 starts passing when `030`'s Indexability narrows the view, which fails the suite, so the task cannot be forgotten.
+- [`pages` has no `title_1_width_px` before v0.2] → "Title too long by characters" is tested without it; the v0.1 query reads characters only.
 - [Duplicate grouping on about 500k Pages] → Plain `GROUP BY` over non-NULL values, which is O(n log n) in SQLite with no extra index. The passes run once per Crawl end.
 - [Each read of `issues` counts `affected_urls`] → A scan of its primary key, which a Crawl of about 500k URLs keeps to a few million narrow rows. `050` reads it once per Command.
 - [Live Issues of a running Crawl of about 500k URLs are slow, or hold back WAL checkpoints] → `026`'s 500k run measures both. Over 30 seconds for the full list, the design is revisited; over 1 second for `page <url>`, the queries get per-URL forms (D16).

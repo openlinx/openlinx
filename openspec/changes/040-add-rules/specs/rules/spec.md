@@ -53,6 +53,21 @@ A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). 
 - **WHEN** an analysed Page has `parse_error` = `extractor_error`, and its title and heading columns (`title_count`, `title_1`, `h1_count`, `h1_1`) NULL
 - **THEN** `title-missing` and `h1-missing` have no Affected URL for it
 
+### Requirement: Populations are views
+**In short:** each population is a view of the crawl file, which a Rule's reproducing query reads.
+
+The crawl file SHALL hold the views `internal_urls`, `analysed_pages` and `indexable_pages`, each of the one column `url_id`. Their rows SHALL be the members of `internal_urls`, of `internal_pages`, and of the Indexable Pages of `internal_pages`, and each Rule's Affected URLs SHALL be rows of the view of its population.
+
+> **v0.1**.
+
+#### Scenario: Populations are views
+- **WHEN** `spider schema analysed_pages --fields name,kind` runs
+- **THEN** `items` is `[{"name":"analysed_pages","kind":"view"}]`
+
+#### Scenario: A Page that was not parsed is not analysed
+- **WHEN** a Page has a row in `pages`, `title_count` 0, and `parsed` = 0
+- **THEN** `analysed_pages` has no row for it, and `title-missing` has no Affected URL for it
+
 ### Requirement: The v0.1 catalogue
 The Rule catalogue SHALL contain exactly the Rules defined in the category requirements below: in v0.1 the 15 Rules that their release marks name (ROADMAP, "The v0.1 Rules", the user's decision of 2026-10-05), and from v0.2 all 42, with the Issue Type, Priority, population, default thresholds, condition and `detail` keys given there. Column names refer to the `urls` table and to the tables of `030-add-page-data`.
 
@@ -654,8 +669,8 @@ The Issues SHALL be a view `issues` over `rules` and `affected_urls`, with one r
 - **THEN** its `affected_urls` row for `title-too-long` has `detail` `{"length": 61}`
 
 #### Scenario: Rule that did not fire has no Issue
-- **WHEN** a Crawl ends as `completed` and no Page has more than one `<title>`
-- **THEN** `issues` holds no row for `title-multiple`
+- **WHEN** a Crawl ends as `completed` and no Page has a title longer than 60 characters
+- **THEN** `issues` holds no row for `title-too-long`
 
 #### Scenario: Issues is a view
 - **WHEN** `spider schema issues --fields name,kind` runs

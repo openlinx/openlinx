@@ -87,6 +87,8 @@ widen:                                        ├─► 022-min ─┐
 | `directives` | `noindex` |
 | `canonicals` | `canonical-to-non-indexable` |
 
+v0.1 does not ship before `title-duplicate` leaves non-indexable Pages out, which needs `030`'s Indexability.
+
 ### What each change owns
 
 If a change needs something another change owns, it depends on that change instead of redefining it. Parts marked **(v0.1.1)** or **(v0.2)** are deferred by the 2026-10-05 scope cut. The changes that move to v0.2 as a whole are marked on their own line, and what they own is unchanged.
