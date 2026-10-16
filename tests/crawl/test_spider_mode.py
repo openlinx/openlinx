@@ -36,7 +36,10 @@ def test_the_request_is_for_the_recorded_url(
     crawl_file = crawled(server.url("/?q=%2F"))
     (url,) = query(crawl_file, "SELECT url FROM urls")[0]
 
-    assert [server.url(request.path) for request in server.requests] == [url]
+    assert [server.url(request.path) for request in server.requests] == [
+        server.url("/robots.txt"),
+        url,
+    ]
 
 
 def test_the_seed_is_kept_as_given_in_seeds(
@@ -169,7 +172,7 @@ def test_an_excluded_url_is_never_requested(
 
     crawled(server.url("/"), "--exclude", "/logout$")
 
-    assert [request.path for request in server.requests] == ["/"]
+    assert [request.path for request in server.requests] == ["/robots.txt", "/"]
 
 
 def test_an_excluded_url_is_recorded_as_skipped(

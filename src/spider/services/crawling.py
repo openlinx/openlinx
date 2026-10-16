@@ -16,7 +16,7 @@ from spider.clock import Clock
 from spider.crawl.context import CrawlContext
 from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import aiohttp_fetcher
-from spider.crawl.hooks import Hooks
+from spider.crawl.hooks import Hooks, PassContext
 from spider.crawl.pages import PageExecutor
 from spider.crawl.scope import ScopeDecision, ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
@@ -45,7 +45,14 @@ from spider.services.crawls import create_crawl
 from spider.services.hooks import default_page_executor
 from spider.services.rules import rule_rows
 from spider.store.crawls import crawl_summary, record_state
-from spider.store.records import CrawlFile, CrawlSummary, NewCrawl, SecretNames, UrlCounts
+from spider.store.records import (
+    CrawlFile,
+    CrawlState,
+    CrawlSummary,
+    NewCrawl,
+    SecretNames,
+    UrlCounts,
+)
 from spider.store.settings import StoreSettings
 from spider.store.urls import url_counts
 from spider.store.writer import CrawlWriter, CrawlWriterClosedError
@@ -235,16 +242,19 @@ async def _crawl(
     context_of = _crawl_context(crawl_file, plan, clock, reporter, hooks, resolver, pages)
     async with context_of as context:
         await run_crawl(context, plan.seed)
-        if context.stop.is_set:
-            # Never completed: 12.9 records a write failure's failed end, 9.7 and 13.1 a stop.
-            raise context.stop.cause or RuntimeError(f"no end is built for {context.stop.reason}")
+        stop_reason = context.stop.reason
+        if stop_reason not in (None, "max_urls"):
+            # 12.9 records a write failure's failed end, 13.1 an interrupt's.
+            raise context.stop.cause or RuntimeError(f"no end is built for {stop_reason}")
         writer = context.writer
-        # Before completed is written: 040 reads completed as "its Issues are materialised".
+        # Before the end is written, for completed and stopped alike: 040 reads either state as
+        # "its Issues are materialised".
         for crawl_pass in hooks.passes:
-            await crawl_pass.run(writer)
-        # One instant: the result's ended_at is the completed_at the file records.
+            await crawl_pass.run(PassContext(writer, clock))
+        # One instant: the result's ended_at is the time the file records for the end.
         ended_at = clock.now()
-        await writer.run_async(record_state("completed", ended_at))
+        state: CrawlState = "completed" if stop_reason is None else "stopped"
+        await writer.run_async(record_state(state, ended_at, stop_reason))
         summary = await writer.run_async(crawl_summary())
         return ended_at, summary, await writer.run_async(url_counts())
 
@@ -316,19 +326,21 @@ def _seed_out_of_scope(seed: NormalizedUrl, decision: ScopeDecision) -> SpiderEr
 
 def _subfolder_is_root(seed: NormalizedUrl) -> SpiderError:
     path = url_path(seed)
+    suggested: str | None = None
     if path == "/":
         hint = (
             f"Give a Seed inside a folder, such as {url_origin(seed)}/blog/, or leave out "
             "--scope subfolder to crawl the whole site."
         )
     else:
-        hint = f"Give the folder's URL with its trailing slash: {url_origin(seed)}{path}/."
+        suggested = f"{url_origin(seed)}{path}/"
+        hint = f"Give {suggested} as the Seed, the folder's URL with its trailing slash."
     return SpiderError(
         SUBFOLDER_IS_ROOT,
         f"The folder of the Seed {seed} is the root, so --scope subfolder would crawl the "
         "whole site.",
         hint=hint,
-        details={"seed": seed},
+        details={"seed": seed, "suggested_seed": suggested},
     )
 
 

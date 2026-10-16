@@ -3,33 +3,44 @@
 import asyncio
 from collections.abc import Iterable
 from contextlib import suppress
+from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Any
 
 from spider.crawl.context import CrawlContext
-from spider.crawl.discovery import discovered_urls
-from spider.crawl.fetcher import FetchFailure, FetchResult, Request
-from spider.crawl.hooks import UrlResult
+from spider.crawl.discovery import RESOURCES, discovered_urls
+from spider.crawl.fetcher import FetchFailure, FetchResult
+from spider.crawl.hooks import Handler, UrlResult
 from spider.crawl.links import DiscoveredLink
 from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
+from spider.crawl.requester import Requester, UrlLimitRefused
+from spider.crawl.robots import OriginRobots
+from spider.crawl.robots_loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision, apex_seed_named_by_page
-from spider.crawl.urls import NormalizedUrl, url_host
+from spider.crawl.urls import NormalizedUrl, url_host, url_origin
+from spider.naming import APP_NAME
 from spider.output.codes import (
     HANDLER_FAILED,
+    MAX_URLS_REACHED,
     PARSE_FAILED,
     RECORD_FAILED,
+    ROBOTS_UNREACHABLE,
     SEED_BASE_MISMATCH,
+    SEED_BLOCKED_BY_ROBOTS_TXT,
 )
 from spider.output.diagnostics import Diagnostic
 from spider.store.failures import is_one_urls_failure
 from spider.store.records import (
     ErroredUrl,
     FetchedUrl,
+    FetchError,
     ParseError,
     QueuedUrl,
     SkippedUrl,
     SkipReason,
 )
+from spider.store.rows import HandlerRows
 from spider.store.urls import (
     UrlUnit,
     next_depth,
@@ -44,6 +55,8 @@ from spider.store.writer import CrawlWriterClosedError
 
 # Queued URLs read from the frontier at once.
 _FRONTIER_BATCH = 100
+# next_depth gives the smallest queued depth above it, so above this one, any depth.
+_ABOVE_NO_DEPTH = -1
 
 
 class _Outcomes:
@@ -53,10 +66,10 @@ class _Outcomes:
         self._context = context
         self._pending: set[asyncio.Future[Any]] = set()
 
-    async def submit(self, queued: QueuedUrl, unit: UrlUnit) -> None:
+    async def submit(self, queued: QueuedUrl, unit: UrlUnit, blocked: bool | None) -> None:
         future = await self._context.writer.submit_async(unit)
         self._pending.add(future)
-        future.add_done_callback(lambda done: self._unit_done(queued, done))
+        future.add_done_callback(lambda done: self._unit_done(queued, blocked, done))
 
     async def settled(self) -> None:
         """Waits for every outcome, fallback units included."""
@@ -69,7 +82,9 @@ class _Outcomes:
             if self._pending:
                 await asyncio.wait(set(self._pending))
 
-    def _unit_done(self, queued: QueuedUrl, done: asyncio.Future[None]) -> None:
+    def _unit_done(
+        self, queued: QueuedUrl, blocked: bool | None, done: asyncio.Future[None]
+    ) -> None:
         self._pending.discard(done)
         error = done.exception()
         if error is None:
@@ -85,22 +100,48 @@ class _Outcomes:
             ),
             queued.url,
         )
-        fallback = asyncio.ensure_future(self._fall_back(queued, error))
+        fallback = asyncio.ensure_future(self._fall_back(queued, blocked, error))
         self._pending.add(fallback)
         fallback.add_done_callback(self._pending.discard)
 
-    async def _fall_back(self, queued: QueuedUrl, error: BaseException) -> None:
+    async def _fall_back(
+        self, queued: QueuedUrl, blocked: bool | None, error: BaseException
+    ) -> None:
         message = f"{type(error).__name__}: {error}"
+        unit = record_unwritten(queued.id, message, blocked_by_robots_txt=blocked)
         try:
-            await (await self._context.writer.submit_async(record_unwritten(queued.id, message)))
+            await (await self._context.writer.submit_async(unit))
         # A fallback that fails is the file's failure, not the URL's (design D2).
         except Exception as failure:
             self._context.stop.set("write_failed", failure)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _Run:
+    """One run's dependencies, made once by run_crawl."""
+
+    context: CrawlContext
+    outcomes: _Outcomes
+    limits: RequestLimits
+    requester: Requester
+    robots: RobotsLoader
+    # The checks in flight, which never hold the depth barrier (design D3).
+    checks: set[asyncio.Task[None]]
+
+
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
-    outcomes = _Outcomes(context)
-    limits = RequestLimits(context.settings.concurrency, context.pages.backlog)
+    limits = RequestLimits(
+        context.settings.concurrency, context.pages.backlog, context.settings.max_urls
+    )
+    requester = Requester(context.fetcher, limits)
+    run = _Run(
+        context=context,
+        outcomes=_Outcomes(context),
+        limits=limits,
+        requester=requester,
+        robots=RobotsLoader(requester, context.writer, context.settings.robots_user_agent),
+        checks=set(),
+    )
     decision = context.scope.decide(seed)
     await context.writer.run_async(
         record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
@@ -110,97 +151,234 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         PageSettings(
             scope=context.scope,
             extractors=context.hooks.extractors,
+            robots_token=context.settings.robots_user_agent,
             strip_params=context.strip_params,
         )
     )
     depth: int | None = 0
     try:
-        while depth is not None and not context.stop.is_set:
-            await _crawl_depth(context, outcomes, limits, depth)
+        while depth is not None:
+            await _crawl_depth(run, depth)
+            # A stop cancels the checks in flight: the sweep below would wait for them.
+            if context.stop.is_set:
+                break
+            if limits.limit_reached() is not None:
+                # The URL limit: what has started ends and is recorded, and nothing more starts.
+                await asyncio.gather(*run.checks)
+                context.stop.set("max_urls")
+                break
             # Read after every unit submitted so far, so it sees the URLs they discovered.
             depth = await context.writer.run_async(next_depth(depth))
+            if depth is None:
+                # A check that was in-Scope HTML may have found URLs, or a shorter path to them,
+                # at a depth the frontier has passed: once every check has ended, and every
+                # outcome, so that no URL whose unit failed is still queued, the queue is read
+                # from the top.
+                await asyncio.gather(*run.checks)
+                await run.outcomes.settled()
+                depth = await context.writer.run_async(next_depth(_ABOVE_NO_DEPTH))
     # An ended writer refuses every unit; its cause says why it ended (017 D6).
     except CrawlWriterClosedError as closed:
         context.stop.set("write_failed", closed.__cause__ or closed)
-    await outcomes.settled()
+    finally:
+        await _cancel_all(run.checks)
+        await run.robots.close()
+    await run.outcomes.settled()
+    limit = limits.limit_reached()
+    # Only once every outcome is in: a failure among them outranks the stop.
+    if limit is not None and context.stop.reason == "max_urls":
+        _warn_of_the_url_limit(context, limit)
 
 
-async def _crawl_depth(
-    context: CrawlContext, outcomes: _Outcomes, limits: RequestLimits, depth: int
-) -> None:
-    """Returns once every URL task of the depth has ended, so the next depth sees their URLs."""
+async def _crawl_depth(run: _Run, depth: int) -> None:
+    """Returns once every followed URL's task of the depth has ended, so the next depth sees
+    their URLs; the depth's checks join the run's checks and run on."""
+    context, limits = run.context, run.limits
     running: set[asyncio.Task[None]] = set()
     try:
         # The cursor of this run: a URL in flight is never read twice (design D1).
         after = 0
-        while batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH)):
+        while limits.limit_reached() is None and (
+            batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH))
+        ):
             for queued in batch:
                 await limits.reserve_task()
                 if context.stop.is_set:
                     limits.task_ended()
                     return
-                task = asyncio.create_task(_crawl_url(context, outcomes, limits, queued))
-                running.add(task)
-                task.add_done_callback(running.discard)
+                if limits.limit_reached() is not None:
+                    limits.task_ended()
+                    break
+                decision = context.scope.decide(queued.url)
+                task = asyncio.create_task(_crawl_url(run, queued, decision))
+                # A check never holds the barrier (design D3); the sweep in run_crawl reads
+                # what one finds after its depth has closed.
+                tasks = run.checks if _is_check(queued, decision) else running
+                tasks.add(task)
+                task.add_done_callback(tasks.discard)
             after = batch[-1].id
         if running:
             await asyncio.gather(*running)
     finally:
-        for task in running:
-            task.cancel()
-        # Retrieved, so that no "Task exception was never retrieved" reaches stderr.
-        await asyncio.gather(*running, return_exceptions=True)
+        await _cancel_all(running)
 
 
-async def _crawl_url(
-    context: CrawlContext, outcomes: _Outcomes, limits: RequestLimits, queued: QueuedUrl
-) -> None:
+async def _cancel_all(tasks: set[asyncio.Task[None]]) -> None:
+    for task in tasks:
+        task.cancel()
+    # Retrieved, so that no "Task exception was never retrieved" reaches stderr.
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _is_check(queued: QueuedUrl, decision: ScopeDecision) -> bool:
+    return not decision.in_scope or _via_resource(queued)
+
+
+def _via_resource(queued: QueuedUrl) -> bool:
+    return queued.discovered_via in RESOURCES
+
+
+async def _crawl_url(run: _Run, queued: QueuedUrl, decision: ScopeDecision) -> None:
     try:
+        recorded = await _unit_of(run, queued, decision)
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
-        await outcomes.submit(queued, await _unit_of(context, limits, queued))
+        if recorded is not None:
+            await run.outcomes.submit(queued, *recorded)
     finally:
-        limits.task_ended()
+        run.limits.task_ended()
 
 
-async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedUrl) -> UrlUnit:
-    """The unit that records the URL's final state, with its handlers' rows."""
-    row_writers = context.hooks.row_writers
-    # Decided once, at dispatch, so a URL found on several Pages is recorded once (design D1).
-    decision = context.scope.decide(queued.url)
-    skip_reason = _skip_reason(context, decision)
+async def _unit_of(
+    run: _Run, queued: QueuedUrl, decision: ScopeDecision
+) -> tuple[UrlUnit, bool | None] | None:
+    """The unit that records the URL's final state, with its handlers' rows, and its
+    blocked_by_robots_txt, which a fallback unit keeps; or None when the URL limit refuses
+    a new request, which leaves it queued. `decision` is taken once, at dispatch, so a URL
+    found on several Pages is recorded once (design D1)."""
+    context, limits, robots = run.context, run.limits, run.robots
+    skip_reason = _skip_reason(context, queued, decision)
+    # Only a URL that would be requested is checked, so a skip never requests robots.txt.
+    blocked = None
+    if skip_reason is None:
+        # A verdict already requested decides the URL before the limit, which guards only a
+        # new request (design D6).
+        if not robots.requested(queued.url) and limits.refuses():
+            limits.refuse()
+            return None
+        # Before the URL's own host slot, which the robots.txt request of its origin takes.
+        origin_robots = await robots.robots_of(queued.url)
+        if origin_robots.fetch_error is not None:
+            # The origin cannot be reached: the URL gets the error without a request of
+            # its own (design D6).
+            message = (
+                f"The robots.txt request of {url_origin(queued.url)} got no HTTP response, "
+                f"so the URL was not requested: {origin_robots.fetch_error_message}"
+            )
+            unit = _record_error(
+                context,
+                queued,
+                decision,
+                origin_robots.fetch_error,
+                message,
+                fetched_at=None,
+                blocked=None,
+            )
+            return unit, None
+        skip_reason, blocked = _robots_check(context, origin_robots, queued, decision)
     if skip_reason is not None:
         skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
-        return record_skipped(
-            SkippedUrl(queued.id, skip_reason, _handler_rows(context, skipped)), row_writers
+        unit = record_skipped(
+            SkippedUrl(
+                url_id=queued.id,
+                skip_reason=skip_reason,
+                crawl_depth=queued.crawl_depth,
+                blocked_by_robots_txt=blocked,
+                # Not final: a shorter path re-queues it, and its handlers see it then (D5).
+                rows=() if skip_reason == "max_depth" else _handler_rows(context, skipped),
+            )
         )
-    async with limits.host(url_host(queued.url)), limits.request():
-        response = await context.fetcher.fetch(Request(queued.url))
+        return unit, blocked
+    response = await run.requester.request_url(queued.url)
+    if isinstance(response, UrlLimitRefused):
+        return None
     if isinstance(response, FetchFailure):
-        failed = _result(
+        unit = _record_error(
+            context,
             queued,
             decision,
-            fetch_state="error",
-            fetch_error=response.fetch_error,
-            fetch_error_message=response.message,
+            response.fetch_error,
+            response.message,
             fetched_at=response.fetched_at,
+            blocked=blocked,
         )
-        errored = ErroredUrl(
-            url_id=queued.id,
-            fetch_error=response.fetch_error,
-            fetch_error_message=response.message,
-            fetched_at=response.fetched_at,
-            rows=_handler_rows(context, failed),
-        )
-        return record_error(errored, row_writers)
-    return record_fetched(await _fetched(context, queued, decision, response), row_writers)
+        return unit, blocked
+    fetched = await _fetched(context, queued, decision, response)
+    return record_fetched(replace(fetched, blocked_by_robots_txt=blocked)), blocked
 
 
-def _skip_reason(context: CrawlContext, decision: ScopeDecision) -> SkipReason | None:
-    if decision.skip_reason is None and not (
-        decision.is_internal or context.settings.check_external
-    ):
+def _record_error(
+    context: CrawlContext,
+    queued: QueuedUrl,
+    decision: ScopeDecision,
+    fetch_error: FetchError,
+    message: str,
+    *,
+    fetched_at: datetime | None,
+    blocked: bool | None,
+) -> UrlUnit:
+    failed = _result(
+        queued,
+        decision,
+        fetch_state="error",
+        fetch_error=fetch_error,
+        fetch_error_message=message,
+        fetched_at=fetched_at,
+    )
+    errored = ErroredUrl(
+        url_id=queued.id,
+        fetch_error=fetch_error,
+        fetch_error_message=message,
+        fetched_at=fetched_at,
+        blocked_by_robots_txt=blocked,
+        rows=_handler_rows(context, failed),
+    )
+    return record_error(errored)
+
+
+def _robots_check(
+    context: CrawlContext, origin_robots: OriginRobots, queued: QueuedUrl, decision: ScopeDecision
+) -> tuple[SkipReason | None, bool | None]:
+    """robots.txt's skip of a URL that would be requested, and its blocked_by_robots_txt, NULL
+    while the rules are unknown (design D6)."""
+    ignore = context.settings.ignore_robots
+    if origin_robots.state == "unreachable":
+        if ignore:
+            return None, None
+        if decision.is_internal:
+            _warn_of_an_unreachable_robots_txt(context, queued.url, origin_robots.status_code)
+        return "robots_unreachable", None
+    blocked = not origin_robots.allows(queued.url)
+    # --ignore-robots requests it, still labelled as blocked.
+    if blocked and not ignore:
+        if queued.discovered_via == "seed":
+            _warn_of_a_blocked_seed(context, queued.url)
+        return "blocked_by_robots_txt", True
+    return None, blocked
+
+
+def _skip_reason(
+    context: CrawlContext, queued: QueuedUrl, decision: ScopeDecision
+) -> SkipReason | None:
+    max_depth = context.settings.max_depth
+    if decision.skip_reason is not None:
+        return decision.skip_reason
+    # A followed Page's Resources are requested one deeper than the limit, no deeper: what
+    # a check that was HTML links to is two deeper (design D5).
+    if max_depth is not None and queued.crawl_depth > max_depth + _via_resource(queued):
+        return "max_depth"
+    if not (decision.is_internal or context.settings.check_external):
         return "external_not_checked"
-    return decision.skip_reason
+    return None
 
 
 async def _fetched(
@@ -225,7 +403,6 @@ async def _fetched(
     discovered = discovered_urls(
         links,
         context.scope,
-        queued.crawl_depth + 1,
         nofollow=nofollow,
         follow_nofollow=context.settings.follow_nofollow,
     )
@@ -264,6 +441,49 @@ async def _fetched(
     )
 
 
+def _warn_of_the_url_limit(context: CrawlContext, limit: int) -> None:
+    context.reporter.warn(
+        Diagnostic.of(
+            MAX_URLS_REACHED,
+            f"The Crawl reached its limit of {limit} URL requests, so it stopped with URLs left "
+            "queued.",
+            # The command itself, as an agent runs it: twice the limit is one higher value.
+            hint=f"{APP_NAME} resume --crawl {context.crawl_file.id} --max-urls {2 * limit}",
+            details={"max_urls": limit},
+        )
+    )
+
+
+def _warn_of_an_unreachable_robots_txt(
+    context: CrawlContext, url: NormalizedUrl, status_code: int | None
+) -> None:
+    origin = url_origin(url)
+    # Once per host, by the warning log: every URL of the origin comes here (design D10).
+    context.reporter.warn(
+        Diagnostic.of(
+            ROBOTS_UNREACHABLE,
+            f"The robots.txt of {origin} answered {status_code}, so none of its URLs was "
+            "requested.",
+            hint="Run the Crawl again later, or give --ignore-robots to crawl the origin anyway.",
+            details={"origin": origin, "host": url_host(url), "status_code": status_code},
+        )
+    )
+
+
+def _warn_of_a_blocked_seed(context: CrawlContext, seed: NormalizedUrl) -> None:
+    context.reporter.warn(
+        Diagnostic.of(
+            SEED_BLOCKED_BY_ROBOTS_TXT,
+            f"robots.txt disallows the Seed {seed} for the robots user-agent token "
+            f"{context.settings.robots_user_agent}, so it was not requested and nothing was "
+            "crawled from it.",
+            hint="Give --ignore-robots to crawl it anyway, or --robots-user-agent with the "
+            "token the site allows.",
+            details={"seed": seed},
+        )
+    )
+
+
 def _warn_of_seed_base_mismatch(
     context: CrawlContext, seed: NormalizedUrl, links: Iterable[DiscoveredLink]
 ) -> None:
@@ -274,7 +494,7 @@ def _warn_of_seed_base_mismatch(
                 SEED_BASE_MISMATCH,
                 f"The Seed {seed} names its apex host as the site: its Page links there by its "
                 "canonical or by most of its hyperlinks, so the Crawl may miss most of the site.",
-                hint=f"To crawl the site the Seed names, give the Seed {apex_seed}.",
+                hint=f"Give {apex_seed} as the Seed to crawl the site its Page names.",
                 details={"seed": seed, "apex_seed": apex_seed},
             )
         )
@@ -306,12 +526,11 @@ def _result(queued: QueuedUrl, decision: ScopeDecision, **outcome: Any) -> UrlRe
     )
 
 
-def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[object, ...]:
-    rows: list[object] = []
+def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[HandlerRows[Any], ...]:
+    rows: list[HandlerRows[Any]] = []
     for handler in context.hooks.handlers:
         try:
-            # Whole, or not at all: a handler that fails midway keeps none of its rows.
-            rows.extend(tuple(handler.handle(result)))
+            batch = _rows_of(handler, result)
         # A handler is later changes' code: its failure costs only its rows (design D16).
         except Exception as error:
             context.reporter.count(
@@ -322,4 +541,13 @@ def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[object, ...
                 ),
                 result.url,
             )
+            continue
+        if batch is not None:
+            rows.append(batch)
     return tuple(rows)
+
+
+def _rows_of[R](handler: Handler[R], result: UrlResult) -> HandlerRows[R] | None:
+    # Whole, or not at all: a handler that fails midway keeps none of its rows.
+    rows = tuple(handler.handle(result))
+    return HandlerRows(handler.write, rows) if rows else None

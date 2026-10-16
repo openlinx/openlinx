@@ -7,7 +7,7 @@ from typing import Any
 from aiohttp.abc import AbstractResolver
 
 from spider.cli.app import build_app
-from spider.clock import SystemClock
+from spider.clock import Clock, SystemClock
 from spider.crawl.hooks import Hooks
 from spider.crawl.pages import PageExecutor
 from spider.output.reporter import Collected, Reporter
@@ -34,6 +34,7 @@ def crawl_result(
     resolver: AbstractResolver | None = None,
     pages: Callable[[], PageExecutor] | None = None,
     reporter: Reporter | None = None,
+    clock: Clock | None = None,
     **crawl: Any,
 ) -> CrawlResult:
     """Crawls through the Crawl Service, which alone takes test hooks, the DNS resolver hook
@@ -41,7 +42,7 @@ def crawl_result(
 
     `crawl` holds settings of the [crawl] table, as their flags would give them. Like the CLI, it
     crawls into the Workspace of the current folder, which `temp_workspace` sets, on the real
-    clock: a FakeClock is for timing scenarios, and its sleeps end at once.
+    clock unless `clock` is given: a FakeClock is for timing scenarios, and its sleeps end at once.
     """
     request = CrawlRequest(
         seed=seed,
@@ -55,7 +56,7 @@ def crawl_result(
     plan = plan_crawl(request, settings_tables(build_app()))
     return start_crawl(
         plan,
-        SystemClock(),
+        clock or SystemClock(),
         reporter or Collected(),
         hooks or default_hooks(),
         resolver=resolver,

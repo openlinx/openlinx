@@ -141,7 +141,7 @@ With `--scope subdomains`, a URL SHALL also be internal when its registrable dom
 - **THEN** the URL is external
 
 ### Requirement: Seed host mismatch
-When the Seed's host is `www.` followed by a registrable domain, the Seed's parsed response names the apex (that registrable domain itself) as the site, and the URL it names is outside the Scope, the Crawl SHALL record one `seed_base_mismatch` warning, whose hint gives the Seed on the apex host. The response names the apex by a `canonical` Link to it, which names that Link's target, or else by more `hyperlink` Links to the apex than to the Seed's host, which names the Seed on the apex host. The Crawl SHALL go on in its Scope.
+When the Seed's host is `www.` followed by a registrable domain, the Seed's parsed response names the apex (that registrable domain itself) as the site, and the Seed on the apex host is outside the Scope, the Crawl SHALL record one `seed_base_mismatch` warning, whose hint gives the Seed on the apex host. The response's first `canonical` Link to the apex or to the Seed's host decides: one to the apex names the apex, and one to the Seed's host names no apex. Without such a Link, the response names the apex when more of its `hyperlink` Links target the apex than the Seed's host. The Crawl SHALL go on in its Scope.
 
 #### Scenario: A www Seed whose canonical names the apex is reported
 - **WHEN** `http://www.site.test/` holds `<link rel="canonical" href="http://site.test/">`, and `spider crawl http://www.site.test/` runs
@@ -450,9 +450,9 @@ With `--ignore-robots`, the Crawl SHALL request URLs that robots.txt disallows, 
 
 ### Requirement: robots.txt fetch outcomes
 The Crawl SHALL treat an origin's robots.txt by its response, as RFC 9309 describes:
-- **2xx:** its rules apply and `robots_state` = `ok`. Only its first 512,000 bytes SHALL be parsed.
+- **2xx:** its rules apply and `robots_state` = `ok`. Only its first 512,000 bytes SHALL be parsed, without a line that this limit cuts.
 - **4xx other than 429:** every URL on the origin is allowed, and `robots_state` = `missing`.
-- **5xx or 429:** every URL on the origin is disallowed, and `robots_state` = `unreachable`.
+- **5xx (500 to 599), 429, or a status outside 200 to 599** (a 1xx final response, 600 or more): every URL on the origin is disallowed, and `robots_state` = `unreachable`. A status no HTTP server should send says the server is broken, so it is treated as cautiously as 5xx.
   - Its URLs SHALL be recorded with `skip_reason` = `robots_unreachable`.
   - For an Internal origin, a `robots_unreachable` warning SHALL be recorded whose hint contains `--ignore-robots`.
 - **No HTTP response** (any `fetch_error` of "Requests without a response"): `robots_state` = `unreachable`, `robots_status_code` is NULL, and `robots_fetch_error` and `robots_fetch_error_message` hold the request's error.
@@ -486,7 +486,7 @@ The Crawl SHALL treat an origin's robots.txt by its response, as RFC 9309 descri
 - **THEN** the `origins` row for `{site}` has `robots_state` = `missing`
 
 ### Requirement: Robots user-agent token
-The Crawl SHALL select robots.txt groups, and user-agent-prefixed robots directives, with the token `spider` by default, or with the token given in `--robots-user-agent <token>`. The token is independent of the `User-Agent` request header.
+The Crawl SHALL select robots.txt groups, and user-agent-prefixed robots directives, with the token `spider` by default, or with the token given in `--robots-user-agent <token>`. The token is independent of the `User-Agent` request header. A token SHALL match RFC 9309's `[a-zA-Z_-]+`; any other value SHALL be rejected: as `--robots-user-agent` with exit code 2 and error code `invalid_value`, and in `spider.toml` with exit code 3 and `settings_invalid`, as any invalid setting is.
 
 #### Scenario: The group for the tool's token applies
 - **WHEN** the robots rules `User-agent: spider` LF `Disallow: /a` LF LF `User-agent: *` LF `Disallow: /b` are applied with the default token
@@ -569,7 +569,7 @@ The Crawl SHALL have no URL limit by default. With `--max-urls <n>`, the Crawl S
 - the requests a continued Crawl recorded before SHALL count
 - robots.txt requests SHALL NOT count
 
-A value below 1 SHALL be rejected with exit code 2 and error code `invalid_value`. When the limit is reached:
+A value below 1 SHALL be rejected with exit code 2 and error code `invalid_value`. The limit is reached when it refuses a request: a Crawl that requests n URLs and has none left SHALL end `completed`, since `stopped` would promise a resume with nothing to do. When the limit is reached:
 - no new request SHALL start
 - the Crawl SHALL end with the Crawl State `stopped` and `crawl.stop_reason` = `max_urls`, and SHALL be resumable
 - URLs not yet requested SHALL stay `queued`
@@ -688,7 +688,7 @@ The crawl store SHALL hold one row for each origin of a URL that the Crawl recor
 | `origin` | TEXT | no | | Scheme, host and port, for example `https://site.test`, with a default port left out; unique |
 | `host` | TEXT | no | | The origin's host in lower-case ASCII (IDNA) form |
 | `is_internal` | INTEGER | no | boolean | 1 when the origin's URLs are Internal URLs |
-| `robots_state` | TEXT | yes | `ok`, `missing`, `unreachable` | Rules applied, everything allowed, or everything disallowed or unanswered; NULL while robots.txt has not been fetched, because no URL of the origin was requested |
+| `robots_state` | TEXT | yes | `ok`, `missing`, `unreachable` | Rules applied, everything allowed, or everything disallowed or unanswered; NULL while robots.txt has not been fetched, which happens before the first URL of the origin that the Scope does not skip and the URL limit does not refuse |
 | `robots_status_code` | INTEGER | yes | | Status code of the final robots.txt response; NULL without a response |
 | `robots_fetch_error` | TEXT | yes | the values of `urls.fetch_error` | Why the robots.txt request got no HTTP response; NULL when it got one, or while robots.txt has not been fetched |
 | `robots_fetch_error_message` | TEXT | yes | | Human-readable detail of `robots_fetch_error` |
@@ -797,7 +797,7 @@ The Crawl Service SHALL be able to continue a Crawl from its store when its Craw
 - **THEN** the fixture site receives no request during the continuation for a URL that had `fetch_state` = `fetched` before it
 
 ### Requirement: Per-response hook
-The Crawl SHALL call every registered per-response handler exactly once for each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`) when it is dispatched. A URL that only Links that are not followed reach is recorded `skipped` when it is discovered, and reaches no handler, since a later followed Link may still queue it. A handler SHALL receive the URL's row values. For a `fetched` URL it SHALL also receive the status code, the response headers and, when the response was parsed, the extractor outputs. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
+The Crawl SHALL call every registered per-response handler exactly once for each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`) when it is dispatched. A URL that only Links that are not followed reach is recorded `skipped` when it is discovered, and reaches no handler, since a later followed Link may still queue it. A URL skipped as `max_depth` reaches no handler either, since a Link found later at a smaller depth re-queues it. A handler SHALL receive the URL's row values. For a `fetched` URL it SHALL also receive the status code, the response headers and, when the response was parsed, the extractor outputs. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
 
 #### Scenario: A registered handler sees every URL once
 - **WHEN** a handler registered for the test records the URLs and states it receives, `/` links to `/a`, `/missing` (which returns 404) and `/logout`, and `spider crawl {site}/ --exclude "/logout$"` runs

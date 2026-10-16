@@ -1,11 +1,13 @@
 """Scope decisions (020-add-crawl-core, crawling)."""
 
+import json
 import re
+from typing import Any
 
 import pytest
 
 from spider.crawl.links import DiscoveredLink
-from spider.crawl.scope import ScopeDecision, ScopeKind, apex_seed_named_by_page, scope_rules
+from spider.crawl.scope import ScopeDecision, ScopeRules, apex_seed_named_by_page, scope_rules
 from spider.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url, parse_seed
 from spider.store.records import LinkType
 
@@ -180,57 +182,112 @@ _TO_THE_APEX_MOSTLY: list[tuple[LinkType, str]] = [
     ("hyperlink", "http://site.test/b"),
     ("hyperlink", "http://www.site.test/c"),
 ]
+_BLOG = (re.compile("/blog/"),)
 
 
 @pytest.mark.parametrize(
-    ("seed", "scope", "links", "apex_seed"),
+    ("seed", "options", "links", "apex_seed"),
     [
-        (
-            "http://www.site.test/",
-            "host",
-            [("canonical", "http://site.test/")],
-            "http://site.test/",
-        ),
+        ("http://www.site.test/", {}, [("canonical", "http://site.test/")], "http://site.test/"),
         (
             "http://www.site.test:8080/blog/",
-            "host",
+            {},
             [("canonical", "http://site.test:8080/blog/")],
             "http://site.test:8080/blog/",
         ),
-        ("http://www.site.test/", "host", _TO_THE_APEX_MOSTLY, "http://site.test/"),
+        ("http://www.site.test/", {}, _TO_THE_APEX_MOSTLY, "http://site.test/"),
         (
             "http://www.site.test/",
-            "host",
+            {},
             [("hyperlink", "http://site.test/a"), ("hyperlink", "http://www.site.test/c")],
             None,
         ),
-        ("http://www.site.test/", "host", [("canonical", "http://www.site.test/")], None),
-        ("http://www.site.test/", "host", [("misc", "http://site.test/feed")], None),
-        ("http://site.test/", "host", [("canonical", "http://www.site.test/")], None),
+        ("http://www.site.test/", {}, [("canonical", "http://www.site.test/")], None),
+        # A canonical to the Seed's own host is the Page's word that www is the site.
+        (
+            "http://www.site.test/",
+            {},
+            [("canonical", "http://www.site.test/"), *_TO_THE_APEX_MOSTLY],
+            None,
+        ),
+        ("http://www.site.test/", {}, [("misc", "http://site.test/feed")], None),
+        ("http://site.test/", {}, [("canonical", "http://www.site.test/")], None),
         # www followed by a host that is no registrable domain: no apex to report.
-        ("http://www.blog.site.test/", "host", [("canonical", "http://blog.site.test/")], None),
-        ("http://www.127.0.0.1/", "host", [("canonical", "http://127.0.0.1/")], None),
+        ("http://www.blog.site.test/", {}, [("canonical", "http://blog.site.test/")], None),
+        ("http://www.127.0.0.1/", {}, [("canonical", "http://127.0.0.1/")], None),
         # The subdomains Scope crawls the apex already, so the Crawl misses nothing.
-        ("http://www.site.test/", "subdomains", [("canonical", "http://site.test/")], None),
-        ("http://www.site.test/", "subdomains", _TO_THE_APEX_MOSTLY, None),
+        (
+            "http://www.site.test/",
+            {"scope": "subdomains"},
+            [("canonical", "http://site.test/")],
+            None,
+        ),
+        ("http://www.site.test/", {"scope": "subdomains"}, _TO_THE_APEX_MOSTLY, None),
+        # The hinted Seed is in the Scope, though the canonical's target is not.
         (
             "http://www.site.test/blog/",
-            "subfolder",
+            {"scope": "subdomains", "include": _BLOG},
+            [("canonical", "http://site.test/")],
+            None,
+        ),
+        (
+            "http://www.site.test/blog/",
+            {"scope": "subfolder"},
             [("canonical", "http://site.test/blog/")],
             "http://site.test/blog/",
         ),
     ],
 )
 def test_a_www_seed_is_reported_when_its_links_name_the_apex_outside_the_scope(
-    seed: str, scope: ScopeKind, links: list[tuple[LinkType, str]], apex_seed: str | None
+    seed: str, options: dict[str, Any], links: list[tuple[LinkType, str]], apex_seed: str | None
 ) -> None:
-    rules = scope_rules(NormalizedUrl(seed), scope=scope)
+    rules = scope_rules(NormalizedUrl(seed), **options)
 
     found = apex_seed_named_by_page(
         NormalizedUrl(seed), [_link(link_type, target) for link_type, target in links], rules
     )
 
     assert found == apex_seed
+
+
+_DECIDED = [
+    NormalizedUrl(url)
+    for url in (
+        "http://site.test/",
+        "https://www.site.test:8443/blog/a",
+        "http://blog.site.test/blog/x",
+        "http://other.test/blog/",
+        "http://127.0.0.1:8080/blog/draft",
+        "http://127.0.0.1:9000/",
+        "http://localhost/blog/",
+        "http://localhost:5000/x",
+        "http://site.test/shop/draft",
+    )
+]
+
+
+@pytest.mark.parametrize(
+    ("seed", "options"),
+    [
+        ("http://site.test/", {}),
+        ("http://www.site.test/", {}),
+        ("http://www.site.test/", {"scope": "subdomains"}),
+        # Hosts with no registrable domain: the record lists the Seed host itself.
+        ("http://127.0.0.1:8080/", {"scope": "subdomains"}),
+        ("http://localhost/", {"scope": "subdomains"}),
+        ("http://site.test/blog/", {"scope": "subfolder"}),
+        ("http://site.test/", {"include": _BLOG}),
+        ("http://127.0.0.1:8080/", {"exclude": (re.compile("draft"),)}),
+    ],
+)
+def test_the_recorded_scope_decides_as_the_scope_it_was_recorded_from(
+    seed: str, options: dict[str, Any]
+) -> None:
+    rules = scope_rules(NormalizedUrl(seed), **options)
+
+    rebuilt = ScopeRules.from_json(json.loads(json.dumps(rules.to_json())))
+
+    assert [rebuilt.decide(url) for url in _DECIDED] == [rules.decide(url) for url in _DECIDED]
 
 
 def test_the_subdomains_scope_records_the_registrable_domain_as_its_hosts() -> None:

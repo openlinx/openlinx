@@ -1,4 +1,4 @@
-"""Guard: decidable code rules (018-add-schema-conventions; 020-add-crawl-core D9, D13, D14)."""
+"""Guard: decidable code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14)."""
 
 import ast
 from collections.abc import Mapping
@@ -451,4 +451,94 @@ def test_a_serialization_of_a_node_is_named() -> None:
         "nested templates",
         "spider/extract/page_data.py:1 serializes a node with .inner_html, which overflows the "
         "stack on deeply nested templates",
+    ]
+
+
+# Every request of a Crawl goes through the Requester, which owns its politeness (020 D7).
+REQUESTER = "spider/crawl/requester.py"
+
+
+def request_violations(sources: Mapping[str, str]) -> list[str]:
+    """Requests made outside the Requester, given every module's source by its path."""
+    found = []
+    for module, source in sources.items():
+        if module == REQUESTER:
+            continue
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.Attribute) and node.attr == "fetch":
+                found.append(f"{module}:{node.lineno} calls a Fetcher outside the Requester")
+            elif isinstance(node, ast.Call) and _base_name(node.func) == "Request":
+                found.append(f"{module}:{node.lineno} makes a Request outside the Requester")
+    return found
+
+
+def test_every_request_goes_through_the_requester() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert request_violations(sources) == []
+
+
+def test_a_request_outside_the_requester_is_named() -> None:
+    sources = {
+        "spider/crawl/robots_loader.py": "async def f(self, url):\n"
+        "    return await self._fetcher.fetch(Request(url))\n",
+        "spider/crawl/engine.py": "fetch = context.fetcher.fetch\nrequest = fetcher.Request(u)\n",
+        REQUESTER: "async def f(self, url):\n    return await self._fetcher.fetch(Request(url))\n",
+        "spider/crawl/fetcher.py": "class AiohttpFetcher:\n"
+        "    async def fetch(self, request): ...\n",
+    }
+
+    assert request_violations(sources) == [
+        "spider/crawl/robots_loader.py:2 calls a Fetcher outside the Requester",
+        "spider/crawl/robots_loader.py:2 makes a Request outside the Requester",
+        "spider/crawl/engine.py:1 calls a Fetcher outside the Requester",
+        "spider/crawl/engine.py:2 makes a Request outside the Requester",
+    ]
+
+
+# Built only through their generic factories, which check the type parameter where the hooks are
+# registered: one built in place inside Hooks(...) takes it as Any (020 D9).
+FACTORIES = {"Handler": "src/spider/crawl/hooks.py", "Extractor": "src/spider/crawl/pages.py"}
+
+
+def factory_violations(sources: Mapping[str, str]) -> list[str]:
+    """Hooks built outside their factories, given every module's source by its path."""
+    found = []
+    for module, source in sources.items():
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Call):
+                continue
+            name = _base_name(node.func)
+            if name in FACTORIES and module != FACTORIES[name]:
+                found.append(f"{module}:{node.lineno} builds {name}(...) outside its factory")
+    return found
+
+
+def test_hooks_are_built_only_through_their_factories() -> None:
+    root = SRC.parent
+    sources = {
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for folder in (SRC / "spider", root / "tests")
+        for path in sorted(folder.rglob("*.py"))
+    }
+
+    assert factory_violations(sources) == []
+
+
+def test_a_hook_built_outside_its_factory_is_named() -> None:
+    sources = {
+        "tests/crawl/test_hooks.py": "hooks = Hooks(handlers=(Handler('x', rows, write),))\n",
+        "src/spider/services/hooks.py": "h = hooks.Handler('x', rows, write)\n",
+        "src/spider/crawl/hooks.py": "def handler(n, h, w):\n    return Handler(n, h, w)\n",
+        "src/spider/services/pages.py": "e = pages.Extractor('x', extract, None)\n",
+        "src/spider/crawl/pages.py": "def extractor(n, e, c):\n    return Extractor(n, e, c)\n",
+    }
+
+    assert factory_violations(sources) == [
+        "tests/crawl/test_hooks.py:1 builds Handler(...) outside its factory",
+        "src/spider/services/hooks.py:1 builds Handler(...) outside its factory",
+        "src/spider/services/pages.py:1 builds Extractor(...) outside its factory",
     ]

@@ -28,4 +28,5 @@ typing-extensions  # pydantic, pydantic-core, typing-inspection, sqlalchemy, aio
 typing-inspection  # pydantic and pydantic-settings: runtime type inspection
 python-dotenv  # pydantic-settings: the .env source, which spider drops (design D2 of 010)
 selectolax  # the HTML parser of the link extractor, lexbor backend (design D5 of 020-add-crawl-core)
+protego  # the robots.txt parser (design D6 of 020-add-crawl-core)
 sqlalchemy  # the crawl store: SQLite through SQLAlchemy 2 Core (ADR-0003, 015-add-crawl-store)

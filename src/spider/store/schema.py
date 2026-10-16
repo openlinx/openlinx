@@ -31,6 +31,7 @@ from spider.store.records import (
     JournalMode,
     ParseError,
     Priority,
+    RobotsState,
     RuleCategory,
     SkipReason,
     StopReason,
@@ -301,6 +302,12 @@ urls = public_table(
         info={"values": literal_values(SkipReason)},
     ),
     Column(
+        "blocked_by_robots_txt",
+        Flag,
+        comment="1 when robots.txt disallows the URL for the robots user-agent token (also "
+        "with --ignore-robots), 0 when it allows it; NULL when not checked.",
+    ),
+    Column(
         "status_code",
         Integer,
         comment="HTTP status code of the URL's own response; NULL without a response.",
@@ -382,6 +389,44 @@ origins = public_table(
         Flag,
         nullable=False,
         comment="1 when the origin's URLs are Internal URLs.",
+    ),
+    Column(
+        "robots_state",
+        Text,
+        comment="Rules applied, everything allowed, or everything disallowed or unanswered; NULL "
+        "while robots.txt has not been fetched, which happens before the first URL of the "
+        "origin that the Scope does not skip and the URL limit does not refuse.",
+        info={"values": literal_values(RobotsState)},
+    ),
+    Column(
+        "robots_status_code",
+        Integer,
+        comment="Status code of the final robots.txt response; NULL without a response.",
+    ),
+    Column(
+        "robots_fetch_error",
+        Text,
+        comment="Why the robots.txt request got no HTTP response; NULL when it got one, or "
+        "while robots.txt has not been fetched.",
+        info={"values": literal_values(FetchError)},
+    ),
+    Column(
+        "robots_fetch_error_message",
+        Text,
+        comment="Human-readable detail of robots_fetch_error.",
+    ),
+    Column("robots_fetched_at", Timestamp, comment="UTC time robots.txt was last fetched."),
+    Column("robots_txt", Text, comment="The robots.txt body as parsed, up to 512,000 bytes."),
+    Column(
+        "robots_crawl_delay_ms",
+        Integer,
+        comment="The Crawl-delay for the robots user-agent token; recorded, not applied.",
+    ),
+    Column(
+        "robots_sitemaps",
+        Json,
+        comment="JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not "
+        "been fetched.",
     ),
     comment="One row for each origin of a URL that the Crawl recorded.",
     change=20,

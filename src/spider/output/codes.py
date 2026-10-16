@@ -165,7 +165,7 @@ SUBFOLDER_IS_ROOT = _declare(
     "error",
     ExitCode.USAGE,
     "--scope subfolder with a Seed whose folder is the root, such as a folder's URL without its "
-    "trailing slash; the hint gives the Seed with it.",
+    "trailing slash; details.suggested_seed holds the Seed with it, or null for a root Seed.",
 )
 INVALID_PATTERN = _declare(
     "invalid_pattern",
@@ -180,12 +180,34 @@ SEED_OUT_OF_SCOPE = _declare(
     "The Seed is outside its own Scope: it matches an --exclude pattern, or no --include "
     "pattern; details.seed holds it.",
 )
+MAX_URLS_REACHED = _declare(
+    "max_urls_reached",
+    "warning",
+    None,
+    "The Crawl reached --max-urls and stopped with URLs left queued; the hint is the command "
+    "that continues it with a higher limit.",
+)
 SEED_BASE_MISMATCH = _declare(
     "seed_base_mismatch",
     "warning",
     None,
     "A www Seed whose Page names its apex host as the site; the hint gives the Seed on the apex "
     "host, and the Crawl went on in its Scope.",
+)
+SEED_BLOCKED_BY_ROBOTS_TXT = _declare(
+    "seed_blocked_by_robots_txt",
+    "warning",
+    None,
+    "robots.txt disallows the Seed for the robots user-agent token, so it was not requested; "
+    "the hint names --ignore-robots, and details.seed holds the Seed.",
+)
+ROBOTS_UNREACHABLE = _declare(
+    "robots_unreachable",
+    "warning",
+    None,
+    "The robots.txt of an Internal origin answered with a server error or 429, so none of its "
+    "URLs was requested; the hint names --ignore-robots, and details.origin, details.host and "
+    "details.status_code say which.",
 )
 PARSE_FAILED = _declare(
     "parse_failed",

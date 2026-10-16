@@ -9,17 +9,42 @@ def global_cap(concurrency: int) -> int:
 
 
 class RequestLimits:
-    """A semaphore per host, the global cap on requests in flight, and the bound on URL tasks.
+    """A semaphore per host, the global cap on requests in flight, the bound on URL tasks, and
+    the URL limit, --max-urls, which counts every request it lets start.
 
     A task holds its permit until its unit is submitted, so `backlog` is how far page
     preparation may fall behind the requests before fetching waits (design D7, 026 D2).
     """
 
-    def __init__(self, concurrency: int, backlog: int = 0) -> None:
+    def __init__(self, concurrency: int, backlog: int = 0, max_urls: int | None = None) -> None:
         self._concurrency = concurrency
         self._hosts: dict[str, asyncio.Semaphore] = {}
         self._requests = asyncio.Semaphore(global_cap(concurrency))
         self._tasks = asyncio.Semaphore(global_cap(concurrency) + backlog)
+        self._max_urls = max_urls
+        self._started = 0
+        self._refused: int | None = None
+
+    def start_request(self) -> bool:
+        """Counts a URL request as it starts, in flight from then on, or refuses it at the URL
+        limit; called with its host's slot and the global cap held, so the count is exact."""
+        if self.refuses():
+            self.refuse()
+            return False
+        self._started += 1
+        return True
+
+    def refuses(self) -> bool:
+        """Whether the URL limit would refuse a new request now."""
+        return self._max_urls is not None and self._started >= self._max_urls
+
+    def refuse(self) -> None:
+        """Marks the limit reached: a refused request leaves its URL queued."""
+        self._refused = self._max_urls
+
+    def limit_reached(self) -> int | None:
+        """The URL limit once it has refused a request."""
+        return self._refused
 
     async def reserve_task(self) -> None:
         """Waits for room under the global cap before a URL's task is created."""

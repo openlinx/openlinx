@@ -218,3 +218,22 @@ def test_an_excluded_url_that_only_unfollowed_links_reach_is_recorded_as_not_fol
         [("skipped", "nofollow", "hyperlink")],
         [("skipped", "link_type_not_followed", "amphtml")],
     )
+
+
+def test_the_robots_user_agent_token_selects_the_x_robots_tag_that_applies(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(
+                    body='<a href="/x">X</a>', headers=[("X-Robots-Tag", "googlebot: nofollow")]
+                ),
+                "/x": Page(body="<p>X</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--robots-user-agent", "Googlebot")
+
+    assert _state(crawl_file, server.url("/x")) == [("skipped", "nofollow", "hyperlink")]

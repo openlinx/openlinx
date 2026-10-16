@@ -410,6 +410,7 @@ def measure(folder: Path, page_count: int) -> dict[str, Any]:
             journal_setting="auto",
             # The writer's throughput needs no Rule.
             rules=(),
+            section_crawl=False,
         ),
         SystemClock(),
         Collected(),

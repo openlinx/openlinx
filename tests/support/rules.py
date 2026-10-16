@@ -19,6 +19,7 @@ from spider.store.records import (
     ParseError,
     RuleRow,
 )
+from spider.store.rows import HandlerRows
 from spider.store.schema import urls
 from spider.store.urls import record_error, record_fetched, record_seed, record_unwritten
 from spider.store.writer import CrawlWriter
@@ -56,8 +57,8 @@ def crawl_with_page(
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         url_id = writer.run(record_seed(_PAGE_URL, is_internal=True, in_scope=True))
         page = PageRow(url_id=url_id, address=_PAGE_URL, url_encoded_address=_PAGE_URL, **page_data)
-        fetched = _html(url_id, parse_error=parse_error, rows=(page,))
-        writer.run(record_fetched(fetched, {PageRow: write_page}))
+        fetched = _html(url_id, parse_error=parse_error, rows=(HandlerRows(write_page, (page,)),))
+        writer.run(record_fetched(fetched))
     return crawl.path, url_id
 
 
@@ -81,12 +82,11 @@ def crawl_with_url(
         seed_id = writer.run(record_seed(_SEED, is_internal=True, in_scope=True))
         found = NewUrl(
             url=target,
-            crawl_depth=1,
             discovered_via="hyperlink",
             is_internal=is_internal,
             in_scope=is_internal if in_scope is None else in_scope,
         )
-        writer.run(record_fetched(_html(seed_id, discovered=(found,)), {}))
+        writer.run(record_fetched(_html(seed_id, discovered=(found,))))
         url_id = writer.run(_url_id(target))
         writer.run(outcome(url_id))
     return crawl.path, url_id
@@ -102,8 +102,7 @@ def responded(status_code: int) -> Callable[[int], UrlUnit]:
             fetched_at=_AT,
             response_time_ms=1,
             parsed=False,
-        ),
-        {},
+        )
     )
 
 
@@ -115,21 +114,22 @@ def failed(fetch_error: FetchError) -> Callable[[int], UrlUnit]:
             fetch_error=fetch_error,
             fetch_error_message=f"The request ended with {fetch_error}.",
             fetched_at=_AT,
-        ),
-        {},
+        )
     )
 
 
 def unrecorded() -> Callable[[int], UrlUnit]:
     """An outcome: the Crawl got a response but failed to record it (record_failed)."""
-    return lambda url_id: record_unwritten(url_id, "The URL's unit failed.")
+    return lambda url_id: record_unwritten(
+        url_id, "The URL's unit failed.", blocked_by_robots_txt=None
+    )
 
 
 def _html(
     url_id: int,
     *,
     discovered: tuple[NewUrl, ...] = (),
-    rows: tuple[object, ...] = (),
+    rows: tuple[HandlerRows[Any], ...] = (),
     parse_error: ParseError | None = None,
 ) -> FetchedUrl:
     return FetchedUrl(

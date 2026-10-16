@@ -1,18 +1,25 @@
-"""Store rows that handlers return, each written by its table's store module (020 D14)."""
+"""Store rows that handlers return, each written by its table's store module (020 D9, D14)."""
 
-from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Connection
+# Under TYPE_CHECKING only, so spider.store.records, which holds these rows, loads no sqlalchemy.
+if TYPE_CHECKING:
+    from sqlalchemy import Connection
 
-type RowWriter = Callable[[Connection, Any], None]
+type RowWriter[R] = Callable[[Connection, R], None]
 
 
-def write_rows(
-    connection: Connection, rows: Sequence[object], writers: Mapping[type, RowWriter]
-) -> None:
-    for row in rows:
-        writer = writers.get(type(row))
-        if writer is None:
-            raise TypeError(f"no row writer is registered for {type(row).__name__}")
-        writer(connection, row)
+@dataclass(frozen=True, slots=True)
+class HandlerRows[R]:
+    """One handler's rows for one URL, with the store function of their table."""
+
+    write: RowWriter[R]
+    rows: tuple[R, ...]
+
+
+def write_rows(connection: "Connection", batches: Sequence[HandlerRows[Any]]) -> None:
+    for batch in batches:
+        for row in batch.rows:
+            batch.write(connection, row)

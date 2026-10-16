@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Protocol
+from typing import Any, Protocol
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
@@ -50,11 +50,33 @@ class PageInput(msgspec.Struct, frozen=True, kw_only=True):
 
 
 @dataclass(frozen=True, slots=True)
-class Extractor:
-    """Pure and module-level, so that a 026 worker imports it by name."""
+class Extractor[C: msgspec.Struct | None]:
+    """Pure and module-level, so that a 026 worker imports it by name; its config, a struct
+    with frozen fields resolved where the hooks are built, travels with it in the settings
+    snapshot (design D9)."""
 
     name: str
-    extract: Callable[[LexborHTMLParser, PageInput], msgspec.Struct]
+    extract: Callable[[LexborHTMLParser, PageInput, C], msgspec.Struct]
+    config: C
+
+    def __post_init__(self) -> None:
+        config: object = self.config
+        # Shared by every Page of the Crawl and by every 026 worker. The check is shallow: a field
+        # may still hold a mutable value.
+        if config is not None and not (
+            isinstance(config, msgspec.Struct) and config.__struct_config__.frozen
+        ):
+            raise TypeError(
+                f"the config of the extractor {self.name} is not a struct with frozen fields"
+            )
+
+
+def extractor[C: msgspec.Struct | None](
+    name: str, extract: Callable[[LexborHTMLParser, PageInput, C], msgspec.Struct], config: C
+) -> Extractor[Any]:
+    """The one way to build an extractor: mypy checks C here, where the extractor is registered,
+    since an Extractor built in place inside Hooks(...) takes C as Any (design D9)."""
+    return Extractor(name, extract, config)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -62,7 +84,7 @@ class PageSettings:
     """The settings snapshot: built once per Crawl, and given to each 026 worker once."""
 
     scope: ScopeRules
-    extractors: tuple[Extractor, ...] = ()
+    extractors: tuple[Extractor[Any], ...] = ()
     robots_token: str = DEFAULT_ROBOTS_TOKEN
     strip_params: re.Pattern[str] | None
 
@@ -118,7 +140,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     failures: list[str] = []
     for extractor in settings.extractors:
         try:
-            output = extractor.extract(tree, page)
+            output = extractor.extract(tree, page, extractor.config)
             # Only a msgspec struct crosses 026's process boundary as it is.
             if not isinstance(output, msgspec.Struct):
                 raise TypeError(f"{extractor.name} returned {type(output).__name__}")
