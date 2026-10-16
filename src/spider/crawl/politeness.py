@@ -1,6 +1,39 @@
-"""Politeness: how many requests may be in flight, to one host and in all (020 D7)."""
+"""Politeness: how many requests may be in flight, to one host and in all, and how often
+they may start (020 D7)."""
 
 import asyncio
+import math
+
+from spider.clock import Clock
+
+
+def is_rate(rate: float) -> bool:
+    """The one rule of --rate and crawl.rate: a finite number of requests per second above 0."""
+    return math.isfinite(rate) and rate > 0
+
+
+class RateGate:
+    """--rate: requests to one host start at least 1/rate seconds apart, on the clock."""
+
+    def __init__(self, clock: Clock, rate: float | None) -> None:
+        self._clock = clock
+        self._interval = None if rate is None else 1 / rate
+        self._turns: dict[str, asyncio.Lock] = {}
+        self._next_starts: dict[str, float] = {}
+
+    async def wait_turn(self, host: str) -> None:
+        if self._interval is None:
+            return
+        turn = self._turns.get(host)
+        if turn is None:
+            turn = self._turns[host] = asyncio.Lock()
+        # One waiter per host at a time, so the starts follow one another in order.
+        async with turn:
+            now = self._clock.monotonic()
+            start = max(now, self._next_starts.get(host, now))
+            if start > now:
+                await self._clock.sleep(start - now)
+            self._next_starts[host] = start + self._interval
 
 
 def global_cap(concurrency: int) -> int:

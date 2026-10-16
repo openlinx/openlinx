@@ -4,6 +4,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from spider.crawl.politeness import is_rate
 from spider.naming import DEFAULT_ROBOTS_TOKEN, ROBOTS_USER_AGENT_PATTERN
 from spider.store.records import ScopeKind
 
@@ -34,6 +35,11 @@ class CrawlSettings(BaseModel):
         ge=0,
         description="The deepest Crawl Depth whose URLs are requested, the Seed's being 0; "
         "Resources of followed Pages are requested one deeper. No limit when unset.",
+    )
+    rate: float | None = Field(
+        None,
+        description="The most requests per second that start to one host, robots.txt's "
+        "included: a finite number above 0. No limit when unset.",
     )
     max_urls: int | None = Field(
         None,
@@ -67,6 +73,13 @@ class CrawlSettings(BaseModel):
         description="Regular expressions of URLs that are never requested; each is searched "
         "for in the normalised URL.",
     )
+
+    @field_validator("rate")
+    @classmethod
+    def _is_a_rate(cls, rate: float | None) -> float | None:
+        if rate is not None and not is_rate(rate):
+            raise ValueError("a rate is a finite number of requests per second above 0")
+        return rate
 
     @field_validator("robots_user_agent")
     @classmethod

@@ -3,7 +3,7 @@
 import asyncio
 import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +15,7 @@ from spider.aio import loop_factory
 from spider.clock import Clock
 from spider.crawl.context import CrawlContext
 from spider.crawl.engine import run_crawl
-from spider.crawl.fetcher import aiohttp_fetcher
+from spider.crawl.fetcher import Fetcher, aiohttp_fetcher
 from spider.crawl.hooks import Hooks, PassContext
 from spider.crawl.pages import PageExecutor
 from spider.crawl.scope import ScopeDecision, ScopeRules, scope_rules
@@ -208,14 +208,25 @@ def start_crawl(
     *,
     resolver: AbstractResolver | None = None,
     pages: Callable[[], PageExecutor] | None = None,
+    fetcher: Fetcher | None = None,
 ) -> CrawlResult:
-    """`resolver` is the DNS resolver hook of multi-host tests, and `pages` builds the page
-    executor instead of `default_page_executor` (design D9, D15)."""
+    """`resolver` is the DNS resolver hook of multi-host tests, `pages` builds the page
+    executor instead of `default_page_executor`, and `fetcher` is the fake Fetcher of the
+    timing scenarios, used instead of aiohttp's (design D9, D15)."""
     log = WarningLog(reporter)
     crawl_file = create_crawl(plan.new_crawl, clock, log)
     with asyncio.Runner(loop_factory=loop_factory) as runner:
         ended_at, summary, counts = runner.run(
-            _crawl(plan, crawl_file, clock, log, hooks, resolver, pages or default_page_executor)
+            _crawl(
+                plan,
+                crawl_file,
+                clock,
+                log,
+                hooks,
+                resolver,
+                pages or default_page_executor,
+                fetcher,
+            )
         )
     return CrawlResult(
         crawl_id=crawl_file.id,
@@ -235,8 +246,9 @@ async def _crawl(
     hooks: Hooks,
     resolver: AbstractResolver | None,
     pages: Callable[[], PageExecutor],
+    fetcher: Fetcher | None,
 ) -> tuple[datetime, CrawlSummary, UrlCounts]:
-    context_of = _crawl_context(crawl_file, plan, clock, reporter, hooks, resolver, pages)
+    context_of = _crawl_context(crawl_file, plan, clock, reporter, hooks, resolver, pages, fetcher)
     async with context_of as context:
         await run_crawl(context, plan.seed)
         stop_reason = context.stop.reason
@@ -265,6 +277,7 @@ async def _crawl_context(
     hooks: Hooks,
     resolver: AbstractResolver | None,
     pages: Callable[[], PageExecutor],
+    given_fetcher: Fetcher | None,
 ) -> AsyncIterator[CrawlContext]:
     """The one place a Crawl's context is built, and its resources closed (design D15)."""
     # Built before crawl_started reports its workers: nothing spawns before its start.
@@ -281,7 +294,12 @@ async def _crawl_context(
         # Opening and closing the writer block, so they run off the event loop.
         writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
         try:
-            async with aiohttp_fetcher(clock, resolver) as fetcher:
+            fetching = (
+                aiohttp_fetcher(clock, resolver)
+                if given_fetcher is None
+                else nullcontext(given_fetcher)
+            )
+            async with fetching as fetcher:
                 yield CrawlContext(
                     crawl_file=crawl_file,
                     settings=plan.settings,

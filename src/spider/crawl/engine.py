@@ -13,7 +13,7 @@ from spider.crawl.fetcher import FetchFailure, FetchResult
 from spider.crawl.hooks import Handler, UrlResult
 from spider.crawl.links import DiscoveredLink
 from spider.crawl.pages import PageSettings, is_html_type, response_links
-from spider.crawl.politeness import RequestLimits
+from spider.crawl.politeness import RateGate, RequestLimits
 from spider.crawl.requester import Requester, UrlLimitRefused
 from spider.crawl.robots import OriginRobots
 from spider.crawl.robots_loader import RobotsLoader
@@ -133,7 +133,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     limits = RequestLimits(
         context.settings.concurrency, context.pages.backlog, context.settings.max_urls
     )
-    requester = Requester(context.fetcher, limits)
+    requester = Requester(context.fetcher, limits, RateGate(context.clock, context.settings.rate))
     run = _Run(
         context=context,
         outcomes=_Outcomes(context),

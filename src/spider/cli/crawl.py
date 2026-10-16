@@ -10,6 +10,7 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
+from spider.crawl.politeness import is_rate
 from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN, ROBOTS_USER_AGENT_PATTERN
 from spider.output.codes import OPTION_CONFLICT
 from spider.output.diagnostics import SpiderError
@@ -27,6 +28,15 @@ def _robots_token(token: str) -> str:
             "'_' and '-'."
         )
     return token
+
+
+def _rate(rate: float | None) -> float | None:
+    # The settings file is checked by CrawlSettings' validator, through the same rule.
+    if rate is not None and not is_rate(rate):
+        raise typer.BadParameter(
+            f"{rate} is not a rate: give a finite number of requests per second above 0."
+        )
+    return rate
 
 
 @command_meta(
@@ -90,6 +100,17 @@ def crawl(
             show_default=False,
         ),
         OptionMeta(setting="crawl.max_depth"),
+    ] = None,
+    rate: Annotated[
+        float | None,
+        typer.Option(
+            "--rate",
+            callback=_rate,
+            help="The most requests per second that start to one host, robots.txt's "
+            "included: a finite number above 0. No limit by default.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.rate"),
     ] = None,
     max_urls: Annotated[
         int | None,
