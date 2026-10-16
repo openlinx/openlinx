@@ -107,19 +107,18 @@ class RequestLimits:
     def start_request(self) -> bool:
         """Counts a URL request as it starts, in flight from then on, or refuses it at the URL
         limit; called with its host's slot and the global cap held, so the count is exact."""
-        if self.refuses():
-            self.refuse()
+        if self.refused():
             return False
         self._started += 1
         return True
 
-    def refuses(self) -> bool:
-        """Whether the URL limit would refuse a new request now."""
-        return self._max_urls is not None and self._started >= self._max_urls
-
-    def refuse(self) -> None:
-        """Marks the limit reached: a refused request leaves its URL queued."""
+    def refused(self) -> bool:
+        """Whether the URL limit refuses a new request now, which marks the limit reached and
+        leaves the request's URL queued."""
+        if self._max_urls is None or self._started < self._max_urls:
+            return False
         self._refused = self._max_urls
+        return True
 
     def limit_reached(self) -> int | None:
         """The URL limit once it has refused a request."""

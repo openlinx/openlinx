@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import Iterable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
@@ -67,10 +67,10 @@ class _Outcomes:
         self._context = context
         self._pending: set[asyncio.Future[Any]] = set()
 
-    async def submit(self, queued: QueuedUrl, unit: UrlUnit, blocked: bool | None) -> None:
+    async def submit(self, result: UrlResult, unit: UrlUnit) -> None:
         future = await self._context.writer.submit_async(unit)
         self._pending.add(future)
-        future.add_done_callback(lambda done: self._unit_done(queued, blocked, done))
+        future.add_done_callback(lambda done: self._unit_done(result, done))
 
     async def settled(self) -> None:
         """Waits for every outcome, fallback units included."""
@@ -83,9 +83,7 @@ class _Outcomes:
             if self._pending:
                 await asyncio.wait(set(self._pending))
 
-    def _unit_done(
-        self, queued: QueuedUrl, blocked: bool | None, done: asyncio.Future[None]
-    ) -> None:
+    def _unit_done(self, result: UrlResult, done: asyncio.Future[None]) -> None:
         self._pending.discard(done)
         error = done.exception()
         if error is None:
@@ -96,20 +94,20 @@ class _Outcomes:
         self._context.reporter.count(
             Diagnostic.of(
                 RECORD_FAILED,
-                f"Recording {queued.url} failed ({type(error).__name__}), so it was recorded "
+                f"Recording {result.url} failed ({type(error).__name__}), so it was recorded "
                 "as an error, without the URLs found on it and its handlers' rows.",
             ),
-            queued.url,
+            result.url,
         )
-        fallback = asyncio.ensure_future(self._fall_back(queued, blocked, error))
+        fallback = asyncio.ensure_future(self._fall_back(result, error))
         self._pending.add(fallback)
         fallback.add_done_callback(self._pending.discard)
 
-    async def _fall_back(
-        self, queued: QueuedUrl, blocked: bool | None, error: BaseException
-    ) -> None:
+    async def _fall_back(self, result: UrlResult, error: BaseException) -> None:
         message = f"{type(error).__name__}: {error}"
-        unit = record_unwritten(queued.id, message, blocked_by_robots_txt=blocked)
+        unit = record_unwritten(
+            result.url_id, message, blocked_by_robots_txt=result.blocked_by_robots_txt
+        )
         try:
             await (await self._context.writer.submit_async(unit))
         # A fallback that fails is the file's failure, not the URL's (design D2).
@@ -246,27 +244,27 @@ async def _crawl_url(run: _Run, queued: QueuedUrl, decision: ScopeDecision) -> N
         recorded = await _unit_of(run, queued, decision)
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
         if recorded is not None:
-            await run.outcomes.submit(queued, *recorded)
+            await run.outcomes.submit(*recorded)
     finally:
         run.limits.task_ended()
 
 
 async def _unit_of(
     run: _Run, queued: QueuedUrl, decision: ScopeDecision
-) -> tuple[UrlUnit, bool | None] | None:
-    """The unit that records the URL's final state, with its handlers' rows, and its
-    blocked_by_robots_txt, which a fallback unit keeps; or None when the URL limit refuses
-    a new request, which leaves it queued. `decision` is taken once, at dispatch, so a URL
-    found on several Pages is recorded once (design D1)."""
-    context, limits, robots = run.context, run.limits, run.robots
+) -> tuple[UrlResult, UrlUnit] | None:
+    """The URL's final state as its handlers see it, which a fallback unit keeps part of,
+    and the unit that records it with their rows; or None when the URL limit refuses a new
+    request, which leaves it queued. `decision` is taken once, at dispatch, so a URL found
+    on several Pages is recorded once (design D1)."""
+    context, robots = run.context, run.robots
+    dispatched = _dispatched(queued, decision)
     skip_reason = _skip_reason(context, queued, decision)
     # Only a URL that would be requested is checked, so a skip never requests robots.txt.
     blocked = None
     if skip_reason is None:
         # A verdict already requested decides the URL before the limit, which guards only a
         # new request (design D6).
-        if not robots.requested(queued.url) and limits.refuses():
-            limits.refuse()
+        if not robots.requested(queued.url) and run.requester.refuses_a_new_request():
             return None
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
         origin_robots = await robots.robots_of(queued.url)
@@ -277,36 +275,22 @@ async def _unit_of(
                 f"The robots.txt request of {url_origin(queued.url)} got no HTTP response, "
                 f"so the URL was not requested: {origin_robots.fetch_error_message}"
             )
-            unit = _record_error(
-                context,
-                queued,
-                decision,
-                origin_robots.fetch_error,
-                message,
-                fetched_at=None,
-                blocked=None,
-            )
-            return unit, None
+            return _errored(context, dispatched, origin_robots.fetch_error, message, None)
         skip_reason, blocked = _robots_check(context, origin_robots, queued, decision)
+    checked = replace(dispatched, blocked_by_robots_txt=blocked)
     if skip_reason is not None:
-        skipped = _result(
-            queued,
-            decision,
-            fetch_state="skipped",
-            skip_reason=skip_reason,
-            blocked_by_robots_txt=blocked,
-        )
+        skipped = replace(checked, fetch_state="skipped", skip_reason=skip_reason)
         unit = record_skipped(
             SkippedUrl(
-                url_id=queued.id,
+                url_id=skipped.url_id,
                 skip_reason=skip_reason,
-                crawl_depth=queued.crawl_depth,
-                blocked_by_robots_txt=blocked,
+                crawl_depth=skipped.crawl_depth,
+                blocked_by_robots_txt=skipped.blocked_by_robots_txt,
                 # Not final: a shorter path re-queues it, and its handlers see it then (D5).
                 rows=() if skip_reason == "max_depth" else _handler_rows(context, skipped),
             )
         )
-        return unit, blocked
+        return skipped, unit
     response = await run.requester.request_url(queued.url)
     if isinstance(response, UrlLimitRefused):
         return None
@@ -315,48 +299,37 @@ async def _unit_of(
     if decision.is_internal and run.blocking.responded(host, status_code):
         _warn_of_possible_blocking(context, host)
     if isinstance(response, FetchFailure):
-        unit = _record_error(
-            context,
-            queued,
-            decision,
-            response.fetch_error,
-            response.message,
-            fetched_at=response.fetched_at,
-            blocked=blocked,
+        return _errored(
+            context, checked, response.fetch_error, response.message, response.fetched_at
         )
-        return unit, blocked
-    fetched = await _fetched(context, queued, decision, response, blocked)
-    return record_fetched(fetched), blocked
+    return await _fetched(context, checked, response)
 
 
-def _record_error(
+def _errored(
     context: CrawlContext,
-    queued: QueuedUrl,
-    decision: ScopeDecision,
+    checked: UrlResult,
     fetch_error: FetchError,
     message: str,
-    *,
     fetched_at: datetime | None,
-    blocked: bool | None,
-) -> UrlUnit:
-    failed = _result(
-        queued,
-        decision,
+) -> tuple[UrlResult, UrlUnit]:
+    failed = replace(
+        checked,
         fetch_state="error",
-        blocked_by_robots_txt=blocked,
         fetch_error=fetch_error,
         fetch_error_message=message,
         fetched_at=fetched_at,
     )
-    errored = ErroredUrl(
-        url_id=queued.id,
-        fetch_error=fetch_error,
-        fetch_error_message=message,
-        fetched_at=fetched_at,
-        blocked_by_robots_txt=blocked,
-        rows=_handler_rows(context, failed),
+    unit = record_error(
+        ErroredUrl(
+            url_id=failed.url_id,
+            fetch_error=fetch_error,
+            fetch_error_message=message,
+            fetched_at=fetched_at,
+            blocked_by_robots_txt=failed.blocked_by_robots_txt,
+            rows=_handler_rows(context, failed),
+        )
     )
-    return record_error(errored)
+    return failed, unit
 
 
 def _robots_check(
@@ -396,25 +369,18 @@ def _skip_reason(
 
 
 async def _fetched(
-    context: CrawlContext,
-    queued: QueuedUrl,
-    decision: ScopeDecision,
-    response: FetchResult,
-    blocked: bool | None,
-) -> FetchedUrl:
+    context: CrawlContext, checked: UrlResult, response: FetchResult
+) -> tuple[UrlResult, UrlUnit]:
+    url = checked.url
     content_type = response.header("Content-Type")
     # An External URL or one outside the Scope is checked, never parsed (design D5).
-    followed = decision.in_scope and 200 <= response.status_code < 300
+    followed = checked.in_scope and 200 <= response.status_code < 300
     prepared = followed and is_html_type(content_type)
-    page = await context.pages.prepare(queued.url, response) if prepared else None
+    page = await context.pages.prepare(url, response) if prepared else None
     parsed = page is not None and page.parsed
     # The Link and Refresh headers of an in-Scope 2xx response count, whatever became of its
     # preparation (design D9).
-    links = (
-        response_links(queued.url, response, context.scope, context.strip_params)
-        if followed
-        else ()
-    )
+    links = response_links(url, response, context.scope, context.strip_params) if followed else ()
     if page is not None:
         links += page.document_links
     nofollow = page is not None and page.directives.nofollow
@@ -424,18 +390,16 @@ async def _fetched(
         nofollow=nofollow,
         follow_nofollow=context.settings.follow_nofollow,
     )
-    if parsed and queued.discovered_via == "seed":
-        _warn_of_seed_base_mismatch(context, queued.url, links)
+    if parsed and checked.discovered_via == "seed":
+        _warn_of_seed_base_mismatch(context, url, links)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
-        failure = _parse_failure(queued.url, parse_error, parse_error_message)
-        context.reporter.count(Diagnostic.of(PARSE_FAILED, failure), queued.url)
-    result = _result(
-        queued,
-        decision,
+        failure = _parse_failure(url, parse_error, parse_error_message)
+        context.reporter.count(Diagnostic.of(PARSE_FAILED, failure), url)
+    fetched = replace(
+        checked,
         fetch_state="fetched",
-        blocked_by_robots_txt=blocked,
         status_code=response.status_code,
         content_type=content_type,
         response_time_ms=response.response_time_ms,
@@ -446,19 +410,22 @@ async def _fetched(
         headers=response.headers,
         outputs={} if page is None else dict(page.outputs),
     )
-    return FetchedUrl(
-        url_id=queued.id,
-        status_code=response.status_code,
-        content_type=content_type,
-        fetched_at=response.fetched_at,
-        response_time_ms=response.response_time_ms,
-        parsed=parsed,
-        parse_error=parse_error,
-        parse_error_message=parse_error_message,
-        blocked_by_robots_txt=blocked,
-        discovered=discovered,
-        rows=_handler_rows(context, result),
+    unit = record_fetched(
+        FetchedUrl(
+            url_id=fetched.url_id,
+            status_code=response.status_code,
+            content_type=content_type,
+            fetched_at=response.fetched_at,
+            response_time_ms=response.response_time_ms,
+            parsed=parsed,
+            parse_error=parse_error,
+            parse_error_message=parse_error_message,
+            blocked_by_robots_txt=fetched.blocked_by_robots_txt,
+            discovered=discovered,
+            rows=_handler_rows(context, fetched),
+        )
     )
+    return fetched, unit
 
 
 def _warn_of_the_url_limit(context: CrawlContext, limit: int) -> None:
@@ -546,7 +513,9 @@ def _parse_failure(url: NormalizedUrl, parse_error: ParseError, message: str | N
     )
 
 
-def _result(queued: QueuedUrl, decision: ScopeDecision, **outcome: Any) -> UrlResult:
+def _dispatched(queued: QueuedUrl, decision: ScopeDecision) -> UrlResult:
+    """The URL as it is dispatched, still queued: each outcome replaces what it decides, which
+    mypy checks field by field."""
     return UrlResult(
         url_id=queued.id,
         url=queued.url,
@@ -555,7 +524,7 @@ def _result(queued: QueuedUrl, decision: ScopeDecision, **outcome: Any) -> UrlRe
         found_on_url_id=queued.found_on_url_id,
         is_internal=decision.is_internal,
         in_scope=decision.in_scope,
-        **outcome,
+        fetch_state="queued",
     )
 
 
