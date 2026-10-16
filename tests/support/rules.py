@@ -1,6 +1,6 @@
 """Crawl files that hold the rows a Rule reads, for seam-2 tests (040-add-rules, Test seams)."""
 
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,10 +39,12 @@ def crawl_with_page(
     disabled: Collection[str] = (),
     parse_error: ParseError | None = None,
     more_rules: Sequence[RuleRow] = (),
+    thresholds: Mapping[str, Mapping[str, int]] | None = None,
     **page_data: Any,
 ) -> tuple[Path, int]:
     """A crawl file and the URL id of its one analysed Page, with these Page data columns,
-    whose rules table marks the Rules named in `disabled` off; `extractor_error` as
+    whose rules table marks the Rules named in `disabled` off and records the
+    `thresholds` given by Rule id as a spider.toml would; `extractor_error` as
     `parse_error` makes it a Page on which an extractor failed, any other parse error a
     Page that was not parsed, and `more_rules` are
     recorded after the catalogue's Rules.
@@ -51,7 +53,14 @@ def crawl_with_page(
     HTML response with its Page row.
     """
     rules = (
-        *(replace(rule, enabled=rule.id not in disabled) for rule in default_rule_rows()),
+        *(
+            replace(
+                rule,
+                enabled=rule.id not in disabled,
+                thresholds={**rule.thresholds, **(thresholds or {}).get(rule.id, {})},
+            )
+            for rule in default_rule_rows()
+        ),
         *more_rules,
     )
     crawl = create_any_crawl(temp_workspace, rules=rules)

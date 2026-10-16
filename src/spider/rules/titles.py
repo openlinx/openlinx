@@ -1,11 +1,18 @@
 """The titles Rules (040-add-rules D3, D4)."""
 
 from spider.naming import SETTINGS_FILE_NAME
-from spider.rules.model import NO_ROWS, Rule, Threshold
+from spider.rules.model import Rule, Threshold
 
 _TITLE_MISSING_SQL = """SELECT url_id, NULL AS detail
 FROM pages JOIN analysed_pages USING (url_id)
 WHERE title_count = 0 OR title_1 = ''"""
+
+# The limit is read from the Crawl's rules row, so the query runs on its own (D15).
+_TITLE_TOO_LONG_SQL = """SELECT url_id, json_object('length', title_1_length) AS detail
+FROM pages JOIN analysed_pages USING (url_id)
+WHERE title_1_length > json_extract(
+  (SELECT thresholds FROM rules WHERE id = 'title-too-long'), '$.max_chars'
+)"""
 
 TITLE_MISSING = Rule(
     id="title-missing",
@@ -40,7 +47,7 @@ TITLE_TOO_LONG = Rule(
         f"max_chars in {SETTINGS_FILE_NAME} if the site's titles are meant to be longer."
     ),
     thresholds=(Threshold("max_chars", 60, "characters"),),
-    reproduce_sql=NO_ROWS,
+    reproduce_sql=_TITLE_TOO_LONG_SQL,
 )
 
 RULES = (TITLE_MISSING, TITLE_TOO_LONG)

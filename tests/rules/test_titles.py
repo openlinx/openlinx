@@ -1,7 +1,7 @@
 """The titles Rules (040-add-rules, rules; seam 2)."""
 
 from spider.rules.headings import H1_MISSING
-from spider.rules.titles import TITLE_MISSING
+from spider.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
 from spider.store.issues import evaluate_rule
 from spider.store.records import AffectedUrl
 from tests.support.crawls import query
@@ -46,3 +46,37 @@ def test_a_page_that_was_not_parsed_is_not_analysed(temp_workspace: TempWorkspac
         query(crawl_file, "SELECT url_id FROM analysed_pages"),
         evaluate_rule(crawl_file, TITLE_MISSING),
     ) == ([], [])
+
+
+def test_title_too_long_by_characters(temp_workspace: TempWorkspace) -> None:
+    crawl_file, url_id = crawl_with_page(
+        temp_workspace, title_count=1, title_1="x" * 61, title_1_length=61
+    )
+
+    assert evaluate_rule(crawl_file, TITLE_TOO_LONG) == [
+        AffectedUrl(url_id=url_id, detail={"length": 61})
+    ]
+
+
+def test_title_at_the_limit(temp_workspace: TempWorkspace) -> None:
+    crawl_file, _ = crawl_with_page(
+        temp_workspace, title_count=1, title_1="x" * 60, title_1_length=60
+    )
+
+    assert evaluate_rule(crawl_file, TITLE_TOO_LONG) == []
+
+
+def test_raised_title_limit(temp_workspace: TempWorkspace) -> None:
+    crawl_file, _ = crawl_with_page(
+        temp_workspace,
+        thresholds={"title-too-long": {"max_chars": 70}},
+        title_count=1,
+        title_1="x" * 65,
+        title_1_length=65,
+    )
+    [(stored_sql,)] = query(
+        crawl_file, "SELECT reproduce_sql FROM rules WHERE id = 'title-too-long'"
+    )
+
+    # The file's own query, run alone, agrees: it binds no threshold.
+    assert (evaluate_rule(crawl_file, TITLE_TOO_LONG), query(crawl_file, stored_sql)) == ([], [])

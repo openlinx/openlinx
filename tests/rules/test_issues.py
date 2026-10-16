@@ -36,12 +36,15 @@ RULE_PAGES = Site(
         "/rules/": Page(
             body='<title>Rules</title><a href="/rules/untitled">Untitled</a> '
             '<a href="/rules/gone">Gone</a> <a href="/rules/down">Down</a> '
-            '<a href="/rules/reset">Reset</a>'
+            '<a href="/rules/reset">Reset</a> <a href="/rules/long-title">Long</a>'
         ),
         "/rules/untitled": Page(body="<p>No title here.</p>"),
         "/rules/gone": Status(404, body="Gone", content_type="text/plain"),
         "/rules/down": Status(503, body="Down", content_type="text/plain"),
         "/rules/reset": Page(body="<p>" + "x" * 100_000 + "</p>", reset_after=100),
+        "/rules/long-title": Page(
+            body="<title>Buy running shoes, trail boots and sandals online at low cost</title>"
+        ),
     }
 )
 # Every Rule that fires on RULE_PAGES: neither Page has an h1.
@@ -51,6 +54,7 @@ FIRING_ON_RULE_PAGES = (
     "internal-5xx",
     "internal-no-response",
     "title-missing",
+    "title-too-long",
 )
 
 
@@ -94,6 +98,19 @@ def test_a_rule_s_query_returns_its_stored_affected_urls(
 
     # Every slice Rule fires on RULE_PAGES, so the comparison is not vacuous.
     assert (returned, sorted(stored)) == (stored, sorted(FIRING_ON_RULE_PAGES))
+
+
+def test_detail_is_stored_as_json(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(RULE_PAGES)
+    crawl_file = crawled(server.url("/rules/"))
+    rows = query(
+        crawl_file,
+        "SELECT a.detail FROM affected_urls AS a JOIN urls AS u ON u.id = a.url_id "
+        "WHERE a.rule_id = 'title-too-long' AND u.url = ?",
+        (server.url("/rules/long-title"),),
+    )
+
+    assert [json.loads(detail) for (detail,) in rows] == [{"length": 61}]
 
 
 SLOW_SITE = Site(
