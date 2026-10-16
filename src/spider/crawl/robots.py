@@ -14,10 +14,9 @@ _LONGEST_DELAY_MS = 2**63 - 1
 
 @dataclass(frozen=True, slots=True)
 class RobotsTxt:
-    """The rules of one origin's robots.txt, read for one robots user-agent token."""
+    """The rules of one origin's robots.txt, read for one robots user-agent token; its text
+    goes to the store, not into the run's memo of origins (design D6)."""
 
-    # As parsed: the first ROBOTS_TXT_LIMIT bytes, decoded.
-    text: str
     _rules: Protego
     _token: str
 
@@ -59,13 +58,22 @@ def robots_state(status_code: int) -> RobotsState:
     """RFC 9309's mapping of the final robots.txt response."""
     if 200 <= status_code < 300:
         return "ok"
-    # A server error, or too many requests, may hide rules: the origin is treated as disallowed.
-    if status_code == 429 or status_code >= 500:
-        return "unreachable"
-    return "missing"
+    if 300 <= status_code < 500 and status_code != 429:
+        return "missing"
+    # A server error or too many requests may hide rules, and a status no server should send
+    # says it is broken: the origin is treated as disallowed.
+    return "unreachable"
 
 
-def read_robots_txt(body: bytes, token: str) -> RobotsTxt:
+def robots_txt_text(body: bytes) -> str:
+    """What is parsed: the first ROBOTS_TXT_LIMIT bytes, without a line that the limit cuts."""
+    kept = body[:ROBOTS_TXT_LIMIT]
+    if len(body) > ROBOTS_TXT_LIMIT and body[ROBOTS_TXT_LIMIT] not in b"\r\n":
+        # A cut "Disallow: /private" would disallow every URL under the shorter prefix /priv.
+        kept = kept[: max(kept.rfind(b"\n"), kept.rfind(b"\r")) + 1]
     # utf-8-sig: a byte order mark would otherwise hide the first line's directive.
-    text = body[:ROBOTS_TXT_LIMIT].decode("utf-8-sig", errors="replace")
-    return RobotsTxt(text, Protego.parse(text), token)
+    return kept.decode("utf-8-sig", errors="replace")
+
+
+def read_robots_txt(text: str, token: str) -> RobotsTxt:
+    return RobotsTxt(Protego.parse(text), token)

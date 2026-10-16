@@ -6,7 +6,12 @@ from datetime import datetime
 from spider.crawl.fetcher import Fetcher, FetchFailure, FetchResult, Request
 from spider.crawl.links import resolve_reference
 from spider.crawl.politeness import RequestLimits
-from spider.crawl.robots import OriginRobots, read_robots_txt, robots_state
+from spider.crawl.robots import (
+    OriginRobots,
+    read_robots_txt,
+    robots_state,
+    robots_txt_text,
+)
 from spider.crawl.urls import NormalizedUrl, robots_txt_url, url_host, url_origin
 from spider.store.origins import record_robots_txt
 from spider.store.records import RobotsTxtRecord
@@ -55,9 +60,9 @@ class RobotsLoader:
                 break
             url = target
             response = await self._request(url)
-        robots = _origin_robots(response, self._token)
+        robots, text = _origin_robots(response, self._token)
         # The URL's origin row exists: the URL that requests robots.txt was recorded first.
-        record = _robots_txt_record(url_origin(robots_url), robots, response.fetched_at)
+        record = _robots_txt_record(url_origin(robots_url), robots, text, response.fetched_at)
         await self._writer.run_async(record_robots_txt(record))
         return robots
 
@@ -78,19 +83,28 @@ def _redirect_target(
     return resolve_reference(url, location, codec=None, strip_params=None)
 
 
-def _origin_robots(response: FetchResult | FetchFailure, token: str) -> OriginRobots:
+def _origin_robots(
+    response: FetchResult | FetchFailure, token: str
+) -> tuple[OriginRobots, str | None]:
+    """The origin's verdict, and the text it was read from, which only the store keeps."""
     if isinstance(response, FetchFailure):
-        return OriginRobots(
+        failed = OriginRobots(
             state="unreachable",
             fetch_error=response.fetch_error,
             fetch_error_message=response.message,
         )
+        return failed, None
     state = robots_state(response.status_code)
-    rules = read_robots_txt(response.body, token) if state == "ok" else None
-    return OriginRobots(state=state, rules=rules, status_code=response.status_code)
+    if state != "ok":
+        return OriginRobots(state=state, status_code=response.status_code), None
+    text = robots_txt_text(response.body)
+    rules = read_robots_txt(text, token)
+    return OriginRobots(state=state, rules=rules, status_code=response.status_code), text
 
 
-def _robots_txt_record(origin: str, robots: OriginRobots, fetched_at: datetime) -> RobotsTxtRecord:
+def _robots_txt_record(
+    origin: str, robots: OriginRobots, text: str | None, fetched_at: datetime
+) -> RobotsTxtRecord:
     rules = robots.rules
     return RobotsTxtRecord(
         origin=origin,
@@ -99,7 +113,7 @@ def _robots_txt_record(origin: str, robots: OriginRobots, fetched_at: datetime) 
         fetch_error=robots.fetch_error,
         fetch_error_message=robots.fetch_error_message,
         fetched_at=fetched_at,
-        text=None if rules is None else rules.text,
+        text=text,
         crawl_delay_ms=None if rules is None else rules.crawl_delay_ms,
         sitemaps=() if rules is None else rules.sitemaps,
     )
