@@ -85,4 +85,6 @@ def affected_url_page(
 def recorded_rule(connection: Connection, rule_id: str) -> dict[str, Any]:
     """The Rule as the Crawl's rules table records it, with the thresholds that applied."""
     row = connection.execute(_RULE, {"rule_id": rule_id}).one()
-    return {**row._asdict(), "thresholds": orjson.loads(row.thresholds)}
+    # A column's name is sqlalchemy's quoted_name, a str subclass that orjson refuses as a key.
+    recorded = {str(name): value for name, value in row._mapping.items()}
+    return {**recorded, "thresholds": orjson.loads(row.thresholds)}

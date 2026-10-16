@@ -1,4 +1,5 @@
-"""`spider issues` (050-add-query-and-segments, querying; seam 1, and 3 with real processes)."""
+"""`spider issues` and `spider issue` (050-add-query-and-segments, querying; seam 1, and 3 with real
+processes)."""
 
 import pytest
 
@@ -63,6 +64,37 @@ def test_unknown_issue_type(temp_workspace: TempWorkspace) -> None:
     )
 
 
+def test_a_rule_id_given_to_the_issue_list_is_a_usage_error(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl_store(temp_workspace)
+
+    result = run_cli("issues", "title-missing")
+
+    assert (result.exit_code, result.stderr_json_lines()[-1]["code"]) == (2, "usage_error")
+
+
+def test_unknown_rule_id(temp_workspace: TempWorkspace) -> None:
+    crawl_store(temp_workspace)
+
+    result = run_cli("issue", "title-mising")
+    error = result.stderr_json_lines()[-1]
+
+    assert (result.exit_code, error["code"], error["details"]["suggestions"][0]) == (
+        4,
+        "rule_not_found",
+        "title-missing",
+    )
+
+
+def test_the_affected_urls_of_an_issue_take_fields(temp_workspace: TempWorkspace) -> None:
+    crawl_store(temp_workspace, statuses={"https://example.com/gone": 404}, completed=True)
+
+    result = run_cli("issue", "internal-4xx", "--fields", "url")
+
+    assert result.json()["items"] == [{"url": "https://example.com/gone"}]
+
+
 E2E_PAGES = Site(
     {
         "/e2e/": Page(
@@ -79,12 +111,19 @@ E2E_PAGES = Site(
 def test_issues_of_a_fixture_crawl_on_every_os(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
-    crawl = run_cli_process("crawl", fixture_site(E2E_PAGES).url("/e2e/"))
+    server = fixture_site(E2E_PAGES)
+    crawl = run_cli_process("crawl", server.url("/e2e/"))
 
     result = run_cli_process("issues")
+    detail = run_cli_process("issue", "internal-4xx")
     found = {item["rule_id"]: item["affected_count"] for item in result.json()["items"]}
 
     assert (
         crawl.exit_code,
         {rule_id: found.get(rule_id) for rule_id in ("internal-4xx", "title-missing")},
-    ) == (0, {"internal-4xx": 1, "title-missing": 1})
+        detail.json()["items"],
+    ) == (
+        0,
+        {"internal-4xx": 1, "title-missing": 1},
+        [{"url": server.url("/e2e/gone"), "detail": {"status_code": 404}}],
+    )

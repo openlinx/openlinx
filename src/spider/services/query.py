@@ -15,6 +15,7 @@ from spider.output.paging import (
     keyset_after,
     keyset_page,
     paginate,
+    project,
     select_fields,
 )
 from spider.rules.registry import RULES
@@ -22,8 +23,11 @@ from spider.store.records import CrawlFile, IssueFilters, IssueType, Priority, R
 from spider.workspace.discovery import resolve_workspace
 
 ISSUES = "issues"
+ISSUE = "issue"
 ISSUE_ITEM = ("rule_id", "category", "issue_type", "priority", "affected_count", "description")
 ISSUE_FIELDS = Fields(available=ISSUE_ITEM, default=ISSUE_ITEM)
+AFFECTED_URL_ITEM = ("url", "detail")
+AFFECTED_URL_FIELDS = Fields(available=AFFECTED_URL_ITEM, default=AFFECTED_URL_ITEM)
 NO_FILTERS = IssueFilters()
 
 
@@ -90,6 +94,7 @@ def issue_list(
     chosen = select_fields(fields, ISSUE_FIELDS)
     crawl_file = _crawl_file(request)
     bound = _fingerprint(
+        ISSUES,
         crawl_file,
         type=sorted(filters.issue_types),
         priority=sorted(filters.priorities),
@@ -103,15 +108,21 @@ def issue_list(
 
 
 def issue_detail(
-    request: QueryRequest, rule_id: str, *, limit: int = 50, cursor: str | None = None
+    request: QueryRequest,
+    rule_id: str,
+    *,
+    limit: int = 50,
+    cursor: str | None = None,
+    fields: str | None = None,
 ) -> Page:
     """One Issue: its Rule as the Crawl recorded it, and a page of the Rule's Affected URLs,
     by keyset in URL order (design D4, D14)."""
     from spider.store.query import affected_url_page, recorded_rule
     from spider.store.reading import reading
 
+    chosen = select_fields(fields, AFFECTED_URL_FIELDS)
     crawl_file = _crawl_file(request)
-    bound = _fingerprint(crawl_file, rule_id=rule_id)
+    bound = _fingerprint(ISSUE, crawl_file, rule_id=rule_id)
     after = keyset_after(cursor, bound, (str,))
     with reading(crawl_file.path) as connection:
         # First: the reader refuses a rule id the Crawl's rules table lacks.
@@ -120,7 +131,7 @@ def issue_detail(
         )
         rule = recorded_rule(connection, rule_id)
     page = keyset_page(found, total, limit=limit, fingerprint=bound, keys=("url",))
-    return replace(page, header={"rule": rule})
+    return replace(page, items=project(page.items, chosen), header={"rule": rule})
 
 
 def _crawl_file(request: QueryRequest) -> CrawlFile:
@@ -130,6 +141,6 @@ def _crawl_file(request: QueryRequest) -> CrawlFile:
     return resolve_crawl(request.crawl, workspace=workspace, cwd=request.cwd)
 
 
-def _fingerprint(crawl_file: CrawlFile, **selection: Any) -> str:
+def _fingerprint(command: str, crawl_file: CrawlFile, **selection: Any) -> str:
     # The resolved id, never latest: a cursor reused after a new Crawl started is refused.
-    return fingerprint(ISSUES, {"crawl": crawl_file.id, **selection})
+    return fingerprint(command, {"crawl": crawl_file.id, **selection})

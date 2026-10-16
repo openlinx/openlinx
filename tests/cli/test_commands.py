@@ -78,6 +78,21 @@ def test_entry_of_a_list_command() -> None:
     )
 
 
+def test_the_issue_list_and_one_issue_are_described_apart() -> None:
+    description = run_cli("commands").json()
+    listed, one = _entry(description, "issues"), _entry(description, "issue")
+
+    assert (
+        [a["name"] for a in listed["arguments"]],
+        [a["name"] for a in one["arguments"]],
+        one["fields"],
+    ) == (
+        [],
+        ["rule_id"],
+        {"available": ["url", "detail"], "default": ["url", "detail"]},
+    )
+
+
 def test_option_details() -> None:
     entry = _entry(run_cli("commands").json(), "init")
     option = next(option for option in entry["options"] if option["name"] == "--workspace")

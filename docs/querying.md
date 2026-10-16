@@ -1,6 +1,6 @@
 # Querying a Crawl
 
-How to read a Crawl's Issues with `spider issues`. The spec is [openspec/changes/050-add-query-and-segments/specs/querying/spec.md](../openspec/changes/050-add-query-and-segments/specs/querying/spec.md), and terms follow [CONTEXT.md](../CONTEXT.md). The Rules behind the Issues are described in [rules.md](rules.md).
+How to read a Crawl's Issues with `spider issues`, and one Issue with `spider issue <rule-id>`. The spec is [openspec/changes/050-add-query-and-segments/specs/querying/spec.md](../openspec/changes/050-add-query-and-segments/specs/querying/spec.md), and terms follow [CONTEXT.md](../CONTEXT.md). The Rules behind the Issues are described in [rules.md](rules.md).
 
 Every query Command reads the Crawl that `--crawl` selects: `latest` (the default, the Crawl that started last), a crawl id, or the path of a crawl file. It never changes the crawl file. In WAL mode, the default, each run reads one snapshot of it, so its numbers agree with each other even while the Crawl is still writing. A crawl file in rollback-journal mode, such as one on a network share, is read statement by statement instead, so a run during a Crawl may see rows that one of its statements missed.
 
@@ -45,16 +45,23 @@ Each item is:
 
 **Paging:** the list is paged as every list Command is ([cli.md](cli.md#lists-paging-fields-and-cursors)), with `--limit`, `--cursor` and `--fields`. A cursor is bound to the Crawl it was read from, by its id, and to the filters: reused after a new Crawl started, or with other filters, it fails with `invalid_cursor`. A Crawl holds at most one item per Rule, so the default `--limit` of 50 shows them all.
 
-## The Affected URLs of one Issue
+## The Affected URLs of one Issue: `spider issue <rule-id>`
 
-Given a Rule id, the detail of one Issue returns the Rule and a page of its Affected URLs:
+`spider issue <rule-id>` returns the Rule and a page of its Affected URLs; `spider issues` takes no Rule id:
+
+```
+spider issue title-missing
+spider issue internal-4xx --fields url --limit 100
+```
+
+Its output:
 
 ```json
 {"rule": {...}, "total": 1, "items": [{"url": "https://example.com/gone", "detail": {"status_code": 404}}], "next_cursor": null}
 ```
 
 - `rule` is the Rule as the Crawl's `rules` table records it: `rule_id`, `category`, `issue_type`, `priority`, `description`, `why_it_matters`, `how_to_fix`, `thresholds` and `reproduce_sql`. `thresholds` maps each threshold name to the value that applied to this Crawl. `reproduce_sql` is the Rule's query: run it with `spider sql` to read the Affected URLs as they are now.
-- Each item is `{url, detail}`. `url` is the URL as the `urls` table records it, the form that `spider sql` returns. `detail` is the JSON object of the values the Rule measured for that URL, or `null` for a Rule that measures none.
+- Each item is `{url, detail}`, the fields `--fields` chooses from. `url` is the URL as the `urls` table records it, the form that `spider sql` returns. `detail` is the JSON object of the values the Rule measured for that URL, or `null` for a Rule that measures none.
 - `total` counts every Affected URL. A Rule that did not fire has `total` 0 and no items.
 - **Order and paging:** the Affected URLs come in `url` order, paged by keyset with `--limit` and `--cursor`: each page starts after the last URL of the one before, so the pages of a stored Issue never repeat or skip a URL. On an Issue computed live, an Affected URL that appears between two pages and sorts before the cursor is not shown, and `total` can change from page to page. A cursor is bound to the Crawl and the Rule.
 - **Unknown rule id:** it fails with `rule_not_found` (exit code 4), whose hint points to `spider rules list` and whose `details.suggestions` lists the closest Rule ids of the Crawl's `rules` table.
@@ -63,4 +70,4 @@ Given a Rule id, the detail of one Issue returns the Rule and a page of its Affe
 
 On a Crawl of about 500,000 URLs, what an index serves decides whether a call takes milliseconds or seconds:
 - **`spider issues`:** a stored list is one scan of `affected_urls`' primary key, grouped by Rule. A live list runs every enabled Rule's query.
-- **One Issue:** a stored Issue reads the Rule's rows of `affected_urls` by their key prefix, joins them to `urls` by key and sorts them by `url` for each page, so its cost grows with the Issue, not with the Crawl. A live Issue runs the Rule's query on every call.
+- **`spider issue <rule-id>`:** a stored Issue reads the Rule's rows of `affected_urls` by their key prefix, joins them to `urls` by key and sorts them by `url` for each page, so its cost grows with the Issue, not with the Crawl. A live Issue runs the Rule's query on every call.

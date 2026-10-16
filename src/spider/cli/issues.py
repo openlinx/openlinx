@@ -1,4 +1,4 @@
-"""`spider issues` (050-add-query-and-segments D14)."""
+"""`spider issues` and `spider issue` (050-add-query-and-segments D14)."""
 
 from pathlib import Path
 from typing import Annotated
@@ -11,9 +11,12 @@ from spider.naming import APP_NAME
 from spider.output.paging import Page
 from spider.output.writer import Format
 from spider.services.query import (
+    AFFECTED_URL_FIELDS,
+    ISSUE,
     ISSUE_FIELDS,
     ISSUES,
     QueryRequest,
+    issue_detail,
     issue_filters,
     issue_list,
 )
@@ -76,6 +79,37 @@ def issues(
             priorities=priorities or (),
             categories=categories or (),
         ),
+        limit=limit,
+        cursor=cursor,
+        fields=fields,
+    )
+
+
+@command_meta(
+    name=ISSUE,
+    output="list",
+    formats=[Format.JSON, Format.JSONL, Format.TABLE],
+    fields=AFFECTED_URL_FIELDS,
+    examples=[
+        Example(
+            f"{APP_NAME} {ISSUE} title-missing",
+            "Show the Rule title-missing as the Crawl recorded it, and its Affected URLs.",
+        )
+    ],
+)
+def issue(
+    rule_id: Annotated[str, typer.Argument(help="The Rule id, as spider issues lists it.")],
+    workspace_dir: WorkspaceOpt = None,
+    crawl: CrawlOpt = LATEST,
+    output_format: FormatOpt = Format.JSON,
+    limit: LimitOpt = 50,
+    cursor: CursorOpt = None,
+    fields: FieldsOpt = None,
+) -> Page:
+    """Show one Issue: its Rule, with the guidance and reproducing query, and its Affected URLs."""
+    return issue_detail(
+        QueryRequest(cwd=Path.cwd(), home=Path.home(), workspace=workspace_dir, crawl=crawl),
+        rule_id,
         limit=limit,
         cursor=cursor,
         fields=fields,
