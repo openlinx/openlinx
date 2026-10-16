@@ -44,6 +44,7 @@ class Requester:
         async with self._limits.host(host):
             await self._gate.wait_turn(host)
             async with self._limits.request():
+                await self._gate.started(host)
                 yield
 
     async def _send(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
