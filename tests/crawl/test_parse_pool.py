@@ -713,6 +713,19 @@ def test_a_page_that_takes_too_long_to_prepare_is_recorded(
 
 
 @pytest.mark.slow
+def test_the_crawl_continues_after_a_preparation_timeout(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SLOW_SITE)
+
+    # One worker: /ok is prepared by the replacement of the worker that /slow held.
+    result = crawl_with_a_short_deadline(server.url("/"))
+
+    parsed = query(result.crawl_file, "SELECT parsed FROM urls WHERE url = ?", (server.url("/ok"),))
+    assert (parsed, result.summary.state) == ([(1,)], "completed")
+
+
+@pytest.mark.slow
 @pytest.mark.parse_pool
 def test_the_number_of_parse_workers_is_reported(
     temp_workspace: TempWorkspace, fixture_site: StartSite
