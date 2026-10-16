@@ -11,7 +11,7 @@ from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.noscript import MARKER, without_noscript
-from spider.crawl.pages import Extractor, PageInput, PageSettings, PreparedPage, prepare_page
+from spider.crawl.pages import PageInput, PageSettings, PreparedPage, extractor, prepare_page
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 
@@ -41,7 +41,7 @@ def _prepared(html: str) -> tuple[PreparedPage, _Head]:
         response_time_ms=1,
     )
     settings = PageSettings(
-        scope=scope_rules(SITE), extractors=(Extractor("head", _head, None),), strip_params=None
+        scope=scope_rules(SITE), extractors=(extractor("head", _head, None),), strip_params=None
     )
     page = prepare_page(SITE, response, settings)
     head = dict(page.outputs)["head"]

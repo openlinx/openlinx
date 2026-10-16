@@ -13,7 +13,7 @@ from sqlalchemy import Connection, text
 
 from spider.clock import Clock
 from spider.crawl.hooks import Hooks, Pass, PassContext, UrlResult, handler
-from spider.crawl.pages import Extractor, PageInput
+from spider.crawl.pages import Extractor, PageInput, extractor
 from spider.output.reporter import Collected
 from spider.services.hooks import default_hooks
 from spider.store.crawls import crawl_summary
@@ -211,7 +211,7 @@ def test_an_extractor_error_is_recorded(
     server = fixture_site(BOOM_SITE)
 
     result = crawl_result(
-        server.url("/"), _with_extractors(Extractor("exploding", _exploding, None))
+        server.url("/"), _with_extractors(extractor("exploding", _exploding, None))
     )
     ((parsed, parse_error, message),) = query(
         result.crawl_file,
@@ -228,7 +228,7 @@ def test_the_crawl_continues_after_an_extractor_error(
     server = fixture_site(BOOM_SITE)
 
     result = crawl_result(
-        server.url("/"), _with_extractors(Extractor("exploding", _exploding, None))
+        server.url("/"), _with_extractors(extractor("exploding", _exploding, None))
     )
 
     assert query(
@@ -242,7 +242,7 @@ def test_links_of_a_page_whose_extractor_failed_are_followed(
     server = fixture_site(BOOM_SITE)
 
     result = crawl_result(
-        server.url("/"), _with_extractors(Extractor("exploding", _exploding, None))
+        server.url("/"), _with_extractors(extractor("exploding", _exploding, None))
     )
 
     assert query(
@@ -273,7 +273,7 @@ def test_handlers_get_the_outputs_of_the_extractors_that_did_not_fail(
 ) -> None:
     server = fixture_site(BOOM_SITE)
     hooks = _with_extractors(
-        Extractor("exploding", _exploding, None), Extractor("found", _found, None)
+        extractor("exploding", _exploding, None), extractor("found", _found, None)
     )
     hooks = replace(
         hooks,
@@ -304,7 +304,7 @@ def test_parse_failures_are_counted_in_one_warning(
     )
 
     result = crawl_result(
-        server.url("/"), _with_extractors(Extractor("exploding", _exploding, None))
+        server.url("/"), _with_extractors(extractor("exploding", _exploding, None))
     )
 
     assert [
@@ -471,7 +471,7 @@ def test_an_extractor_that_returns_no_struct_is_an_extractor_error(
     server = fixture_site(BOOM_SITE)
 
     result = crawl_result(
-        server.url("/"), _with_extractors(Extractor("loose", _not_a_struct, None))
+        server.url("/"), _with_extractors(extractor("loose", _not_a_struct, None))
     )
 
     assert query(

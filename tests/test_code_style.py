@@ -501,7 +501,7 @@ def test_a_request_outside_the_requester_is_named() -> None:
 
 # Built only through their generic factories, which check the type parameter where the hooks are
 # registered: one built in place inside Hooks(...) takes it as Any (020 D9).
-FACTORIES = {"Handler": "src/spider/crawl/hooks.py"}
+FACTORIES = {"Handler": "src/spider/crawl/hooks.py", "Extractor": "src/spider/crawl/pages.py"}
 
 
 def factory_violations(sources: Mapping[str, str]) -> list[str]:
@@ -533,9 +533,12 @@ def test_a_hook_built_outside_its_factory_is_named() -> None:
         "tests/crawl/test_hooks.py": "hooks = Hooks(handlers=(Handler('x', rows, write),))\n",
         "src/spider/services/hooks.py": "h = hooks.Handler('x', rows, write)\n",
         "src/spider/crawl/hooks.py": "def handler(n, h, w):\n    return Handler(n, h, w)\n",
+        "src/spider/services/pages.py": "e = pages.Extractor('x', extract, None)\n",
+        "src/spider/crawl/pages.py": "def extractor(n, e, c):\n    return Extractor(n, e, c)\n",
     }
 
     assert factory_violations(sources) == [
         "tests/crawl/test_hooks.py:1 builds Handler(...) outside its factory",
         "src/spider/services/hooks.py:1 builds Handler(...) outside its factory",
+        "src/spider/services/pages.py:1 builds Extractor(...) outside its factory",
     ]

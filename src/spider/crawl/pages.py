@@ -51,17 +51,32 @@ class PageInput(msgspec.Struct, frozen=True, kw_only=True):
 
 @dataclass(frozen=True, slots=True)
 class Extractor[C: msgspec.Struct | None]:
-    """Pure and module-level, so that a 026 worker imports it by name; its config, resolved
-    where the hooks are built, travels with it in the settings snapshot (design D9)."""
+    """Pure and module-level, so that a 026 worker imports it by name; its config, a struct
+    with frozen fields resolved where the hooks are built, travels with it in the settings
+    snapshot (design D9)."""
 
     name: str
     extract: Callable[[LexborHTMLParser, PageInput, C], msgspec.Struct]
     config: C
 
     def __post_init__(self) -> None:
-        # Shared by every Page of the Crawl, and by every 026 worker: no one may change it.
-        if self.config is not None and not self.config.__struct_config__.frozen:
-            raise TypeError(f"the config of the extractor {self.name} is not a frozen struct")
+        config: object = self.config
+        # Shared by every Page of the Crawl and by every 026 worker. The check is shallow: a field
+        # may still hold a mutable value.
+        if config is not None and not (
+            isinstance(config, msgspec.Struct) and config.__struct_config__.frozen
+        ):
+            raise TypeError(
+                f"the config of the extractor {self.name} is not a struct with frozen fields"
+            )
+
+
+def extractor[C: msgspec.Struct | None](
+    name: str, extract: Callable[[LexborHTMLParser, PageInput, C], msgspec.Struct], config: C
+) -> Extractor[Any]:
+    """The one way to build an extractor: mypy checks C here, where the extractor is registered,
+    since an Extractor built in place inside Hooks(...) takes C as Any (design D9)."""
+    return Extractor(name, extract, config)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

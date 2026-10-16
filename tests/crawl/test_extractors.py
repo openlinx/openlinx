@@ -8,7 +8,7 @@ import pytest
 from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.fetcher import FetchResult
-from spider.crawl.pages import Extractor, PageInput, PageSettings, prepare_page
+from spider.crawl.pages import PageInput, PageSettings, extractor, prepare_page
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 
@@ -37,7 +37,7 @@ def _greet(tree: LexborHTMLParser, page: PageInput, config: Greeting) -> Greeted
 def test_an_extractor_gets_its_own_config() -> None:
     settings = PageSettings(
         scope=scope_rules(SITE),
-        extractors=(Extractor("greeting", _greet, Greeting("hi")),),
+        extractors=(extractor("greeting", _greet, Greeting("hi")),),
         strip_params=None,
     )
 
@@ -45,10 +45,10 @@ def test_an_extractor_gets_its_own_config() -> None:
 
 
 def test_an_extractor_and_its_config_survive_the_trip_to_a_worker_process() -> None:
-    extractor = Extractor("greeting", _greet, Greeting("hi"))
+    greeting = extractor("greeting", _greet, Greeting("hi"))
 
     # Our own bytes, as 026's pool sends them, never data from outside.
-    assert pickle.loads(pickle.dumps(extractor)) == extractor  # noqa: S301
+    assert pickle.loads(pickle.dumps(greeting)) == greeting  # noqa: S301
 
 
 class Mutable(msgspec.Struct):
@@ -61,4 +61,14 @@ def _mutable(tree: LexborHTMLParser, page: PageInput, config: Mutable) -> Greete
 
 def test_an_extractor_s_config_must_be_frozen() -> None:
     with pytest.raises(TypeError, match="frozen"):
-        Extractor("mutable", _mutable, Mutable("hi"))
+        extractor("mutable", _mutable, Mutable("hi"))
+
+
+def _from_a_dict(tree: LexborHTMLParser, page: PageInput, config: dict[str, str]) -> Greeted:
+    return Greeted(config["text"])
+
+
+def test_an_extractor_s_config_must_be_a_struct() -> None:
+    with pytest.raises(TypeError, match="struct"):
+        # A wrong call on purpose: mypy refuses it, and the check must refuse it at run time too.
+        extractor("dict", _from_a_dict, {"text": "hi"})  # type: ignore[type-var]
