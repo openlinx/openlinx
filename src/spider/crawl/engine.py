@@ -13,7 +13,7 @@ from spider.crawl.fetcher import FetchFailure, FetchResult
 from spider.crawl.hooks import Handler, UrlResult
 from spider.crawl.links import DiscoveredLink
 from spider.crawl.pages import PageSettings, is_html_type, response_links
-from spider.crawl.politeness import RateGate, RequestLimits
+from spider.crawl.politeness import BLOCKING_RUN, BlockingRuns, RateGate, RequestLimits
 from spider.crawl.requester import Requester, UrlLimitRefused
 from spider.crawl.robots import OriginRobots
 from spider.crawl.robots_loader import RobotsLoader
@@ -24,6 +24,7 @@ from spider.output.codes import (
     HANDLER_FAILED,
     MAX_URLS_REACHED,
     PARSE_FAILED,
+    POSSIBLE_BLOCKING,
     RECORD_FAILED,
     ROBOTS_UNREACHABLE,
     SEED_BASE_MISMATCH,
@@ -125,6 +126,7 @@ class _Run:
     limits: RequestLimits
     requester: Requester
     robots: RobotsLoader
+    blocking: BlockingRuns
     # The checks in flight, which never hold the depth barrier (design D3).
     checks: set[asyncio.Task[None]]
 
@@ -140,6 +142,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         limits=limits,
         requester=requester,
         robots=RobotsLoader(requester, context.writer, context.settings.robots_user_agent),
+        blocking=BlockingRuns(),
         checks=set(),
     )
     decision = context.scope.decide(seed)
@@ -301,6 +304,9 @@ async def _unit_of(
     response = await run.requester.request_url(queued.url)
     if isinstance(response, UrlLimitRefused):
         return None
+    status_code = None if isinstance(response, FetchFailure) else response.status_code
+    if decision.is_internal and run.blocking.responded(url_host(queued.url), status_code):
+        _warn_of_possible_blocking(context, url_host(queued.url))
     if isinstance(response, FetchFailure):
         unit = _record_error(
             context,
@@ -466,6 +472,19 @@ def _warn_of_an_unreachable_robots_txt(
             "requested.",
             hint="Run the Crawl again later, or give --ignore-robots to crawl the origin anyway.",
             details={"origin": origin, "host": url_host(url), "status_code": status_code},
+        )
+    )
+
+
+def _warn_of_possible_blocking(context: CrawlContext, host: str) -> None:
+    # Once per host, by the warning log (design D10).
+    context.reporter.warn(
+        Diagnostic.of(
+            POSSIBLE_BLOCKING,
+            f"{BLOCKING_RUN} responses in a row from {host} had status 403 or 429, so the "
+            "host may be blocking the Crawl, which went on.",
+            hint="Crawl the site again more slowly, with a lower --rate or --concurrency.",
+            details={"host": host, "count": BLOCKING_RUN},
         )
     )
 

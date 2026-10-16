@@ -206,6 +206,14 @@ ROBOTS_UNREACHABLE = _declare(
     "URLs was requested; the hint names --ignore-robots, and details.origin, details.host and "
     "details.status_code say which.",
 )
+POSSIBLE_BLOCKING = _declare(
+    "possible_blocking",
+    "warning",
+    None,
+    "10 responses in a row from an Internal host had status 403 or 429, so it may be "
+    "blocking the Crawl, which went on; the hint names --rate and --concurrency, and "
+    "details.host and details.count say which host and how many responses.",
+)
 PARSE_FAILED = _declare(
     "parse_failed",
     "warning",
