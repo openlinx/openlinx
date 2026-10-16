@@ -2,9 +2,11 @@
 
 import asyncio
 import gc
+import json
 import multiprocessing
 import os
 import pickle
+import subprocess
 import sys
 import threading
 import time
@@ -46,10 +48,12 @@ from spider.services.hooks import default_page_executor
 from spider.store.records import SecretNames
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Route, Site
+from tests.fixture_site.server import ServerHandle
 from tests.support.app import settings_tables
-from tests.support.cli import run_cli, run_cli_process
+from tests.support.cli import PROCESS_TIMEOUT, run_cli, run_cli_process
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
+from tests.support.processes import python_command
 from tests.support.workspace import TempWorkspace
 
 SITE = "https://site.test"
@@ -845,6 +849,42 @@ def test_the_number_of_parse_workers_is_reported(
         "crawl_started",
         default_workers(),
     )
+
+
+# Long enough for the test to list the crawl process's children while /held is answered.
+HELD_SECONDS = 3.0
+HELD_SITE = Site(
+    routes={
+        "/": Page(body='<a href="/held">Held</a>'),
+        "/held": Page(body="held", delay=HELD_SECONDS),
+    }
+)
+
+
+def requested(server: ServerHandle, path: str) -> None:
+    """Returns once the fixture site has received `path`, or fails the test."""
+    deadline = time.monotonic() + PROCESS_TIMEOUT
+    while not any(request.path == path for request in server.requests):
+        assert time.monotonic() < deadline, f"{path} was not requested"
+        time.sleep(0.05)
+
+
+@pytest.mark.slow
+def test_no_parse_worker_outlives_a_completed_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(HELD_SITE)
+    command = python_command("-m", "spider", "crawl", server.url("/"))
+    with subprocess.Popen(
+        command.argv, env=command.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    ) as crawl:
+        # / has been prepared, so the workers are running.
+        requested(server, "/held")
+        children = psutil.Process(crawl.pid).children(recursive=True)
+        stdout, _ = crawl.communicate(timeout=PROCESS_TIMEOUT)
+    _, running = psutil.wait_procs(children, timeout=10)
+
+    assert (json.loads(stdout)["state"], len(children) > 0, running) == ("completed", True, [])
 
 
 @pytest.mark.slow

@@ -73,7 +73,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 
 ## 4. Shutdown and Windows consoles
 
-- [ ] 4.1 [Subprocess] Drive "No parse worker outlives a completed Crawl": each worker gets a stop message and is joined (design D4).
+- [x] 4.1 [Subprocess] Drive "No parse worker outlives a completed Crawl": each worker gets a stop message and is joined (design D4).
 - [ ] 4.2 [Subprocess] Drive "An interrupt ends the parse workers": workers ignore SIGINT and SIGBREAK, and a worker still preparing a Page when the grace period of `020`'s `StopSignal` ends is killed, its URL left `queued`. Done when, besides: `close()` never waits without a bound on a worker, with a test each for a stop while a worker is on a Page that never ends, and for a worker that is never ready after another worker broke the pool (ruled 2026-10-16). `close()` keeps the busy Pages' deadline timers and the workers' readiness timers armed until its workers have stopped, since they are the only bound on a stop during a Page that never ends; 4.2 decides how (the approval of group 3, 2026-10-16).
 - [ ] 4.3 Check: a worker over its deadline is replaced at once, never on the end of file of its result pipe: `_overdue` drops it from the workers alive and watched and starts the replacement itself, so a process that inherited the worker's pipe cannot keep the Crawl waiting for good (design D8, ruled 2026-10-16). Tested on POSIX only, with an extractor whose child process inherits the pipe, the skip reason named; on Windows the kill covers it. Design Risks says so in the same task.
 - [ ] 4.4 [Subprocess, Windows in CI] Drive "Parse workers open no console window (Windows)".
