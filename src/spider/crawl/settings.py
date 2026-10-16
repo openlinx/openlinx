@@ -38,6 +38,7 @@ class CrawlSettings(BaseModel):
     )
     rate: float | None = Field(
         None,
+        strict=True,
         description="The most requests per second that start to one host, robots.txt's "
         "included: a finite number above 0. No limit when unset.",
     )
@@ -78,7 +79,10 @@ class CrawlSettings(BaseModel):
     @classmethod
     def _is_a_rate(cls, rate: float | None) -> float | None:
         if rate is not None and not is_rate(rate):
-            raise ValueError("a rate is a finite number of requests per second above 0")
+            raise ValueError(
+                "a rate is a finite number of requests per second above 0, whose interval "
+                "1/rate is finite"
+            )
         return rate
 
     @field_validator("robots_user_agent")

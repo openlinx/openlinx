@@ -55,3 +55,19 @@ async def test_requests_that_the_global_cap_held_back_start_one_interval_apart()
         starts.append(clock.monotonic())
 
     assert (turns, starts) == ([0.0, 0.5, 1.0], [5.0, 5.5, 6.0])
+
+
+async def test_a_start_whose_wait_is_cancelled_is_given_back() -> None:
+    clock = FakeClock()
+    gate = RateGate(clock, 2)
+    await gate.started("a.test")
+    waiting = asyncio.create_task(gate.started("a.test"))
+    # It takes the start at 0.5 and waits for it.
+    await asyncio.sleep(0)
+    waiting.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiting
+
+    await gate.started("a.test")
+
+    assert clock.monotonic() == 0.5

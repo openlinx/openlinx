@@ -212,7 +212,7 @@ POSSIBLE_BLOCKING = _declare(
     None,
     "10 responses in a row from an Internal host had status 403 or 429, so it may be "
     "blocking the Crawl, which went on; the hint names --rate and --concurrency, and "
-    "details.host and details.count say which host and how many responses.",
+    "details.host says which host, and details.count is the length of the run that raises it.",
 )
 PARSE_FAILED = _declare(
     "parse_failed",

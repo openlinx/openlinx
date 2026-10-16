@@ -34,7 +34,8 @@ def _rate(rate: float | None) -> float | None:
     # The settings file is checked by CrawlSettings' validator, through the same rule.
     if rate is not None and not is_rate(rate):
         raise typer.BadParameter(
-            f"{rate} is not a rate: give a finite number of requests per second above 0."
+            f"{rate} is not a rate: give a finite number of requests per second above 0, "
+            "whose interval 1/rate is finite."
         )
     return rate
 

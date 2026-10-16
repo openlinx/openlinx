@@ -333,7 +333,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared, and the run of consecutive 403 and 429 responses is kept per Internal host as the spec says.
 - [x] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
 - [x] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
-- [ ] 11.6 Fix the review of group 11, each fix red first or red by mutation:
+- [x] 11.6 Fix the review of group 11, each fix red first or red by mutation:
   - The robots.txt 403 of a second Internal origin of the host falls inside a run of the URLs' own 403s, so counting it once goes red.
   - A request without a response counted as a 403 goes red.
   - The wait guard resolves module aliases, covers `asyncio`'s submodules, `asyncio.as_completed` with a timeout and `reschedule`, and names its one exemption.

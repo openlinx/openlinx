@@ -28,6 +28,7 @@ class Requester:
         exact."""
         async with self._slots(url):
             if not self._limits.start_request():
+                # The start the gate gave it stays taken: after a refusal, no request starts.
                 return UrlLimitRefused()
             return await self._send(url)
 

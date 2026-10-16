@@ -7,8 +7,9 @@ from spider.clock import Clock
 
 
 def is_rate(rate: float) -> bool:
-    """The one rule of --rate and crawl.rate: a finite number of requests per second above 0."""
-    return math.isfinite(rate) and rate > 0
+    """The one rule of --rate and crawl.rate: a finite number of requests per second above 0,
+    whose interval 1/rate is finite too."""
+    return math.isfinite(rate) and rate > 0 and math.isfinite(1 / rate)
 
 
 class RateGate:
@@ -46,7 +47,17 @@ class RateGate:
         # Taken before the wait, so the next caller counts from this start.
         self._last_starts[host] = start
         if start > now:
-            await self._clock.sleep(start - now)
+            try:
+                await self._clock.sleep(start - now)
+            except asyncio.CancelledError:
+                # A cancelled request never starts: the next caller counts from the start
+                # before it, unless another caller has taken a start since.
+                if self._last_starts[host] == start:
+                    if last is None:
+                        del self._last_starts[host]
+                    else:
+                        self._last_starts[host] = last
+                raise
 
 
 # Consecutive 403 and 429 responses of one host before the warning that it may be blocking.
