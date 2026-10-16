@@ -8,7 +8,7 @@ import multiprocessing
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.pages import Extractor, PageInput
+from spider.crawl.pages import PageInput, extractor
 
 if multiprocessing.current_process().name != "MainProcess":
     raise ImportError("a parse worker cannot import this module")
@@ -18,8 +18,8 @@ class Nothing(msgspec.Struct, frozen=True):
     pass
 
 
-def _nothing(tree: LexborHTMLParser, page: PageInput) -> Nothing:
+def _nothing(tree: LexborHTMLParser, page: PageInput, config: None) -> Nothing:
     return Nothing()
 
 
-UNIMPORTABLE_IN_WORKERS = Extractor("unimportable_in_workers", _nothing)
+UNIMPORTABLE_IN_WORKERS = extractor("unimportable_in_workers", _nothing, None)

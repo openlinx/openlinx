@@ -1,24 +1,30 @@
 """The hooks of a Crawl: handlers, passes and extractors (020-add-crawl-core D9; seam 2)."""
 
 import sqlite3
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
+from typing import Any
 
 import msgspec
 import pytest
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, text
 
-from spider.crawl.hooks import Handler, Hooks, Pass, UrlResult
-from spider.crawl.pages import Extractor, PageInput
+from spider.clock import Clock
+from spider.crawl.hooks import Hooks, Pass, PassContext, UrlResult, handler
+from spider.crawl.pages import Extractor, PageInput, extractor
+from spider.output.reporter import Collected
 from spider.services.hooks import default_hooks
 from spider.store.crawls import crawl_summary
 from spider.store.records import CrawlState
-from spider.store.writer import CrawlWriter, CrawlWriterReplayError
+from spider.store.writer import CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Robots, Site
+from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
+from tests.support.sites import LATE_SHORTER_PATH, NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
 
@@ -58,8 +64,7 @@ def test_a_registered_handler_sees_every_url_once(
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("seen", _seen)),
-        row_writers={**hooks.row_writers, Seen: _write_seen},
+        handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)),
     )
 
     result = crawl_result(server.url("/"), hooks, exclude=["/logout$"])
@@ -78,14 +83,35 @@ def test_a_registered_handler_sees_every_url_once(
     ]
 
 
+@pytest.mark.slow
+def test_a_url_skipped_beyond_the_depth_limit_reaches_its_handlers_once_requeued(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(LATE_SHORTER_PATH)
+    hooks = default_hooks()
+    hooks = replace(
+        hooks,
+        handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)),
+    )
+
+    result = crawl_result(server.url("/"), hooks, max_depth=2)
+
+    assert query(
+        result.crawl_file,
+        "SELECT test_seen.state FROM test_seen JOIN urls ON urls.id = test_seen.url_id "
+        "WHERE urls.url = ?",
+        [server.url("/c")],
+    ) == [("fetched",)]
+
+
 def test_post_crawl_passes_run_before_a_crawl_is_completed(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
     seen: list[CrawlState] = []
 
-    async def record_state(writer: CrawlWriter) -> None:
-        seen.append((await writer.run_async(crawl_summary())).state)
+    async def record_state(context: PassContext) -> None:
+        seen.append((await context.writer.run_async(crawl_summary())).state)
 
     hooks = default_hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("state", record_state)))
@@ -95,17 +121,72 @@ def test_post_crawl_passes_run_before_a_crawl_is_completed(
     assert seen == ["running"]
 
 
+def test_post_crawl_passes_run_in_the_order_the_hooks_declare(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
+    ran: list[str] = []
+
+    async def first(context: PassContext) -> None:
+        ran.append("first")
+
+    async def second(context: PassContext) -> None:
+        ran.append("second")
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("first", first), Pass("second", second)))
+
+    crawl_result(server.url("/"), hooks)
+
+    assert ran == ["first", "second"]
+
+
+def test_a_post_crawl_pass_gets_the_clock_of_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
+    clock = FakeClock()
+    clocks: list[Clock] = []
+
+    async def record_the_clock(context: PassContext) -> None:
+        clocks.append(context.clock)
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("clock", record_the_clock)))
+
+    crawl_result(server.url("/"), hooks, clock=clock)
+
+    assert clocks == [clock]
+
+
+def test_post_crawl_passes_run_when_the_url_limit_stops_a_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+    runs: list[str] = []
+
+    async def count_runs(context: PassContext) -> None:
+        runs.append("run")
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
+
+    crawl_result(server.url("/"), hooks, max_urls=3)
+
+    assert runs == ["run"]
+
+
 class Found(msgspec.Struct, frozen=True):
     url: str
 
 
-def _exploding(tree: LexborHTMLParser, page: PageInput) -> Found:
+def _exploding(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
     if page.url.endswith("/boom"):
         raise ValueError(page.url)
     return Found(page.url)
 
 
-def _found(tree: LexborHTMLParser, page: PageInput) -> Found:
+def _found(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
     return Found(page.url)
 
 
@@ -119,7 +200,7 @@ BOOM_SITE = Site(
 )
 
 
-def _with_extractors(*extractors: Extractor) -> Hooks:
+def _with_extractors(*extractors: Extractor[Any]) -> Hooks:
     hooks = default_hooks()
     return replace(hooks, extractors=(*hooks.extractors, *extractors))
 
@@ -129,7 +210,9 @@ def test_an_extractor_error_is_recorded(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
+    result = crawl_result(
+        server.url("/"), _with_extractors(extractor("exploding", _exploding, None))
+    )
     ((parsed, parse_error, message),) = query(
         result.crawl_file,
         "SELECT parsed, parse_error, parse_error_message FROM urls WHERE url = ?",
@@ -144,7 +227,9 @@ def test_the_crawl_continues_after_an_extractor_error(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
+    result = crawl_result(
+        server.url("/"), _with_extractors(extractor("exploding", _exploding, None))
+    )
 
     assert query(
         result.crawl_file, "SELECT parsed FROM urls WHERE url = ?", [server.url("/ok")]
@@ -156,7 +241,9 @@ def test_links_of_a_page_whose_extractor_failed_are_followed(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
+    result = crawl_result(
+        server.url("/"), _with_extractors(extractor("exploding", _exploding, None))
+    )
 
     assert query(
         result.crawl_file, "SELECT fetch_state FROM urls WHERE url = ?", [server.url("/deeper")]
@@ -185,11 +272,12 @@ def test_handlers_get_the_outputs_of_the_extractors_that_did_not_fail(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = _with_extractors(Extractor("exploding", _exploding), Extractor("found", _found))
+    hooks = _with_extractors(
+        extractor("exploding", _exploding, None), extractor("found", _found, None)
+    )
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("outputs", _outputs)),
-        row_writers={**hooks.row_writers, Outputs: _write_outputs},
+        handlers=(*hooks.handlers, handler("outputs", _outputs, _write_outputs)),
     )
 
     result = crawl_result(server.url("/"), hooks)
@@ -215,7 +303,9 @@ def test_parse_failures_are_counted_in_one_warning(
         )
     )
 
-    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
+    result = crawl_result(
+        server.url("/"), _with_extractors(extractor("exploding", _exploding, None))
+    )
 
     assert [
         (warning["code"], warning["details"]["count"]) for warning in result.to_json()["warnings"]
@@ -243,8 +333,7 @@ def test_a_failing_handler_does_not_stop_the_crawl(
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("boom", _boom)),
-        row_writers={**hooks.row_writers, Seen: _write_seen},
+        handlers=(*hooks.handlers, handler("boom", _boom, _write_seen)),
     )
 
     result = crawl_result(server.url("/"), hooks)
@@ -268,8 +357,11 @@ def test_only_the_failing_handlers_rows_are_dropped(
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("boom", _boom_only), Handler("seen", _seen)),
-        row_writers={**hooks.row_writers, Seen: _write_seen},
+        handlers=(
+            *hooks.handlers,
+            handler("boom", _boom_only, _write_outputs),
+            handler("seen", _seen, _write_seen),
+        ),
     )
 
     result = crawl_result(server.url("/"), hooks)
@@ -303,8 +395,7 @@ def _with_row_writer(writer: Callable[[Connection, Unwritable], None]) -> Hooks:
     hooks = default_hooks()
     return replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("unwritable", _unwritable)),
-        row_writers={**hooks.row_writers, Unwritable: writer},
+        handlers=(*hooks.handlers, handler("unwritable", _unwritable, writer)),
     )
 
 
@@ -358,8 +449,7 @@ def test_a_handler_that_fails_midway_keeps_none_of_its_rows(
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("halfway", _seen_then_boom)),
-        row_writers={**hooks.row_writers, Seen: _write_seen},
+        handlers=(*hooks.handlers, handler("halfway", _seen_then_boom, _write_seen)),
     )
 
     result = crawl_result(server.url("/"), hooks)
@@ -371,7 +461,7 @@ def test_a_handler_that_fails_midway_keeps_none_of_its_rows(
     ) == [(0,)]
 
 
-def _not_a_struct(tree: LexborHTMLParser, page: PageInput) -> Found:
+def _not_a_struct(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
     return {"url": page.url}  # type: ignore[return-value]
 
 
@@ -380,7 +470,9 @@ def test_an_extractor_that_returns_no_struct_is_an_extractor_error(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = crawl_result(server.url("/"), _with_extractors(Extractor("loose", _not_a_struct)))
+    result = crawl_result(
+        server.url("/"), _with_extractors(extractor("loose", _not_a_struct, None))
+    )
 
     assert query(
         result.crawl_file,
@@ -394,9 +486,7 @@ class Flaky:
     url_id: int
 
 
-def _flaky_or_unwritable(result: UrlResult) -> tuple[object, ...]:
-    if result.url.endswith("/boom"):
-        return (Unwritable(result.url_id),)
+def _flaky(result: UrlResult) -> tuple[Flaky, ...]:
     return (Flaky(result.url_id),) if result.crawl_depth == 0 else ()
 
 
@@ -417,8 +507,11 @@ def test_a_writer_that_ends_reports_why_it_ended(
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("flaky", _flaky_or_unwritable)),
-        row_writers={**hooks.row_writers, Flaky: _write_flaky([]), Unwritable: _refuse},
+        handlers=(
+            *hooks.handlers,
+            handler("flaky", _flaky, _write_flaky([])),
+            handler("unwritable", _unwritable, _refuse),
+        ),
     )
 
     with pytest.raises(CrawlWriterReplayError):
@@ -462,8 +555,7 @@ def test_a_handler_gets_the_row_values_of_the_url(
     hooks = default_hooks()
     hooks = replace(
         hooks,
-        handlers=(*hooks.handlers, Handler("values", _row_values)),
-        row_writers={**hooks.row_writers, RowValues: _write_row_values},
+        handlers=(*hooks.handlers, handler("values", _row_values, _write_row_values)),
     )
 
     result = crawl_result(server.url("/"), hooks)
@@ -493,3 +585,93 @@ def test_a_handler_gets_the_row_values_of_the_url(
             ),
         ),
     ]
+
+
+def _slowly(
+    writer: Callable[[Connection, Unwritable], None],
+) -> Callable[[Connection, Unwritable], None]:
+    def write(connection: Connection, row: Unwritable) -> None:
+        # Still running when the engine goes on, so the failure reaches it later.
+        time.sleep(0.5)
+        writer(connection, row)
+
+    return write
+
+
+@pytest.mark.slow
+def test_a_check_whose_unit_fails_as_the_frontier_runs_dry_is_requested_once(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<img src="/boom">'),
+                # Answers after the frontier has run dry, so its unit is the last one submitted.
+                "/boom": Page(body="<p>B</p>", delay=0.3),
+            }
+        )
+    )
+
+    crawl_result(server.url("/"), _with_row_writer(_slowly(_refuse)))
+
+    assert [request.path for request in server.requests if request.path == "/boom"] == ["/boom"]
+
+
+# /boom is a check: its unit, slow to fail, is the last one the URL limit waits for.
+LIMIT_SITE = Site(
+    routes={
+        "/": Page(body='<img src="/boom"><a href="/a">A</a><a href="/b">B</a>'),
+        "/boom": Page(body="<p>B</p>"),
+        "/a": Page(body="<p>A</p>"),
+        "/b": Page(body="<p>B</p>"),
+    }
+)
+
+
+@pytest.mark.slow
+def test_a_file_failure_after_the_url_limit_ends_the_crawl_with_that_failure(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(LIMIT_SITE)
+
+    with pytest.raises(sqlite3.OperationalError):
+        crawl_result(server.url("/"), _with_row_writer(_slowly(_refuse_with_the_file)), max_urls=2)
+
+
+@pytest.mark.slow
+def test_a_crawl_that_failed_after_its_url_limit_gives_no_limit_warning(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(LIMIT_SITE)
+    reporter = Collected()
+
+    with pytest.raises(sqlite3.OperationalError):
+        crawl_result(
+            server.url("/"),
+            _with_row_writer(_slowly(_refuse_with_the_file)),
+            reporter=reporter,
+            max_urls=2,
+        )
+
+    assert [warning.code for warning in reporter.warnings] == []
+
+
+def test_a_url_recorded_as_unwritten_keeps_its_robots_txt_verdict(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={**BOOM_SITE.routes, "/robots.txt": Robots("User-agent: *\nDisallow: /boom\n")})
+    )
+
+    result = crawl_result(server.url("/"), _with_row_writer(_refuse), ignore_robots=True)
+
+    assert query(
+        result.crawl_file,
+        "SELECT fetch_error, blocked_by_robots_txt FROM urls WHERE url = ?",
+        [server.url("/boom")],
+    ) == [("record_failed", 1)]
+
+
+def test_a_handler_without_its_writer_cannot_be_built() -> None:
+    with pytest.raises(TypeError):
+        handler("seen", _seen)  # type: ignore[call-arg]

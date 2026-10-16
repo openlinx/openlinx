@@ -1,5 +1,6 @@
 """`spider crawl` over the Crawl Service (020-add-crawl-core D10, D11)."""
 
+import re
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -9,10 +10,23 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
-from spider.naming import APP_NAME
+from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN, ROBOTS_USER_AGENT_PATTERN
+from spider.output.codes import OPTION_CONFLICT
+from spider.output.diagnostics import SpiderError
 from spider.output.writer import Format
+from spider.store.records import ScopeKind
 
 CRAWL = "crawl"
+
+
+def _robots_token(token: str) -> str:
+    # The settings file is checked by CrawlSettings' pattern, which gives settings_invalid.
+    if re.fullmatch(ROBOTS_USER_AGENT_PATTERN, token) is None:
+        raise typer.BadParameter(
+            f"{token!r} is not a robots user-agent token: RFC 9309 allows only letters, "
+            "'_' and '-'."
+        )
+    return token
 
 
 @command_meta(
@@ -57,6 +71,83 @@ def crawl(
         ),
         OptionMeta(setting="crawl.follow_nofollow"),
     ] = False,
+    ignore_robots: Annotated[
+        bool,
+        typer.Option(
+            "--ignore-robots",
+            help="Request URLs that robots.txt disallows; they are still recorded with "
+            "blocked_by_robots_txt = 1.",
+        ),
+        OptionMeta(setting="crawl.ignore_robots"),
+    ] = False,
+    max_depth: Annotated[
+        int | None,
+        typer.Option(
+            "--max-depth",
+            min=0,
+            help="The deepest Crawl Depth whose URLs are requested, the Seed's being 0; "
+            "Resources of followed Pages are requested one deeper. No limit by default.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.max_depth"),
+    ] = None,
+    max_urls: Annotated[
+        int | None,
+        typer.Option(
+            "--max-urls",
+            min=1,
+            help="The most URL requests the Crawl starts; robots.txt requests do not count. "
+            "No limit by default.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.max_urls"),
+    ] = None,
+    robots_user_agent: Annotated[
+        str,
+        typer.Option(
+            "--robots-user-agent",
+            callback=_robots_token,
+            help="The token that selects robots.txt groups and user-agent-prefixed "
+            "X-Robots-Tag values, letters, '_' and '-' only; independent of the User-Agent "
+            "request header.",
+        ),
+        OptionMeta(setting="crawl.robots_user_agent"),
+    ] = DEFAULT_ROBOTS_TOKEN,
+    scope: Annotated[
+        ScopeKind,
+        typer.Option(
+            "--scope",
+            help="Which Internal URLs are in the Scope: host (the Seed hosts), subdomains "
+            "(every host of their registrable domains) or subfolder (the Seed's folder).",
+        ),
+        OptionMeta(setting="crawl.scope"),
+    ] = "host",
+    subdomains: Annotated[
+        bool,
+        typer.Option("--subdomains", help="The same as --scope subdomains."),
+    ] = False,
+    strip_params: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--strip-params",
+            help="Comma-separated glob patterns of query parameter names, such as utm_*, "
+            "removed from every URL before it is recorded or requested. Give it more than once "
+            "for several values.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.strip_params"),
+    ] = None,
+    include: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--include",
+            help="A regular expression, searched for in each normalised URL; when given, an "
+            "Internal URL that matches no include pattern is checked but not followed. Give it "
+            "more than once for several patterns.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.include"),
+    ] = None,
     exclude: Annotated[
         list[str] | None,
         typer.Option(
@@ -87,7 +178,21 @@ def crawl(
         workspace=workspace_dir,
         command_argv=[APP_NAME, *invocation.argv],
         secret_names=secret_names(ctx.command, invocation.settings_tables),
-        flags=setting_flags(ctx),
+        flags=_with_subdomains(setting_flags(ctx)) if subdomains else setting_flags(ctx),
     )
     plan = plan_crawl(request, invocation.settings_tables)
     return start_crawl(plan, SystemClock(), invocation.reporter, default_hooks()).to_json()
+
+
+def _with_subdomains(flags: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """--subdomains has no setting of its own: it is resolved into scope (design D11)."""
+    crawl_flags = flags.get("crawl", {})
+    scope = crawl_flags.get("scope", "subdomains")
+    if scope != "subdomains":
+        raise SpiderError(
+            OPTION_CONFLICT,
+            f"--subdomains means --scope subdomains, so it cannot be given with --scope {scope}.",
+            hint="Give --scope alone, or --subdomains alone.",
+            details={"options": ["--subdomains", "--scope"]},
+        )
+    return {**flags, "crawl": {**crawl_flags, "scope": "subdomains"}}

@@ -46,7 +46,7 @@ SITE = SyntheticSite(
     },
 )
 SCOPE = scope_rules(NormalizedUrl(f"{BASE}/"))
-SETTINGS = PageSettings(SCOPE)
+SETTINGS = PageSettings(scope=SCOPE, strip_params=None)
 
 
 def first(predicate: Callable[[int], bool]) -> int:
@@ -99,7 +99,7 @@ def projected(
     # As the engine takes them: the response's header Links, then the document's.
     links: list[tuple[object, ...]] = [
         (link.target, link.type, link.element, link.attribute, link.declared_in, link.ordinal)
-        for link in (*response_links(url(n), response, SCOPE), *page.document_links)
+        for link in (*response_links(url(n), response, SCOPE, None), *page.document_links)
     ]
     return (links, page.directives)
 
@@ -139,7 +139,11 @@ def test_a_page_whose_links_are_lost_is_prepared_with_its_expected_failure() -> 
 
 
 def _prepare_in_child(n: int, scope: ScopeRules) -> None:
-    prepare_page(url(n), response(n), PageSettings(scope, (END_WORKER_EXTRACTOR,)))
+    prepare_page(
+        url(n),
+        response(n),
+        PageSettings(scope=scope, extractors=(END_WORKER_EXTRACTOR,), strip_params=None),
+    )
 
 
 def test_the_end_worker_extractor_ends_its_process_on_the_marked_page_only() -> None:
@@ -149,7 +153,11 @@ def test_the_end_worker_extractor_ends_its_process_on_the_marked_page_only() -> 
     child.start()
     child.join(60)
 
-    clean = prepare_page(url(0), response(0), PageSettings(SCOPE, (END_WORKER_EXTRACTOR,)))
+    clean = prepare_page(
+        url(0),
+        response(0),
+        PageSettings(scope=SCOPE, extractors=(END_WORKER_EXTRACTOR,), strip_params=None),
+    )
 
     assert (child.exitcode, clean.outputs, clean.parse_error) == (
         END_WORKER_EXIT,

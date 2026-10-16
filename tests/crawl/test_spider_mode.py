@@ -36,7 +36,10 @@ def test_the_request_is_for_the_recorded_url(
     crawl_file = crawled(server.url("/?q=%2F"))
     (url,) = query(crawl_file, "SELECT url FROM urls")[0]
 
-    assert [server.url(request.path) for request in server.requests] == [url]
+    assert [server.url(request.path) for request in server.requests] == [
+        server.url("/robots.txt"),
+        url,
+    ]
 
 
 def test_the_seed_is_kept_as_given_in_seeds(
@@ -169,7 +172,7 @@ def test_an_excluded_url_is_never_requested(
 
     crawled(server.url("/"), "--exclude", "/logout$")
 
-    assert [request.path for request in server.requests] == ["/"]
+    assert [request.path for request in server.requests] == ["/robots.txt", "/"]
 
 
 def test_an_excluded_url_is_recorded_as_skipped(
@@ -315,3 +318,33 @@ def test_a_lower_concurrency_is_honoured(
     crawled(server.url("/"), "--concurrency", "2")
 
     assert server.most_simultaneous == 2
+
+
+def test_urls_that_differ_only_in_stripped_parameters_are_fetched_once(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/p?utm_source=a">A</a><a href="/p?utm_source=b">B</a>'),
+                "/p": Page(body="<p>P</p>"),
+            }
+        )
+    )
+
+    crawled(server.url("/"), "--strip-params", "utm_*")
+
+    assert [request.path for request in server.requests if request.path.startswith("/p")] == ["/p"]
+
+
+def test_the_seed_is_stripped_of_its_parameters_too(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
+
+    crawl_file = crawled(server.url("/?utm_source=mail&id=7"), "--strip-params", "utm_*")
+
+    assert (
+        query(crawl_file, "SELECT url FROM urls"),
+        [request.path for request in server.requests if request.path.startswith("/?")],
+    ) == ([(server.url("/?id=7"),)], ["/?id=7"])

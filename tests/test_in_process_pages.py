@@ -6,7 +6,7 @@ import pytest
 
 from spider.crawl.pages import PageSettings
 from spider.crawl.scope import scope_rules
-from spider.crawl.urls import NormalizedUrl
+from spider.crawl.urls import NormalizedUrl, strip_params_pattern
 from spider.services.hooks import default_hooks
 
 INNER_HELPERS = """
@@ -17,7 +17,7 @@ import msgspec
 
 from spider.aio import loop_factory
 from spider.crawl.fetcher import FetchResult
-from spider.crawl.pages import Extractor, PageSettings
+from spider.crawl.pages import PageSettings, extractor
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.services import crawling
@@ -36,10 +36,12 @@ class Marker(msgspec.Struct, frozen=True):
     pass
 
 
-def prepared(extractor):
+def prepared(built):
     async def prepare():
         executor = crawling.default_page_executor()
-        await executor.start(PageSettings(scope_rules(SEED), (extractor,)))
+        await executor.start(
+            PageSettings(scope=scope_rules(SEED), extractors=(built,), strip_params=None)
+        )
         try:
             return await executor.prepare(SEED, RESPONSE)
         finally:
@@ -49,7 +51,7 @@ def prepared(extractor):
 """
 
 UNPICKLABLE_OUTPUT = """
-def _local_class(tree, page):
+def _local_class(tree, page, config):
     class Local(msgspec.Struct, frozen=True):
         pass
 
@@ -57,15 +59,27 @@ def _local_class(tree, page):
 
 
 def test_an_output_of_a_local_class():
-    prepared(Extractor("local_class", _local_class))
+    prepared(extractor("local_class", _local_class, None))
 """
 
 LOCAL_EXTRACTOR = """
 def test_a_local_extractor():
-    def local(tree, page):
+    def local(tree, page, config):
         return Marker()
 
-    prepared(Extractor("local", local))
+    prepared(extractor("local", local, None))
+"""
+
+LOCAL_CONFIG = """
+def _marker(tree, page, config):
+    return Marker()
+
+
+def test_a_config_of_a_local_class():
+    class Local(msgspec.Struct, frozen=True):
+        pass
+
+    prepared(extractor("marker", _marker, Local()))
 """
 
 
@@ -99,9 +113,25 @@ def test_an_extractor_that_cannot_be_pickled_fails_the_test(pytester: pytest.Pyt
     )
 
 
+def test_an_extractor_config_that_cannot_be_pickled_fails_the_test(
+    pytester: pytest.Pytester,
+) -> None:
+    result = inner_run(pytester, LOCAL_CONFIG)
+
+    result.stdout.fnmatch_lines(
+        [
+            "*ERROR at teardown of test_a_config_of_a_local_class*",
+            "Cannot cross the parse pool: the settings snapshot: PicklingError: *",
+        ]
+    )
+
+
 def test_the_built_in_extractors_reach_a_worker_as_they_are() -> None:
+    # An Extractor's equality takes in its config, and the snapshot's pattern of strip_params.
     settings = PageSettings(
-        scope_rules(NormalizedUrl("https://site.test/")), default_hooks().extractors
+        scope=scope_rules(NormalizedUrl("https://site.test/")),
+        extractors=default_hooks().extractors,
+        strip_params=strip_params_pattern(["utm_*"]),
     )
 
     assert pickle.loads(pickle.dumps(settings, pickle.HIGHEST_PROTOCOL)) == settings  # noqa: S301

@@ -48,6 +48,8 @@ POOL_OUTCOMES = {
     "missing": MISSING_OUTCOME,
     "external": EXTERNAL_OUTCOME,
     "not_followed": NOT_FOLLOWED_OUTCOME,
+    # Requested as a check, as an External URL is; a non-HTML response is never parsed (020 9.1).
+    "resource": EXTERNAL_OUTCOME,
 }
 # Wrong rows named in the problems, at most.
 EXAMPLES = 10

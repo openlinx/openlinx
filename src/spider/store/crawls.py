@@ -130,6 +130,7 @@ def _write_new_file(
                 id=crawl_file.id,
                 crawl_mode=request.crawl_mode,
                 section_crawl=request.section_crawl,
+                scope=dict(request.scope),
                 state="running",
                 started_at=started_at,
                 command_argv=list(request.command_argv),

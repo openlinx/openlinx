@@ -9,7 +9,7 @@ import time
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.pages import Extractor, PageInput
+from spider.crawl.pages import PageInput, extractor
 
 if multiprocessing.current_process().name != "MainProcess":
     time.sleep(120)
@@ -19,8 +19,8 @@ class Nothing(msgspec.Struct, frozen=True):
     pass
 
 
-def _nothing(tree: LexborHTMLParser, page: PageInput) -> Nothing:
+def _nothing(tree: LexborHTMLParser, page: PageInput, config: None) -> Nothing:
     return Nothing()
 
 
-HANGS_IN_WORKERS = Extractor("hangs_in_workers", _nothing)
+HANGS_IN_WORKERS = extractor("hangs_in_workers", _nothing, None)

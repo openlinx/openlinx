@@ -22,13 +22,21 @@ import msgspec
 import psutil
 import pytest
 from selectolax.lexbor import LexborHTMLParser
+from sqlalchemy import Connection
 
 from spider.cli.app import build_app
 from spider.clock import SystemClock
 from spider.crawl import parse_pool
 from spider.crawl.fetcher import FetchResult
-from spider.crawl.hooks import Handler, Hooks, UrlResult
-from spider.crawl.pages import Extractor, PageInput, PageSettings, PreparedPage, prepare_page
+from spider.crawl.hooks import Hooks, UrlResult, handler
+from spider.crawl.pages import (
+    Extractor,
+    PageInput,
+    PageSettings,
+    PreparedPage,
+    extractor,
+    prepare_page,
+)
 from spider.crawl.parse_pool import (
     PREPARE_DEADLINE_SECONDS,
     PoolExecutor,
@@ -117,7 +125,7 @@ def _fork_a_child_that_holds_the_pipes() -> None:
         os._exit(0)
 
 
-def _record_preparer(tree: LexborHTMLParser, page: PageInput) -> Preparer:
+def _record_preparer(tree: LexborHTMLParser, page: PageInput, config: None) -> Preparer:
     global _prepared_here
     _prepared_here += 1
     if page.url.endswith("/die"):
@@ -147,7 +155,7 @@ class Unreadable(msgspec.Struct, frozen=True):
             raise ValueError("an Unreadable is built only in a worker")
 
 
-def _unreadable_on_bad(tree: LexborHTMLParser, page: PageInput) -> msgspec.Struct:
+def _unreadable_on_bad(tree: LexborHTMLParser, page: PageInput, config: None) -> msgspec.Struct:
     return Unreadable(page.url) if page.url.endswith("/bad") else Preparer(os.getpid(), 0)
 
 
@@ -155,14 +163,14 @@ class Holder(msgspec.Struct, frozen=True):
     value: Any
 
 
-def _unpicklable_on_odd(tree: LexborHTMLParser, page: PageInput) -> Holder:
+def _unpicklable_on_odd(tree: LexborHTMLParser, page: PageInput, config: None) -> Holder:
     return Holder((lambda: None) if page.url.endswith("/odd") else None)
 
 
 # Module-level, so that a spawn worker imports them by name.
-RECORD_PREPARER = Extractor("record_preparer", _record_preparer)
-UNREADABLE_ON_BAD = Extractor("unreadable_on_bad", _unreadable_on_bad)
-UNPICKLABLE_ON_ODD = Extractor("unpicklable_on_odd", _unpicklable_on_odd)
+RECORD_PREPARER = extractor("record_preparer", _record_preparer, None)
+UNREADABLE_ON_BAD = extractor("unreadable_on_bad", _unreadable_on_bad, None)
+UNPICKLABLE_ON_ODD = extractor("unpicklable_on_odd", _unpicklable_on_odd, None)
 
 # The scenario's slow parsing, against fetches of a few milliseconds from the fixture site.
 SLOW_SECONDS = 1.0
@@ -172,23 +180,34 @@ class Slept(msgspec.Struct, frozen=True):
     pass
 
 
-def _slow_everywhere(tree: LexborHTMLParser, page: PageInput) -> Slept:
+def _slow_everywhere(tree: LexborHTMLParser, page: PageInput, config: None) -> Slept:
     time.sleep(SLOW_SECONDS)
     return Slept()
 
 
-SLOW_EVERYWHERE = Extractor("slow_everywhere", _slow_everywhere)
+SLOW_EVERYWHERE = extractor("slow_everywhere", _slow_everywhere, None)
 
 # The scenarios' deadline, shortened as the spec allows; every other Page takes a third of it.
 TEST_DEADLINE = 1.5
 
 
-def _never_ends_on_slow(tree: LexborHTMLParser, page: PageInput) -> Slept:
+def _never_ends_on_slow(tree: LexborHTMLParser, page: PageInput, config: None) -> Slept:
     time.sleep(HANG_SECONDS if page.url.endswith("/slow") else TEST_DEADLINE / 3)
     return Slept()
 
 
-NEVER_ENDS_ON_SLOW = Extractor("never_ends_on_slow", _never_ends_on_slow)
+NEVER_ENDS_ON_SLOW = extractor("never_ends_on_slow", _never_ends_on_slow, None)
+
+
+class Greeting(msgspec.Struct, frozen=True):
+    text: str
+
+
+def _greet(tree: LexborHTMLParser, page: PageInput, config: Greeting) -> Greeting:
+    return config
+
+
+GREET = extractor("greet", _greet, Greeting("from the snapshot"))
 
 
 def preparer(page: PreparedPage | BaseException) -> Preparer:
@@ -201,12 +220,18 @@ def preparer(page: PreparedPage | BaseException) -> Preparer:
 @asynccontextmanager
 async def started(
     workers: int,
-    *extractors: Extractor,
+    *extractors: Extractor[Any],
     deadline: float = PREPARE_DEADLINE_SECONDS,
     ready_deadline: float = PREPARE_DEADLINE_SECONDS,
 ) -> AsyncIterator[PoolExecutor]:
     pool = PoolExecutor(workers=workers, deadline=deadline, ready_deadline=ready_deadline)
-    await pool.start(PageSettings(scope_rules(at("/")), extractors or (RECORD_PREPARER,)))
+    await pool.start(
+        PageSettings(
+            scope=scope_rules(at("/")),
+            extractors=extractors or (RECORD_PREPARER,),
+            strip_params=None,
+        )
+    )
     try:
         yield pool
     finally:
@@ -218,12 +243,23 @@ async def test_a_page_is_prepared_in_a_worker_as_in_process() -> None:
     async with started(2) as pool:
         page = await pool.prepare(at("/"), RESPONSE)
         workers = pool.worker_pids
-    in_process = prepare_page(at("/"), RESPONSE, PageSettings(scope_rules(at("/"))))
+    in_process = prepare_page(
+        at("/"), RESPONSE, PageSettings(scope=scope_rules(at("/")), strip_params=None)
+    )
 
     assert (page.document_links, preparer(page).pid in workers) == (
         in_process.document_links,
         True,
     )
+
+
+@pytest.mark.slow
+async def test_an_extractor_config_reaches_the_workers() -> None:
+    async with started(1, GREET) as pool:
+        page = await pool.prepare(at("/"), RESPONSE)
+
+    assert isinstance(page, PreparedPage)
+    assert dict(page.outputs) == {"greet": Greeting("from the snapshot")}
 
 
 @pytest.mark.slow
@@ -302,7 +338,9 @@ async def test_an_output_a_worker_cannot_send_costs_only_its_extractor() -> None
 
 
 def test_a_page_whose_record_a_worker_cannot_send_is_recorded_as_crashed() -> None:
-    page = prepare_page(at("/"), RESPONSE, PageSettings(scope_rules(at("/"))))
+    page = prepare_page(
+        at("/"), RESPONSE, PageSettings(scope=scope_rules(at("/")), strip_params=None)
+    )
     unsendable = msgspec.structs.replace(page, document_links=(lambda: None,))
 
     crashed = decode_outcome(encode_outcome(unsendable))
@@ -323,7 +361,7 @@ def test_a_worker_whose_crawl_process_has_ended_ends_quietly() -> None:
     worker.start()
     task_reader.close()
     result_writer.close()
-    task_writer.send(PageSettings(scope_rules(at("/"))))
+    task_writer.send(PageSettings(scope=scope_rules(at("/")), strip_params=None))
     # Its ready answer: the outcome's send is the one that must fail.
     result_reader.recv_bytes()
     # As a second Ctrl+C ends the crawl process while its worker prepares a Page.
@@ -674,6 +712,10 @@ def test_the_default_page_executor_is_the_pool() -> None:
     assert isinstance(default_page_executor(), PoolExecutor)
 
 
+def _never_written(connection: Connection, row: object) -> None:
+    raise AssertionError("these handlers give no rows")
+
+
 def recording_preparers() -> tuple[Hooks, list[int]]:
     """Hooks with the test extractor and a handler that lists the process of each Page's."""
     preparers: list[int] = []
@@ -684,7 +726,9 @@ def recording_preparers() -> tuple[Hooks, list[int]]:
             preparers.append(output.pid)
         return ()
 
-    return Hooks(extractors=(RECORD_PREPARER,), handlers=(Handler("preparers", record),)), preparers
+    return Hooks(
+        extractors=(RECORD_PREPARER,), handlers=(handler("preparers", record, _never_written),)
+    ), preparers
 
 
 def crawl_without_a_page_executor(seed: str, hooks: Hooks) -> None:
@@ -753,7 +797,9 @@ def test_fetching_waits_for_slow_parsing(
             prepared.append(time.monotonic())
         return ()
 
-    hooks = Hooks(extractors=(SLOW_EVERYWHERE,), handlers=(Handler("prepared", record),))
+    hooks = Hooks(
+        extractors=(SLOW_EVERYWHERE,), handlers=(handler("prepared", record, _never_written),)
+    )
     crawl_result(server.url("/"), hooks, pages=lambda: PoolExecutor(workers=2))
 
     requested = [r.received_at for r in server.requests if server.url(r.path) in pages]

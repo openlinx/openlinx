@@ -6,12 +6,11 @@ from typing import Any
 import pytest
 
 from spider.crawl.fetcher import FetchResult
-from spider.crawl.hooks import Hooks, Pass
+from spider.crawl.hooks import Hooks, Pass, PassContext
 from spider.crawl.pages import PageSettings, PreparedPage, prepare_page
 from spider.crawl.urls import NormalizedUrl
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Collected
-from spider.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawl_result
@@ -67,8 +66,8 @@ def test_the_page_executor_starts_once_before_the_seed_and_closes_at_the_end(
     ]
 
 
-def _failing(message: str) -> Callable[[CrawlWriter], Awaitable[None]]:
-    async def run(writer: CrawlWriter) -> None:
+def _failing(message: str) -> Callable[[PassContext], Awaitable[None]]:
+    async def run(context: PassContext) -> None:
         raise RuntimeError(message)
 
     return run

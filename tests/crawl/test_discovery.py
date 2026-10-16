@@ -16,26 +16,29 @@ def test_a_page_records_each_url_it_links_to_once() -> None:
         b'<a href="/a">A</a><img src="/logo.png"><a href="/b">B</a>'
         b'<a href="/a#top">A again</a><a href="http://other.test/">Other</a><a href="/b">B</a>'
     )
-    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True)
+    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True, strip_params=None)
 
-    assert discovered_urls(links, scope_rules(SITE), 1) == (
+    assert discovered_urls(links, scope_rules(SITE)) == (
         NewUrl(
             url=NormalizedUrl("http://site.test/a"),
-            crawl_depth=1,
             discovered_via="hyperlink",
             is_internal=True,
             in_scope=True,
         ),
         NewUrl(
+            url=NormalizedUrl("http://site.test/logo.png"),
+            discovered_via="image",
+            is_internal=True,
+            in_scope=True,
+        ),
+        NewUrl(
             url=NormalizedUrl("http://site.test/b"),
-            crawl_depth=1,
             discovered_via="hyperlink",
             is_internal=True,
             in_scope=True,
         ),
         NewUrl(
             url=NormalizedUrl("http://other.test/"),
-            crawl_depth=1,
             discovered_via="hyperlink",
             is_internal=False,
             in_scope=False,
@@ -44,10 +47,12 @@ def test_a_page_records_each_url_it_links_to_once() -> None:
 
 
 def _recorded(html: str) -> list[tuple[str, str, str | None]]:
-    links = extract_links(html.encode(), "text/html", SITE, is_internal=lambda url: True)
+    links = extract_links(
+        html.encode(), "text/html", SITE, is_internal=lambda url: True, strip_params=None
+    )
     return [
         (new.url, new.discovered_via, new.skip_reason)
-        for new in discovered_urls(links, scope_rules(SITE), 1)
+        for new in discovered_urls(links, scope_rules(SITE))
     ]
 
 
@@ -60,6 +65,11 @@ def _recorded(html: str) -> list[tuple[str, str, str | None]]:
         (
             '<link rel="alternate" hreflang="de" href="/de/">',
             [("http://site.test/de/", "hreflang", None)],
+        ),
+        ('<link rel="canonical" href="/c">', [("http://site.test/c", "canonical", None)]),
+        (
+            '<a href="/x.png">X</a><img src="/x.png">',
+            [("http://site.test/x.png", "image", None)],
         ),
         ('<iframe src="/f"></iframe>', [("http://site.test/f", "iframe", None)]),
         (
@@ -78,11 +88,20 @@ def _recorded(html: str) -> list[tuple[str, str, str | None]]:
             '<link rel="icon" href="/favicon.ico">',
             [("http://site.test/favicon.ico", "misc", "link_type_not_followed")],
         ),
-        ('<img src="/i.png"><link rel="stylesheet" href="/s.css">', []),
-        ('<script src="/s.js"></script><embed src="/e.swf">', []),
+        (
+            '<img src="/i.png"><link rel="stylesheet" href="/s.css">',
+            [("http://site.test/i.png", "image", None), ("http://site.test/s.css", "css", None)],
+        ),
+        (
+            '<script src="/s.js"></script><embed src="/e.swf">',
+            [
+                ("http://site.test/s.js", "javascript", None),
+                ("http://site.test/e.swf", "media", None),
+            ],
+        ),
         (
             '<link rel="icon" href="/x"><img src="/y"><a href="/x">X</a><a href="/y">Y</a>',
-            [("http://site.test/x", "hyperlink", None), ("http://site.test/y", "hyperlink", None)],
+            [("http://site.test/x", "hyperlink", None), ("http://site.test/y", "image", None)],
         ),
         (
             '<a rel="nofollow" href="/n">N</a>',
@@ -106,11 +125,11 @@ def test_each_link_type_is_followed_or_recorded_as_not_followed(
 
 def test_follow_nofollow_follows_every_nofollow_hyperlink_and_only_those() -> None:
     body = b'<a rel="nofollow" href="/n">N</a><a href="/x">X</a><link rel="icon" href="/i">'
-    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True)
+    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True, strip_params=None)
     scope = scope_rules(SITE)
 
-    honoured = discovered_urls(links, scope, 1, nofollow=True)
-    followed = discovered_urls(links, scope, 1, nofollow=True, follow_nofollow=True)
+    honoured = discovered_urls(links, scope, nofollow=True)
+    followed = discovered_urls(links, scope, nofollow=True, follow_nofollow=True)
 
     assert (
         [(new.url, new.skip_reason) for new in honoured],

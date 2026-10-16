@@ -1,9 +1,10 @@
 """Page preparation: one pure function of a response, behind an executor (020-add-crawl-core D9)."""
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Protocol
+from typing import Any, Protocol
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
@@ -18,6 +19,7 @@ from spider.crawl.directives import (
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.headers import header_links
 from spider.crawl.links import DiscoveredLink, base_url, links_in_tree
+from spider.crawl.noscript import parse_html
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import DEFAULT_ROBOTS_TOKEN
@@ -48,20 +50,43 @@ class PageInput(msgspec.Struct, frozen=True, kw_only=True):
 
 
 @dataclass(frozen=True, slots=True)
-class Extractor:
-    """Pure and module-level, so that a 026 worker imports it by name."""
+class Extractor[C: msgspec.Struct | None]:
+    """Pure and module-level, so that a 026 worker imports it by name; its config, a struct
+    with frozen fields resolved where the hooks are built, travels with it in the settings
+    snapshot (design D9)."""
 
     name: str
-    extract: Callable[[LexborHTMLParser, PageInput], msgspec.Struct]
+    extract: Callable[[LexborHTMLParser, PageInput, C], msgspec.Struct]
+    config: C
+
+    def __post_init__(self) -> None:
+        config: object = self.config
+        # Shared by every Page of the Crawl and by every 026 worker. The check is shallow: a field
+        # may still hold a mutable value.
+        if config is not None and not (
+            isinstance(config, msgspec.Struct) and config.__struct_config__.frozen
+        ):
+            raise TypeError(
+                f"the config of the extractor {self.name} is not a struct with frozen fields"
+            )
 
 
-@dataclass(frozen=True, slots=True)
+def extractor[C: msgspec.Struct | None](
+    name: str, extract: Callable[[LexborHTMLParser, PageInput, C], msgspec.Struct], config: C
+) -> Extractor[Any]:
+    """The one way to build an extractor: mypy checks C here, where the extractor is registered,
+    since an Extractor built in place inside Hooks(...) takes C as Any (design D9)."""
+    return Extractor(name, extract, config)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PageSettings:
     """The settings snapshot: built once per Crawl, and given to each 026 worker once."""
 
     scope: ScopeRules
-    extractors: tuple[Extractor, ...] = ()
+    extractors: tuple[Extractor[Any], ...] = ()
     robots_token: str = DEFAULT_ROBOTS_TOKEN
+    strip_params: re.Pattern[str] | None
 
 
 class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
@@ -82,16 +107,18 @@ class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
 def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettings) -> PreparedPage:
     """Decodes and parses once; the link extractor and later extractors share the tree."""
     decoded = decode_html(response.body, response.header("Content-Type"))
-    tree = LexborHTMLParser(decoded.text)
+    html = parse_html(decoded.text)
+    tree = html.tree
     is_internal = partial(_is_internal, settings.scope)
     # The header Links come first, as 030's ordinals count them (design D5).
-    from_headers = response_links(url, response, settings.scope)
+    from_headers = response_links(url, response, settings.scope, settings.strip_params)
     from_document = tuple(
         links_in_tree(
-            tree,
+            html,
             base=base_url(tree, url, decoded.encoding),
             encoding=decoded.encoding,
             is_internal=is_internal,
+            strip_params=settings.strip_params,
             first_ordinal=len(from_headers) + 1,
         )
     )
@@ -113,7 +140,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     failures: list[str] = []
     for extractor in settings.extractors:
         try:
-            output = extractor.extract(tree, page)
+            output = extractor.extract(tree, page, extractor.config)
             # Only a msgspec struct crosses 026's process boundary as it is.
             if not isinstance(output, msgspec.Struct):
                 raise TypeError(f"{extractor.name} returned {type(output).__name__}")
@@ -131,11 +158,21 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
 
 
 def response_links(
-    url: NormalizedUrl, response: FetchResult, scope: ScopeRules
+    url: NormalizedUrl,
+    response: FetchResult,
+    scope: ScopeRules,
+    strip_params: re.Pattern[str] | None,
 ) -> tuple[DiscoveredLink, ...]:
     """The engine reads them whatever became of the preparation, which reads them for
     `PageInput`, so both number them alike (design D9)."""
-    return tuple(header_links(response.headers, url, is_internal=partial(_is_internal, scope)))
+    return tuple(
+        header_links(
+            response.headers,
+            url,
+            is_internal=partial(_is_internal, scope),
+            strip_params=strip_params,
+        )
+    )
 
 
 def _is_internal(scope: ScopeRules, url: NormalizedUrl) -> bool:

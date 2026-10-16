@@ -217,69 +217,92 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 8. Scope over HTTP and Section Crawls (widening)
 
-- [ ] 8.1 Drive "URLs that differ only in stripped parameters are fetched once" at seam 3.
-- [ ] 8.2 Drive "The subdomains shorthand conflicts with a subfolder Scope" at seam 1. Done when: `option_conflict` is declared.
-- [ ] 8.3 Drive "A Seed without its trailing slash is rejected" at seam 1. Done when: `subfolder_is_root` is declared, with a hint built from the Seed.
-- [ ] 8.4 Drive "Pages inside the folder are followed" at seam 3+6.
-- [ ] 8.5 Drive "Pages outside the folder are checked but not followed" at seam 3+6.
-- [ ] 8.6 Drive "A URL that matches no include pattern is checked but not followed" at seam 3+6.
-- [ ] 8.7 Drive "An invalid pattern is rejected" at seam 1. Done when: an invalid `--include` pattern is `invalid_pattern`, which task 5.1 declared for `--exclude`, before any crawl file is created.
-- [ ] 8.8 Drive "A Seed outside the Scope is rejected" at seam 1. Done when: `seed_out_of_scope` is declared.
-- [ ] 8.9 Drive "A subfolder Crawl is a Section Crawl" at seam 1.
-- [ ] 8.10 Drive "An include pattern makes a Section Crawl" and "Exclude patterns alone do not make a Section Crawl" at seam 3+6, a trivial pair.
-- [ ] 8.11 Drive "A subfolder Scope is recorded" at seam 3+6. Done when: `crawl.scope` is declared NOT NULL, with the Seed hosts in order, and `create_crawl` writes it with the `crawl` row from a `scope` field added to `NewCrawl` (design D18).
-- [ ] 8.12 Drive "A www Seed whose canonical names the apex is reported" at seam 1. Done when: `seed_base_mismatch` is declared, and the Scope is unchanged.
-- [ ] 8.13 **Guard:** "A www Seed whose Links stay on www is not reported", at seam 1.
-- [ ] 8.14 Docs: document Section Crawls, the recorded Scope and `seed_base_mismatch` in `docs/crawling.md`.
-- [ ] 8.15 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [x] 8.1 Drive "URLs that differ only in stripped parameters are fetched once" at seam 3.
+- [x] 8.2 Drive "The subdomains shorthand conflicts with a subfolder Scope" at seam 1. Done when: `option_conflict` is declared.
+- [x] 8.3 Drive "A Seed without its trailing slash is rejected" at seam 1. Done when: `subfolder_is_root` is declared, with a hint built from the Seed.
+- [x] 8.4 Drive "Pages inside the folder are followed" at seam 3+6.
+- [x] 8.5 Drive "Pages outside the folder are checked but not followed" at seam 3+6.
+- [x] 8.6 Drive "A URL that matches no include pattern is checked but not followed" at seam 3+6.
+- [x] 8.7 Drive "An invalid pattern is rejected" at seam 1. Done when: an invalid `--include` pattern is `invalid_pattern`, which task 5.1 declared for `--exclude`, before any crawl file is created.
+- [x] 8.8 Drive "A Seed outside the Scope is rejected" at seam 1. Done when: `seed_out_of_scope` is declared.
+- [x] 8.9 Drive "A subfolder Crawl is a Section Crawl" at seam 1.
+- [x] 8.10 Drive "An include pattern makes a Section Crawl" and "Exclude patterns alone do not make a Section Crawl" at seam 3+6, a trivial pair.
+- [x] 8.11 Drive "A subfolder Scope is recorded" at seam 3+6. Done when: `crawl.scope` is declared NOT NULL, with the Seed hosts in order, and `create_crawl` writes it with the `crawl` row from a `scope` field added to `NewCrawl` (design D18).
+- [x] 8.12 Drive "A www Seed whose canonical names the apex is reported" at seam 1, run at seam 2 through the Crawl Service, since `www.site.test` needs the DNS resolver hook, which the CLI cannot take. Done when: `seed_base_mismatch` is declared, and the Scope is unchanged.
+- [x] 8.13 **Guard:** "A www Seed whose Links stay on www is not reported", at seam 1, run at seam 2 for the same reason as 8.12.
+- [x] 8.14 Docs: document Section Crawls, the recorded Scope and `seed_base_mismatch` in `docs/crawling.md`.
+- [x] 8.15 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [x] 8.16 Review fixes of group 8 (rulings of 2026-10-14). Done when: `ScopeRules.from_json` rebuilds every decision from `crawl.scope`, which a round-trip test over a URL table proves, and `NewCrawl.scope` is a `RecordedScope`; the 8.13 guard proves the Seed was parsed; `seed_base_mismatch` decides on the Seed on the apex host, and a canonical to the Seed's own host ends the check; `NewCrawl.section_crawl` is required; `subfolder_is_root` gives `details.suggested_seed`, and no hint ends with a URL that a period sticks to.
 
 ## 9. Resources, Crawl Depth, limits and invariants (widening)
 
-- [ ] 9.1 Drive "An image is checked but not parsed" at seam 3+6. Group 4's review parses only HTML, so the parse half may pass at once; its red then comes from a mutation.
-- [ ] 9.2 **Guard:** "A broken image is recorded", at seam 3+6.
-- [ ] 9.3 Drive "The shortest path wins over a faster, longer one" at seam 3+6. Done when: followed URLs of depth d+1 wait for every followed URL of depth d, and checks never wait (design D3).
-- [ ] 9.4 Drive "A Resource is one deeper than its Page" at seam 3+6.
-- [ ] 9.5 Drive "Links beyond the limit are not requested" at seam 3+6. Done when: `--max-depth` is declared with `OptionMeta(setting="crawl.max_depth")` and the default `None`, no limit (design D11).
-- [ ] 9.6 Drive "Resources are checked beyond the depth limit" at seam 3+6.
-- [ ] 9.7 Drive "The Crawl stops at the limit" at seam 1. Done when: `--max-urls` is declared with `OptionMeta(setting="crawl.max_urls")` and the default `None`, no limit, and the `stopped` end goes through `check_transition` with `max_urls`.
-- [ ] 9.8 Drive "URLs not requested stay queued" at seam 3+6.
-- [ ] 9.9 Drive "The limit warning says how to continue" at seam 1. Done when: `max_urls_reached` is declared, with a hint built from `spider.naming`.
-- [ ] 9.10 Drive "The limit holds under concurrency" at seam 3. Done when: requests in flight count toward the limit.
-- [ ] 9.11 **Guard:** "There is no limit by default" (seam 1) and "No limit is recorded as null" (seam 3+6), a pair.
-- [ ] 9.12 Drive "A limit below one is rejected" at seam 1.
-- [ ] 9.13 **Guard:** "Each URL is requested once", at seam 3.
-- [ ] 9.14 **Guard:** "A link cycle ends", at seam 3+6.
-- [ ] 9.15 **Guard:** "Followed URLs start in discovery order", at seam 3.
-- [ ] 9.16 Drive "Post-crawl passes run when the URL limit stops a Crawl" at seam 2.
-- [ ] 9.17 Docs: document Resources, Crawl Depth, `--max-depth`, `--max-urls` (no default, what counts) and the dispatch order in `docs/crawling.md`.
-- [ ] 9.18 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [x] 9.1 Drive "An image is checked but not parsed" at seam 3+6. Group 4's review parses only HTML, so the parse half may pass at once; its red then comes from a mutation.
+- [x] 9.2 **Guard:** "A broken image is recorded", at seam 3+6.
+- [x] 9.3 Drive "The shortest path wins over a faster, longer one" at seam 3+6. Done when: followed URLs of depth d+1 wait for every followed URL of depth d, and checks never wait (design D3).
+- [x] 9.4 Drive "A Resource is one deeper than its Page" at seam 3+6.
+- [x] 9.5 Drive "Links beyond the limit are not requested" at seam 3+6. Done when: `--max-depth` is declared with `OptionMeta(setting="crawl.max_depth")` and the default `None`, no limit (design D11).
+- [x] 9.6 Drive "Resources are checked beyond the depth limit" at seam 3+6.
+- [x] 9.7 Drive "The Crawl stops at the limit" at seam 1. Done when: `--max-urls` is declared with `OptionMeta(setting="crawl.max_urls")` and the default `None`, no limit, and the `stopped` end goes through `check_transition` with `max_urls`.
+- [x] 9.8 Drive "URLs not requested stay queued" at seam 3+6.
+- [x] 9.9 Drive "The limit warning says how to continue" at seam 1. Done when: `max_urls_reached` is declared, with a hint built from `spider.naming`.
+- [x] 9.10 Drive "The limit holds under concurrency" at seam 3. Done when: requests in flight count toward the limit.
+- [x] 9.11 **Guard:** "There is no limit by default" (seam 1) and "No limit is recorded as null" (seam 3+6), a pair.
+- [x] 9.12 Drive "A limit below one is rejected" at seam 1.
+- [x] 9.13 **Guard:** "Each URL is requested once", at seam 3.
+- [x] 9.14 **Guard:** "A link cycle ends", at seam 3+6.
+- [x] 9.15 **Guard:** "Followed URLs start in discovery order", at seam 3.
+- [x] 9.16 Drive "Post-crawl passes run when the URL limit stops a Crawl" at seam 2.
+- [x] 9.17 Docs: document Resources, Crawl Depth, `--max-depth`, `--max-urls` (no default, what counts) and the dispatch order in `docs/crawling.md`.
+- [x] 9.18 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [x] 9.19 Fix the review of group 9 (rulings of 2026-10-14), each red first or red by mutation: the frontier waits for every outcome, fallbacks included, before it reads the queue again from the top, so a URL whose unit failed is requested once; a `skipped` `max_depth` row that a Link reaches at a smaller depth is re-queued, and a skip is recorded only on the depth it was decided on; a failure outranks a stop in the stop flag, and the `max_urls_reached` warning is given only for a `max_urls` stop; the engine reads no deeper depth once a stop has ended a depth; 9.9's test checks the whole hint and `details.max_urls`; `docs/crawling.md` and the `max_urls` help say what counts today, and task 14.2 adds the requests of a continued Crawl; a seam-6 table pins every branch of the discovered-URL conflict.
 
 ## 10. robots.txt (widening)
 
-- [ ] 10.1 Drive "The group for the tool's token applies" at seam 4. Done when: the robots.txt reader is on Protego and reads at most 512,000 bytes, decoded with replacement.
-- [ ] 10.2 Drive "Another token can be chosen" at seam 4. Done when: `--robots-user-agent` also sets `PageSettings.robots_token` in the snapshot the engine starts the page executor with, so the prefixes of `X-Robots-Tag` follow the chosen token, and a test pins it.
-- [ ] 10.3 **Guard:** "Any robots.txt gives a decision", as a hypothesis property at seam 4.
-- [ ] 10.4 Drive "robots.txt is fetched once per origin" at seam 3.
-- [ ] 10.5 Drive "A disallowed URL is not requested" (seam 3) and "A disallowed URL is recorded as blocked" (seam 3+6), a trivial pair. Done when: `blocked_by_robots_txt` is declared.
-- [ ] 10.6 Drive "robots.txt is stored with its origin" and "A URL that is not requested still points to its origin" at seam 3+6, a pair. Done when: the `robots_*` columns of `origins` are declared, with `robots_state` and `robots_sitemaps` NULL until robots.txt is fetched.
-- [ ] 10.7 Drive "A blocked Seed is reported" at seam 1. Done when: `seed_blocked_by_robots_txt` is declared.
-- [ ] 10.8 Drive "Disallowed URLs are crawled and still labelled" at seam 3+6.
-- [ ] 10.9 Drive "A missing robots.txt allows everything" at seam 3+6.
-- [ ] 10.10 Drive "An unreachable robots.txt blocks its origin" at seam 3+6.
-- [ ] 10.11 Drive "An unreachable robots.txt of the site is reported" at seam 1. Done when: `robots_unreachable` is declared.
-- [ ] 10.12 Drive "A redirected robots.txt is followed" at seam 3+6.
-- [ ] 10.13 Drive "More than five robots.txt redirects count as missing" at seam 3+6.
-- [ ] 10.14 Drive "A dead External domain is a DNS error" at seam 3+6, with the DNS resolver hook of task 6.1.
+- [x] 10.1 Drive "The group for the tool's token applies" at seam 4. Done when: the robots.txt reader is on Protego and reads at most 512,000 bytes, decoded with replacement.
+- [x] 10.2 Drive "Another token can be chosen" at seam 4. Done when: `--robots-user-agent` also sets `PageSettings.robots_token` in the snapshot the engine starts the page executor with, so the prefixes of `X-Robots-Tag` follow the chosen token, and a test pins it.
+- [x] 10.3 **Guard:** "Any robots.txt gives a decision", as a hypothesis property at seam 4.
+- [x] 10.4 Drive "robots.txt is fetched once per origin" at seam 3.
+- [x] 10.5 Drive "A disallowed URL is not requested" (seam 3) and "A disallowed URL is recorded as blocked" (seam 3+6), a trivial pair. Done when: `blocked_by_robots_txt` is declared.
+- [x] 10.6 Drive "robots.txt is stored with its origin" and "A URL that is not requested still points to its origin" at seam 3+6, a pair. Done when: the `robots_*` columns of `origins` are declared, with `robots_state` and `robots_sitemaps` NULL until robots.txt is fetched.
+- [x] 10.7 Drive "A blocked Seed is reported" at seam 1. Done when: `seed_blocked_by_robots_txt` is declared.
+- [x] 10.8 Drive "Disallowed URLs are crawled and still labelled" at seam 3+6.
+- [x] 10.9 Drive "A missing robots.txt allows everything" at seam 3+6.
+- [x] 10.10 Drive "An unreachable robots.txt blocks its origin" at seam 3+6.
+- [x] 10.11 Drive "An unreachable robots.txt of the site is reported" at seam 1. Done when: `robots_unreachable` is declared.
+- [x] 10.12 Drive "A redirected robots.txt is followed" at seam 3+6.
+- [x] 10.13 Drive "More than five robots.txt redirects count as missing" at seam 3+6.
+- [x] 10.14 Drive "A dead External domain is a DNS error" at seam 3+6, with the DNS resolver hook of task 6.1.
 
   Done when: each URL of an origin whose robots.txt request got no HTTP response is recorded with `fetch_state` = `error` and that request's `fetch_error`, without a request of its own, with a `fetch_error_message` that names the robots.txt request; the origin has `robots_state` = `unreachable`, `robots_status_code` NULL, and the request's error in `robots_fetch_error` and `robots_fetch_error_message`, declared with their `docs/schema.md` rows and the CHECK values of the `fetch_error` `Literal`; 5xx and 429 stay `robots_unreachable`; and "An unknown host is a DNS error" still passes (design D6). The Seed's origin pauses the Crawl instead from task 12.6 on.
-- [ ] 10.15 Docs: document robots.txt handling (status mapping, no HTTP response, `--ignore-robots`, `--robots-user-agent`, Crawl-delay) in `docs/crawling.md`.
-- [ ] 10.16 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [x] 10.15 Docs: document robots.txt handling (status mapping, no HTTP response, `--ignore-robots`, `--robots-user-agent`, Crawl-delay) in `docs/crawling.md`.
+- [x] 10.16 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [x] 10.17 Fix the review of group 10 (rulings of 2026-10-15), each red first or red by mutation:
+  - An origin's robots.txt verdict, once known, decides a URL before the URL limit, which guards only a new request, robots.txt's or the URL's own, so a disallowed URL left after the limit is still recorded and the Crawl can end `completed`. `RequestLimits` splits the pure query from the call that marks the limit reached.
+  - A URL skipped as `max_depth` reaches no handler, since a Link found later at a smaller depth re-queues it (design D5).
+  - The robots.txt memo keeps the parsed rules only; the text goes straight to the store.
+  - A line that the 512,000-byte limit cuts is dropped, and a robots.txt status outside 200–599 is `unreachable`, as 500–599 and 429 are.
+  - `--robots-user-agent` must match RFC 9309's `[a-zA-Z_-]+`: refused as `invalid_value` (exit 2), and in the settings file as `settings_invalid` (exit 3).
+  - Tests pin the token on the robots.txt side, one robots.txt request for an origin that two URLs reach at once, no `seed_blocked_by_robots_txt` for a blocked URL that is not the Seed, no `robots_unreachable` for an External origin, and a fallback row whose verdict is 1.
+  - `docs/testing.md` places `tests/crawl/test_warning_log.py` at seam 2, with the Crawl Service's reporter.
+- [x] 10.18 Extract the Requester (design D7), behaviour unchanged: `spider.crawl.requester` makes every request of a Crawl. It takes the host's slot, then the global cap, and counts a URL's own request toward `--max-urls` or refuses it; a robots.txt request is never counted. The engine and the robots.txt loader call it, and neither holds the Fetcher or takes a slot itself. The engine's per-run dependencies (the outcomes, the limits, the Requester, the robots.txt loader, the checks) are one frozen record.
+
+  Done when: a guard in `tests/test_code_style.py` names each call of a Fetcher's `fetch` and each `Request` made in `src/spider` outside the Requester, red by mutation of the robots.txt loader; `--rate` (11.1), the watchdog (12.14), the network pause with its probes (12.11–12.22) and `022`'s retries are written into the Requester, not into its callers.
+- [x] 10.19 Rework the hooks (design D9, D14): `Handler(name, handle, write)` names the store function that writes its rows, generic in the row type, so a handler and a writer of different row types fail mypy at a bare `Handler(...)` line, though not inside `Hooks(...)`, where `R` is taken as `Any` (task 10.22 closes that); `Hooks.row_writers` is gone, and the URL's unit writes each handler's rows with that handler's writer, with no dispatch on a row's type, so the `TypeError` of a missing writer and its test go. One handler gives one row type for one table. `Pass.run` takes one frozen `PassContext(writer, clock)`, and passes run in the order `Hooks` declares them. Red first: a `Handler` without `write` cannot be built.
+- [x] 10.20 Give extractors their own config (design D9): `Extractor(name, extract, config)`, where `config` is a frozen `msgspec.Struct` or `None`, resolved from the Crawl's settings where the hooks are built, and carried in the settings snapshot with its extractor. `PageSettings` has no field of any one extractor, so `030`'s `content_area` is its Page extractor's config. Red first: an extractor gets its own config.
+- [x] 10.21 Docs: `docs/architecture.md`'s crawl pipeline names the Requester, a handler's writer (one handler, one table), `PassContext` and the declared order of passes, and an extractor's config; it no longer names a Scheduler or a `frontier/` package, which do not exist.
+- [x] 10.22 Fix the review of tasks 10.19 to 10.21 (rulings of 2026-10-16), each red first or red by mutation:
+  - Handlers are built only through the generic factory `handler(name, handle, write)`, which returns `Handler[Any]`, so a writer of another row type fails mypy where the handler is registered, inside `Hooks(...)` too; a guard in `tests/test_code_style.py` names any `Handler(...)` built outside `spider.crawl.hooks`, and the type guard checks the mismatch inside `Hooks(...)`.
+  - The same for extractors: `extractor(name, extract, config)`, its guard, and a mismatched config in the type guard. A config that is not a msgspec struct raises `TypeError`; the frozen check is shallow, and the docs say "frozen fields".
+  - A pass test shows that `PassContext.clock` is the clock given to the Crawl Service, and the declared-order test records the passes' names.
+  - `CONTRIBUTING.md` allows a `# type: ignore[code]` for a deliberate type guard or a deliberately wrong call in a test.
+  - A `robots_user_agent` in `spider.toml` that RFC 9309 refuses gives a `settings_invalid` message that names the allowed characters, from the same pattern.
+  - `docs/architecture.md` says what mypy checks, and where.
 
 ## 11. Politeness (widening)
 
 - [ ] 11.1 Drive "Requests to a host are spaced by the rate", fake timing.
 
-  Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`.
+  Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`. The spacing is the Requester's (design D7), so it holds for robots.txt requests too.
 - [ ] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
 - [ ] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared.
 - [ ] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
@@ -300,7 +323,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
 
   Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`.
-- [ ] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 1, with a handler and a row writer registered for the test. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
+- [ ] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 1, with a handler and its writer registered for the test. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
 
   Done when: the record-failure count of design D16 trips at `RECORD_FAILURE_LIMIT` (100) URL units in a row that failed on their first run, a URL unit that commits resets it, fallback units do not count, and the constant's comment says why.
 - [ ] 12.11 Drive "A network wait of zero fails at once" at seam 1, with the reset route of task 5.11.
@@ -310,14 +333,14 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
 - [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing.
 
-  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without an HTTP response for the network pause.
+  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without an HTTP response for the network pause. The watchdog is the Requester's (design D7), around every request it makes.
 - [ ] 12.15 Drive "Probes back off to once a minute" at seam 4. Done when: one pure function gives the probe times of a network wait: 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, none later than the wait.
 - [ ] 12.16 Drive "A dead section does not stop the Crawl", fake timing.
 
-  Done when: probes request the Seed URL through the per-host gate on the context's `Clock`, are not recorded and do not count toward `--max-urls`; the first answering probe resumes the Crawl with the errors kept; and `network_paused` is declared and counted, with `details.count` and `details.total_seconds`.
+  Done when: probes request the Seed URL through the Requester (design D7) on the context's `Clock`, are not recorded and do not count toward `--max-urls`; the first answering probe resumes the Crawl with the errors kept; and `network_paused` is declared and counted, with `details.count` and `details.total_seconds`.
 - [ ] 12.17 Drive "An outage pauses and resumes the Crawl", fake timing.
 
-  Done when: the `crawl_paused` and `crawl_resumed` events carry the data of the spec's event table; no request starts while paused; and a request that ends without an HTTP response while paused is not recorded, so its URL stays `queued` and is requested again when the Crawl resumes.
+  Done when: the `crawl_paused` and `crawl_resumed` events carry the data of the spec's event table; no request starts while paused, which the Requester holds (design D7); and a request that ends without an HTTP response while paused is not recorded, so its URL stays `queued` and is requested again when the Crawl resumes.
 - [ ] 12.18 Drive "URLs that failed in an outage are requested again", fake timing. Done when: a later answering probe re-queues the URLs of the count, each at most once in a run, and the engine dispatches them ahead of the frontier read.
 - [ ] 12.19 Drive "A Crawl that waits longer than the network wait fails", fake timing.
 - [ ] 12.20 Drive "Progress events say when the Crawl is paused", fake timing. Done when: `progress` carries `paused`, and its events go on during a pause.
@@ -330,7 +353,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 13.1 Drive "Ctrl+C stops a Crawl on macOS and Linux" at seam 1, subprocess, POSIX in CI.
 
-  Done when: the signal handlers set the `StopSignal` through `loop.call_soon_threadsafe`, no `KeyboardInterrupt` reaches `010`'s runner during a Crawl, and the `stopped` end goes through `check_transition` with `interrupt`.
+  Done when: the signal handlers set the `StopSignal` through `loop.call_soon_threadsafe`, no `KeyboardInterrupt` reaches `010`'s runner during a Crawl, and the `stopped` end goes through `check_transition` with `interrupt`; a test pins that an interrupt that ends a depth reads no deeper one (the stop's `break` of task 9.19, which nothing could reach before interrupts).
 - [ ] 13.2 Drive "Ctrl+Break stops a Crawl on Windows (Windows)" at seam 1, subprocess, Windows in CI.
 - [ ] 13.3 Drive "An interrupt is reported by one error" at seam 1, subprocess. Done when: `010`'s `interrupted` is the one error, with exit code 130.
 - [ ] 13.4 **Guard:** "An interrupted Crawl keeps its queue", at seam 1, subprocess.
@@ -344,7 +367,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 14.1 **Guard:** "A killed Crawl leaves no half-recorded Page", at seam 1, subprocess, killed with `Popen.kill()`. Mark it `slow`.
 - [ ] 14.2 Drive "Continuing a stopped Crawl completes it" at seam 2.
 
-  Done when: the Crawl Service's continue operation (which `060`'s `resume` calls) accepts `stopped` and `failed` Crawls, goes back to `running` through `check_transition`, counts the URL limit over the Crawl's whole life, and inserts the `urls` row of a Seed that has none.
+  Done when: the Crawl Service's continue operation (which `060`'s `resume` calls) accepts `stopped` and `failed` Crawls, goes back to `running` through `check_transition`, counts the URL limit over the Crawl's whole life (saying so in the `max_urls` help and in `docs/crawling.md`), and inserts the `urls` row of a Seed that has none.
 - [ ] 14.3 **Guard:** "Continuing does not request fetched URLs again", at seam 2.
 - [ ] 14.4 Drive "Continuing clears how the Crawl ended" at seam 2, read by a handler registered for the test.
 - [ ] 14.5 Drive "A failed Crawl is continued once its Seed answers" at seam 2. Done when: continuing re-queues `error` and `robots_unreachable` URLs.
@@ -352,9 +375,10 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 14.7 Docs: document the frontier, what a killed Crawl keeps, and the continue operation for `060` in `docs/crawling.md`.
 - [ ] 14.8 Review: run the code-review skill on group 14's commits, then refactor with the whole suite green.
 
-## 15. Parsing with scripting on (waiting for selectolax)
+## 15. Reading `<noscript>` as browsers that run scripts do
 
-- [ ] 15.1 Waits for the selectolax release that offers lexbor's scripting flag (an upstream pull request is being prepared). Page preparation parses with scripting on, as browsers and Google's renderer do, so a head `<noscript><img>` no longer ends `<head>`, and a head-noscript `<title>` stays inside its `<noscript>`. The Links of a body `<noscript>` are then found by fragment-parsing the text of each `<noscript>` (the user's ruling of 2026-10-14). Done when: the scripting-off cases of design Risks have scenarios that pass, and the body `<noscript>` Links of task 7.19 are still found.
+- [x] 15.1 Fix: page preparation reads `<noscript>` as a browser that runs scripts does, before selectolax offers lexbor's scripting flag (the user's decision of 2026-10-14; design D5). lexbor parses with scripting off, so a head `<noscript><img>`, the common tracking pixel, ends `<head>` and every later head element (canonical, meta description, robots, hreflang) lands in `<body>`, and a head-noscript `<title>` moves out of its `<noscript>`. Before lexbor parses the decoded text, every `<noscript>` start and end tag becomes a `<template>` tag, whose start tag carries the `data-<APP_NAME>-noscript` attribute with the index of the `<noscript>`'s text; HTML allows `<template>` in `<head>`, and its content stays out of the tree. The text of each `<noscript>`, up to the next `</noscript>`, as a browser that runs scripts reads it, is fragment-parsed for its Links: a `<link>` or `<meta>` gives nothing, the other elements give theirs in document order (task 7.19), a head-noscript pixel's `src` included. A page's own `<template>` gives no Link, as before. The noscript ancestor walk goes (task 7.23). Done when: tests at seam 4 pin that a head-noscript pixel keeps the canonical, hreflang and metas in `<head>`, that a head-noscript title and robots meta are ignored, that body-noscript Links are found in document order, that HTML without a `<noscript>` tag is left as it is, that a literal `<noscript` is renamed wherever it stands, and the edges of design Risks; a never-raises property runs over text with noscript tags; and the commit shows each existing noscript test red with the renaming disabled, as the guard of the walk's removal.
+- [ ] 15.2 Waits for the first selectolax release that contains upstream commit 69eddd1, lexbor's scripting flag (rushter/selectolax#228, merged into its master on 2026-10-14 and not yet released); never a pin to a git URL, and 15.1's renaming stays until then. Page preparation then parses with scripting on and fragment-parses the text of each `<noscript>`, which replaces 15.1's renaming; 15.1's tests stay. Done when: the renaming is gone, and 15.1's tests pass.
 
 ## 16. Change check
 

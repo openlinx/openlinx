@@ -34,7 +34,7 @@ from spider.crawl import pages
 from spider.crawl.context import CrawlContext
 from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import FetchFailure, FetchResult, Request
-from spider.crawl.hooks import Hooks
+from spider.crawl.hooks import Hooks, PassContext
 from spider.crawl.pages import PageSettings, PreparedPage
 from spider.crawl.stop import StopSignal
 from spider.crawl.urls import NormalizedUrl
@@ -76,9 +76,9 @@ BASELINE_SHARES: Mapping[Fault, float] = {
     Fault.NESTED_DIVS: 0.0,
     Fault.ENDS_WORKER: 0.0,
 }
-# 020 records every hyperlink and checks the External ones, and records amphtml, mobile and misc
-# targets as not followed; Resources come with its task 9.4.
-RECORDED_POOLS = frozenset({"missing", "external", "not_followed"})
+# 020 records every hyperlink and checks the External ones and the Resources, and records amphtml,
+# mobile and misc targets as not followed.
+RECORDED_POOLS = frozenset({"resource", "missing", "external", "not_followed"})
 DIRECT_SEED = "http://synthetic.test/"
 # psutil reports only the nominal clock on Windows; this counter scales it, turbo included.
 PERFORMANCE_CLASS = "Win32_PerfFormattedData_Counters_ProcessorInformation"
@@ -323,6 +323,7 @@ def direct(folder: Path, site: SyntheticSite, concurrency: int, *, new_urls_only
                 crawl_file=crawl_file,
                 settings=crawl_plan.settings,
                 scope=crawl_plan.scope,
+                strip_params=crawl_plan.strip_params,
                 clock=clock,
                 reporter=log,
                 writer=writer,
@@ -337,7 +338,7 @@ def direct(folder: Path, site: SyntheticSite, concurrency: int, *, new_urls_only
             # Before completed, as the Crawl Service runs them: 040 reads completed as
             # "its Issues are materialised".
             for crawl_pass in context.hooks.passes:
-                await crawl_pass.run(writer)
+                await crawl_pass.run(PassContext(writer, clock))
             await writer.run_async(record_state("completed", clock.now()))
 
     asyncio.run(run(), loop_factory=loop_factory)

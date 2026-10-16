@@ -35,7 +35,7 @@ from tests.support.workspace import TempWorkspace
 
 BASE = "http://127.0.0.1:8000"
 # The pool kinds 020 records: it checks External URLs and records not-followed ones unrequested.
-RECORDED = frozenset({"missing", "external", "not_followed"})
+RECORDED = frozenset({"resource", "missing", "external", "not_followed"})
 SITE = SyntheticSite(
     seed=5,
     pages=150,
@@ -140,6 +140,7 @@ def test_every_url_that_is_not_accounted_for_is_a_problem() -> None:
     }
     servers = accounting.pages[Fault.SERVER_ERROR.value][0]
     clean_pages = accounting.pages[CLEAN][0]
+    resources = SITE.manifest()["urls"]["resources"]
     assert accounting.problems == (
         f"{BASE}/p/1 (clean) was recorded as {queued}",
         f"{BASE}/elsewhere is no URL of the synthetic site",
@@ -149,7 +150,7 @@ def test_every_url_that_is_not_accounted_for_is_a_problem() -> None:
         "expected outcome",
         f"server_error Pages: {servers - 1} of {servers} recorded, {servers - 1} with the "
         "expected outcome",
-        "resource URLs: 1 recorded, 0 expected",
+        f"resource URLs: {resources + 1} recorded, {resources} expected",
         f"the site served {SITE.pages - 1} of {SITE.pages} Pages",
         "2 Pages were requested twice",
     )

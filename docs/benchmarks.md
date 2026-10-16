@@ -52,7 +52,7 @@ A 5,000-Page run (`--pages 5000`) that proves the script. It is not a run agains
 - **What fails a run:**
   - an exception, or an interrupt (Ctrl+C reaches only the script, which stops the site in order)
   - memory that grows: the last quarter's peak RSS above the second quarter's by more than 64 MiB or 10%
-  - a URL not accounted for in `urls`: each Page with its expected outcome (`parsed`, or its fault's), each URL count per kind against the site's manifest, no URL that is not the site's, and every Page served exactly once. Each External URL is checked once and not parsed. Resources and other not-followed URLs must have no row until `020` records them (its tasks 9.4 and 7.8).
+  - a URL not accounted for in `urls`: each Page with its expected outcome (`parsed`, or its fault's), each URL count per kind against the site's manifest, no URL that is not the site's, and every Page served exactly once. Each External URL and each Resource is checked once and not parsed, and each amphtml, mobile or misc target is recorded as not followed.
 
 ### Check run, 2026-10-14
 
