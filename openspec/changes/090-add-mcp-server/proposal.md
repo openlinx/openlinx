@@ -6,7 +6,7 @@ This change is **v0.1.1**, the first change after v0.1, as the maintainer decide
 
 ## What Changes
 
-> **v0.1.1 scope (2026-10-05, see ROADMAP.md):** the tools for the foreground and the detached crawl in Spider mode, `crawl_status`, `crawl_stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues`, `sql` and `rules`, plus `schema` and `doctor`. **Deferred to v0.2:** `crawl_resume`, `crawls_list`, `dry_run`, the `urls` and `sitemap` inputs (`024`), `page`'s `html`, the `report` and `report_brief` tools with inline Report Notes (`070`), and the dry-run and Hand-off guardrails in the server instructions.
+> **v0.1.1 scope (2026-10-05, see ROADMAP.md):** the tools for the foreground and the detached crawl in Spider mode, `crawl_status`, `crawl_stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues`, `issue`, `sql` and `rules`, plus `schema` and `doctor`. **Deferred to v0.2:** `crawl_resume`, `crawls_list`, `dry_run`, the `urls` and `sitemap` inputs (`024`), `page`'s `html`, the `report` and `report_brief` tools with inline Report Notes (`070`), and the dry-run and Hand-off guardrails in the server instructions.
 
 - **New Command `spider mcp [--workspace <path>]`.** It runs a local stdio MCP server built on the MCP Python SDK `mcp` 2.x (`MCPServer`). Its tools mirror the crawl-control, query and report Commands:
 
@@ -18,7 +18,8 @@ This change is **v0.1.1**, the first change after v0.1, as the maintainer decide
   | `crawl_resume` | `resume --detach` |
   | `crawls_list` | `crawls list` |
   | `summary` | `summary` |
-  | `issues` | `issues [<rule-id>]` |
+  | `issues` | `issues` |
+  | `issue` | `issue <rule-id>` |
   | `pages` | `pages` |
   | `page` | `page <url>` |
   | `sql` | `sql` (read-only) |
@@ -32,7 +33,7 @@ This change is **v0.1.1**, the first change after v0.1, as the maintainer decide
   - **Inputs** are the Command's flags in snake_case.
     - `url`, `urls` and `sitemap` (an array) select the Crawl Mode. Giving more than one fails with `mode_conflict`.
   - **Results:** the CLI's JSON, returned as structured content and as text.
-  - **Paging:** `crawls_list`, `issues`, `pages`, `schema` and `rules` take `limit` and `cursor`, and return `next_cursor`.
+  - **Paging:** `crawls_list`, `issues`, `issue`, `pages`, `schema` and `rules` take `limit` and `cursor`, and return `next_cursor`.
   - **Errors:** a failure becomes an MCP tool error that carries the CLI's full diagnostic, `{level, code, message, hint, details}`.
   - **Long Crawls** run detached, and the agent polls `crawl_status`.
   - **`sql`** is read-only.

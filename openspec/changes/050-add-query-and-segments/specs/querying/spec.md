@@ -140,7 +140,7 @@ Where the values come from SHALL follow the Crawl State, as the Issues of `040-a
 - `completed` or `stopped`: the derived fields of the `crawl` row that `040-add-rules`' post-crawl pass wrote, `health_score` as `score`, `health_internal_page_count` as `internal_pages` and `health_affected_page_count` as `affected_pages`.
 - every other state (`running`, `failed` or `interrupted`): computed at query time with the Health Score function of `040-add-rules`, over the Affected URLs that its Issues reader computes live.
 
-The `issues` member, and every Issue that `issues`, `issues <rule-id>` and `page <url>` show, SHALL be read through the Issues reader of `040-add-rules`, which reads the materialised Issues of a `completed` or `stopped` Crawl and computes them live in every other Crawl State.
+The `issues` member, and every Issue that `issues`, `issue <rule-id>` and `page <url>` show, SHALL be read through the Issues reader of `040-add-rules`, which reads the materialised Issues of a `completed` or `stopped` Crawl and computes them live in every other Crawl State.
 
 The `issues` member SHALL be `{total, by_type_priority, top}`:
 - `total` is the number of Issues.
@@ -202,7 +202,7 @@ The summary SHALL always have exactly these top-level members: `summary_version`
 
 ### Requirement: Where filter language
 
-The `--where` option of `pages`, `issues <rule-id>` and `export`, and every Segment definition, SHALL accept an expression in this grammar:
+The `--where` option of `pages`, `issue <rule-id>` and `export`, and every Segment definition, SHALL accept an expression in this grammar:
 
 ```
 expression = or_expr
@@ -459,7 +459,7 @@ A column name in `--where` or `--sort` that the queried view does not have SHALL
 
 ### Requirement: Cursors are bound to the query
 
-Cursors returned by `pages` and `issues <rule-id>` SHALL follow the cursor rule of `010-add-workspace-and-cli-contract`. The Crawl, `--where`, `--sort` and `--segment` SHALL count as filters that the cursor is bound to, so a cursor used with any other value of them SHALL fail with `invalid_cursor`.
+Cursors returned by `pages` and `issue <rule-id>` SHALL follow the cursor rule of `010-add-workspace-and-cli-contract`. The Crawl, `--where`, `--sort` and `--segment` SHALL count as filters that the cursor is bound to, so a cursor used with any other value of them SHALL fail with `invalid_cursor`.
 
 #### Scenario: A cursor is reused with another filter
 - **WHEN** a `next_cursor` from `spider pages --where "status_code = 200"` is passed to `spider pages --where "status_code = 404" --cursor <that cursor>`
@@ -600,6 +600,7 @@ The Issues SHALL be read through the Issues reader of `040-add-rules`, so a Craw
 - **WHEN** on Windows, macOS and Linux, `spider crawl {site}/e2e/` runs as a real subprocess, where `/e2e/` has a title and an `<h1>` and links to `/e2e/notitle`, which has an `<h1>` and no `<title>`, and to `/e2e/gone`, which responds 404
 - **AND** `spider issues` then runs as a real subprocess
 - **THEN** its items include `internal-4xx` and `title-missing`, each with `"affected_count": 1`
+- **AND** `spider issue internal-4xx`, run as a real subprocess, has the items `[{"url": "{site}/e2e/gone", "detail": {"status_code": 404}}]`
 
 #### Scenario: Unknown Issue Type
 - **WHEN** `spider issues --type critical` runs
@@ -607,7 +608,7 @@ The Issues SHALL be read through the Issues reader of `040-add-rules`, so a Craw
 
 ### Requirement: Issue detail
 
-`spider issues <rule-id>` SHALL return `{rule, total, items, next_cursor}`:
+`spider issue <rule-id>` SHALL return `{rule, total, items, next_cursor}`:
 - `rule` is `{rule_id, category, issue_type, priority, description, why_it_matters, how_to_fix, thresholds, reproduce_sql}`, taken from the Crawl's `rules` table (`040-add-rules`). `thresholds` maps each threshold name to the value that applied to the Crawl, and `reproduce_sql` is the Rule's query, which `spider sql` runs.
 - The items are the Issue's Affected URLs, read through the Issues reader of `040-add-rules`. Without `--fields`, each item SHALL be `{url, detail}`, where `detail` is the JSON object of measured values that `040-add-rules` recorded for that Affected URL, or `null`. The available fields are `url`, `detail`, the `pages` columns and `segment`. Page columns and `segment` are `null` for an Affected URL without a `pages` row.
 - The default order SHALL be `unique_inlinks` descending, then `url`. `--where`, `--sort`, `--limit`, `--cursor` and `--segment` SHALL work as they do for `pages`.
@@ -616,39 +617,39 @@ A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `i
 
 #### Scenario: Most-linked Affected URLs first
 - **WHEN** the Issue `title-too-long` has the Affected URLs A (unique_inlinks 5), B (12) and C (null)
-- **AND** `spider issues title-too-long` runs
+- **AND** `spider issue title-too-long` runs
 - **THEN** the `url` values of the items are B, A and C, in that order
 
 #### Scenario: Thresholds recorded for the Crawl
 - **WHEN** a Crawl ran with the threshold `max_chars` of the Rule `title-too-long` set to 70
-- **AND** `spider issues title-too-long` runs
+- **AND** `spider issue title-too-long` runs
 - **THEN** `rule.thresholds` is `{"max_chars": 70}`
 
 #### Scenario: Guidance of the Rule
-- **WHEN** `spider issues title-too-long` runs
+- **WHEN** `spider issue title-too-long` runs
 - **THEN** `rule.how_to_fix` equals the `how_to_fix` text that `spider rules show title-too-long` prints
 
 #### Scenario: The reproducing query of the Rule
-- **WHEN** `spider issues title-missing` runs
+- **WHEN** `spider issue title-missing` runs
 - **THEN** `rule.reproduce_sql` equals the `reproduce_sql` of the Crawl's `rules` row for `title-missing`
 
 #### Scenario: Detail of an Affected URL
 - **WHEN** the Issue `internal-4xx` has the single Affected URL `https://example.com/gone`, recorded with `detail` `{"status_code": 404}`
-- **AND** `spider issues internal-4xx` runs
+- **AND** `spider issue internal-4xx` runs
 - **THEN** `items` is `[{"url": "https://example.com/gone", "detail": {"status_code": 404}}]`
 
 #### Scenario: Page columns for Affected URLs
 - **WHEN** the Issue `title-too-long` has the single Affected URL `https://example.com/a`, whose title_1_length is 81
-- **AND** `spider issues title-too-long --fields url,title_1_length` runs
+- **AND** `spider issue title-too-long --fields url,title_1_length` runs
 - **THEN** `items` is `[{"url": "https://example.com/a", "title_1_length": 81}]`
 
 #### Scenario: A Rule that did not fire
 - **WHEN** no Page of the Crawl is an Affected URL of the Rule `h1-missing`
-- **AND** `spider issues h1-missing` runs
+- **AND** `spider issue h1-missing` runs
 - **THEN** the exit code is 0, `total` is `0` and `items` is `[]`
 
 #### Scenario: Unknown rule id
-- **WHEN** `spider issues title-mising` runs
+- **WHEN** `spider issue title-mising` runs
 - **THEN** the exit code is 4, the error has the code `rule_not_found`, and its `details.suggestions` starts with `title-missing`
 
 ### Requirement: Read-only SQL

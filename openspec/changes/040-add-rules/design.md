@@ -156,7 +156,7 @@ Every Rule is one SQL query over the public schema that reproduces its Affected 
 - **Exclusions are explained in the query:** an agent reads the query, not this design, so a condition that leaves a value out carries an SQL comment with the reason. `internal-no-response` and `image-broken` leave out `fetch_error = 'record_failed'`: the Crawl got a response and failed to record it, which is the tool's failure, reported by `020`'s `record_failed` warning, not the site's.
 
 ### D16. Issues of a Crawl without a final pass
-The Issues reader in `spider.store.issues` is the one way `050`'s `issues`, `issues <rule-id>`, `summary` and `page <url>` read Issues.
+The Issues reader in `spider.store.issues` is the one way `050`'s `issues`, `issue <rule-id>`, `summary` and `page <url>` read Issues.
 - **Which path:** materialised when `crawl.state` is `completed` or `stopped`, live otherwise. The Crawl State is the marker because `020` writes those two states only after the post-crawl passes, in the unit that ends the Crawl, so they imply a finished pass over the current rows.
   - A resume sets `running` first, so its Crawl is read live at once, without clearing anything.
   - A process killed during the pass leaves `running`, which `060` records as `interrupted`, and that is read live.

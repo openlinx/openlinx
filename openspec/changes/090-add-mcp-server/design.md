@@ -158,3 +158,4 @@ This is new functionality with nothing to migrate. When the product name changes
 - Should there be a read-only server mode (`spider mcp --read-only`) that hides `crawl_start`, `crawl_stop`, `crawl_resume` and `report`, for cautious users? It would be an additive flag.
 - Should `crawl_start` refuse, by itself, a Crawl above 5,000 estimated URLs unless the call confirms it? This would be a hard guard. For now the instructions hand such Crawls off.
 - Should polling move to MCP Tasks once Claude Desktop and Codex support them? That is a v1.0 decision.
+- Should `rules` become two tools, as `issues` and `issue` are (the user's decision of 2026-10-16 for `050`)? One `rules` tool whose `rule_id` switches it between `rules list` and `rules show <id>` returns two shapes under one output schema. This change's re-grounding decides it.

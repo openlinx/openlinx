@@ -172,7 +172,7 @@ The draft checked only that each recipe's SQL exits with code 0. A wrong join, a
   JOIN urls AS u ON u.id = r.url_id, json_each(r.headers) AS h
   WHERE lower(json_extract(h.value, '$[0]')) = 'x-robots-tag'
   ```
-- **The running-Crawl recipe** reads `rules.reproduce_sql` for one Rule and runs it with `spider sql`, as `050`'s `issues <rule-id>` suggests.
+- **The running-Crawl recipe** reads `rules.reproduce_sql` for one Rule and runs it with `spider sql`, as `050`'s `issue <rule-id>` suggests.
 - *Alternative:* exit code 0 only, as the draft had. Rejected for the reason above.
 
 ## Test seams

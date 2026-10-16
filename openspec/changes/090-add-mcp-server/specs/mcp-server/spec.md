@@ -27,7 +27,7 @@ Offers spider's crawl-control, query and report Commands as tools of a local MCP
 - **THEN** the title value the client receives is `Привет, мир`
 
 ### Requirement: Tool list
-The server SHALL offer exactly these 15 tools, each with a description, an input schema of JSON type `object`, and annotations:
+The server SHALL offer exactly these 16 tools, each with a description, an input schema of JSON type `object`, and annotations:
 
 | Tool | Equivalent Command | `readOnlyHint` | `openWorldHint` |
 |---|---|---|---|
@@ -37,7 +37,8 @@ The server SHALL offer exactly these 15 tools, each with a description, an input
 | `crawl_resume` | `resume --detach` | false | true |
 | `crawls_list` | `crawls list` | true | false |
 | `summary` | `summary` | true | false |
-| `issues` | `issues [<rule-id>]` | true | false |
+| `issues` | `issues` | true | false |
+| `issue` | `issue <rule-id>` | true | false |
 | `pages` | `pages` | true | false |
 | `page` | `page <url>` | true | false |
 | `sql` | `sql` | true | false |
@@ -51,11 +52,11 @@ The server SHALL offer exactly these 15 tools, each with a description, an input
 
 #### Scenario: Tool names
 - **WHEN** an in-process MCP client session lists the tools
-- **THEN** the tool names are exactly `crawl_start`, `crawl_status`, `crawl_stop`, `crawl_resume`, `crawls_list`, `summary`, `issues`, `pages`, `page`, `sql`, `schema`, `rules`, `report`, `report_brief` and `doctor`
+- **THEN** the tool names are exactly `crawl_start`, `crawl_status`, `crawl_stop`, `crawl_resume`, `crawls_list`, `summary`, `issues`, `issue`, `pages`, `page`, `sql`, `schema`, `rules`, `report`, `report_brief` and `doctor`
 
 #### Scenario: Read-only tools
 - **WHEN** the tool list is read
-- **THEN** `readOnlyHint` is true for exactly `crawl_status`, `crawls_list`, `summary`, `issues`, `pages`, `page`, `sql`, `schema`, `rules`, `report_brief` and `doctor`
+- **THEN** `readOnlyHint` is true for exactly `crawl_status`, `crawls_list`, `summary`, `issues`, `issue`, `pages`, `page`, `sql`, `schema`, `rules`, `report_brief` and `doctor`
 
 #### Scenario: Open-world tools
 - **WHEN** the tool list is read
@@ -66,7 +67,7 @@ The server SHALL offer exactly these 15 tools, each with a description, an input
 - **THEN** `destructiveHint` is false for `crawl_start`, `crawl_stop` and `crawl_resume`, and true for `report`
 
 ### Requirement: Tool inputs
-Tool inputs SHALL use the equivalent Command's argument and flag names in snake_case. For example, `--max-urls` becomes `max_urls`, and `issues <rule-id>` becomes `rule_id`. Types follow the flag:
+Tool inputs SHALL use the equivalent Command's argument and flag names in snake_case. For example, `--max-urls` becomes `max_urls`, and `issue <rule-id>` becomes `rule_id`. Types follow the flag:
 - List-valued and repeatable flags SHALL be JSON arrays.
 - Numeric flags SHALL be numbers.
 - On/off flags SHALL be booleans.
@@ -110,7 +111,7 @@ A successful tool call SHALL return, as the result's structured content, the JSO
 - **THEN** its text content parses as JSON equal to its structured content
 
 ### Requirement: Paging
-The list tools `crawls_list`, `issues`, `pages`, `schema` and `rules` SHALL:
+The list tools `crawls_list`, `issues`, `issue`, `pages`, `schema` and `rules` SHALL:
 - accept `limit` and `cursor`, with the CLI's default of 50 and range of 0 to 1000
 - return `next_cursor`, which is null on the last page
 
@@ -230,8 +231,8 @@ Crawl progress SHALL be available only by polling `crawl_status`, which returns 
 - **THEN** its structured content equals the JSON printed by `spider crawls list`
 
 ### Requirement: Query tools
-`summary`, `issues`, `pages`, `page`, `schema` and `rules` SHALL accept the inputs of their Commands, including `segment` wherever the Command accepts `--segment`, and SHALL return the same JSON.
-- `issues` with `rule_id` SHALL behave as `spider issues <rule-id>`.
+`summary`, `issues`, `issue`, `pages`, `page`, `schema` and `rules` SHALL accept the inputs of their Commands, including `segment` wherever the Command accepts `--segment`, and SHALL return the same JSON.
+- `issue` SHALL take `rule_id`, the argument of `spider issue <rule-id>`, and `issues` SHALL take none.
 - `rules` with `rule_id` SHALL behave as `spider rules show <id>`. Without `rule_id`, it SHALL behave as `spider rules list`.
 - `page` with `html: true` SHALL return the JSON of `spider page <url> --html`, which carries the fields `html` and `encoding`.
 
@@ -239,9 +240,9 @@ Crawl progress SHALL be available only by polling `crawl_status`, which returns 
 - **WHEN** the Workspace's `spider.toml` defines the Segment `blog` and `summary` is called with `segment` = `"blog"`
 - **THEN** its structured content equals the JSON printed by `spider summary --segment blog`
 
-#### Scenario: Issues of one Rule
-- **WHEN** `issues` is called with `rule_id` set to a Rule id that has Affected URLs in a completed fixture Crawl
-- **THEN** its structured content equals the JSON printed by `spider issues <that rule id>`
+#### Scenario: One Issue
+- **WHEN** `issue` is called with `rule_id` set to a Rule id that has Affected URLs in a completed fixture Crawl
+- **THEN** its structured content equals the JSON printed by `spider issue <that rule id>`
 
 #### Scenario: One Rule
 - **WHEN** `rules` is called with `rule_id` set to the first Rule id listed by `spider rules --format json`

@@ -6,13 +6,13 @@ Each implementation task below is **one red → green slice** for one scenario, 
 3. Run ruff, the strict type checker and pytest with coverage.
 4. Make one commit whose message names the scenario.
 
-**The thin slice** (ROADMAP, Build order) is group 1: `issues` and `issues <rule-id>` over `040`'s Issues reader, ending with the cross-OS end-to-end test. It needs no `--where`, no `pages` and no `summary`. Groups 2–8 widen the change to the rest of v0.1. Groups 9–13 are v0.2, and their tasks are marked (v0.2).
+**The thin slice** (ROADMAP, Build order) is group 1: `issues` and `issue <rule-id>` over `040`'s Issues reader, ending with the cross-OS end-to-end test. It needs no `--where`, no `pages` and no `summary`. Groups 2–8 widen the change to the rest of v0.1. Groups 9–13 are v0.2, and their tasks are marked (v0.2).
 
 From group 1 on, the tests use the `crawl_store` factory (design.md, Test seams). It writes only tables and columns documented in `docs/schema.md`, through the store API of `015-add-crawl-store`. It grows in the slice that first needs a table. No boundary doubles are used.
 
 Every group ends with a docs task and a review task.
 
-## 1. `issues` and `issues <rule-id>` for the thin slice (slice; seams 2: Services, 1: CLI, 3+6)
+## 1. `issues` and `issue <rule-id>` for the thin slice (slice; seams 2: Services, 1: CLI, 3+6)
 
 - [x] 1.1 Drive `Issue list › Order` (Services). Start the `crawl_store` factory, a helper function in `tests/support/crawl_store.py`, with the documented `crawl`, `seeds`, `urls`, `pages`, `rules` and `affected_urls` tables, each written by its owner's store code (design, Test seams), and a `completed` Crawl carrying its `affected_urls` rows. The scenario's Issues A–D are Rules of a later tool, recorded as `RuleRow`s and passed over with the catalogue, as `040`'s reader tests do, since no registered Rule is a warning with high Priority or an issue with low Priority. Add the `issues` entry point of the Query Service in `spider.services.query`. It resolves the Crawl with `015`'s `resolve_crawl`, then reads in one `reading()`: `040`'s `issues_in`, joined to the Crawl's `rules` table for `description` (design D14). Verify: red → green; one commit.
 - [x] 1.2 Drive `Issue list › Item fields` (Services). Verify: red → green; one commit.
@@ -20,15 +20,15 @@ Every group ends with a docs task and a review task.
 - [x] 1.4 Drive `Issue list › Filters combine` (CLI). Declare the `issues` Command with `@command_meta(output="list")`, returning a `Page` whose cursor fingerprint holds the resolved crawl id and the normalised filters (design D14). Its values are comma-separated, repeatable and case-insensitive. Verify: red → green; one commit.
 - [x] 1.5 Drive `Issue list › Filter by category` (CLI). Verify: red → green; one commit.
 - [x] 1.6 Drive `Issue list › Unknown Issue Type` (CLI). Verify: red → green; one commit.
-- [x] 1.7 Drive `Issue detail › A Rule that did not fire` (Services): the detail entry point returns a `Page` with `header` `{"rule": ...}`, read from the Crawl's `rules` table, and its Affected URLs from `040`'s `affected_urls_in` on the same connection (design D14). The detail Command's name waits for the user's decision (design, Open Questions); the service call and the item shape do not depend on it. Verify: red → green; one commit.
+- [x] 1.7 Drive `Issue detail › A Rule that did not fire` (Services): the detail entry point returns a `Page` with `header` `{"rule": ...}`, read from the Crawl's `rules` table, and its Affected URLs from `040`'s `affected_urls_in` on the same connection (design D14). The detail Command is `issue <rule-id>` (the user's decision of 2026-10-16, design D14), declared with task 1.13. Verify: red → green; one commit.
 - [x] 1.8 Drive `Issue detail › Thresholds recorded for the Crawl` (Services). Verify: red → green; one commit.
 - [x] 1.9 Drive `Issue detail › Guidance of the Rule` (Services). Verify: red → green; one commit.
 - [x] 1.10 Drive `Issue detail › The reproducing query of the Rule` (Services): `reproduce_sql` in `rule`. Verify: red → green; one commit.
 - [x] 1.11 Drive `Issue detail › Detail of an Affected URL` (Services). Verify: red → green; one commit.
 - [x] 1.12 Drive the paging of Affected URLs (Services), a clause with no scenario of its own in `Issue detail` ("`--limit` and `--cursor` SHALL work as they do for `pages`"): items in `urls.url` order, paged by keyset in SQL through `affected_urls_in` joined to `urls`, the test listed in design Risks (design D4, D14). Verify: red → green; one commit.
-- [ ] 1.13 Drive `Issue detail › Unknown rule id` (CLI): `040`'s `rule_not_found`, which its reader raises on both paths against the Crawl's `rules` table, with `details.suggestions` from that table (its task 4.11; design D14). Verify: red → green; one commit.
-- [x] 1.14 Drive `Issue list › Issues of a fixture Crawl on every OS` (CLI and 3, real subprocesses on the Windows, macOS and Linux CI jobs, through `run_cli_process`, marked `slow`): add the `/e2e/` fixture pages, with `/e2e/gone` a `Status(404)` route; `spider crawl` then `spider issues`. This is the thin slice's end-to-end test. Verify: red → green on all three OSes; one commit.
-- [ ] 1.15 Docs: in `docs/querying.md`, document `spider issues` and `spider issues <rule-id>`: the order, the filters, `affected_count`, `detail`, `reproduce_sql`, and that a `running`, `failed` or `interrupted` Crawl's Issues are computed live on every call. Until group 6, Affected URLs come in `url` order. Verify: every flag is documented.
+- [ ] 1.13 Drive `Issue detail › Unknown rule id` (CLI), declaring the `issue <rule-id>` Command with its own `@command_meta` and its own fields, its cursor fingerprinted under `issue`, while `issues` takes no argument, so `spider issues <rule-id>` is a usage error and `spider commands` describes both truthfully: `040`'s `rule_not_found`, which its reader raises on both paths against the Crawl's `rules` table, with `details.suggestions` from that table (its task 4.11; design D14). Verify: red → green; one commit.
+- [x] 1.14 Drive `Issue list › Issues of a fixture Crawl on every OS` (CLI and 3, real subprocesses on the Windows, macOS and Linux CI jobs, through `run_cli_process`, marked `slow`): add the `/e2e/` fixture pages, with `/e2e/gone` a `Status(404)` route; `spider crawl` then `spider issues`. `spider issue internal-4xx` follows, as a third subprocess (the rulings of 2026-10-16). This is the thin slice's end-to-end test. Verify: red → green on all three OSes; one commit.
+- [ ] 1.15 Docs: in `docs/querying.md`, document `spider issues` and `spider issue <rule-id>`: the order, the filters, `affected_count`, `detail`, `reproduce_sql`, and that a `running`, `failed` or `interrupted` Crawl's Issues are computed live on every call. Until group 6, Affected URLs come in `url` order. Verify: every flag is documented.
 - [x] 1.16 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 - [x] 1.17 Close the approval of group 1 (the rulings of 2026-10-15): non-scenario tests prove the order of Issue Types and Priorities, the `url` order of Affected URLs apart from their insertion order, the cursor's binding to the Crawl and the filters of the list and to the Crawl of the detail, the whole `rule` header and a later Rule's `description` read from the Crawl's `rules` table (`later_rule` gets texts of its own), and `keyset_page` with `--limit 0` and with an exactly full last page; `issue_list` checks `--fields` and the cursor before it reads the Issues; the empty-value message quotes the value; design D14 says that a read is one snapshot in WAL mode only; `keyset_after` and `keyset_page` take a tuple of keys, checked by length and exact type, so group 6's (`unique_inlinks`, `url`) keeps one cursor shape; and `spider.store.query` decodes a `detail` with `040`'s reader's own function. Verify: suite green; one commit.
 
@@ -120,11 +120,11 @@ Every group ends with a docs task and a review task.
 - [ ] 5.26 Docs: write `docs/contracts/summary.md`: every member, its type and meaning, the `summary_version` rule, a full example, the mapping to Screaming Frog's Overview (design D16), the note that `status` is the cheap progress reading of a running Crawl (design D17), and the note that the Report (070) uses this model. Verify: the example decodes into `SummaryModel` in a doc test.
 - [ ] 5.27 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
-## 6. `issues <rule-id>` widening (seams 2: Services)
+## 6. `issue <rule-id>` widening (seams 2: Services)
 
 - [ ] 6.1 Drive `Issue detail › Most-linked Affected URLs first` (Services), once `030`'s inlink columns exist. Verify: red → green; one commit.
 - [ ] 6.2 Drive `Issue detail › Page columns for Affected URLs` (Services), reusing `--where` and `--sort` from groups 1 and 3. Verify: red → green; one commit.
-- [ ] 6.3 Docs: in `docs/querying.md`, document the default order by Unique Inlinks, and the page columns of Affected URLs. Verify: every flag of `issues <rule-id>` is documented.
+- [ ] 6.3 Docs: in `docs/querying.md`, document the default order by Unique Inlinks, and the page columns of Affected URLs. Verify: every flag of `issue <rule-id>` is documented.
 - [ ] 6.4 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 7. `sql` (seams 6: Store contract, 1: CLI)

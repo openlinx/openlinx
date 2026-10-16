@@ -6,7 +6,7 @@ After a Crawl, the crawl store holds everything, but agents and people still nee
 
 > **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships `summary`, `pages`, `page`, `issues` and read-only `sql`, with the basic `--where` language: comparisons, `contains`, `is [not] null` and `and`. **Deferred to v0.2:** `export`, Segments (the `segments` capability, `--segment`, the per-Segment breakdown in `summary`), `page --html`, the rest of `--where` (`~`, `!~`, `in`, `or`, `not`, `not contains` and parentheses), and the whole `cli-contract` delta (`--format csv`, the CSV policy, `--no-bom` and `-o`).
 >
-> **End-to-end test in v0.1:** a cross-OS CI test, a foreground `crawl` → `issues` on Windows, macOS and Linux, is the last part of the thin slice (050-issues), which is `issues` and `issues <rule-id>` only.
+> **End-to-end test in v0.1:** a cross-OS CI test, a foreground `crawl` → `issues` → `issue <rule-id>` on Windows, macOS and Linux, is the last part of the thin slice (050-issues), which is `issues` and `issue <rule-id>` only.
 
 New Commands, all read-only. They take `--format` (`json`, `jsonl` and `table`) and the `--workspace` flag from `010-add-workspace-and-cli-contract`, the `--crawl` option (`latest|<id>|<path>`) from `015-add-crawl-store`, and the `csv` format, `--no-bom` and `-o` from this change:
 
@@ -16,7 +16,7 @@ New Commands, all read-only. They take `--format` (`json`, `jsonl` and `table`) 
 | `spider pages` | `--where <expr>`, `--sort <keys>`, `--segment <name>`, plus 010's `--fields`, `--limit` and `--cursor` |
 | `spider page <url>` | `--html`, `--headers` |
 | `spider issues` | `--type <list>`, `--priority <list>`, `--category <list>`, `--segment <name>`, plus 010's paging flags |
-| `spider issues <rule-id>` | `--where`, `--sort`, `--segment <name>`, plus 010's `--fields`, `--limit` and `--cursor` |
+| `spider issue <rule-id>` | `--where`, `--sort`, `--segment <name>`, plus 010's `--fields`, `--limit` and `--cursor` |
 | `spider sql "<query>"` | `--file <path>`, `--limit <n>`, `--timeout <seconds>` |
 | `spider export <view>` | `--where`, `--fields`, `--sort`, `--segment <name>`; `--format jsonl` (the default) or `csv` |
 
@@ -30,11 +30,11 @@ Global flags added by this change to the CLI contract: `--format csv`, `--no-bom
 - **The `--where` filter language**: comparisons, `~` / `!~` regex, `contains`, `in`, `is [not] null`, `and` / `or` / `not` and parentheses over the column names that `spider schema` lists. Nulls follow two-valued logic, and unknown columns fail with `unknown_column` and close-match suggestions.
 - **`pages`**: multi-key `--sort` (a `-` prefix sorts descending), and stable keyset paging inside 010's paging envelope.
 - **`page <url>`**: JSON with every column for one URL, its Segment, its Issues, its Redirect Chain and its link counts. `--html` adds `html` (the stored HTML as text) and `encoding`. `--headers` adds the recorded response headers, with cookie values redacted.
-- **`issues`** and **`issues <rule-id>`**: the Issue list with `affected_count`, and one Issue's guidance and reproducing query with its paged Affected URLs. Both read `040`'s Issues reader: the materialised Issues of a `completed` or `stopped` Crawl, and live ones in every other Crawl State.
+- **`issues`** and **`issue <rule-id>`**: the Issue list with `affected_count`, and one Issue's guidance and reproducing query with its paged Affected URLs. Both read `040`'s Issues reader: the materialised Issues of a `completed` or `stopped` Crawl, and live ones in every other Crawl State.
 - **`sql`**: runs exactly one `SELECT`/`WITH` statement. Anything else is refused. Results are capped by a default row limit and a timeout.
 - **`export`**: the views `pages`, `links`, `resources`, `issues` and `affected-urls`, streamed as NDJSON rows, or as CSV under this change's CSV policy. `-o` works as this change defines it, and there is no receipt. The `resources` view is defined over the `urls` and `links` tables.
 - **Segments**: an ordered `[segments]` table in `spider.toml` that maps each name to a `--where` expression. Definitions are checked when settings load (`settings_invalid`). The first match wins, and Segments are applied at query time. There is a `--segment` flag and a `segment` field.
-- **Flags beyond ROADMAP.md**: small ones that the Commands obviously need: `summary --top`, `issues --category`, `issues <rule-id> --where/--sort`, `sql --file/--limit/--timeout`, and `export --where/--fields/--sort`.
+- **Flags beyond ROADMAP.md**: small ones that the Commands obviously need: `summary --top`, `issues --category`, `issue <rule-id> --where/--sort`, `sql --file/--limit/--timeout`, and `export --where/--fields/--sort`.
 - **MCP tools**: none here. `090-add-mcp-server` wraps these Commands and returns the same JSON.
 
 ## Capabilities
