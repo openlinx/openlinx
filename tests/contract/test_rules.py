@@ -31,6 +31,12 @@ def test_issues_is_a_view() -> None:
     assert result.json()["items"] == [{"name": "issues", "kind": "view"}]
 
 
+def test_populations_are_views() -> None:
+    result = run_cli("schema", "analysed_pages", "--fields", "name,kind")
+
+    assert result.json()["items"] == [{"name": "analysed_pages", "kind": "view"}]
+
+
 def test_a_view_that_declares_other_columns_than_its_query_is_refused() -> None:
     with pytest.raises(TypeError, match="declares other columns"):
         public_view(

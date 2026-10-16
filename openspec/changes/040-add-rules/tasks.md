@@ -91,7 +91,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 5. Title Rules and the post-crawl pass (v0.1, except the tasks marked v0.2)
 
-- [ ] 5.0 Drive "A Page that was not parsed is not analysed" at seam 2 and "Populations are views" at seam 6 (design D19): every Rule's query selects from the view of its `population`, and one seam-2 test runs every Rule over a file with rows outside each population and checks that its Affected URLs are rows of its view.
+- [x] 5.0 Drive "A Page that was not parsed is not analysed" at seam 2 and "Populations are views" at seam 6 (design D19): every Rule's query selects from the view of its `population`, and one seam-2 test runs every Rule over a file with rows outside each population and checks that its Affected URLs are rows of its view.
 - [ ] 5.1 Drive "Title too long by characters" at seam 2.
 - [ ] 5.2 Drive "Title at the limit" at seam 2.
 - [ ] 5.3 Drive "Raised title limit" at seam 2: a Rule's query reads its thresholds from the Crawl's `rules` row (`json_extract`), so `reproduce_sql` runs on its own, with no threshold bound as a parameter (D15).

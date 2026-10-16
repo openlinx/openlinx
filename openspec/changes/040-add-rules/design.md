@@ -208,6 +208,7 @@ The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is 
 - [Resource and non-Page URL Issues, such as no response or blocked, do not lower the Health Score] → This follows the glossary definition, which is Page-centric. It is documented, and listed under Open Questions.
 - [`indexable_pages` holds every analysed Page until `030` stores Indexability] → `title-duplicate` compares non-indexable Pages too until then. The strict xfail test of task 5.10 starts passing when `030`'s Indexability narrows the view, which fails the suite, so the task cannot be forgotten.
 - [`pages` has no `title_1_width_px` before v0.2] → "Title too long by characters" is tested without it; the v0.1 query reads characters only.
+- [Tests of group 5 named after no scenario] → In `tests/rules/test_populations.py`: `test_a_rule_s_affected_urls_are_members_of_its_population`, every Rule over rows outside each population (D19).
 - [Duplicate grouping on about 500k Pages] → Plain `GROUP BY` over non-NULL values, which is O(n log n) in SQLite with no extra index. The passes run once per Crawl end.
 - [Each read of `issues` counts `affected_urls`] → A scan of its primary key, which a Crawl of about 500k URLs keeps to a few million narrow rows. `050` reads it once per Command.
 - [Live Issues of a running Crawl of about 500k URLs are slow, or hold back WAL checkpoints] → `026`'s 500k run measures both. Over 30 seconds for the full list, the design is revisited; over 1 second for `page <url>`, the queries get per-URL forms (D16).

@@ -4,7 +4,7 @@ from spider.naming import SETTINGS_FILE_NAME
 from spider.rules.model import NO_ROWS, Rule, Threshold
 
 _TITLE_MISSING_SQL = """SELECT url_id, NULL AS detail
-FROM pages
+FROM pages JOIN analysed_pages USING (url_id)
 WHERE title_count = 0 OR title_1 = ''"""
 
 TITLE_MISSING = Rule(
@@ -12,7 +12,7 @@ TITLE_MISSING = Rule(
     category="titles",
     issue_type="issue",
     priority="high",
-    applies_to="internal_pages",
+    population="analysed_pages",
     description="A Page has no title, or its first title is empty.",
     why_it_matters=(
         "The title names the page in search results and in browser tabs. Without one, "
@@ -29,7 +29,7 @@ TITLE_TOO_LONG = Rule(
     category="titles",
     issue_type="opportunity",
     priority="medium",
-    applies_to="internal_pages",
+    population="analysed_pages",
     description="A Page's first title is longer than max_chars characters.",
     why_it_matters=(
         "Search engines cut a long title short in their results, so its end, often the brand or "

@@ -1,7 +1,7 @@
 """The Rule model (040-add-rules D1, D12)."""
 
 import difflib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -11,6 +11,15 @@ from spider.output.diagnostics import SpiderError
 from spider.store.records import AppliesTo, IssueType, Priority, RuleCategory
 
 type ThresholdUnit = Literal["characters", "pixels", "words", "kilobytes", "hops"]
+# The views that a Rule's query joins (design D19).
+type Population = Literal["internal_urls", "analysed_pages", "indexable_pages"]
+
+# The Health Score counts the Indexable Pages among the Internal Pages.
+_APPLIES_TO: Mapping[Population, AppliesTo] = {
+    "internal_urls": "internal_urls",
+    "analysed_pages": "internal_pages",
+    "indexable_pages": "internal_pages",
+}
 
 # The query of a Rule registered before the slice of its condition, until that slice.
 NO_ROWS = "SELECT id AS url_id, NULL AS detail FROM urls WHERE 0"
@@ -29,13 +38,17 @@ class Rule:
     category: RuleCategory
     issue_type: IssueType
     priority: Priority
-    applies_to: AppliesTo
+    population: Population
     description: str
     why_it_matters: str
     how_to_fix: str
     # The only form of the Rule's condition (design D1, D15).
     reproduce_sql: str
     thresholds: tuple[Threshold, ...] = ()
+
+    @property
+    def applies_to(self) -> AppliesTo:
+        return _APPLIES_TO[self.population]
 
 
 def find_rule(catalogue: Sequence[Rule], rule_id: str) -> Rule:

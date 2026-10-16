@@ -43,7 +43,8 @@ def crawl_with_page(
 ) -> tuple[Path, int]:
     """A crawl file and the URL id of its one analysed Page, with these Page data columns,
     whose rules table marks the Rules named in `disabled` off; `extractor_error` as
-    `parse_error` makes it a Page on which an extractor failed, and `more_rules` are
+    `parse_error` makes it a Page on which an extractor failed, any other parse error a
+    Page that was not parsed, and `more_rules` are
     recorded after the catalogue's Rules.
 
     The rows go through the store's own units, as a Crawl writes them: the Seed, then its
@@ -138,7 +139,7 @@ def _html(
         content_type="text/html",
         fetched_at=_AT,
         response_time_ms=1,
-        parsed=True,
+        parsed=parse_error in (None, "extractor_error"),
         parse_error=parse_error,
         discovered=discovered,
         rows=rows,

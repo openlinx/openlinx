@@ -3,14 +3,14 @@
 from spider.rules.model import Rule
 
 _INTERNAL_4XX_SQL = """SELECT id AS url_id, json_object('status_code', status_code) AS detail
-FROM urls
-WHERE is_internal = 1 AND fetch_state = 'fetched' AND status_code BETWEEN 400 AND 499"""
+FROM urls JOIN internal_urls ON internal_urls.url_id = urls.id
+WHERE fetch_state = 'fetched' AND status_code BETWEEN 400 AND 499"""
 _INTERNAL_5XX_SQL = """SELECT id AS url_id, json_object('status_code', status_code) AS detail
-FROM urls
-WHERE is_internal = 1 AND fetch_state = 'fetched' AND status_code BETWEEN 500 AND 599"""
+FROM urls JOIN internal_urls ON internal_urls.url_id = urls.id
+WHERE fetch_state = 'fetched' AND status_code BETWEEN 500 AND 599"""
 _INTERNAL_NO_RESPONSE_SQL = """SELECT id AS url_id, json_object('error', fetch_error) AS detail
-FROM urls
-WHERE is_internal = 1 AND fetch_state = 'error'
+FROM urls JOIN internal_urls ON internal_urls.url_id = urls.id
+WHERE fetch_state = 'error'
   -- record_failed: the Crawl got a response and failed to record it. That is the tool's
   -- failure, which the record_failed warning reports, not the site's.
   AND fetch_error <> 'record_failed'"""
@@ -20,7 +20,7 @@ INTERNAL_4XX = Rule(
     category="response_codes",
     issue_type="issue",
     priority="high",
-    applies_to="internal_urls",
+    population="internal_urls",
     description="An Internal URL responded with a client error, a status code from 400 to 499.",
     why_it_matters=(
         "Visitors and search engines that follow a link to the URL reach an error instead of "
@@ -37,7 +37,7 @@ INTERNAL_5XX = Rule(
     category="response_codes",
     issue_type="issue",
     priority="high",
-    applies_to="internal_urls",
+    population="internal_urls",
     description="An Internal URL responded with a server error, a status code from 500 to 599.",
     why_it_matters=(
         "The server failed to deliver the page. Search engines crawl a site that answers with "
@@ -54,7 +54,7 @@ INTERNAL_NO_RESPONSE = Rule(
     category="response_codes",
     issue_type="issue",
     priority="high",
-    applies_to="internal_urls",
+    population="internal_urls",
     description=(
         "An Internal URL got no HTTP response: a timeout, a DNS, connection or TLS error, an "
         "answer that was no valid HTTP, or its site's robots.txt got no response so it was "

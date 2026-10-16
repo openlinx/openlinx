@@ -246,3 +246,27 @@ The Issues: one row for each Rule with at least one Affected URL, counted from a
 | `issue_type` | TEXT | no | | | `issue`, `warning`, `opportunity` | The Issue Type of the Rule's Issues. |
 | `priority` | TEXT | no | | | `high`, `medium`, `low` | The Priority of the Rule's Issues. |
 | `affected_count` | INTEGER | no | | | | The number of the Rule's rows in affected_urls. |
+
+## View `internal_urls`
+
+The Internal URLs that were requested.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | → `urls.id` | | | A member of the population. |
+
+## View `analysed_pages`
+
+The Pages that were parsed, also when one of their extractors failed.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | → `urls.id` | | | A member of the population. |
+
+## View `indexable_pages`
+
+The analysed Pages that are indexable. The store records no Indexability yet, so it holds every analysed Page.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | → `urls.id` | | | A member of the population. |

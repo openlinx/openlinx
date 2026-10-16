@@ -3,7 +3,7 @@
 from spider.rules.model import Rule
 
 _H1_MISSING_SQL = """SELECT url_id, NULL AS detail
-FROM pages
+FROM pages JOIN analysed_pages USING (url_id)
 WHERE h1_count = 0 OR h1_1 = ''"""
 
 H1_MISSING = Rule(
@@ -11,7 +11,7 @@ H1_MISSING = Rule(
     category="headings",
     issue_type="warning",
     priority="medium",
-    applies_to="internal_pages",
+    population="analysed_pages",
     description="A Page has no h1 heading, or its first h1 is empty.",
     why_it_matters=(
         "The h1 tells visitors and search engines what the page is about. Without one, the "

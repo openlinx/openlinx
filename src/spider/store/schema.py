@@ -758,3 +758,49 @@ issues = public_view(
     "affected_urls, so it holds the result of the last post-crawl pass.",
     change=40,
 )
+
+
+def _population(name: str, query: Select[Any], comment: str) -> Table:
+    """The URL ids of a population, which a Rule's query joins (040-add-rules D19)."""
+    return public_view(
+        name,
+        Column(
+            "url_id",
+            Integer,
+            nullable=False,
+            comment="A member of the population.",
+            info={"references": "urls.id"},
+        ),
+        query=query,
+        comment=comment,
+        change=40,
+    )
+
+
+def _analysed() -> Select[Any]:
+    return (
+        select(pages.c.url_id)
+        .join_from(pages, urls, pages.c.url_id == urls.c.id)
+        .where(urls.c.parsed == 1)
+    )
+
+
+internal_urls = _population(
+    "internal_urls",
+    select(urls.c.id.label("url_id")).where(
+        urls.c.is_internal == 1, urls.c.fetch_state.in_(("fetched", "error"))
+    ),
+    "The Internal URLs that were requested.",
+)
+analysed_pages = _population(
+    "analysed_pages",
+    _analysed(),
+    "The Pages that were parsed, also when one of their extractors failed.",
+)
+# Narrowed to the indexable Pages once the store records Indexability.
+indexable_pages = _population(
+    "indexable_pages",
+    _analysed(),
+    "The analysed Pages that are indexable. The store records no Indexability yet, so it holds "
+    "every analysed Page.",
+)
