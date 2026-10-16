@@ -306,7 +306,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
 - [x] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared, and the run of consecutive 403 and 429 responses is kept per Internal host as the spec says.
 - [x] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
-- [ ] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+- [x] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
 
 ## 12. Events, failures and backstops (widening)
 
