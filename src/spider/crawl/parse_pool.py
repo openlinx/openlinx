@@ -90,9 +90,13 @@ def _work(tasks: _PipeEnd, results: _PipeEnd) -> None:
 def _pickled(outcome: _Outcome) -> bytes:
     """What a worker sends: whatever cannot cross to the crawl process costs only itself."""
     if isinstance(outcome, PreparedPage):
-        with suppress(Exception):
+        try:
             return pickle.dumps(_sendable(outcome), pickle.HIGHEST_PROTOCOL)
-        return pickle.dumps(RuntimeError("The parse worker could not send its PreparedPage."))
+        # That one Page's failure, as a record the crawl process cannot read is (design D3).
+        except Exception as error:
+            message = f"The parse worker could not send the Page's record: {type(error).__name__}"
+            crashed: _Sent = (_crashed(message), ())
+            return pickle.dumps(crashed, pickle.HIGHEST_PROTOCOL)
     with suppress(Exception):
         return pickle.dumps(outcome, pickle.HIGHEST_PROTOCOL)
     return pickle.dumps(RuntimeError(f"{type(outcome).__name__}: {outcome}"))
@@ -289,7 +293,7 @@ class PoolExecutor:
         self._closing = False
         self._broken: BaseException | None = None
         # The result pipes the waiter thread reads, by identity: on Windows a pipe end is a
-        # PipeConnection, which is no Connection. The waiter reads it; the loop's thread adds.
+        # PipeConnection, which is no Connection. The loop's thread adds, the waiter removes.
         self._watched: dict[int, _Worker] = {}
         self._watched_lock = threading.Lock()
         self._waiter: threading.Thread | None = None
@@ -326,15 +330,16 @@ class PoolExecutor:
 
     async def close(self) -> None:
         self._closing = True
-        timers = [*self._readiness.values(), *(held.deadline for held in self._busy.values())]
-        for timer in timers:
-            timer.cancel()
         # Nothing waits any more at a normal end; a stop leaves no Page for a worker.
         for _, future in self._waiting:
             future.cancel()
         self._waiting.clear()
         # A replacement still starting is stopped with the others once it has started.
         await asyncio.gather(*self._replacing, return_exceptions=True)
+        # Only now: a replacement that has just started armed a readiness timer.
+        timers = [*self._readiness.values(), *(held.deadline for held in self._busy.values())]
+        for timer in timers:
+            timer.cancel()
         for worker in self._live:
             # A worker that ended meanwhile has nothing to stop.
             with suppress(OSError):
@@ -545,6 +550,7 @@ class PoolExecutor:
         # The first cause counts: a worker that reported its start failure then ends too.
         if self._broken is None:
             self._broken = error
+        # The readiness timers stay: each still ends a worker that is never ready.
         for held in self._busy.values():
             held.deadline.cancel()
         futures = [held.future for held in self._busy.values()]

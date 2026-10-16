@@ -79,13 +79,24 @@ def inner_run(pytester: pytest.Pytester, test: str) -> pytest.RunResult:
 def test_an_output_that_cannot_be_pickled_fails_the_test(pytester: pytest.Pytester) -> None:
     result = inner_run(pytester, UNPICKLABLE_OUTPUT)
 
-    result.assert_outcomes(passed=1, errors=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*ERROR at teardown of test_an_output_of_a_local_class*",
+            "Cannot cross the parse pool: the output of local_class on https://site.test/: "
+            "PicklingError: *",
+        ]
+    )
 
 
 def test_an_extractor_that_cannot_be_pickled_fails_the_test(pytester: pytest.Pytester) -> None:
     result = inner_run(pytester, LOCAL_EXTRACTOR)
 
-    result.assert_outcomes(passed=1, errors=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*ERROR at teardown of test_a_local_extractor*",
+            "Cannot cross the parse pool: the settings snapshot: PicklingError: *",
+        ]
+    )
 
 
 def test_the_built_in_extractors_reach_a_worker_as_they_are() -> None:

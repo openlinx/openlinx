@@ -1,4 +1,4 @@
-"""An extractor whose module a parse worker cannot import, as a missing dependency would make it.
+"""An extractor whose module a parse worker cannot import (026 design D1).
 
 A spawn child names itself before it unpickles its start arguments, which import this module.
 """

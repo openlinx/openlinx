@@ -36,9 +36,7 @@ from spider.crawl.parse_pool import (
     worker_count,
     worker_limit,
 )
-from spider.crawl.politeness import global_cap
 from spider.crawl.scope import scope_rules
-from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import NormalizedUrl
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
@@ -283,11 +281,17 @@ async def test_an_output_a_worker_cannot_send_costs_only_its_extractor() -> None
     )
 
 
-def test_an_outcome_that_cannot_cross_even_without_its_outputs_fails_its_page() -> None:
+def test_a_page_whose_record_a_worker_cannot_send_is_recorded_as_crashed() -> None:
     page = prepare_page(at("/"), RESPONSE, PageSettings(scope_rules(at("/"))))
     unsendable = msgspec.structs.replace(page, document_links=(lambda: None,))
 
-    assert type(pickle.loads(_pickled(unsendable))) is RuntimeError  # noqa: S301
+    crashed = _outcome(_pickled(unsendable))
+
+    assert isinstance(crashed, PreparedPage)
+    assert (crashed.parse_error, crashed.parse_error_message) == (
+        "worker_crashed",
+        "The parse worker could not send the Page's record: PicklingError",
+    )
 
 
 @pytest.mark.slow
@@ -641,7 +645,8 @@ def test_fetching_waits_for_slow_parsing(
 
     requested = [r.received_at for r in server.requests if server.url(r.path) in pages]
     most = max(sum(t <= at for t in requested) - sum(t <= at for t in prepared) for at in requested)
-    assert most <= global_cap(CrawlSettings.model_validate({}).concurrency) + 2 * 2
+    # The global request cap at the default --concurrency, 20, and 2 Pages for each of 2 workers.
+    assert most <= 24
 
 
 CRASH_SITE = Site(

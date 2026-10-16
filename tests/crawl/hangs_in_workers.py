@@ -1,4 +1,4 @@
-"""An extractor whose module never finishes importing in a parse worker, so it is never ready.
+"""An extractor whose module never finishes importing in a parse worker (026 design D8).
 
 A spawn child names itself before it unpickles its snapshot, which imports this module.
 """
