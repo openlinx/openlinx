@@ -253,14 +253,17 @@ async def _unit_of(
 ) -> tuple[UrlUnit, bool | None] | None:
     """The unit that records the URL's final state, with its handlers' rows, and its
     blocked_by_robots_txt, which a fallback unit keeps; or None when the URL limit refuses
-    its request, which leaves it queued. `decision` is taken once, at dispatch, so a URL
+    a new request, which leaves it queued. `decision` is taken once, at dispatch, so a URL
     found on several Pages is recorded once (design D1)."""
     row_writers = context.hooks.row_writers
     skip_reason = _skip_reason(context, queued, decision)
     # Only a URL that would be requested is checked, so a skip never requests robots.txt.
     blocked = None
     if skip_reason is None:
-        if limits.refuses():
+        # A verdict already requested decides the URL before the limit, which guards only a
+        # new request (design D6).
+        if not robots.requested(queued.url) and limits.refuses():
+            limits.refuse()
             return None
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
         origin_robots = await robots.robots_of(queued.url)

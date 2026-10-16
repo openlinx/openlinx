@@ -6,7 +6,7 @@ from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status, redirect_chain
 from tests.support.crawling import crawl_result, crawled
-from tests.support.crawls import query
+from tests.support.crawls import crawl_row, query
 from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
@@ -283,3 +283,16 @@ def test_a_url_that_the_url_limit_refuses_never_requests_robots_txt(
         [request.path for request in hosts.other.requests],
         query(crawl_file, "SELECT robots_state FROM origins WHERE origin = 'http://other.test'"),
     ) == ([], [(None,)])
+
+
+def test_a_known_verdict_records_a_disallowed_url_past_the_url_limit(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(PRIVATE_SITE)
+
+    crawl_file = crawled(server.url("/"), "--max-urls", "1")
+
+    assert (
+        crawl_row(crawl_file)["state"],
+        query(crawl_file, "SELECT skip_reason FROM urls WHERE url = ?", [server.url("/private/a")]),
+    ) == ("completed", [("blocked_by_robots_txt",)])

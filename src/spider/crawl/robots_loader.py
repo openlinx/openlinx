@@ -36,6 +36,10 @@ class RobotsLoader:
         # A URL whose task is cancelled while it waits leaves the request to the others.
         return await asyncio.shield(task)
 
+    def requested(self, url: NormalizedUrl) -> bool:
+        """Whether the robots.txt of the URL's origin needs no new request."""
+        return url_origin(url) in self._origins
+
     async def close(self) -> None:
         for task in self._origins.values():
             task.cancel()
