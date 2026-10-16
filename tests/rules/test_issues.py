@@ -188,6 +188,17 @@ def test_disabled_rule_produces_no_issue(
     assert query(crawl_file, "SELECT rule_id FROM issues WHERE rule_id = 'title-missing'") == []
 
 
+def test_a_crawl_stopped_by_the_url_limit_lists_its_issues_as_stored(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    crawl_file = crawled(fixture_site(TWO_UNTITLED_PAGES).url("/"), "--max-urls", "1")
+
+    assert (
+        query(crawl_file, "SELECT state FROM crawl"),
+        [(issue.rule_id, issue.affected_count) for issue in read_issues(crawl_file, RULES)],
+    ) == ([("stopped",)], [("title-missing", 1), ("h1-missing", 1)])
+
+
 def test_client_error_recorded_by_a_crawl(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
