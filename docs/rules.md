@@ -46,7 +46,7 @@ Each Rule fires for a URL of its population when the condition holds, and record
 
 `record_failed` means that the Crawl received a response but could not record it. That is the tool's failure, not the site's, so it is no Issue: the `record_failed` warning reports it, and continuing the Crawl requests the URL again. The query of `internal-no-response` says so in an SQL comment.
 
-`title-too-long` counts characters only in v0.1; pixel widths come in v0.2. `indexable_pages` holds every analysed Page until the crawl store records Indexability, so `title-duplicate` compares non-indexable Pages too until then.
+`title-too-long` counts characters only in v0.1; pixel widths come in v0.2.
 
 `spider rules show <id>` prints each Rule's guidance: what it checks, why it matters and how to fix it.
 

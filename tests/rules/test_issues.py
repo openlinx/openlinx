@@ -124,7 +124,8 @@ TWO_SHOES = Site(
 def test_rule_that_did_not_fire_has_no_issue(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
-    crawl_file = crawled(fixture_site(TWO_UNTITLED_PAGES).url("/"))
+    at_the_limit = Site({"/": Page(body=f"<title>{'x' * 60}</title>")})
+    crawl_file = crawled(fixture_site(at_the_limit).url("/"))
 
     assert query(crawl_file, "SELECT rule_id FROM issues WHERE rule_id = 'title-too-long'") == []
 

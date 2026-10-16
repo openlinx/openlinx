@@ -9,7 +9,7 @@ from spider.rules.model import Population, Rule
 from spider.rules.registry import RULES
 from spider.store.issues import evaluate_rule
 from tests.support.crawls import query
-from tests.support.rules import crawl_with_page, crawl_with_url, responded
+from tests.support.rules import crawl_with_page, crawl_with_url, failed, responded
 from tests.support.workspace import TempWorkspace
 
 MEMBERS: dict[Population, str] = {
@@ -19,11 +19,22 @@ MEMBERS: dict[Population, str] = {
 }
 # Rows outside every population, on which a Rule that read its table alone would fire.
 OUTSIDE: dict[str, Callable[[TempWorkspace], tuple[Path, int]]] = {
-    "external": lambda workspace: crawl_with_url(
+    "external_4xx": lambda workspace: crawl_with_url(
         workspace, "https://elsewhere.test/gone", responded(404), is_internal=False
     ),
+    "external_5xx": lambda workspace: crawl_with_url(
+        workspace, "https://elsewhere.test/down", responded(503), is_internal=False
+    ),
+    "external_no_response": lambda workspace: crawl_with_url(
+        workspace, "https://elsewhere.test/reset", failed("connection_refused"), is_internal=False
+    ),
     "not_parsed": lambda workspace: crawl_with_page(
-        workspace, parse_error="parse_timeout", title_count=0, h1_count=0
+        workspace,
+        parse_error="parse_timeout",
+        title_count=1,
+        title_1="",
+        title_1_length=61,
+        h1_count=0,
     ),
 }
 

@@ -7,7 +7,7 @@ from spider.rules.titles import TITLE_DUPLICATE, TITLE_MISSING, TITLE_TOO_LONG
 from spider.store.issues import evaluate_rule
 from spider.store.records import AffectedUrl
 from tests.support.crawls import query
-from tests.support.rules import crawl_with_page, crawl_with_pages
+from tests.support.rules import SHOES, crawl_with_page, crawl_with_pages
 from tests.support.workspace import TempWorkspace
 
 
@@ -82,9 +82,6 @@ def test_raised_title_limit(temp_workspace: TempWorkspace) -> None:
 
     # The file's own query, run alone, agrees: it binds no threshold.
     assert (evaluate_rule(crawl_file, TITLE_TOO_LONG), query(crawl_file, stored_sql)) == ([], [])
-
-
-SHOES = {"title_count": 1, "title_1": "Shoes", "title_1_length": 5}
 
 
 def test_duplicate_titles_among_indexable_pages(temp_workspace: TempWorkspace) -> None:

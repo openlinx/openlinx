@@ -16,7 +16,7 @@ WHERE title_1_length > json_extract(
 
 _TITLE_DUPLICATE_SQL = """SELECT url_id, json_object('title_1', title_1, 'pages', pages) AS detail
 FROM (
-  -- = and PARTITION BY compare the titles case-sensitively.
+  -- PARTITION BY compares the titles case-sensitively.
   SELECT url_id, title_1, count(*) OVER (PARTITION BY title_1) AS pages
   FROM pages JOIN indexable_pages USING (url_id)
   -- An empty title is title-missing's.

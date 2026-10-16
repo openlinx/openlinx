@@ -31,6 +31,8 @@ _PAGE_URL = NormalizedUrl("https://site.test/")
 _SEED = NormalizedUrl("https://example.test/")
 _AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
 type UrlUnit = Callable[[Connection], None]
+# The Page data of two Pages whose titles are the same.
+SHOES: Mapping[str, Any] = {"title_count": 1, "title_1": "Shoes", "title_1_length": 5}
 
 
 def crawl_with_page(
@@ -84,14 +86,22 @@ def crawl_with_pages(
         for url in urls[1:]
     )
     with CrawlWriter(crawl.path, FakeClock()) as writer:
-        ids = [writer.run(record_seed(urls[0], is_internal=True, in_scope=True))]
-        for n, (url, page_data) in enumerate(zip(urls, pages, strict=True)):
-            if n:
-                ids.append(writer.run(_url_id(url)))
-            page = PageRow(url_id=ids[n], address=url, url_encoded_address=url, **page_data)
-            rows = (HandlerRows(write_page, (page,)),)
-            writer.run(record_fetched(_html(ids[n], discovered=() if n else found, rows=rows)))
+        seed_id = writer.run(record_seed(urls[0], is_internal=True, in_scope=True))
+        writer.run(
+            record_fetched(_html(seed_id, discovered=found, rows=_page(seed_id, urls[0], pages[0])))
+        )
+        ids = [seed_id]
+        for url, page_data in zip(urls[1:], pages[1:], strict=True):
+            ids.append(writer.run(_url_id(url)))
+            writer.run(record_fetched(_html(ids[-1], rows=_page(ids[-1], url, page_data))))
     return crawl.path, ids
+
+
+def _page(
+    url_id: int, url: NormalizedUrl, page_data: Mapping[str, Any]
+) -> tuple[HandlerRows[Any], ...]:
+    page = PageRow(url_id=url_id, address=url, url_encoded_address=url, **page_data)
+    return (HandlerRows(write_page, (page,)),)
 
 
 def crawl_with_url(

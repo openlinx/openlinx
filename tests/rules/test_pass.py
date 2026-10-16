@@ -11,11 +11,9 @@ from spider.store.issues import affected_urls_unit, materialise_issues
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import query
-from tests.support.rules import crawl_with_page, crawl_with_pages
+from tests.support.rules import SHOES, crawl_with_page, crawl_with_pages
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import replay_now
-
-SHOES = {"title_count": 1, "title_1": "Shoes", "title_1_length": 5}
 
 
 def test_the_units_of_the_issues_pass_run_again_the_same(temp_workspace: TempWorkspace) -> None:

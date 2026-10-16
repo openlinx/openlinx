@@ -777,7 +777,7 @@ def _population(name: str, query: Select[Any], comment: str) -> Table:
     )
 
 
-def _analysed() -> Select[Any]:
+def _analysed_page_ids() -> Select[Any]:
     return (
         select(pages.c.url_id)
         .join_from(pages, urls, pages.c.url_id == urls.c.id)
@@ -794,13 +794,12 @@ internal_urls = _population(
 )
 analysed_pages = _population(
     "analysed_pages",
-    _analysed(),
+    _analysed_page_ids(),
     "The Pages that were parsed, also when one of their extractors failed.",
 )
-# Narrowed to the indexable Pages once the store records Indexability.
 indexable_pages = _population(
     "indexable_pages",
-    _analysed(),
+    _analysed_page_ids(),
     "The analysed Pages that are indexable. The store records no Indexability yet, so it holds "
     "every analysed Page.",
 )
