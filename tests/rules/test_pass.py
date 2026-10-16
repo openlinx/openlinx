@@ -1,16 +1,21 @@
 """The units of the Issues pass (040-add-rules D5, D15; seam 2)."""
 
+import asyncio
 from dataclasses import replace
 
+from spider.aio import loop_factory
+from spider.rules.registry import RULES
 from spider.rules.titles import TITLE_MISSING
 from spider.services.hooks import default_hooks
-from spider.store.issues import affected_urls_unit
+from spider.store.issues import affected_urls_unit, materialise_issues
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import query
-from tests.support.rules import crawl_with_page
+from tests.support.rules import crawl_with_page, crawl_with_pages
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import replay_now
+
+SHOES = {"title_count": 1, "title_1": "Shoes", "title_1_length": 5}
 
 
 def test_the_units_of_the_issues_pass_run_again_the_same(temp_workspace: TempWorkspace) -> None:
@@ -44,3 +49,15 @@ def test_a_rule_query_ending_in_a_comment_is_run_as_written(
     assert query(crawl_file, "SELECT rule_id, url_id FROM affected_urls") == [
         ("title-missing", url_id)
     ]
+
+
+def test_a_second_pass_does_not_duplicate_rows(temp_workspace: TempWorkspace) -> None:
+    crawl_file, _ = crawl_with_pages(temp_workspace, SHOES, SHOES)
+
+    with CrawlWriter(crawl_file, FakeClock()) as writer:
+        for _ in range(2):
+            asyncio.run(materialise_issues(writer, RULES), loop_factory=loop_factory)
+
+    assert query(
+        crawl_file, "SELECT count(*) FROM affected_urls WHERE rule_id = 'title-duplicate'"
+    ) == [(2,)]

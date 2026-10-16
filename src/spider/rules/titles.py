@@ -14,6 +14,16 @@ WHERE title_1_length > json_extract(
   (SELECT thresholds FROM rules WHERE id = 'title-too-long'), '$.max_chars'
 )"""
 
+_TITLE_DUPLICATE_SQL = """SELECT url_id, json_object('title_1', title_1, 'pages', pages) AS detail
+FROM (
+  -- = and PARTITION BY compare the titles case-sensitively.
+  SELECT url_id, title_1, count(*) OVER (PARTITION BY title_1) AS pages
+  FROM pages JOIN indexable_pages USING (url_id)
+  -- An empty title is title-missing's.
+  WHERE title_1 <> ''
+)
+WHERE pages > 1"""
+
 TITLE_MISSING = Rule(
     id="title-missing",
     category="titles",
@@ -30,6 +40,23 @@ TITLE_MISSING = Rule(
         "it and set it apart from the site's other pages."
     ),
     reproduce_sql=_TITLE_MISSING_SQL,
+)
+TITLE_DUPLICATE = Rule(
+    id="title-duplicate",
+    category="titles",
+    issue_type="warning",
+    priority="medium",
+    population="indexable_pages",
+    description="A Page's first title is also the first title of another Indexable Page.",
+    why_it_matters=(
+        "Search engines cannot tell the pages apart by their titles, and may show one of "
+        "them for searches meant for the other."
+    ),
+    how_to_fix=(
+        "Give each page a title that says what sets it apart. If the pages are the same, "
+        "point one at the other with a canonical link, or redirect it."
+    ),
+    reproduce_sql=_TITLE_DUPLICATE_SQL,
 )
 TITLE_TOO_LONG = Rule(
     id="title-too-long",
@@ -50,4 +77,4 @@ TITLE_TOO_LONG = Rule(
     reproduce_sql=_TITLE_TOO_LONG_SQL,
 )
 
-RULES = (TITLE_MISSING, TITLE_TOO_LONG)
+RULES = (TITLE_MISSING, TITLE_DUPLICATE, TITLE_TOO_LONG)

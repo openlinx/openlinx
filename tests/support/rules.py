@@ -72,6 +72,28 @@ def crawl_with_page(
     return crawl.path, url_id
 
 
+def crawl_with_pages(
+    temp_workspace: TempWorkspace, *pages: Mapping[str, Any]
+) -> tuple[Path, list[int]]:
+    """A crawl file of analysed Pages with these Page data columns, and their URL ids: the
+    Seed, https://site.test/, then /2, /3 and on, which it links to."""
+    crawl = create_any_crawl(temp_workspace)
+    urls = [NormalizedUrl(_PAGE_URL + (str(n) if n > 1 else "")) for n in range(1, len(pages) + 1)]
+    found = tuple(
+        NewUrl(url=url, discovered_via="hyperlink", is_internal=True, in_scope=True)
+        for url in urls[1:]
+    )
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        ids = [writer.run(record_seed(urls[0], is_internal=True, in_scope=True))]
+        for n, (url, page_data) in enumerate(zip(urls, pages, strict=True)):
+            if n:
+                ids.append(writer.run(_url_id(url)))
+            page = PageRow(url_id=ids[n], address=url, url_encoded_address=url, **page_data)
+            rows = (HandlerRows(write_page, (page,)),)
+            writer.run(record_fetched(_html(ids[n], discovered=() if n else found, rows=rows)))
+    return crawl.path, ids
+
+
 def crawl_with_url(
     temp_workspace: TempWorkspace,
     url: str,

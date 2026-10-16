@@ -113,6 +113,32 @@ def test_detail_is_stored_as_json(temp_workspace: TempWorkspace, fixture_site: S
     assert [json.loads(detail) for (detail,) in rows] == [{"length": 61}]
 
 
+TWO_SHOES = Site(
+    {
+        "/": Page(body='<title>Shoes</title><a href="/twin">Twin</a>'),
+        "/twin": Page(body="<title>Shoes</title>"),
+    }
+)
+
+
+def test_rule_that_did_not_fire_has_no_issue(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    crawl_file = crawled(fixture_site(TWO_UNTITLED_PAGES).url("/"))
+
+    assert query(crawl_file, "SELECT rule_id FROM issues WHERE rule_id = 'title-too-long'") == []
+
+
+def test_duplicates_found_by_the_post_crawl_passes(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    crawl_file = crawled(fixture_site(TWO_SHOES).url("/"))
+
+    assert query(
+        crawl_file, "SELECT count(*) FROM affected_urls WHERE rule_id = 'title-duplicate'"
+    ) == [(2,)]
+
+
 SLOW_SITE = Site(
     {
         "/": Page(body='<title>Home</title><a href="/notitle">a</a> <a href="/slow">b</a>'),
@@ -173,6 +199,51 @@ def test_issue_visible_before_the_crawl_ends(
         [("title-missing", 1)],
         [server.url("/notitle")],
     )
+
+
+SLOW_TWINS = Site(
+    {
+        "/": Page(body='<title>Shoes</title><a href="/twin">a</a> <a href="/slow">b</a>'),
+        "/twin": Page(body="<title>Shoes</title>"),
+        "/slow": Page(body="<title>Slow</title>", delay=5.0),
+    }
+)
+
+
+@pytest.mark.slow
+def test_a_running_crawl_writes_no_affected_url(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SLOW_TWINS)
+    # One request at a time: /slow is requested only after /twin was recorded.
+    crawl = threading.Thread(
+        target=crawl_result, args=(server.url("/"),), kwargs={"concurrency": 1}
+    )
+    crawl.start()
+    try:
+        waited_for(lambda: True if any(r.path == "/slow" for r in server.requests) else None)
+        crawl_file = waited_for(lambda: next(temp_workspace.home.rglob("*.sqlite"), None))
+        waited_for(
+            lambda: (
+                query(
+                    crawl_file,
+                    "SELECT 1 FROM pages JOIN urls ON urls.id = pages.url_id WHERE urls.url = ?",
+                    (server.url("/twin"),),
+                )
+                or None
+            )
+        )
+        state = query(crawl_file, "SELECT state FROM crawl")
+        stored = query(crawl_file, "SELECT count(*) FROM affected_urls")
+        issues = [
+            (issue.rule_id, issue.affected_count)
+            for issue in read_issues(crawl_file, RULES)
+            if issue.rule_id == "title-duplicate"
+        ]
+    finally:
+        crawl.join()
+
+    assert (state, stored, issues) == ([("running",)], [(0,)], [("title-duplicate", 2)])
 
 
 def test_live_and_materialised_issues_agree(

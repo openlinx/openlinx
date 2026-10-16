@@ -98,13 +98,13 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture page `/rules/long-title`.
 - [ ] 5.5 **(v0.2)** Drive "Title too short" and "Title at the minimum" at seam 2. This is a trivial pair: one boundary. Register `title-too-short`.
 - [ ] 5.6 **(v0.2)** Drive "Multiple titles" at seam 2, and register `title-multiple`.
-- [ ] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
+- [x] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
 - [ ] 5.8 **(v0.2)** Drive "Title equals H1" and "Comparison with H1 is case-sensitive" at seam 2. This is a trivial pair: the same comparison. Register `title-same-as-h1`.
-- [ ] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
+- [x] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
 - [ ] 5.10 Drive "Non-indexable Pages are not compared" at seam 2. Its test is written in this group as a strict xfail that waits for `030`'s Indexability, which narrows `indexable_pages` (design D19); the task is done when the mark is gone, and v0.1 does not ship before.
-- [ ] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
-- [ ] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
-- [ ] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
+- [x] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
+- [x] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
+- [x] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
 - [x] 5.14 Merge `020` at the approved boundary of its group 9, which the rulings give and which includes its task 9.16, the post-crawl passes of a Crawl that `--max-urls` stops: until then such a Crawl ends `stopped` with no pass, and the reader would read its empty `affected_urls` as stored. Drive at seam 3 that a Crawl stopped by `--max-urls` lists its Issues as stored.
 - [ ] 5.15 Docs: add `title-too-long` and `title-duplicate` (id, type, priority, condition, detail, guidance) to the catalogue in `docs/rules.md`, with `title-too-long` checking characters only in v0.1. **(v0.2)** The other 3 title Rules.
 - [ ] 5.16 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green. Also, from the approval of task 4.11 (the rulings of 2026-10-14), `_found` escapes every `:` of a Rule's query as `\:` for SQLAlchemy's `text()`, so the text that runs equals `reproduce_sql` whatever it holds; this closes the class that the bind-parameter guard of task 4.10 only enumerates, and the guard goes with it (red first: a Rule whose comment holds ` :later` runs as written).

@@ -1,11 +1,13 @@
 """The titles Rules (040-add-rules, rules; seam 2)."""
 
+import pytest
+
 from spider.rules.headings import H1_MISSING
-from spider.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
+from spider.rules.titles import TITLE_DUPLICATE, TITLE_MISSING, TITLE_TOO_LONG
 from spider.store.issues import evaluate_rule
 from spider.store.records import AffectedUrl
 from tests.support.crawls import query
-from tests.support.rules import crawl_with_page
+from tests.support.rules import crawl_with_page, crawl_with_pages
 from tests.support.workspace import TempWorkspace
 
 
@@ -80,3 +82,28 @@ def test_raised_title_limit(temp_workspace: TempWorkspace) -> None:
 
     # The file's own query, run alone, agrees: it binds no threshold.
     assert (evaluate_rule(crawl_file, TITLE_TOO_LONG), query(crawl_file, stored_sql)) == ([], [])
+
+
+SHOES = {"title_count": 1, "title_1": "Shoes", "title_1_length": 5}
+
+
+def test_duplicate_titles_among_indexable_pages(temp_workspace: TempWorkspace) -> None:
+    crawl_file, ids = crawl_with_pages(temp_workspace, SHOES, SHOES)
+    detail = {"title_1": "Shoes", "pages": 2}
+
+    assert sorted(evaluate_rule(crawl_file, TITLE_DUPLICATE), key=lambda url: url.url_id) == [
+        AffectedUrl(url_id=url_id, detail=detail) for url_id in ids
+    ]
+
+
+# Fails with a TypeError until PageRow has the Indexability columns; with them it fails on its
+# assertion, which the mark does not allow, until indexable_pages leaves non-indexable Pages out.
+@pytest.mark.xfail(raises=TypeError, strict=True, reason="pages has no Indexability yet")
+def test_non_indexable_pages_are_not_compared(temp_workspace: TempWorkspace) -> None:
+    crawl_file, _ = crawl_with_pages(
+        temp_workspace,
+        {**SHOES, "indexability": "indexable"},
+        {**SHOES, "indexability": "non_indexable", "indexability_status": "noindex"},
+    )
+
+    assert evaluate_rule(crawl_file, TITLE_DUPLICATE) == []
