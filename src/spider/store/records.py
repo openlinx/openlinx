@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from spider.crawl.urls import NormalizedUrl
+from spider.store.rows import HandlerRows
 from spider.workspace.discovery import Workspace
 
 type CrawlMode = Literal["spider", "list", "sitemap"]
@@ -193,7 +194,7 @@ class FetchedUrl:
     blocked_by_robots_txt: bool | None = None
     discovered: tuple[NewUrl, ...] = ()
     # What the handlers returned, written in the same unit (design D9).
-    rows: tuple[object, ...] = ()
+    rows: tuple[HandlerRows[Any], ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -205,7 +206,7 @@ class SkippedUrl:
     # The depth the skip was decided on: a URL lowered since then is decided again (design D5).
     crawl_depth: int
     blocked_by_robots_txt: bool | None = None
-    rows: tuple[object, ...] = ()
+    rows: tuple[HandlerRows[Any], ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -218,7 +219,7 @@ class ErroredUrl:
     # None without a request of its own: its origin's robots.txt got no response.
     fetched_at: datetime | None
     blocked_by_robots_txt: bool | None = None
-    rows: tuple[object, ...] = ()
+    rows: tuple[HandlerRows[Any], ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

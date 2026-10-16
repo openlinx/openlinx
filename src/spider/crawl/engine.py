@@ -10,7 +10,7 @@ from typing import Any
 from spider.crawl.context import CrawlContext
 from spider.crawl.discovery import RESOURCES, discovered_urls
 from spider.crawl.fetcher import FetchFailure, FetchResult
-from spider.crawl.hooks import UrlResult
+from spider.crawl.hooks import Handler, UrlResult
 from spider.crawl.links import DiscoveredLink
 from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
@@ -40,6 +40,7 @@ from spider.store.records import (
     SkippedUrl,
     SkipReason,
 )
+from spider.store.rows import HandlerRows
 from spider.store.urls import (
     UrlUnit,
     next_depth,
@@ -255,7 +256,6 @@ async def _unit_of(
     a new request, which leaves it queued. `decision` is taken once, at dispatch, so a URL
     found on several Pages is recorded once (design D1)."""
     context, limits, robots = run.context, run.limits, run.robots
-    row_writers = context.hooks.row_writers
     skip_reason = _skip_reason(context, queued, decision)
     # Only a URL that would be requested is checked, so a skip never requests robots.txt.
     blocked = None
@@ -295,8 +295,7 @@ async def _unit_of(
                 blocked_by_robots_txt=blocked,
                 # Not final: a shorter path re-queues it, and its handlers see it then (D5).
                 rows=() if skip_reason == "max_depth" else _handler_rows(context, skipped),
-            ),
-            row_writers,
+            )
         )
         return unit, blocked
     response = await run.requester.request_url(queued.url)
@@ -314,7 +313,7 @@ async def _unit_of(
         )
         return unit, blocked
     fetched = await _fetched(context, queued, decision, response)
-    return record_fetched(replace(fetched, blocked_by_robots_txt=blocked), row_writers), blocked
+    return record_fetched(replace(fetched, blocked_by_robots_txt=blocked)), blocked
 
 
 def _record_error(
@@ -343,7 +342,7 @@ def _record_error(
         blocked_by_robots_txt=blocked,
         rows=_handler_rows(context, failed),
     )
-    return record_error(errored, context.hooks.row_writers)
+    return record_error(errored)
 
 
 def _robots_check(
@@ -527,12 +526,11 @@ def _result(queued: QueuedUrl, decision: ScopeDecision, **outcome: Any) -> UrlRe
     )
 
 
-def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[object, ...]:
-    rows: list[object] = []
+def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[HandlerRows[Any], ...]:
+    rows: list[HandlerRows[Any]] = []
     for handler in context.hooks.handlers:
         try:
-            # Whole, or not at all: a handler that fails midway keeps none of its rows.
-            rows.extend(tuple(handler.handle(result)))
+            batch = _rows_of(handler, result)
         # A handler is later changes' code: its failure costs only its rows (design D16).
         except Exception as error:
             context.reporter.count(
@@ -543,4 +541,13 @@ def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[object, ...
                 ),
                 result.url,
             )
+            continue
+        if batch is not None:
+            rows.append(batch)
     return tuple(rows)
+
+
+def _rows_of[R](handler: Handler[R], result: UrlResult) -> HandlerRows[R] | None:
+    # Whole, or not at all: a handler that fails midway keeps none of its rows.
+    rows = tuple(handler.handle(result))
+    return HandlerRows(handler.write, rows) if rows else None

@@ -16,7 +16,7 @@ from spider.clock import Clock
 from spider.crawl.context import CrawlContext
 from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import aiohttp_fetcher
-from spider.crawl.hooks import Hooks
+from spider.crawl.hooks import Hooks, PassContext
 from spider.crawl.pages import PageExecutor
 from spider.crawl.scope import ScopeDecision, ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
@@ -247,7 +247,7 @@ async def _crawl(
         # Before the end is written, for completed and stopped alike: 040 reads either state as
         # "its Issues are materialised".
         for crawl_pass in hooks.passes:
-            await crawl_pass.run(writer)
+            await crawl_pass.run(PassContext(writer, clock))
         # One instant: the result's ended_at is the time the file records for the end.
         ended_at = clock.now()
         state: CrawlState = "completed" if stop_reason is None else "stopped"

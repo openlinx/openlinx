@@ -1,6 +1,6 @@
 """The units of the urls table: the frontier and each URL's outcome (020 D1, D2, D14)."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 
 from sqlalchemy import Connection, bindparam, func, literal_column, null, or_, select, update
 from sqlalchemy.dialects.sqlite import insert
@@ -15,7 +15,7 @@ from spider.store.records import (
     SkippedUrl,
     UrlCounts,
 )
-from spider.store.rows import RowWriter, write_rows
+from spider.store.rows import write_rows
 from spider.store.schema import literal_values, urls
 
 type UrlUnit = Callable[[Connection], None]
@@ -176,9 +176,7 @@ def next_depth(depth: int) -> Callable[[Connection], int | None]:
     return unit
 
 
-def record_fetched(
-    fetched: FetchedUrl, row_writers: Mapping[type, RowWriter]
-) -> Callable[[Connection], None]:
+def record_fetched(fetched: FetchedUrl) -> Callable[[Connection], None]:
     """A unit that records the URL's response, the URLs discovered from it and its rows."""
     url_id = fetched.url_id
     values = {
@@ -219,14 +217,12 @@ def record_fetched(
             depth = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one() + 1
             rows = [{**row, "crawl_depth": depth} for row in new_rows]
             connection.execute(_INSERT_DISCOVERED, rows)
-        write_rows(connection, fetched.rows, row_writers)
+        write_rows(connection, fetched.rows)
 
     return unit
 
 
-def record_skipped(
-    skipped: SkippedUrl, row_writers: Mapping[type, RowWriter]
-) -> Callable[[Connection], None]:
+def record_skipped(skipped: SkippedUrl) -> Callable[[Connection], None]:
     """A unit that records a URL as not requested, why, and its rows, unless a shorter path
     lowered its depth after the skip was decided: it then stays queued (design D5)."""
     values = {
@@ -238,14 +234,12 @@ def record_skipped(
 
     def unit(connection: Connection) -> None:
         if connection.execute(_SKIPPED, values).rowcount:
-            write_rows(connection, skipped.rows, row_writers)
+            write_rows(connection, skipped.rows)
 
     return unit
 
 
-def record_error(
-    errored: ErroredUrl, row_writers: Mapping[type, RowWriter]
-) -> Callable[[Connection], None]:
+def record_error(errored: ErroredUrl) -> Callable[[Connection], None]:
     """A unit that records a URL whose request got no HTTP response, why, and its rows."""
     values = {
         "url_id": errored.url_id,
@@ -257,7 +251,7 @@ def record_error(
 
     def unit(connection: Connection) -> None:
         connection.execute(_ERRORED, values)
-        write_rows(connection, errored.rows, row_writers)
+        write_rows(connection, errored.rows)
 
     return unit
 
