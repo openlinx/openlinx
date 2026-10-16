@@ -303,14 +303,14 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 11.1 Drive "Requests to a host are spaced by the rate", fake timing.
 
   Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`. The spacing is the Requester's `RateGate` (design D7), so it holds for robots.txt requests too; `--rate` and `crawl.rate` refuse a value that is not a finite number above 0, through one rule function; and a guard in `tests/test_code_style.py` names any wait outside the `Clock`, red by mutation.
-- [ ] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
+- [x] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
 - [ ] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared, and the run of consecutive 403 and 429 responses is kept per Internal host as the spec says.
 - [ ] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
 - [ ] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
 
 ## 12. Events, failures and backstops (widening)
 
-- [ ] 12.0 An auto-advancing virtual clock for the timing tests (the rulings of 2026-10-16): `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once every task is idle, as trio's `MockClock(autojump_threshold=0)` does. The watchdog and the 10-second progress tests use it. Designed at this task, which also lifts task 11.1's serialization from the Risks.
+- [ ] 12.0 An auto-advancing virtual clock for the timing tests (the rulings of 2026-10-16): `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once every task is idle, as trio's `MockClock(autojump_threshold=0)` does. The watchdog and the 10-second progress tests use it. Designed at this task, which also lifts task 11.1's serialization from the Risks. A test on it pins the Requester's order, the rate wait before the global cap: a request waiting for its turn on one host lets another host's request start, with a global cap of 1 and two hosts if `RequestLimits` can be built at the Requester's seam without the settings' validation, otherwise with 21 hosts, red by mutation of `wait_turn` moved inside the global cap.
 - [ ] 12.1 Drive "Every stderr line is an event or a diagnostic" at seam 1.
 - [ ] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
 - [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
