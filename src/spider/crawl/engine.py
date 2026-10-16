@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import Iterable
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -289,7 +289,13 @@ async def _unit_of(
             return unit, None
         skip_reason, blocked = _robots_check(context, origin_robots, queued, decision)
     if skip_reason is not None:
-        skipped = _result(queued, decision, fetch_state="skipped", skip_reason=skip_reason)
+        skipped = _result(
+            queued,
+            decision,
+            fetch_state="skipped",
+            skip_reason=skip_reason,
+            blocked_by_robots_txt=blocked,
+        )
         unit = record_skipped(
             SkippedUrl(
                 url_id=queued.id,
@@ -319,8 +325,8 @@ async def _unit_of(
             blocked=blocked,
         )
         return unit, blocked
-    fetched = await _fetched(context, queued, decision, response)
-    return record_fetched(replace(fetched, blocked_by_robots_txt=blocked)), blocked
+    fetched = await _fetched(context, queued, decision, response, blocked)
+    return record_fetched(fetched), blocked
 
 
 def _record_error(
@@ -337,6 +343,7 @@ def _record_error(
         queued,
         decision,
         fetch_state="error",
+        blocked_by_robots_txt=blocked,
         fetch_error=fetch_error,
         fetch_error_message=message,
         fetched_at=fetched_at,
@@ -389,7 +396,11 @@ def _skip_reason(
 
 
 async def _fetched(
-    context: CrawlContext, queued: QueuedUrl, decision: ScopeDecision, response: FetchResult
+    context: CrawlContext,
+    queued: QueuedUrl,
+    decision: ScopeDecision,
+    response: FetchResult,
+    blocked: bool | None,
 ) -> FetchedUrl:
     content_type = response.header("Content-Type")
     # An External URL or one outside the Scope is checked, never parsed (design D5).
@@ -424,6 +435,7 @@ async def _fetched(
         queued,
         decision,
         fetch_state="fetched",
+        blocked_by_robots_txt=blocked,
         status_code=response.status_code,
         content_type=content_type,
         response_time_ms=response.response_time_ms,
@@ -443,6 +455,7 @@ async def _fetched(
         parsed=parsed,
         parse_error=parse_error,
         parse_error_message=parse_error_message,
+        blocked_by_robots_txt=blocked,
         discovered=discovered,
         rows=_handler_rows(context, result),
     )

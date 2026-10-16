@@ -27,6 +27,8 @@ class UrlResult:
     is_internal: bool
     in_scope: bool
     fetch_state: FetchState
+    # NULL when robots.txt was not checked (design D6).
+    blocked_by_robots_txt: bool | None = None
     skip_reason: SkipReason | None = None
     fetch_error: FetchError | None = None
     fetch_error_message: str | None = None

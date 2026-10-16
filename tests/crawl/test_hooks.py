@@ -675,3 +675,35 @@ def test_a_url_recorded_as_unwritten_keeps_its_robots_txt_verdict(
 def test_a_handler_without_its_writer_cannot_be_built() -> None:
     with pytest.raises(TypeError):
         handler("seen", _seen)  # type: ignore[call-arg]
+
+
+def _verdict(result: UrlResult) -> tuple[Seen, ...]:
+    return (Seen(result.url_id, repr(result.blocked_by_robots_txt)),)
+
+
+def test_a_handler_gets_the_robots_txt_verdict_of_the_url(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/robots.txt": Robots("User-agent: *\nDisallow: /private/\n"),
+                "/": Page(body='<a href="/private/a">Private</a> <a href="/a">A</a>'),
+                "/private/a": Page(body="<p>Private</p>"),
+                "/a": Page(body="<p>A</p>"),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), handlers=(handler("verdict", _verdict, _write_seen),))
+
+    result = crawl_result(server.url("/"), hooks, ignore_robots=True)
+
+    assert query(
+        result.crawl_file,
+        "SELECT urls.url, test_seen.state FROM test_seen JOIN urls ON urls.id = test_seen.url_id "
+        "ORDER BY urls.id",
+    ) == [
+        (server.url("/"), "False"),
+        (server.url("/private/a"), "True"),
+        (server.url("/a"), "False"),
+    ]
