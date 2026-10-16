@@ -372,33 +372,56 @@ async def test_replacements_started_together_get_names_of_their_own() -> None:
     ]
 
 
-def open_pipe_ends_and_workers() -> tuple[int, int]:
-    """The pipe ends open in this process, and the parse workers whose process is not closed."""
+def _refuse_to_release(process: BaseProcess) -> None:
+    raise OSError("the process could not be released")
+
+
+@pytest.mark.slow
+async def test_a_worker_that_cannot_be_released_breaks_the_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pool's private _reap is replaced: the one seam where the OS's refusal to end and
+    release a process can be had at will."""
+    monkeypatch.setattr(parse_pool, "_reap", _refuse_to_release)
+    async with started(1) as pool:
+        await asyncio.wait_for(pool.prepare(at("/die"), RESPONSE), 30)
+        after = await asyncio.wait_for(
+            asyncio.gather(pool.prepare(at("/"), RESPONSE), return_exceptions=True), 30
+        )
+
+    assert [type(error) for error in after] == [WorkerStartError]
+
+
+def open_pipe_ends() -> int:
     gc.collect()
-    objects = gc.get_objects()
-    ends = sum(1 for o in objects if isinstance(o, _ConnectionBase) and not o.closed)
+    return sum(1 for o in gc.get_objects() if isinstance(o, _ConnectionBase) and not o.closed)
+
+
+def unreleased_workers(pids: tuple[int, ...]) -> int:
+    """The workers of these process ids whose process is not closed: another test's are left
+    out, since the parent discards a child it finds ended at its next start of a process."""
+    gc.collect()
     workers = 0
-    for o in objects:
+    for o in gc.get_objects():
         if isinstance(o, BaseProcess) and o.name.startswith("spider-parse-"):
             # A closed process refuses every question.
             with suppress(ValueError):
-                o.is_alive()
-                workers += 1
-    return ends, workers
+                workers += o.pid in pids
+    return workers
 
 
 @pytest.mark.slow
 async def test_crashed_workers_leave_no_pipe_end_or_process_open() -> None:
-    before = open_pipe_ends_and_workers()
+    before = open_pipe_ends()
     async with started(1) as pool:
         for _ in range(3):
             await asyncio.wait_for(pool.prepare(at("/die"), RESPONSE), 30)
         # Prepared by the last replacement, so every crash before it has been handled.
         await asyncio.wait_for(pool.prepare(at("/"), RESPONSE), 30)
-        during = open_pipe_ends_and_workers()
+        during = (open_pipe_ends() - before, unreleased_workers(pool.worker_pids))
 
     # The wake pipe's two ends, and the one worker alive: its two pipe ends and its process.
-    assert (during[0] - before[0], during[1] - before[1]) == (4, 1)
+    assert during == (4, 1)
 
 
 class RaisesOnLoad:

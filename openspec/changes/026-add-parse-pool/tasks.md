@@ -69,6 +69,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
   - the `parse_timeout` and `worker_crashed` messages name the Page's URL
   - a worker found ended when a Page is sent to it leaves the pipes the waiter watches at once, before its replacement joins them, so on Windows before Python 3.13, at 62 workers, the waiter never waits on more than 63 handles; the waiter takes a pipe already removed in its stride
   - the docstring of `tests/crawl/unimportable_in_workers.py` (its module is imported with the snapshot), a stale comment in `tests/crawl/test_parse_pool.py`, design Risks' list of the tests named after no scenario, and CONTRIBUTING's size sentence, which leaves out `spider/store/schema.py`
+- [x] 3.12 Fix of the approval of 3.11 (2026-10-16): a retirement that fails ends in a broken pool, never in silence. If closing an ended worker's task pipe end or ending and releasing its process fails, the pool breaks with `WorkerStartError` and the cause, so every waiting Page fails and the Crawl ends with that error, where the retiring task died unread before and a one-worker Crawl hung for good. No replacement is started beside a process that may still run. Tested by replacing the pool's private `_reap` with one that raises (the one seam where the OS's refusal can be had), red first: the Page after the crash waited until its timeout.
 
 ## 4. Shutdown and Windows consoles
 

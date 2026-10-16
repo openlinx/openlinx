@@ -335,8 +335,17 @@ class PoolExecutor:
 
     async def _retire(self, worker: _Worker) -> None:
         """Closes what an ended worker leaves, then starts its replacement (design D3)."""
-        worker.tasks.close()
-        await asyncio.to_thread(_reap, worker.process)
+        name = worker.process.name
+        try:
+            worker.tasks.close()
+            await asyncio.to_thread(_reap, worker.process)
+        # Its process may still run: a replacement beside it would keep one more for good, and a
+        # failure that ended this task unread would leave the waiting Pages waiting for ever.
+        except Exception as error:
+            failure = WorkerStartError(f"The parse worker {name} that ended could not be released.")
+            failure.__cause__ = error
+            self._break(failure)
+            return
         if self._closing or self._broken is not None:
             return
         try:
