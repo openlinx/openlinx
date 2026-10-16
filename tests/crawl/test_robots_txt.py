@@ -296,3 +296,71 @@ def test_a_known_verdict_records_a_disallowed_url_past_the_url_limit(
         crawl_row(crawl_file)["state"],
         query(crawl_file, "SELECT skip_reason FROM urls WHERE url = ?", [server.url("/private/a")]),
     ) == ("completed", [("blocked_by_robots_txt",)])
+
+
+def test_the_robots_user_agent_token_selects_the_robots_txt_group_that_applies(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/robots.txt": Robots("User-agent: Googlebot\nDisallow: /g\n"),
+                "/": Page(body='<a href="/g">G</a>'),
+                "/g": Page(body="<p>G</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--robots-user-agent", "Googlebot")
+
+    assert query(crawl_file, "SELECT skip_reason FROM urls WHERE url = ?", [server.url("/g")]) == [
+        ("blocked_by_robots_txt",)
+    ]
+
+
+def test_two_urls_of_an_origin_reached_at_once_request_its_robots_txt_once(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(
+            routes={
+                "/": Page(
+                    body='<a href="http://other.test/a">A</a><a href="http://other.test/b">B</a>'
+                )
+            }
+        ),
+        Site(routes={"/robots.txt": Robots("User-agent: *\nAllow: /\n")}),
+    )
+
+    crawl_result("http://site.test/", resolver=hosts.resolver)
+
+    assert [request.path for request in hosts.other.requests if request.path == "/robots.txt"] == [
+        "/robots.txt"
+    ]
+
+
+def test_a_blocked_url_that_is_not_the_seed_raises_no_seed_warning(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(PRIVATE_SITE)
+
+    result = crawl_result(server.url("/"))
+
+    assert [
+        warning.code for warning in result.warnings if warning.code == "seed_blocked_by_robots_txt"
+    ] == []
+
+
+def test_an_unreachable_robots_txt_of_an_external_origin_raises_no_warning(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(routes={"/": Page(body='<a href="http://other.test/a">A</a>')}),
+        Site(routes={"/robots.txt": Status(503)}),
+    )
+
+    result = crawl_result("http://site.test/", resolver=hosts.resolver)
+
+    assert [
+        warning.code for warning in result.warnings if warning.code == "robots_unreachable"
+    ] == []

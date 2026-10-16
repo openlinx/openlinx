@@ -18,7 +18,7 @@ from spider.store.crawls import crawl_summary
 from spider.store.records import CrawlState
 from spider.store.writer import CrawlWriter, CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Robots, Site
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
 from tests.support.sites import LATE_SHORTER_PATH, NINE_PAGES
@@ -609,12 +609,14 @@ def test_a_crawl_that_failed_after_its_url_limit_gives_no_limit_warning(
 def test_a_url_recorded_as_unwritten_keeps_its_robots_txt_verdict(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
-    server = fixture_site(BOOM_SITE)
+    server = fixture_site(
+        Site(routes={**BOOM_SITE.routes, "/robots.txt": Robots("User-agent: *\nDisallow: /boom\n")})
+    )
 
-    result = crawl_result(server.url("/"), _with_row_writer(_refuse))
+    result = crawl_result(server.url("/"), _with_row_writer(_refuse), ignore_robots=True)
 
     assert query(
         result.crawl_file,
         "SELECT fetch_error, blocked_by_robots_txt FROM urls WHERE url = ?",
         [server.url("/boom")],
-    ) == [("record_failed", 0)]
+    ) == [("record_failed", 1)]
