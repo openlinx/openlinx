@@ -28,14 +28,13 @@ from spider.crawl.parse_pool import (
     PREPARE_DEADLINE_SECONDS,
     PoolExecutor,
     WorkerStartError,
-    _outcome,
-    _pickled,
     _work,
     cpu_quota,
     default_workers,
     worker_count,
     worker_limit,
 )
+from spider.crawl.parse_wire import decode_outcome, encode_outcome
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.output.reporter import Collected
@@ -285,7 +284,7 @@ def test_a_page_whose_record_a_worker_cannot_send_is_recorded_as_crashed() -> No
     page = prepare_page(at("/"), RESPONSE, PageSettings(scope_rules(at("/"))))
     unsendable = msgspec.structs.replace(page, document_links=(lambda: None,))
 
-    crashed = _outcome(_pickled(unsendable))
+    crashed = decode_outcome(encode_outcome(unsendable))
 
     assert isinstance(crashed, PreparedPage)
     assert (crashed.parse_error, crashed.parse_error_message) == (
@@ -355,7 +354,7 @@ def _refuse() -> None:
 
 
 def test_a_page_whose_record_cannot_be_read_is_recorded_as_crashed() -> None:
-    page = _outcome(pickle.dumps(RaisesOnLoad()))
+    page = decode_outcome(pickle.dumps(RaisesOnLoad()))
 
     assert isinstance(page, PreparedPage)
     assert (page.parse_error, page.parse_error_message) == (

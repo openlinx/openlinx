@@ -4,7 +4,6 @@ import asyncio
 import math
 import multiprocessing
 import os
-import pickle
 import signal
 import sys
 import threading
@@ -16,10 +15,9 @@ from multiprocessing.process import BaseProcess
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-import msgspec
-
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.pages import PageSettings, PreparedPage, prepare_page
+from spider.crawl.parse_wire import Outcome, crashed_page, decode_outcome, encode_outcome
 from spider.crawl.urls import NormalizedUrl
 
 # Pages that may wait for a busy worker, per worker (design D2).
@@ -37,10 +35,6 @@ _START_FAILED = b"failed:"
 # A Connection on POSIX, a PipeConnection on Windows: the one class both pipe ends share.
 type _PipeEnd = _ConnectionBase[Any, Any]
 type _Work = tuple[NormalizedUrl, FetchResult]
-# The PreparedPage, or the exception prepare_page raised, which in-process reaches the engine.
-type _Outcome = PreparedPage | BaseException
-# What crosses for a PreparedPage: the Page without its outputs, and each output's pickle.
-type _Sent = tuple[PreparedPage, tuple[tuple[str, bytes], ...]]
 
 
 class WorkerStartError(RuntimeError):
@@ -75,92 +69,16 @@ def _work(tasks: _PipeEnd, results: _PipeEnd) -> None:
         if work is None:
             return
         url, response = work
-        outcome: _Outcome
+        outcome: Outcome
         try:
             outcome = prepare_page(url, response, settings)
         except Exception as error:
             outcome = error
         try:
-            results.send_bytes(_pickled(outcome))
+            results.send_bytes(encode_outcome(outcome))
         # As at recv: the crawl process ended while this worker prepared its Page.
         except OSError:
             return
-
-
-def _pickled(outcome: _Outcome) -> bytes:
-    """What a worker sends: whatever cannot cross to the crawl process costs only itself."""
-    if isinstance(outcome, PreparedPage):
-        try:
-            return pickle.dumps(_sendable(outcome), pickle.HIGHEST_PROTOCOL)
-        # That one Page's failure, as a record the crawl process cannot read is (design D3).
-        except Exception as error:
-            message = f"The parse worker could not send the Page's record: {type(error).__name__}"
-            crashed: _Sent = (_crashed(message), ())
-            return pickle.dumps(crashed, pickle.HIGHEST_PROTOCOL)
-    with suppress(Exception):
-        return pickle.dumps(outcome, pickle.HIGHEST_PROTOCOL)
-    return pickle.dumps(RuntimeError(f"{type(outcome).__name__}: {outcome}"))
-
-
-def _sendable(page: PreparedPage) -> _Sent:
-    """The Page without its outputs, and each output pickled by itself (design D3)."""
-    outputs: list[tuple[str, bytes]] = []
-    failures: list[str] = []
-    for name, output in page.outputs:
-        try:
-            outputs.append((name, pickle.dumps(output, pickle.HIGHEST_PROTOCOL)))
-        except Exception as error:
-            failures.append(f"{name}: {type(error).__name__}")
-    return _with_failures(page, failures, ()), tuple(outputs)
-
-
-def _outcome(message: bytes) -> _Outcome:
-    try:
-        return _received(message)
-    # A Page whose own record this process cannot read is that one Page's failure (design D3).
-    except Exception as error:
-        return _crashed(
-            "The Page's record from its parse worker could not be read: "
-            f"{type(error).__name__}: {error}"
-        )
-
-
-def _crashed(message: str) -> PreparedPage:
-    """Nothing came out of the Page's preparation: 020 records it with parsed = 0."""
-    return PreparedPage(parse_error="worker_crashed", parse_error_message=message)
-
-
-def _received(message: bytes) -> _Outcome:
-    # From our own worker over a pipe of its own, as multiprocessing's recv() would unpickle it.
-    sent: _Sent | BaseException = pickle.loads(message)  # noqa: S301
-    if isinstance(sent, BaseException):
-        return sent
-    page, outputs = sent
-    kept: list[tuple[str, msgspec.Struct]] = []
-    failures: list[str] = []
-    for name, data in outputs:
-        try:
-            kept.append((name, pickle.loads(data)))  # noqa: S301
-        # Such as an output whose class cannot be rebuilt in this process.
-        except Exception as error:
-            failures.append(f"{name}: {type(error).__name__}")
-    return _with_failures(page, failures, tuple(kept))
-
-
-def _with_failures(
-    page: PreparedPage, failures: list[str], outputs: tuple[tuple[str, Any], ...]
-) -> PreparedPage:
-    """In process an output would reach its handler; one that cannot cross fails as its
-    extractor would (020 D16), and the Page keeps its Links."""
-    if not failures:
-        return msgspec.structs.replace(page, outputs=outputs)
-    messages = [page.parse_error_message] if page.parse_error_message else []
-    return msgspec.structs.replace(
-        page,
-        outputs=outputs,
-        parse_error="extractor_error",
-        parse_error_message="; ".join([*messages, *failures]),
-    )
 
 
 def worker_count(
@@ -464,7 +382,7 @@ class PoolExecutor:
                     )
                     loop.call_soon_threadsafe(self._break, failure)
                 else:
-                    loop.call_soon_threadsafe(self._finished, worker, _outcome(message))
+                    loop.call_soon_threadsafe(self._finished, worker, decode_outcome(message))
 
     def _on_ready(self, worker: _Worker) -> None:
         self._ready.add(worker)
@@ -506,7 +424,7 @@ class PoolExecutor:
                 )
             )
 
-    def _finished(self, worker: _Worker, outcome: _Outcome) -> None:
+    def _finished(self, worker: _Worker, outcome: Outcome) -> None:
         held = self._busy.pop(worker, None)
         # None once the pool broke, which failed the Page already, or its deadline passed.
         if held is None:
@@ -537,7 +455,9 @@ class PoolExecutor:
         if held is not None:
             held.deadline.cancel()
             if not held.future.done():
-                held.future.set_result(_crashed(f"The parse worker {worker.process.name} ended."))
+                held.future.set_result(
+                    crashed_page(f"The parse worker {worker.process.name} ended.")
+                )
         if self._closing or self._broken is not None:
             return
         # The Pages waiting meanwhile wait for it (design D3).
