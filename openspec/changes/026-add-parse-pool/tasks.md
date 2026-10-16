@@ -60,7 +60,8 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 - [x] 3.5 [3+6] Drive "The Crawl continues after a preparation timeout".
 - [x] 3.6 [3+6] Drive "Other Pages are not charged for a preparation timeout".
 - [x] 3.7 Docs: document the queue bound, crash handling and the preparation deadline (its value, and why it is a constant) in `docs/architecture.md`.
-- [ ] 3.8 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [ ] 3.8 Check: the in-process double prepares a Page as a worker does (design Test seams). `tests/support/page_executor.py` prepares each Page with a pickle round trip of the `PageSettings` given to `start()`, as a worker gets its snapshot (D1), and hands on each extractor output through a pickle round trip of its own, as a worker sends it (D3). A settings snapshot or an output that cannot cross is recorded by the fixture and fails the test at its teardown with the pickling error: an exception raised from `prepare()` would only become the Crawl's error, which a test that does not read the Crawl State would miss, and in the pool such an output costs only its extractor, which a test would not see either. Tested with `pytester`, as the isolation plugin is: an inner test whose extractor's output cannot be pickled, and one whose extractor is a local function, each fails at teardown. Guard: the `PageSettings` of `default_hooks()`'s extractors equals its pickle round trip, so an extractor that `030` or `040` registers, and its settings, can reach a worker.
+- [ ] 3.9 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. Shutdown and Windows consoles
 
