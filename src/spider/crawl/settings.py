@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from spider.naming import DEFAULT_ROBOTS_TOKEN
+from spider.naming import DEFAULT_ROBOTS_TOKEN, ROBOTS_USER_AGENT_PATTERN
 from spider.store.records import ScopeKind
 
 
@@ -41,8 +41,10 @@ class CrawlSettings(BaseModel):
     )
     robots_user_agent: str = Field(
         DEFAULT_ROBOTS_TOKEN,
+        pattern=ROBOTS_USER_AGENT_PATTERN,
         description="The token that selects robots.txt groups and user-agent-prefixed "
-        "X-Robots-Tag values; independent of the User-Agent request header.",
+        "X-Robots-Tag values, letters, '_' and '-' only; independent of the User-Agent "
+        "request header.",
     )
     scope: ScopeKind = Field(
         "host",

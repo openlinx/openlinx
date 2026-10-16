@@ -276,7 +276,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: each URL of an origin whose robots.txt request got no HTTP response is recorded with `fetch_state` = `error` and that request's `fetch_error`, without a request of its own, with a `fetch_error_message` that names the robots.txt request; the origin has `robots_state` = `unreachable`, `robots_status_code` NULL, and the request's error in `robots_fetch_error` and `robots_fetch_error_message`, declared with their `docs/schema.md` rows and the CHECK values of the `fetch_error` `Literal`; 5xx and 429 stay `robots_unreachable`; and "An unknown host is a DNS error" still passes (design D6). The Seed's origin pauses the Crawl instead from task 12.6 on.
 - [x] 10.15 Docs: document robots.txt handling (status mapping, no HTTP response, `--ignore-robots`, `--robots-user-agent`, Crawl-delay) in `docs/crawling.md`.
 - [x] 10.16 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
-- [ ] 10.17 Fix the review of group 10 (rulings of 2026-10-15), each red first or red by mutation:
+- [x] 10.17 Fix the review of group 10 (rulings of 2026-10-15), each red first or red by mutation:
   - An origin's robots.txt verdict, once known, decides a URL before the URL limit, which guards only a new request, robots.txt's or the URL's own, so a disallowed URL left after the limit is still recorded and the Crawl can end `completed`. `RequestLimits` splits the pure query from the call that marks the limit reached.
   - A URL skipped as `max_depth` reaches no handler, since a Link found later at a smaller depth re-queues it (design D5).
   - The robots.txt memo keeps the parsed rules only; the text goes straight to the store.

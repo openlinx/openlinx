@@ -335,7 +335,7 @@ With `--ignore-robots`, the Crawl requests the URLs that robots.txt disallows an
 
 ### The robots user-agent token
 
-`--robots-user-agent <token>` (default `spider`) selects the robots.txt group that applies, and the `X-Robots-Tag` values with a crawler prefix (see [Robots directives](#robots-directives)). It is independent of the `User-Agent` request header.
+`--robots-user-agent <token>` (default `spider`) selects the robots.txt group that applies, and the `X-Robots-Tag` values with a crawler prefix (see [Robots directives](#robots-directives)). It is independent of the `User-Agent` request header. As RFC 9309 says, a token has only letters, `_` and `-`: any other is rejected, as `invalid_value` (exit code 2), or in `spider.toml` as `settings_invalid` (exit code 3).
 
 ## Links
 
