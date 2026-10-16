@@ -72,7 +72,7 @@ def test_a_robots_user_agent_token_outside_rfc_9309_in_the_settings_file_is_refu
     assert (
         result.exit_code,
         [
-            (error["code"], problem["key"], "[a-zA-Z_-]" in problem["message"])
+            (error["code"], problem["key"], "letters, '_' and '-'" in problem["message"])
             for error in result.errors()
             for problem in error["details"]["errors"]
         ],
