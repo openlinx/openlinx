@@ -1,11 +1,33 @@
-"""The Crawl's warning log: every warning kept once, counted ones with their count (020 D10)."""
+"""The Crawl's warning log: warnings kept once per what their code names, and counts (020 D10)."""
 
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any, Protocol
 
 from spider.crawl.urls import NormalizedUrl
+from spider.output.codes import (
+    HANDLER_FAILED,
+    PARSE_FAILED,
+    POSSIBLE_BLOCKING,
+    RECORD_FAILED,
+    ROBOTS_UNREACHABLE,
+    SEED_BASE_MISMATCH,
+    SEED_BLOCKED_BY_ROBOTS_TXT,
+)
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Reporter
+
+# The detail that makes two warnings of a code one, or None for one per code; a code not
+# named here is written each time it is given (design D10).
+_KEPT_ONCE_PER: Mapping[str, str | None] = {
+    ROBOTS_UNREACHABLE.code: "host",
+    POSSIBLE_BLOCKING.code: "host",
+    SEED_BLOCKED_BY_ROBOTS_TXT.code: "seed",
+    SEED_BASE_MISMATCH.code: "seed",
+    PARSE_FAILED.code: None,
+    HANDLER_FAILED.code: None,
+    RECORD_FAILED.code: None,
+}
 
 
 class CrawlReporter(Protocol):
@@ -24,7 +46,6 @@ class WarningLog:
     def __init__(self, reporter: Reporter) -> None:
         self._reporter = reporter
         self._warnings: list[Diagnostic] = []
-        # Each warning is written once per code and host (design D10).
         self._written: dict[tuple[str, object], int] = {}
         # By code: where a counted warning is kept, and how many URLs it affected so far.
         self._counted: dict[str, tuple[int, int]] = {}
@@ -51,15 +72,21 @@ class WarningLog:
         self._counted[diagnostic.code] = (self._write(first), 1)
 
     def _write(self, diagnostic: Diagnostic) -> int:
-        """Where the warning is kept: a warning already written for its code and host is
+        """Where the warning is kept: a warning already written for what its code names is
         kept once, and a count goes on it."""
-        key = (diagnostic.code, diagnostic.details.get("host"))
+        if diagnostic.code not in _KEPT_ONCE_PER:
+            return self._keep(diagnostic)
+        detail = _KEPT_ONCE_PER[diagnostic.code]
+        key = (diagnostic.code, None if detail is None else diagnostic.details.get(detail))
         index = self._written.get(key)
         if index is None:
-            index = self._written[key] = len(self._warnings)
-            self._warnings.append(diagnostic)
-            self._reporter.warn(diagnostic)
+            index = self._written[key] = self._keep(diagnostic)
         return index
+
+    def _keep(self, diagnostic: Diagnostic) -> int:
+        self._warnings.append(diagnostic)
+        self._reporter.warn(diagnostic)
+        return len(self._warnings) - 1
 
     def event(self, name: str, **data: Any) -> None:
         self._reporter.event(name, **data)
