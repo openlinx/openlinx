@@ -512,14 +512,14 @@ The Crawl SHALL never have more than `--concurrency` requests in flight to one h
 - **THEN** the Command exits with code 2 and its only stderr error has `code` = `invalid_value`
 
 ### Requirement: Rate limit
-With `--rate <n>`, where n is a positive number of requests per second, requests to one host SHALL start at least `1/n` seconds apart, and the robots.txt request SHALL count as one of them. Without `--rate`, no limit SHALL apply beyond `--concurrency`.
+With `--rate <n>`, where n is a positive number of requests per second, requests to one host SHALL start at least `1/n` seconds apart, and the robots.txt request SHALL count as one of them. Without `--rate`, no limit SHALL apply beyond `--concurrency`. A value that is not a finite number above 0, such as 0, -1, `nan` or `inf`, SHALL be rejected: as `--rate` with exit code 2 and error code `invalid_value`, and in `spider.toml` with exit code 3 and `settings_invalid`, as any invalid setting is.
 
 #### Scenario: Requests to a host are spaced by the rate
 - **WHEN** a Crawl with `--rate 2` requests robots.txt and then five URLs on one host through a fake Fetcher that answers at once, with a fake clock
 - **THEN** the six requests start at 0.0, 0.5, 1.0, 1.5, 2.0 and 2.5 seconds
 
 ### Requirement: Blocking warning
-When 10 consecutive responses from one Internal host have status 403 or 429, the Crawl SHALL record one `possible_blocking` warning for that host, whose hint names `--rate` and `--concurrency`, and SHALL go on crawling.
+When 10 consecutive responses from one Internal host have status 403 or 429, the Crawl SHALL record one `possible_blocking` warning for that host, whose hint names `--rate` and `--concurrency`, and SHALL go on crawling. Only a URL's own responses count, not those of robots.txt, in the order they complete. A response with any other status ends the run of consecutive ones; a request without an HTTP response neither counts nor ends it. A host gets the warning once in a Crawl.
 
 #### Scenario: Many 403 responses raise one warning
 - **WHEN** `/` links to `/blocked/1` to `/blocked/12`, which all return 403
