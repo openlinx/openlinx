@@ -49,6 +49,20 @@ def test_a_rule_query_ending_in_a_comment_is_run_as_written(
     ]
 
 
+def test_a_rule_query_with_a_colon_is_run_as_written(temp_workspace: TempWorkspace) -> None:
+    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    colon = replace(
+        TITLE_MISSING, reproduce_sql=TITLE_MISSING.reproduce_sql + "\n-- Widths come :later."
+    )
+
+    with CrawlWriter(crawl_file, FakeClock()) as writer:
+        writer.run(affected_urls_unit(colon))
+
+    assert query(crawl_file, "SELECT rule_id, url_id FROM affected_urls") == [
+        ("title-missing", url_id)
+    ]
+
+
 def test_a_second_pass_does_not_duplicate_rows(temp_workspace: TempWorkspace) -> None:
     crawl_file, _ = crawl_with_pages(temp_workspace, SHOES, SHOES)
 
