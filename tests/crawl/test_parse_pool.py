@@ -1,6 +1,7 @@
 """The parse pool: page preparation in worker processes (design D1 of 026-add-parse-pool)."""
 
 import asyncio
+import gc
 import multiprocessing
 import os
 import pickle
@@ -8,8 +9,10 @@ import sys
 import threading
 import time
 from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
+from multiprocessing.connection import _ConnectionBase
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 from typing import Any
 
@@ -342,6 +345,62 @@ async def test_a_worker_that_ends_is_replaced() -> None:
     assert preparer(after).pid not in (first, os.getpid())
 
 
+@pytest.mark.slow
+async def test_the_failure_of_a_page_names_its_url() -> None:
+    async with started(1, deadline=LATE_DEADLINE) as pool:
+        crashed = await asyncio.wait_for(pool.prepare(at("/die"), RESPONSE), 30)
+        timed_out = await asyncio.wait_for(pool.prepare(at("/hang"), RESPONSE), 30)
+
+    assert [crashed.parse_error_message, timed_out.parse_error_message] == [
+        "The parse worker spider-parse-0 ended while it prepared https://site.test/die.",
+        "Preparing https://site.test/hang took more than 1.0 s, so its parse worker "
+        "spider-parse-1 was ended.",
+    ]
+
+
+@pytest.mark.slow
+async def test_replacements_started_together_get_names_of_their_own() -> None:
+    async with started(2) as pool:
+        both = (pool.prepare(at("/die"), RESPONSE), pool.prepare(at("/die"), RESPONSE))
+        await asyncio.wait_for(asyncio.gather(*both), 30)
+        both = (pool.prepare(at("/die"), RESPONSE), pool.prepare(at("/die"), RESPONSE))
+        replaced = await asyncio.wait_for(asyncio.gather(*both), 30)
+
+    assert sorted(page.parse_error_message or "" for page in replaced) == [
+        "The parse worker spider-parse-2 ended while it prepared https://site.test/die.",
+        "The parse worker spider-parse-3 ended while it prepared https://site.test/die.",
+    ]
+
+
+def open_pipe_ends_and_workers() -> tuple[int, int]:
+    """The pipe ends open in this process, and the parse workers whose process is not closed."""
+    gc.collect()
+    objects = gc.get_objects()
+    ends = sum(1 for o in objects if isinstance(o, _ConnectionBase) and not o.closed)
+    workers = 0
+    for o in objects:
+        if isinstance(o, BaseProcess) and o.name.startswith("spider-parse-"):
+            # A closed process refuses every question.
+            with suppress(ValueError):
+                o.is_alive()
+                workers += 1
+    return ends, workers
+
+
+@pytest.mark.slow
+async def test_crashed_workers_leave_no_pipe_end_or_process_open() -> None:
+    before = open_pipe_ends_and_workers()
+    async with started(1) as pool:
+        for _ in range(3):
+            await asyncio.wait_for(pool.prepare(at("/die"), RESPONSE), 30)
+        # Prepared by the last replacement, so every crash before it has been handled.
+        await asyncio.wait_for(pool.prepare(at("/"), RESPONSE), 30)
+        during = open_pipe_ends_and_workers()
+
+    # The wake pipe's two ends, and the one worker alive: its two pipe ends and its process.
+    assert (during[0] - before[0], during[1] - before[1]) == (4, 1)
+
+
 class RaisesOnLoad:
     """A record that pickles in a worker and cannot be rebuilt in the crawl process."""
 
@@ -437,7 +496,7 @@ async def test_a_page_cancelled_while_it_waits_is_never_prepared() -> None:
         busy = asyncio.ensure_future(pool.prepare(at("/busy"), RESPONSE))
         cancelled = asyncio.ensure_future(pool.prepare(at("/cancelled"), RESPONSE))
         last = asyncio.ensure_future(pool.prepare(at("/last"), RESPONSE))
-        # Each has reached the pool: the first holds the one worker, the others wait.
+        # Each has reached the pool and waits: the one worker takes the first once it is ready.
         await asyncio.sleep(0)
         cancelled.cancel()
         pages = await asyncio.gather(busy, last)

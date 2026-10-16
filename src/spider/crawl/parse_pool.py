@@ -160,6 +160,13 @@ def _available_cpus(process: Any) -> int | None:
     return None if affinity is None else len(affinity())
 
 
+def _reap(process: BaseProcess) -> None:
+    # Killed first, so that the join is bounded: an ended worker may still be exiting.
+    process.kill()
+    process.join()
+    process.close()
+
+
 @dataclass(frozen=True, eq=False)
 class _Worker:
     process: BaseProcess
@@ -196,8 +203,12 @@ class PoolExecutor:
         self._deadline = deadline
         self._ready_deadline = ready_deadline
         self._settings: PageSettings | None = None
-        # Every worker started, and those still running, idle or busy, or ready.
+        # The workers not yet retired, and those still running, idle or busy, or ready; a
+        # worker that ended is retired, so a long hostile Crawl keeps no pipe or process of
+        # it. The count and the process ids of every worker started.
         self._workers: list[_Worker] = []
+        self._spawned = 0
+        self._pids: list[int] = []
         self._live: set[_Worker] = set()
         self._ready: set[_Worker] = set()
         self._idle: deque[_Worker] = deque()
@@ -206,13 +217,17 @@ class PoolExecutor:
         # The timer of each worker's ready answer.
         self._readiness: dict[_Worker, asyncio.TimerHandle] = {}
         self._waiting: deque[tuple[_Work, asyncio.Future[PreparedPage]]] = deque()
-        self._replacing: set[asyncio.Task[None]] = set()
+        # Each ended worker's retirement, which starts its replacement.
+        self._retiring: set[asyncio.Task[None]] = set()
         self._started = False
         self._closing = False
         self._broken: BaseException | None = None
         # The result pipes the waiter thread reads, by identity: on Windows a pipe end is a
         # PipeConnection, which is no Connection. The loop's thread adds, the waiter removes.
         self._watched: dict[int, _Worker] = {}
+        # Result pipe ends no longer watched, which the waiter closes, since it may still be
+        # waiting on them.
+        self._retired: list[_PipeEnd] = []
         self._watched_lock = threading.Lock()
         self._waiter: threading.Thread | None = None
         # True: watch the pipes again, for a replacement; None: stop.
@@ -220,7 +235,7 @@ class PoolExecutor:
 
     @property
     def worker_pids(self) -> tuple[int, ...]:
-        return tuple(worker.process.pid for worker in self._workers if worker.process.pid)
+        return tuple(self._pids)
 
     async def start(self, settings: PageSettings) -> None:
         self._settings = settings
@@ -253,7 +268,7 @@ class PoolExecutor:
             future.cancel()
         self._waiting.clear()
         # A replacement still starting is stopped with the others once it has started.
-        await asyncio.gather(*self._replacing, return_exceptions=True)
+        await asyncio.gather(*self._retiring, return_exceptions=True)
         # Only now: a replacement that has just started armed a readiness timer.
         timers = [*self._readiness.values(), *(held.deadline for held in self._busy.values())]
         for timer in timers:
@@ -262,26 +277,29 @@ class PoolExecutor:
             # A worker that ended meanwhile has nothing to stop.
             with suppress(OSError):
                 worker.tasks.send(None)
-        await asyncio.to_thread(self._join)
+        await asyncio.to_thread(self._join, list(self._workers))
 
-    def _join(self) -> None:
+    def _join(self, workers: list[_Worker]) -> None:
         try:
-            for worker in self._workers:
+            for worker in workers:
                 worker.process.join()
         finally:
             with suppress(OSError):
                 self._wake_writer.send(None)
             if self._waiter is not None:
                 self._waiter.join()
-            ends = [worker.tasks for worker in self._workers]
-            ends += [worker.results for worker in self._workers]
-            for end in (*ends, self._wake_reader, self._wake_writer):
+            ends = [worker.tasks for worker in workers]
+            ends += [worker.results for worker in workers]
+            for end in (*ends, *self._retired, self._wake_reader, self._wake_writer):
                 end.close()
 
     async def _spawn(self) -> None:
         """Starts a worker and hands it the snapshot; the first ones and each replacement."""
         if self._settings is None:
             raise RuntimeError("the parse pool starts a worker before it has its snapshot")
+        # Taken before the start is awaited, so replacements started together differ.
+        number = self._spawned
+        self._spawned += 1
         spawn = multiprocessing.get_context("spawn")
         task_reader, task_writer = spawn.Pipe(duplex=False)
         result_reader, result_writer = spawn.Pipe(duplex=False)
@@ -290,7 +308,7 @@ class PoolExecutor:
             # Its pipe ends alone: on Windows a child that died while it unpickled the snapshot
             # would leave its result pipe's write end open here (design D1).
             args=(task_reader, result_writer),
-            name=f"spider-parse-{len(self._workers)}",
+            name=f"spider-parse-{number}",
             daemon=True,
         )
         # Starting a spawn process blocks while it pickles its arguments across.
@@ -299,6 +317,8 @@ class PoolExecutor:
         result_writer.close()
         worker = _Worker(process, task_writer, result_reader)
         self._workers.append(worker)
+        if process.pid is not None:
+            self._pids.append(process.pid)
         # Idle only once ready: a Page sent earlier would wait for the worker's start, and its
         # deadline would count that wait (design D8).
         self._live.add(worker)
@@ -313,7 +333,12 @@ class PoolExecutor:
         with suppress(OSError):
             task_writer.send(self._settings)
 
-    async def _replace(self) -> None:
+    async def _retire(self, worker: _Worker) -> None:
+        """Closes what an ended worker leaves, then starts its replacement (design D3)."""
+        worker.tasks.close()
+        await asyncio.to_thread(_reap, worker.process)
+        if self._closing or self._broken is not None:
+            return
         try:
             await self._spawn()
         # Starting it failed in this process: the pool cannot keep its workers.
@@ -359,6 +384,9 @@ class PoolExecutor:
         while True:
             with self._watched_lock:
                 watched = dict(self._watched)
+                retired, self._retired = self._retired, []
+            for end in retired:
+                end.close()
             for ready in wait([*(w.results for w in watched.values()), self._wake_reader]):
                 if ready is self._wake_reader:
                     if self._wake_reader.recv() is None:
@@ -369,8 +397,10 @@ class PoolExecutor:
                     message = worker.results.recv_bytes()
                 except (EOFError, OSError):
                     # The worker ended: at close, or a crash, whose Page design D3 records.
+                    # Already removed if a send to it failed first; closing twice is harmless.
                     with self._watched_lock:
-                        del self._watched[id(ready)]
+                        self._watched.pop(id(ready), None)
+                    worker.results.close()
                     loop.call_soon_threadsafe(self._ended, worker)
                     continue
                 if message == _READY:
@@ -419,8 +449,8 @@ class PoolExecutor:
             future.set_result(
                 PreparedPage(
                     parse_error="parse_timeout",
-                    parse_error_message=f"Preparing it took more than {self._deadline} s, so its "
-                    f"parse worker {worker.process.name} was ended.",
+                    parse_error_message=f"Preparing {held.url} took more than {self._deadline} "
+                    f"s, so its parse worker {worker.process.name} was ended.",
                 )
             )
 
@@ -446,24 +476,37 @@ class PoolExecutor:
         self._live.discard(worker)
         with suppress(ValueError):
             self._idle.remove(worker)
+        self._unwatch(worker)
+        name = worker.process.name
         if worker not in self._ready:
             # It would end the same way again: never replaced (design D1).
-            name = worker.process.name
             self._break(WorkerStartError(f"The parse worker {name} ended before it was ready."))
-            return
         held = self._busy.pop(worker, None)
         if held is not None:
             held.deadline.cancel()
             if not held.future.done():
                 held.future.set_result(
-                    crashed_page(f"The parse worker {worker.process.name} ended.")
+                    crashed_page(f"The parse worker {name} ended while it prepared {held.url}.")
                 )
-        if self._closing or self._broken is not None:
+        # close() stops and closes every worker it still lists.
+        if self._closing:
             return
-        # The Pages waiting meanwhile wait for it (design D3).
-        replacement = asyncio.ensure_future(self._replace())
-        self._replacing.add(replacement)
-        replacement.add_done_callback(self._replacing.discard)
+        self._workers.remove(worker)
+        # The Pages waiting meanwhile wait for its replacement (design D3).
+        retiring = asyncio.ensure_future(self._retire(worker))
+        self._retiring.add(retiring)
+        retiring.add_done_callback(self._retiring.discard)
+
+    def _unwatch(self, worker: _Worker) -> None:
+        with self._watched_lock:
+            # Gone already: the waiter saw its end of file and closed it.
+            if self._watched.pop(id(worker.results), None) is None:
+                return
+            self._retired.append(worker.results)
+        # Before its replacement joins them: on Windows before Python 3.13 the waiter's wait
+        # takes at most 63 handles (design D1).
+        with suppress(OSError):
+            self._wake_writer.send(True)
 
     def _break(self, error: BaseException) -> None:
         """Fails every Page, and every later one: the pool cannot prepare Pages any more."""

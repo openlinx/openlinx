@@ -1,6 +1,6 @@
 """An extractor whose module a parse worker cannot import (026 design D1).
 
-A spawn child names itself before it unpickles its start arguments, which import this module.
+A spawn child names itself before it unpickles its snapshot, which imports this module.
 """
 
 import multiprocessing
