@@ -214,43 +214,45 @@ def start_crawl(
     executor instead of `default_page_executor`, and `fetcher` is the fake Fetcher of the
     timing scenarios, used instead of aiohttp's (design D9, D15)."""
     log = WarningLog(reporter)
-    crawl_file = create_crawl(plan.new_crawl, clock, log)
+    crawl = _Crawl(
+        plan=plan,
+        crawl_file=create_crawl(plan.new_crawl, clock, log),
+        clock=clock,
+        log=log,
+        hooks=hooks,
+        resolver=resolver,
+        pages=pages or default_page_executor,
+        fetcher=fetcher,
+    )
     with asyncio.Runner(loop_factory=loop_factory) as runner:
-        ended_at, summary, counts = runner.run(
-            _crawl(
-                plan,
-                crawl_file,
-                clock,
-                log,
-                hooks,
-                resolver,
-                pages or default_page_executor,
-                fetcher,
-            )
-        )
+        ended_at, summary, counts = runner.run(_run(crawl))
     return CrawlResult(
-        crawl_id=crawl_file.id,
+        crawl_id=crawl.crawl_file.id,
         summary=summary,
         ended_at=ended_at,
         counts=counts,
-        crawl_file=crawl_file.path,
+        crawl_file=crawl.crawl_file.path,
         warnings=log.warnings,
     )
 
 
-async def _crawl(
-    plan: CrawlPlan,
-    crawl_file: CrawlFile,
-    clock: Clock,
-    reporter: WarningLog,
-    hooks: Hooks,
-    resolver: AbstractResolver | None,
-    pages: Callable[[], PageExecutor],
-    fetcher: Fetcher | None,
-) -> tuple[datetime, CrawlSummary, UrlCounts]:
-    context_of = _crawl_context(crawl_file, plan, clock, reporter, hooks, resolver, pages, fetcher)
-    async with context_of as context:
-        await run_crawl(context, plan.seed)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _Crawl:
+    """What start_crawl was given for one Crawl, with its new file and its warning log."""
+
+    plan: CrawlPlan
+    crawl_file: CrawlFile
+    clock: Clock
+    log: WarningLog
+    hooks: Hooks
+    resolver: AbstractResolver | None
+    pages: Callable[[], PageExecutor]
+    fetcher: Fetcher | None
+
+
+async def _run(crawl: _Crawl) -> tuple[datetime, CrawlSummary, UrlCounts]:
+    async with _crawl_context(crawl) as context:
+        await run_crawl(context, crawl.plan.seed)
         stop_reason = context.stop.reason
         if stop_reason not in (None, "max_urls"):
             # 12.9 records a write failure's failed end, 13.1 an interrupt's.
@@ -258,10 +260,10 @@ async def _crawl(
         writer = context.writer
         # Before the end is written, for completed and stopped alike: 040 reads either state as
         # "its Issues are materialised".
-        for crawl_pass in hooks.passes:
-            await crawl_pass.run(PassContext(writer, clock))
+        for crawl_pass in crawl.hooks.passes:
+            await crawl_pass.run(PassContext(writer, crawl.clock))
         # One instant: the result's ended_at is the time the file records for the end.
-        ended_at = clock.now()
+        ended_at = crawl.clock.now()
         state: CrawlState = "completed" if stop_reason is None else "stopped"
         await writer.run_async(record_state(state, ended_at, stop_reason))
         summary = await writer.run_async(crawl_summary())
@@ -269,21 +271,13 @@ async def _crawl(
 
 
 @asynccontextmanager
-async def _crawl_context(
-    crawl_file: CrawlFile,
-    plan: CrawlPlan,
-    clock: Clock,
-    reporter: WarningLog,
-    hooks: Hooks,
-    resolver: AbstractResolver | None,
-    pages: Callable[[], PageExecutor],
-    given_fetcher: Fetcher | None,
-) -> AsyncIterator[CrawlContext]:
+async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
     """The one place a Crawl's context is built, and its resources closed (design D15)."""
+    plan, crawl_file, clock = crawl.plan, crawl.crawl_file, crawl.clock
     # Built before crawl_started reports its workers: nothing spawns before its start.
-    executor = pages()
+    executor = crawl.pages()
     try:
-        reporter.event(
+        crawl.log.event(
             "crawl_started",
             crawl_id=crawl_file.id,
             crawl_mode=plan.new_crawl.crawl_mode,
@@ -295,9 +289,9 @@ async def _crawl_context(
         writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
         try:
             fetching = (
-                aiohttp_fetcher(clock, resolver)
-                if given_fetcher is None
-                else nullcontext(given_fetcher)
+                aiohttp_fetcher(clock, crawl.resolver)
+                if crawl.fetcher is None
+                else nullcontext(crawl.fetcher)
             )
             async with fetching as fetcher:
                 yield CrawlContext(
@@ -306,11 +300,11 @@ async def _crawl_context(
                     scope=plan.scope,
                     strip_params=plan.strip_params,
                     clock=clock,
-                    reporter=reporter,
+                    reporter=crawl.log,
                     writer=writer,
                     fetcher=fetcher,
                     pages=executor,
-                    hooks=hooks,
+                    hooks=crawl.hooks,
                     stop=StopSignal(),
                 )
         except BaseException:
