@@ -62,14 +62,16 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 - [x] 3.7 Docs: document the queue bound, crash handling and the preparation deadline (its value, and why it is a constant) in `docs/architecture.md`.
 - [x] 3.8 Check: the in-process double prepares a Page as a worker does (design Test seams). `tests/support/page_executor.py` prepares each Page with a pickle round trip of the `PageSettings` given to `start()`, as a worker gets its snapshot (D1), and hands on each extractor output through a pickle round trip of its own, as a worker sends it (D3). A settings snapshot or an output that cannot cross is recorded by the fixture and fails the test at its teardown with the pickling error: an exception raised from `prepare()` would only become the Crawl's error, which a test that does not read the Crawl State would miss, and in the pool such an output costs only its extractor, which a test would not see either. Tested with `pytester`, as the isolation plugin is: an inner test whose extractor's output cannot be pickled, and one whose extractor is a local function, each fails at teardown. Guard: the `PageSettings` of `default_hooks()`'s extractors equals its pickle round trip, so an extractor that `030` or `040` registers, and its settings, can reach a worker.
 - [x] 3.9 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [ ] 3.10 Refactor (ruled 2026-10-16, group 3's review): the wire codec, what a worker sends for a Page and how the crawl process reads it back, moves from `spider.crawl.parse_pool` to its own module, `spider.crawl.parse_wire`, under public names (`encode_outcome`, `decode_outcome`, `crashed_page`), and `parse_pool` keeps the workers, their sizing and the pool's bookkeeping. Behaviour is unchanged: the codec's tests stay, importing the public names; CONTRIBUTING's size sentence is true again.
 
 ## 4. Shutdown and Windows consoles
 
 - [ ] 4.1 [Subprocess] Drive "No parse worker outlives a completed Crawl": each worker gets a stop message and is joined (design D4).
-- [ ] 4.2 [Subprocess] Drive "An interrupt ends the parse workers": workers ignore SIGINT and SIGBREAK, and a worker still preparing a Page when the grace period of `020`'s `StopSignal` ends is killed, its URL left `queued`.
-- [ ] 4.3 [Subprocess, Windows in CI] Drive "Parse workers open no console window (Windows)".
-- [ ] 4.4 Docs: document shutdown and Windows console behaviour (why `060` uses CREATE_NO_WINDOW) in `docs/architecture.md`.
-- [ ] 4.5 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [ ] 4.2 [Subprocess] Drive "An interrupt ends the parse workers": workers ignore SIGINT and SIGBREAK, and a worker still preparing a Page when the grace period of `020`'s `StopSignal` ends is killed, its URL left `queued`. Done when, besides: `close()` never waits without a bound on a worker, with a test each for a stop while a worker is on a Page that never ends, and for a worker that is never ready after another worker broke the pool (ruled 2026-10-16).
+- [ ] 4.3 Check: a worker over its deadline is replaced at once, never on the end of file of its result pipe: `_overdue` drops it from the workers alive and watched and starts the replacement itself, so a process that inherited the worker's pipe cannot keep the Crawl waiting for good (design D8, ruled 2026-10-16). Tested on POSIX only, with an extractor whose child process inherits the pipe, the skip reason named; on Windows the kill covers it. Design Risks says so in the same task.
+- [ ] 4.4 [Subprocess, Windows in CI] Drive "Parse workers open no console window (Windows)".
+- [ ] 4.5 Docs: document shutdown and Windows console behaviour (why `060` uses CREATE_NO_WINDOW) in `docs/architecture.md`.
+- [ ] 4.6 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Change check
 
