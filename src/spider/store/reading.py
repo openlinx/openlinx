@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, Row, select
 from sqlalchemy.exc import DBAPIError
 
 from spider.naming import APP_NAME
@@ -47,6 +47,12 @@ def _check_schema_version(connection: Connection, path: Path) -> None:
         )
 
 
+def row_dict(row: Row[Any]) -> dict[str, Any]:
+    # A column's name is sqlalchemy's quoted_name, a str subclass that orjson refuses as
+    # a key and that equals the str it names, so only the exact type shows it.
+    return {str(name): value for name, value in row._mapping.items()}
+
+
 def read_metadata(path: Path) -> dict[str, Any]:
     with reading(path) as connection:
-        return dict(connection.execute(select(crawl)).mappings().one())
+        return row_dict(connection.execute(select(crawl)).one())

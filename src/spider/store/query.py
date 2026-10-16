@@ -8,6 +8,7 @@ from sqlalchemy import Connection, bindparam, case, func, select
 
 from spider.rules.model import Rule
 from spider.store.issues import affected_urls_in, decode_detail, issues_in
+from spider.store.reading import row_dict
 from spider.store.records import IssueFilters, IssueType, Priority
 from spider.store.schema import literal_values, rules, urls
 
@@ -53,7 +54,7 @@ def ordered_issues(
             found.c.rule_id,
         )
     )
-    return [dict(row._mapping) for row in connection.execute(ordered)]
+    return [row_dict(row) for row in connection.execute(ordered)]
 
 
 def affected_url_page(
@@ -85,6 +86,4 @@ def affected_url_page(
 def recorded_rule(connection: Connection, rule_id: str) -> dict[str, Any]:
     """The Rule as the Crawl's rules table records it, with the thresholds that applied."""
     row = connection.execute(_RULE, {"rule_id": rule_id}).one()
-    # A column's name is sqlalchemy's quoted_name, a str subclass that orjson refuses as a key.
-    recorded = {str(name): value for name, value in row._mapping.items()}
-    return {**recorded, "thresholds": orjson.loads(row.thresholds)}
+    return {**row_dict(row), "thresholds": orjson.loads(row.thresholds)}
