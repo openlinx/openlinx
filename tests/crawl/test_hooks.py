@@ -4,6 +4,7 @@ import sqlite3
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
+from typing import Any
 
 import msgspec
 import pytest
@@ -168,13 +169,13 @@ class Found(msgspec.Struct, frozen=True):
     url: str
 
 
-def _exploding(tree: LexborHTMLParser, page: PageInput) -> Found:
+def _exploding(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
     if page.url.endswith("/boom"):
         raise ValueError(page.url)
     return Found(page.url)
 
 
-def _found(tree: LexborHTMLParser, page: PageInput) -> Found:
+def _found(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
     return Found(page.url)
 
 
@@ -188,7 +189,7 @@ BOOM_SITE = Site(
 )
 
 
-def _with_extractors(*extractors: Extractor) -> Hooks:
+def _with_extractors(*extractors: Extractor[Any]) -> Hooks:
     hooks = default_hooks()
     return replace(hooks, extractors=(*hooks.extractors, *extractors))
 
@@ -198,7 +199,9 @@ def test_an_extractor_error_is_recorded(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
+    result = crawl_result(
+        server.url("/"), _with_extractors(Extractor("exploding", _exploding, None))
+    )
     ((parsed, parse_error, message),) = query(
         result.crawl_file,
         "SELECT parsed, parse_error, parse_error_message FROM urls WHERE url = ?",
@@ -213,7 +216,9 @@ def test_the_crawl_continues_after_an_extractor_error(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
+    result = crawl_result(
+        server.url("/"), _with_extractors(Extractor("exploding", _exploding, None))
+    )
 
     assert query(
         result.crawl_file, "SELECT parsed FROM urls WHERE url = ?", [server.url("/ok")]
@@ -225,7 +230,9 @@ def test_links_of_a_page_whose_extractor_failed_are_followed(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
+    result = crawl_result(
+        server.url("/"), _with_extractors(Extractor("exploding", _exploding, None))
+    )
 
     assert query(
         result.crawl_file, "SELECT fetch_state FROM urls WHERE url = ?", [server.url("/deeper")]
@@ -254,7 +261,9 @@ def test_handlers_get_the_outputs_of_the_extractors_that_did_not_fail(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = _with_extractors(Extractor("exploding", _exploding), Extractor("found", _found))
+    hooks = _with_extractors(
+        Extractor("exploding", _exploding, None), Extractor("found", _found, None)
+    )
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, Handler("outputs", _outputs, _write_outputs)),
@@ -283,7 +292,9 @@ def test_parse_failures_are_counted_in_one_warning(
         )
     )
 
-    result = crawl_result(server.url("/"), _with_extractors(Extractor("exploding", _exploding)))
+    result = crawl_result(
+        server.url("/"), _with_extractors(Extractor("exploding", _exploding, None))
+    )
 
     assert [
         (warning["code"], warning["details"]["count"]) for warning in result.to_json()["warnings"]
@@ -439,7 +450,7 @@ def test_a_handler_that_fails_midway_keeps_none_of_its_rows(
     ) == [(0,)]
 
 
-def _not_a_struct(tree: LexborHTMLParser, page: PageInput) -> Found:
+def _not_a_struct(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
     return {"url": page.url}  # type: ignore[return-value]
 
 
@@ -448,7 +459,9 @@ def test_an_extractor_that_returns_no_struct_is_an_extractor_error(
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    result = crawl_result(server.url("/"), _with_extractors(Extractor("loose", _not_a_struct)))
+    result = crawl_result(
+        server.url("/"), _with_extractors(Extractor("loose", _not_a_struct, None))
+    )
 
     assert query(
         result.crawl_file,

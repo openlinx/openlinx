@@ -71,7 +71,7 @@ class Pass:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Hooks:
-    extractors: tuple[Extractor, ...] = ()
+    extractors: tuple[Extractor[Any], ...] = ()
     handlers: tuple[Handler[Any], ...] = ()
     # One after another in this order, so a pass may read what an earlier one wrote.
     passes: tuple[Pass, ...] = ()
