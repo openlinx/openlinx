@@ -58,7 +58,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 
   Done when, besides: a worker that has not answered "ready" within the deadline is a `WorkerStartError`, the Crawl's error, and is never replaced, with its own test (a worker that never answers ready; ruled 2026-10-14).
 - [x] 3.5 [3+6] Drive "The Crawl continues after a preparation timeout".
-- [ ] 3.6 [3+6] Drive "Other Pages are not charged for a preparation timeout".
+- [x] 3.6 [3+6] Drive "Other Pages are not charged for a preparation timeout".
 - [ ] 3.7 Docs: document the queue bound, crash handling and the preparation deadline (its value, and why it is a constant) in `docs/architecture.md`.
 - [ ] 3.8 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 

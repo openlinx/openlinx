@@ -726,6 +726,28 @@ def test_the_crawl_continues_after_a_preparation_timeout(
 
 
 @pytest.mark.slow
+def test_other_pages_are_not_charged_for_a_preparation_timeout(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    paths = [f"/p{n}" for n in range(1, 11)]
+    links = "".join(f'<a href="{path}">{path}</a>' for path in ["/slow", *paths])
+    routes: dict[str, Route] = {"/": Page(body=links), "/slow": Page(body="slow")}
+    routes |= {path: Page(body=path) for path in paths}
+    server = fixture_site(Site(routes=routes))
+
+    # One worker, so each Page waits in the queue far longer than the deadline before it is
+    # taken, which the deadline must not count.
+    crawl_file = crawl_with_a_short_deadline(server.url("/")).crawl_file
+
+    rows = query(
+        crawl_file,
+        "SELECT url, parsed, parse_error FROM urls WHERE url LIKE ? ORDER BY url",
+        (server.url("/p%"),),
+    )
+    assert sorted(rows) == sorted((server.url(path), 1, None) for path in paths)
+
+
+@pytest.mark.slow
 @pytest.mark.parse_pool
 def test_the_number_of_parse_workers_is_reported(
     temp_workspace: TempWorkspace, fixture_site: StartSite
