@@ -33,6 +33,20 @@ Features and fixes are built as OpenSpec changes under `openspec/changes/<id>/`.
   - bash: `export OPENSPEC_TELEMETRY=0`
   - PowerShell: `$env:OPENSPEC_TELEMETRY = "0"`
 
+### Writing specs, designs and commits
+
+A reader should get the point of any requirement or decision from one line, and still find every rule when they need it. These rules keep the text short as a consequence; there is no length limit.
+
+- **The point first.** Each requirement and each design decision opens with a one-line `**In short:**`. A spec or design opens with a short overview of what it guarantees. A table or a list replaces a paragraph that enumerates cases.
+- **One place per fact.** A spec says what the system does, a design says why, and tasks say what to build. Git keeps how we got there. Everywhere else, point to the fact instead of retelling it.
+- **A spec holds what a test can check.** A sentence that no test could check is rationale, and it goes in the design.
+- **Every sentence carries a rule or an edge case.** If deleting it loses neither, delete it.
+- **No history in specs and designs:** no dates, rulings, "re-grounded", "previously" or task numbers. Git and the pull request keep them.
+- **A decision is its outcome:** what was chosen, why, and the alternative that lost. It is not the path to it.
+- **Glossary terms are used, not re-explained.**
+- **A commit body says what the diff does not:** why, and any consequence that is not obvious. It does not retell the diff or list test names. A one-line fix has a one-line message.
+- **Ready when** a contributor reads a requirement once and can write its test, and reads a decision once and knows what was chosen and why.
+
 ### Test-driven development
 
 Code is written test-first, in vertical slices. [docs/testing.md](docs/testing.md) has the full rules and the agreed test seams.

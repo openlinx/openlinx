@@ -21,7 +21,9 @@ rules:
     - Requirements describe observable behaviour (command output, exit codes, stored data, files written), not internal structure.
     - Write every scenario so it can become one automated test at an agreed seam (docs/testing.md) - concrete inputs, one observable outcome, expected values stated as literals.
     - Add a scenario for Windows behaviour whenever paths, processes, file locking or console output are involved.
+    - Follow "Writing specs, designs and commits" in CONTRIBUTING.md - open each requirement with a one-line **In short:**; state only what a test can check; no dates, rulings or task numbers.
   design:
+    - Follow "Writing specs, designs and commits" in CONTRIBUTING.md - open with a short overview and each decision with a one-line **In short:**; a decision states what was chosen, why, and the alternative that lost; no dates, rulings or task numbers.
     - Record only decisions local to this change; cross-cutting decisions belong in docs/adr/.
     - Name the seams (docs/testing.md) this change is tested at, and any new test seam it introduces (e.g. a fake Fetcher or clock).
   tasks:

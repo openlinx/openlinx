@@ -19,6 +19,8 @@ Conventions used in the scenarios:
 
 ### Requirement: One file per Crawl
 
+**In short:** each Crawl is one self-contained SQLite file that opens from anywhere by its path.
+
 Each Crawl SHALL be stored as one SQLite file, `<data folder>/crawls/<crawl-id>.sqlite`. The file SHALL be self-contained: a copy SHALL open as the same Crawl from any folder when its path is given to `--crawl`.
 
 #### Scenario: Location of a crawl file
@@ -30,6 +32,8 @@ Each Crawl SHALL be stored as one SQLite file, `<data folder>/crawls/<crawl-id>.
 - **THEN** its `crawl.id` is `"20260927-140312-k3f9"`
 
 ### Requirement: Crawl ids
+
+**In short:** a crawl id is the Crawl's UTC start time plus 4 random characters, and is never one already taken in the Workspace.
 
 A crawl id SHALL consist of:
 - the Crawl's UTC start time, formatted `YYYYMMDD-HHMMSS`
@@ -52,6 +56,8 @@ An id SHALL count as taken in a Workspace when `<id>.sqlite` exists in its `craw
 
 ### Requirement: Storing a Crawl creates the data folder
 
+**In short:** creating a Crawl creates a missing data folder, never the settings file, and fails before crawling when that folder cannot be written.
+
 Creating a Crawl SHALL create the Workspace's data folder, its `.gitignore` and its `crawls/` folder, as `010-add-workspace-and-cli-contract` defines them, when they are missing. It SHALL NOT create the settings file. When the data folder cannot be created or written, creating the Crawl SHALL fail with `workspace_not_writable`, whose `details.path` names the path that failed, before anything is crawled.
 
 #### Scenario: First Crawl in the global Workspace
@@ -72,6 +78,8 @@ Creating a Crawl SHALL create the Workspace's data folder, its `.gitignore` and 
 
 ### Requirement: The writer checks that it can write
 
+**In short:** the writer proves it can write to the crawl file before any work runs, and fails with `crawl_not_writable` otherwise.
+
 Opening a Crawl's writer SHALL first run a write inside a transaction that it rolls back. When that fails, opening SHALL fail with `crawl_not_writable`, whose `details.file` is the crawl file, before any unit of work runs. The file SHALL be left unchanged.
 
 #### Scenario: A read-only crawl file
@@ -79,6 +87,8 @@ Opening a Crawl's writer SHALL first run a write inside a transaction that it ro
 - **THEN** opening fails with the error code `crawl_not_writable`, `details.file` is that file's path, and the SHA-256 of the file is unchanged
 
 ### Requirement: Selecting a Crawl with --crawl
+
+**In short:** `--crawl` selects the latest Crawl by default, or a Crawl given by id or by file path, and never creates a folder or crawl file.
 
 A Command that reads a Crawl SHALL take the global flag `--crawl` with one of these values:
 - `latest`, the default
@@ -182,6 +192,8 @@ Failures SHALL use these error codes:
 
 ### Requirement: Crawl metadata
 
+**In short:** every crawl file records when and how its Crawl started, with its Seeds and resolved settings, and holds no running counts.
+
 Every crawl file SHALL hold the table `crawl`, with exactly one row, and the table `seeds`, with one row per Seed. They SHALL have these columns:
 
 | Column | Content |
@@ -241,6 +253,8 @@ The `crawl` row SHALL hold no counts or statistics that are written while the Cr
 
 ### Requirement: Crawl states
 
+**In short:** a Crawl is always in one of the five Crawl States, and starts as *running*.
+
 `crawl.state` SHALL hold one of these Crawl States, and a new Crawl SHALL start as `running`:
 
 | State | Meaning |
@@ -256,6 +270,8 @@ The `crawl` row SHALL hold no counts or statistics that are written while the Cr
 - **THEN** the `state` column has `"values":["running","stopped","completed","failed","interrupted"]`
 
 ### Requirement: Redacting secrets
+
+**In short:** secrets in the recorded command line and settings are masked, so the crawl file never contains them.
 
 When a Crawl is created, the secrets in its recorded command line (`crawl.command_argv`) and its recorded config (`crawl.config`) SHALL be replaced:
 - A secret is the value of a secret option or a secret setting, as `010-add-workspace-and-cli-contract` declares them: once, on the settings field, or on an option that maps to no setting.
@@ -311,6 +327,8 @@ A secret option SHALL have only long names, so that the attached short form (`-t
 - **THEN** the bytes of the crawl file and of its `-wal` file do not contain `s3cret`
 
 ### Requirement: Transactional writer
+
+**In short:** all Crawl data goes through one writer that runs units of work in order, each all-or-nothing, and commits them in batches that survive a crash.
 
 Crawl data SHALL be written only through the Crawl's transactional writer. Callers submit units of work, and each unit may insert, update and read rows.
 - **Order:** units SHALL run one at a time, in the order they were submitted. Each unit runs in the writer's open transaction and sees the effects of every unit before it. A unit that only reads SHALL commit nothing.
@@ -403,6 +421,8 @@ Crawl data SHALL be written only through the Crawl's transactional writer. Calle
 
 ### Requirement: Journal mode
 
+**In short:** crawl files use WAL by default, and fall back to a rollback journal, with a warning, on a UNC path or when SQLite refuses WAL.
+
 A new crawl file SHALL use the journal mode chosen from the setting `store.journal_mode` and the file's location:
 
 | Setting | Local location | UNC path |
@@ -459,6 +479,8 @@ A UNC path is one that starts with `\\` or `//`, such as `\\host\share`, `//host
 
 ### Requirement: The store setting
 
+**In short:** `[store] journal_mode` in `spider.toml` chooses the journal mode, `"auto"` by default.
+
 This change SHALL register the `spider.toml` table `[store]`, with the setting `journal_mode`: `"auto"`, `"wal"` or `"delete"`, with the default `"auto"`. It follows the settings rules of `010-add-workspace-and-cli-contract`.
 
 #### Scenario: The store setting in the template
@@ -470,6 +492,8 @@ This change SHALL register the `spider.toml` table `[store]`, with the setting `
 - **THEN** the exit code is 3, and the error has the code `settings_invalid` and `details.errors[0].key` `"store.journal_mode"`
 
 ### Requirement: Reading while a Crawl is written, and waiting for a lock
+
+**In short:** a Crawl can be read while it is written, and a reader or writer kept out by a lock gives up with `crawl_busy` instead of waiting forever.
 
 In `wal` mode, a process SHALL be able to read a Crawl while another process writes it, and it SHALL see every committed row.
 
@@ -505,6 +529,8 @@ On Windows, while the process of a killed writer is still exiting, it can still 
 
 ### Requirement: Readers never change a crawl file
 
+**In short:** reading a Crawl never changes its file.
+
 Commands that only read a Crawl SHALL open its file read-only. Reading SHALL leave the file's bytes unchanged, and any attempt to write through a read-only handle SHALL fail.
 
 #### Scenario: Bytes are unchanged by reading
@@ -517,6 +543,8 @@ Commands that only read a Crawl SHALL open its file read-only. Reading SHALL lea
 
 ### Requirement: Crawl files are released after each operation
 
+**In short:** once an operation on a Crawl ends, the process lets go of its files, so another process can delete them even while this one keeps running.
+
 When an operation on a Crawl finishes, the process SHALL hold no open handle to the crawl file or its `-wal` and `-shm` files. This SHALL hold even when the process keeps running, as the MCP server does.
 
 #### Scenario: Deleting after a read on Windows
@@ -528,6 +556,8 @@ When an operation on a Crawl finishes, the process SHALL hold no open handle to 
 - **THEN** another process can delete that file
 
 ### Requirement: Crawl files from a newer tool are refused
+
+**In short:** a crawl file from a newer tool is refused and left untouched, with a hint to upgrade.
 
 A crawl file whose schema version is newer than the tool's SHALL be refused with `crawl_schema_too_new`, without changing the file:
 - `details.file_schema_version` and `details.tool_schema_version` give the two versions
@@ -542,6 +572,8 @@ A crawl file whose schema version is newer than the tool's SHALL be refused with
 - **THEN** the SHA-256 of the crawl file is the same as before
 
 ### Requirement: Listing the schema with spider schema
+
+**In short:** `spider schema` lists the public tables of a crawl file with their columns and indexes, and needs no Workspace or Crawl.
 
 `spider schema [TABLE]` SHALL be a list Command that follows the paging and output rules of `010-add-workspace-and-cli-contract`, with the formats `json`, `jsonl` and `table`.
 - Its JSON result SHALL start with the key `schema_version`, the tool's schema version, before `total`.
@@ -614,6 +646,8 @@ An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists t
 
 ### Requirement: The documented schema, the declared schema and the file agree
 
+**In short:** `docs/schema.md`, the declared schema and every new crawl file always describe the same tables, columns and indexes.
+
 The public schema SHALL be declared once, as the store's table definitions, and the two other places that show it SHALL agree with them:
 - **`docs/schema.md`,** the public schema reference, SHALL document every public table, column and index with the same name, type, nullability, key, reference, format, values, index columns, uniqueness, condition and description as the declared schema, and SHALL document nothing else.
 - **A new crawl file** SHALL have exactly the declared tables, columns and indexes, with the same types, nullability, primary keys, foreign keys, index columns, uniqueness and conditions, as SQLite reports them. Every public table SHALL be `STRICT`, and every table the schema declares `WITHOUT ROWID` SHALL be so in the file.
@@ -627,6 +661,8 @@ The public schema SHALL be declared once, as the store's table definitions, and 
 - **THEN** every public table, column and index of the declared schema is there, with the declared type, nullability, primary key, reference, index columns, uniqueness and condition, every public table is `STRICT`, and the file has no other public table, column or index
 
 ### Requirement: Public schema conventions
+
+**In short:** every public table, column and index follows one set of naming, type and value conventions, so the schema reads the same everywhere.
 
 Every public table, column and index SHALL follow these conventions (ADR-0005):
 - **Names:** lowercase snake_case. Table names are plural nouns, except the one-row `crawl`.
@@ -695,6 +731,8 @@ Every public table, column and index SHALL follow these conventions (ADR-0005):
 
 ### Requirement: Unmeasured values are NULL
 
+**In short:** a value that was not measured or does not apply is NULL, never `0` or an empty string.
+
 A value that was not measured, or that does not apply, SHALL be stored as NULL. It SHALL never be stored as `0` or as an empty string. `0` SHALL mean a measured zero, and an empty string SHALL mean a value that is present but empty. A column that a later release measures SHALL be NULL in every row until then, and a derived column SHALL be NULL until its post-crawl pass has run.
 
 #### Scenario: A running Crawl has no completion time
@@ -706,6 +744,8 @@ A value that was not measured, or that does not apply, SHALL be stored as NULL. 
 - **THEN** `settings_file` is NULL
 
 ### Requirement: Crawl store diagnostics
+
+**In short:** the crawl store's error and warning codes are declared with fixed levels and exit codes, so `spider commands` lists them.
 
 This change's diagnostic codes SHALL be declared in the registry of `010-add-workspace-and-cli-contract`, with these levels and exit codes, so `spider commands` lists them:
 
@@ -729,6 +769,8 @@ This change's diagnostic codes SHALL be declared in the registry of `010-add-wor
   - `store_wal_unavailable` null
 
 ### Requirement: Submitting units with their outcome at the commit
+
+**In short:** a caller can submit a unit without waiting, and gets a Future that settles only when the unit is committed or fails.
 
 A caller SHALL be able to submit a unit without waiting for it to run. Submitting returns a Future for that unit, which is:
 - resolved with the unit's result after the commit that holds the unit, never before it
@@ -774,6 +816,8 @@ Submitted units follow the order, atomicity and commit rules of the transactiona
 - **THEN** cancelling returned `False`, a separate reader sees the positions 1 and 2 in `seeds`, and the second unit's Future holds its result
 
 ### Requirement: The writer's connection settings
+
+**In short:** the writer's connection uses fixed memory and cache settings, while creating and reading a crawl file keep SQLite's defaults.
 
 The writer's connection SHALL keep temporary tables and indexes in memory, and SHALL use a page cache of 64 MiB. In `wal` mode it SHALL also use memory-mapped I/O for up to 256 MiB of the crawl file; in `delete` mode it SHALL use none. No setting changes these values. Creating a crawl file and reading it SHALL keep SQLite's defaults. The durability scenarios of the transactional writer SHALL hold with them, on Windows too.
 
