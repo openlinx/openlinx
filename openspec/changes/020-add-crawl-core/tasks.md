@@ -297,7 +297,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - `CONTRIBUTING.md` allows a `# type: ignore[code]` for a deliberate type guard or a deliberately wrong call in a test.
   - A `robots_user_agent` in `spider.toml` that RFC 9309 refuses gives a `settings_invalid` message that names the allowed characters, from the same pattern.
   - `docs/architecture.md` says what mypy checks, and where.
-- [ ] 10.23 Fix the review of the whole branch (main...7801901), each fix red first or red by mutation, each refactor with behaviour unchanged:
+- [x] 10.23 Fix the review of the whole branch (main...7801901), each fix red first or red by mutation, each refactor with behaviour unchanged:
   - A handler gets `blocked_by_robots_txt` in `UrlResult`, so under `--ignore-robots` it sees 1.
   - A skip decided at dispatch reaches its handlers once, also when a late check lowers the URL's depth first; or, if that fix is out of proportion, a Risks line and a test that its rows are written once, by ruling.
   - The warning log keys each code by its own identity: the host for `possible_blocking` and `robots_unreachable`. Where a code is kept once per code, D10 says so and a test pins it.

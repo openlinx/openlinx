@@ -583,8 +583,8 @@ A dispatched URL SHALL be skipped as `excluded` when an exclude pattern matches 
 - **WHEN** `/` links to `/a`, `/a` links to `/logout`, and `spider crawl {site}/ --max-depth 1 --exclude "/logout$"` runs
 - **THEN** `{site}/logout` has `skip_reason` = `excluded`
 
-#### Scenario: An unchecked External URL requests no robots.txt
-- **WHEN** `/` links to `http://other.test/page`, another fixture site serves `other.test`, and `spider crawl {site}/ --no-check-external` runs
+#### Scenario: An excluded URL requests no robots.txt
+- **WHEN** `/` links to `http://other.test/logout`, another fixture site serves `other.test`, and `spider crawl {site}/ --exclude "/logout$"` runs
 - **THEN** `other.test` receives no request
 
 ### Requirement: URL limit
