@@ -42,6 +42,7 @@ Each Rule fires for a URL of its population when the condition holds, and record
 | `title-missing` | `titles` | `issue` | `high` | an analysed Page whose `title_count` is 0 or whose `title_1` is the empty string | none |
 | `title-duplicate` | `titles` | `warning` | `medium` | an Indexable Page whose non-empty `title_1` is, letter case included, the `title_1` of another Indexable Page | `title_1`, and `pages`: how many Indexable Pages have it |
 | `title-too-long` | `titles` | `opportunity` | `medium` | an analysed Page whose `title_1_length` is above `max_chars`, 60 characters by default | `length`: the `title_1_length` |
+| `meta-description-missing` | `meta_descriptions` | `opportunity` | `medium` | an analysed Page whose `meta_description_count` is 0 or whose `meta_description_1` is the empty string | none |
 | `h1-missing` | `headings` | `warning` | `medium` | an analysed Page whose `h1_count` is 0 or whose `h1_1` is the empty string | none |
 
 `record_failed` means that the Crawl received a response but could not record it. That is the tool's failure, not the site's, so it is no Issue: the `record_failed` warning reports it, and continuing the Crawl requests the URL again. The query of `internal-no-response` says so in an SQL comment.

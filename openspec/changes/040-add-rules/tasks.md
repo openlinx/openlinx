@@ -121,7 +121,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 6.7 **(v0.2)** Drive "H1 too long" and "H1 at the limit" at seam 2. This is a trivial pair: one boundary. Register `h1-too-long`.
 - [ ] 6.8 **(v0.2)** Drive "Duplicate H1" at seam 2, and register `h1-duplicate`.
 - [ ] 6.9 **(v0.2)** Drive "Missing H2" at seam 2, over `030`'s `h2_count` and `h2_1`, and register `h2-missing` (moved from group 3).
-- [ ] 6.10 Docs: add `meta-description-missing` to the catalogue in `docs/rules.md`. **(v0.2)** The other 4 meta description Rules and the other 4 heading Rules.
+- [x] 6.10 Docs: add `meta-description-missing` to the catalogue in `docs/rules.md`. **(v0.2)** The other 4 meta description Rules and the other 4 heading Rules.
 - [ ] 6.11 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Response code and security Rules (v0.1)
