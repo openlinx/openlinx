@@ -1,6 +1,9 @@
 """The stop flag of a Crawl: set once, with the stop_reason it ends with (020 D10)."""
 
 from spider.store.records import StopReason
+from spider.store.transitions import TRANSITIONS
+
+_FAILURES = TRANSITIONS["running", "failed"]
 
 
 class StopSignal:
@@ -22,6 +25,7 @@ class StopSignal:
         return self._cause
 
     def set(self, reason: StopReason, cause: BaseException | None = None) -> None:
-        """Only the first stop counts: the Crawl ends for that reason."""
-        if self._reason is None:
+        """The first stop counts, but a failure outranks a stop: a Crawl that stopped at its
+        URL limit and then lost its file has failed (design D10)."""
+        if self._reason is None or (reason in _FAILURES and self._reason not in _FAILURES):
             self._reason, self._cause = reason, cause

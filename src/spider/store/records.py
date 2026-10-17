@@ -4,12 +4,28 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from spider.crawl.urls import NormalizedUrl
+from spider.store.rows import HandlerRows
 from spider.workspace.discovery import Workspace
 
 type CrawlMode = Literal["spider", "list", "sitemap"]
+
+# A plain alias, not a type statement: Typer reads it as the choices of --scope.
+ScopeKind = Literal["host", "subdomains", "subfolder"]
+
+
+class RecordedScope(TypedDict):
+    """crawl.scope (020-add-crawl-core D18)."""
+
+    mode: ScopeKind
+    hosts: list[str]
+    folder: str | None
+    include: list[str]
+    exclude: list[str]
+
+
 type JournalMode = Literal["wal", "delete"]
 type JournalSetting = Literal["auto", "wal", "delete"]
 type CrawlState = Literal["running", "stopped", "completed", "failed", "interrupted"]
@@ -17,6 +33,8 @@ type CrawlState = Literal["running", "stopped", "completed", "failed", "interrup
 type StopReason = Literal[
     "max_urls", "interrupt", "requested", "seed_unreachable", "site_unreachable", "write_failed"
 ]
+# Rules applied, everything allowed, or everything disallowed or unanswered (D6).
+type RobotsState = Literal["ok", "missing", "unreachable"]
 type SkipReason = Literal[
     "excluded",
     "blocked_by_robots_txt",
@@ -28,6 +46,9 @@ type SkipReason = Literal[
     "max_redirects",
     "url_too_long",
 ]
+# The reasons a URL is recorded as skipped when it is discovered, never dispatched; a later
+# followed Link re-queues a URL skipped for one of them (020 D5).
+type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed"]
 type LinkType = Literal[
     "hyperlink",
     "canonical",
@@ -79,7 +100,7 @@ class SecretNames:
     settings: frozenset[str] = frozenset()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class NewCrawl:
     workspace: Workspace
     crawl_mode: CrawlMode
@@ -87,12 +108,13 @@ class NewCrawl:
     command_argv: Sequence[str]
     cwd: Path
     config: Mapping[str, Any]
+    scope: RecordedScope
     # No defaults: a creator that forgot its secrets would record them, and one that forgot the
     # store.journal_mode setting would silently ignore it.
     secret_names: SecretNames
     journal_setting: JournalSetting
+    section_crawl: bool
     settings_file: Path | None = None
-    section_crawl: bool = False
 
 
 @dataclass(frozen=True)
@@ -114,13 +136,15 @@ class QueuedUrl:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewUrl:
-    """A URL discovered from a response, recorded unless the Crawl has it already."""
+    """A URL discovered from a response, recorded unless the Crawl has it already, one
+    deeper than the URL it was found on as the store holds it (design D3)."""
 
     url: NormalizedUrl
-    crawl_depth: int
     discovered_via: DiscoveredVia
     is_internal: bool
     in_scope: bool
+    # Why none of the Page's Links to it is followed; None queues it (design D5).
+    skip_reason: DiscoverySkipReason | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -166,18 +190,23 @@ class FetchedUrl:
     parsed: bool
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
+    # NULL when robots.txt was not checked (design D6).
+    blocked_by_robots_txt: bool | None = None
     discovered: tuple[NewUrl, ...] = ()
     # What the handlers returned, written in the same unit (design D9).
-    rows: tuple[object, ...] = ()
+    rows: tuple[HandlerRows[Any], ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class SkippedUrl:
     """A URL recorded without a request, with what the handlers returned for it."""
 
     url_id: int
     skip_reason: SkipReason
-    rows: tuple[object, ...] = ()
+    # The depth the skip was decided on: a URL lowered since then is decided again (design D5).
+    crawl_depth: int
+    blocked_by_robots_txt: bool | None = None
+    rows: tuple[HandlerRows[Any], ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -187,5 +216,22 @@ class ErroredUrl:
     url_id: int
     fetch_error: FetchError
     fetch_error_message: str
+    # None without a request of its own: its origin's robots.txt got no response.
+    fetched_at: datetime | None
+    blocked_by_robots_txt: bool | None = None
+    rows: tuple[HandlerRows[Any], ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RobotsTxtRecord:
+    """What an origin's robots.txt request gave, for the origin's row (design D6)."""
+
+    origin: str
+    state: RobotsState
+    status_code: int | None
+    fetch_error: FetchError | None = None
+    fetch_error_message: str | None = None
     fetched_at: datetime
-    rows: tuple[object, ...] = ()
+    text: str | None
+    crawl_delay_ms: int | None
+    sitemaps: tuple[str, ...]

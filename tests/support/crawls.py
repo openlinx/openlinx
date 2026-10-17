@@ -40,8 +40,16 @@ def new_crawl(workspace: Workspace) -> NewCrawl:
         command_argv=["spider", "crawl", "https://example.com/"],
         cwd=workspace.root,
         config={},
+        scope={
+            "mode": "host",
+            "hosts": ["example.com"],
+            "folder": None,
+            "include": [],
+            "exclude": [],
+        },
         secret_names=SecretNames(),
         journal_setting="auto",
+        section_crawl=False,
     )
 
 

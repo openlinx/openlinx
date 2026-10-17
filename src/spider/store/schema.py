@@ -5,12 +5,14 @@ from typing import Any, Literal, get_args, get_origin
 from sqlalchemy import (
     CheckConstraint,
     Column,
+    ColumnElement,
     ForeignKey,
     Index,
     Integer,
     MetaData,
     Table,
     Text,
+    or_,
 )
 
 from spider.store.records import (
@@ -21,6 +23,7 @@ from spider.store.records import (
     FetchState,
     JournalMode,
     ParseError,
+    RobotsState,
     SkipReason,
     StopReason,
 )
@@ -50,7 +53,8 @@ def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckCons
         if "values" in column.info:
             checks.append(
                 CheckConstraint(
-                    column.in_(column.info["values"]), name=f"{table_name}_{column.name}_values"
+                    _one_of(column, column.info["values"]),
+                    name=f"{table_name}_{column.name}_values",
                 )
             )
         if isinstance(column.type, Flag):
@@ -58,6 +62,12 @@ def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckCons
                 CheckConstraint(column.in_([0, 1]), name=f"{table_name}_{column.name}_flag")
             )
     return checks
+
+
+def _one_of(column: Column[Any], values: list[str]) -> ColumnElement[bool]:
+    # Never IN: SQLite builds an ephemeral index for an IN list of more than two values again
+    # on every row of an executemany (ADR-0005).
+    return or_(*(column == value for value in values))
 
 
 def public_tables() -> list[Table]:
@@ -96,6 +106,12 @@ crawl = public_table(
         Flag,
         nullable=False,
         comment="1 for a Section Crawl, whose Scope is one part of a site, otherwise 0.",
+    ),
+    Column(
+        "scope",
+        Json,
+        nullable=False,
+        comment="The resolved Scope, as an object of mode, hosts, folder, include and exclude.",
     ),
     Column(
         "state",
@@ -226,14 +242,16 @@ urls = public_table(
         "discovered_via",
         Text,
         nullable=False,
-        comment="How the URL was first found: seed, or the Link type.",
+        comment="How the URL was first found: seed, or the Link type; through a followed Link "
+        "once one has reached it.",
         info={"values": literal_values(DiscoveredVia)},
     ),
     Column(
         "found_on_url_id",
         Integer,
         ForeignKey("urls.id"),
-        comment="The URL whose response first revealed this one; NULL for Seeds.",
+        comment="The URL whose response first revealed this one, through a followed Link once "
+        "one has reached it; NULL for Seeds.",
     ),
     Column(
         "fetch_state",
@@ -247,6 +265,12 @@ urls = public_table(
         Text,
         comment="Why a skipped URL was not requested.",
         info={"values": literal_values(SkipReason)},
+    ),
+    Column(
+        "blocked_by_robots_txt",
+        Flag,
+        comment="1 when robots.txt disallows the URL for the robots user-agent token (also "
+        "with --ignore-robots), 0 when it allows it; NULL when not checked.",
     ),
     Column(
         "status_code",
@@ -330,6 +354,44 @@ origins = public_table(
         Flag,
         nullable=False,
         comment="1 when the origin's URLs are Internal URLs.",
+    ),
+    Column(
+        "robots_state",
+        Text,
+        comment="Rules applied, everything allowed, or everything disallowed or unanswered; NULL "
+        "while robots.txt has not been fetched, which happens before the first URL of the "
+        "origin that the Scope does not skip and the URL limit does not refuse.",
+        info={"values": literal_values(RobotsState)},
+    ),
+    Column(
+        "robots_status_code",
+        Integer,
+        comment="Status code of the final robots.txt response; NULL without a response.",
+    ),
+    Column(
+        "robots_fetch_error",
+        Text,
+        comment="Why the robots.txt request got no HTTP response; NULL when it got one, or "
+        "while robots.txt has not been fetched.",
+        info={"values": literal_values(FetchError)},
+    ),
+    Column(
+        "robots_fetch_error_message",
+        Text,
+        comment="Human-readable detail of robots_fetch_error.",
+    ),
+    Column("robots_fetched_at", Timestamp, comment="UTC time robots.txt was last fetched."),
+    Column("robots_txt", Text, comment="The robots.txt body as parsed, up to 512,000 bytes."),
+    Column(
+        "robots_crawl_delay_ms",
+        Integer,
+        comment="The Crawl-delay for the robots user-agent token; recorded, not applied.",
+    ),
+    Column(
+        "robots_sitemaps",
+        Json,
+        comment="JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not "
+        "been fetched.",
     ),
     comment="One row for each origin of a URL that the Crawl recorded.",
     change=20,

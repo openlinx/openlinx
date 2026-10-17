@@ -1,4 +1,4 @@
-"""Guard: decidable code rules (018-add-schema-conventions; 020-add-crawl-core D13)."""
+"""Guard: decidable code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14)."""
 
 import ast
 from collections.abc import Mapping
@@ -341,4 +341,300 @@ def positional_bound(x): ...
         "m.py: called_lru is a memo without an explicit bound",
         "m.py: unbounded_lru is a memo without an explicit bound",
         "m.py: positional_none is a memo without an explicit bound",
+    ]
+
+
+# The crawl core never imports the layers that wire it or plug into it (020 design D9).
+PLUGIN_LAYERS = ("spider.services", "spider.extract", "spider.rules", "spider.cli")
+
+
+def _absolute(module: str, level: int, name: str | None) -> str:
+    if not level:
+        return name or ""
+    package = module.removesuffix(".py").split("/")[:-1]
+    base = package[: len(package) - level + 1]
+    return ".".join([*base, name] if name else base)
+
+
+def _plugin_imports(module: str, tree: ast.AST) -> list[str]:
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            base = _absolute(module, node.level, node.module)
+            # `from spider import rules` names the layer in the alias.
+            found += (
+                [f"{base}.{alias.name}" for alias in node.names] if base == "spider" else [base]
+            )
+    return [
+        name
+        for name in found
+        if any(name == layer or name.startswith(f"{layer}.") for layer in PLUGIN_LAYERS)
+    ]
+
+
+def plugin_import_violations(sources: Mapping[str, str]) -> list[str]:
+    """Modules of spider.crawl that import a plugin layer, given every module's source by path."""
+    return [
+        f"{module} imports {name}"
+        for module, source in sources.items()
+        if module.startswith("spider/crawl/")
+        for name in _plugin_imports(module, ast.parse(source))
+    ]
+
+
+def test_the_crawl_core_imports_no_plugin_layer() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert plugin_import_violations(sources) == []
+
+
+def test_an_import_of_a_plugin_layer_in_the_crawl_core_is_named() -> None:
+    sources = {
+        "spider/crawl/engine.py": "from spider.services.hooks import default_hooks\n",
+        "spider/crawl/pages.py": "def late():\n    import spider.extract.page\n",
+        "spider/crawl/scope.py": "from spider import rules, store\n",
+        "spider/crawl/links.py": "from ..cli import app\n",
+        "spider/crawl/hooks.py": "from spider.store import rows\nimport spider.servicesx\n",
+        "spider/services/crawling.py": "from spider.services.hooks import default_hooks\n",
+    }
+
+    assert plugin_import_violations(sources) == [
+        "spider/crawl/engine.py imports spider.services.hooks",
+        "spider/crawl/pages.py imports spider.extract.page",
+        "spider/crawl/scope.py imports spider.rules",
+        "spider/crawl/links.py imports spider.cli",
+    ]
+
+
+# lexbor's serializer recurses into template content: `.html` of a <template> nested 20,000
+# deep ends the process with a native stack overflow (020 design Risks, task 15.1).
+SERIALIZERS = frozenset({"html", "inner_html", "html_pretty", "inner_html_pretty"})
+PAGE_READERS = ("spider/crawl/", "spider/extract/")
+
+
+def serializer_violations(sources: Mapping[str, str]) -> list[str]:
+    """Reads of a serializer in the modules that read Pages, given every module's source by path."""
+    return [
+        f"{module}:{node.lineno} serializes a node with .{node.attr}, which overflows the stack "
+        "on deeply nested templates"
+        for module, source in sources.items()
+        if module.startswith(PAGE_READERS)
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Attribute) and node.attr in SERIALIZERS
+    ]
+
+
+def test_no_module_that_reads_pages_serializes_a_node() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert serializer_violations(sources) == []
+
+
+def test_a_serialization_of_a_node_is_named() -> None:
+    sources = {
+        "spider/crawl/links.py": "def f(node):\n    return node.html\n",
+        "spider/extract/page_data.py": "text = tree.body.inner_html\n",
+        "spider/crawl/pages.py": "x = node.css('a')\ny = node.attributes\n",
+        "spider/report/html.py": "page = node.html\n",
+    }
+
+    assert serializer_violations(sources) == [
+        "spider/crawl/links.py:2 serializes a node with .html, which overflows the stack on deeply "
+        "nested templates",
+        "spider/extract/page_data.py:1 serializes a node with .inner_html, which overflows the "
+        "stack on deeply nested templates",
+    ]
+
+
+# Every request of a Crawl goes through the Requester, which owns its politeness (020 D7).
+REQUESTER = "spider/crawl/requester.py"
+
+
+def request_violations(sources: Mapping[str, str]) -> list[str]:
+    """Requests made outside the Requester, given every module's source by its path."""
+    found = []
+    for module, source in sources.items():
+        if module == REQUESTER:
+            continue
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.Attribute) and node.attr == "fetch":
+                found.append(f"{module}:{node.lineno} calls a Fetcher outside the Requester")
+            elif isinstance(node, ast.Call) and _base_name(node.func) == "Request":
+                found.append(f"{module}:{node.lineno} makes a Request outside the Requester")
+    return found
+
+
+def test_every_request_goes_through_the_requester() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert request_violations(sources) == []
+
+
+def test_a_request_outside_the_requester_is_named() -> None:
+    sources = {
+        "spider/crawl/robots_loader.py": "async def f(self, url):\n"
+        "    return await self._fetcher.fetch(Request(url))\n",
+        "spider/crawl/engine.py": "fetch = context.fetcher.fetch\nrequest = fetcher.Request(u)\n",
+        REQUESTER: "async def f(self, url):\n    return await self._fetcher.fetch(Request(url))\n",
+        "spider/crawl/fetcher.py": "class AiohttpFetcher:\n"
+        "    async def fetch(self, request): ...\n",
+    }
+
+    assert request_violations(sources) == [
+        "spider/crawl/robots_loader.py:2 calls a Fetcher outside the Requester",
+        "spider/crawl/robots_loader.py:2 makes a Request outside the Requester",
+        "spider/crawl/engine.py:1 calls a Fetcher outside the Requester",
+        "spider/crawl/engine.py:2 makes a Request outside the Requester",
+    ]
+
+
+# Built only through their generic factories, which check the type parameter where the hooks are
+# registered: one built in place inside Hooks(...) takes it as Any (020 D9).
+FACTORIES = {"Handler": "src/spider/crawl/hooks.py", "Extractor": "src/spider/crawl/pages.py"}
+
+
+def factory_violations(sources: Mapping[str, str]) -> list[str]:
+    """Hooks built outside their factories, given every module's source by its path."""
+    found = []
+    for module, source in sources.items():
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Call):
+                continue
+            name = _base_name(node.func)
+            if name in FACTORIES and module != FACTORIES[name]:
+                found.append(f"{module}:{node.lineno} builds {name}(...) outside its factory")
+    return found
+
+
+def test_hooks_are_built_only_through_their_factories() -> None:
+    root = SRC.parent
+    sources = {
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for folder in (SRC / "spider", root / "tests")
+        for path in sorted(folder.rglob("*.py"))
+    }
+
+    assert factory_violations(sources) == []
+
+
+def test_a_hook_built_outside_its_factory_is_named() -> None:
+    sources = {
+        "tests/crawl/test_hooks.py": "hooks = Hooks(handlers=(Handler('x', rows, write),))\n",
+        "src/spider/services/hooks.py": "h = hooks.Handler('x', rows, write)\n",
+        "src/spider/crawl/hooks.py": "def handler(n, h, w):\n    return Handler(n, h, w)\n",
+        "src/spider/services/pages.py": "e = pages.Extractor('x', extract, None)\n",
+        "src/spider/crawl/pages.py": "def extractor(n, e, c):\n    return Extractor(n, e, c)\n",
+    }
+
+    assert factory_violations(sources) == [
+        "tests/crawl/test_hooks.py:1 builds Handler(...) outside its factory",
+        "src/spider/services/hooks.py:1 builds Handler(...) outside its factory",
+        "src/spider/services/pages.py:1 builds Extractor(...) outside its factory",
+    ]
+
+
+# A Crawl waits only through its Clock, so a fake Clock drives every wait of a test (020 D7).
+WAITERS = ("spider/crawl/", "spider/services/crawling.py")
+SLEEPS = {("asyncio", "sleep"), ("time", "sleep")}
+CALLBACKS = {"call_later", "call_at"}
+# Where each asyncio call that may wait takes its timeout as a positional argument, if it does.
+TIMEOUT_POSITIONS = {"wait_for": 1, "wait": None, "timeout": 0, "timeout_at": 0}
+TIMEOUT_KEYWORDS = {"timeout", "delay", "when"}
+
+
+def _has_timeout(call: ast.Call, position: int | None) -> bool:
+    given = [keyword.value for keyword in call.keywords if keyword.arg in TIMEOUT_KEYWORDS]
+    if position is not None and len(call.args) > position:
+        given.append(call.args[position])
+    return any(not (isinstance(value, ast.Constant) and value.value is None) for value in given)
+
+
+def _waits(call: ast.Call) -> bool:
+    if not isinstance(call.func, ast.Attribute):
+        return False
+    name = call.func.attr
+    owner = call.func.value.id if isinstance(call.func.value, ast.Name) else None
+    if name in CALLBACKS or (owner, name) in SLEEPS:
+        return True
+    return (
+        owner == "asyncio"
+        and name in TIMEOUT_POSITIONS
+        and _has_timeout(call, TIMEOUT_POSITIONS[name])
+    )
+
+
+def wait_violations(sources: Mapping[str, str]) -> list[str]:
+    """Waits of a Crawl outside its Clock, given every module's source by its path."""
+    found: list[str] = []
+    for module, source in sources.items():
+        if not module.startswith(WAITERS):
+            continue
+        nodes = sorted(ast.walk(ast.parse(source)), key=lambda node: getattr(node, "lineno", 0))
+        for node in nodes:
+            if isinstance(node, ast.ImportFrom) and node.module in {"asyncio", "time"}:
+                found.extend(
+                    f"{module}:{node.lineno} imports {node.module}.{alias.name} by name"
+                    for alias in node.names
+                    if (node.module, alias.name) in SLEEPS
+                    or (node.module == "asyncio" and alias.name in TIMEOUT_POSITIONS)
+                )
+            elif isinstance(node, ast.Call) and _waits(node):
+                found.append(f"{module}:{node.lineno} waits outside the Clock: {ast.unparse(node)}")
+    return found
+
+
+def test_a_crawl_waits_only_through_its_clock() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert wait_violations(sources) == []
+
+
+def test_a_wait_outside_the_clock_is_named() -> None:
+    sources = {
+        "spider/crawl/engine.py": "await asyncio.sleep(0)\n"
+        "time.sleep(1)\n"
+        "loop.call_later(1, f)\n"
+        "self._loop.call_at(t, f)\n"
+        "await asyncio.wait_for(task, 5)\n"
+        "await asyncio.wait_for(task, timeout=5)\n"
+        "await asyncio.wait(tasks, timeout=5)\n"
+        "async with asyncio.timeout(5): ...\n"
+        "async with asyncio.timeout_at(when=t): ...\n",
+        "spider/crawl/politeness.py": "from asyncio import sleep, Lock\nfrom time import sleep\n"
+        "await self._clock.sleep(1)\n"
+        "await asyncio.wait_for(task, None)\n"
+        "await asyncio.wait(tasks)\n"
+        "async with asyncio.timeout(None): ...\n",
+        "spider/services/crawling.py": "async with asyncio.timeout(delay=1): ...\n",
+        "spider/services/listing.py": "await asyncio.sleep(1)\n",
+        "spider/clock.py": "await asyncio.sleep(seconds)\n",
+    }
+
+    assert wait_violations(sources) == [
+        "spider/crawl/engine.py:1 waits outside the Clock: asyncio.sleep(0)",
+        "spider/crawl/engine.py:2 waits outside the Clock: time.sleep(1)",
+        "spider/crawl/engine.py:3 waits outside the Clock: loop.call_later(1, f)",
+        "spider/crawl/engine.py:4 waits outside the Clock: self._loop.call_at(t, f)",
+        "spider/crawl/engine.py:5 waits outside the Clock: asyncio.wait_for(task, 5)",
+        "spider/crawl/engine.py:6 waits outside the Clock: asyncio.wait_for(task, timeout=5)",
+        "spider/crawl/engine.py:7 waits outside the Clock: asyncio.wait(tasks, timeout=5)",
+        "spider/crawl/engine.py:8 waits outside the Clock: asyncio.timeout(5)",
+        "spider/crawl/engine.py:9 waits outside the Clock: asyncio.timeout_at(when=t)",
+        "spider/crawl/politeness.py:1 imports asyncio.sleep by name",
+        "spider/crawl/politeness.py:2 imports time.sleep by name",
+        "spider/services/crawling.py:1 waits outside the Clock: asyncio.timeout(delay=1)",
     ]

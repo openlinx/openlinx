@@ -20,7 +20,7 @@ SMALL_SITE = Site(
 
 def test_an_invalid_seed_is_rejected(temp_workspace: TempWorkspace) -> None:
     result = run_cli("crawl", "http://exa mple.test/")
-    errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+    errors = [error["code"] for error in result.errors()]
 
     assert (result.exit_code, errors, list(temp_workspace.home.rglob("*.sqlite"))) == (
         2,
@@ -180,6 +180,7 @@ def test_the_first_event_line_is_the_start_event(
             "crawl_mode": "spider",
             "seed_count": 1,
             "crawl_file": result.json()["crawl_file"],
+            "parse_workers": 0,
         },
     )
 
@@ -236,7 +237,7 @@ def test_an_invalid_exclude_pattern_is_rejected(temp_workspace: TempWorkspace) -
 
 def test_a_concurrency_of_zero_is_rejected(temp_workspace: TempWorkspace) -> None:
     result = run_cli("crawl", "http://site.test/", "--concurrency", "0")
-    errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+    errors = [error["code"] for error in result.errors()]
 
     assert (result.exit_code, errors) == (2, ["invalid_value"])
 
@@ -247,7 +248,7 @@ def test_a_concurrency_above_50_in_the_settings_file_is_refused(
     (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nconcurrency = 51\n")
 
     result = run_cli("crawl", "http://site.test/")
-    errors = [line["code"] for line in result.stderr_json_lines() if line.get("level") == "error"]
+    errors = [error["code"] for error in result.errors()]
 
     assert (result.exit_code, errors) == (3, ["settings_invalid"])
 
@@ -265,3 +266,98 @@ def test_no_check_external_records_an_external_url_as_skipped(
         "SELECT fetch_state, skip_reason FROM urls WHERE url = ?",
         ["http://other.test/"],
     ) == [("skipped", "external_not_checked")]
+
+
+def test_the_subdomains_shorthand_conflicts_with_a_subfolder_scope(
+    temp_workspace: TempWorkspace,
+) -> None:
+    result = run_cli("crawl", "http://site.test/blog/", "--subdomains", "--scope", "subfolder")
+    errors = [error["code"] for error in result.errors()]
+
+    assert (result.exit_code, errors, list(temp_workspace.home.rglob("*.sqlite"))) == (
+        2,
+        ["option_conflict"],
+        [],
+    )
+
+
+def test_the_subdomains_shorthand_is_the_subdomains_scope(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SMALL_SITE)
+
+    config = json.loads(crawl_row(crawled(server.url("/"), "--subdomains"))["config"])
+
+    assert config["crawl"]["scope"] == "subdomains"
+
+
+def test_a_seed_without_its_trailing_slash_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/blog", "--scope", "subfolder")
+
+    assert (
+        result.exit_code,
+        [
+            (
+                error["code"],
+                error["details"]["suggested_seed"],
+                "http://site.test/blog/ " in error["hint"],
+            )
+            for error in result.errors()
+        ],
+    ) == (2, [("subfolder_is_root", "http://site.test/blog/", True)])
+
+
+def test_a_root_seed_with_a_subfolder_scope_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--scope", "subfolder")
+
+    assert (
+        result.exit_code,
+        [
+            (
+                error["code"],
+                error["details"]["suggested_seed"],
+                "--scope subfolder" in error["hint"],
+            )
+            for error in result.errors()
+        ],
+        list(temp_workspace.home.rglob("*.sqlite")),
+    ) == (2, [("subfolder_is_root", None, True)], [])
+
+
+def test_an_invalid_pattern_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--include", "(")
+
+    assert (
+        result.exit_code,
+        [(error["code"], "--include" in error["hint"]) for error in result.errors()],
+        list(temp_workspace.home.rglob("*.sqlite")),
+    ) == (2, [("invalid_pattern", True)], [])
+
+
+def test_a_seed_outside_the_scope_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--exclude", "site")
+
+    assert (
+        result.exit_code,
+        [error["code"] for error in result.errors()],
+        list(temp_workspace.home.rglob("*.sqlite")),
+    ) == (2, ["seed_out_of_scope"], [])
+
+
+def test_a_seed_that_matches_no_include_pattern_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--include", "/blog/")
+
+    assert (
+        result.exit_code,
+        [(error["code"], "--include" in error["message"]) for error in result.errors()],
+    ) == (2, [("seed_out_of_scope", True)])
+
+
+def test_a_subfolder_crawl_is_a_section_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/blog/": Page(body="<p>Blog</p>")}))
+
+    result = run_cli("crawl", server.url("/blog/"), "--scope", "subfolder")
+
+    assert (result.exit_code, result.json()["section_crawl"]) == (0, True)

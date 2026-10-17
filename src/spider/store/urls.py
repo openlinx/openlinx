@@ -1,24 +1,59 @@
 """The units of the urls table: the frontier and each URL's outcome (020 D1, D2, D14)."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 
-from sqlalchemy import Connection, bindparam, func, literal_column, select, update
+from sqlalchemy import Connection, bindparam, func, literal_column, null, or_, select, update
 from sqlalchemy.dialects.sqlite import insert
 
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.store.origins import ORIGIN_ID, origin_rows, record_origins
-from spider.store.records import ErroredUrl, FetchedUrl, QueuedUrl, SkippedUrl, UrlCounts
-from spider.store.rows import RowWriter, write_rows
-from spider.store.schema import urls
+from spider.store.records import (
+    DiscoverySkipReason,
+    ErroredUrl,
+    FetchedUrl,
+    QueuedUrl,
+    SkippedUrl,
+    UrlCounts,
+)
+from spider.store.rows import write_rows
+from spider.store.schema import literal_values, urls
 
 type UrlUnit = Callable[[Connection], None]
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
 # Each row binds its origin, whose row the unit records first (design D18).
-_INSERT_URL = (
-    insert(urls).values(origin_id=ORIGIN_ID).on_conflict_do_nothing(index_elements=[urls.c.url])
+_INSERT = insert(urls).values(origin_id=ORIGIN_ID)
+_INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])
+# A followed Link re-queues a URL that only unfollowed Links reached, as found through it, and
+# gives the shorter path a check found after its depth closed (design D3) to a URL still queued,
+# or skipped beyond the depth limit, which dispatch then decides again; every other conflict
+# changes nothing, so a replayed unit gives the same rows (design D5).
+_INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
+    index_elements=[urls.c.url],
+    set_={
+        "fetch_state": _INSERT.excluded.fetch_state,
+        "skip_reason": null(),
+        "crawl_depth": _INSERT.excluded.crawl_depth,
+        "discovered_via": _INSERT.excluded.discovered_via,
+        "found_on_url_id": _INSERT.excluded.found_on_url_id,
+    },
+    where=(
+        or_(
+            *(
+                urls.c.skip_reason == literal_column(f"'{reason}'")
+                for reason in literal_values(DiscoverySkipReason)
+            ),
+            (
+                (urls.c.fetch_state == literal_column("'queued'"))
+                | (urls.c.skip_reason == literal_column("'max_depth'"))
+            )
+            & (urls.c.crawl_depth > _INSERT.excluded.crawl_depth),
+        )
+    )
+    & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
 )
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
+_DEPTH = select(urls.c.crawl_depth).where(urls.c.id == bindparam("url_id"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
 _FETCHED = _URL_ROW.values(
@@ -30,18 +65,25 @@ _FETCHED = _URL_ROW.values(
     parsed=bindparam("is_parsed"),
     parse_error=bindparam("parse_failure"),
     parse_error_message=bindparam("parse_failure_message"),
+    blocked_by_robots_txt=bindparam("robots_blocked"),
 )
-_SKIPPED = _URL_ROW.values(fetch_state="skipped", skip_reason=bindparam("reason"))
+_SKIPPED = _URL_ROW.where(urls.c.crawl_depth == bindparam("decided_depth")).values(
+    fetch_state="skipped",
+    skip_reason=bindparam("reason"),
+    blocked_by_robots_txt=bindparam("robots_blocked"),
+)
 _ERRORED = _URL_ROW.values(
     fetch_state="error",
     fetch_error=bindparam("failure"),
     fetch_error_message=bindparam("failure_message"),
     fetched_at=bindparam("request_at"),
+    blocked_by_robots_txt=bindparam("robots_blocked"),
 )
 _UNWRITTEN = _URL_ROW.values(
     fetch_state="error",
     fetch_error="record_failed",
     fetch_error_message=bindparam("failure_message"),
+    blocked_by_robots_txt=bindparam("robots_blocked"),
 )
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
@@ -134,9 +176,7 @@ def next_depth(depth: int) -> Callable[[Connection], int | None]:
     return unit
 
 
-def record_fetched(
-    fetched: FetchedUrl, row_writers: Mapping[type, RowWriter]
-) -> Callable[[Connection], None]:
+def record_fetched(fetched: FetchedUrl) -> Callable[[Connection], None]:
     """A unit that records the URL's response, the URLs discovered from it and its rows."""
     url_id = fetched.url_id
     values = {
@@ -148,6 +188,7 @@ def record_fetched(
         "is_parsed": fetched.parsed,
         "parse_failure": fetched.parse_error,
         "parse_failure_message": fetched.parse_error_message,
+        "robots_blocked": fetched.blocked_by_robots_txt,
     }
     new_rows = [
         {
@@ -156,10 +197,10 @@ def record_fetched(
             "origin": url_origin(new.url),
             "is_internal": new.is_internal,
             "in_scope": new.in_scope,
-            "crawl_depth": new.crawl_depth,
             "discovered_via": new.discovered_via,
             "found_on_url_id": url_id,
-            "fetch_state": "queued",
+            "fetch_state": "queued" if new.skip_reason is None else "skipped",
+            "skip_reason": new.skip_reason,
             "parsed": False,
         }
         for new in fetched.discovered
@@ -171,46 +212,58 @@ def record_fetched(
         record_origins(connection, origins)
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
-            connection.execute(_INSERT_URL, new_rows)
-        write_rows(connection, fetched.rows, row_writers)
+            # The stored depth, which a late check may have lowered while the URL was in
+            # flight, so what it links to stays one deeper than it (design D3).
+            depth = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one() + 1
+            rows = [{**row, "crawl_depth": depth} for row in new_rows]
+            connection.execute(_INSERT_DISCOVERED, rows)
+        write_rows(connection, fetched.rows)
 
     return unit
 
 
-def record_skipped(
-    skipped: SkippedUrl, row_writers: Mapping[type, RowWriter]
-) -> Callable[[Connection], None]:
-    """A unit that records a URL as not requested, why, and its rows."""
-    values = {"url_id": skipped.url_id, "reason": skipped.skip_reason}
+def record_skipped(skipped: SkippedUrl) -> Callable[[Connection], None]:
+    """A unit that records a URL as not requested, why, and its rows, unless a shorter path
+    lowered its depth after the skip was decided: it then stays queued (design D5)."""
+    values = {
+        "url_id": skipped.url_id,
+        "reason": skipped.skip_reason,
+        "decided_depth": skipped.crawl_depth,
+        "robots_blocked": skipped.blocked_by_robots_txt,
+    }
 
     def unit(connection: Connection) -> None:
-        connection.execute(_SKIPPED, values)
-        write_rows(connection, skipped.rows, row_writers)
+        if connection.execute(_SKIPPED, values).rowcount:
+            write_rows(connection, skipped.rows)
 
     return unit
 
 
-def record_error(
-    errored: ErroredUrl, row_writers: Mapping[type, RowWriter]
-) -> Callable[[Connection], None]:
+def record_error(errored: ErroredUrl) -> Callable[[Connection], None]:
     """A unit that records a URL whose request got no HTTP response, why, and its rows."""
     values = {
         "url_id": errored.url_id,
         "failure": errored.fetch_error,
         "failure_message": errored.fetch_error_message,
         "request_at": errored.fetched_at,
+        "robots_blocked": errored.blocked_by_robots_txt,
     }
 
     def unit(connection: Connection) -> None:
         connection.execute(_ERRORED, values)
-        write_rows(connection, errored.rows, row_writers)
+        write_rows(connection, errored.rows)
 
     return unit
 
 
-def record_unwritten(url_id: int, message: str) -> UrlUnit:
-    """The fallback unit of a URL whose own unit failed: only its state (design D2)."""
-    values = {"url_id": url_id, "failure_message": message}
+def record_unwritten(url_id: int, message: str, *, blocked_by_robots_txt: bool | None) -> UrlUnit:
+    """The fallback unit of a URL whose own unit failed: only its state, and what robots.txt
+    said of it (design D2)."""
+    values = {
+        "url_id": url_id,
+        "failure_message": message,
+        "robots_blocked": blocked_by_robots_txt,
+    }
 
     def unit(connection: Connection) -> None:
         connection.execute(_UNWRITTEN, values)

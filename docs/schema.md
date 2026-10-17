@@ -75,6 +75,7 @@ The Crawl's metadata, in exactly one row.
 | `id` | TEXT | no | PK | | | The crawl id. |
 | `crawl_mode` | TEXT | no | | | `spider`, `list`, `sitemap` | How the Crawl finds URLs. |
 | `section_crawl` | INTEGER | no | | `boolean` | | 1 for a Section Crawl, whose Scope is one part of a site, otherwise 0. |
+| `scope` | TEXT | no | | `json` | | The resolved Scope, as an object of mode, hosts, folder, include and exclude. |
 | `state` | TEXT | no | | | `running`, `stopped`, `completed`, `failed`, `interrupted` | The Crawl State. |
 | `started_at` | TEXT | no | | `timestamp` | | When the Crawl started. |
 | `completed_at` | TEXT | yes | | `timestamp` | | When the state became completed; NULL in every other state. |
@@ -111,10 +112,11 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `is_internal` | INTEGER | no | | `boolean` | | 1 for an Internal URL, 0 for an External URL. |
 | `in_scope` | INTEGER | no | | `boolean` | | 1 when the URL is inside the Scope, so it may be followed. |
 | `crawl_depth` | INTEGER | no | | | | Crawl Depth; 0 for Seeds. |
-| `discovered_via` | TEXT | no | | | `seed`, `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`, `redirect`, `list`, `sitemap_input`, `sitemap_index` | How the URL was first found: seed, or the Link type. |
-| `found_on_url_id` | INTEGER | yes | → `urls.id` | | | The URL whose response first revealed this one; NULL for Seeds. |
+| `discovered_via` | TEXT | no | | | `seed`, `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`, `redirect`, `list`, `sitemap_input`, `sitemap_index` | How the URL was first found: seed, or the Link type; through a followed Link once one has reached it. |
+| `found_on_url_id` | INTEGER | yes | → `urls.id` | | | The URL whose response first revealed this one, through a followed Link once one has reached it; NULL for Seeds. |
 | `fetch_state` | TEXT | no | | | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested. |
 | `skip_reason` | TEXT | yes | | | `excluded`, `blocked_by_robots_txt`, `robots_unreachable`, `nofollow`, `link_type_not_followed`, `external_not_checked`, `max_depth`, `max_redirects`, `url_too_long` | Why a skipped URL was not requested. |
+| `blocked_by_robots_txt` | INTEGER | yes | | `boolean` | | 1 when robots.txt disallows the URL for the robots user-agent token (also with --ignore-robots), 0 when it allows it; NULL when not checked. |
 | `status_code` | INTEGER | yes | | | | HTTP status code of the URL's own response; NULL without a response. |
 | `fetch_error` | TEXT | yes | | | `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`, `record_failed`, `timeout`, `tls_error` | Why no response is recorded for the URL. |
 | `fetch_error_message` | TEXT | yes | | | | Human-readable detail of fetch_error. |
@@ -142,6 +144,14 @@ One row for each origin of a URL that the Crawl recorded.
 | `origin` | TEXT | no | | | | Scheme, host and port, for example https://site.test, with a default port left out; unique. |
 | `host` | TEXT | no | | | | The origin's host in lower-case ASCII (IDNA) form. |
 | `is_internal` | INTEGER | no | | `boolean` | | 1 when the origin's URLs are Internal URLs. |
+| `robots_state` | TEXT | yes | | | `ok`, `missing`, `unreachable` | Rules applied, everything allowed, or everything disallowed or unanswered; NULL while robots.txt has not been fetched, which happens before the first URL of the origin that the Scope does not skip and the URL limit does not refuse. |
+| `robots_status_code` | INTEGER | yes | | | | Status code of the final robots.txt response; NULL without a response. |
+| `robots_fetch_error` | TEXT | yes | | | `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`, `record_failed`, `timeout`, `tls_error` | Why the robots.txt request got no HTTP response; NULL when it got one, or while robots.txt has not been fetched. |
+| `robots_fetch_error_message` | TEXT | yes | | | | Human-readable detail of robots_fetch_error. |
+| `robots_fetched_at` | TEXT | yes | | `timestamp` | | UTC time robots.txt was last fetched. |
+| `robots_txt` | TEXT | yes | | | | The robots.txt body as parsed, up to 512,000 bytes. |
+| `robots_crawl_delay_ms` | INTEGER | yes | | | | The Crawl-delay for the robots user-agent token; recorded, not applied. |
+| `robots_sitemaps` | TEXT | yes | | `json` | | JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not been fetched. |
 
 ### Indexes
 

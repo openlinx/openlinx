@@ -83,9 +83,11 @@ def normalize_url(
     return NormalizedUrl(urlunsplit(_normalized_parts(parts, host, port, strip_params)))
 
 
-def parse_seed(text: str) -> NormalizedUrl | InvalidUrl:
+def parse_seed(
+    text: str, strip_params: re.Pattern[str] | None = None
+) -> NormalizedUrl | InvalidUrl:
     seed = text.strip()
-    return normalize_url(seed if _SCHEME.match(seed) else f"https://{seed}")
+    return normalize_url(seed if _SCHEME.match(seed) else f"https://{seed}", strip_params)
 
 
 def _raw_host(netloc: str) -> str:
@@ -186,6 +188,12 @@ def _without_dot_segments(path: str) -> str:
     return "/" + "/".join(segments)
 
 
+def without_www(url: NormalizedUrl) -> NormalizedUrl:
+    """The URL on its host without a leading www. label, which keeps the normal form."""
+    scheme, rest = url.split("://", 1)
+    return NormalizedUrl(f"{scheme}://{rest.removeprefix('www.')}")
+
+
 def url_host(url: NormalizedUrl) -> str:
     authority = url.split("/", 3)[2]
     if authority.startswith("["):
@@ -196,6 +204,11 @@ def url_host(url: NormalizedUrl) -> str:
 def url_origin(url: NormalizedUrl) -> str:
     """The scheme, host and port: a normalised URL has left out a default port already."""
     return "/".join(url.split("/", 3)[:3])
+
+
+def robots_txt_url(url: NormalizedUrl) -> NormalizedUrl:
+    """The robots.txt of the URL's origin: a normalised origin and a plain path stay normal."""
+    return NormalizedUrl(f"{url_origin(url)}/robots.txt")
 
 
 def url_path(url: NormalizedUrl) -> str:

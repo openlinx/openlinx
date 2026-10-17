@@ -37,6 +37,8 @@ class Page(RouteOptions):
 @dataclass(frozen=True)
 class Status(RouteOptions):
     code: int
+    # Served as text/html, as an error page is; None answers with an empty body.
+    body: str | None = None
 
 
 @dataclass(frozen=True)
