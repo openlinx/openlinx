@@ -8,7 +8,7 @@ A Rule is a deterministic check with fixed guidance. Every Rule has:
 - `id`: kebab-case, such as `title-too-long`. It is never renamed or reused, so a script or a `spider.toml` that names it keeps working.
 - `category`: one of `response_codes`, `security`, `titles`, `meta_descriptions`, `headings`, `canonicals`, `directives`, `content`, `urls` and `images`, in this order.
 - `issue_type` and `priority`: see below.
-- `applies_to`: the population the Rule checks. `internal_urls` are the Internal URLs that were requested, or that robots.txt disallows; `internal_pages` are the analysed Pages ([page-data.md](page-data.md#analysed-and-non-analysed-pages)); `resources` are the Resources that Pages reference, in v0.2 the images. A Rule's query joins the view of its population ([schema.md](schema.md)): `internal_urls`, `analysed_pages`, or `indexable_pages` for the Rules that compare Indexable Pages.
+- `applies_to`: the population the Rule checks. `internal_urls` are the Internal URLs that were requested; `internal_pages` are the analysed Pages ([page-data.md](page-data.md#analysed-and-non-analysed-pages)); `resources` are the Resources that Pages reference, in v0.2 the images. A Rule's query joins the view of its population ([schema.md](schema.md)): `internal_urls`, `analysed_pages`, or `indexable_pages` for the Rules that compare Indexable Pages.
 - `thresholds`: the named limits of the Rule, each a non-negative integer with a default and a unit (`characters`, `pixels`, `words`, `kilobytes` or `hops`). A Rule without limits has none.
 - `description`, `why_it_matters` and `how_to_fix`: fixed English guidance, the same in every Crawl, so an agent can explain an Issue without judgement calls.
 - `reproduce_sql`: the Rule's reproducing query, the only form of its condition (see [Checking an Issue with its query](#checking-an-issue-with-its-query)).
@@ -46,7 +46,7 @@ Each Rule fires for a URL of its population when the condition holds, and record
 
 `record_failed` means that the Crawl received a response but could not record it. That is the tool's failure, not the site's, so it is no Issue: the `record_failed` warning reports it, and continuing the Crawl requests the URL again. The query of `internal-no-response` says so in an SQL comment.
 
-`title-too-long` counts characters only in v0.1; pixel widths come in v0.2.
+`title-too-long` counts characters only in v0.1; pixel widths come in v0.2. `title-duplicate` compares every analysed Page until the crawl store records Indexability.
 
 `spider rules show <id>` prints each Rule's guidance: what it checks, why it matters and how to fix it.
 
