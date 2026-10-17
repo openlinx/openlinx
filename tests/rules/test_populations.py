@@ -41,6 +41,7 @@ OUTSIDE: dict[str, Callable[[TempWorkspace], Path]] = {
         title_count=1,
         title_1="",
         title_1_length=61,
+        meta_description_count=0,
         h1_count=0,
     )[0],
     "not_parsed_twins": lambda workspace: crawl_with_pages(

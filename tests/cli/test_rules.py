@@ -44,6 +44,7 @@ APPLIES_TO = {
     "title-missing": "internal_pages",
     "title-duplicate": "internal_pages",
     "title-too-long": "internal_pages",
+    "meta-description-missing": "internal_pages",
     "h1-missing": "internal_pages",
 }
 

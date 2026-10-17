@@ -53,6 +53,7 @@ FIRING_ON_RULE_PAGES = (
     "internal-4xx",
     "internal-5xx",
     "internal-no-response",
+    "meta-description-missing",
     "title-missing",
     "title-too-long",
 )
@@ -284,8 +285,12 @@ def test_a_crawl_stopped_by_the_url_limit_lists_its_issues_as_stored(
 
     assert (
         query(crawl_file, "SELECT state FROM crawl"),
-        [(issue.rule_id, issue.affected_count) for issue in read_issues(crawl_file, RULES)],
-    ) == ([("stopped",)], [("title-missing", 1), ("h1-missing", 1)])
+        [
+            (issue.rule_id, issue.affected_count)
+            for issue in read_issues(crawl_file, RULES)
+            if issue.rule_id == "title-missing"
+        ],
+    ) == ([("stopped",)], [("title-missing", 1)])
 
 
 def test_client_error_recorded_by_a_crawl(

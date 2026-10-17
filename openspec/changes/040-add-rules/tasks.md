@@ -112,7 +112,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 6. Meta description and heading Rules (v0.1, except the tasks marked v0.2)
 
-- [ ] 6.1 Drive "Missing meta description" at seam 2, and register `meta-description-missing`.
+- [x] 6.1 Drive "Missing meta description" at seam 2, and register `meta-description-missing`.
 - [ ] 6.2 **(v0.2)** Drive "Meta description too long" and "Meta description at both limits" at seam 2. This is a trivial pair: one boundary. Register `meta-description-too-long`.
 - [ ] 6.3 **(v0.2)** Drive "Meta description too short" at seam 2, and register `meta-description-too-short`.
 - [ ] 6.4 **(v0.2)** Drive "Multiple meta descriptions" at seam 2, and register `meta-description-multiple`.
