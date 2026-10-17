@@ -149,11 +149,9 @@ def _robots_verdict(
     while the rules are unknown (design D6)."""
     ignore = context.settings.ignore_robots
     if origin_robots.state == "unreachable":
-        if ignore:
-            return None, None
         if decision.is_internal:
             warn_of_an_unreachable_robots_txt(context, queued.url, origin_robots.status_code)
-        return "robots_unreachable", None
+        return (None, None) if ignore else ("robots_unreachable", None)
     blocked = not origin_robots.allows(queued.url)
     # --ignore-robots requests it, still labelled as blocked.
     if blocked and not ignore:

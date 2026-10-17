@@ -36,13 +36,19 @@ def warn_of_an_unreachable_robots_txt(
     context: CrawlContext, url: NormalizedUrl, status_code: int | None
 ) -> None:
     origin = url_origin(url)
+    answered = f"The robots.txt of {origin} answered {status_code}"
+    if context.settings.ignore_robots:
+        message = f"{answered}, so its URLs were requested without its rules."
+        hint = "Run the Crawl again later to crawl the origin by its rules."
+    else:
+        message = f"{answered}, so none of its URLs was requested."
+        hint = "Run the Crawl again later, or give --ignore-robots to crawl the origin anyway."
     # Once per host, by the warning log: every URL of the origin comes here (design D10).
     context.reporter.warn(
         Diagnostic.of(
             ROBOTS_UNREACHABLE,
-            f"The robots.txt of {origin} answered {status_code}, so none of its URLs was "
-            "requested.",
-            hint="Run the Crawl again later, or give --ignore-robots to crawl the origin anyway.",
+            message,
+            hint=hint,
             details={"origin": origin, "host": url_host(url), "status_code": status_code},
         )
     )

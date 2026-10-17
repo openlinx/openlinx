@@ -337,7 +337,7 @@ A Seed that robots.txt disallows is reported as a `seed_blocked_by_robots_txt` w
 
 ### `--ignore-robots`
 
-With `--ignore-robots`, the Crawl requests the URLs that robots.txt disallows and still records `blocked_by_robots_txt` = 1 for them, since robots.txt is still read. It also requests the URLs of an origin whose robots.txt answered 5xx or 429, with `blocked_by_robots_txt` NULL. An origin whose robots.txt got no HTTP response still gives each of its URLs that error.
+With `--ignore-robots`, the Crawl requests the URLs that robots.txt disallows and still records `blocked_by_robots_txt` = 1 for them, since robots.txt is still read. It also requests the URLs of an origin whose robots.txt answered 5xx or 429, with `blocked_by_robots_txt` NULL, and an Internal origin still gives the `robots_unreachable` warning, which says its URLs were requested without its rules. An origin whose robots.txt got no HTTP response still gives each of its URLs that error.
 
 ### The robots user-agent token
 

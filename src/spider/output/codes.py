@@ -203,7 +203,8 @@ ROBOTS_UNREACHABLE = _declare(
     "warning",
     None,
     "The robots.txt of an Internal origin answered with a server error or 429, so none of its "
-    "URLs was requested; the hint names --ignore-robots, and details.origin, details.host and "
+    "URLs was requested, or under --ignore-robots all were, without its rules; the hint names "
+    "--ignore-robots unless it was given, and details.origin, details.host and "
     "details.status_code say which.",
 )
 POSSIBLE_BLOCKING = _declare(
