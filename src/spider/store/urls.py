@@ -1,4 +1,4 @@
-"""The units of the urls table: the frontier and each URL's outcome (020 D1, D2, D14)."""
+"""The urls table's units: the frontier and each URL's outcome (020-add-crawl-core D1, D2, D14)."""
 
 from collections.abc import Callable
 

@@ -1,15 +1,8 @@
-"""Politeness: the request limits, the URL limit, --rate and the run of 403s (020 D7)."""
+"""Politeness: request limits, the URL limit, --rate, runs of 403s (020-add-crawl-core D7)."""
 
 import asyncio
-import math
 
 from spider.clock import Clock
-
-
-def is_rate(rate: float) -> bool:
-    """The one rule of --rate and crawl.rate: a finite number of requests per second above 0,
-    whose interval 1/rate is finite too."""
-    return math.isfinite(rate) and rate > 0 and math.isfinite(1 / rate)
 
 
 class RateGate:

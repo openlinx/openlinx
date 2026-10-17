@@ -1,6 +1,5 @@
 """`spider crawl` over the Crawl Service (020-add-crawl-core D10, D11)."""
 
-import re
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -10,8 +9,8 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
-from spider.crawl.politeness import is_rate
-from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN, ROBOTS_USER_AGENT_PATTERN
+from spider.crawl.setting_rules import as_rate, as_robots_token
+from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN
 from spider.output.codes import OPTION_CONFLICT
 from spider.output.diagnostics import SpiderError
 from spider.output.writer import Format
@@ -21,23 +20,17 @@ CRAWL = "crawl"
 
 
 def _robots_token(token: str) -> str:
-    # The settings file is checked by CrawlSettings' pattern, which gives settings_invalid.
-    if re.fullmatch(ROBOTS_USER_AGENT_PATTERN, token) is None:
-        raise typer.BadParameter(
-            f"{token!r} is not a robots user-agent token: RFC 9309 allows only letters, "
-            "'_' and '-'."
-        )
-    return token
+    try:
+        return as_robots_token(token)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{token!r}: {refusal}.") from None
 
 
 def _rate(rate: float | None) -> float | None:
-    # The settings file is checked by CrawlSettings' validator, through the same rule.
-    if rate is not None and not is_rate(rate):
-        raise typer.BadParameter(
-            f"{rate} is not a rate: give a finite number of requests per second above 0, "
-            "whose interval 1/rate is finite."
-        )
-    return rate
+    try:
+        return None if rate is None else as_rate(rate)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{rate}: {refusal}.") from None
 
 
 @command_meta(

@@ -1,4 +1,4 @@
-"""The composition root of a Crawl's hooks: the crawl core never imports them (020 D9)."""
+"""A Crawl's hooks, composed here: the crawl core never imports them (020-add-crawl-core D9)."""
 
 from spider.crawl.hooks import Hooks
 from spider.crawl.pages import InProcessExecutor, PageExecutor

@@ -311,7 +311,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
     - one-line module docstrings in `tests/crawl/test_headers.py`, `tests/crawl/test_noscript.py` and `tests/test_handler_types.py`;
     - the tag `020-add-crawl-core Dn`;
     - a `CONTEXT.md` term for "check" as a noun;
-    - `ROBOTS_USER_AGENT_PATTERN` in `spider.crawl.robots`;
+    - the robots user-agent rule out of `spider.naming`, into `spider.crawl.setting_rules` with the rate's, since `spider.crawl.robots` loads Protego, which `crawl --help` must not;
     - no task numbers in code comments;
     - `record_unwritten` shaped like the other `record_*`;
     - one source for each crawl setting's help and default, or a backlog proposal;

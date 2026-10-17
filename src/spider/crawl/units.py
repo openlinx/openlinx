@@ -51,8 +51,8 @@ class Run:
     requester: Requester
     robots: RobotsLoader
     blocking: BlockingRuns
-    # The checks in flight, which never hold the depth barrier (design D3).
-    checks: set[asyncio.Task[None]]
+    # The tasks of decided URLs in flight, which never hold the depth barrier (design D3).
+    checked_urls: set[asyncio.Task[None]]
 
 
 def via_resource(queued: QueuedUrl) -> bool:
@@ -69,7 +69,7 @@ async def unit_of(
     context, robots = run.context, run.robots
     dispatched = _dispatched(queued, decision)
     skip_reason = _skip_reason(context, queued, decision)
-    # Only a URL that would be requested is checked, so a skip never requests robots.txt.
+    # Only a URL that would be requested is decided, so a skip never requests robots.txt.
     blocked = None
     if skip_reason is None:
         # A verdict already requested decides the URL before the limit, which guards only a
@@ -86,10 +86,10 @@ async def unit_of(
                 f"so the URL was not requested: {origin_robots.fetch_error_message}"
             )
             return _errored(context, dispatched, origin_robots.fetch_error, message, None)
-        skip_reason, blocked = _robots_check(context, origin_robots, queued, decision)
-    checked = replace(dispatched, blocked_by_robots_txt=blocked)
+        skip_reason, blocked = _robots_verdict(context, origin_robots, queued, decision)
+    decided = replace(dispatched, blocked_by_robots_txt=blocked)
     if skip_reason is not None:
-        skipped = replace(checked, fetch_state="skipped", skip_reason=skip_reason)
+        skipped = replace(decided, fetch_state="skipped", skip_reason=skip_reason)
         unit = record_skipped(
             SkippedUrl(
                 url_id=skipped.url_id,
@@ -110,20 +110,20 @@ async def unit_of(
         warn_of_possible_blocking(context, host)
     if isinstance(response, FetchFailure):
         return _errored(
-            context, checked, response.fetch_error, response.message, response.fetched_at
+            context, decided, response.fetch_error, response.message, response.fetched_at
         )
-    return await _fetched(context, checked, response)
+    return await _fetched(context, decided, response)
 
 
 def _errored(
     context: CrawlContext,
-    checked: UrlResult,
+    decided: UrlResult,
     fetch_error: FetchError,
     message: str,
     fetched_at: datetime | None,
 ) -> tuple[UrlResult, UrlUnit]:
     failed = replace(
-        checked,
+        decided,
         fetch_state="error",
         fetch_error=fetch_error,
         fetch_error_message=message,
@@ -142,7 +142,7 @@ def _errored(
     return failed, unit
 
 
-def _robots_check(
+def _robots_verdict(
     context: CrawlContext, origin_robots: OriginRobots, queued: QueuedUrl, decision: ScopeDecision
 ) -> tuple[SkipReason | None, bool | None]:
     """robots.txt's skip of a URL that would be requested, and its blocked_by_robots_txt, NULL
@@ -170,7 +170,7 @@ def _skip_reason(
     if decision.skip_reason is not None:
         return decision.skip_reason
     # A followed Page's Resources are requested one deeper than the limit, no deeper: what
-    # a check that was HTML links to is two deeper (design D5).
+    # a decided URL that was HTML links to is two deeper (design D5).
     if max_depth is not None and queued.crawl_depth > max_depth + via_resource(queued):
         return "max_depth"
     if not (decision.is_internal or context.settings.check_external):
@@ -179,12 +179,12 @@ def _skip_reason(
 
 
 async def _fetched(
-    context: CrawlContext, checked: UrlResult, response: FetchResult
+    context: CrawlContext, decided: UrlResult, response: FetchResult
 ) -> tuple[UrlResult, UrlUnit]:
-    url = checked.url
+    url = decided.url
     content_type = response.header("Content-Type")
-    # An External URL or one outside the Scope is checked, never parsed (design D5).
-    followed = checked.in_scope and 200 <= response.status_code < 300
+    # An External URL or one outside the Scope is decided, never parsed (design D5).
+    followed = decided.in_scope and 200 <= response.status_code < 300
     prepared = followed and is_html_type(content_type)
     page = await context.pages.prepare(url, response) if prepared else None
     parsed = page is not None and page.parsed
@@ -200,7 +200,7 @@ async def _fetched(
         nofollow=nofollow,
         follow_nofollow=context.settings.follow_nofollow,
     )
-    if parsed and checked.discovered_via == "seed":
+    if parsed and decided.discovered_via == "seed":
         warn_of_seed_base_mismatch(context, url, links)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
@@ -208,7 +208,7 @@ async def _fetched(
         failure = parse_failure(url, parse_error, parse_error_message)
         context.reporter.count(Diagnostic.of(PARSE_FAILED, failure), url)
     fetched = replace(
-        checked,
+        decided,
         fetch_state="fetched",
         status_code=response.status_code,
         content_type=content_type,

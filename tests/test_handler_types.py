@@ -1,8 +1,7 @@
-"""Guard: a hook whose types disagree fails mypy where it is registered (020-add-crawl-core D9).
+"""Guard: a hook whose types disagree fails mypy where it is registered (020-add-crawl-core D9)."""
 
-The check is mypy's, in the same run as the rest of the suite: strict mode reports an unused
-ignore, so an ignore below fails the checks the day its mismatch is no longer caught.
-"""
+# mypy checks this module with the rest of the suite: strict mode reports an unused ignore, so
+# an ignore below fails the checks the day its mismatch is no longer caught.
 
 from dataclasses import dataclass
 

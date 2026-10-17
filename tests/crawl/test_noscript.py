@@ -1,5 +1,4 @@
-"""`<noscript>` read as a browser that runs scripts reads it (020-add-crawl-core D5, task 15.1;
-seam 4)."""
+"""`<noscript>` read as a browser that runs scripts reads it (020-add-crawl-core D5; seam 4)."""
 
 from datetime import UTC, datetime
 

@@ -255,7 +255,7 @@ async def _run(crawl: _Crawl) -> tuple[datetime, CrawlSummary, UrlCounts]:
         await run_crawl(context, crawl.plan.seed)
         stop_reason = context.stop.reason
         if stop_reason not in (None, "max_urls"):
-            # 12.9 records a write failure's failed end, 13.1 an interrupt's.
+            # Neither a write failure nor an interrupt has the end it records yet.
             raise context.stop.cause or RuntimeError(f"no end is built for {stop_reason}")
         writer = context.writer
         # Before the end is written, for completed and stopped alike: 040 reads either state as

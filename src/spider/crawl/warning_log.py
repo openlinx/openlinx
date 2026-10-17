@@ -1,4 +1,4 @@
-"""The Crawl's warning log: warnings kept once per what their code names, and counts (020 D10)."""
+"""The warning log: each warning kept once per what its code names (020-add-crawl-core D10)."""
 
 from collections.abc import Mapping
 from dataclasses import replace

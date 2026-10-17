@@ -34,7 +34,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         requester=requester,
         robots=RobotsLoader(requester, context.writer, context.settings.robots_user_agent),
         blocking=BlockingRuns(),
-        checks=set(),
+        checked_urls=set(),
     )
     decision = context.scope.decide(seed)
     await context.writer.run_async(
@@ -53,29 +53,29 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     try:
         while depth is not None:
             await _crawl_depth(run, depth)
-            # A stop cancels the checks in flight: the sweep below would wait for them.
+            # A stop cancels the checked URLs in flight: the sweep below would wait for them.
             if context.stop.is_set:
                 break
             if limits.limit_reached() is not None:
                 # The URL limit: what has started ends and is recorded, and nothing more starts.
-                await asyncio.gather(*run.checks)
+                await asyncio.gather(*run.checked_urls)
                 context.stop.set("max_urls")
                 break
             # Read after every unit submitted so far, so it sees the URLs they discovered.
             depth = await context.writer.run_async(next_depth(depth))
             if depth is None:
-                # A check that was in-Scope HTML may have found URLs, or a shorter path to them,
-                # at a depth the frontier has passed: once every check has ended, and every
-                # outcome, so that no URL whose unit failed is still queued, the queue is read
-                # from the top.
-                await asyncio.gather(*run.checks)
+                # A checked URL that was in-Scope HTML may have found URLs, or a shorter path
+                # to them, at a depth the frontier has passed: once every checked URL has ended,
+                # and every outcome, so that no URL whose unit failed is still queued, the queue
+                # is read from the top.
+                await asyncio.gather(*run.checked_urls)
                 await run.outcomes.settled()
                 depth = await context.writer.run_async(next_depth(_ABOVE_NO_DEPTH))
     # An ended writer refuses every unit; its cause says why it ended (017 D6).
     except CrawlWriterClosedError as closed:
         context.stop.set("write_failed", closed.__cause__ or closed)
     finally:
-        await _cancel_all(run.checks)
+        await _cancel_all(run.checked_urls)
         await run.robots.close()
     await run.outcomes.settled()
     limit = limits.limit_reached()
@@ -86,7 +86,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
 
 async def _crawl_depth(run: Run, depth: int) -> None:
     """Returns once every followed URL's task of the depth has ended, so the next depth sees
-    their URLs; the depth's checks join the run's checks and run on."""
+    their URLs; the depth's checked URLs join the run's and run on."""
     context, limits = run.context, run.limits
     running: set[asyncio.Task[None]] = set()
     try:
@@ -105,9 +105,9 @@ async def _crawl_depth(run: Run, depth: int) -> None:
                     break
                 decision = context.scope.decide(queued.url)
                 task = asyncio.create_task(_crawl_url(run, queued, decision))
-                # A check never holds the barrier (design D3); the sweep in run_crawl reads
+                # A checked URL never holds the barrier (design D3); the sweep in run_crawl reads
                 # what one finds after its depth has closed.
-                tasks = run.checks if _is_check(queued, decision) else running
+                tasks = run.checked_urls if _is_checked_url(queued, decision) else running
                 tasks.add(task)
                 task.add_done_callback(tasks.discard)
             after = batch[-1].id
@@ -124,7 +124,7 @@ async def _cancel_all(tasks: set[asyncio.Task[None]]) -> None:
     await asyncio.gather(*tasks, return_exceptions=True)
 
 
-def _is_check(queued: QueuedUrl, decision: ScopeDecision) -> bool:
+def _is_checked_url(queued: QueuedUrl, decision: ScopeDecision) -> bool:
     return not decision.in_scope or via_resource(queued)
 
 
