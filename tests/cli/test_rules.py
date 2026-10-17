@@ -36,6 +36,24 @@ def test_every_rule_has_its_guidance() -> None:
     assert [item["id"] for item in items if not all(item[key] for key in GUIDANCE)] == []
 
 
+# The Health Score counts the Pages of internal_pages, Indexable Pages among them.
+APPLIES_TO = {
+    "internal-4xx": "internal_urls",
+    "internal-5xx": "internal_urls",
+    "internal-no-response": "internal_urls",
+    "title-missing": "internal_pages",
+    "title-duplicate": "internal_pages",
+    "title-too-long": "internal_pages",
+    "h1-missing": "internal_pages",
+}
+
+
+def test_every_rule_applies_to_its_population() -> None:
+    items = run_cli("rules", "list", "--fields", "id,applies_to", "--limit", "50").json()["items"]
+
+    assert {item["id"]: item["applies_to"] for item in items} == APPLIES_TO
+
+
 def test_show_a_rule_with_thresholds() -> None:
     result = run_cli("rules", "show", "title-too-long")
     rule = result.json()
