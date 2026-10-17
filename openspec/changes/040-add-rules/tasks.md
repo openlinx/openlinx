@@ -108,6 +108,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 5.14 Merge `020` at the approved boundary of its group 9, which the rulings give and which includes its task 9.16, the post-crawl passes of a Crawl that `--max-urls` stops: until then such a Crawl ends `stopped` with no pass, and the reader would read its empty `affected_urls` as stored. Drive at seam 3 that a Crawl stopped by `--max-urls` lists its Issues as stored.
 - [x] 5.15 Docs: add `title-too-long` and `title-duplicate` (id, type, priority, condition, detail, guidance) to the catalogue in `docs/rules.md`, with `title-too-long` checking characters only in v0.1. **(v0.2)** The other 3 title Rules.
 - [x] 5.16 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green. Also, from the approval of task 4.11 (the rulings of 2026-10-14), `_found` escapes every `:` of a Rule's query as `\:` for SQLAlchemy's `text()`, so the text that runs equals `reproduce_sql` whatever it holds; this closes the class that the bind-parameter guard of task 4.10 only enumerates, and the guard goes with it (red first: a Rule whose comment holds ` :later` runs as written).
+- [ ] 5.17 Close the approval of group 5: the population test covers title-duplicate's join, a seam-1 test pins every Rule's `applies_to`, the xfail of "Non-indexable Pages are not compared" is conditioned on PageRow's fields, and design and docs describe what is built.
 
 ## 6. Meta description and heading Rules (v0.1, except the tasks marked v0.2)
 

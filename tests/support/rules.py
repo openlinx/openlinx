@@ -75,10 +75,13 @@ def crawl_with_page(
 
 
 def crawl_with_pages(
-    temp_workspace: TempWorkspace, *pages: Mapping[str, Any]
+    temp_workspace: TempWorkspace,
+    *pages: Mapping[str, Any],
+    parse_error: ParseError | None = None,
 ) -> tuple[Path, list[int]]:
-    """A crawl file of analysed Pages with these Page data columns, and their URL ids: the
-    Seed, https://site.test/, then /2, /3 and on, which it links to."""
+    """A crawl file of Pages with these Page data columns, and their URL ids: the Seed,
+    https://site.test/, then /2, /3 and on, which it links to; each with `parse_error`, as
+    crawl_with_page takes it."""
     crawl = create_any_crawl(temp_workspace)
     urls = [NormalizedUrl(_PAGE_URL + (str(n) if n > 1 else "")) for n in range(1, len(pages) + 1)]
     found = tuple(
@@ -88,12 +91,20 @@ def crawl_with_pages(
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         seed_id = writer.run(record_seed(urls[0], is_internal=True, in_scope=True))
         writer.run(
-            record_fetched(_html(seed_id, discovered=found, rows=_page(seed_id, urls[0], pages[0])))
+            record_fetched(
+                _html(
+                    seed_id,
+                    discovered=found,
+                    rows=_page(seed_id, urls[0], pages[0]),
+                    parse_error=parse_error,
+                )
+            )
         )
         ids = [seed_id]
         for url, page_data in zip(urls[1:], pages[1:], strict=True):
             ids.append(writer.run(_url_id(url)))
-            writer.run(record_fetched(_html(ids[-1], rows=_page(ids[-1], url, page_data))))
+            rows = _page(ids[-1], url, page_data)
+            writer.run(record_fetched(_html(ids[-1], rows=rows, parse_error=parse_error)))
     return crawl.path, ids
 
 
