@@ -1,10 +1,13 @@
 """The titles Rules (040-add-rules, rules; seam 2)."""
 
+from dataclasses import fields
+
 import pytest
 
 from spider.rules.headings import H1_MISSING
 from spider.rules.titles import TITLE_DUPLICATE, TITLE_MISSING, TITLE_TOO_LONG
 from spider.store.issues import evaluate_rule
+from spider.store.page_records import PageRow
 from spider.store.records import AffectedUrl
 from tests.support.crawls import query
 from tests.support.rules import SHOES, crawl_with_page, crawl_with_pages
@@ -93,9 +96,13 @@ def test_duplicate_titles_among_indexable_pages(temp_workspace: TempWorkspace) -
     ]
 
 
-# Fails with a TypeError until PageRow has the Indexability columns; with them it fails on its
-# assertion, which the mark does not allow, until indexable_pages leaves non-indexable Pages out.
-@pytest.mark.xfail(raises=TypeError, strict=True, reason="pages has no Indexability yet")
+# Once PageRow has the field, the test runs, and fails until indexable_pages leaves the
+# non-indexable Pages out.
+@pytest.mark.xfail(
+    "indexability" not in {field.name for field in fields(PageRow)},
+    reason="pages has no Indexability yet",
+    strict=True,
+)
 def test_non_indexable_pages_are_not_compared(temp_workspace: TempWorkspace) -> None:
     crawl_file, _ = crawl_with_pages(
         temp_workspace,
