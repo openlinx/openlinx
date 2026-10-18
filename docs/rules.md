@@ -39,6 +39,8 @@ Each Rule fires for a URL of its population when the condition holds, and record
 | `internal-4xx` | `response_codes` | `issue` | `high` | an Internal URL with a `status_code` from 400 to 499 | `status_code` |
 | `internal-5xx` | `response_codes` | `issue` | `high` | an Internal URL with a `status_code` from 500 to 599 | `status_code` |
 | `internal-no-response` | `response_codes` | `issue` | `high` | an Internal URL with `fetch_state` `error` and any `fetch_error` other than `record_failed` | `error`: the URL's `fetch_error` |
+| `internal-blocked-by-robots-txt` | `response_codes` | `warning` | `medium` | an Internal URL that robots.txt disallows, whether or not the Crawl fetched it under `--ignore-robots` | none |
+| `http-url` | `security` | `warning` | `high` | an Internal URL with the `http` scheme and a `status_code` from 200 to 299 | `status_code` |
 | `title-missing` | `titles` | `issue` | `high` | an analysed Page whose `title_count` is 0 or whose `title_1` is the empty string | none |
 | `title-duplicate` | `titles` | `warning` | `medium` | an Indexable Page whose non-empty `title_1` is, letter case included, the `title_1` of another Indexable Page | `title_1`, and `pages`: how many Indexable Pages have it |
 | `title-too-long` | `titles` | `opportunity` | `medium` | an analysed Page whose `title_1_length` is above `max_chars`, 60 characters by default | `length`: the `title_1_length` |
