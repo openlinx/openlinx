@@ -86,11 +86,13 @@ def crawl_with_pages(
     *pages: Mapping[str, Any],
     parse_error: ParseError | None = None,
     base: str = _PAGE_URL,
+    more_rules: Sequence[RuleRow] = (),
 ) -> tuple[Path, list[int]]:
     """A crawl file of Pages with these Page data columns, and their URL ids: the Seed,
     `base`, https://site.test/ unless given, then /2, /3 and on, which it links to; each with
-    `parse_error`, as crawl_with_page takes it."""
-    crawl = create_any_crawl(temp_workspace)
+    `parse_error`, and `more_rules` recorded after the catalogue's, as crawl_with_page takes
+    them."""
+    crawl = create_any_crawl(temp_workspace, rules=(*default_rule_rows(), *more_rules))
     urls = [NormalizedUrl(base + (str(n) if n > 1 else "")) for n in range(1, len(pages) + 1)]
     found = tuple(
         NewUrl(url=url, discovered_via="hyperlink", is_internal=True, in_scope=True)

@@ -178,7 +178,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 - [x] 10.1 Drive "Pages with Issue-type Issues lower the score" and "Score is rounded down" at seam 4, with the pure `health_score` of the two counts (design D8). This is a trivial pair: one formula.
 - [x] 10.2 Drive "Warnings do not lower the score" at seam 2, with `health` over a crawl file (design D8).
-- [ ] 10.3 Drive "A Page with several Issues counts once" at seam 2: the second Issue-type Rule is a `RuleRow` recorded after the catalogue's, whose query selects the same Page.
+- [x] 10.3 Drive "A Page with several Issues counts once" at seam 2: the second Issue-type Rule is a `RuleRow` recorded after the catalogue's, whose query selects the same Page.
 - [ ] 10.4 **(v0.2)** Drive "Resource Issues do not change the score" at seam 4.
 - [x] 10.5 Drive "No Pages means no score" at seam 4.
 - [ ] 10.6 Drive "Health Score of a Segment" at seam 2, with a selectable of the subset's Pages.
