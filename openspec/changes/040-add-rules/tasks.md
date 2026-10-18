@@ -126,12 +126,12 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 7. Response code and security Rules (v0.1)
 
-- [ ] 7.1 Drive "Blocked even when crawled anyway" at seam 2, after `020` task 10.5, and register `internal-blocked-by-robots-txt`; the `internal_urls` population gains `blocked_by_robots_txt` = 1 here (design D2).
-- [ ] 7.2 Drive "Internal redirect" at seam 2, and register `internal-3xx`.
-- [ ] 7.3 Drive "Two-hop chain" and "One hop is not a chain" at seam 2. This is a trivial pair: the walk along `redirect_url_id` and its boundary. Register `redirect-chain`.
-- [ ] 7.4 Drive "Loop" at seam 2, using `in_redirect_loop`. Register `redirect-loop`.
+- [ ] 7.1 Drive "Blocked even when crawled anyway" at seam 2, and register `internal-blocked-by-robots-txt`; `internal_urls` gains `blocked_by_robots_txt` = 1 (design D2).
+- [ ] 7.2 Drive "Internal redirect" at seam 2, and register `internal-3xx`. Waits for `022-min`'s `redirect_url_id`.
+- [ ] 7.3 Drive "Two-hop chain" and "One hop is not a chain" at seam 2. This is a trivial pair: the walk along `redirect_url_id` and its boundary. Register `redirect-chain`. Waits for `022-min`'s `redirect_url_id`.
+- [ ] 7.4 Drive "Loop" at seam 2, using `in_redirect_loop`. Register `redirect-loop`. Waits for `022-min`'s `in_redirect_loop`.
 - [ ] 7.5 Drive "Content served over HTTP" and "HTTP URL that redirects to HTTPS" at seam 2. This is a trivial pair. Register `http-url` as Warning/High.
-- [ ] 7.6 Docs: add the other 4 response code Rules and `http-url` to the catalogue in `docs/rules.md`.
+- [ ] 7.6 Docs: add `internal-blocked-by-robots-txt` and `http-url` to the catalogue in `docs/rules.md`; the rows of the 3 redirect Rules come with tasks 7.2 to 7.4.
 - [ ] 7.7 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Canonical and directive Rules (v0.1, except the tasks marked v0.2)

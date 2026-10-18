@@ -87,7 +87,7 @@ widen:                                        ├─► 022-min ─┐
 | `directives` | `noindex` |
 | `canonicals` | `canonical-to-non-indexable` |
 
-v0.1 does not ship before `title-duplicate` leaves non-indexable Pages out, which needs `030`'s Indexability.
+v0.1 does not ship before `title-duplicate` leaves non-indexable Pages out, which needs `030`'s Indexability, nor before `internal-3xx`, `redirect-chain` and `redirect-loop`, which need `022-min`'s redirect columns.
 
 ### What each change owns
 
