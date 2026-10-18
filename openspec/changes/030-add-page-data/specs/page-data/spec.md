@@ -41,18 +41,21 @@ In the scenarios, `{site}` is the origin of the local fixture site. In scenarios
 - **THEN** `pages` holds 0 rows whose `address` is `http://other.test/page`
 
 ### Requirement: Analysed and non-analysed Pages
+**In short:** a Page is analysed when `020-add-crawl-core` parsed it; one that is not analysed keeps its response columns, and its HTML columns are NULL.
+
 A Page SHALL be *analysed* exactly when `020-add-crawl-core` parsed it (`urls.parsed` = 1), meaning it had a 2xx status and a body that was read in full. For every Page, analysed or not, these columns SHALL be set as their own requirements define:
 
 - the identity and response columns
 - the size columns
 - `set_cookie_count`
+- `x_robots_tag`, `x_robots_tag_noindex` and `x_robots_tag_nofollow`
 - `crawl_depth` and `folder_depth`
 - the inlink columns, once the post-crawl passes have run
 
 For a Page that is not analysed, these columns SHALL be NULL:
 
 - every title and heading column
-- every directive column
+- every other directive column
 - every content column
 - the outlink columns (`outlinks`, `unique_outlinks`, `external_outlinks`, `unique_external_outlinks`)
 - the structured-data columns
@@ -478,7 +481,9 @@ The result SHALL NOT depend on the fonts installed on the machine.
 - **THEN** `title_2_width_px` is 38 and `meta_description_2_width_px` is 9
 
 ### Requirement: Meta robots and X-Robots-Tag
-An analysed Page SHALL store the robots directives found in its HTML and in its headers:
+**In short:** the raw directive text and `020-add-crawl-core`'s noindex and nofollow verdicts, from the HTML of an analysed Page and from the headers of every Page.
+
+An analysed Page SHALL store the robots directives found in its HTML, and every Page those found in its headers:
 
 - **`meta_robots`**: the normalised `content` values of all `<meta>` elements whose `name` is `robots` (compared case-insensitively), joined with `, ` in document order. It is NULL when there are none.
 - **`x_robots_tag`**: the normalised values of all `X-Robots-Tag` response headers, joined with `, ` in the order received. It is NULL when there are none.
@@ -487,6 +492,10 @@ An analysed Page SHALL store the robots directives found in its HTML and in its 
 #### Scenario: Meta robots keeps case but reads directives
 - **WHEN** an analysed Page's HTML contains `<meta name="ROBOTS" content="NOINDEX, follow">`
 - **THEN** `meta_robots` is `NOINDEX, follow`, `meta_robots_noindex` is 1 and `meta_robots_nofollow` is 0
+
+#### Scenario: X-Robots-Tag is kept when page preparation fails
+- **WHEN** a Page responds 200 with `Content-Type: text/html` and `X-Robots-Tag: noindex`, and its preparation failed (`parsed` = 0)
+- **THEN** `x_robots_tag` is `noindex`, `x_robots_tag_noindex` is 1 and `meta_robots` is NULL
 
 #### Scenario: X-Robots-Tag is stored with the parser's verdict
 - **WHEN** an analysed Page's response has `X-Robots-Tag: noindex` and its HTML has no robots `<meta>`
@@ -802,6 +811,8 @@ For an analysed Page, the structured-data columns SHALL be:
 - **THEN** `jsonld_items` is 0, `microdata_items` is 0 and `structured_data_types` is `[]`
 
 ### Requirement: Link attributes
+**In short:** one `links` row per Link that `020-add-crawl-core` discovers, with the attributes analysis needs.
+
 The crawl store SHALL hold one row in the `links` table for each Link that the Link discovery of `020-add-crawl-core` finds. That requirement defines:
 
 - which responses are read (the HTML of parsed Pages, and the `Link` headers of in-Scope 2xx responses)
@@ -823,6 +834,7 @@ This change stores each discovered Link together with the attributes that analys
 | `alt_text` | TEXT | yes | | for `image` Links from an `<img>` element, the normalised `alt` attribute: NULL when absent, the empty string when empty. NULL otherwise. |
 | `rel` | TEXT | yes | | the Link's `rel` tokens as `020-add-crawl-core`'s Link discovery reads them (ASCII lower-cased), joined with single spaces, or NULL |
 | `rel_nofollow`, `rel_ugc`, `rel_sponsored` | INTEGER | no | boolean | 1 when `rel` contains that token, otherwise 0 |
+| `followed` | INTEGER | no | boolean | 1 when the Crawl follows the Link by `020-add-crawl-core`'s follow rule (the Link's and the Page's nofollow, its type and the Scope), otherwise 0 |
 | `hreflang` | TEXT | yes | | the trimmed `hreflang` value for `hreflang` Links, otherwise NULL |
 | `media` | TEXT | yes | | the trimmed `media` value for `mobile_alternate` Links, otherwise NULL |
 | `link_position` | TEXT | yes | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | where on the Page the Link is (see below) |
@@ -910,11 +922,17 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 - **THEN** the descriptions of `inlinks`, `unique_inlinks` and `linking_pages_pct` start with `Derived: `
 
 ### Requirement: Crawl Depth and Folder Depth
-`crawl_depth` SHALL equal `urls.crawl_depth` for the Page. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, and a trailing slash does not add a segment.
+**In short:** `crawl_depth` is the shortest path of followed Links from a Seed once the post-crawl passes have run; `folder_depth` counts the path's segments.
+
+`crawl_depth` SHALL equal `urls.crawl_depth` for the Page. Once the post-crawl passes have run, both SHALL be the number of Links on the shortest path of followed Links (`links.followed` = 1) from a Seed, for every URL that such a path reaches; a URL that no such path reaches keeps the depth the crawl engine recorded. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, and a trailing slash does not add a segment.
 
 #### Scenario: Folder depth
 - **WHEN** Pages have the paths `/`, `/blog/`, `/blog/post.html` and `/a//b/`
 - **THEN** their `folder_depth` values are 0, 1, 2 and 2
+
+#### Scenario: Crawl Depth is the shortest path over followed Links
+- **WHEN** the post-crawl passes run on a Crawl whose `urls` row for `{site}/p` has `crawl_depth` 3, while a path of 2 followed Links leads from the Seed to it
+- **THEN** `{site}/p` has `crawl_depth` 2 in `pages` and in `urls`
 
 #### Scenario: Crawl Depth is copied from the crawl engine
 - **WHEN** the Seed `{site}/` links to `{site}/l1`, which links to `{site}/l2`

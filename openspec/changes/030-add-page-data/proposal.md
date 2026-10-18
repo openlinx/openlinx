@@ -24,7 +24,7 @@
 - **Link data:**
   - Inlink and outlink counts, including % of Total (`linking_pages_pct`). The inlink counts are computed in the post-crawl passes.
   - Folder Depth
-  - Crawl Depth, copied from `urls`
+  - Crawl Depth, the shortest path over followed Links, which a post-crawl pass also writes to `urls`
 - **Small additions beyond the Internal-tab list,** needed by Rules and agents:
   - `title_count`, `meta_description_count`, `h1_count`, `h2_count` and `canonical_count`
   - `url_path` and `url_query`, the path and query of `address`
