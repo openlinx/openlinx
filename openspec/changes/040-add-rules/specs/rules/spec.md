@@ -574,12 +574,12 @@ The Crawl SHALL use this configuration throughout, including after `resume`. Edi
 - **THEN** its `rules` row for `title-too-long` has `thresholds` `{"max_chars": 70}`
 
 #### Scenario: Later edits do not change a completed Crawl
-- **WHEN** a Crawl ended as `completed` with the default `min_words` and `spider.toml` then sets `min_words = 5000`
-- **THEN** that Crawl's `issues` and `affected_urls` rows for `low-word-count` are unchanged
+- **WHEN** a Crawl ended as `completed` with the default `max_chars` and `spider.toml` then sets `max_chars = 100`
+- **THEN** that Crawl's `issues` and `affected_urls` rows for `title-too-long` are unchanged
 
 #### Scenario: Resumed Crawl keeps the recorded configuration
-- **WHEN** a Crawl started with `min_words = 300` stops at its `--max-urls` limit, `spider.toml` is changed to `min_words = 50`, and the Crawl is resumed through the Crawl Service with a higher limit
-- **THEN** an Indexable Page with `word_count` 120 written after the resume is an Affected URL of `low-word-count`
+- **WHEN** a Crawl started with `max_chars = 70` stops at its `--max-urls` limit, `spider.toml` is changed to `max_chars = 100`, and the Crawl is resumed through the Crawl Service with a higher limit
+- **THEN** an analysed Page with `title_1_length` 80 written after the resume is an Affected URL of `title-too-long`
 
 ### Requirement: Rules are SQL queries
 Every Rule SHALL have a reproducing query and SHALL be evaluated only by it. The query is one read-only SQL `SELECT` over the public schema that returns the Rule's Affected URLs in a crawl file, as the columns `url_id` and `detail`.
@@ -714,7 +714,7 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** `health_score` is 100
 
 #### Scenario: A Page with several Issues counts once
-- **WHEN** a Crawl has 4 Internal Pages and one of them is an Affected URL of both `title-missing` and `exact-duplicate`
+- **WHEN** a Crawl has 4 Internal Pages and one of them is an Affected URL of both `title-missing` and another Rule whose Issue Type is `issue`
 - **THEN** `health_score` is 75
 
 #### Scenario: Resource Issues do not change the score
@@ -736,6 +736,10 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 #### Scenario: Health Score of a Segment
 - **WHEN** the Health Score function is called with a subset of 4 Internal Pages, 1 of which is an Affected URL of an Issue-type Rule
 - **THEN** it returns 75
+
+#### Scenario: Live Health Score of a running Crawl
+- **WHEN** a Crawl is still `running`, with 2 Internal Pages, one of them without a `<title>`
+- **THEN** the Health Score function over its live Affected URLs returns 50
 
 #### Scenario: End-to-end score on the fixture site
 - **WHEN** a Crawl of 4 fixture Pages on the plain-HTTP fixture site ends as `completed`, with one Page without a `<title>` and no other Issue-type problem
