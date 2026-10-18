@@ -1,6 +1,6 @@
 # Querying a Crawl
 
-How to read a Crawl's Issues with `spider issues`, and one Issue with `spider issue <rule-id>`. The spec is [openspec/changes/050-add-query-and-segments/specs/querying/spec.md](../openspec/changes/050-add-query-and-segments/specs/querying/spec.md), and terms follow [CONTEXT.md](../CONTEXT.md). The Rules behind the Issues are described in [rules.md](rules.md).
+How to read a Crawl's Issues with `spider issues`, and one Issue with `spider issue <rule-id>`, and the where language that filters rows by their columns. The spec is [openspec/changes/050-add-query-and-segments/specs/querying/spec.md](../openspec/changes/050-add-query-and-segments/specs/querying/spec.md), and terms follow [CONTEXT.md](../CONTEXT.md). The Rules behind the Issues are described in [rules.md](rules.md).
 
 Every query Command reads the Crawl that `--crawl` selects: `latest` (the default, the Crawl that started last), a crawl id, or the path of a crawl file. It never changes the crawl file. In WAL mode, the default, each run reads one snapshot of it, so its numbers agree with each other even while the Crawl is still writing. A crawl file in rollback-journal mode, such as one on a network share, is read statement by statement instead, so a run during a Crawl may see rows that one of its statements missed.
 
@@ -65,6 +65,40 @@ Its output:
 - `total` counts every Affected URL. A Rule that did not fire has `total` 0 and no items.
 - **Order and paging:** the Affected URLs come in `url` order, paged by keyset with `--limit` and `--cursor`: each page starts after the last URL of the one before, so the pages of a stored Issue never repeat or skip a URL. On an Issue computed live, an Affected URL that appears between two pages and sorts before the cursor is not shown, and `total` can change from page to page. A cursor is bound to the Crawl and the Rule.
 - **Unknown rule id:** it fails with `rule_not_found` (exit code 4), whose hint points to `spider rules list` and whose `details.suggestions` lists the closest Rule ids of the Crawl's `rules` table.
+
+## The where language
+
+A `--where` expression picks rows by their columns. It is parsed and checked before any query runs, and it never reaches SQLite as text: every value is bound as a parameter.
+
+```
+status_code >= 400
+status_code = 404 and crawl_depth > 3
+title_1 contains 'каталог'
+meta_description_1 is not null
+```
+
+| Form | A row matches when |
+|---|---|
+| `column = value`, `column != value` (or `<>`) | the column equals the value, or does not. Text compares exactly, case included. |
+| `column < value`, `<=`, `>`, `>=` | numbers compare numerically, text by Unicode code point. |
+| `column contains 'text'` | the column's text holds `text`, ignoring case in any script: `title_1 contains 'КАТАЛОГ'` matches `Каталог товаров`. A number column is read as its text, so `status_code contains '0'` matches 404. |
+| `column is null`, `column is not null` | the column has no value, or has one. |
+| `expression and expression` | both match. |
+
+- **Values:** a number (`404`, `-1.5`), a string in single or double quotes, or `true` and `false` for a boolean column. A string writes its own quote twice: `'It''s here'` is the same as `"It's here"`. Backslashes are ordinary characters.
+- **Names:** column names and the keywords `and`, `contains`, `is`, `not`, `null`, `true` and `false` are case-insensitive.
+- **Null values:** every form except `is null` and `is not null` is false where the column is null. `word_count < 300` and `word_count != 250` both leave out a row without a word count; `word_count is null` finds it.
+- **Not in this version:** `or`, `not`, parentheses, the regular-expression operators `~` and `!~`, `in` and `not contains` are syntax errors.
+
+**On the command line,** put the whole expression in double quotes and its strings in single quotes. This works in PowerShell, cmd and POSIX shells alike:
+
+```
+--where "title_1 contains 'blog' and status_code = 200"
+```
+
+Inside the double quotes, the shell still reads `$`, and PowerShell also reads the backtick.
+
+**Errors:** an expression that breaks this grammar fails with `invalid_where` (exit code 2) before any query runs, with a message that says what was expected and a hint that recalls the grammar.
 
 ## What a query costs
 
