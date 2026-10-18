@@ -59,3 +59,9 @@ def test_and_requires_both(connection: Connection) -> None:
     }
 
     assert matching(connection, "status_code = 404 and crawl_depth > 3", rows) == ["B"]
+
+
+def test_column_names_are_case_insensitive(connection: Connection) -> None:
+    rows = {"A": {"status_code": 200}, "B": {"status_code": 404}}
+
+    assert matching(connection, "STATUS_CODE = 404", rows) == ["B"]

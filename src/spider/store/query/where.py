@@ -4,7 +4,7 @@ import operator
 from collections.abc import Callable
 from typing import Any
 
-from sqlalchemy import ColumnElement, Table, and_
+from sqlalchemy import Column, ColumnElement, Table, and_
 
 from spider.query.where import And, Comparison, Expression
 
@@ -25,4 +25,8 @@ def compile_where(expression: Expression, table: Table) -> ColumnElement[bool]:
         case And(operands):
             return and_(*(compile_where(operand, table) for operand in operands))
         case Comparison(column, compare, value):
-            return _COMPARE[compare](table.c[column], value)
+            return _COMPARE[compare](_column(table, column), value)
+
+
+def _column(table: Table, name: str) -> Column[Any]:
+    return {column.name.lower(): column for column in table.columns}[name.lower()]
