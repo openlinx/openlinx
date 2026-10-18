@@ -27,6 +27,7 @@ ROWS = Table(
     Column("name", Text, primary_key=True),
     Column("status_code", Integer),
     Column("crawl_depth", Integer),
+    Column("word_count", Integer),
     Column("title_1", Text),
     Column("meta_description_1", Text),
     # Declared as every boolean column of the schema is.
@@ -116,3 +117,14 @@ def test_boolean_literal(connection: Connection) -> None:
     rows = {"A": {"flag": True}, "B": {"flag": False}}
 
     assert matching(connection, "flag = true", rows) == ["A"]
+
+
+WORD_COUNTS: Rows = {"A": {"word_count": 250}, "B": {"word_count": 800}, "C": {"word_count": None}}
+
+
+def test_a_comparison_excludes_null_values(connection: Connection) -> None:
+    assert matching(connection, "word_count < 300", WORD_COUNTS) == ["A"]
+
+
+def test_not_equal_excludes_null_values(connection: Connection) -> None:
+    assert matching(connection, "word_count != 250", WORD_COUNTS) == ["B"]
