@@ -76,6 +76,31 @@ def test_path_and_query_of_the_address() -> None:
     ]
 
 
+def test_last_modified_is_normalised_to_a_timestamp() -> None:
+    row = _page(
+        _fetched(
+            "https://example.test/", headers=(("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT"),)
+        )
+    )
+
+    assert row.last_modified == datetime(2015, 10, 21, 7, 28, tzinfo=UTC)
+
+
+def test_invalid_last_modified_is_null() -> None:
+    row = _page(_fetched("https://example.test/", headers=(("Last-Modified", "yesterday"),)))
+
+    assert row.last_modified is None
+
+
+def test_an_asctime_last_modified_is_utc() -> None:
+    # The obsolete asctime form names no zone, which an HTTP-date always means as GMT.
+    row = _page(
+        _fetched("https://example.test/", headers=(("last-modified", "Sun Nov  6 08:49:37 1994"),))
+    )
+
+    assert row.last_modified == datetime(1994, 11, 6, 8, 49, 37, tzinfo=UTC)
+
+
 def test_an_address_keeps_what_does_not_decode() -> None:
     row = _page(_fetched("https://xn--bcher-kva.xn--zz.test:8080/%FF%C3%BC%2F?q=%E2%82"))
 

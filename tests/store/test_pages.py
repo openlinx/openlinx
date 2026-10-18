@@ -31,6 +31,7 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
             url_encoded_address=url,
             url_path="/über",
             url_query=None,
+            last_modified=None,
         )
         fetched = FetchedUrl(
             url_id=url_id,

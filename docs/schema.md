@@ -170,6 +170,7 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `url_encoded_address` | TEXT | no | | | | The Page's URL as the Crawl requested it, equal to urls.url: the host in IDNA (punycode) form and every non-ASCII character percent-encoded as UTF-8. |
 | `url_path` | TEXT | no | | | | The path of address: from the first / after the host up to the first ?, or to the end. |
 | `url_query` | TEXT | yes | | | | The query of address: the text after the first ?; NULL when address has no ?, and the empty string when nothing follows it. |
+| `last_modified` | TEXT | yes | | `timestamp` | | The Last-Modified response header as a UTC time; NULL when absent or not an HTTP-date. |
 | `title_1` | TEXT | yes | | | | The text of the Page's first title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `title_1_length` | INTEGER | yes | | | | The length of title_1 in Unicode code points; NULL exactly when title_1 is. |
 | `title_2` | TEXT | yes | | | | The text of the Page's second title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |

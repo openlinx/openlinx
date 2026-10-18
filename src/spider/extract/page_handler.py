@@ -1,6 +1,8 @@
 """The Page handler: the rows of a URL that is a Page (030-add-page-data D1, D2)."""
 
 from collections.abc import Iterable
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 
 import msgspec
 
@@ -24,9 +26,22 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             url_encoded_address=result.url,
             url_path=url_path,
             url_query=url_query,
+            last_modified=_last_modified(result.headers),
             **({} if data is None else msgspec.structs.asdict(data)),
         ),
     )
+
+
+def _last_modified(headers: tuple[tuple[str, str], ...]) -> datetime | None:
+    value = next((value for name, value in headers if name.lower() == "last-modified"), None)
+    if value is None:
+        return None
+    try:
+        moment = parsedate_to_datetime(value)
+    except ValueError:
+        return None
+    # An HTTP-date is always GMT, also in the asctime form, which names no zone.
+    return moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment
 
 
 def _is_page(result: UrlResult) -> bool:

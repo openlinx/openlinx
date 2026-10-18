@@ -445,6 +445,12 @@ pages = public_table(
         "and the empty string when nothing follows it.",
     ),
     Column(
+        "last_modified",
+        Timestamp,
+        comment="The Last-Modified response header as a UTC time; NULL when absent or not an "
+        "HTTP-date.",
+    ),
+    Column(
         "title_1",
         Text,
         comment="The text of the Page's first title element without an svg, math or noscript "

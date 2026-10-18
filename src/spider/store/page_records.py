@@ -1,6 +1,7 @@
 """The rows of the Page data tables, loading no sqlalchemy (030-add-page-data D1, D16)."""
 
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -10,6 +11,7 @@ class PageRow:
     url_encoded_address: str
     url_path: str
     url_query: str | None
+    last_modified: datetime | None
     # From the HTML: NULL for a Page that is not analysed or whose Page extractor failed (D2).
     title_1: str | None = None
     title_1_length: int | None = None
