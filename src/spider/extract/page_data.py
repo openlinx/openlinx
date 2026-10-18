@@ -1,5 +1,7 @@
 """The Page extractor: the columns a Page's HTML gives (030-add-page-data D1, D7)."""
 
+from collections.abc import Mapping
+
 import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
@@ -39,39 +41,49 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: None) -> PageData:
     titles = [normalized(node.text()) for node in _page_nodes(tree, "title")]
-    title_1, title_2 = _nth(titles, 0), _nth(titles, 1)
+    title_1, title_1_length, title_2, title_2_length = _first_two(titles)
     metas = _page_nodes(tree, "meta")
     descriptions = _meta_contents(metas, "description")
-    description_1, description_2 = _nth(descriptions, 0), _nth(descriptions, 1)
-    keywords_1 = _nth(_meta_contents(metas, "keywords"), 0)
+    description_1, description_1_length, description_2, description_2_length = _first_two(
+        descriptions
+    )
+    keywords_1, keywords_1_length, _, _ = _first_two(_meta_contents(metas, "keywords"))
     h1s, h1_count = _headings(tree, "h1")
-    h1_1, h1_2 = _nth(h1s, 0), _nth(h1s, 1)
+    h1_1, h1_1_length, h1_2, h1_2_length = _first_two(h1s)
     h2s, h2_count = _headings(tree, "h2")
-    h2_1, h2_2 = _nth(h2s, 0), _nth(h2s, 1)
+    h2_1, h2_1_length, h2_2, h2_2_length = _first_two(h2s)
     return PageData(
         title_1=title_1,
-        title_1_length=_length(title_1),
+        title_1_length=title_1_length,
         title_2=title_2,
-        title_2_length=_length(title_2),
+        title_2_length=title_2_length,
         title_count=len(titles),
         meta_description_1=description_1,
-        meta_description_1_length=_length(description_1),
+        meta_description_1_length=description_1_length,
         meta_description_2=description_2,
-        meta_description_2_length=_length(description_2),
+        meta_description_2_length=description_2_length,
         meta_description_count=len(descriptions),
         meta_keywords_1=keywords_1,
-        meta_keywords_1_length=_length(keywords_1),
+        meta_keywords_1_length=keywords_1_length,
         h1_1=h1_1,
-        h1_1_length=_length(h1_1),
+        h1_1_length=h1_1_length,
         h1_2=h1_2,
-        h1_2_length=_length(h1_2),
+        h1_2_length=h1_2_length,
         h1_count=h1_count,
         h2_1=h2_1,
-        h2_1_length=_length(h2_1),
+        h2_1_length=h2_1_length,
         h2_2=h2_2,
-        h2_2_length=_length(h2_2),
+        h2_2_length=h2_2_length,
         h2_count=h2_count,
     )
+
+
+def page_data_of(outputs: Mapping[str, msgspec.Struct]) -> PageData | None:
+    """None when the Page extractor gave no output, as for a Page that is not analysed."""
+    data = outputs.get(PAGE_DATA.name)
+    if data is None or isinstance(data, PageData):
+        return data
+    raise RuntimeError(f"the output named {PAGE_DATA.name} is a {type(data).__name__}")
 
 
 def _headings(tree: LexborHTMLParser, tag: str) -> tuple[list[str], int]:
@@ -99,8 +111,10 @@ def _is_named(node: LexborNode, name: str) -> bool:
     return value.isascii() and value.lower() == name
 
 
-def _nth(texts: list[str], index: int) -> str | None:
-    return texts[index] if index < len(texts) else None
+def _first_two(texts: list[str]) -> tuple[str | None, int | None, str | None, int | None]:
+    first = texts[0] if texts else None
+    second = texts[1] if len(texts) > 1 else None
+    return first, _length(first), second, _length(second)
 
 
 def _length(text: str | None) -> int | None:

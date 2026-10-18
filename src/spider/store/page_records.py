@@ -39,4 +39,6 @@ class PageRow:
     h2_2: str | None = None
     h2_2_length: int | None = None
     h2_count: int | None = None
+
+    # After the HTML columns, as in pages: copied from urls.
     crawl_depth: int

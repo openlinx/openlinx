@@ -48,17 +48,15 @@ Titles, meta descriptions, meta keywords and headings follow one pattern:
 - **Columns.** A `_count` column counts the elements, and is 0 when there are none. The `_1` and `_2` columns hold the normalised texts of the first two, in document order, NULL when there is no such element; meta keywords keep only the first, with no count. Each `_length` column is NULL exactly when its text is.
 - **Headings** take the text of the whole element, nested elements such as `<span>` included (see [Text](#text)).
 
-## Response values
+## Values of the response and of `urls`
 
-- **Copies of `urls`.** `content_type`, `status_code`, `response_time_ms` and `crawl_depth` repeat the URL's row, and `crawl_timestamp` repeats its `fetched_at`. They are written in the URL's own unit, from the same response, so they always agree.
-- **Times** are UTC, in the `timestamp` format of [schema.md](schema.md#conventions). `last_modified` reads the `Last-Modified` header as an HTTP-date, in any of its three forms. An HTTP-date is always GMT, also in the obsolete asctime form, which names no zone. A value that is not an HTTP-date gives NULL.
-- **Every Page** has these values, analysed or not, since they come from the response, not from the HTML.
+- **Copies of `urls`.** `content_type`, `status_code`, `response_time_ms` and `crawl_depth` repeat the URL's row, and `crawl_timestamp` repeats its `fetched_at`. They are written in the URL's own unit, so they always agree.
+- **Times** are UTC, in the `timestamp` format of [schema.md](schema.md#conventions). `last_modified` reads the header leniently, as RFC 9110 asks of a recipient: an HTTP-date in any of its three forms, always GMT, also in the obsolete asctime form, which names no zone, or another Internet Message Format date, whose offset is converted to UTC.
 
 ## The two address forms
 
-- **`url_encoded_address`** is the URL as the Crawl requested it, equal to `urls.url`: the host in IDNA (punycode) form and every non-ASCII character percent-encoded as UTF-8, such as `https://xn--bcher-kva.test/%C3%BCber%20uns`.
-- **`address`** is the same URL for people: the host in Unicode, and every percent-encoded UTF-8 sequence of a non-ASCII character decoded, such as `https://bücher.test/über%20uns`. Percent-encoded ASCII characters, such as `%20` and `%2F`, stay encoded, and so does what does not decode: a byte that is no UTF-8, or a punycode label that is not valid. Controls, format characters such as a right-to-left override, and spaces and separators such as the no-break space stay encoded too (Unicode categories `Cc`, `Cf`, `Zs`, `Zl` and `Zp`), so an address never hides or spoofs what was requested.
-
-- **`url_path`** and **`url_query`** are cut from `address`, so they hold non-ASCII characters decoded, while an escaped `/` stays escaped. The query is NULL when `address` has no `?`, and the empty string after a bare `?`.
+- **`url_encoded_address`** is what the Crawl requested, so it joins `urls.url`, such as `https://xn--bcher-kva.test/%C3%BCber%20uns`.
+- **`address`** is the form people read, such as `https://bücher.test/über%20uns`. What could hide or spoof what was requested stays encoded: escaped ASCII such as `%20` and `%2F`, a byte that is no UTF-8, a punycode label that is not valid, and invisible characters such as a right-to-left override or a no-break space.
+- **`url_path`** and **`url_query`** are cut from `address`, so they hold non-ASCII characters decoded, while an escaped `/` stays escaped.
 
 `address` is unique, through the index `pages_address`, so a Page can be found by the URL a person reads: normalising an `address` gives back its `url_encoded_address`, so two URLs never share one.

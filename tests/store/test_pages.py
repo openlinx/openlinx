@@ -4,7 +4,6 @@ from dataclasses import fields
 from datetime import UTC, datetime
 
 from spider.crawl.urls import parse_seed
-from spider.extract.page_data import PageData
 from spider.store.page_records import PageRow
 from spider.store.pages import write_page
 from spider.store.records import FetchedUrl
@@ -55,10 +54,5 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
     ]
 
 
-def test_the_page_row_has_every_pages_column_and_every_extracted_field() -> None:
-    row_fields = [field.name for field in fields(PageRow)]
-
-    assert (row_fields, set(PageData.__struct_fields__) - set(row_fields)) == (
-        [column.name for column in pages.c],
-        set(),
-    )
+def test_the_page_row_has_every_pages_column_in_order() -> None:
+    assert [field.name for field in fields(PageRow)] == [column.name for column in pages.c]

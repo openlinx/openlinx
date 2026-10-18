@@ -1,12 +1,15 @@
 """The columns the Page extractor derives from the HTML (030-add-page-data, page-data; seam 4)."""
 
 import sys
+from dataclasses import fields
 from types import FrameType
 
 from hypothesis import given
 from hypothesis import strategies as st
 
 from spider.extract.text import element_text
+from spider.store.page_records import PageRow
+from spider.store.schema import pages
 from tests.support.page_data import page_row
 
 
@@ -152,10 +155,7 @@ def test_heading_text_leaves_out_fallbacks_frames_and_pictures() -> None:
     assert row.h1_1 == "ab"
 
 
-def test_headings_read_the_text_of_their_first_two_elements_only() -> None:
-    # The parser nests an h1 inside a div inside an h1, so each h1 holds every later one:
-    # reading the text of all of them cost their count squared. Calls are counted, not
-    # timed, so the test does not depend on the machine.
+def _text_walks(html: str) -> int:
     calls = 0
 
     def count(frame: FrameType, event: str, arg: object) -> None:
@@ -165,11 +165,40 @@ def test_headings_read_the_text_of_their_first_two_elements_only() -> None:
 
     sys.setprofile(count)
     try:
-        row = page_row("<h1><div>" * 100)
+        page_row(html)
     finally:
         sys.setprofile(None)
+    return calls
 
-    assert (row.h1_count, calls) == (100, 2)
+
+def test_headings_read_the_text_of_their_first_two_elements_only() -> None:
+    # The parser nests an h1 inside a div inside an h1, so each h1 holds every later one:
+    # reading the text of all of them cost their count squared. Calls are counted, not
+    # timed, so the test does not depend on the machine.
+    assert _text_walks("<h1><div>" * 100) == _text_walks("<h1><div>" * 10)
+
+
+# Two of every element the Page extractor reads; a group that adds an HTML column adds its
+# element here.
+_FULL_PAGE = (
+    "<title>T1</title><title>T2</title>"
+    '<meta name="description" content="D1"><meta name="description" content="D2">'
+    '<meta name="keywords" content="K1">'
+    "<h1>A1</h1><h1>A2</h1><h2>B1</h2><h2>B2</h2>"
+)
+# Filled by a post-crawl pass or by a later release, so NULL on a Page that was just prepared.
+_LATER = ("Derived: ", "Filled from ")
+
+
+def test_a_full_page_fills_every_html_column() -> None:
+    row = page_row(_FULL_PAGE)
+    later = {column.name for column in pages.c if (column.comment or "").startswith(_LATER)}
+
+    assert [
+        field.name
+        for field in fields(PageRow)
+        if field.default is None and field.name not in later and getattr(row, field.name) is None
+    ] == []
 
 
 def test_a_deeply_nested_heading_needs_no_recursion() -> None:

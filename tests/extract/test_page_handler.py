@@ -3,10 +3,12 @@
 from datetime import UTC, datetime
 from typing import Any
 
+import msgspec
 import pytest
 
 from spider.crawl.hooks import UrlResult
 from spider.crawl.urls import NormalizedUrl
+from spider.extract.page_data import PAGE_DATA
 from spider.extract.page_handler import page_rows
 from spider.store.page_records import PageRow
 
@@ -96,13 +98,32 @@ def test_invalid_last_modified_is_null() -> None:
     assert row.last_modified is None
 
 
-def test_an_asctime_last_modified_is_utc() -> None:
-    # The obsolete asctime form names no zone, which an HTTP-date always means as GMT.
-    row = _page(
-        _fetched("https://example.test/", headers=(("last-modified", "Sun Nov  6 08:49:37 1994"),))
+def _last_modified(value: str, name: str = "Last-Modified") -> datetime | None:
+    return _page(_fetched("https://example.test/", headers=((name, value),))).last_modified
+
+
+def test_the_obsolete_http_date_forms_are_read_as_gmt() -> None:
+    assert [
+        _last_modified("Sunday, 06-Nov-94 08:49:37 GMT"),
+        _last_modified("Sun Nov  6 08:49:37 1994"),
+    ] == [datetime(1994, 11, 6, 8, 49, 37, tzinfo=UTC)] * 2
+
+
+def test_last_modified_is_read_in_any_letter_case() -> None:
+    assert _last_modified("Wed, 21 Oct 2015 07:28:00 GMT", name="last-MODIFIED") == datetime(
+        2015, 10, 21, 7, 28, tzinfo=UTC
     )
 
-    assert row.last_modified == datetime(1994, 11, 6, 8, 49, 37, tzinfo=UTC)
+
+def test_a_last_modified_offset_is_converted_to_utc() -> None:
+    moment = _last_modified("Wed, 21 Oct 2015 07:28:00 +0300")
+
+    assert (moment, moment and moment.tzinfo) == (datetime(2015, 10, 21, 4, 28, tzinfo=UTC), UTC)
+
+
+def test_a_last_modified_beyond_the_timestamp_range_is_null() -> None:
+    # The year 9999 at -01:00 is the year 10000 in UTC, which the timestamp column cannot hold.
+    assert _last_modified("Fri, 31 Dec 9999 23:59:59 -0100") is None
 
 
 def test_an_address_keeps_what_does_not_decode() -> None:
@@ -114,8 +135,19 @@ def test_an_address_keeps_what_does_not_decode() -> None:
 def test_a_fetched_page_without_a_status_code_fails_its_handler() -> None:
     broken = _result("https://example.test/", fetch_state="fetched", content_type="text/html")
 
-    with pytest.raises(ValueError, match="status_code"):
+    with pytest.raises(RuntimeError, match="status_code"):
         page_rows(broken)
+
+
+def test_another_output_under_the_page_extractors_name_fails_its_handler() -> None:
+    broken = _fetched("https://example.test/", outputs={PAGE_DATA.name: UrlLike(url="x")})
+
+    with pytest.raises(RuntimeError, match=PAGE_DATA.name):
+        page_rows(broken)
+
+
+class UrlLike(msgspec.Struct, frozen=True):
+    url: str
 
 
 def test_url_blocked_by_robots_txt_is_not_a_page() -> None:

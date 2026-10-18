@@ -4,11 +4,14 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 from tests.support.cli import PROCESS_TIMEOUT, REPO_ROOT
 
 _LIST_MODULES = "import sys, spider.extract.page_data; sys.stderr.write(chr(10).join(sys.modules))"
 
 
+@pytest.mark.slow
 def test_the_page_extractor_loads_no_sqlalchemy() -> None:
     completed = subprocess.run(
         [sys.executable, "-c", _LIST_MODULES],

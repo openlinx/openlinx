@@ -9,14 +9,14 @@ import msgspec
 from spider.crawl.hooks import UrlResult
 from spider.crawl.pages import is_html_type
 from spider.extract.addresses import display_address, path_and_query
-from spider.extract.page_data import PAGE_DATA
+from spider.extract.page_data import page_data_of
 from spider.store.page_records import PageRow
 
 
 def page_rows(result: UrlResult) -> Iterable[PageRow]:
     if not _is_page(result):
         return ()
-    data = result.outputs.get(PAGE_DATA.name)
+    data = page_data_of(result.outputs)
     address = display_address(result.url)
     url_path, url_query = path_and_query(address)
     return (
@@ -40,7 +40,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
 def _required[T](value: T | None, name: str) -> T:
     # A fetched URL always has its response's values; the engine reports a handler that raises.
     if value is None:
-        raise ValueError(f"a fetched URL has no {name}")
+        raise RuntimeError(f"a fetched URL has no {name}")
     return value
 
 
@@ -50,10 +50,11 @@ def _last_modified(headers: tuple[tuple[str, str], ...]) -> datetime | None:
         return None
     try:
         moment = parsedate_to_datetime(value)
-    except ValueError:
+        # An HTTP-date is always GMT, also in the asctime form, which names no zone. Converted
+        # here, so a time past the year 9999 in UTC is NULL, not a Page that fails to be written.
+        return (moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment).astimezone(UTC)
+    except (ValueError, OverflowError):
         return None
-    # An HTTP-date is always GMT, also in the asctime form, which names no zone.
-    return moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment
 
 
 def _is_page(result: UrlResult) -> bool:

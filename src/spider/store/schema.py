@@ -422,7 +422,8 @@ pages = public_table(
         nullable=False,
         comment="The Page's URL for display: url_encoded_address with the host in Unicode and "
         "every percent-encoded UTF-8 sequence of a non-ASCII character decoded; percent-encoded "
-        "ASCII characters stay encoded.",
+        "ASCII characters stay encoded, and so do characters of the Unicode categories Cc, Cf, "
+        "Zs, Zl and Zp.",
     ),
     Column(
         "url_encoded_address",
@@ -466,8 +467,8 @@ pages = public_table(
     Column(
         "last_modified",
         Timestamp,
-        comment="The Last-Modified response header as a UTC time; NULL when absent or not an "
-        "HTTP-date.",
+        comment="The first Last-Modified response header as a UTC time, read as an HTTP-date or "
+        "another Internet Message Format date; NULL when absent or neither.",
     ),
     Column(
         "crawl_timestamp",

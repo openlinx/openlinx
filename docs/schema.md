@@ -166,14 +166,14 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | Column | Type | Null | Key | Format | Values | Description |
 |---|---|---|---|---|---|---|
 | `url_id` | INTEGER | no | PK, → `urls.id` | | | The Page's URL. |
-| `address` | TEXT | no | | | | The Page's URL for display: url_encoded_address with the host in Unicode and every percent-encoded UTF-8 sequence of a non-ASCII character decoded; percent-encoded ASCII characters stay encoded. |
+| `address` | TEXT | no | | | | The Page's URL for display: url_encoded_address with the host in Unicode and every percent-encoded UTF-8 sequence of a non-ASCII character decoded; percent-encoded ASCII characters stay encoded, and so do characters of the Unicode categories Cc, Cf, Zs, Zl and Zp. |
 | `url_encoded_address` | TEXT | no | | | | The Page's URL as the Crawl requested it, equal to urls.url: the host in IDNA (punycode) form and every non-ASCII character percent-encoded as UTF-8. |
 | `url_path` | TEXT | no | | | | The path of address: from the first / after the host up to the first ?, or to the end. |
 | `url_query` | TEXT | yes | | | | The query of address: the text after the first ?; NULL when address has no ?, and the empty string when nothing follows it. |
 | `content_type` | TEXT | no | | | | The Content-Type response header as received, equal to urls.content_type. |
 | `status_code` | INTEGER | no | | | | The HTTP status code of the Page's own response, equal to urls.status_code. |
 | `response_time_ms` | INTEGER | no | | | | Time from sending the request to receiving the whole body, equal to urls.response_time_ms. |
-| `last_modified` | TEXT | yes | | `timestamp` | | The Last-Modified response header as a UTC time; NULL when absent or not an HTTP-date. |
+| `last_modified` | TEXT | yes | | `timestamp` | | The first Last-Modified response header as a UTC time, read as an HTTP-date or another Internet Message Format date; NULL when absent or neither. |
 | `crawl_timestamp` | TEXT | no | | `timestamp` | | The UTC time of the Page's request, equal to urls.fetched_at. |
 | `title_1` | TEXT | yes | | | | The text of the Page's first title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `title_1_length` | INTEGER | yes | | | | The length of title_1 in Unicode code points; NULL exactly when title_1 is. |

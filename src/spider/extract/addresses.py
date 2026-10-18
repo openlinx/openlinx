@@ -1,4 +1,5 @@
-"""The display form of a Page's address (design D17 of 030-add-page-data)."""
+"""The display form of a Page's address, and its path and query (030-add-page-data, the Address
+columns)."""
 
 import re
 import unicodedata
@@ -58,6 +59,6 @@ def _decoded(match: re.Match[str]) -> str:
 
 def path_and_query(address: str) -> tuple[str, str | None]:
     """The query is None without a "?", and "" when nothing follows it."""
-    rest = address.partition("://")[2]
-    path, mark, query = rest[rest.find("/") :].partition("?")
+    after_host = address.partition("://")[2].partition("/")[2]
+    path, mark, query = ("/" + after_host).partition("?")
     return path, query if mark else None

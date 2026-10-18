@@ -38,7 +38,7 @@ def page_row(html: str | bytes, content_type: str = "text/html; charset=utf-8") 
         is_internal=True,
         in_scope=True,
         fetch_state="fetched",
-        status_code=200,
+        status_code=response.status_code,
         content_type=content_type,
         response_time_ms=response.response_time_ms,
         fetched_at=response.fetched_at,

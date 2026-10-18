@@ -1,10 +1,11 @@
-"""The display form of a URL (design D17 of 030-add-page-data; seam 4)."""
+"""The display form of a URL, and its path and query (030-add-page-data, the Address columns;
+seam 4)."""
 
 from hypothesis import given, reject
 from hypothesis import strategies as st
 
 from spider.crawl.urls import normalize_url
-from spider.extract.addresses import display_address
+from spider.extract.addresses import display_address, path_and_query
 
 # Escapes and characters whose display forms could meet: escaped ASCII, both letter cases,
 # raw and escaped non-ASCII, the characters that stay encoded, and bytes that are no UTF-8.
@@ -50,3 +51,7 @@ def test_an_address_normalises_back_to_its_url(text: str) -> None:
         reject()
 
     assert normalize_url(display_address(url)) == url
+
+
+def test_an_address_without_a_path_has_the_root_path() -> None:
+    assert path_and_query("https://example.test:8080") == ("/", None)
