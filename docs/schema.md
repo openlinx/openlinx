@@ -249,7 +249,7 @@ The Issues: one row for each Rule with at least one Affected URL, counted from a
 
 ## View `internal_urls`
 
-The Internal URLs that were requested.
+The Internal URLs that were requested, or that robots.txt disallows.
 
 | Column | Type | Null | Key | Format | Values | Description |
 |---|---|---|---|---|---|---|

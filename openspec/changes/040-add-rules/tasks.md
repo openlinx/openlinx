@@ -126,7 +126,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 7. Response code and security Rules (v0.1)
 
-- [ ] 7.1 Drive "Blocked even when crawled anyway" at seam 2, and register `internal-blocked-by-robots-txt`; `internal_urls` gains `blocked_by_robots_txt` = 1 (design D2).
+- [x] 7.1 Drive "Blocked even when crawled anyway" at seam 2, and register `internal-blocked-by-robots-txt`; `internal_urls` gains `blocked_by_robots_txt` = 1 (design D2).
 - [ ] 7.2 Drive "Internal redirect" at seam 2, and register `internal-3xx`. Waits for `022-min`'s `redirect_url_id`.
 - [ ] 7.3 Drive "Two-hop chain" and "One hop is not a chain" at seam 2. This is a trivial pair: the walk along `redirect_url_id` and its boundary. Register `redirect-chain`. Waits for `022-min`'s `redirect_url_id`.
 - [ ] 7.4 Drive "Loop" at seam 2, using `in_redirect_loop`. Register `redirect-loop`. Waits for `022-min`'s `in_redirect_loop`.

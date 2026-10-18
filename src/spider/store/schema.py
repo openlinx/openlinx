@@ -788,9 +788,10 @@ def _analysed_page_ids() -> Select[Any]:
 internal_urls = _population(
     "internal_urls",
     select(urls.c.id.label("url_id")).where(
-        urls.c.is_internal == 1, urls.c.fetch_state.in_(("fetched", "error"))
+        urls.c.is_internal == 1,
+        or_(urls.c.fetch_state.in_(("fetched", "error")), urls.c.blocked_by_robots_txt == 1),
     ),
-    "The Internal URLs that were requested.",
+    "The Internal URLs that were requested, or that robots.txt disallows.",
 )
 analysed_pages = _population(
     "analysed_pages",

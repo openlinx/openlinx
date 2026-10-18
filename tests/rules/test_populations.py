@@ -35,6 +35,12 @@ OUTSIDE: dict[str, Callable[[TempWorkspace], Path]] = {
     "external_no_response": lambda workspace: crawl_with_url(
         workspace, "https://elsewhere.test/reset", failed("connection_refused"), is_internal=False
     )[0],
+    "external_blocked": lambda workspace: crawl_with_url(
+        workspace,
+        "https://elsewhere.test/private",
+        responded(200, blocked_by_robots_txt=True),
+        is_internal=False,
+    )[0],
     "not_parsed": lambda workspace: crawl_with_page(
         workspace,
         parse_error="parse_timeout",

@@ -18,10 +18,17 @@ from spider.store.records import (
     NewUrl,
     ParseError,
     RuleRow,
+    SkippedUrl,
 )
 from spider.store.rows import HandlerRows
 from spider.store.schema import urls
-from spider.store.urls import record_error, record_fetched, record_seed, record_unwritten
+from spider.store.urls import (
+    record_error,
+    record_fetched,
+    record_seed,
+    record_skipped,
+    record_unwritten,
+)
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, default_rule_rows
@@ -145,8 +152,11 @@ def crawl_with_url(
     return crawl.path, url_id
 
 
-def responded(status_code: int) -> Callable[[int], UrlUnit]:
-    """An outcome: the URL answered with this status, as a response that is not a Page."""
+def responded(
+    status_code: int, *, blocked_by_robots_txt: bool | None = None
+) -> Callable[[int], UrlUnit]:
+    """An outcome: the URL answered with this status, as a response that is not a Page,
+    with robots.txt's verdict on it as a Crawl records it."""
     return lambda url_id: record_fetched(
         FetchedUrl(
             url_id=url_id,
@@ -155,6 +165,7 @@ def responded(status_code: int) -> Callable[[int], UrlUnit]:
             fetched_at=_AT,
             response_time_ms=1,
             parsed=False,
+            blocked_by_robots_txt=blocked_by_robots_txt,
         )
     )
 
@@ -167,6 +178,18 @@ def failed(fetch_error: FetchError) -> Callable[[int], UrlUnit]:
             fetch_error=fetch_error,
             fetch_error_message=f"The request ended with {fetch_error}.",
             fetched_at=_AT,
+        )
+    )
+
+
+def kept_out_by_robots_txt() -> Callable[[int], UrlUnit]:
+    """An outcome: robots.txt disallows the URL, so the Crawl did not request it."""
+    return lambda url_id: record_skipped(
+        SkippedUrl(
+            url_id=url_id,
+            skip_reason="blocked_by_robots_txt",
+            crawl_depth=1,
+            blocked_by_robots_txt=True,
         )
     )
 

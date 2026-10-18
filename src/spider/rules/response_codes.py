@@ -15,6 +15,10 @@ WHERE fetch_state = 'error'
   -- failure, which the record_failed warning reports, not the site's.
   AND fetch_error <> 'record_failed'"""
 
+_INTERNAL_BLOCKED_BY_ROBOTS_TXT_SQL = """SELECT id AS url_id, NULL AS detail
+FROM urls JOIN internal_urls ON internal_urls.url_id = urls.id
+WHERE blocked_by_robots_txt = 1"""
+
 INTERNAL_4XX = Rule(
     id="internal-4xx",
     category="response_codes",
@@ -73,4 +77,22 @@ INTERNAL_NO_RESPONSE = Rule(
     reproduce_sql=_INTERNAL_NO_RESPONSE_SQL,
 )
 
-RULES = (INTERNAL_4XX, INTERNAL_5XX, INTERNAL_NO_RESPONSE)
+INTERNAL_BLOCKED_BY_ROBOTS_TXT = Rule(
+    id="internal-blocked-by-robots-txt",
+    category="response_codes",
+    issue_type="warning",
+    priority="medium",
+    population="internal_urls",
+    description="robots.txt disallows an Internal URL, whether or not the Crawl fetched it anyway.",
+    why_it_matters=(
+        "Search engines that obey robots.txt do not crawl the URL, so they cannot read "
+        "its content, and a page they cannot read rarely ranks."
+    ),
+    how_to_fix=(
+        "If the URL should be found in search, remove the Disallow rule that matches it "
+        "from robots.txt. If it should not, keep the rule and stop linking to it."
+    ),
+    reproduce_sql=_INTERNAL_BLOCKED_BY_ROBOTS_TXT_SQL,
+)
+
+RULES = (INTERNAL_4XX, INTERNAL_5XX, INTERNAL_NO_RESPONSE, INTERNAL_BLOCKED_BY_ROBOTS_TXT)
