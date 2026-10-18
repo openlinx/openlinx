@@ -445,6 +445,12 @@ pages = public_table(
         "and the empty string when nothing follows it.",
     ),
     Column(
+        "status_code",
+        Integer,
+        nullable=False,
+        comment="The HTTP status code of the Page's own response, equal to urls.status_code.",
+    ),
+    Column(
         "last_modified",
         Timestamp,
         comment="The Last-Modified response header as a UTC time; NULL when absent or not an "

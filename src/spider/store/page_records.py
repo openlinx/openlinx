@@ -11,6 +11,7 @@ class PageRow:
     url_encoded_address: str
     url_path: str
     url_query: str | None
+    status_code: int
     last_modified: datetime | None
     # From the HTML: NULL for a Page that is not analysed or whose Page extractor failed (D2).
     title_1: str | None = None

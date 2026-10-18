@@ -3,6 +3,8 @@
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from spider.crawl.hooks import UrlResult
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.page_handler import page_rows
@@ -105,6 +107,13 @@ def test_an_address_keeps_what_does_not_decode() -> None:
     row = _page(_fetched("https://xn--bcher-kva.xn--zz.test:8080/%FF%C3%BC%2F?q=%E2%82"))
 
     assert row.address == "https://bücher.xn--zz.test:8080/%FFü%2F?q=%E2%82"
+
+
+def test_a_fetched_page_without_a_status_code_fails_its_handler() -> None:
+    broken = _result("https://example.test/", fetch_state="fetched", content_type="text/html")
+
+    with pytest.raises(ValueError, match="status_code"):
+        page_rows(broken)
 
 
 def test_url_blocked_by_robots_txt_is_not_a_page() -> None:

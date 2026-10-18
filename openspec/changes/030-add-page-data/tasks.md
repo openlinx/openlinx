@@ -56,7 +56,7 @@ Task 4.0 is task 12.4, moved here; 4.3, 4.6, 4.7 and 4.10 moved to group 4b, and
 - [x] 4.0 Drive "Title in head noscript is ignored" at seam 4, a `test:` guard over the tree page preparation gives: red by mutating its noscript pre-pass off. It must stay green when page preparation parses with scripting on.
 - [x] 4.1 Drive "Path and query of the address" at seam 4, and add `url_path` and `url_query`.
 - [x] 4.2 Drive "Last-Modified is normalised to a timestamp" and "Invalid Last-Modified is NULL" at seam 4. This is a trivial pair: valid and invalid input. Add `last_modified`.
-- [ ] 4.4 Drive "Error Page keeps response data" at seam 3+6, and add `status_code`. The handler already builds a Page that is not analysed with NULL HTML columns.
+- [x] 4.4 Drive "Error Page keeps response data" at seam 3+6, and add `status_code`. The handler already builds a Page that is not analysed with NULL HTML columns.
 - [ ] 4.5 Drive "Crawl timestamp repeats fetched_at" at seam 3+6, with the injectable clock. Add `crawl_timestamp`.
 - [ ] 4.8 Drive "Crawl Depth is copied from the crawl engine" at seam 3+6, and add `crawl_depth`, copied from the URL's result; the depth pass (task 11.7) corrects it after the Crawl.
 - [ ] 4.9 Drive "Repeated values equal the urls row" at seam 3+6 over the columns that exist, and add `content_type` and `response_time_ms`. Task 4.6 extends the same test to the size columns.

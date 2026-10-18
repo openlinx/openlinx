@@ -2,7 +2,7 @@
 
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -16,6 +16,26 @@ def test_html_response_becomes_a_page(
     crawl_file = crawl_result(server.url("/about")).crawl_file
 
     assert query(crawl_file, "SELECT address FROM pages") == [(server.url("/about"),)]
+
+
+def test_error_page_keeps_response_data(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/missing">Missing</a>'),
+                "/missing": Status(404, body="<title>Not found</title>"),
+            }
+        )
+    )
+    missing = server.url("/missing")
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file, "SELECT status_code, title_1 FROM pages WHERE address = ?", [missing]
+    ) == [(404, None)]
 
 
 def test_image_response_is_not_a_page(

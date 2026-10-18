@@ -26,10 +26,18 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             url_encoded_address=result.url,
             url_path=url_path,
             url_query=url_query,
+            status_code=_required(result.status_code, "status_code"),
             last_modified=_last_modified(result.headers),
             **({} if data is None else msgspec.structs.asdict(data)),
         ),
     )
+
+
+def _required[T](value: T | None, name: str) -> T:
+    # A fetched URL always has its response's values; the engine reports a handler that raises.
+    if value is None:
+        raise ValueError(f"a fetched URL has no {name}")
+    return value
 
 
 def _last_modified(headers: tuple[tuple[str, str], ...]) -> datetime | None:
