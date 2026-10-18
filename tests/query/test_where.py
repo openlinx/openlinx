@@ -19,6 +19,7 @@ from sqlalchemy import (
 
 from spider.query.where import parse
 from spider.store.query.where import compile_where, register_where_functions
+from spider.store.types import Flag
 
 ROWS = Table(
     "rows",
@@ -28,6 +29,8 @@ ROWS = Table(
     Column("crawl_depth", Integer),
     Column("title_1", Text),
     Column("meta_description_1", Text),
+    # Declared as every boolean column of the schema is.
+    Column("flag", Flag),
 )
 
 type Rows = Mapping[str, Mapping[str, Any]]
@@ -107,3 +110,9 @@ def test_doubled_quotes_inside_a_string_and_double_quoted_string(
     rows = {"A": {"title_1": "It's here"}, "B": {"title_1": "Its here"}}
 
     assert matching(connection, where, rows) == ["A"]
+
+
+def test_boolean_literal(connection: Connection) -> None:
+    rows = {"A": {"flag": True}, "B": {"flag": False}}
+
+    assert matching(connection, "flag = true", rows) == ["A"]

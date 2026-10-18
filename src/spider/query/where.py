@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import NoReturn
 
-type Value = int | float | str
+type Value = int | float | str | bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +114,9 @@ def _predicate(tokens: _Tokens) -> Comparison | Contains | IsNull:
 
 
 def _value(tokens: _Tokens) -> Value:
+    for word, value in (("true", True), ("false", False)):
+        if tokens.keyword(word):
+            return value
     if tokens.peek("string"):
         return _unquoted(tokens.take("string", "a value"))
     number = tokens.take("number", "a value")
