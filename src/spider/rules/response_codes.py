@@ -90,7 +90,8 @@ INTERNAL_BLOCKED_BY_ROBOTS_TXT = Rule(
     ),
     how_to_fix=(
         "If the URL should be found in search, remove the Disallow rule that matches it "
-        "from robots.txt. If it should not, keep the rule and stop linking to it."
+        "from robots.txt. If it should not, a block is not enough, since search engines can "
+        "index a blocked URL from its links: allow it and give it a noindex instead."
     ),
     reproduce_sql=_INTERNAL_BLOCKED_BY_ROBOTS_TXT_SQL,
 )

@@ -132,7 +132,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 7.4 Drive "Loop" at seam 2, using `in_redirect_loop`. Register `redirect-loop`. Waits for `022-min`'s `in_redirect_loop`.
 - [x] 7.5 Drive "Content served over HTTP" and "HTTP URL that redirects to HTTPS" at seam 2. This is a trivial pair. Register `http-url` as Warning/High.
 - [x] 7.6 Docs: add `internal-blocked-by-robots-txt` and `http-url` to the catalogue in `docs/rules.md`; the rows of the 3 redirect Rules come with tasks 7.2 to 7.4.
-- [ ] 7.7 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [x] 7.7 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Canonical and directive Rules (v0.1, except the tasks marked v0.2)
 

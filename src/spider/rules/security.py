@@ -6,7 +6,8 @@ _HTTP_URL_SQL = """SELECT id AS url_id, json_object('status_code', status_code) 
 FROM urls JOIN internal_urls ON internal_urls.url_id = urls.id
 WHERE url LIKE 'http://%' AND status_code BETWEEN 200 AND 299"""
 
-# A Warning, so that it never lowers the Health Score (D3).
+# A Warning: a site may mean to serve plain HTTP, and only definite defects lower the Health
+# Score (D3).
 HTTP_URL = Rule(
     id="http-url",
     category="security",
