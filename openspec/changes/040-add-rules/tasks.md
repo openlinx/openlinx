@@ -133,6 +133,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 7.5 Drive "Content served over HTTP" and "HTTP URL that redirects to HTTPS" at seam 2. This is a trivial pair. Register `http-url` as Warning/High.
 - [x] 7.6 Docs: add `internal-blocked-by-robots-txt` and `http-url` to the catalogue in `docs/rules.md`; the rows of the 3 redirect Rules come with tasks 7.2 to 7.4.
 - [x] 7.7 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [x] 7.8 Close the project review of the Rules so far: every registered Rule fires on the fixture pages under `/rules/`, so the end-to-end comparisons of stored, live and reproduced Issues cover each one, and `docs/rules.md` points to `spider rules show` for a Rule's query instead of printing one.
 
 ## 8. Canonical and directive Rules (v0.1, except the tasks marked v0.2)
 

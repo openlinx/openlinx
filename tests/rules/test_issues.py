@@ -18,7 +18,7 @@ from spider.store.issues import (
     stored_issues,
 )
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site, Status
+from tests.fixture_site.routes import Page, Robots, Site, Status
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -30,14 +30,17 @@ TWO_UNTITLED_PAGES = Site(
     }
 )
 
-# The fixture pages under /rules/: each later Rule's slice adds the pages its Rule fires on.
+# The fixture pages under /rules/: each Rule fires on one of them, so a new Rule adds its own.
 RULE_PAGES = Site(
     {
         "/rules/": Page(
             body='<title>Rules</title><a href="/rules/untitled">Untitled</a> '
             '<a href="/rules/gone">Gone</a> <a href="/rules/down">Down</a> '
-            '<a href="/rules/reset">Reset</a> <a href="/rules/long-title">Long</a>'
+            '<a href="/rules/reset">Reset</a> <a href="/rules/long-title">Long</a> '
+            '<a href="/rules/twin-a">Twin</a> <a href="/rules/twin-b">Twin</a> '
+            '<a href="/rules/private">Private</a>'
         ),
+        "/robots.txt": Robots("User-agent: *\nDisallow: /rules/private\n"),
         "/rules/untitled": Page(body="<p>No title here.</p>"),
         "/rules/gone": Status(404, body="Gone", content_type="text/plain"),
         "/rules/down": Status(503, body="Down", content_type="text/plain"),
@@ -45,20 +48,13 @@ RULE_PAGES = Site(
         "/rules/long-title": Page(
             body="<title>Buy running shoes, trail boots and sandals online at low cost</title>"
         ),
+        "/rules/twin-a": Page(body="<title>Twins</title>"),
+        "/rules/twin-b": Page(body="<title>Twins</title>"),
+        "/rules/private": Page(body="<title>Private</title>"),
     }
 )
-# Every Rule that fires on RULE_PAGES: no Page has an h1 or a meta description, and the
-# fixture site is served over plain HTTP.
-FIRING_ON_RULE_PAGES = (
-    "h1-missing",
-    "http-url",
-    "internal-4xx",
-    "internal-5xx",
-    "internal-no-response",
-    "meta-description-missing",
-    "title-missing",
-    "title-too-long",
-)
+# Every Rule: a Rule without a fixture page that it fires on fails the comparisons below.
+FIRING_ON_RULE_PAGES = [rule.id for rule in RULES]
 
 
 def test_issue_row_counts_its_affected_urls(
@@ -99,7 +95,7 @@ def test_a_rule_s_query_returns_its_stored_affected_urls(
         for (rule_id,) in query(crawl_file, "SELECT DISTINCT rule_id FROM affected_urls")
     }
 
-    # Every slice Rule fires on RULE_PAGES, so the comparison is not vacuous.
+    # Every Rule fires on RULE_PAGES, so the comparison is not vacuous.
     assert (returned, sorted(stored)) == (stored, sorted(FIRING_ON_RULE_PAGES))
 
 
@@ -262,7 +258,7 @@ def test_live_and_materialised_issues_agree(
 
     stored_found = stored_issues(crawl_file, RULES)
 
-    # Every slice Rule fires on RULE_PAGES, so the comparison is not vacuous.
+    # Every Rule fires on RULE_PAGES, so the comparison is not vacuous.
     assert (
         live_issues(crawl_file, RULES),
         live,

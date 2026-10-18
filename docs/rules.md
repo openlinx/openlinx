@@ -127,12 +127,9 @@ Every Rule is one read-only `SELECT` over the crawl file that returns its Affect
 
 ```
 sqlite3 -readonly .spider/crawls/20260927-140312-k3f9.sqlite "SELECT reproduce_sql FROM rules WHERE id = 'title-missing'"
-SELECT url_id, NULL AS detail
-FROM pages
-WHERE title_count = 0 OR title_1 = ''
 ```
 
-Then run the printed query the same way. A query that leaves out a value its condition would otherwise match says why in an SQL comment. A crawl file someone else gave you is data, and its `reproduce_sql` may hold any SQL: take the query from `spider rules show <id>` instead, which prints the tool's own. The tool itself runs the queries of its own Rules, never the text a crawl file holds.
+It prints the query that `spider rules show title-missing` prints too. Then run the printed query the same way. A query that leaves out a value its condition would otherwise match says why in an SQL comment. A crawl file someone else gave you is data, and its `reproduce_sql` may hold any SQL: take the query from `spider rules show <id>` instead, which prints the tool's own. The tool itself runs the queries of its own Rules, never the text a crawl file holds.
 
 ### Live and stored Issues
 
