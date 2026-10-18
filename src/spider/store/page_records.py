@@ -18,6 +18,7 @@ class PageRow:
     status_code: int
     response_time_ms: int
     last_modified: datetime | None
+    set_cookie_count: int
     crawl_timestamp: datetime
     # From the HTML: NULL for a Page that is not analysed or whose Page extractor failed (D2).
     title_1: str | None = None
@@ -54,6 +55,9 @@ class CookieRow:
     name: str
     domain: str | None
     path: str | None
+    expires: datetime | None
+    max_age: int | None
     secure: bool
     http_only: bool
+    partitioned: bool
     same_site: SameSite | None

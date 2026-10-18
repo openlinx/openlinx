@@ -34,6 +34,7 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
             status_code=200,
             response_time_ms=12,
             last_modified=None,
+            set_cookie_count=0,
             crawl_timestamp=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
             crawl_depth=0,
         )

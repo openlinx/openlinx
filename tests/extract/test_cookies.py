@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from spider.crawl.hooks import UrlResult
 from spider.crawl.urls import NormalizedUrl
-from spider.extract.page_handler import cookie_rows
+from spider.extract.page_handler import cookie_rows, page_rows
 from spider.store.page_records import CookieRow
 
 
@@ -53,3 +53,50 @@ def test_a_repeated_attribute_takes_the_last_in_any_letter_case() -> None:
     (row,) = _cookies("a=1; Path=/x; secure; PATH=/y; samesite=STRICT")
 
     assert (row.path, row.secure, row.same_site) == ("/y", True, "strict")
+
+
+def test_cookie_count_matches_the_headers() -> None:
+    result = _result("a=1; Max-Age=3600", "b=2; Domain=.Example.test")
+    (page,) = page_rows(result)
+    first, second = cookie_rows(result)
+
+    assert (page.set_cookie_count, first.max_age, second.domain) == (2, 3600, "example.test")
+
+
+def test_a_max_age_that_is_no_64_bit_integer_is_null() -> None:
+    rows = _cookies(
+        "a=1; Max-Age=-1",
+        "b=1; Max-Age=1.5",
+        "c=1; Max-Age=99999999999999999999",
+        "d=1; Max-Age=\N{ARABIC-INDIC DIGIT ONE}",
+    )
+
+    assert [row.max_age for row in rows] == [-1, None, None, None]
+
+
+def test_an_empty_domain_is_null() -> None:
+    (row,) = _cookies("a=1; Domain=")
+
+    assert row.domain is None
+
+
+def test_expires_reads_two_digit_years_as_rfc_6265_does() -> None:
+    rows = _cookies(
+        "a=1; Expires=Wed, 21-Oct-15 07:28:00 GMT",
+        "b=1; Expires=Thu, 01-Jan-70 00:00:01 GMT",
+        "c=1; Expires=Tue, 01-Jan-69 00:00:00 GMT",
+        "d=1; Expires=soon",
+    )
+
+    assert [row.expires for row in rows] == [
+        datetime(2015, 10, 21, 7, 28, tzinfo=UTC),
+        datetime(1970, 1, 1, 0, 0, 1, tzinfo=UTC),
+        datetime(2069, 1, 1, tzinfo=UTC),
+        None,
+    ]
+
+
+def test_partitioned_is_a_flag() -> None:
+    rows = _cookies("a=1; Partitioned", "b=1")
+
+    assert [row.partitioned for row in rows] == [True, False]

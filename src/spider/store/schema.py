@@ -471,6 +471,13 @@ pages = public_table(
         "another Internet Message Format date; NULL when absent or neither.",
     ),
     Column(
+        "set_cookie_count",
+        Integer,
+        nullable=False,
+        comment="The number of Set-Cookie headers of the Page's response, equal to its rows in "
+        "cookies.",
+    ),
+    Column(
         "crawl_timestamp",
         Timestamp,
         nullable=False,

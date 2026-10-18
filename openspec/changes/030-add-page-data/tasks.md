@@ -64,7 +64,7 @@ Task 4.0 is task 12.4, moved here; 4.3, 4.6, 4.7 and 4.10 moved to group 4b, and
 ## 5. Cookies
 
 - [x] 5.1 Drive "Cookie attributes are stored" at seam 4, by parsing `Set-Cookie` headers into cookie records.
-- [ ] 5.2 Drive "Cookie count matches the headers" at seam 4, and add `set_cookie_count`.
+- [x] 5.2 Drive "Cookie count matches the headers" at seam 4, and add `set_cookie_count`.
 - [ ] 5.3 Drive "Cookie values are not stored in Page data" at seam 3+6. Create the `cookies` table, keyed by `(url_id, ordinal)` and `WITHOUT ROWID`, and the `cookies` handler with its writer. The test reads every table this change declares in `spider.store.schema`, so `links` and `page_sources` join it once they exist.
 - [ ] 5.4 Drive "Cookies of a redirect are stored" at seam 3+6 (a 302 Page with `Set-Cookie`).
 - [ ] 5.5 Docs: add the cookie concepts and the rule that this change's tables store no cookie value to `docs/page-data.md`.

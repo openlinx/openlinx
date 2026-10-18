@@ -1,8 +1,7 @@
 """The Page handler: the rows of a URL that is a Page (030-add-page-data D1, D2)."""
 
 from collections.abc import Iterable
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
+from datetime import datetime
 
 import msgspec
 
@@ -10,6 +9,7 @@ from spider.crawl.hooks import UrlResult
 from spider.crawl.pages import is_html_type
 from spider.extract.addresses import display_address, path_and_query
 from spider.extract.cookies import cookie_row
+from spider.extract.dates import internet_date
 from spider.extract.page_data import page_data_of
 from spider.store.page_records import CookieRow, PageRow
 
@@ -31,6 +31,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             status_code=_required(result.status_code, "status_code"),
             response_time_ms=_required(result.response_time_ms, "response_time_ms"),
             last_modified=_last_modified(result.headers),
+            set_cookie_count=sum(name.lower() == "set-cookie" for name, _ in result.headers),
             crawl_timestamp=_required(result.fetched_at, "fetched_at"),
             crawl_depth=result.crawl_depth,
             **({} if data is None else msgspec.structs.asdict(data)),
@@ -56,15 +57,7 @@ def _required[T](value: T | None, name: str) -> T:
 
 def _last_modified(headers: tuple[tuple[str, str], ...]) -> datetime | None:
     value = next((value for name, value in headers if name.lower() == "last-modified"), None)
-    if value is None:
-        return None
-    try:
-        moment = parsedate_to_datetime(value)
-        # An HTTP-date is always GMT, also in the asctime form, which names no zone. Converted
-        # here, so a time past the year 9999 in UTC is NULL, not a Page that fails to be written.
-        return (moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment).astimezone(UTC)
-    except (ValueError, OverflowError):
-        return None
+    return None if value is None else internet_date(value)
 
 
 def _is_page(result: UrlResult) -> bool:
