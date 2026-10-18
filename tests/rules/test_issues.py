@@ -47,9 +47,11 @@ RULE_PAGES = Site(
         ),
     }
 )
-# Every Rule that fires on RULE_PAGES: no Page has an h1 or a meta description.
+# Every Rule that fires on RULE_PAGES: no Page has an h1 or a meta description, and the
+# fixture site is served over plain HTTP.
 FIRING_ON_RULE_PAGES = (
     "h1-missing",
+    "http-url",
     "internal-4xx",
     "internal-5xx",
     "internal-no-response",
@@ -288,7 +290,12 @@ def test_a_crawl_stopped_by_the_url_limit_lists_its_issues_as_stored(
         [(issue.rule_id, issue.affected_count) for issue in read_issues(crawl_file, RULES)],
     ) == (
         [("stopped",)],
-        [("title-missing", 1), ("meta-description-missing", 1), ("h1-missing", 1)],
+        [
+            ("http-url", 1),
+            ("title-missing", 1),
+            ("meta-description-missing", 1),
+            ("h1-missing", 1),
+        ],
     )
 
 

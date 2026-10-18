@@ -42,6 +42,7 @@ APPLIES_TO = {
     "internal-5xx": "internal_urls",
     "internal-no-response": "internal_urls",
     "internal-blocked-by-robots-txt": "internal_urls",
+    "http-url": "internal_urls",
     "title-missing": "internal_pages",
     "title-duplicate": "internal_pages",
     "title-too-long": "internal_pages",
