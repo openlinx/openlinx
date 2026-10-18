@@ -87,7 +87,7 @@ def issue_list(
     fields: str | None = None,
 ) -> Page:
     # Imported here, as every store module: sqlalchemy stays off the CLI's startup path.
-    from spider.store.query import ordered_issues
+    from spider.store.query.issues import ordered_issues
     from spider.store.reading import reading
 
     # Checked before the Issues are read: on a running Crawl that runs every Rule's query.
@@ -117,7 +117,7 @@ def issue_detail(
 ) -> Page:
     """One Issue: its Rule as the Crawl recorded it, and a page of the Rule's Affected URLs,
     by keyset in URL order (design D4, D14)."""
-    from spider.store.query import affected_url_page, recorded_rule
+    from spider.store.query.issues import affected_url_page, recorded_rule
     from spider.store.reading import reading
 
     chosen = select_fields(fields, AFFECTED_URL_FIELDS)

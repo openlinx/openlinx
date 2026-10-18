@@ -1,7 +1,7 @@
 """The store's reads of the query Commands (050-add-query-and-segments D14; seam 2)."""
 
 from spider.rules.registry import RULES
-from spider.store.query import affected_url_page, ordered_issues, recorded_rule
+from spider.store.query.issues import affected_url_page, ordered_issues, recorded_rule
 from spider.store.reading import read_metadata, reading
 from spider.store.records import IssueFilters
 from tests.support.crawl_store import crawl_store
