@@ -6,7 +6,7 @@ import msgspec
 
 from spider.crawl.hooks import UrlResult
 from spider.crawl.pages import is_html_type
-from spider.extract.addresses import display_address
+from spider.extract.addresses import display_address, path_and_query
 from spider.extract.page_data import PAGE_DATA
 from spider.store.page_records import PageRow
 
@@ -15,11 +15,15 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
     if not _is_page(result):
         return ()
     data = result.outputs.get(PAGE_DATA.name)
+    address = display_address(result.url)
+    url_path, url_query = path_and_query(address)
     return (
         PageRow(
             url_id=result.url_id,
-            address=display_address(result.url),
+            address=address,
             url_encoded_address=result.url,
+            url_path=url_path,
+            url_query=url_query,
             **({} if data is None else msgspec.structs.asdict(data)),
         ),
     )

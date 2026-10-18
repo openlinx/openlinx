@@ -25,7 +25,13 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         url_id = writer.run(record_seed(url, is_internal=True, in_scope=True))
-        page = PageRow(url_id=url_id, address="https://bücher.test/über", url_encoded_address=url)
+        page = PageRow(
+            url_id=url_id,
+            address="https://bücher.test/über",
+            url_encoded_address=url,
+            url_path="/über",
+            url_query=None,
+        )
         fetched = FetchedUrl(
             url_id=url_id,
             status_code=200,

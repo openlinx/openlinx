@@ -432,6 +432,19 @@ pages = public_table(
         "(punycode) form and every non-ASCII character percent-encoded as UTF-8.",
     ),
     Column(
+        "url_path",
+        Text,
+        nullable=False,
+        comment="The path of address: from the first / after the host up to the first ?, or to "
+        "the end.",
+    ),
+    Column(
+        "url_query",
+        Text,
+        comment="The query of address: the text after the first ?; NULL when address has no ?, "
+        "and the empty string when nothing follows it.",
+    ),
+    Column(
         "title_1",
         Text,
         comment="The text of the Page's first title element without an svg, math or noscript "

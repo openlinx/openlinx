@@ -59,6 +59,23 @@ def test_invisible_and_control_characters_stay_encoded() -> None:
     assert row.address == "https://example.test/a%C2%A0b%E2%80%AEc%C2%9Bdü"
 
 
+def test_path_and_query_of_the_address() -> None:
+    rows = [
+        _page(_fetched(url))
+        for url in (
+            "https://example.test/%D0%9A%D0%B0%D1%82/a%2Fb?x=1&y=%C3%BC",
+            "https://example.test/a?",
+            "https://example.test/a",
+        )
+    ]
+
+    assert [(row.url_path, row.url_query) for row in rows] == [
+        ("/Кат/a%2Fb", "x=1&y=ü"),
+        ("/a", ""),
+        ("/a", None),
+    ]
+
+
 def test_an_address_keeps_what_does_not_decode() -> None:
     row = _page(_fetched("https://xn--bcher-kva.xn--zz.test:8080/%FF%C3%BC%2F?q=%E2%82"))
 

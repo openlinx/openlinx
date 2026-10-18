@@ -54,3 +54,10 @@ def _decoded(match: re.Match[str]) -> str:
             parts.append(character)
         position += size
     return "".join(parts)
+
+
+def path_and_query(address: str) -> tuple[str, str | None]:
+    """The query is None without a "?", and "" when nothing follows it."""
+    rest = address.partition("://")[2]
+    path, mark, query = rest[rest.find("/") :].partition("?")
+    return path, query if mark else None
