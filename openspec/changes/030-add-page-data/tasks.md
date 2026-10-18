@@ -59,7 +59,7 @@ Task 4.0 is task 12.4, moved here; 4.3, 4.6, 4.7 and 4.10 moved to group 4b, and
 - [x] 4.4 Drive "Error Page keeps response data" at seam 3+6, and add `status_code`. The handler already builds a Page that is not analysed with NULL HTML columns.
 - [x] 4.5 Drive "Crawl timestamp repeats fetched_at" at seam 3+6, with the injectable clock. Add `crawl_timestamp`.
 - [x] 4.8 Drive "Crawl Depth is copied from the crawl engine" at seam 3+6, and add `crawl_depth`, copied from the URL's result; the depth pass (task 11.7) corrects it after the Crawl.
-- [ ] 4.9 Drive "Repeated values equal the urls row" at seam 3+6 over the columns that exist, and add `content_type` and `response_time_ms`. Task 4.6 extends the same test to the size columns.
+- [x] 4.9 Drive "Repeated values equal the urls row" at seam 3+6 over the columns that exist, and add `content_type` and `response_time_ms`. Task 4.6 extends the same test to the size columns.
 - [ ] 4.12 Docs: add the identity and response concepts to `docs/page-data.md` (the address forms with their path and query, the timestamps, the values that repeat `urls`), as cross-column concepts only, since each column's description is its one definition; trim the per-column bullets of groups 1–3 to the same rule.
 - [ ] 4.13 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 

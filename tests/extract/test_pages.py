@@ -72,6 +72,27 @@ def test_crawl_depth_is_copied_from_the_crawl_engine(
     ) == [(2,)]
 
 
+def test_repeated_values_equal_the_urls_row(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/about": Page(body="<p>About</p>")}))
+    about = server.url("/about")
+
+    crawl_file = crawl_result(about).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT content_type, status_code, response_time_ms, crawl_depth, crawl_timestamp "
+        "FROM pages WHERE address = ?",
+        [about],
+    ) == query(
+        crawl_file,
+        "SELECT content_type, status_code, response_time_ms, crawl_depth, fetched_at "
+        "FROM urls WHERE url = ?",
+        [about],
+    )
+
+
 def test_image_response_is_not_a_page(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:

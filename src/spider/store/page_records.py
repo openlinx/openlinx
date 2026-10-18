@@ -11,7 +11,9 @@ class PageRow:
     url_encoded_address: str
     url_path: str
     url_query: str | None
+    content_type: str
     status_code: int
+    response_time_ms: int
     last_modified: datetime | None
     crawl_timestamp: datetime
     # From the HTML: NULL for a Page that is not analysed or whose Page extractor failed (D2).

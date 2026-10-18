@@ -445,10 +445,23 @@ pages = public_table(
         "and the empty string when nothing follows it.",
     ),
     Column(
+        "content_type",
+        Text,
+        nullable=False,
+        comment="The Content-Type response header as received, equal to urls.content_type.",
+    ),
+    Column(
         "status_code",
         Integer,
         nullable=False,
         comment="The HTTP status code of the Page's own response, equal to urls.status_code.",
+    ),
+    Column(
+        "response_time_ms",
+        Integer,
+        nullable=False,
+        comment="Time from sending the request to receiving the whole body, equal to "
+        "urls.response_time_ms.",
     ),
     Column(
         "last_modified",
