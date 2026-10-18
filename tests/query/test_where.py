@@ -27,7 +27,10 @@ ROWS = Table(
     Column("status_code", Integer),
     Column("crawl_depth", Integer),
     Column("title_1", Text),
+    Column("meta_description_1", Text),
 )
+
+type Rows = Mapping[str, Mapping[str, Any]]
 
 
 @pytest.fixture
@@ -40,9 +43,7 @@ def connection() -> Iterator[Connection]:
     engine.dispose()
 
 
-def matching(
-    connection: Connection, where: str, rows: Mapping[str, Mapping[str, Any]]
-) -> list[str]:
+def matching(connection: Connection, where: str, rows: Rows) -> list[str]:
     connection.execute(insert(ROWS), [{"name": name, **values} for name, values in rows.items()])
     chosen = select(ROWS.c.name).where(compile_where(parse(where), ROWS)).order_by(ROWS.c.name)
     return list(connection.execute(chosen).scalars())
@@ -84,6 +85,16 @@ def test_column_names_are_case_insensitive(connection: Connection) -> None:
     ],
 )
 def test_contains_ignores_case_in_any_script(
-    connection: Connection, rows: Mapping[str, Mapping[str, Any]], where: str, matched: list[str]
+    connection: Connection, rows: Rows, where: str, matched: list[str]
 ) -> None:
+    assert matching(connection, where, rows) == matched
+
+
+@pytest.mark.parametrize(
+    ("where", "matched"),
+    [("meta_description_1 is null", ["A"]), ("meta_description_1 is not null", ["B"])],
+)
+def test_is_null_and_is_not_null(connection: Connection, where: str, matched: list[str]) -> None:
+    rows: Rows = {"A": {"meta_description_1": None}, "B": {"meta_description_1": "Hello"}}
+
     assert matching(connection, where, rows) == matched

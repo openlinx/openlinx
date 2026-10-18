@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import Boolean, Column, ColumnElement, Table, Text, and_, cast
 from sqlalchemy.sql.functions import Function
 
-from spider.query.where import And, Comparison, Contains, Expression
+from spider.query.where import And, Comparison, Contains, Expression, IsNull
 
 # Registered on a connection and called by compiled expressions under the one name.
 _CONTAINS = "spider_contains"
@@ -40,6 +40,9 @@ def compile_where(expression: Expression, table: Table) -> ColumnElement[bool]:
             return and_(*(compile_where(operand, table) for operand in operands))
         case Comparison(column, compare, value):
             return _COMPARE[compare](_column(table, column), value)
+        case IsNull(column, negated):
+            found = _column(table, column)
+            return found.is_not(None) if negated else found.is_(None)
         case Contains(column, needle):
             return Function(_CONTAINS, cast(_column(table, column), Text), needle, type_=Boolean)
 

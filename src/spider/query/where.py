@@ -21,11 +21,17 @@ class Contains:
 
 
 @dataclass(frozen=True, slots=True)
+class IsNull:
+    column: str
+    negated: bool
+
+
+@dataclass(frozen=True, slots=True)
 class And:
     operands: tuple["Expression", ...]
 
 
-type Expression = Comparison | Contains | And
+type Expression = Comparison | Contains | IsNull | And
 
 _TOKENS = re.compile(
     r"\s*(?:(?P<number>-?\d+(?:\.\d+)?)|(?P<name>[A-Za-z][A-Za-z0-9_]*)|(?P<string>'[^']*')|(?P<compare><=|>=|!=|<>|=|<|>))"
@@ -85,8 +91,13 @@ class _Tokens:
             _fail(f"unexpected {self._tokens[self._next].text!r}")
 
 
-def _predicate(tokens: _Tokens) -> Comparison | Contains:
+def _predicate(tokens: _Tokens) -> Comparison | Contains | IsNull:
     column = tokens.take("name", "a column name")
+    if tokens.keyword("is"):
+        negated = tokens.keyword("not")
+        if not tokens.keyword("null"):
+            _fail("expected null")
+        return IsNull(column, negated)
     if tokens.keyword("contains"):
         return Contains(column, tokens.take("string", "a string")[1:-1])
     compare = tokens.take("compare", "a comparison")

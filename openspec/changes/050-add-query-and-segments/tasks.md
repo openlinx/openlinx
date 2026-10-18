@@ -40,7 +40,7 @@ Every group ends with a docs task and a review task.
 - [x] 2.3 Drive `Where filter language › and requires both`. Verify: red → green; one commit.
 - [x] 2.4 Drive `Where filter language › Column names are case-insensitive`. Verify: red → green; one commit.
 - [x] 2.5 Drive `Where filter language › contains ignores case in any script`: `spider_contains(CAST(col AS TEXT), needle)` (design D3), registered by `register_where_functions(dbapi_connection)` beside the compiler as a deterministic function that gives 0 for a null value. The test engine registers that same function through `event.listen("connect")`. The test adds a row named after no scenario, `status_code contains '0'`, since `contains` applies to the text form of any column. Verify: red → green; one commit.
-- [ ] 2.6 Drive `Where filter language › is null and is not null`. Verify: red → green; one commit.
+- [x] 2.6 Drive `Where filter language › is null and is not null`. Verify: red → green; one commit.
 - [ ] 2.7 Drive the pair `Where filter language › Doubled quotes inside a string` and `› Double-quoted string`. Verify: red → green; one commit.
 - [ ] 2.8 Drive `Where filter language › Boolean literal`: the test table declares `flag` with the store's `Flag` type, as every boolean column of the schema is; the compiler knows booleans by it, and `true` and `false` bind through it. Verify: red → green; one commit.
 - [ ] 2.9 Guard the pair `Null values in filters › A comparison excludes null values` and `› Not-equal excludes null values`. Without `not`, SQL's WHERE already drops a null value, so both pass at once and D2's `IS NOT NULL AND` wrap lands with `not` (9.3). Verify: red by mutation (`ifnull(col, 0) < 300`; `col IS NOT literal`); one `test:` commit.
