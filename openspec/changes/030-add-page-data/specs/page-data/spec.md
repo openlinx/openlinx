@@ -302,17 +302,19 @@ In every other case both columns SHALL be NULL. `redirect_type` also lists `java
 - **THEN** its row has `redirect_type` `http_refresh` and `redirect_url` `https://example.test/new`
 
 ### Requirement: Cookies from Set-Cookie headers
+**In short:** one `cookies` row per `Set-Cookie` header of a Page, with the cookie's name and attributes, never its value.
+
 The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` header on a Page's response, whatever the Page's status code. Its columns are:
 
 | Column | Type | Null | Format / values | Value |
 |---|---|---|---|---|
 | `url_id` | INTEGER, references `urls.id` | no | | the Page |
 | `ordinal` | INTEGER | no | | the header's position among the response's `Set-Cookie` headers, from 1 |
-| `name` | TEXT | no | | the text before the first `=`, trimmed |
+| `name` | TEXT | no | | the text before the first `=`, trimmed; the empty string when the header's first part has no `=` |
 | `domain` | TEXT | yes | | the `Domain` attribute, lowercased with any leading dot removed |
-| `path` | TEXT | yes | | the `Path` attribute |
-| `expires` | TEXT | yes | timestamp | the `Expires` attribute as a timestamp; NULL when absent or invalid |
-| `max_age` | INTEGER | yes | | the `Max-Age` attribute, in seconds |
+| `path` | TEXT | yes | | the `Path` attribute, trimmed, as sent rather than the path a browser would default to |
+| `expires` | TEXT | yes | timestamp | the `Expires` attribute as a timestamp, a two-digit year read as RFC 6265 reads it (70–99 as 19xx, 0–69 as 20xx); NULL when absent or invalid |
+| `max_age` | INTEGER | yes | | the `Max-Age` attribute, in seconds; NULL when it is not an optional `-` followed by digits, or does not fit a 64-bit INTEGER |
 | `secure` | INTEGER | no | boolean | 1 when the `Secure` attribute is present |
 | `http_only` | INTEGER | no | boolean | 1 when the `HttpOnly` attribute is present |
 | `partitioned` | INTEGER | no | boolean | 1 when the `Partitioned` attribute is present |
@@ -320,7 +322,7 @@ The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` 
 
 `(url_id, ordinal)` SHALL be the primary key, and the table SHALL be `WITHOUT ROWID`. `expires` and `max_age` keep their Screaming Frog names; their descriptions give their units.
 
-Attribute names SHALL be matched case-insensitively. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
+Attribute names SHALL be matched case-insensitively, and when an attribute is repeated, the last one SHALL apply. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
 
 The cookie value SHALL NOT be stored in any table this change adds. Together with `022-add-fetch-policy`, which stores `Set-Cookie` values as `***` in `response_headers`, no cookie value is stored anywhere in a crawl file.
 
