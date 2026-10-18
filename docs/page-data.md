@@ -1,6 +1,6 @@
 # Page data
 
-What a Crawl stores about each Page: the flat Page record in `pages`, one row per Page, read without joins. The spec is [openspec/changes/030-add-page-data/specs/page-data/spec.md](../openspec/changes/030-add-page-data/specs/page-data/spec.md), and the columns are listed in [schema.md](schema.md#table-pages). Terms follow [CONTEXT.md](../CONTEXT.md).
+What a Crawl stores about each Page: the flat Page record in `pages`, one row per Page, read without joins. The spec is [openspec/changes/030-add-page-data/specs/page-data/spec.md](../openspec/changes/030-add-page-data/specs/page-data/spec.md), and each column's one definition is its description in [schema.md](schema.md#table-pages); this page explains what several columns share. Terms follow [CONTEXT.md](../CONTEXT.md).
 
 ## What a Page is
 
@@ -40,28 +40,25 @@ The *text* of an element, such as a heading, is its text nodes in document order
 
 Every text column is whitespace-normalised, and breaks become spaces: each run of ASCII whitespace (tab, line feed, form feed, carriage return and space) becomes one space, and ASCII whitespace at either end is removed. A no-break space is text, so it is kept. A length is counted in Unicode code points of the normalised text.
 
-## Titles
+## Elements of the HTML
 
-- **`title_count`** is the number of `<title>` elements without an `svg`, `math` or `noscript` ancestor. A title inside an SVG image or a MathML formula names the image or the formula, not the Page; one inside `<foreignObject>` of an SVG image is left out too. Nothing inside `noscript` is an element to a browser that runs scripts, as a search engine's renderer does, so its titles are left out as well, while the Links inside it are still discovered (ruled by the user, 2026-10-14). It is 0 when the Page has none.
-- **`title_1`** and **`title_2`** are the normalised texts of the first and second of them, in document order. Each is NULL when there is no such element, and the empty string for `<title></title>`.
-- **`title_1_length`** and **`title_2_length`** are their lengths, NULL exactly when their text is.
+Titles, meta descriptions, meta keywords and headings follow one pattern:
+- **Which elements count.** An element with an `svg` or `math` ancestor does not count: it names a picture or a formula, not the Page, also inside an SVG image's `<foreignObject>`. Nothing inside `noscript` is an element, since page preparation reads the HTML as a browser that runs scripts does, so the metadata inside it is ignored, while the Links inside it are still discovered.
+- **Meta elements** count by their `name`, trimmed of ASCII whitespace and compared in any ASCII letter case. Their text is their `content`, and a missing `content` gives the empty string.
+- **Columns.** A `_count` column counts the elements, and is 0 when there are none. The `_1` and `_2` columns hold the normalised texts of the first two, in document order, NULL when there is no such element; meta keywords keep only the first, with no count. Each `_length` column is NULL exactly when its text is.
+- **Headings** take the text of the whole element, nested elements such as `<span>` included (see [Text](#text)).
 
-## Meta description and meta keywords
+## Response values
 
-- **`meta_description_count`** is the number of `<meta>` elements whose `name`, trimmed of ASCII whitespace, is `description` in any ASCII letter case, without an `svg`, `math` or `noscript` ancestor, like titles.
-- **`meta_description_1`** and **`meta_description_2`** are the whitespace-normalised `content` of the first and second of them. A `<meta name="description">` without `content` gives the empty string.
-- **`meta_keywords_1`** is the same for the first `<meta name="keywords">`.
-- Each has a `_length` column, NULL exactly when its text is.
-
-## Headings
-
-- **`h1_count`** and **`h2_count`** are the numbers of `<h1>` and `<h2>` elements without an `svg`, `math` or `noscript` ancestor, like titles.
-- **`h1_1`**, **`h1_2`**, **`h2_1`** and **`h2_2`** are the normalised texts of the first and second of each, in document order, with nested elements such as `<span>` included.
-- Each has a `_length` column, NULL exactly when its text is.
+- **Copies of `urls`.** `content_type`, `status_code`, `response_time_ms` and `crawl_depth` repeat the URL's row, and `crawl_timestamp` repeats its `fetched_at`. They are written in the URL's own unit, from the same response, so they always agree.
+- **Times** are UTC, in the `timestamp` format of [schema.md](schema.md#conventions). `last_modified` reads the `Last-Modified` header as an HTTP-date, in any of its three forms. An HTTP-date is always GMT, also in the obsolete asctime form, which names no zone. A value that is not an HTTP-date gives NULL.
+- **Every Page** has these values, analysed or not, since they come from the response, not from the HTML.
 
 ## The two address forms
 
 - **`url_encoded_address`** is the URL as the Crawl requested it, equal to `urls.url`: the host in IDNA (punycode) form and every non-ASCII character percent-encoded as UTF-8, such as `https://xn--bcher-kva.test/%C3%BCber%20uns`.
 - **`address`** is the same URL for people: the host in Unicode, and every percent-encoded UTF-8 sequence of a non-ASCII character decoded, such as `https://bücher.test/über%20uns`. Percent-encoded ASCII characters, such as `%20` and `%2F`, stay encoded, and so does what does not decode: a byte that is no UTF-8, or a punycode label that is not valid. Controls, format characters such as a right-to-left override, and spaces and separators such as the no-break space stay encoded too (Unicode categories `Cc`, `Cf`, `Zs`, `Zl` and `Zp`), so an address never hides or spoofs what was requested.
+
+- **`url_path`** and **`url_query`** are cut from `address`, so they hold non-ASCII characters decoded, while an escaped `/` stays escaped. The query is NULL when `address` has no `?`, and the empty string after a bare `?`.
 
 `address` is unique, through the index `pages_address`, so a Page can be found by the URL a person reads: normalising an `address` gives back its `url_encoded_address`, so two URLs never share one.
