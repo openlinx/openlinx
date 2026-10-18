@@ -41,7 +41,7 @@ A change's `design.md` names the seams it is tested at. Adding a new seam is a d
 | `tests/output/` | 4, the output layer's pure logic |
 | `tests/crawl/` | 4, the crawler's pure logic, such as URL normalisation; 3 and 3+6, Crawls of the fixture site; 2, the Crawl Service |
 | `tests/rules/` | 4, the Rule catalogue; 2, Rule queries, the Issues pass and the Issues reader over crawl files; 3+6, Crawls of the fixture site read through the Rule tables |
-| `tests/query/` | 2, the Query Service over crawl files |
+| `tests/query/` | 2, the Query Service over crawl files; 4, the `--where` language |
 | `tests/extract/` | 4, the Page extractor and the Page handler; 3+6, Crawls of the fixture site read through the Page data tables |
 | `tests/contract/` | 6, the store contract (`test_schema.py`, which reads `docs/schema.md` with `spider.services.schema_doc.parse_tables`), and the hand-written expected JSON of the CLI contract tests (`commands/`) |
 | `tests/js/` | 9, the Report script |

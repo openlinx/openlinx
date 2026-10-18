@@ -1,6 +1,6 @@
 # Querying a Crawl
 
-How to read a Crawl's Issues with `spider issues`, and one Issue with `spider issue <rule-id>`, and the where language that filters rows by their columns. The spec is [openspec/changes/050-add-query-and-segments/specs/querying/spec.md](../openspec/changes/050-add-query-and-segments/specs/querying/spec.md), and terms follow [CONTEXT.md](../CONTEXT.md). The Rules behind the Issues are described in [rules.md](rules.md).
+How to read a Crawl's Issues with `spider issues`, and one Issue with `spider issue <rule-id>`; it also describes the where language, which filters rows by their columns. The spec is [openspec/changes/050-add-query-and-segments/specs/querying/spec.md](../openspec/changes/050-add-query-and-segments/specs/querying/spec.md), and terms follow [CONTEXT.md](../CONTEXT.md). The Rules behind the Issues are described in [rules.md](rules.md).
 
 Every query Command reads the Crawl that `--crawl` selects: `latest` (the default, the Crawl that started last), a crawl id, or the path of a crawl file. It never changes the crawl file. In WAL mode, the default, each run reads one snapshot of it, so its numbers agree with each other even while the Crawl is still writing. A crawl file in rollback-journal mode, such as one on a network share, is read statement by statement instead, so a run during a Crawl may see rows that one of its statements missed.
 
@@ -68,11 +68,12 @@ Its output:
 
 ## The where language
 
-A `--where` expression picks rows by their columns. It is parsed and checked before any query runs, and it never reaches SQLite as text: every value is bound as a parameter.
+A `--where` expression picks rows by their columns. It is parsed before any query runs, and it never reaches SQLite as text: every value is bound as a parameter.
 
 ```
 status_code >= 400
 status_code = 404 and crawl_depth > 3
+crawl_depth <= 2 and status_code <> 200
 title_1 contains 'каталог'
 meta_description_1 is not null
 ```
@@ -96,9 +97,9 @@ meta_description_1 is not null
 --where "title_1 contains 'blog' and status_code = 200"
 ```
 
-Inside the double quotes, the shell still reads `$`, and PowerShell also reads the backtick.
+Inside the double quotes, PowerShell and POSIX shells still expand `$` and read the backtick, and cmd expands `%NAME%`.
 
-**Errors:** an expression that breaks this grammar fails with `invalid_where` (exit code 2) before any query runs, with a message that says what was expected and a hint that recalls the grammar.
+**Errors:** an expression that breaks this grammar fails with `invalid_where` (exit code 2) before any query runs, with a message that names the token it could not read, or what it expected there, and a hint that recalls the grammar.
 
 ## What a query costs
 

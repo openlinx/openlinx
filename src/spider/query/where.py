@@ -2,18 +2,19 @@
 
 import re
 from dataclasses import dataclass
-from typing import NoReturn
+from typing import Literal, NoReturn
 
 from spider.output.codes import INVALID_WHERE
 from spider.output.diagnostics import SpiderError
 
 type Value = int | float | str | bool
+type Compare = Literal["=", "!=", "<", "<=", ">", ">="]
 
 
 @dataclass(frozen=True, slots=True)
 class Comparison:
     column: str
-    operator: str
+    operator: Compare
     value: Value
 
 
@@ -46,6 +47,17 @@ _TOKENS = re.compile(
     r")"
 )
 
+# <> is another spelling of !=, so the syntax tree has one.
+_COMPARES: dict[str, Compare] = {
+    "=": "=",
+    "!=": "!=",
+    "<>": "!=",
+    "<": "<",
+    "<=": "<=",
+    ">": ">",
+    ">=": ">=",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class _Token:
@@ -56,7 +68,7 @@ class _Token:
 def parse(text: str) -> Expression:
     tokens = _Tokens(_tokenize(text))
     operands = [_predicate(tokens)]
-    while tokens.keyword("and"):
+    while tokens.accept("and"):
         operands.append(_predicate(tokens))
     tokens.expect_end()
     return operands[0] if len(operands) == 1 else And(tuple(operands))
@@ -79,46 +91,48 @@ class _Tokens:
         self._tokens = tokens
         self._next = 0
 
+    def peek(self, kind: str) -> bool:
+        current = self._current()
+        return current is not None and current.kind == kind
+
     def take(self, kind: str, expected: str) -> str:
-        if self._next == len(self._tokens) or self._tokens[self._next].kind != kind:
+        if not self.peek(kind):
             _fail(f"expected {expected}")
         self._next += 1
         return self._tokens[self._next - 1].text
 
-    def peek(self, kind: str) -> bool:
-        return self._next < len(self._tokens) and self._tokens[self._next].kind == kind
-
-    def keyword(self, word: str) -> bool:
-        """Whether the next token is the keyword `word`, in any case, which it then consumes."""
-        if self._next == len(self._tokens):
-            return False
-        token = self._tokens[self._next]
-        if token.kind != "name" or token.text.lower() != word:
+    def accept(self, word: str) -> bool:
+        current = self._current()
+        if current is None or current.kind != "name" or current.text.lower() != word:
             return False
         self._next += 1
         return True
 
     def expect_end(self) -> None:
-        if self._next < len(self._tokens):
-            _fail(f"unexpected {self._tokens[self._next].text!r}")
+        current = self._current()
+        if current is not None:
+            _fail(f"unexpected {current.text!r}")
+
+    def _current(self) -> _Token | None:
+        return self._tokens[self._next] if self._next < len(self._tokens) else None
 
 
 def _predicate(tokens: _Tokens) -> Comparison | Contains | IsNull:
     column = tokens.take("name", "a column name")
-    if tokens.keyword("is"):
-        negated = tokens.keyword("not")
-        if not tokens.keyword("null"):
+    if tokens.accept("is"):
+        negated = tokens.accept("not")
+        if not tokens.accept("null"):
             _fail("expected null")
         return IsNull(column, negated)
-    if tokens.keyword("contains"):
+    if tokens.accept("contains"):
         return Contains(column, _unquoted(tokens.take("string", "a string")))
-    compare = tokens.take("compare", "a comparison")
+    compare = _COMPARES[tokens.take("compare", "a comparison")]
     return Comparison(column, compare, _value(tokens))
 
 
 def _value(tokens: _Tokens) -> Value:
     for word, value in (("true", True), ("false", False)):
-        if tokens.keyword(word):
+        if tokens.accept(word):
             return value
     if tokens.peek("string"):
         return _unquoted(tokens.take("string", "a value"))

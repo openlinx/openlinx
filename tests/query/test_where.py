@@ -1,4 +1,4 @@
-"""The --where language on a table of its own (050-add-query-and-segments, querying; seam 4)."""
+"""The --where language on a table of its own (050-add-query-and-segments D1, D3; seam 4)."""
 
 from collections.abc import Iterator, Mapping
 from typing import Any
@@ -82,7 +82,7 @@ def test_column_names_are_case_insensitive(connection: Connection) -> None:
     ("rows", "where", "matched"),
     [
         (
-            # The scenario's titles are Russian, so its O is Cyrillic.
+            # Not our fault: ruff takes the Russian title's Cyrillic O for a Latin look-alike.
             {"A": {"title_1": "Каталог товаров"}, "B": {"title_1": "О компании"}},  # noqa: RUF001
             "title_1 contains 'КАТАЛОГ'",
             ["A"],
@@ -122,6 +122,26 @@ def test_boolean_literal(connection: Connection) -> None:
     assert matching(connection, "flag = true", rows) == ["A"]
 
 
+@pytest.mark.parametrize(
+    ("where", "matched"),
+    [
+        ("status_code = 404 AND crawl_depth > 3", ["B"]),
+        ("title_1 CONTAINS 'blog'", ["A"]),
+        ("title_1 Is Not NULL", ["A", "B"]),
+        ("flag = TRUE", ["A"]),
+    ],
+)
+def test_keywords_of_v0_1_are_case_insensitive(
+    connection: Connection, where: str, matched: list[str]
+) -> None:
+    rows: Rows = {
+        "A": {"status_code": 200, "crawl_depth": 1, "title_1": "Blog", "flag": True},
+        "B": {"status_code": 404, "crawl_depth": 5, "title_1": "Shop", "flag": False},
+    }
+
+    assert matching(connection, where, rows) == matched
+
+
 WORD_COUNTS: Rows = {"A": {"word_count": 250}, "B": {"word_count": 800}, "C": {"word_count": None}}
 
 
@@ -138,32 +158,30 @@ PRINTABLE = st.characters(exclude_categories=("C", "Zl", "Zp"))
 GRAMMAR = st.sampled_from(
     [
         " ",
-        *[
-            "status_code",
-            "AND",
-            "and",
-            "contains",
-            "is",
-            "not",
-            "null",
-            "true",
-            "=",
-            "!=",
-            "<>",
-            "<=",
-            ">",
-            "404",
-            "-1.5",
-            "'a''b'",
-            '"x"',
-            "'",
-            '"',
-            "(",
-            ")",
-            "~",
-            ",",
-            ";",
-        ],
+        "status_code",
+        "AND",
+        "and",
+        "contains",
+        "is",
+        "not",
+        "null",
+        "true",
+        "=",
+        "!=",
+        "<>",
+        "<=",
+        ">",
+        "404",
+        "-1.5",
+        "'a''b'",
+        '"x"',
+        "'",
+        '"',
+        "(",
+        ")",
+        "~",
+        ",",
+        ";",
     ]
 )
 
@@ -200,7 +218,4 @@ def outcome(text: str) -> str:
     ],
 )
 def test_the_operators_of_v0_2_are_syntax_errors(where: str) -> None:
-    with pytest.raises(SpiderError) as raised:
-        parse(where)
-
-    assert raised.value.code == "invalid_where"
+    assert outcome(where) == "invalid_where"
