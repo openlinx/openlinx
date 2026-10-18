@@ -33,6 +33,7 @@ def _fetched(url: str, **values: Any) -> UrlResult:
         fetch_state="fetched",
         status_code=200,
         content_type="text/html; charset=utf-8",
+        fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
         **values,
     )
 

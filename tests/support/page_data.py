@@ -40,6 +40,7 @@ def page_row(html: str | bytes, content_type: str = "text/html; charset=utf-8") 
         fetch_state="fetched",
         status_code=200,
         content_type=content_type,
+        fetched_at=response.fetched_at,
         parsed=True,
         headers=response.headers,
         outputs=dict(prepared.outputs),

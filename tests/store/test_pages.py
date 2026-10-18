@@ -33,6 +33,7 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
             url_query=None,
             status_code=200,
             last_modified=None,
+            crawl_timestamp=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
         )
         fetched = FetchedUrl(
             url_id=url_id,

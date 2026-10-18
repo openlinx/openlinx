@@ -457,6 +457,12 @@ pages = public_table(
         "HTTP-date.",
     ),
     Column(
+        "crawl_timestamp",
+        Timestamp,
+        nullable=False,
+        comment="The UTC time of the Page's request, equal to urls.fetched_at.",
+    ),
+    Column(
         "title_1",
         Text,
         comment="The text of the Page's first title element without an svg, math or noscript "

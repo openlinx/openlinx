@@ -1,8 +1,11 @@
 """Page rows (030-add-page-data, page-data; seam 3+6)."""
 
+from datetime import UTC, datetime
+
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
+from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -36,6 +39,17 @@ def test_error_page_keeps_response_data(
     assert query(
         crawl_file, "SELECT status_code, title_1 FROM pages WHERE address = ?", [missing]
     ) == [(404, None)]
+
+
+def test_crawl_timestamp_repeats_fetched_at(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/about": Page(body="<p>About</p>")}))
+    clock = FakeClock(start=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC))
+
+    crawl_file = crawl_result(server.url("/about"), clock=clock).crawl_file
+
+    assert query(crawl_file, "SELECT crawl_timestamp FROM pages") == [("2026-01-02T03:04:05.000Z",)]
 
 
 def test_image_response_is_not_a_page(

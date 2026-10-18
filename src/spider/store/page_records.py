@@ -13,6 +13,7 @@ class PageRow:
     url_query: str | None
     status_code: int
     last_modified: datetime | None
+    crawl_timestamp: datetime
     # From the HTML: NULL for a Page that is not analysed or whose Page extractor failed (D2).
     title_1: str | None = None
     title_1_length: int | None = None
