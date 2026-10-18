@@ -29,6 +29,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             status_code=_required(result.status_code, "status_code"),
             last_modified=_last_modified(result.headers),
             crawl_timestamp=_required(result.fetched_at, "fetched_at"),
+            crawl_depth=result.crawl_depth,
             **({} if data is None else msgspec.structs.asdict(data)),
         ),
     )

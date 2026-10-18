@@ -52,6 +52,26 @@ def test_crawl_timestamp_repeats_fetched_at(
     assert query(crawl_file, "SELECT crawl_timestamp FROM pages") == [("2026-01-02T03:04:05.000Z",)]
 
 
+def test_crawl_depth_is_copied_from_the_crawl_engine(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/l1">1</a>'),
+                "/l1": Page(body='<a href="/l2">2</a>'),
+                "/l2": Page(body="<p>Two</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file, "SELECT crawl_depth FROM pages WHERE address = ?", [server.url("/l2")]
+    ) == [(2,)]
+
+
 def test_image_response_is_not_a_page(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:

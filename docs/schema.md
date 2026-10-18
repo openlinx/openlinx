@@ -195,6 +195,7 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `h2_2` | TEXT | yes | | | | The text of the Page's second h2 element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `h2_2_length` | INTEGER | yes | | | | The length of h2_2 in Unicode code points; NULL exactly when h2_2 is. |
 | `h2_count` | INTEGER | yes | | | | The number of h2 elements without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
+| `crawl_depth` | INTEGER | no | | | | Crawl Depth, equal to urls.crawl_depth: 0 for Seeds. |
 
 ### Indexes
 

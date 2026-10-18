@@ -597,6 +597,12 @@ pages = public_table(
         comment="The number of h2 elements without an svg, math or noscript ancestor; NULL when "
         "the Page is not analysed or its Page extractor failed.",
     ),
+    Column(
+        "crawl_depth",
+        Integer,
+        nullable=False,
+        comment="Crawl Depth, equal to urls.crawl_depth: 0 for Seeds.",
+    ),
     comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
     "an HTML document, whatever its status code.",
     change=30,
