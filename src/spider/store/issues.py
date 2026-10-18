@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     bindparam,
     delete,
+    distinct,
     false,
     func,
     insert,
@@ -22,10 +23,11 @@ from sqlalchemy import (
     union_all,
 )
 
+from spider.rules.health import health_score
 from spider.rules.model import Rule, rule_not_computable, rule_not_found
 from spider.store.reading import reading
-from spider.store.records import AffectedUrl, CrawlState, Issue, UrlIssue
-from spider.store.schema import affected_urls, crawl, issues, rules
+from spider.store.records import AffectedUrl, CrawlState, Health, Issue, UrlIssue
+from spider.store.schema import affected_urls, crawl, issues, pages, rules
 from spider.store.writer import CrawlWriter
 
 _DELETE = delete(affected_urls).where(affected_urls.c.rule_id == bindparam("rule_id"))
@@ -45,6 +47,10 @@ _STORED_URL_ISSUES = select(affected_urls.c.rule_id, affected_urls.c.detail).whe
 _STORED_ISSUES = select(issues)
 _STORED_AFFECTED_URLS = select(affected_urls.c.url_id, affected_urls.c.detail)
 _NO_AFFECTED_URLS = _STORED_AFFECTED_URLS.where(false())
+# The selectables of health(): every Internal Page, and the Affected URLs as stored.
+INTERNAL_PAGES = select(pages.c.url_id)
+STORED_AFFECTED_URLS = select(affected_urls.c.rule_id, affected_urls.c.url_id)
+_ISSUE_RULES = select(rules.c.id).where(rules.c.issue_type == "issue")
 
 
 def evaluate_rule(crawl_file: Path, rule: Rule) -> list[AffectedUrl]:
@@ -64,6 +70,25 @@ def affected_urls_unit(rule: Rule) -> Callable[[Connection], None]:
         connection.execute(statement)
 
     return unit
+
+
+def health(connection: Connection, pages: Select[Any], affected: Select[Any]) -> Health:
+    """The Health Score of the Pages whose url_id `pages` selects, counted against the Affected
+    URLs, rule_id and url_id, that `affected` selects (D8)."""
+    page_ids = pages.subquery()
+    found = affected.subquery()
+    counted = select(
+        select(func.count()).select_from(page_ids).scalar_subquery(),
+        select(func.count(distinct(found.c.url_id)))
+        .where(found.c.url_id.in_(select(page_ids.c.url_id)), found.c.rule_id.in_(_ISSUE_RULES))
+        .scalar_subquery(),
+    )
+    internal, affected_pages = connection.execute(counted).one()
+    return Health(
+        score=health_score(internal, affected_pages),
+        internal_pages=internal,
+        affected_pages=affected_pages,
+    )
 
 
 async def materialise_issues(writer: CrawlWriter, catalogue: Sequence[Rule]) -> None:

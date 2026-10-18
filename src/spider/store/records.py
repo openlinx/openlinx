@@ -150,6 +150,14 @@ class UrlIssue:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Health:
+    # None when there is no Internal Page to rate.
+    score: int | None
+    internal_pages: int
+    affected_pages: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Issue:
     rule_id: str
     category: RuleCategory
