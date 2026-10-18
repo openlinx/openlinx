@@ -49,3 +49,13 @@ def test_comparison(connection: Connection) -> None:
     rows = {"A": {"status_code": 200}, "B": {"status_code": 404}, "C": {"status_code": 500}}
 
     assert matching(connection, "status_code >= 400", rows) == ["B", "C"]
+
+
+def test_and_requires_both(connection: Connection) -> None:
+    rows = {
+        "A": {"status_code": 404, "crawl_depth": 1},
+        "B": {"status_code": 404, "crawl_depth": 5},
+        "C": {"status_code": 200, "crawl_depth": 5},
+    }
+
+    assert matching(connection, "status_code = 404 and crawl_depth > 3", rows) == ["B"]

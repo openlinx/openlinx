@@ -14,7 +14,12 @@ class Comparison:
     value: Value
 
 
-type Expression = Comparison
+@dataclass(frozen=True, slots=True)
+class And:
+    operands: tuple["Expression", ...]
+
+
+type Expression = Comparison | And
 
 _TOKENS = re.compile(
     r"\s*(?:(?P<number>-?\d+(?:\.\d+)?)|(?P<name>[A-Za-z][A-Za-z0-9_]*)|(?P<compare><=|>=|!=|<>|=|<|>))"
@@ -29,9 +34,11 @@ class _Token:
 
 def parse(text: str) -> Expression:
     tokens = _Tokens(_tokenize(text))
-    expression = _comparison(tokens)
+    operands: list[Expression] = [_comparison(tokens)]
+    while tokens.keyword("and"):
+        operands.append(_comparison(tokens))
     tokens.expect_end()
-    return expression
+    return operands[0] if len(operands) == 1 else And(tuple(operands))
 
 
 def _tokenize(text: str) -> list[_Token]:
@@ -56,6 +63,16 @@ class _Tokens:
             _fail(f"expected {expected}")
         self._next += 1
         return self._tokens[self._next - 1].text
+
+    def keyword(self, word: str) -> bool:
+        """Whether the next token is the keyword `word`, in any case, which it then consumes."""
+        if self._next == len(self._tokens):
+            return False
+        token = self._tokens[self._next]
+        if token.kind != "name" or token.text.lower() != word:
+            return False
+        self._next += 1
+        return True
 
     def expect_end(self) -> None:
         if self._next < len(self._tokens):

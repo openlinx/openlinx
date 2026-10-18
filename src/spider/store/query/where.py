@@ -4,9 +4,9 @@ import operator
 from collections.abc import Callable
 from typing import Any
 
-from sqlalchemy import ColumnElement, Table
+from sqlalchemy import ColumnElement, Table, and_
 
-from spider.query.where import Expression
+from spider.query.where import And, Comparison, Expression
 
 _COMPARE: dict[str, Callable[[Any, Any], ColumnElement[bool]]] = {
     "=": operator.eq,
@@ -21,4 +21,8 @@ _COMPARE: dict[str, Callable[[Any, Any], ColumnElement[bool]]] = {
 
 def compile_where(expression: Expression, table: Table) -> ColumnElement[bool]:
     """The expression as a condition on `table`, every value bound as a parameter."""
-    return _COMPARE[expression.operator](table.c[expression.column], expression.value)
+    match expression:
+        case And(operands):
+            return and_(*(compile_where(operand, table) for operand in operands))
+        case Comparison(column, compare, value):
+            return _COMPARE[compare](table.c[column], value)
