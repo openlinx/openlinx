@@ -98,3 +98,12 @@ def test_is_null_and_is_not_null(connection: Connection, where: str, matched: li
     rows: Rows = {"A": {"meta_description_1": None}, "B": {"meta_description_1": "Hello"}}
 
     assert matching(connection, where, rows) == matched
+
+
+@pytest.mark.parametrize("where", ["title_1 = 'It''s here'", 'title_1 = "It\'s here"'])
+def test_doubled_quotes_inside_a_string_and_double_quoted_string(
+    connection: Connection, where: str
+) -> None:
+    rows = {"A": {"title_1": "It's here"}, "B": {"title_1": "Its here"}}
+
+    assert matching(connection, where, rows) == ["A"]

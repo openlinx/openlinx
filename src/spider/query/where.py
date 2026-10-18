@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import NoReturn
 
-type Value = int | float
+type Value = int | float | str
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,7 +34,13 @@ class And:
 type Expression = Comparison | Contains | IsNull | And
 
 _TOKENS = re.compile(
-    r"\s*(?:(?P<number>-?\d+(?:\.\d+)?)|(?P<name>[A-Za-z][A-Za-z0-9_]*)|(?P<string>'[^']*')|(?P<compare><=|>=|!=|<>|=|<|>))"
+    r"\s*(?:"
+    r"(?P<number>-?\d+(?:\.\d+)?)"
+    r"|(?P<name>[A-Za-z][A-Za-z0-9_]*)"
+    r"|(?P<string>'(?:[^']|'')*'"
+    r'|"(?:[^"]|"")*")'
+    r"|(?P<compare><=|>=|!=|<>|=|<|>)"
+    r")"
 )
 
 
@@ -76,6 +82,9 @@ class _Tokens:
         self._next += 1
         return self._tokens[self._next - 1].text
 
+    def peek(self, kind: str) -> bool:
+        return self._next < len(self._tokens) and self._tokens[self._next].kind == kind
+
     def keyword(self, word: str) -> bool:
         """Whether the next token is the keyword `word`, in any case, which it then consumes."""
         if self._next == len(self._tokens):
@@ -99,10 +108,22 @@ def _predicate(tokens: _Tokens) -> Comparison | Contains | IsNull:
             _fail("expected null")
         return IsNull(column, negated)
     if tokens.keyword("contains"):
-        return Contains(column, tokens.take("string", "a string")[1:-1])
+        return Contains(column, _unquoted(tokens.take("string", "a string")))
     compare = tokens.take("compare", "a comparison")
+    return Comparison(column, compare, _value(tokens))
+
+
+def _value(tokens: _Tokens) -> Value:
+    if tokens.peek("string"):
+        return _unquoted(tokens.take("string", "a value"))
     number = tokens.take("number", "a value")
-    return Comparison(column, compare, float(number) if "." in number else int(number))
+    return float(number) if "." in number else int(number)
+
+
+def _unquoted(string: str) -> str:
+    # A quote inside a string is written twice; backslashes mean nothing.
+    quote = string[0]
+    return string[1:-1].replace(quote * 2, quote)
 
 
 def _fail(problem: str) -> NoReturn:
