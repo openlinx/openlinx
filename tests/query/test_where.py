@@ -12,12 +12,13 @@ from sqlalchemy import (
     Table,
     Text,
     create_engine,
+    event,
     insert,
     select,
 )
 
 from spider.query.where import parse
-from spider.store.query.where import compile_where
+from spider.store.query.where import compile_where, register_where_functions
 
 ROWS = Table(
     "rows",
@@ -25,12 +26,14 @@ ROWS = Table(
     Column("name", Text, primary_key=True),
     Column("status_code", Integer),
     Column("crawl_depth", Integer),
+    Column("title_1", Text),
 )
 
 
 @pytest.fixture
 def connection() -> Iterator[Connection]:
     engine = create_engine("sqlite://")
+    event.listen(engine, "connect", register_where_functions)
     with engine.connect() as opened:
         ROWS.create(opened)
         yield opened
@@ -65,3 +68,22 @@ def test_column_names_are_case_insensitive(connection: Connection) -> None:
     rows = {"A": {"status_code": 200}, "B": {"status_code": 404}}
 
     assert matching(connection, "STATUS_CODE = 404", rows) == ["B"]
+
+
+@pytest.mark.parametrize(
+    ("rows", "where", "matched"),
+    [
+        (
+            # The scenario's titles are Russian, so its O is Cyrillic.
+            {"A": {"title_1": "Каталог товаров"}, "B": {"title_1": "О компании"}},  # noqa: RUF001
+            "title_1 contains 'КАТАЛОГ'",
+            ["A"],
+        ),
+        # Named after no scenario: contains reads any column as text.
+        ({"A": {"status_code": 404}, "B": {"status_code": 311}}, "status_code contains '0'", ["A"]),
+    ],
+)
+def test_contains_ignores_case_in_any_script(
+    connection: Connection, rows: Mapping[str, Mapping[str, Any]], where: str, matched: list[str]
+) -> None:
+    assert matching(connection, where, rows) == matched

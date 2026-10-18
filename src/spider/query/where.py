@@ -15,14 +15,20 @@ class Comparison:
 
 
 @dataclass(frozen=True, slots=True)
+class Contains:
+    column: str
+    needle: str
+
+
+@dataclass(frozen=True, slots=True)
 class And:
     operands: tuple["Expression", ...]
 
 
-type Expression = Comparison | And
+type Expression = Comparison | Contains | And
 
 _TOKENS = re.compile(
-    r"\s*(?:(?P<number>-?\d+(?:\.\d+)?)|(?P<name>[A-Za-z][A-Za-z0-9_]*)|(?P<compare><=|>=|!=|<>|=|<|>))"
+    r"\s*(?:(?P<number>-?\d+(?:\.\d+)?)|(?P<name>[A-Za-z][A-Za-z0-9_]*)|(?P<string>'[^']*')|(?P<compare><=|>=|!=|<>|=|<|>))"
 )
 
 
@@ -34,9 +40,9 @@ class _Token:
 
 def parse(text: str) -> Expression:
     tokens = _Tokens(_tokenize(text))
-    operands: list[Expression] = [_comparison(tokens)]
+    operands = [_predicate(tokens)]
     while tokens.keyword("and"):
-        operands.append(_comparison(tokens))
+        operands.append(_predicate(tokens))
     tokens.expect_end()
     return operands[0] if len(operands) == 1 else And(tuple(operands))
 
@@ -79,8 +85,10 @@ class _Tokens:
             _fail(f"unexpected {self._tokens[self._next].text!r}")
 
 
-def _comparison(tokens: _Tokens) -> Comparison:
+def _predicate(tokens: _Tokens) -> Comparison | Contains:
     column = tokens.take("name", "a column name")
+    if tokens.keyword("contains"):
+        return Contains(column, tokens.take("string", "a string")[1:-1])
     compare = tokens.take("compare", "a comparison")
     number = tokens.take("number", "a value")
     return Comparison(column, compare, float(number) if "." in number else int(number))
