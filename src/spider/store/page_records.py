@@ -2,6 +2,9 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
+
+type SameSite = Literal["strict", "lax", "none"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -42,3 +45,15 @@ class PageRow:
 
     # After the HTML columns, as in pages: copied from urls.
     crawl_depth: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CookieRow:
+    url_id: int
+    ordinal: int
+    name: str
+    domain: str | None
+    path: str | None
+    secure: bool
+    http_only: bool
+    same_site: SameSite | None

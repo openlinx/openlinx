@@ -9,8 +9,9 @@ import msgspec
 from spider.crawl.hooks import UrlResult
 from spider.crawl.pages import is_html_type
 from spider.extract.addresses import display_address, path_and_query
+from spider.extract.cookies import cookie_row
 from spider.extract.page_data import page_data_of
-from spider.store.page_records import PageRow
+from spider.store.page_records import CookieRow, PageRow
 
 
 def page_rows(result: UrlResult) -> Iterable[PageRow]:
@@ -34,6 +35,15 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             crawl_depth=result.crawl_depth,
             **({} if data is None else msgspec.structs.asdict(data)),
         ),
+    )
+
+
+def cookie_rows(result: UrlResult) -> Iterable[CookieRow]:
+    if not _is_page(result):
+        return ()
+    values = [value for name, value in result.headers if name.lower() == "set-cookie"]
+    return tuple(
+        cookie_row(result.url_id, ordinal, value) for ordinal, value in enumerate(values, 1)
     )
 
 
