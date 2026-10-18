@@ -327,7 +327,7 @@ def test_deeply_nested_html_gives_its_links() -> None:
         ),
         # A page's own template holds placeholders that scripts fill in (design D5).
         ('<template><a href="{{ url }}"></a></template>', []),
-        # A literal start tag makes no template, so its text is never read (design Risks).
+        # With scripting on, the content of a <script> is text.
         ('<script>"<noscript>"</script><a href="/x"></a>', [("hyperlink", "http://site.test/x")]),
         # The content of a <noscript> is text, so a comment there hides no end tag.
         (
@@ -337,6 +337,26 @@ def test_deeply_nested_html_gives_its_links() -> None:
         (
             '<noscript><a href="/a"></a><noscript></noscript><a href="/c"></a></noscript>',
             [("hyperlink", "http://site.test/a"), ("hyperlink", "http://site.test/c")],
+        ),
+        # A foreign <noscript>'s child elements give their Links once; its text is decoded markup.
+        (
+            '<svg><noscript><a href="/x"></a></noscript></svg>',
+            [("hyperlink", "http://site.test/x")],
+        ),
+        (
+            '<math><noscript><img src="/i.png"></noscript></math>',
+            [("image", "http://site.test/i.png")],
+        ),
+        ('<svg><noscript>&lt;a href="/y"&gt;</noscript></svg>', []),
+        ('<math><noscript>&lt;a href="/y"&gt;</noscript></math>', []),
+        (
+            '<NoScript class="a"><a href="/x"></a></NOSCRIPT >',
+            [("hyperlink", "http://site.test/x")],
+        ),
+        ('<p></p><noscript><a href="/open">', [("hyperlink", "http://site.test/open")]),
+        (
+            '<template></noscript></template><a href="/t"></a>',
+            [("hyperlink", "http://site.test/t")],
         ),
     ],
 )

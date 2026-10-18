@@ -41,7 +41,8 @@ _ELEMENTS = ", ".join(
         "link[href], img, video, source, track, meta[http-equiv]",
     ]
 )
-_ELEMENTS_OR_NOSCRIPT = f"{_ELEMENTS}, noscript"
+# A <noscript> in <svg> or <math> is a foreign element, whose text is decoded markup.
+_ELEMENTS_OR_NOSCRIPT = f"{_ELEMENTS}, noscript:not(svg noscript, math noscript)"
 _MEDIA_TYPES: Mapping[str, LinkType] = {"video": "video", "audio": "audio"}
 PAGINATION_RELS = frozenset({"next", "prev", "previous"})
 _METADATA = frozenset({"link", "meta"})
@@ -87,8 +88,7 @@ def extract_links(
 
 
 def parse_html(text: str) -> LexborHTMLParser:
-    """As a browser that runs scripts parses it: the content of each `<noscript>` is one text
-    node, which never ends `<head>` (design D5)."""
+    """As a browser that runs scripts parses it (design D5)."""
     return LexborHTMLParser(text, scripting=True)
 
 

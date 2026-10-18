@@ -454,8 +454,8 @@ def test_a_serialization_of_a_node_is_named() -> None:
     ]
 
 
-# With scripting off, a head <noscript><img> ends <head> (020 design D5); a fragment is the
-# content of a <noscript>, read as markup.
+# With scripting off, a head <noscript><img> ends <head> (020-add-crawl-core design D5); a
+# fragment is the content of a <noscript>, read as markup.
 PARSE_FLAGS = ("scripting", "is_fragment")
 
 
@@ -468,7 +468,7 @@ def parse_violations(sources: Mapping[str, str]) -> list[str]:
         if module.startswith(PAGE_READERS)
         for node in ast.walk(ast.parse(source))
         if isinstance(node, ast.Call)
-        and _called_name(node.func) == "LexborHTMLParser"
+        and _base_name(node.func) == "LexborHTMLParser"
         and not any(
             keyword.arg in PARSE_FLAGS
             and isinstance(keyword.value, ast.Constant)
@@ -476,12 +476,6 @@ def parse_violations(sources: Mapping[str, str]) -> list[str]:
             for keyword in node.keywords
         )
     ]
-
-
-def _called_name(func: ast.expr) -> str | None:
-    if isinstance(func, ast.Name):
-        return func.id
-    return func.attr if isinstance(func, ast.Attribute) else None
 
 
 def test_every_page_is_parsed_with_scripting_on() -> None:
