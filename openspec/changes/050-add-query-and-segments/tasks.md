@@ -35,17 +35,17 @@ Every group ends with a docs task and a review task.
 
 ## 2. The basic `--where` language (seam 4: Pure-logic)
 
-- [ ] 2.1 Drive `Where filter language › Comparison`: a tokenizer, a recursive-descent parser and the AST in `spider.query`, which loads no `sqlalchemy`, and the compiler to Core in `spider.store.query` (design Context, D1), for `column compare literal`, evaluated on an in-memory SQLite table defined by the test. Verify: red → green; one commit.
-- [ ] 2.2 Drive `Where filter language › and requires both`. Verify: red → green; one commit.
-- [ ] 2.3 Drive `Where filter language › Column names are case-insensitive`. Verify: red → green; one commit.
-- [ ] 2.4 Drive `Where filter language › contains ignores case in any script`: the `spider_contains` casefold function. Verify: red → green; one commit.
-- [ ] 2.5 Drive `Where filter language › is null and is not null`. Verify: red → green; one commit.
-- [ ] 2.6 Drive the pair `Where filter language › Doubled quotes inside a string` and `› Double-quoted string`. Verify: red → green; one commit.
-- [ ] 2.7 Drive `Where filter language › Boolean literal`. Verify: red → green; one commit.
-- [ ] 2.8 Drive `Null values in filters › A comparison excludes null values`: wrap predicates in `IS NOT NULL AND`. Verify: red → green; one commit.
-- [ ] 2.9 Drive `Null values in filters › Not-equal excludes null values`. Verify: red → green; one commit.
-- [ ] 2.10 Drive `Filter syntax errors › Any input either parses or fails cleanly` with a hypothesis text strategy. Verify: the property passes; one commit.
-- [ ] 2.11 Docs: write the where-language reference in `docs/querying.md`: the v0.1 grammar (comparisons, `contains`, `is [not] null` and `and`), the null rule, quoting in PowerShell and cmd (double quotes outside, single quotes inside), and the error codes. Verify: every v0.1 operator has an example.
+- [ ] 2.1 Refactor: `spider.store.query` becomes a package. `git mv` its module to `spider/store/query/issues.py` with no code change; `__init__.py` stays empty, with no re-exports, and callers import `spider.store.query.issues`. Verify: suite green; one `refactor:` commit.
+- [ ] 2.2 Drive `Where filter language › Comparison`: the tokenizer, the recursive-descent parser and the AST in one module, `spider/query/where.py`, which loads no `sqlalchemy`, and the compiler to Core in `spider/store/query/where.py` (design Context, D1), for `column compare literal`, evaluated on an in-memory SQLite table defined by the test. Keywords are case-insensitive from the start. Verify: red → green; one commit.
+- [ ] 2.3 Drive `Where filter language › and requires both`. Verify: red → green; one commit.
+- [ ] 2.4 Drive `Where filter language › Column names are case-insensitive`. Verify: red → green; one commit.
+- [ ] 2.5 Drive `Where filter language › contains ignores case in any script`: `spider_contains(CAST(col AS TEXT), needle)` (design D3), registered by `register_where_functions(dbapi_connection)` beside the compiler as a deterministic function that gives 0 for a null value. The test engine registers that same function through `event.listen("connect")`. The test adds a row named after no scenario, `status_code contains '0'`, since `contains` applies to the text form of any column. Verify: red → green; one commit.
+- [ ] 2.6 Drive `Where filter language › is null and is not null`. Verify: red → green; one commit.
+- [ ] 2.7 Drive the pair `Where filter language › Doubled quotes inside a string` and `› Double-quoted string`. Verify: red → green; one commit.
+- [ ] 2.8 Drive `Where filter language › Boolean literal`: the test table declares `flag` with the store's `Flag` type, as every boolean column of the schema is; the compiler knows booleans by it, and `true` and `false` bind through it. Verify: red → green; one commit.
+- [ ] 2.9 Guard the pair `Null values in filters › A comparison excludes null values` and `› Not-equal excludes null values`. Without `not`, SQL's WHERE already drops a null value, so both pass at once and D2's `IS NOT NULL AND` wrap lands with `not` (9.3). Verify: red by mutation (`ifnull(col, 0) < 300`; `col IS NOT literal`); one `test:` commit.
+- [ ] 2.10 Drive `Filter syntax errors › Any input either parses or fails cleanly` with a hypothesis text strategy over `parse()` alone: for any text it returns an AST or raises `SpiderError` with `invalid_where`, which this task declares (exit code 2) with its row in `docs/cli.md`. Compile errors keep their own scenarios (3.7, 3.8). In the same commit, a table-driven guard named after no scenario: each v0.2 form (`or`, `not`, parentheses, `~`, `!~`, `in`, `not contains`) is `invalid_where`. Verify: the property passes; the guard red by mutation; one commit.
+- [ ] 2.11 Docs: write a standalone section "The where language" in `docs/querying.md`, which names no Command yet: the v0.1 grammar (comparisons, `contains`, `is [not] null` and `and`), the null rule, quoting in PowerShell and cmd (double quotes outside, single quotes inside), and the error codes. Groups 3 and 6 link to it. Verify: every v0.1 operator has an example.
 - [ ] 2.12 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 3. Query foundation and `pages` (seams 2: Services, 1: CLI)
@@ -54,7 +54,7 @@ Every group ends with a docs task and a review task.
 - [ ] 3.2 Drive `Page listing › Default fields` (Services): the six default fields in 010's envelope. Verify: red → green; one commit.
 - [ ] 3.3 Drive the pair `Page listing › Selected fields` and `› All fields` (Services): the available fields are the `pages` columns in `spider schema` order. Verify: red → green; one commit.
 - [ ] 3.4 Drive `Unknown names in --where, --sort and --fields › Unknown field in --fields` (CLI): the `spider pages` Typer command, raising 010's `unknown_field`. Verify: red → green; one commit.
-- [ ] 3.5 Drive `Page listing › Filtered listing` (CLI): wire `--where` into `pages`. Verify: red → green; one commit.
+- [ ] 3.5 Drive `Page listing › Filtered listing` (CLI): wire `--where` into `pages`, and register `register_where_functions` on the Query Service's read connections. Verify: red → green; one commit.
 - [ ] 3.6 Drive `Query error codes › Error shape` (CLI). Verify: red → green; one commit.
 - [ ] 3.7 Drive `Unknown names in --where, --sort and --fields › Unknown column in --where` (CLI): `unknown_column` with `details.suggestions` from `difflib`. Verify: red → green; one commit.
 - [ ] 3.8 Drive the pair `Filter values fit the column type › String compared with a number column` and `› Number compared with a text column` (CLI). Verify: red → green; one commit.
@@ -158,9 +158,11 @@ Every group ends with a docs task and a review task.
 
 ## 9. (v0.2) The rest of the `--where` language (seam 4: Pure-logic)
 
+Each task that adds an operator deletes its row from the guard of the v0.2 forms (2.10).
+
 - [ ] 9.1 (v0.2) Drive `Where filter language › and binds tighter than or`. Verify: red → green; one commit.
 - [ ] 9.2 (v0.2) Drive `Where filter language › Parentheses override precedence`. Verify: red → green; one commit.
-- [ ] 9.3 (v0.2) Drive `Where filter language › not`. Verify: red → green; one commit.
+- [ ] 9.3 (v0.2) Drive `Where filter language › not`: every predicate except `is [not] null` gets D2's `(col IS NOT NULL AND …)` wrap here, which 9.12 proves. Verify: red → green; one commit.
 - [ ] 9.4 (v0.2) Drive `Where filter language › Keywords are case-insensitive`. Verify: red → green; one commit.
 - [ ] 9.5 (v0.2) Drive `Where filter language › Regular expression`: the `spider_regexp` SQLite function with a pattern cache. Verify: red → green; one commit.
 - [ ] 9.6 (v0.2) Drive the pair `Where filter language › Regular expressions are case-sensitive by default` and `› Case-insensitive regular expression`. Verify: red → green; one commit.
