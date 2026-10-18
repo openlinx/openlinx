@@ -18,8 +18,8 @@ META_DESCRIPTION_MISSING = Rule(
         "Without one, they pick a snippet from the page, which may not say why to visit it."
     ),
     how_to_fix=(
-        'Add one <meta name="description" content="..."> to the <head> of the page, with a '
-        "sentence or two that says what the page offers."
+        'Give the <head> of the page one <meta name="description">, whose content is a sentence '
+        "or two that says what the page offers."
     ),
     reproduce_sql=_META_DESCRIPTION_MISSING_SQL,
 )

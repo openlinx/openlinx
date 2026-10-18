@@ -47,7 +47,7 @@ RULE_PAGES = Site(
         ),
     }
 )
-# Every Rule that fires on RULE_PAGES: neither Page has an h1.
+# Every Rule that fires on RULE_PAGES: no Page has an h1 or a meta description.
 FIRING_ON_RULE_PAGES = (
     "h1-missing",
     "internal-4xx",
@@ -285,12 +285,11 @@ def test_a_crawl_stopped_by_the_url_limit_lists_its_issues_as_stored(
 
     assert (
         query(crawl_file, "SELECT state FROM crawl"),
-        [
-            (issue.rule_id, issue.affected_count)
-            for issue in read_issues(crawl_file, RULES)
-            if issue.rule_id == "title-missing"
-        ],
-    ) == ([("stopped",)], [("title-missing", 1)])
+        [(issue.rule_id, issue.affected_count) for issue in read_issues(crawl_file, RULES)],
+    ) == (
+        [("stopped",)],
+        [("title-missing", 1), ("meta-description-missing", 1), ("h1-missing", 1)],
+    )
 
 
 def test_client_error_recorded_by_a_crawl(

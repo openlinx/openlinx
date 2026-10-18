@@ -5,6 +5,7 @@ from dataclasses import fields
 import pytest
 
 from spider.rules.headings import H1_MISSING
+from spider.rules.meta_descriptions import META_DESCRIPTION_MISSING
 from spider.rules.titles import TITLE_DUPLICATE, TITLE_MISSING, TITLE_TOO_LONG
 from spider.store.issues import evaluate_rule
 from spider.store.page_records import PageRow
@@ -41,7 +42,8 @@ def test_a_failed_extractor_raises_no_issue_for_its_missing_columns(
         evaluate_rule(filled, TITLE_MISSING),
         evaluate_rule(missing, TITLE_MISSING),
         evaluate_rule(missing, H1_MISSING),
-    ) == ([AffectedUrl(url_id=filled_id, detail=None)], [], [])
+        evaluate_rule(missing, META_DESCRIPTION_MISSING),
+    ) == ([AffectedUrl(url_id=filled_id, detail=None)], [], [], [])
 
 
 def test_a_page_that_was_not_parsed_is_not_analysed(temp_workspace: TempWorkspace) -> None:
