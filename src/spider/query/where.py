@@ -4,6 +4,9 @@ import re
 from dataclasses import dataclass
 from typing import NoReturn
 
+from spider.output.codes import INVALID_WHERE
+from spider.output.diagnostics import SpiderError
+
 type Value = int | float | str | bool
 
 
@@ -35,7 +38,7 @@ type Expression = Comparison | Contains | IsNull | And
 
 _TOKENS = re.compile(
     r"\s*(?:"
-    r"(?P<number>-?\d+(?:\.\d+)?)"
+    r"(?P<number>-?[0-9]+(?:\.[0-9]+)?)"
     r"|(?P<name>[A-Za-z][A-Za-z0-9_]*)"
     r"|(?P<string>'(?:[^']|'')*'"
     r'|"(?:[^"]|"")*")'
@@ -130,4 +133,9 @@ def _unquoted(string: str) -> str:
 
 
 def _fail(problem: str) -> NoReturn:
-    raise ValueError(problem)
+    raise SpiderError(
+        INVALID_WHERE,
+        f"The --where expression is not valid: {problem}.",
+        hint="Join predicates with and: column compare value, column contains 'text' "
+        "or column is [not] null; quote text in single quotes.",
+    )

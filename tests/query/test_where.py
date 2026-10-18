@@ -4,6 +4,8 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from sqlalchemy import (
     Column,
     Connection,
@@ -17,6 +19,7 @@ from sqlalchemy import (
     select,
 )
 
+from spider.output.diagnostics import SpiderError
 from spider.query.where import parse
 from spider.store.query.where import compile_where, register_where_functions
 from spider.store.types import Flag
@@ -128,3 +131,76 @@ def test_a_comparison_excludes_null_values(connection: Connection) -> None:
 
 def test_not_equal_excludes_null_values(connection: Connection) -> None:
     assert matching(connection, "word_count != 250", WORD_COUNTS) == ["B"]
+
+
+PRINTABLE = st.characters(exclude_categories=("C", "Zl", "Zp"))
+# Pieces of the grammar, so that generated text gets past its first token.
+GRAMMAR = st.sampled_from(
+    [
+        " ",
+        *[
+            "status_code",
+            "AND",
+            "and",
+            "contains",
+            "is",
+            "not",
+            "null",
+            "true",
+            "=",
+            "!=",
+            "<>",
+            "<=",
+            ">",
+            "404",
+            "-1.5",
+            "'a''b'",
+            '"x"',
+            "'",
+            '"',
+            "(",
+            ")",
+            "~",
+            ",",
+            ";",
+        ],
+    ]
+)
+
+
+@given(
+    st.one_of(
+        st.text(PRINTABLE, max_size=200),
+        st.lists(GRAMMAR, max_size=60).map(lambda pieces: "".join(pieces)[:200]),
+    )
+)
+def test_any_input_either_parses_or_fails_cleanly(text: str) -> None:
+    assert outcome(text) in {"parsed", "invalid_where"}
+
+
+def outcome(text: str) -> str:
+    try:
+        parse(text)
+    except SpiderError as error:
+        return error.code
+    return "parsed"
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        "status_code = 404 or status_code = 500",
+        "not status_code = 200",
+        "(status_code = 200)",
+        "address ~ '/blog/'",
+        "address !~ '/blog/'",
+        "status_code in (301, 404)",
+        "status_code not in (301, 404)",
+        "title_1 not contains 'blog'",
+    ],
+)
+def test_the_operators_of_v0_2_are_syntax_errors(where: str) -> None:
+    with pytest.raises(SpiderError) as raised:
+        parse(where)
+
+    assert raised.value.code == "invalid_where"

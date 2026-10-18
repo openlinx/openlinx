@@ -115,6 +115,9 @@ CRAWL_NOT_FOUND = _declare(
 RULE_NOT_FOUND = _declare(
     "rule_not_found", "error", ExitCode.NOT_FOUND, "No Rule has the id given to rules show."
 )
+INVALID_WHERE = _declare(
+    "invalid_where", "error", ExitCode.USAGE, "A --where expression that breaks its grammar."
+)
 CRAWL_BUSY = _declare(
     "crawl_busy",
     "error",
