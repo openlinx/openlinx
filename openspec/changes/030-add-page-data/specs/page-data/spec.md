@@ -67,12 +67,12 @@ For an analysed Page, following the table conventions of `015-add-crawl-store`:
 - A text column SHALL be NULL when its element or header is absent, and the empty string when the element is present but empty.
 - A length column SHALL be NULL exactly when its text column is NULL, and so SHALL a width column from v0.2.
 
-When the Page extractor of this change raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns the Page extractor derives from the HTML (the title and heading, content and structured-data columns, and the Link attributes it adds) SHALL be NULL. The columns that come from the response, from `020-add-crawl-core`'s robots directives parser and discovered Links (the directive and canonical columns), the outlink counts and `indexability` SHALL be set as for any analysed Page.
+When an extractor of this change, the Page extractor or the Link extractor, raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns that extractor derives from the HTML SHALL be NULL: the title and heading, content and structured-data columns for the Page extractor, and the Link attributes this change adds for the Link extractor. The columns that come from the response, from `020-add-crawl-core`'s robots directives parser and discovered Links (the directive and canonical columns), the outlink counts and `indexability` SHALL be set as for any analysed Page.
 
 The columns that a later release fills stay NULL in every Page until then (see "Columns measured by later releases stay NULL").
 
 #### Scenario: A Page whose Page extractor failed keeps its response data and Links
-- **WHEN** the Page extractor raises on `{site}/broken` (a test puts a raising extractor under its name in `default_hooks()` in `spider.services.hooks`, the composition root), which responds 200 with `<title>T</title><meta name="robots" content="noindex"><a href="/a">A</a>`
+- **WHEN** the Page extractor and the Link extractor raise on `{site}/broken` (a test puts raising extractors under their names in `default_hooks()` in `spider.services.hooks`, the composition root), which responds 200 with `<title>T</title><meta name="robots" content="noindex"><a href="/a">A</a>`
 - **THEN** `{site}/broken` has `parsed` = 1 and `parse_error` = `extractor_error`, its `pages` row has `status_code` 200, `title_1` NULL, `meta_robots_noindex` 1 and `indexability` `non_indexable`, and its `links` row to `{site}/a` has `type` `hyperlink` and `anchor_text` NULL
 
 #### Scenario: Error Page keeps response data
@@ -231,6 +231,8 @@ Each Page row SHALL store two forms of the Page's URL, and the path and query of
 - **THEN** the first has `url_path` `/Кат/a%2Fb` and `url_query` `x=1&y=ü`, the second has `url_path` `/a` and `url_query` equal to the empty string, and the third has `url_query` NULL
 
 ### Requirement: Response columns
+**In short:** every Page stores its own response's values; those that `urls` holds too are equal to it.
+
 Each Page row SHALL store these columns. All of them come from the Page's own response, never from a redirect target. Where a column repeats a value of the `urls` table (`020-add-crawl-core`, including the columns that `022-add-fetch-policy` adds) or of the `origins` table, it SHALL be equal to that value.
 
 | Column | Value |
@@ -239,7 +241,7 @@ Each Page row SHALL store these columns. All of them come from the Page's own re
 | `status_code` | `urls.status_code` |
 | `status` | the reason phrase the server sent; when it sent none, the standard reason phrase for the status code from RFC 9110; NULL when neither exists |
 | `response_time_ms` | `urls.response_time_ms` |
-| `last_modified` | the `Last-Modified` header parsed as an HTTP-date, as a `timestamp` (`YYYY-MM-DDTHH:MM:SS.sssZ`); NULL when absent or invalid |
+| `last_modified` | the first `Last-Modified` header, parsed as an HTTP-date or as another Internet Message Format date, as RFC 9110 allows, with its offset converted to UTC, as a `timestamp` (`YYYY-MM-DDTHH:MM:SS.sssZ`); NULL when absent or neither |
 | `http_version` | `origins.http_version` for the Page's origin (`http_1_1` or `http_2`); filled from v0.2, as the origin's column is, and NULL until then |
 | `crawl_timestamp` | `urls.fetched_at` |
 
@@ -842,7 +844,7 @@ This change stores each discovered Link together with the attributes that analys
 
 `(source_url_id, ordinal)` SHALL be the primary key. How the rows are laid out on disk, and the indexes of `links`, are chosen by the links benchmark (ADR-0005); they change none of these columns.
 
-**Link position.** For a Link from an element that the HTML parser places inside `<head>`, `link_position` SHALL be `head`. For a Link from an element inside `<body>`, it SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element, and SHALL be `content` when there is none. It SHALL be NULL only for a Link declared in an HTTP header, and for every Link of a Page whose Page extractor failed. The `[content_area]` settings do not change it.
+**Link position.** For a Link from an element that the HTML parser places inside `<head>`, `link_position` SHALL be `head`. For a Link from an element inside `<body>`, it SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element, and SHALL be `content` when there is none. It SHALL be NULL only for a Link declared in an HTTP header, and for every Link of a Page whose Link extractor failed. The `[content_area]` settings do not change it.
 
 #### Scenario: Hyperlink with rel flags
 - **WHEN** the analysed Page `https://example.test/a` contains `<main><a href="/b" rel="nofollow UGC">Read  more</a></main>`
