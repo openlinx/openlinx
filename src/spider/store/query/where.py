@@ -1,0 +1,24 @@
+"""The --where language compiled to SQLAlchemy Core (050-add-query-and-segments D1)."""
+
+import operator
+from collections.abc import Callable
+from typing import Any
+
+from sqlalchemy import ColumnElement, Table
+
+from spider.query.where import Expression
+
+_COMPARE: dict[str, Callable[[Any, Any], ColumnElement[bool]]] = {
+    "=": operator.eq,
+    "!=": operator.ne,
+    "<>": operator.ne,
+    "<": operator.lt,
+    "<=": operator.le,
+    ">": operator.gt,
+    ">=": operator.ge,
+}
+
+
+def compile_where(expression: Expression, table: Table) -> ColumnElement[bool]:
+    """The expression as a condition on `table`, every value bound as a parameter."""
+    return _COMPARE[expression.operator](table.c[expression.column], expression.value)
