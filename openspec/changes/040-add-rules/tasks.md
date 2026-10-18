@@ -180,7 +180,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 10.2 Drive "Warnings do not lower the score" at seam 2, with `health` over a crawl file (design D8).
 - [ ] 10.3 Drive "A Page with several Issues counts once" at seam 2: the second Issue-type Rule is a `RuleRow` recorded after the catalogue's, whose query selects the same Page.
 - [ ] 10.4 **(v0.2)** Drive "Resource Issues do not change the score" at seam 4.
-- [ ] 10.5 Drive "No Pages means no score" at seam 4.
+- [x] 10.5 Drive "No Pages means no score" at seam 4.
 - [ ] 10.6 Drive "Health Score of a Segment" at seam 2, with a selectable of the subset's Pages.
 - [ ] 10.6b Drive "Live Health Score of a running Crawl" at seam 2, with the live Affected URLs of a Crawl whose state is `running`.
 - [ ] 10.7 Drive "End-to-end score on the fixture site" at seam 3+6. Add the four derived `health_*` fields to the `crawl` row, with `Derived: ` descriptions, written only by the pass's last unit, with `health_calculated_at` from the clock that the composition root passes to the Issues pass (design D8).
