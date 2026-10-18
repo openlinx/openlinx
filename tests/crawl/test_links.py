@@ -329,8 +329,11 @@ def test_deeply_nested_html_gives_its_links() -> None:
         ('<template><a href="{{ url }}"></a></template>', []),
         # A literal start tag makes no template, so its text is never read (design Risks).
         ('<script>"<noscript>"</script><a href="/x"></a>', [("hyperlink", "http://site.test/x")]),
-        # A known edge: the comment hides the end tag from lexbor, not from a browser.
-        ('<noscript><!-- </noscript> --><a href="/lost"></a>', []),
+        # The content of a <noscript> is text, so a comment there hides no end tag.
+        (
+            '<noscript><!-- </noscript> --><a href="/kept"></a>',
+            [("hyperlink", "http://site.test/kept")],
+        ),
         (
             '<noscript><a href="/a"></a><noscript></noscript><a href="/c"></a></noscript>',
             [("hyperlink", "http://site.test/a"), ("hyperlink", "http://site.test/c")],

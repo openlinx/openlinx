@@ -5,7 +5,7 @@ from hypothesis import strategies as st
 from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.directives import RobotsDirectives, meta_robots_contents, robots_directives
-from spider.crawl.noscript import parse_html
+from spider.crawl.links import parse_html
 from spider.naming import DEFAULT_ROBOTS_TOKEN
 
 
@@ -22,9 +22,7 @@ def test_meta_robots_directives_are_read_case_insensitively() -> None:
 
 
 def test_a_robots_meta_inside_noscript_does_not_apply() -> None:
-    tree = parse_html(
-        '<head><noscript><meta name="robots" content="noindex"></noscript></head>'
-    ).tree
+    tree = parse_html('<head><noscript><meta name="robots" content="noindex"></noscript></head>')
 
     directives = robots_directives(meta_robots_contents(tree), (), DEFAULT_ROBOTS_TOKEN)
 

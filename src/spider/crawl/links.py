@@ -8,7 +8,6 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.decoding import decode_html, query_codec
-from spider.crawl.noscript import MARKER, ParsedHtml, parse_html
 from spider.crawl.refresh import refresh_url
 from spider.crawl.urls import NormalizedUrl, normalize_url
 from spider.store.records import DeclaredIn, LinkType
@@ -42,7 +41,7 @@ _ELEMENTS = ", ".join(
         "link[href], img, video, source, track, meta[http-equiv]",
     ]
 )
-_ELEMENTS_OR_NOSCRIPT = f"{_ELEMENTS}, template[{MARKER}]"
+_ELEMENTS_OR_NOSCRIPT = f"{_ELEMENTS}, noscript"
 _MEDIA_TYPES: Mapping[str, LinkType] = {"video": "video", "audio": "audio"}
 PAGINATION_RELS = frozenset({"next", "prev", "previous"})
 _METADATA = frozenset({"link", "meta"})
@@ -77,15 +76,20 @@ def extract_links(
     strip_params: re.Pattern[str] | None,
 ) -> list[DiscoveredLink]:
     decoded = decode_html(body, content_type)
-    html = parse_html(decoded.text)
-    base = base_url(html.tree, url, decoded.encoding)
+    tree = parse_html(decoded.text)
     return links_in_tree(
-        html,
-        base=base,
+        tree,
+        base=base_url(tree, url, decoded.encoding),
         encoding=decoded.encoding,
         is_internal=is_internal,
         strip_params=strip_params,
     )
+
+
+def parse_html(text: str) -> LexborHTMLParser:
+    """As a browser that runs scripts parses it: the content of each `<noscript>` is one text
+    node, which never ends `<head>` (design D5)."""
+    return LexborHTMLParser(text, scripting=True)
 
 
 def rel_tokens(rel: str) -> tuple[str, ...]:
@@ -99,7 +103,7 @@ def base_url(tree: LexborHTMLParser, url: NormalizedUrl, encoding: str) -> str:
 
 
 def links_in_tree(
-    html: ParsedHtml,
+    tree: LexborHTMLParser,
     *,
     base: str,
     encoding: str,
@@ -110,7 +114,7 @@ def links_in_tree(
     """The Links of a parsed document, for page preparation, which parses once (design D9)."""
     codec = query_codec(encoding)
     links: list[DiscoveredLink] = []
-    for node in _link_nodes(html):
+    for node in _link_nodes(tree):
         attributes = node.attributes
         rel = rel_tokens(attributes.get("rel") or "")
         for link_type, attribute, raw in _references(node.tag or "", attributes, rel, node.parent):
@@ -134,12 +138,12 @@ def links_in_tree(
     return links
 
 
-def _link_nodes(html: ParsedHtml) -> Iterator[LexborNode]:
-    for node in html.tree.css(_ELEMENTS_OR_NOSCRIPT):
-        if node.tag != "template":
+def _link_nodes(tree: LexborHTMLParser) -> Iterator[LexborNode]:
+    for node in tree.css(_ELEMENTS_OR_NOSCRIPT):
+        if node.tag != "noscript":
             yield node
             continue
-        text = html.noscript_text(node)
+        text = node.text()
         if text:
             # Head metadata inside <noscript> is ignored; other elements there give their Links.
             fragment = LexborHTMLParser(text, is_fragment=True)

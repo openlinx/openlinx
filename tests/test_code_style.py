@@ -412,7 +412,7 @@ def test_an_import_of_a_plugin_layer_in_the_crawl_core_is_named() -> None:
 
 
 # lexbor's serializer recurses into template content: `.html` of a <template> nested 20,000
-# deep ends the process with a native stack overflow (020 design Risks, task 15.1).
+# deep ends the process with a native stack overflow (020-add-crawl-core design Risks).
 SERIALIZERS = frozenset({"html", "inner_html", "html_pretty", "inner_html_pretty"})
 PAGE_READERS = ("spider/crawl/", "spider/extract/")
 
@@ -451,6 +451,62 @@ def test_a_serialization_of_a_node_is_named() -> None:
         "nested templates",
         "spider/extract/page_data.py:1 serializes a node with .inner_html, which overflows the "
         "stack on deeply nested templates",
+    ]
+
+
+# With scripting off, a head <noscript><img> ends <head> (020 design D5); a fragment is the
+# content of a <noscript>, read as markup.
+PARSE_FLAGS = ("scripting", "is_fragment")
+
+
+def parse_violations(sources: Mapping[str, str]) -> list[str]:
+    """Parsers built with neither flag in the modules that read Pages, given every module's
+    source by path."""
+    return [
+        f"{module}:{node.lineno} parses a document with scripting off"
+        for module, source in sources.items()
+        if module.startswith(PAGE_READERS)
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and _called_name(node.func) == "LexborHTMLParser"
+        and not any(
+            keyword.arg in PARSE_FLAGS
+            and isinstance(keyword.value, ast.Constant)
+            and keyword.value.value is True
+            for keyword in node.keywords
+        )
+    ]
+
+
+def _called_name(func: ast.expr) -> str | None:
+    if isinstance(func, ast.Name):
+        return func.id
+    return func.attr if isinstance(func, ast.Attribute) else None
+
+
+def test_every_page_is_parsed_with_scripting_on() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert parse_violations(sources) == []
+
+
+def test_a_parse_with_scripting_off_is_named() -> None:
+    sources = {
+        "spider/crawl/links.py": "tree = LexborHTMLParser(text)\n",
+        "spider/extract/page_data.py": "tree = lexbor.LexborHTMLParser(text, scripting=False)\n",
+        "spider/crawl/pages.py": (
+            "a = LexborHTMLParser(text, scripting=True)\n"
+            "b = LexborHTMLParser(text, is_fragment=True)\n"
+        ),
+        "spider/report/html.py": "tree = LexborHTMLParser(text)\n",
+    }
+
+    assert parse_violations(sources) == [
+        "spider/crawl/links.py:1 parses a document with scripting off",
+        "spider/extract/page_data.py:1 parses a document with scripting off",
     ]
 
 
