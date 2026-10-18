@@ -45,6 +45,14 @@ def test_title_in_noscript_is_ignored() -> None:
     assert (row.title_1, row.title_count) == ("Main", 1)
 
 
+def test_title_in_head_noscript_is_ignored() -> None:
+    row = page_row(
+        "<head><noscript><title>Enable JavaScript</title></noscript><title>Main</title></head>"
+    )
+
+    assert (row.title_1, row.title_count) == ("Main", 1)
+
+
 def test_a_title_in_math_is_ignored() -> None:
     row = page_row("<title>Main</title><math><mi><title>m</title></mi></math>")
 

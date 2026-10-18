@@ -53,7 +53,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 
 Task 4.0 is task 12.4, moved here; 4.3, 4.6, 4.7 and 4.10 moved to group 4b, and 4.11 to group 6 as task 6.13.
 
-- [ ] 4.0 Drive "Title in head noscript is ignored" at seam 4, a `test:` guard over the tree page preparation gives: red by mutating its noscript pre-pass off. It must stay green when page preparation parses with scripting on.
+- [x] 4.0 Drive "Title in head noscript is ignored" at seam 4, a `test:` guard over the tree page preparation gives: red by mutating its noscript pre-pass off. It must stay green when page preparation parses with scripting on.
 - [ ] 4.1 Drive "Path and query of the address" at seam 4, and add `url_path` and `url_query`.
 - [ ] 4.2 Drive "Last-Modified is normalised to a timestamp" and "Invalid Last-Modified is NULL" at seam 4. This is a trivial pair: valid and invalid input. Add `last_modified`.
 - [ ] 4.4 Drive "Error Page keeps response data" at seam 3+6, and add `status_code`. The handler already builds a Page that is not analysed with NULL HTML columns.
