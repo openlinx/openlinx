@@ -762,10 +762,13 @@ def test_each_url_is_recorded_with_the_values_its_handlers_saw(
                 "/": Page(
                     body='<a href="/a">A</a> <a href="/missing">Gone</a> '
                     '<a href="/logout">Out</a> <a href="/private">Private</a> '
-                    '<a href="http://127.0.0.1:1/">Down</a> <img src="/logo.png">'
+                    '<a href="http://127.0.0.1:1/">Down</a> <a href="/broken">Broken</a> '
+                    '<img src="/logo.png">'
                 ),
                 "/a": Page(body="<p>A</p>"),
                 "/logo.png": Status(200),
+                # The connection breaks inside the body: an error after its own request.
+                "/broken": Page(body="x" * 100_000, reset_after=100),
             }
         )
     )
