@@ -53,6 +53,14 @@ Titles, meta descriptions, meta keywords and headings follow one pattern:
 - **Copies of `urls`.** `content_type`, `status_code`, `response_time_ms` and `crawl_depth` repeat the URL's row, and `crawl_timestamp` repeats its `fetched_at`. They are written in the URL's own unit, so they always agree.
 - **Times** are UTC, in the `timestamp` format of [schema.md](schema.md#conventions). `last_modified` reads the header leniently, as RFC 9110 asks of a recipient: an HTTP-date in any of its three forms, always GMT, also in the obsolete asctime form, which names no zone, or another Internet Message Format date, whose offset is converted to UTC.
 
+## Cookies
+
+A Page's cookies are the `Set-Cookie` headers of its response, one `cookies` row each. They come from the response, not the HTML, so a Page that is not analysed, such as a redirect, has its cookies too.
+
+A header is read as RFC 6265 asks of a browser: attribute names match in any letter case, the last of a repeated attribute wins, and an attribute that does not parse leaves its column NULL instead of failing the Page.
+
+Page data never holds a cookie's value, only its name and attributes, since a value can be a session token that lets anyone who reads the Crawl file sign in as the crawler.
+
 ## The two address forms
 
 - **`url_encoded_address`** is what the Crawl requested, so it joins `urls.url`, such as `https://xn--bcher-kva.test/%C3%BCber%20uns`.
