@@ -136,3 +136,20 @@ It prints the query that `spider rules show title-missing` prints too. Then run 
 - **While a Crawl runs,** it stores no Issue: `affected_urls` is empty, or holds an earlier pass's rows when the Crawl was resumed, and the Issues are computed on each read from the queries of the Rules that the Crawl's `rules` table marks enabled. A running Crawl therefore shows its Issues so far, at the cost of running every query on each read.
 - **When a Crawl ends as `completed` or `stopped`,** its post-crawl pass stores them, before the Crawl State is written: `affected_urls` and `issues` then hold that pass's result, and they are read as stored. A resumed Crawl's pass replaces them.
 - **A Crawl that `failed`, or whose process died,** got no final pass, and its `affected_urls` may still hold an earlier pass's rows. Its Issues are computed as for a running Crawl, so trust `affected_urls` and `issues` only when `crawl.state` is `completed` or `stopped`.
+
+## The Health Score
+
+**In short:** a score from 0 to 100 for a Crawl or any part of it, which only its Internal Pages with an Issue-type Issue lower.
+
+- **The formula:** `floor(100 × (N − A) ÷ N)`, where N is the number of Internal Pages, the rows of `pages` whatever their status code, and A is the number of those Pages that are an Affected URL of at least one Rule that the Crawl's `rules` table marks enabled and of Issue Type `issue`. Each Page counts once, however many Issues it has. Warnings, `http-url` among them, and Opportunities never lower it. Rounding down shows 100 only when no Page has an Issue-type Issue.
+- **No Pages, no score:** with N = 0 there is no score, not 0 or 100.
+- **Stored on the crawl row:** the Issues pass's last unit writes `health_score`, `health_internal_page_count` (N), `health_affected_page_count` (A) and `health_calculated_at` on `crawl`, after the Rules' own rows. They are `Derived: ` fields: NULL until the Crawl's first pass has run, and a resumed Crawl keeps its last pass's values until its next pass. The score of a finished Crawl:
+
+```sql
+SELECT health_score, health_internal_page_count, health_affected_page_count FROM crawl;
+```
+
+- **For a Segment or a running Crawl:** `health(connection, pages, affected)` in `spider.store.issues` is the one function that computes it, in SQL. `pages` is a selectable of the `url_id` of the Pages to rate, and `affected` a selectable of `rule_id` and `url_id`:
+  - The whole Crawl: `INTERNAL_PAGES`.
+  - A Segment (`050`) or a Report Section (`070`): a selectable of its Pages' `url_id`, such as `select(pages.c.url_id).where(...)`.
+  - Any Crawl: `health_affected_in(connection, catalogue)`, which reads the Affected URLs as the Issues reader does: as stored for a `completed` or `stopped` Crawl, otherwise computed live, so a running, `failed` or `interrupted` Crawl gets its score so far.
