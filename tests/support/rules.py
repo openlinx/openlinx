@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import Connection, select
 
 from spider.crawl.urls import NormalizedUrl
+from spider.rules.model import Rule
 from spider.store.page_records import PageRow
 from spider.store.pages import write_page
 from spider.store.records import (
@@ -38,6 +39,39 @@ _PAGE_URL = NormalizedUrl("https://site.test/")
 _SEED = NormalizedUrl("https://example.test/")
 _AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
 type UrlUnit = Callable[[Connection], None]
+# title-multiple as a later tool that registers it records it: this tool's catalogue lacks it.
+TITLE_MULTIPLE = Rule(
+    id="title-multiple",
+    category="titles",
+    issue_type="issue",
+    priority="medium",
+    population="indexable_pages",
+    description="A Page has more than one title element.",
+    why_it_matters="Search engines use one of them, not always the one meant.",
+    how_to_fix="Keep one title element in the head.",
+    reproduce_sql="""SELECT url_id, json_object('count', title_count) AS detail
+FROM pages JOIN analysed_pages USING (url_id)
+WHERE title_count > 1""",
+)
+
+
+def recorded(rule: Rule) -> RuleRow:
+    """The rules row of a Rule with no [rules.<id>] settings."""
+    return RuleRow(
+        id=rule.id,
+        category=rule.category,
+        issue_type=rule.issue_type,
+        priority=rule.priority,
+        applies_to=rule.applies_to,
+        enabled=True,
+        thresholds={threshold.name: threshold.default for threshold in rule.thresholds},
+        description=rule.description,
+        why_it_matters=rule.why_it_matters,
+        how_to_fix=rule.how_to_fix,
+        reproduce_sql=rule.reproduce_sql,
+    )
+
+
 # The Page data of two Pages whose titles are the same.
 SHOES: Mapping[str, Any] = {"title_count": 1, "title_1": "Shoes", "title_1_length": 5}
 
