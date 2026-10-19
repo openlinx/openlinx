@@ -3,12 +3,15 @@
 import asyncio
 from dataclasses import replace
 
+from sqlalchemy import select
+
 from spider.aio import loop_factory
 from spider.rules.registry import RULES
 from spider.rules.titles import TITLE_MISSING
 from spider.store.issues import INTERNAL_PAGES, STORED_AFFECTED_URLS, health, materialise_issues
 from spider.store.reading import reading
 from spider.store.records import Health
+from spider.store.schema import pages
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import default_rule_rows
@@ -50,5 +53,25 @@ def test_a_page_with_several_issues_counts_once(temp_workspace: TempWorkspace) -
 
     with reading(crawl_file) as connection:
         found = health(connection, INTERNAL_PAGES, STORED_AFFECTED_URLS)
+
+    assert found == Health(score=75, internal_pages=4, affected_pages=1)
+
+
+def test_health_score_of_a_segment(temp_workspace: TempWorkspace) -> None:
+    # The fifth Page, outside the Segment, is untitled too.
+    crawl_file, ids = crawl_with_pages(
+        temp_workspace,
+        {"title_count": 0},
+        {"title_count": 1, "title_1": "Shoes", "title_1_length": 5},
+        {"title_count": 1, "title_1": "Boots", "title_1_length": 5},
+        {"title_count": 1, "title_1": "Socks", "title_1_length": 5},
+        {"title_count": 0},
+    )
+    with CrawlWriter(crawl_file, FakeClock()) as writer:
+        asyncio.run(materialise_issues(writer, RULES), loop_factory=loop_factory)
+    segment = select(pages.c.url_id).where(pages.c.url_id.in_(ids[:4]))
+
+    with reading(crawl_file) as connection:
+        found = health(connection, segment, STORED_AFFECTED_URLS)
 
     assert found == Health(score=75, internal_pages=4, affected_pages=1)
