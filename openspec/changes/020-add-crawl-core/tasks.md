@@ -323,7 +323,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
     - a Resource of an in-Scope HTML Resource beyond the limit;
     - the Provenance of one Page's Links;
     - a Page's own `<template>`.
-- [ ] 10.24 Fix the review of 10.23, each fix red first or red by mutation, each refactor with behaviour unchanged:
+- [x] 10.24 Fix the review of 10.23, each fix red first or red by mutation, each refactor with behaviour unchanged:
   - One builder per URL record in `spider.crawl.engine.units` takes the `UrlResult`, so a record and the `UrlResult` agree on every field they share; a crawl of the fixture site with a URL in each final state pins it.
   - The Checked URL term replaces "check" for a URL and "decided" where a Checked URL is meant, in the code, the design and the docs; its definition admits the in-Scope HTML that a Resource Link reaches, which is followed.
   - A handler's purity is a contract in design D9.

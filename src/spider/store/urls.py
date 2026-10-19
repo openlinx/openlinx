@@ -25,9 +25,9 @@ type UrlUnit = Callable[[Connection], None]
 _INSERT = insert(urls).values(origin_id=ORIGIN_ID)
 _INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])
 # A followed Link re-queues a URL that only unfollowed Links reached, as found through it, and
-# gives the shorter path a check found after its depth closed (design D3) to a URL still queued,
-# or skipped beyond the depth limit, which dispatch then decides again; every other conflict
-# changes nothing, so a replayed unit gives the same rows (design D5).
+# gives the shorter path that a Checked URL found after its depth closed (design D3) to a URL
+# still queued, or skipped beyond the depth limit, which dispatch then decides again; every
+# other conflict changes nothing, so a replayed unit gives the same rows (design D5).
 _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     index_elements=[urls.c.url],
     set_={
@@ -212,8 +212,8 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         record_origins(connection, origins)
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
-            # The stored depth, which a late check may have lowered while the URL was in
-            # flight, so what it links to stays one deeper than it (design D3).
+            # The stored depth, which a Checked URL answering late may have lowered while the
+            # URL was in flight, so what it links to stays one deeper than it (design D3).
             depth = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one() + 1
             rows = [{**row, "crawl_depth": depth} for row in new_rows]
             connection.execute(_INSERT_DISCOVERED, rows)

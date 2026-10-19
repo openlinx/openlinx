@@ -385,6 +385,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 
 ## Backlog
 
+- **Test names that call a Checked URL a check:** in `tests/crawl/test_depth.py` and `tests/crawl/test_hooks.py`, rename them with the glossary term.
 - **Site metrics beyond Screaming Frog parity:** after v0.1, decide which site-level measurements to add on top of the Screaming Frog tabs. Nothing is chosen yet.
 
 - **Data import (high priority, before Integrations):** `spider import <file> --as <table>` loads a CSV, such as a GSC or Ahrefs export, into the crawl file as an extra table. Agents can then join it with crawl data in SQL and rank Issues by traffic. It is a cheap, agent-first alternative to OAuth integrations, and suits agents that already have Ahrefs or GSC MCP servers.

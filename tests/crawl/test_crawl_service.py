@@ -1,4 +1,4 @@
-"""The Crawl Service wires 015's journal mode and redaction (020 D11; seams 2 and 1)."""
+"""The Crawl Service wires 015's journal mode and redaction (020-add-crawl-core D11; seams 1, 2)."""
 
 import json
 import sys

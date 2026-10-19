@@ -61,7 +61,7 @@ A non-HTML file that a Page references, such as an image, stylesheet or script. 
 _Avoid_: asset
 
 **Checked URL**:
-A URL that a Crawl requests for its response without following it: an External URL, a URL outside the Scope, or one that a Page references as a Resource.
+A URL that a Crawl requests for its response without following it: an External URL, a URL outside the Scope, or one that a Page references as a Resource, unless it is in-Scope HTML, whose Links are then followed.
 _Avoid_: check
 
 **Link**:
