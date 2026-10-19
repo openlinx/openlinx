@@ -171,6 +171,16 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.16 Drive "A concurrency of zero is rejected" at seam 1.
 - [x] 5.17 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes and the per-host and global request limits in `docs/crawling.md`.
 - [x] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [ ] 5.19 Fix: a handler's writer takes the URL's rows as one sequence and runs one `executemany` (design D9).
+  Done when: a crawl with a handler that returns several rows per URL runs one INSERT per URL's unit, red by mutation of one writer call per row.
+- [ ] 5.20 Refactor: `UrlResult.response` and `UrlResult.failure` replace the flat response and failure fields, the store records are built from them, and one header lookup serves `FetchResult`, `UrlResponse` and the `X-Robots-Tag` read (design D9), behaviour unchanged.
+- [ ] 5.21 Drive "A handler sees the X-Robots-Tag of a PDF" at seam 3.
+- [ ] 5.22 Drive "A handler sees the Links of a Page whose extractor failed" and "A canonical in the body is placed in the body" at seam 3.
+- [ ] 5.23 Drive "A nofollow Link does not request its target" at seam 3, with the follow rule in `spider.crawl.following`.
+  Done when: a seam-4 table over the Link type, the Link's nofollow, the Page's nofollow and `--follow-nofollow` pins `requests_target`, red by mutation of each.
+- [ ] 5.24 Drive "A handler sees the reason phrase" at seam 3.
+- [ ] 5.25 Fix: `Extractor[C, O]` knows its output type, and `output(outputs)` gives its output by type (design D9).
+  Done when: an extractor whose function returns another type than it declares is recorded as an extractor error, and one whose return annotation is not a msgspec struct cannot be built.
 
 ## 6. Internal and External URLs over HTTP (slice)
 
