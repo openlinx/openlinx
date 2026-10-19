@@ -51,7 +51,6 @@ Titles, meta descriptions, meta keywords and headings follow one pattern:
 ## Values of the response and of `urls`
 
 - **Copies of `urls`.** `content_type`, `status_code`, `response_time_ms` and `crawl_depth` repeat the URL's row, and `crawl_timestamp` repeats its `fetched_at`. They are written in the URL's own unit, so they always agree.
-- **Times** are UTC, in the `timestamp` format of [schema.md](schema.md#conventions). `last_modified` reads the header leniently, as RFC 9110 asks of a recipient: an HTTP-date in any of its three forms, always GMT, also in the obsolete asctime form, which names no zone, or another Internet Message Format date, whose offset is converted to UTC.
 
 ## Cookies
 

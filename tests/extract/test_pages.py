@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 
+import pytest
 from sqlalchemy import select
 
 from spider.store.schema import public_tables
@@ -12,6 +13,9 @@ from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
+
+# Long against the few milliseconds a local request takes, short for a test.
+SLOW = 2.0
 
 
 def test_html_response_becomes_a_page(
@@ -94,6 +98,33 @@ def test_repeated_values_equal_the_urls_row(
         "FROM urls WHERE url = ?",
         [about],
     )
+
+
+@pytest.mark.slow
+def test_a_page_lowered_in_flight_has_the_depth_of_its_url(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<img src="/late.html"><a href="/a">A</a>'),
+                "/late.html": Page(body='<a href="/x">X</a>', delay=SLOW / 2),
+                "/a": Page(body='<a href="/b">B</a>'),
+                "/b": Page(body='<a href="/x">X</a>'),
+                # In flight at depth 3 when the late check lowers it to 2.
+                "/x": Page(body="<p>X</p>", delay=SLOW),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT pages.crawl_depth, urls.crawl_depth FROM pages JOIN urls ON urls.id = pages.url_id "
+        "WHERE pages.address = ?",
+        [server.url("/x")],
+    ) == [(2, 2)]
 
 
 def test_cookie_values_are_not_stored_in_page_data(

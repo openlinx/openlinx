@@ -41,7 +41,7 @@ Every public table, column and index follows the conventions of [ADR-0005](adr/0
 - **Keys and references:**
   - An entity's own key is `id`, INTEGER. Only the public identifiers that a user types, the crawl id and Rule ids, are TEXT. A table with a natural key uses it.
   - A column that refers to another table is named `<table singular>_id`, with a role prefix when a table refers to the same table twice, such as `source_url_id` and `target_url_id`. It is declared as a foreign key.
-- **Timestamps:** TEXT in the form `YYYY-MM-DDTHH:MM:SS.sssZ`, in UTC, with the format `timestamp`, in a column whose name ends with `_at`. They sort as text. A Screaming Frog name in `pages` stays, such as `crawl_timestamp` (ADR-0005 rule 14). A time read from a header keeps the header's name, such as `last_modified`, and so does a header's raw value, which keeps its text, such as `content_type`.
+- **Timestamps:** TEXT in the form `YYYY-MM-DDTHH:MM:SS.sssZ`, in UTC, with the format `timestamp`, in a column whose name ends with `_at`. They sort as text. A time read from a header keeps the header's name, such as `last_modified`, and so does a header's raw value, which keeps its text, such as `content_type`.
 - **Booleans:** INTEGER `0` or `1`, with the format `boolean`. The file refuses any other value, through a CHECK named `<table>_<column>_flag`. The name reads as yes or no, such as `is_*` or `has_*`, and is never negated.
 - **JSON:** TEXT holding valid JSON, with the format `json`, only for recorded inputs and for lists without a fixed shape. A value that queries filter, sort or count by is a column of its own.
 - **Enumerations:** TEXT whose allowed values are lowercase snake_case, listed under Values. The file refuses any other value, through a CHECK named `<table>_<column>_values`. A CHECK passes on NULL: `NOT NULL` is what refuses NULL. Values that a later release adds are listed from v0.1, and one enumeration has one value set in every table that holds it.
@@ -173,7 +173,7 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `content_type` | TEXT | no | | | | The Content-Type response header as received, equal to urls.content_type. |
 | `status_code` | INTEGER | no | | | | The HTTP status code of the Page's own response, equal to urls.status_code. |
 | `response_time_ms` | INTEGER | no | | | | Time from sending the request to receiving the whole body, equal to urls.response_time_ms. |
-| `last_modified` | TEXT | yes | | `timestamp` | | The first Last-Modified response header as a UTC time, read as an HTTP-date or another Internet Message Format date; NULL when absent or neither. |
+| `last_modified` | TEXT | yes | | `timestamp` | | The first Last-Modified response header as a UTC time, read as an HTTP-date or another Internet Message Format date; NULL when absent, another text or a leap second. |
 | `set_cookie_count` | INTEGER | no | | | | The number of Set-Cookie headers of the Page's response, equal to its rows in cookies. |
 | `crawl_timestamp` | TEXT | no | | `timestamp` | | The UTC time of the Page's request, equal to urls.fetched_at. |
 | `title_1` | TEXT | yes | | | | The text of the Page's first title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |

@@ -112,12 +112,14 @@ def test_meta_keywords() -> None:
 
 
 def test_heading_text_includes_nested_elements() -> None:
-    row = page_row("<body><h1>Main <span>Title</span></h1><h1>Second</h1><h2>Sub</h2></body>")
+    row = page_row(
+        "<body><h1>Main <span>Title</span></h1><h1>Second</h1><h1>Third</h1><h2>Sub</h2></body>"
+    )
 
     assert (
         (row.h1_1, row.h1_1_length, row.h1_2, row.h1_2_length, row.h1_count),
         (row.h2_1, row.h2_1_length, row.h2_2, row.h2_2_length, row.h2_count),
-    ) == (("Main Title", 10, "Second", 6, 2), ("Sub", 3, None, None, 1))
+    ) == (("Main Title", 10, "Second", 6, 3), ("Sub", 3, None, None, 1))
 
 
 def test_heading_text_leaves_out_scripts_and_styles() -> None:

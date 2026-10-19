@@ -203,6 +203,8 @@ The Kind column marks how a column is filled:
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"pages_address","columns":["address"],"unique":true,"where":null}`
 
 ### Requirement: Address columns
+**In short:** a Page row stores its URL as requested and as people read it, with the path and query of the readable form.
+
 Each Page row SHALL store two forms of the Page's URL, and the path and query of the display form:
 
 - **`url_encoded_address`** is the URL as the Crawl requested it, equal to `urls.url`. The host is in IDNA (punycode) form, and every non-ASCII character is percent-encoded as UTF-8.

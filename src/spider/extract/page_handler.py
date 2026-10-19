@@ -33,7 +33,6 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             last_modified=_last_modified(result.headers),
             set_cookie_count=sum(name.lower() == "set-cookie" for name, _ in result.headers),
             crawl_timestamp=_required(result.fetched_at, "fetched_at"),
-            crawl_depth=result.crawl_depth,
             **({} if data is None else msgspec.structs.asdict(data)),
         ),
     )
@@ -56,6 +55,7 @@ def _required[T](value: T | None, name: str) -> T:
 
 
 def _last_modified(headers: tuple[tuple[str, str], ...]) -> datetime | None:
+    # The first-header lookup of 020's UrlResult replaces this once UrlResult has one.
     value = next((value for name, value in headers if name.lower() == "last-modified"), None)
     return None if value is None else internet_date(value)
 

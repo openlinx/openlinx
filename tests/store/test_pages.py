@@ -36,7 +36,6 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
             last_modified=None,
             set_cookie_count=0,
             crawl_timestamp=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
-            crawl_depth=0,
         )
         fetched = FetchedUrl(
             url_id=url_id,
@@ -97,4 +96,6 @@ def test_the_cookie_row_has_every_cookies_column_in_order() -> None:
 
 
 def test_the_page_row_has_every_pages_column_in_order() -> None:
-    assert [field.name for field in fields(PageRow)] == [column.name for column in pages.c]
+    assert [*(field.name for field in fields(PageRow)), "crawl_depth"] == [
+        column.name for column in pages.c
+    ]

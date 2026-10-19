@@ -109,6 +109,18 @@ def test_the_obsolete_http_date_forms_are_read_as_gmt() -> None:
     ] == [datetime(1994, 11, 6, 8, 49, 37, tzinfo=UTC)] * 2
 
 
+def test_the_first_last_modified_header_wins() -> None:
+    # The application's header, then the one a cache in front of it appended.
+    headers = (
+        ("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT"),
+        ("Last-Modified", "Thu, 22 Oct 2015 09:00:00 GMT"),
+    )
+
+    row = _page(_fetched("https://example.test/", headers=headers))
+
+    assert row.last_modified == datetime(2015, 10, 21, 7, 28, tzinfo=UTC)
+
+
 def test_last_modified_is_read_in_any_letter_case() -> None:
     assert _last_modified("Wed, 21 Oct 2015 07:28:00 GMT", name="last-MODIFIED") == datetime(
         2015, 10, 21, 7, 28, tzinfo=UTC

@@ -472,7 +472,7 @@ pages = public_table(
         "last_modified",
         Timestamp,
         comment="The first Last-Modified response header as a UTC time, read as an HTTP-date or "
-        "another Internet Message Format date; NULL when absent or neither.",
+        "another Internet Message Format date; NULL when absent, another text or a leap second.",
     ),
     Column(
         "set_cookie_count",

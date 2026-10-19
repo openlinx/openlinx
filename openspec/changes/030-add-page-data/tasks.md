@@ -60,6 +60,7 @@ Task 4.0 is task 12.4, moved here; 4.3, 4.6, 4.7 and 4.10 moved to group 4b, and
 - [x] 4.9 Drive "Repeated values equal the urls row" at seam 3+6 over the columns that exist, and add `content_type` and `response_time_ms`. Task 4.6 extends the same test to the size columns.
 - [x] 4.12 Docs: add the identity and response concepts to `docs/page-data.md` (the address forms with their path and query, the timestamps, the values that repeat `urls`), as cross-column concepts only, since each column's description is its one definition; trim the per-column bullets of groups 1–3 to the same rule.
 - [x] 4.13 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [x] 4.16 Fix the findings of the review of group 4: read `pages.crawl_depth` from `urls` in the Page's unit, pin that the first `Last-Modified` header wins and a heading count above 2, and settle the date edge cases, the address without a path, and the docs' history and repeated facts.
 
 ## 5. Cookies
 
@@ -149,7 +150,7 @@ Every task of this group reads the URL's result *(after the 020 merge)*. Task 6.
 - [ ] 11.2 Drive "Repeated inlinks from one source" at seam 3+6.
 - [ ] 11.3 Drive "Inlinks are NULL while the Crawl runs" at seam 3+6.
 - [ ] 11.4 Drive "Folder depth" at seam 4, and add `folder_depth`.
-- [ ] 11.7 Drive "Crawl Depth is the shortest path over followed Links" at seam 2, and add `links.followed`, `020`'s follow flag. The depth pass, a store function in `spider.store.links` that `default_hooks()` lists before the inlink pass, is set-based (design D18): it updates `urls.crawl_depth` and `pages.crawl_depth` in units, writes the same rows when run twice (`replay_now`), and runs again after `resume`.
+- [ ] 11.7 Drive "Crawl Depth is the shortest path over followed Links" at seam 2, and add `links.followed`, `020`'s follow flag. The depth pass, a store function in `spider.store.links` that `default_hooks()` lists before the inlink pass, is set-based (design D18): it updates `urls.crawl_depth` and `pages.crawl_depth` in units, writes the same rows when run twice (`replay_now`), and runs again after `resume`. It settles the description of `pages.crawl_depth`, which says the column equals `urls.crawl_depth`, and whether ADR-0005 rule 12 (`Derived: `) applies to it.
 - [ ] 11.5 Docs: add the link count definitions, the self-link rule, % of Total (`linking_pages_pct`), the depth pass, that a URL skipped at `--max-depth` has `links` rows but no `pages` row, and when the post-crawl passes run to `docs/page-data.md`.
 - [ ] 11.6 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
 
