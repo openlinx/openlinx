@@ -7,7 +7,7 @@ from sqlalchemy import select
 from spider.store.schema import public_tables
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site, Status
+from tests.fixture_site.routes import Page, Redirect, Site, Status
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
@@ -100,7 +100,19 @@ def test_cookie_values_are_not_stored_in_page_data(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(
-        Site(routes={"/cookie": Page(body="<p>Cookie</p>", headers=[("Set-Cookie", "sid=abc123")])})
+        Site(
+            routes={
+                "/cookie": Page(
+                    body="<p>Cookie</p>",
+                    headers=[
+                        (
+                            "Set-Cookie",
+                            "PHPSESSID=9c7f3b2e1d4a8f6e0b5c3a7d9e1f2b4c; path=/; HttpOnly",
+                        )
+                    ],
+                )
+            }
+        )
     )
 
     crawl_file = crawl_result(server.url("/cookie")).crawl_file
@@ -111,9 +123,45 @@ def test_cookie_values_are_not_stored_in_page_data(
         table.name
         for table in tables
         for row in query(crawl_file, str(select(table)))
-        if any(isinstance(value, str) and "abc123" in value for value in row)
+        if any(
+            isinstance(value, str) and "9c7f3b2e1d4a8f6e0b5c3a7d9e1f2b4c" in value for value in row
+        )
     ]
-    assert (query(crawl_file, "SELECT name FROM cookies"), holding_the_value) == ([("sid",)], [])
+    assert (query(crawl_file, "SELECT name FROM cookies"), holding_the_value) == (
+        [("PHPSESSID",)],
+        [],
+    )
+
+
+def test_cookies_of_a_redirect_are_stored(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # A login that sets the session cookie and sends the browser home.
+    redirect = Redirect(
+        location="/",
+        status=302,
+        content_type="text/html",
+        headers=[
+            (
+                "Set-Cookie",
+                "session=eyJ1c2VyX2lkIjo0Mn0.Zx8kVQ.q3Jt0mXb; "
+                "Path=/; HttpOnly; Secure; SameSite=Lax",
+            )
+        ],
+    )
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/login">Log in</a>'), "/login": redirect})
+    )
+    login = server.url("/login")
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT pages.set_cookie_count, cookies.name, cookies.http_only, cookies.same_site "
+        "FROM pages JOIN cookies USING (url_id) WHERE pages.address = ?",
+        [login],
+    ) == [(1, "session", 1, "lax")]
 
 
 def test_image_response_is_not_a_page(
