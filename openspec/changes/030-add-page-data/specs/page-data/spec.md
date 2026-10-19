@@ -243,7 +243,7 @@ Each Page row SHALL store these columns. All of them come from the Page's own re
 | `status_code` | `urls.status_code` |
 | `status` | the reason phrase the server sent; when it sent none, the standard reason phrase for the status code from RFC 9110; NULL when neither exists |
 | `response_time_ms` | `urls.response_time_ms` |
-| `last_modified` | the first `Last-Modified` header, parsed as an HTTP-date or as another Internet Message Format date, as RFC 9110 allows, with its offset converted to UTC, as a `timestamp` (`YYYY-MM-DDTHH:MM:SS.sssZ`); NULL when absent or neither |
+| `last_modified` | the first `Last-Modified` header, parsed as an HTTP-date or as another Internet Message Format date, as RFC 9110 allows, with its offset converted to UTC, as a `timestamp` (`YYYY-MM-DDTHH:MM:SS.sssZ`); NULL when absent, another text or a leap second |
 | `http_version` | `origins.http_version` for the Page's origin (`http_1_1` or `http_2`); filled from v0.2, as the origin's column is, and NULL until then |
 | `crawl_timestamp` | `urls.fetched_at` |
 
@@ -313,8 +313,8 @@ The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` 
 | `url_id` | INTEGER, references `urls.id` | no | | the Page |
 | `ordinal` | INTEGER | no | | the header's position among the response's `Set-Cookie` headers, from 1 |
 | `name` | TEXT | no | | the text before the first `=`, trimmed; the empty string when the header's first part has no `=` |
-| `domain` | TEXT | yes | | the `Domain` attribute, lowercased with any leading dot removed |
-| `path` | TEXT | yes | | the `Path` attribute, trimmed, as sent rather than the path a browser would default to |
+| `domain` | TEXT | yes | | the `Domain` attribute, lowercased with any leading dot removed; NULL when absent or empty |
+| `path` | TEXT | yes | | the `Path` attribute, trimmed, as sent rather than the path a browser would default to; NULL when absent |
 | `expires` | TEXT | yes | timestamp | the `Expires` attribute as a timestamp, a two-digit year read as RFC 6265 reads it (70–99 as 19xx, 0–69 as 20xx); NULL when absent or invalid |
 | `max_age` | INTEGER | yes | | the `Max-Age` attribute, in seconds; NULL when it is not an optional `-` followed by digits, or does not fit a 64-bit INTEGER |
 | `secure` | INTEGER | no | boolean | 1 when the `Secure` attribute is present |
@@ -324,7 +324,7 @@ The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` 
 
 `(url_id, ordinal)` SHALL be the primary key, and the table SHALL be `WITHOUT ROWID`. `expires` and `max_age` keep their Screaming Frog names; their descriptions give their units.
 
-Attribute names SHALL be matched case-insensitively, and when an attribute is repeated, the last one SHALL apply. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
+Attribute names SHALL be matched case-insensitively, and when an attribute is repeated, the last one whose value parses SHALL apply, as RFC 6265 section 5.2 ignores an attribute whose value does not. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
 
 The cookie value SHALL NOT be stored in any table this change adds. Together with `022-add-fetch-policy`, which stores `Set-Cookie` values as `***` in `response_headers`, no cookie value is stored anywhere in a crawl file.
 
@@ -337,12 +337,12 @@ The cookie value SHALL NOT be stored in any table this change adds. Together wit
 - **THEN** the Page has `set_cookie_count` 2, the first cookie has `max_age` 3600 and the second has `domain` `example.test`
 
 #### Scenario: Cookies of a redirect are stored
-- **WHEN** `{site}/login` responds 302 with `Content-Type: text/html`, `Location: /` and `Set-Cookie: s=1; Path=/`
-- **THEN** its Page row has `set_cookie_count` 1
+- **WHEN** `{site}/login` responds 302 with `Content-Type: text/html`, `Location: /` and `Set-Cookie: session=eyJ1c2VyX2lkIjo0Mn0.Zx8kVQ.q3Jt0mXb; Path=/; HttpOnly; Secure; SameSite=Lax`
+- **THEN** its Page row has `set_cookie_count` 1, and its `cookies` row has `name` `session`, `http_only` 1 and `same_site` `lax`
 
 #### Scenario: Cookie values are not stored in Page data
-- **WHEN** a Crawl stores the cookie `sid=abc123` from `{site}/cookie`, whose body does not contain `abc123`
-- **THEN** 0 rows of `cookies`, `pages`, `links` and `page_sources` (decompressed) contain the text `abc123`
+- **WHEN** a Crawl stores the cookie `PHPSESSID=9c7f3b2e1d4a8f6e0b5c3a7d9e1f2b4c; path=/; HttpOnly` from `{site}/cookie`, whose body does not contain `9c7f3b2e1d4a8f6e0b5c3a7d9e1f2b4c`
+- **THEN** its `cookies` row has `name` `PHPSESSID`, and 0 rows of `cookies`, `pages`, `links` and `page_sources` (decompressed) contain the text `9c7f3b2e1d4a8f6e0b5c3a7d9e1f2b4c`
 
 ### Requirement: Decoding, text and URL resolution
 Analysed Pages SHALL be decoded to text using the first source that applies, in this order:
@@ -442,11 +442,11 @@ Headings SHALL be extracted from `<h1>` and `<h2>` elements anywhere in the docu
 - Each has a matching `_length` column.
 
 #### Scenario: Heading text includes nested elements
-- **WHEN** an analysed Page's HTML is `<body><h1>Main <span>Title</span></h1><h1>Second</h1><h2>Sub</h2></body>`
+- **WHEN** an analysed Page's HTML is `<body><h1>Main <span>Title</span></h1><h1>Second</h1><h1>Third</h1><h2>Sub</h2></body>`
 - **THEN** these values are stored:
   - `h1_1` is `Main Title` and `h1_1_length` is 10
   - `h1_2` is `Second` and `h1_2_length` is 6
-  - `h1_count` is 2
+  - `h1_count` is 3
   - `h2_1` is `Sub` and `h2_1_length` is 3
   - `h2_count` is 1
   - `h2_2` and `h2_2_length` are NULL

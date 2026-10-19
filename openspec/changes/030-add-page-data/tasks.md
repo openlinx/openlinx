@@ -159,10 +159,10 @@ Every task of this group reads the URL's result *(after the 020 merge)*. Task 6.
 Task 12.4 moved to group 4 as task 4.0.
 
 - [ ] 12.1 Drive, in one slice, "Schema lists exactly the Page record columns" (seam 6), "Columns of links" (seam 6), "Deferred columns are described with their release" (seam 6) and "Deferred columns are NULL after a completed Crawl" (seam 3+6). All four fail only because the later columns are missing: the 17 of `pages`, and `links.html_source`. Add them as always-NULL columns whose descriptions name their release.
-- [ ] 12.2 Drive "HTML is not stored by default" at seam 3+6. Create `page_sources` (`url_id`, an INTEGER PRIMARY KEY referencing `urls.id`, `encoding` and `html`), whose description starts with `Filled from v0.2. `; nothing writes it in v0.1.
+- [ ] 12.2 Drive "HTML is not stored by default" at seam 3+6. Create `page_sources` (`url_id`, an INTEGER PRIMARY KEY referencing `urls.id`, `encoding` and `html`), whose description starts with `Filled from v0.2. `; nothing writes it in v0.1. Extend the test of "Cookie values are not stored in Page data" to decompress `page_sources.html`, since it scans only text values.
 - [ ] 12.3 Drive "Non-ASCII title on a Windows console" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
 - [ ] 12.5 Docs: add the later columns and the empty `page_sources` table to `docs/page-data.md`, update the Page data table in `docs/architecture.md` with the stored column names, and check that the column descriptions read well as the Skill's column reference that `080` generates.
-- [ ] 12.6 Review: run the code-review skill on group 12's commits and then on the whole change, and refactor with the whole suite green.
+- [ ] 12.6 Review: run the code-review skill on group 12's commits and then on the whole change, and refactor with the whole suite green. Before the change is archived, give D5 to D12 and D15 an `**In short:**` opener, and reduce each Risks entry of tests named after no scenario to the test's name and the failure class it guards.
 
 ## 4b. Sizes, HTTP redirects and the reason phrase (after 022-min)
 
