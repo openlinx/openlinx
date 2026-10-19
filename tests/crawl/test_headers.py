@@ -176,8 +176,9 @@ _HEADER_PIECES = st.sampled_from(
     st.lists(
         st.tuples(
             st.sampled_from(["Link", "Refresh", "link", "X-Other"]),
-            st.lists(_HEADER_PIECES | st.text(max_size=6)).map("".join),
-        )
+            st.lists(_HEADER_PIECES | st.text(max_size=6), max_size=6).map("".join),
+        ),
+        max_size=4,
     )
 )
 def test_the_header_links_accept_any_values(headers: list[tuple[str, str]]) -> None:

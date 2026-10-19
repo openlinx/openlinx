@@ -345,8 +345,40 @@ def test_deeply_nested_html_gives_its_links() -> None:
             [("hyperlink", "http://site.test/x")],
         ),
         (
-            '<math><noscript><img src="/i.png"></noscript></math>',
-            [("image", "http://site.test/i.png")],
+            '<math display="block"><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup>'
+            '<noscript><a href="/formula">The formula</a></noscript></math>',
+            [("hyperlink", "http://site.test/formula")],
+        ),
+        (
+            '<svg viewBox="0 0 10 10"><noscript><link rel="canonical" href="/c"></noscript></svg>',
+            [],
+        ),
+        # At an HTML integration point a <noscript> is HTML, and its text gives its Links once.
+        (
+            '<button><svg viewBox="0 0 24 24" aria-labelledby="t"><title id="t">Cart<noscript>'
+            '<a href="/cart">Open the cart</a></noscript></title><path d="M7 18h10"/></svg>'
+            "</button>",
+            [("hyperlink", "http://site.test/cart")],
+        ),
+        (
+            '<svg role="img" viewBox="0 0 100 50"><desc>Sales by month<noscript>'
+            '<a href="/sales.csv">Download the data</a></noscript></desc>'
+            '<rect width="40" height="50"/></svg>',
+            [("hyperlink", "http://site.test/sales.csv")],
+        ),
+        (
+            '<svg width="200" height="100"><foreignObject width="200" height="100"><div>'
+            '<noscript><a href="/more">Read more</a></noscript></div></foreignObject></svg>',
+            [("hyperlink", "http://site.test/more")],
+        ),
+        (
+            '<p>The ratio <math><mi>&pi;<noscript><a href="/pi">pi</a></noscript></mi></math></p>',
+            [("hyperlink", "http://site.test/pi")],
+        ),
+        (
+            '<math><semantics><mi>x</mi><annotation-xml encoding="text/html"><noscript>'
+            '<a href="/x">x</a></noscript></annotation-xml></semantics></math>',
+            [("hyperlink", "http://site.test/x")],
         ),
         ('<svg><noscript>&lt;a href="/y"&gt;</noscript></svg>', []),
         ('<math><noscript>&lt;a href="/y"&gt;</noscript></math>', []),

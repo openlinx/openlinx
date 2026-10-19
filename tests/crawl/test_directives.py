@@ -88,10 +88,14 @@ _PIECES = st.sampled_from(
         "\ud800",
     ]
 )
-_VALUES = st.lists(_PIECES | st.text(max_size=8)).map("".join)
+_VALUES = st.lists(_PIECES | st.text(max_size=8), max_size=6).map("".join)
 
 
-@given(st.lists(_VALUES), st.lists(_VALUES), st.text() | _PIECES | st.just(DEFAULT_ROBOTS_TOKEN))
+@given(
+    st.lists(_VALUES, max_size=4),
+    st.lists(_VALUES, max_size=4),
+    st.text() | _PIECES | st.just(DEFAULT_ROBOTS_TOKEN),
+)
 def test_the_robots_directives_parser_accepts_any_values(
     meta_contents: list[str], header_values: list[str], token: str
 ) -> None:

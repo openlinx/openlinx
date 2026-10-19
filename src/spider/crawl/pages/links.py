@@ -25,17 +25,25 @@ _SINGLE_REFERENCES: Mapping[str, tuple[LinkType, str]] = {
     "embed": ("media", "src"),
     "object": ("media", "data"),
 }
-_ELEMENTS = ", ".join(
+# The elements a <noscript>'s text gives Links of: its <link> and <meta> are head metadata,
+# which a browser that runs scripts never sees.
+_NOSCRIPT_ELEMENTS = ", ".join(
     [
         *(f"{tag}[{attribute}]" for tag, (_, attribute) in _SINGLE_REFERENCES.items()),
-        "link[href], img, video, source, track, meta[http-equiv]",
+        "img, video, source, track",
     ]
 )
-# A <noscript> in <svg> or <math> is a foreign element, whose text is decoded markup.
-_ELEMENTS_OR_NOSCRIPT = f"{_ELEMENTS}, noscript:not(svg noscript, math noscript)"
+# Only a foreign <noscript> has elements in the tree.
+_ELEMENTS = (
+    f"{_NOSCRIPT_ELEMENTS}, link[href]:not(noscript link), meta[http-equiv]:not(noscript meta),"
+    " noscript"
+)
+_FOREIGN_ROOTS = frozenset({"svg", "math"})
+# HTML integration points (HTML Standard): inside one a <noscript> is HTML, as in the body.
+_INTEGRATION_POINTS = frozenset({"foreignObject", "desc", "title", "mi", "mo", "mn", "ms", "mtext"})
+_HTML_ENCODINGS = frozenset({"text/html", "application/xhtml+xml"})
 _MEDIA_TYPES: Mapping[str, LinkType] = {"video": "video", "audio": "audio"}
 PAGINATION_RELS = frozenset({"next", "prev", "previous"})
-_METADATA = frozenset({"link", "meta"})
 # These name an origin to connect to, not a file.
 _ORIGIN_HINTS = frozenset({"preconnect", "dns-prefetch"})
 # The srcset grammar of HTML: a URL ends at white space, or at the commas closing it, which
@@ -116,15 +124,31 @@ def links_in_tree(
 
 
 def _link_nodes(tree: LexborHTMLParser) -> Iterator[LexborNode]:
-    for node in tree.css(_ELEMENTS_OR_NOSCRIPT):
+    # A foreign <noscript>'s text is decoded markup, and its child elements are in the tree.
+    foreign = {node.mem_id for node in tree.css("svg noscript, math noscript") if _is_foreign(node)}
+    for node in tree.css(_ELEMENTS):
         if node.tag != "noscript":
             yield node
-            continue
-        text = node.text()
-        if text:
-            # Head metadata inside <noscript> is ignored; other elements there give their Links.
-            fragment = LexborHTMLParser(text, is_fragment=True)
-            yield from (inner for inner in fragment.css(_ELEMENTS) if inner.tag not in _METADATA)
+        elif node.mem_id not in foreign:
+            yield from _noscript_links(node.text())
+
+
+def _is_foreign(noscript: LexborNode) -> bool:
+    node = noscript.parent
+    while node is not None and node.tag not in _FOREIGN_ROOTS:
+        if node.tag in _INTEGRATION_POINTS or (
+            node.tag == "annotation-xml"
+            and (node.attributes.get("encoding") or "").lower() in _HTML_ENCODINGS
+        ):
+            return False
+        node = node.parent
+    return node is not None
+
+
+def _noscript_links(text: str) -> Iterator[LexborNode]:
+    if text:
+        fragment = LexborHTMLParser(text, is_fragment=True)
+        yield from fragment.css(_NOSCRIPT_ELEMENTS)
 
 
 def _references(

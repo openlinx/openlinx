@@ -1,7 +1,7 @@
 """Guard: code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14, D19)."""
 
 import ast
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -612,28 +612,61 @@ def test_a_serialization_of_a_node_is_named() -> None:
     ]
 
 
-# With scripting off, a head <noscript><img> ends <head> (020-add-crawl-core design D5); a
-# fragment is the content of a <noscript>, read as markup.
-PARSE_FLAGS = ("scripting", "is_fragment")
+# With scripting off, a head <noscript><img> ends <head> (020-add-crawl-core design D5). The one
+# fragment parse reads an HTML <noscript>'s text as markup.
+FRAGMENT_PARSE = ("spider/crawl/pages/links.py", "_noscript_links")
+
+
+def _calls_in_functions(
+    node: ast.AST, function: str | None = None
+) -> Iterator[tuple[ast.Call, str | None]]:
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            yield from _calls_in_functions(child, child.name)
+            continue
+        if isinstance(child, ast.Call):
+            yield child, function
+        yield from _calls_in_functions(child, function)
+
+
+def _sets(call: ast.Call, flag: str) -> bool:
+    return any(
+        keyword.arg == flag
+        and isinstance(keyword.value, ast.Constant)
+        and keyword.value.value is True
+        for keyword in call.keywords
+    )
+
+
+def _parses(sources: Mapping[str, str]) -> list[tuple[str, int, str | None]]:
+    """Each parser built in the modules that read Pages, with what it breaches, if anything."""
+    found = []
+    for module, source in sources.items():
+        if not module.startswith(PAGE_READERS):
+            continue
+        tree = ast.parse(source)
+        names = {"LexborHTMLParser"} | {
+            alias.asname
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+            if alias.name == "LexborHTMLParser" and alias.asname
+        }
+        for call, function in _calls_in_functions(tree):
+            if _base_name(call.func) not in names:
+                continue
+            breach = None
+            if _sets(call, "is_fragment") and (module, function) != FRAGMENT_PARSE:
+                breach = "parses a fragment outside the noscript re-parse"
+            elif not _sets(call, "scripting") and not _sets(call, "is_fragment"):
+                breach = "parses a document with scripting off"
+            found.append((module, call.lineno, breach))
+    return found
 
 
 def parse_violations(sources: Mapping[str, str]) -> list[str]:
-    """Parsers built with neither flag in the modules that read Pages, given every module's
-    source by path."""
-    return [
-        f"{module}:{node.lineno} parses a document with scripting off"
-        for module, source in sources.items()
-        if module.startswith(PAGE_READERS)
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.Call)
-        and _base_name(node.func) == "LexborHTMLParser"
-        and not any(
-            keyword.arg in PARSE_FLAGS
-            and isinstance(keyword.value, ast.Constant)
-            and keyword.value.value is True
-            for keyword in node.keywords
-        )
-    ]
+    """Parsers that break design D5, given every module's source by path."""
+    return [f"{module}:{line} {breach}" for module, line, breach in _parses(sources) if breach]
 
 
 def test_every_page_is_parsed_with_scripting_on() -> None:
@@ -642,16 +675,24 @@ def test_every_page_is_parsed_with_scripting_on() -> None:
         for path in sorted((SRC / "spider").rglob("*.py"))
     }
 
-    assert parse_violations(sources) == []
+    assert (parse_violations(sources), bool(_parses(sources))) == ([], True)
 
 
 def test_a_parse_with_scripting_off_is_named() -> None:
     sources = {
-        "spider/crawl/pages/links.py": "tree = LexborHTMLParser(text)\n",
+        "spider/crawl/pages/links.py": (
+            "tree = LexborHTMLParser(text)\n"
+            "def _noscript_links(text):\n"
+            "    return LexborHTMLParser(text, is_fragment=True)\n"
+        ),
         "spider/extract/page_data.py": "tree = lexbor.LexborHTMLParser(text, scripting=False)\n",
         "spider/crawl/pages/preparation.py": (
             "a = LexborHTMLParser(text, scripting=True)\n"
-            "b = LexborHTMLParser(text, is_fragment=True)\n"
+            "def prepare(text):\n"
+            "    return LexborHTMLParser(text, is_fragment=True)\n"
+        ),
+        "spider/crawl/pages/headers.py": (
+            "from selectolax.lexbor import LexborHTMLParser as Parser\ntree = Parser(text)\n"
         ),
         "spider/report/html.py": "tree = LexborHTMLParser(text)\n",
     }
@@ -659,6 +700,8 @@ def test_a_parse_with_scripting_off_is_named() -> None:
     assert parse_violations(sources) == [
         "spider/crawl/pages/links.py:1 parses a document with scripting off",
         "spider/extract/page_data.py:1 parses a document with scripting off",
+        "spider/crawl/pages/preparation.py:3 parses a fragment outside the noscript re-parse",
+        "spider/crawl/pages/headers.py:2 parses a document with scripting off",
     ]
 
 
