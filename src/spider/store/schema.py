@@ -15,6 +15,7 @@ from sqlalchemy import (
     or_,
 )
 
+from spider.store.page_records import SameSite
 from spider.store.records import (
     CrawlMode,
     CrawlState,
@@ -75,7 +76,9 @@ def public_tables() -> list[Table]:
     return [table for table in metadata.tables.values() if not table.name.startswith("_")]
 
 
-def public_table(name: str, *columns: Column[Any], comment: str, change: int) -> Table:
+def public_table(
+    name: str, *columns: Column[Any], comment: str, change: int, without_rowid: bool = False
+) -> Table:
     """The one way to declare a public table: STRICT, with the CHECKs its columns' values call for.
 
     STRICT refuses the FLOAT and DOUBLE that `Float` and `Double` declare: a real number is `REAL`.
@@ -88,6 +91,7 @@ def public_table(name: str, *columns: Column[Any], comment: str, change: int) ->
         comment=comment,
         info={"change": change},
         sqlite_strict=True,
+        sqlite_with_rowid=not without_rowid,
     )
 
 
@@ -636,4 +640,64 @@ Index(
         "description": "Finding a Page by its display address, and the tie-breaker of keyset "
         "paging over Pages."
     },
+)
+
+cookies = public_table(
+    "cookies",
+    Column(
+        "url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        autoincrement=False,
+        comment="The Page whose response set the cookie.",
+    ),
+    Column(
+        "ordinal",
+        Integer,
+        primary_key=True,
+        autoincrement=False,
+        comment="The header's position among the response's Set-Cookie headers, from 1.",
+    ),
+    Column(
+        "name",
+        Text,
+        nullable=False,
+        comment="The text before the header's first =, trimmed; the empty string when its first "
+        "part has no =.",
+    ),
+    Column(
+        "domain",
+        Text,
+        comment="The Domain attribute, lowercased, without a leading dot; NULL when absent or "
+        "empty.",
+    ),
+    Column("path", Text, comment="The Path attribute, trimmed, as sent; NULL when absent."),
+    Column(
+        "expires",
+        Timestamp,
+        comment="The Expires attribute as a UTC time, a two-digit year read as RFC 6265 reads "
+        "it; NULL when absent or invalid.",
+    ),
+    Column(
+        "max_age",
+        Integer,
+        comment="The Max-Age attribute, in seconds; NULL when absent, not an optional - followed "
+        "by digits, or beyond a 64-bit INTEGER.",
+    ),
+    Column("secure", Flag, nullable=False, comment="1 when the Secure attribute is present."),
+    Column("http_only", Flag, nullable=False, comment="1 when the HttpOnly attribute is present."),
+    Column(
+        "partitioned", Flag, nullable=False, comment="1 when the Partitioned attribute is present."
+    ),
+    Column(
+        "same_site",
+        Text,
+        comment="The SameSite attribute, lowercased; NULL when absent or another value.",
+        info={"values": literal_values(SameSite)},
+    ),
+    comment="One row for each Set-Cookie header of a Page's response, with the cookie's name and "
+    "attributes, never its value.",
+    change=30,
+    without_rowid=True,
 )

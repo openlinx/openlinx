@@ -2,6 +2,9 @@
 
 from datetime import UTC, datetime
 
+from sqlalchemy import select
+
+from spider.store.schema import public_tables
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
@@ -91,6 +94,26 @@ def test_repeated_values_equal_the_urls_row(
         "FROM urls WHERE url = ?",
         [about],
     )
+
+
+def test_cookie_values_are_not_stored_in_page_data(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={"/cookie": Page(body="<p>Cookie</p>", headers=[("Set-Cookie", "sid=abc123")])})
+    )
+
+    crawl_file = crawl_result(server.url("/cookie")).crawl_file
+
+    # Every table of this change, so the tables of later groups are searched too.
+    tables = [table for table in public_tables() if table.info["change"] == 30]
+    holding_the_value = [
+        table.name
+        for table in tables
+        for row in query(crawl_file, str(select(table)))
+        if any(isinstance(value, str) and "abc123" in value for value in row)
+    ]
+    assert (query(crawl_file, "SELECT name FROM cookies"), holding_the_value) == ([("sid",)], [])
 
 
 def test_image_response_is_not_a_page(

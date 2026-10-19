@@ -205,3 +205,21 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | Name | Columns | Unique | Where | Description |
 |---|---|---|---|---|
 | `pages_address` | `address` | yes | | Finding a Page by its display address, and the tie-breaker of keyset paging over Pages. |
+
+## Table `cookies`
+
+One row for each Set-Cookie header of a Page's response, with the cookie's name and attributes, never its value.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | PK, → `urls.id` | | | The Page whose response set the cookie. |
+| `ordinal` | INTEGER | no | PK | | | The header's position among the response's Set-Cookie headers, from 1. |
+| `name` | TEXT | no | | | | The text before the header's first =, trimmed; the empty string when its first part has no =. |
+| `domain` | TEXT | yes | | | | The Domain attribute, lowercased, without a leading dot; NULL when absent or empty. |
+| `path` | TEXT | yes | | | | The Path attribute, trimmed, as sent; NULL when absent. |
+| `expires` | TEXT | yes | | `timestamp` | | The Expires attribute as a UTC time, a two-digit year read as RFC 6265 reads it; NULL when absent or invalid. |
+| `max_age` | INTEGER | yes | | | | The Max-Age attribute, in seconds; NULL when absent, not an optional - followed by digits, or beyond a 64-bit INTEGER. |
+| `secure` | INTEGER | no | | `boolean` | | 1 when the Secure attribute is present. |
+| `http_only` | INTEGER | no | | `boolean` | | 1 when the HttpOnly attribute is present. |
+| `partitioned` | INTEGER | no | | `boolean` | | 1 when the Partitioned attribute is present. |
+| `same_site` | TEXT | yes | | | `strict`, `lax`, `none` | The SameSite attribute, lowercased; NULL when absent or another value. |

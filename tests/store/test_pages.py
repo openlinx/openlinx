@@ -4,11 +4,11 @@ from dataclasses import fields
 from datetime import UTC, datetime
 
 from spider.crawl.urls import parse_seed
-from spider.store.page_records import PageRow
-from spider.store.pages import write_page
+from spider.store.page_records import CookieRow, PageRow
+from spider.store.pages import write_cookie, write_page
 from spider.store.records import FetchedUrl
 from spider.store.rows import HandlerRows
-from spider.store.schema import pages
+from spider.store.schema import cookies, pages
 from spider.store.urls import record_fetched, record_seed
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
@@ -53,6 +53,47 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
     assert query(crawl.path, "SELECT url_id, address, url_encoded_address FROM pages") == [
         (url_id, "https://bücher.test/über", url)
     ]
+
+
+def test_the_units_of_cookies_run_again_the_same(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace)
+    url = parse_seed("https://example.test/")
+    assert isinstance(url, str)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        url_id = writer.run(record_seed(url, is_internal=True, in_scope=True))
+        cookie = CookieRow(
+            url_id=url_id,
+            ordinal=1,
+            name="sid",
+            domain=None,
+            path="/",
+            expires=datetime(2027, 1, 2, tzinfo=UTC),
+            max_age=None,
+            secure=True,
+            http_only=False,
+            partitioned=False,
+            same_site="lax",
+        )
+        fetched = FetchedUrl(
+            url_id=url_id,
+            status_code=200,
+            content_type="text/html",
+            fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+            response_time_ms=12,
+            parsed=True,
+            rows=(HandlerRows(write_cookie, (cookie,)),),
+        )
+        writer.run(record_fetched(fetched))
+        replay_now(writer)
+
+    assert query(crawl.path, "SELECT url_id, ordinal, name, expires, secure FROM cookies") == [
+        (url_id, 1, "sid", "2027-01-02T00:00:00.000Z", 1)
+    ]
+
+
+def test_the_cookie_row_has_every_cookies_column_in_order() -> None:
+    assert [field.name for field in fields(CookieRow)] == [column.name for column in cookies.c]
 
 
 def test_the_page_row_has_every_pages_column_in_order() -> None:
