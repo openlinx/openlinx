@@ -70,11 +70,13 @@ Task 4.0 is task 12.4, moved here; 4.3, 4.6, 4.7 and 4.10 moved to group 4b, and
 - [x] 5.4 Drive "Cookies of a redirect are stored" at seam 3+6 (a 302 Page with `Set-Cookie`).
 - [x] 5.5 Docs: add the cookie concepts and the rule that this change's tables store no cookie value to `docs/page-data.md`.
 - [x] 5.6 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [ ] 5.7 Fix the findings of the review of group 5, before group 8's first slice: a `Domain` that is no host name or IP address, and a `Path` that does not start with `/`, are NULL, so a folded header stores no value; a Max-Age beyond 64 bits is clamped; real repeated attributes and a lowercase name from an HTTP/1.1 proxy in the tests; the cookie column test compares sets; and the in-flight depth test is sequenced on a request, not on delays.
 
 ## 6. Directives and canonicals
 
-Every task of this group reads the URL's result *(after the 020 merge)*. Task 6.13 is task 4.11, moved here, and comes before 6.3.
+Every task of this group but 6.0 reads the URL's result *(after the 020 merge)*. Task 6.13 is task 4.11, moved here, and comes before 6.3.
 
+- [ ] 6.0 Add `tests/support/headers.py`: real `Set-Cookie` and `Last-Modified` headers, each with the stack that sends it (PHP, Django, Rails, Express, nginx and a CDN). The seam-4 cookie and Last-Modified tests and one hypothesis property draw from it. Pin that `SameSite=Lax; SameSite=Foo` gives `same_site` NULL, as an unknown SameSite is not ignored.
 - [ ] 6.1 Drive "Meta robots keeps case but reads directives" at seam 4, from the robots directives of the URL's result, which `020-add-crawl-core`'s parser gives. Add `meta_robots`, `meta_robots_noindex` and `meta_robots_nofollow`.
 - [ ] 6.2 Drive "X-Robots-Tag is stored with the parser's verdict" and "X-Robots-Tag is kept when page preparation fails" at seam 4, a trivial pair: the same columns from the URL's result, for an analysed Page and for one whose preparation failed. Add `x_robots_tag`, `x_robots_tag_noindex` and `x_robots_tag_nofollow`.
 - [ ] 6.13 Drive "HTTP Refresh header is a redirect" at seam 4, from `020`'s `http_refresh` Link, and add `redirect_url` and `redirect_type` with all its values.
@@ -103,16 +105,16 @@ Every task of this group reads the URL's result *(after the 020 merge)*. Task 6.
 
 ## 8. Content Area, counts and declared language
 
-- [ ] 8.1 Drive "Default Content Area leaves out navigation" at seam 4. Add the `[content_area]` settings (`include`, `exclude`), the Page extractor's config, which `default_hooks(settings)` resolves from the Crawl's settings; fixture A as test data; and `word_count`.
+- [ ] 8.1 Drive "Default Content Area leaves out navigation" at seam 4. Add the `[content_area]` settings (`include`, `exclude`), the Page extractor's config, which `default_hooks(settings)` resolves from the Crawl's settings; fixture A as test data; and `word_count`. The Content Area, words and sentences live in `spider.extract.content`, over one text walk in `spider.extract.text` that yields blocks. The `[content_area]` table is registered beside `[crawl]`, and `CrawlPlan.loaded` brings the loaded settings to `default_hooks`. The new columns follow `h2_count`, in the spec's order.
 - [ ] 8.2 Drive "Empty exclude list counts everything" at seam 4.
 - [ ] 8.3 Drive "Include selector limits the Content Area" at seam 4.
-- [ ] 8.4 Drive "Invalid selector stops the Crawl" at seam 1: `settings_invalid` with the key `content_area.exclude`, and 0 requests to the fixture site. Record `content_area` in the Crawl's config.
-- [ ] 8.5 Drive "Words with apostrophes, hyphens and dots" at seam 4.
-- [ ] 8.6 Drive "Each ideograph and kana is a word" at seam 4.
+- [ ] 8.4 Drive "Invalid selector stops the Crawl" at seam 1: `settings_invalid` with the key `content_area.exclude`, and 0 requests to the fixture site. Record `content_area` in the Crawl's config. Assert at seam 1 that a Crawl with its own `[content_area]` records it under `content_area`.
+- [ ] 8.5 Drive "Words with apostrophes, hyphens and dots" at seam 4. Pin with tests named after no scenario, on real page text: a Devanagari word with its marks is one word, `snake_case` is two, and `カード` is three. Measure the word count on a real 1 MB Japanese page and a real 1 MB English page; each stays under about 50 ms.
+- [ ] 8.6 Drive "Each ideograph and kana is a word" at seam 4. Han, Hiragana and Katakana come from a range table of Scripts.txt, compiled into the tokenizer's regular expression.
 - [ ] 8.7 Drive "Blocks end sentences" at seam 4, and add `sentence_count`.
-- [ ] 8.8 Drive "Text ratio of a small document" at seam 4, and add `text_ratio_pct`.
+- [ ] 8.8 Drive "Text ratio of a small document" at seam 4, and add `text_ratio_pct`. It is NULL for an empty decoded document, and rounded half up from its exact quotient.
 - [ ] 8.9 Drive "Counts for fixture A" at seam 4, and add `average_words_per_sentence`.
-- [ ] 8.10 Drive "Declared language is trimmed, not normalised" at seam 4, and add `declared_language`.
+- [ ] 8.10 Drive "Declared language is trimmed, not normalised" at seam 4, and add `declared_language`. A `lang` attribute without a value gives the empty string.
 - [ ] 8.11 Docs: add the Content Area settings with examples (including keeping article `<header>` elements), the word and sentence rules, Text Ratio and the declared language column to `docs/page-data.md`.
 - [ ] 8.12 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 

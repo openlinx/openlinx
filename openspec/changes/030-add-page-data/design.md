@@ -90,11 +90,11 @@ Indexability is stored only for Pages. `040`'s `canonical-to-non-indexable` Rule
 - *Alternative: incremental inlink counters updated for every Link write.* Rejected. It is contended, and it is wrong while targets are still unknown.
 
 ### D7. One text model for everything
-- **Element text.** One algorithm produces headings, anchor text, the Content Area text, the Exact Duplicate hash and Text Ratio: text nodes in document order, with non-text elements skipped and block breaks at block-level elements and `br`.
+- **Element text.** One algorithm produces headings, anchor text, the Content Area text, the Exact Duplicate hash and Text Ratio: text nodes in document order, with non-text elements skipped and block breaks at block-level elements and `br`. One walk yields the text's blocks: sentences are counted per block, and an element's text is its blocks joined by spaces.
 - **Whitespace.** Normalisation follows `document.title` semantics (ASCII whitespace only), so NBSP is kept in stored text but still separates words.
 
 ### D8. Words, sentences and syllables
-- **Words** are Unicode letter, mark and number runs, joined across a single `'`, `-`, `.` or `,`. Han, Hiragana and Katakana count one word per character. Scripts written without spaces between words (Thai, Lao, Khmer, Myanmar) are undercounted; this is documented as a limitation.
+- **Words** are Unicode letter, mark and number runs, joined across a single `'`, `-`, `.` or `,`. Han, Hiragana and Katakana count one word per character. Python's `\w` is not this class, since it leaves out marks and takes `_`, and Python has no script property, so the tokenizer is one compiled regular expression whose classes come from a range table of Unicode's Scripts.txt; `unicodedata.category` is used only where a regular expression cannot express L, M and N. It needs no `regex` dependency. Scripts written without spaces between words (Thai, Lao, Khmer, Myanmar) are undercounted; this is documented as a limitation.
 - **Syllables** (v0.2) are counted with our own rule-based counters per readability language, with no dictionary:
   - The base is groups of consecutive vowels, using each language's vowel set (including `y` for en and nl).
   - `en`: a final `e` is subtracted unless it ends a consonant + `le` or is the word's only vowel group.
@@ -132,7 +132,7 @@ SHA-256 over the NFC-normalised Content Area text, stored as hex. It is in the s
 **In short:** `[content_area]` is a new settings table and the Page extractor's config; the v0.2 keys go under `[crawl]`.
 
 - From v0.2, `store_html` and `detect_language` go under `[crawl]`, following `010`'s flag-mirroring rule. `020`'s generic recorded config therefore includes them.
-- The new `[content_area]` table (`include`, `exclude`) is added to the settings model. Its effective values are recorded under `content_area`. They are the Page extractor's config: `default_hooks(settings)` in `spider.services.hooks` resolves them from the Crawl's settings, so page preparation's settings snapshot has no field of its own for them (`020` D9).
+- The new `[content_area]` table (`include`, `exclude`) is added to the settings model. Its effective values are recorded under `content_area`. They are the Page extractor's config, a frozen struct of the selectors' texts, which each worker's parser compiles: `default_hooks(settings)` in `spider.services.hooks` resolves them from the settings that `plan_crawl` loaded, kept on the plan as `CrawlPlan.loaded`, so page preparation's settings snapshot has no field of its own for them (`020` D9).
 - Selectors are compiled when the settings are validated. An invalid one is a `settings_invalid` problem with the key `content_area.include` or `content_area.exclude`.
 - `060`'s equivalent command warns that `[content_area]` cannot be written as flags.
 
@@ -140,6 +140,8 @@ SHA-256 over the NFC-normalised Content Area text, stored as hex. It is in the s
 **In short:** `cookies` stores the names and attributes of every Page's `Set-Cookie` headers, never a value.
 
 `cookies` stores only names and attributes, whatever the Page's status: `020` calls the handlers for every URL that reaches a final state, and the `cookies` handler returns the cookie rows of every Page. `022` stores cookie values in `response_headers` as `***`, so no cookie value exists anywhere in a crawl file.
+
+A Page sends a few cookies, so `cookies` holds about 2M rows at 500k Pages. It is read only by `url_id`, the prefix of its key `(url_id, ordinal)`, so `WITHOUT ROWID` keeps each Page's rows together in the key's own B-tree.
 
 ### D15. Columns grow with their behaviours
 There are no schema-first slices. Each column and table is added in the TDD slice whose scenario first needs it, with its `docs/schema.md` entry in the same commit, so `015`'s contract test is never red between commits. Scenarios are written so that every column is driven by a behaviour; for example, the second-title columns are asserted by "Second title element". The last v0.1 slice adds the 17 `pages` columns and `links.html_source` that later releases fill, and pins the full column set with "Schema lists exactly the Page record columns".
@@ -198,6 +200,7 @@ The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is 
 - [Every HTML column of `pages` is one more field of the Page extractor] → `extract_page_data` is split by column family once `spider/extract/page_data.py` passes about 150 lines.
 - [Stored text has no bound: an unclosed top-level `<h1>` holds the rest of the body, so its text, up to four copies per row across the heading columns, is the body's text] → No cap, since a length must agree with its text; `026`'s 500k run measures the size of `pages`. If it shows a problem, the stored text is capped at about 2,000 code points while its length counts the full text.
 - [`last_modified` reads dates leniently, as RFC 9110 encourages, with three edge cases: a four-digit year below 100, such as `0001`, is read as a two-digit year (`2001`); a two-digit year from `69` to `99` is read in the 1900s, where RFC 9110 reads a year up to 50 years ahead in the 2000s, so `Sunday, 06-Nov-70` is 1970; and a leap second (`:60`), which RFC 9110 allows, gives NULL, since a Python time has no 60th second] → Four-digit years below 100 do not occur in practice, and the value is still a valid timestamp. A Last-Modified time is never ahead of the Crawl, so only the past reading of a two-digit year can be true. Leap seconds are rare, and none has been inserted since 2016.
+- [The date reader takes a named zone, such as `PST`, and a time without seconds, which RFC 6265 section 5.1.1 does not accept in a cookie date] → Servers send `GMT`, with seconds; such an `Expires` is stored as read instead of NULL.
 - [The depth pass reads every followed Link of the Crawl (D18)] → One indexed scan of `links` per level and one write per URL whose depth gets smaller; `026`'s 500k run measures it.
 - [Which characters stay encoded in `address` comes from Python's Unicode database, which a new Python version extends] → Only the categories of assigned characters are read (no `Cn` or `Co`), so an address changes only if a character's category changes; the property above pins that an address still normalises back to its URL.
 

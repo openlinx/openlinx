@@ -93,6 +93,8 @@ The Kind column marks how a column is filled:
 - **W (written with the Page):** a value that other stored rows already determine: a copy of a `urls` or `origins` value, or a value computed from them, from the Page's other columns, its Links or its cookies. It is written in the Page's unit, from the same response.
 - No mark: measured from the Page's response.
 
+A value *rounded to 2 decimals* SHALL be its exact quotient rounded half up, so 1 ÷ 8 is 0.13.
+
 | Group | Column | Type | Null | Kind | Format / values |
 |---|---|---|---|---|---|
 | Identity and response | `url_id` | INTEGER, primary key, references `urls.id` | no |  |  |
@@ -313,10 +315,10 @@ The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` 
 | `url_id` | INTEGER, references `urls.id` | no | | the Page |
 | `ordinal` | INTEGER | no | | the header's position among the response's `Set-Cookie` headers, from 1 |
 | `name` | TEXT | no | | the text before the first `=`, trimmed; the empty string when the header's first part has no `=` |
-| `domain` | TEXT | yes | | the `Domain` attribute, lowercased with any leading dot removed; NULL when absent or empty |
-| `path` | TEXT | yes | | the `Path` attribute, trimmed, as sent rather than the path a browser would default to; NULL when absent |
+| `domain` | TEXT | yes | | the `Domain` attribute, lowercased with any leading dot removed; NULL when absent, empty, or neither a host name nor an IP address |
+| `path` | TEXT | yes | | the `Path` attribute, trimmed, as sent rather than the path a browser would default to; NULL when absent or when it does not start with `/`, which RFC 6265 section 5.2.4 reads as the default path |
 | `expires` | TEXT | yes | timestamp | the `Expires` attribute as a timestamp, a two-digit year read as RFC 6265 reads it (70–99 as 19xx, 0–69 as 20xx); NULL when absent or invalid |
-| `max_age` | INTEGER | yes | | the `Max-Age` attribute, in seconds; NULL when it is not an optional `-` followed by digits, or does not fit a 64-bit INTEGER |
+| `max_age` | INTEGER | yes | | the `Max-Age` attribute, in seconds; NULL when it is not an optional `-` followed by digits; a value beyond a 64-bit INTEGER is clamped to its bound |
 | `secure` | INTEGER | no | boolean | 1 when the `Secure` attribute is present |
 | `http_only` | INTEGER | no | boolean | 1 when the `HttpOnly` attribute is present |
 | `partitioned` | INTEGER | no | boolean | 1 when the `Partitioned` attribute is present |
@@ -326,7 +328,7 @@ The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` 
 
 Attribute names SHALL be matched case-insensitively. When `Domain`, `Expires` or `Max-Age` is repeated, the last one whose value parses SHALL apply, as RFC 6265 section 5.2 ignores one whose value does not; when another attribute is repeated, the last one SHALL apply, as an unknown `SameSite` value is not ignored. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
 
-The cookie value SHALL NOT be stored in any table this change adds. Together with `022-add-fetch-policy`, which stores `Set-Cookie` values as `***` in `response_headers`, no cookie value is stored anywhere in a crawl file.
+The cookie value SHALL NOT be stored in any table this change adds, also when a proxy folds several `Set-Cookie` headers into one.
 
 #### Scenario: Cookie attributes are stored
 - **WHEN** a Page's response has `Set-Cookie: sid=abc123; Path=/; Secure; HttpOnly; SameSite=Lax`
@@ -652,7 +654,7 @@ Fixture A below is referred to by later scenarios:
 ### Requirement: Word, sentence and syllable counts
 These counts SHALL be taken over the Content Area text.
 
-**Words.** A word is a maximal sequence of letters, marks and digits (Unicode categories L, M and N). A single apostrophe (`'` or `’`), hyphen (`-` or U+2010), full stop or comma between two such characters does not end the sequence. There is one exception: each Han, Hiragana or Katakana character is a word on its own. `word_count` is the number of words.
+**Words.** A word is a maximal sequence of letters, marks and digits (Unicode categories L, M and N). A single apostrophe (`'` or `’`), hyphen (`-` or U+2010), full stop or comma between two such characters does not end the sequence. There is one exception: each Han, Hiragana or Katakana character is a word on its own, and so is the prolonged sound mark `ー` (U+30FC), so `カード` is 3 words. `word_count` is the number of words.
 
 **Sentences.** A sentence is a part of a text block that contains at least one word and ends in one of two ways:
 
@@ -747,7 +749,7 @@ The detected language SHALL NOT be used.
 - **THEN** `flesch_reading_ease` is NULL
 
 ### Requirement: Text Ratio
-`text_ratio_pct` SHALL be 100 × (the length of the normalised text of `<body>`) ÷ (the length in characters of the decoded HTML document), rounded to 2 decimals. The text of `<body>` is taken without Content Area exclusions.
+`text_ratio_pct` SHALL be 100 × (the length of the normalised text of `<body>`) ÷ (the length in characters of the decoded HTML document), rounded to 2 decimals, or NULL when the decoded document is empty. The text of `<body>` is taken without Content Area exclusions.
 
 #### Scenario: Text ratio of a small document
 - **WHEN** an analysed Page's decoded HTML is exactly `<html><body><p>Hello world</p></body></html>`
@@ -756,7 +758,7 @@ The detected language SHALL NOT be used.
 ### Requirement: Declared and detected language
 The two languages SHALL be stored separately:
 
-- **`declared_language`** is the trimmed `lang` attribute of the root `<html>` element. It is the empty string when the attribute is present but empty, and NULL when it is absent.
+- **`declared_language`** is the trimmed `lang` attribute of the root `<html>` element. It is the empty string when the attribute is present but empty or has no value, as in `<html lang>`, and NULL when it is absent.
 - **`detected_language`** is filled from v0.2, and SHALL be NULL in every Page in v0.1. From v0.2 it SHALL be NULL unless the Crawl was started with `--detect-language`, or with `detect_language = true` under `[crawl]` in `spider.toml`. In that case it is the ISO 639-1 code of the language detected offline from the Content Area text. It is NULL when that text has no words.
 
 #### Scenario: Declared language is trimmed, not normalised
