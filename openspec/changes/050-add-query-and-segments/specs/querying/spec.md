@@ -6,7 +6,7 @@ Lets agents and people read a Crawl through stable, token-efficient Commands: an
 
 ### Requirement: Query Commands read the selected Crawl without changing it
 
-The `summary`, `pages`, `page`, `issues`, `sql` and, from v0.2, `export` Commands SHALL read the Crawl that the `--crawl` option selects. That option, `latest|<id>|<path>` with the default `latest`, is defined by `015-add-crawl-store`. The Commands SHALL NOT modify the crawl store, they SHALL work while the selected Crawl is still running, and each invocation SHALL read one consistent snapshot of the store.
+The `summary`, `pages`, `page`, `issues`, `issue`, `sql` and, from v0.2, `export` Commands SHALL read the Crawl that the `--crawl` option selects. That option, `latest|<id>|<path>` with the default `latest`, is defined by `015-add-crawl-store`. The Commands SHALL NOT modify the crawl store, they SHALL work while the selected Crawl is still running, and each invocation SHALL read one consistent snapshot of the store.
 
 #### Scenario: The latest Crawl is used by default
 - **WHEN** the Workspace holds Crawl A, started first and `completed`, and Crawl B, started second
@@ -24,14 +24,14 @@ The `summary`, `pages`, `page`, `issues`, `sql` and, from v0.2, `export` Command
 - **THEN** the output has `"state": "running"` in `crawl` and `"pages": 4` in `totals`
 
 #### Scenario: Queries leave the store unchanged
-- **WHEN** `spider summary`, `spider pages`, `spider page https://example.com/`, `spider issues` and `spider sql "SELECT 1"` each run once against a `completed` Crawl
+- **WHEN** `spider summary`, `spider pages`, `spider page https://example.com/`, `spider issues`, `spider issue title-missing` and `spider sql "SELECT 1"` each run once against a `completed` Crawl
 - **THEN** a SQL dump of the crawl store taken afterwards is identical to one taken before they ran
 
 ### Requirement: Query Commands are self-described
 
-`spider commands --format json`, the self-description defined by `010-add-workspace-and-cli-contract`, SHALL describe the `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands. The description SHALL include each Command's output kind, every flag this capability defines for it, and every diagnostic code it can emit. The output kinds SHALL be:
+`spider commands --format json`, the self-description defined by `010-add-workspace-and-cli-contract`, SHALL describe the `summary`, `pages`, `page`, `issues`, `issue`, `sql` and `export` Commands. The description SHALL include each Command's output kind, every flag this capability defines for it, and every diagnostic code it can emit. The output kinds SHALL be:
 - `document` for `summary`, `page` and `sql`
-- `list` for `pages` and `issues`
+- `list` for `pages`, `issues` and `issue`
 - `rows` for `export` (v0.2)
 
 #### Scenario: The flags of pages are listed
@@ -301,6 +301,8 @@ In v0.1 the language SHALL be the `and` of predicates of three forms: `column co
 #### Scenario: is null and is not null
 - **WHEN** Pages A (meta_description_1 null) and B (meta_description_1 `Hello`) are filtered with `meta_description_1 is null`
 - **THEN** the only matching Page is A
+- **WHEN** the same Pages are filtered with `meta_description_1 is not null`
+- **THEN** the only matching Page is B
 
 #### Scenario: Doubled quotes inside a string
 - **WHEN** Pages A (title_1 `It's here`) and B (title_1 `Its here`) are filtered with `title_1 = 'It''s here'`
@@ -356,7 +358,7 @@ A string literal compared with a numeric column, a number literal compared with 
 
 ### Requirement: Filter syntax errors
 
-An expression that does not match the grammar SHALL be rejected with the error code `invalid_where` before any query runs. The message SHALL give the 1-based character position where parsing failed. An expression nested more than 64 levels deep SHALL be rejected with `invalid_where`. The expression SHALL never reach the store as SQL text.
+An expression that does not match the grammar SHALL be rejected with the error code `invalid_where` before any query runs. The message SHALL give the 1-based character position where parsing failed. An expression nested more than 64 levels deep, or made of more than 256 predicates, SHALL be rejected with `invalid_where`. The expression SHALL never reach the store as SQL text.
 
 #### Scenario: Position of a syntax error
 - **WHEN** `spider pages --where "status_code = = 200"` runs
@@ -374,9 +376,13 @@ An expression that does not match the grammar SHALL be rejected with the error c
 - **WHEN** `--where` is `status_code = 200` wrapped in 65 pairs of parentheses
 - **THEN** the expression is rejected with code `invalid_where`
 
+#### Scenario: Too many predicates
+- **WHEN** a `--where` expression joins one comparison more than the predicate limit with `and`
+- **THEN** the error has the code `invalid_where`
+
 #### Scenario: Any input either parses or fails cleanly
 - **WHEN** any string of up to 200 printable characters is given as a `--where` expression
-- **THEN** the result is either a valid filter or an `invalid_where` error, and never a crash
+- **THEN** the result is either a syntax tree or an `invalid_where` error, and never a crash
 
 ### Requirement: Unknown names in --where, --sort and --fields
 
@@ -613,6 +619,8 @@ The Issues SHALL be read through the Issues reader of `040-add-rules`, so a Craw
 - The items are the Issue's Affected URLs, read through the Issues reader of `040-add-rules`. Without `--fields`, each item SHALL be `{url, detail}`, where `detail` is the JSON object of measured values that `040-add-rules` recorded for that Affected URL, or `null`. The available fields are `url`, `detail`, the `pages` columns and `segment`. Page columns and `segment` are `null` for an Affected URL without a `pages` row.
 - The default order SHALL be `unique_inlinks` descending, then `url`. `--where`, `--sort`, `--limit`, `--cursor` and `--segment` SHALL work as they do for `pages`.
 
+With `--format table`, `rule` SHALL be printed above the Affected URLs. `--format jsonl` SHALL print the items only, as for every list Command.
+
 A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `items`. An unknown rule id SHALL be rejected with the error code `rule_not_found` of `040-add-rules`. The hint SHALL mention `spider rules list`, and `details.suggestions` SHALL list the closest rule ids.
 
 #### Scenario: Most-linked Affected URLs first
@@ -651,6 +659,16 @@ A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `i
 #### Scenario: Unknown rule id
 - **WHEN** `spider issue title-mising` runs
 - **THEN** the exit code is 4, the error has the code `rule_not_found`, and its `details.suggestions` starts with `title-missing`
+
+#### Scenario: The Rule in the table format
+- **WHEN** the Issue `internal-4xx` has the single Affected URL `https://example.com/gone`
+- **AND** `spider issue internal-4xx --format table` runs
+- **THEN** stdout shows the Rule's `how_to_fix` and `reproduce_sql`, and below them `https://example.com/gone`
+
+#### Scenario: jsonl prints only the Affected URLs
+- **WHEN** the Issue `internal-4xx` has the single Affected URL `https://example.com/gone`, recorded with `detail` `{"status_code": 404}`
+- **AND** `spider issue internal-4xx --format jsonl` runs
+- **THEN** stdout is the one line `{"url":"https://example.com/gone","detail":{"status_code":404}}`
 
 ### Requirement: Read-only SQL
 

@@ -32,6 +32,11 @@ Every group ends with a docs task and a review task.
 - [x] 1.16 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 - [x] 1.17 Close the approval of group 1 (the rulings of 2026-10-15): non-scenario tests prove the order of Issue Types and Priorities, the `url` order of Affected URLs apart from their insertion order, the cursor's binding to the Crawl and the filters of the list and to the Crawl of the detail, the whole `rule` header and a later Rule's `description` read from the Crawl's `rules` table (`later_rule` gets texts of its own), and `keyset_page` with `--limit 0` and with an exactly full last page; `issue_list` checks `--fields` and the cursor before it reads the Issues; the empty-value message quotes the value; design D14 says that a read is one snapshot in WAL mode only; `keyset_after` and `keyset_page` take a tuple of keys, checked by length and exact type, so group 6's (`unique_inlinks`, `url`) keeps one cursor shape; and `spider.store.query` decodes a `detail` with `040`'s reader's own function. Verify: suite green; one commit.
 - [x] 1.18 Close the class of 1.13's exit 70 (the approval of the rename, 2026-10-16): every dict the store hands out for output is built from its row by one helper with exact `str` keys, since a column's name is sqlalchemy's `quoted_name`, a `str` subclass that orjson refuses as a key and that compares equal to a `str`; a store test checks the type of every key its query reads return. Verify: red by mutation; one commit.
+- [ ] 1.19 Refactor: one paging module for pages by index and by keyset, before `pages` copies the second shape. `PageRequest` in `010`'s `spider.output.paging`, made by `PageRequest.by_index` or `PageRequest.by_keys` from the chosen fields, `--limit`, `--cursor` and the fingerprint, checks the cursor there, its position too, so a hand-made cursor fails before any Rule's query runs; it gives `fields`, `after`, `read_limit` and `page(found, total, header=...)` (design Context). `keyset_after` and `keyset_page` go into it, with their tests in `tests/output/test_paging.py`; `paginate()` pages a whole list through it, so `rules list` and `schema` keep their calls. `issues` and `issue` use it: each store read takes `after` and `limit` and returns `(total, found)`. The fingerprint holds the Crawl id in a member of its own beside the selection. Verify: suite green; one `refactor:` commit.
+- [ ] 1.20 Drive `Issue detail › The Rule in the table format` (CLI): in the table format, a header member of a list that is an object is printed as a key and value table above the items, so a scalar one, `schema`'s `schema_version`, stays in `json` only. Verify: red → green; one commit.
+- [ ] 1.21 Guard `Issue detail › jsonl prints only the Affected URLs` (CLI). Verify: red by mutation (the header printed as a first line); one `test:` commit.
+- [ ] 1.22 Docs: in `docs/querying.md`, `issue --format table` prints the Rule above its Affected URLs, and `jsonl` prints the items only, so an agent that needs `rule` reads `json`. Verify: both formats are documented.
+- [ ] 1.23 Close the audit of group 1's small items: `recorded_rule` raises `rule_not_found` itself, so no read order is needed; one `literal_values`, in `spider.store.records`, used by the service and the store; `rules.thresholds` decoded by `decode_detail`, as `detail` is; `_filter_values` builds `invalid_value` in one place, with `details.value` the value refused and a hint that lists the accepted values; the CLI builds a `QueryRequest` in one helper; `UNDER_A` to `UNDER_D` become `under_query(folder)`; a test that fails without the `rule_id` tie-break; `Unknown rule id` checks the hint on the live and the stored path; `rule_not_found`'s description in `spider.output.codes` covers `issue`; `docs/cli.md` loses its line on the first Commands that read a Crawl; `tests/cli/test_issues.py` has a one-line docstring. Verify: each new test red first or by mutation; suite green; one `refactor:` commit.
 
 ## 2. The basic `--where` language (seam 4: Pure-logic)
 
@@ -42,11 +47,12 @@ Every group ends with a docs task and a review task.
 - [x] 2.5 Drive `Where filter language › contains ignores case in any script`: `spider_contains(CAST(col AS TEXT), needle)` (design D3), registered by `register_where_functions(dbapi_connection)` beside the compiler as a deterministic function that gives 0 for a null value. The test engine registers that same function through `event.listen("connect")`. The test adds a row named after no scenario, `status_code contains '0'`, since `contains` applies to the text form of any column. Verify: red → green; one commit.
 - [x] 2.6 Drive `Where filter language › is null and is not null`. Verify: red → green; one commit.
 - [x] 2.7 Drive the pair `Where filter language › Doubled quotes inside a string` and `› Double-quoted string`. Verify: red → green; one commit.
-- [x] 2.8 Drive `Where filter language › Boolean literal`: the test table declares `flag` with the store's `Flag` type, as every boolean column of the schema is; the compiler knows booleans by it, and `true` and `false` bind through it. Verify: red → green; one commit.
-- [x] 2.9 Guard the pair `Null values in filters › A comparison excludes null values` and `› Not-equal excludes null values`. Without `not`, SQL's WHERE already drops a null value, so both pass at once and D2's `IS NOT NULL AND` wrap lands with `not` (9.3). Verify: red by mutation (`ifnull(col, 0) < 300`; `col IS NOT literal`); one `test:` commit.
+- [x] 2.8 Drive `Where filter language › Boolean literal`: the test table declares `flag` with the store's `Flag` type, as every boolean column of the schema is; `true` and `false` bind through that column type, which stores them as 1 and 0; the compiler does not look at it until group 3's type checks. Verify: red → green; one commit.
+- [x] 2.9 Guard the pair `Null values in filters › A comparison excludes null values` and `› Not-equal excludes null values`. Without `not`, SQL's WHERE already drops a null value, so both pass at once and D2's `IS NOT NULL AND` wrap lands with `not includes null values` (9.13). Verify: red by mutation (`ifnull(col, 0) < 300`; `col IS NOT literal`); one `test:` commit.
 - [x] 2.10 Drive `Filter syntax errors › Any input either parses or fails cleanly` with a hypothesis text strategy over `parse()` alone: for any text it returns an AST or raises `SpiderError` with `invalid_where`, which this task declares (exit code 2); `docs/querying.md` documents it with the where language (2.11), as each change documents its own codes. Compile errors keep their own scenarios (3.7, 3.8). In the same commit, a table-driven guard named after no scenario: each v0.2 form (`or`, `not`, parentheses, `~`, `!~`, `in`, `not contains`) is `invalid_where`. Verify: the property passes; the guard red by mutation; one commit.
 - [x] 2.11 Docs: write a standalone section "The where language" in `docs/querying.md`, which names no Command yet: the v0.1 grammar (comparisons, `contains`, `is [not] null` and `and`), the null rule, quoting in PowerShell and cmd (double quotes outside, single quotes inside), and the error codes. Groups 3 and 6 link to it. Verify: every v0.1 operator has an example.
 - [x] 2.12 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green. Verify: suite green; one commit.
+- [ ] 2.13 Close the review of group 2. `parse()` refuses with `invalid_where`: text that does not encode to UTF-8, such as a lone surrogate from a POSIX command line, checked once at its start; a number with more digits than a signed 64-bit integer has, or one outside its range; a number directly followed by a letter, such as `404and`; and an expression of more predicates than the spec allows (`Filter syntax errors › Too many predicates`). The property's alphabet gains a run of about 20 nines and a lone surrogate. The tokenizer runs in linear time. A guard beside the `sqlalchemy` one in `tests/test_code_style.py`: `spider.query` never imports `spider.store`. The Cyrillic row of `tests/query/test_where.py` gets a neutral comment; `docs/querying.md` says that `contains` does no Unicode normalisation; `spider_contains` becomes `where_contains` (design D3). Verify: each fix red first or by mutation; suite green; one `refactor:` commit.
 
 ## 3. Query foundation and `pages` (seams 2: Services, 1: CLI)
 
@@ -57,24 +63,23 @@ Every group ends with a docs task and a review task.
 - [ ] 3.5 Drive `Page listing › Filtered listing` (CLI): wire `--where` into `pages`, and register `register_where_functions` on the Query Service's read connections. Verify: red → green; one commit.
 - [ ] 3.6 Drive `Query error codes › Error shape` (CLI). Verify: red → green; one commit.
 - [ ] 3.7 Drive `Unknown names in --where, --sort and --fields › Unknown column in --where` (CLI): `unknown_column` with `details.suggestions` from `difflib`. Verify: red → green; one commit.
-- [ ] 3.8 Drive the pair `Filter values fit the column type › String compared with a number column` and `› Number compared with a text column` (CLI). Verify: red → green; one commit.
-- [ ] 3.9 Drive `Filter values fit the column type › Invalid regular expression` (CLI). Verify: red → green; one commit.
-- [ ] 3.10 Drive `Filter syntax errors › Position of a syntax error` (CLI). Verify: red → green; one commit.
-- [ ] 3.11 Drive `Filter syntax errors › SQL cannot be smuggled in` (CLI). Verify: red → green; one commit.
-- [ ] 3.12 Drive `Filter syntax errors › A smuggling attempt leaves the store unchanged` (CLI, SQL dump before and after). Verify: red → green; one commit.
-- [ ] 3.13 Drive `Sorting › Default order` (Services). Verify: red → green; one commit.
-- [ ] 3.14 Drive `Sorting › Several keys, one descending` (Services). Verify: red → green; one commit.
-- [ ] 3.15 Drive the pair `Sorting › Nulls sort last when descending` and `› Nulls sort last when ascending` (Services): `(col IS NULL), col`. Verify: red → green; one commit.
-- [ ] 3.16 Drive `Sorting › Repeated flag` (CLI). Verify: red → green; one commit.
-- [ ] 3.17 Drive `Sorting › Malformed sort` (CLI). Verify: red → green; one commit.
-- [ ] 3.18 Drive `Unknown names in --where, --sort and --fields › Unknown column in --sort` (CLI). Verify: red → green; one commit.
-- [ ] 3.19 Drive `Page listing › Total counts every match` (Services): the keyset payload inside 010's cursor. Verify: red → green; one commit.
-- [ ] 3.20 Drive `Sorting › Paging is stable while the Crawl writes` (Services, with rows added through the store API between pages). Verify: red → green; one commit.
-- [ ] 3.21 Drive `Cursors are bound to the query › A cursor is reused with another filter` (CLI): pass the Crawl, `--where` and `--sort` to 010's cursor binding. Verify: red → green; one commit.
-- [ ] 3.22 Drive `Page listing › Non-ASCII titles on the Windows console` (CLI, real subprocess, Windows-only). Verify: red → green on the Windows CI job; one commit.
-- [ ] 3.23 Drive `Where filter language › Non-ASCII literal passed on the Windows command line` (CLI, real subprocess, Windows-only). Verify: red → green on the Windows CI job; one commit.
-- [ ] 3.24 Docs: in `docs/querying.md`, document `spider pages`: the default fields, `--fields all`, the `--sort` syntax (with `--sort=-col` for shells that read a leading `-` as a flag), and paging, with what is served by `pages_address` and what scans (design D15). Verify: every flag of `pages` is documented.
-- [ ] 3.25 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green. Verify: suite green; one commit.
+- [ ] 3.8 Drive the pair `Filter values fit the column type › String compared with a number column` and `› Number compared with a text column` (CLI): a boolean value is told by `type(value) is bool` before any int check, since `bool` is an `int`. Verify: red → green; one commit.
+- [ ] 3.9 Drive `Filter syntax errors › Position of a syntax error` (CLI): each token carries its start, after the whitespace before it, and the failures move onto the token stream; `invalid_where`'s `details` carry the problem and its 1-based position; its description in `spider.output.codes` widens to the type checks. Verify: red → green; one commit.
+- [ ] 3.10 Drive `Filter syntax errors › SQL cannot be smuggled in` (CLI). Verify: red → green; one commit.
+- [ ] 3.11 Drive `Filter syntax errors › A smuggling attempt leaves the store unchanged` (CLI, SQL dump before and after). Verify: red → green; one commit.
+- [ ] 3.12 Drive `Sorting › Default order` (Services). Verify: red → green; one commit.
+- [ ] 3.13 Drive `Sorting › Several keys, one descending` (Services). Verify: red → green; one commit.
+- [ ] 3.14 Drive the pair `Sorting › Nulls sort last when descending` and `› Nulls sort last when ascending` (Services): `(col IS NULL), col`. Verify: red → green; one commit.
+- [ ] 3.15 Drive `Sorting › Repeated flag` (CLI). Verify: red → green; one commit.
+- [ ] 3.16 Drive `Sorting › Malformed sort` (CLI). Verify: red → green; one commit.
+- [ ] 3.17 Drive `Unknown names in --where, --sort and --fields › Unknown column in --sort` (CLI). Verify: red → green; one commit.
+- [ ] 3.18 Drive `Page listing › Total counts every match` (Services): the keyset payload inside 010's cursor. Verify: red → green; one commit.
+- [ ] 3.19 Drive `Sorting › Paging is stable while the Crawl writes` (Services, with rows added through the store API between pages). Verify: red → green; one commit.
+- [ ] 3.20 Drive `Cursors are bound to the query › A cursor is reused with another filter` (CLI): pass the Crawl, `--where` and `--sort` to 010's cursor binding. Verify: red → green; one commit.
+- [ ] 3.21 Drive `Page listing › Non-ASCII titles on the Windows console` (CLI, real subprocess, Windows-only). Verify: red → green on the Windows CI job; one commit.
+- [ ] 3.22 Drive `Where filter language › Non-ASCII literal passed on the Windows command line` (CLI, real subprocess, Windows-only). Verify: red → green on the Windows CI job; one commit.
+- [ ] 3.23 Docs: in `docs/querying.md`, document `spider pages`: the default fields, `--fields all`, the `--sort` syntax (with `--sort=-col` for shells that read a leading `-` as a flag), and paging, with what is served by `pages_address` and what scans (design D15). Verify: every flag of `pages` is documented.
+- [ ] 3.24 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 4. `page <url>` (seams 2: Services, 1: CLI, 3+6)
 
@@ -162,20 +167,21 @@ Each task that adds an operator deletes its row from the guard of the v0.2 forms
 
 - [ ] 9.1 (v0.2) Drive `Where filter language › and binds tighter than or`. Verify: red → green; one commit.
 - [ ] 9.2 (v0.2) Drive `Where filter language › Parentheses override precedence`. Verify: red → green; one commit.
-- [ ] 9.3 (v0.2) Drive `Where filter language › not`: every predicate except `is [not] null` gets D2's `(col IS NOT NULL AND …)` wrap here, which 9.12 proves. Verify: red → green; one commit.
-- [ ] 9.4 (v0.2) Drive `Where filter language › Keywords are case-insensitive`. Verify: red → green; one commit.
-- [ ] 9.5 (v0.2) Drive `Where filter language › Regular expression`: the `spider_regexp` SQLite function with a pattern cache. Verify: red → green; one commit.
-- [ ] 9.6 (v0.2) Drive the pair `Where filter language › Regular expressions are case-sensitive by default` and `› Case-insensitive regular expression`. Verify: red → green; one commit.
-- [ ] 9.7 (v0.2) Drive `Where filter language › Negated regular expression`. Verify: red → green; one commit.
-- [ ] 9.8 (v0.2) Drive `Where filter language › Backslashes reach the regular expression unchanged`. Verify: red → green; one commit.
-- [ ] 9.9 (v0.2) Drive `Where filter language › Regular expression on a number column`: match on `CAST(col AS TEXT)`. Verify: red → green; one commit.
-- [ ] 9.10 (v0.2) Drive `Where filter language › not contains`. Verify: red → green; one commit.
-- [ ] 9.11 (v0.2) Drive `Where filter language › in and not in`. Verify: red → green; one commit.
-- [ ] 9.12 (v0.2) Drive `Null values in filters › not includes null values`. Verify: red → green; one commit.
-- [ ] 9.13 (v0.2) Drive `Null values in filters › Double negation changes nothing`: a hypothesis generator of grammar-valid expressions over rows with nulls. Verify: the property passes with the default hypothesis profile; one commit.
-- [ ] 9.14 (v0.2) Drive `Filter syntax errors › Nesting limit`: a depth cap of 64. Verify: red → green; one commit.
-- [ ] 9.15 (v0.2) Docs: add `or`, `not`, parentheses, `~`, `!~`, `in` and `not contains`, the regex dialect and the nesting limit to the where-language reference in `docs/querying.md`. Verify: every operator in the spec grammar has an example.
-- [ ] 9.16 (v0.2) Review: run the code-review skill on group 9's commits, then refactor with the whole suite green. Verify: suite green; one commit.
+- [ ] 9.3 (v0.2) Drive `Where filter language › not`, without D2's wrap, which 9.13 brings. Verify: red → green; one commit.
+- [ ] 9.4 (v0.2) Guard `Where filter language › Keywords are case-insensitive`: keywords are case-insensitive since group 2, so it passes at once. Verify: red by mutation (keywords matched with their case); one `test:` commit.
+- [ ] 9.5 (v0.2) Drive `Where filter language › Regular expression`: the `where_regexp` SQLite function with a pattern cache. Verify: red → green; one commit.
+- [ ] 9.6 (v0.2) Drive `Filter values fit the column type › Invalid regular expression` (CLI), once `~` parses: the pattern is compiled at parse time (design D3). Verify: red → green; one commit.
+- [ ] 9.7 (v0.2) Drive the pair `Where filter language › Regular expressions are case-sensitive by default` and `› Case-insensitive regular expression`. Verify: red → green; one commit.
+- [ ] 9.8 (v0.2) Drive `Where filter language › Negated regular expression`. Verify: red → green; one commit.
+- [ ] 9.9 (v0.2) Drive `Where filter language › Backslashes reach the regular expression unchanged`. Verify: red → green; one commit.
+- [ ] 9.10 (v0.2) Drive `Where filter language › Regular expression on a number column`: match on `CAST(col AS TEXT)`. Verify: red → green; one commit.
+- [ ] 9.11 (v0.2) Drive `Where filter language › not contains`: its test has a row whose column is null, compiled with D2's wrap. Verify: red → green; one commit.
+- [ ] 9.12 (v0.2) Drive `Where filter language › in and not in`: its test has a row whose column is null, compiled with D2's wrap, and so does an outer `not` over `not in`. Verify: red → green; one commit.
+- [ ] 9.13 (v0.2) Drive `Null values in filters › not includes null values`: every predicate except `is [not] null` gets D2's `(col IS NOT NULL AND …)` wrap here, red then green. Verify: red → green; one commit.
+- [ ] 9.14 (v0.2) Drive `Null values in filters › Double negation changes nothing`: a hypothesis generator of grammar-valid expressions over rows with nulls. Verify: the property passes with the default hypothesis profile; one commit.
+- [ ] 9.15 (v0.2) Drive `Filter syntax errors › Nesting limit`: a depth cap of 64. Verify: red → green; one commit.
+- [ ] 9.16 (v0.2) Docs: add `or`, `not`, parentheses, `~`, `!~`, `in` and `not contains`, the regex dialect and the nesting limit to the where-language reference in `docs/querying.md`. Verify: every operator in the spec grammar has an example.
+- [ ] 9.17 (v0.2) Review: run the code-review skill on group 9's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 10. (v0.2) The `csv` format, the CSV policy and `-o` (seam 1: CLI, 010's fixture app)
 
@@ -221,7 +227,7 @@ Each task that adds an operator deletes its row from the guard of the v0.2 forms
 - [ ] 12.3 (v0.2) Drive `First match wins › Reordering changes membership` (Services). Verify: red → green; one commit.
 - [ ] 12.4 (v0.2) Drive `First match wins › A Page in no Segment` (Services). Verify: red → green; one commit.
 - [ ] 12.5 (v0.2) Drive `Segment definitions are checked when settings load › Unknown column in a Segment expression` (CLI): register the `[segments]` validator in 010's settings check, compiling against the static `pages` table definition. Verify: red → green; one commit.
-- [ ] 12.6 (v0.2) Drive `Segment definitions are checked when settings load › The problem is named` (CLI). Verify: red → green; one commit.
+- [ ] 12.6 (v0.2) Drive `Segment definitions are checked when settings load › The problem is named` (CLI): the settings check builds the `segments.<name>` entry from `invalid_where`'s `details`, its problem and position, not from its message, which names `--where`. Verify: red → green; one commit.
 - [ ] 12.7 (v0.2) Drive `Segment definitions are checked when settings load › Invalid Segment name` (CLI). Verify: red → green; one commit.
 - [ ] 12.8 (v0.2) Drive `Segment definitions are checked when settings load › Commands that do not use Segments are stopped too` (CLI). Verify: red → green; one commit.
 - [ ] 12.9 (v0.2) Drive `The --segment flag › Pages of one Segment` (Services). Verify: red → green; one commit.
