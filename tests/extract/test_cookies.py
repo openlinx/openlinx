@@ -8,7 +8,7 @@ from spider.extract.page_handler import cookie_rows, page_rows
 from spider.store.page_records import CookieRow
 
 
-def _result(*set_cookies: str) -> UrlResult:
+def _result(*set_cookies: str, headers: tuple[tuple[str, str], ...] = ()) -> UrlResult:
     return UrlResult(
         url_id=1,
         url=NormalizedUrl("https://example.test/"),
@@ -22,7 +22,7 @@ def _result(*set_cookies: str) -> UrlResult:
         content_type="text/html",
         response_time_ms=1,
         fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
-        headers=tuple(("Set-Cookie", value) for value in set_cookies),
+        headers=(*headers, *(("Set-Cookie", value) for value in set_cookies)),
     )
 
 
@@ -55,8 +55,25 @@ def test_a_repeated_attribute_takes_the_last_in_any_letter_case() -> None:
     assert (row.path, row.secure, row.same_site) == ("/y", True, "strict")
 
 
+def test_a_repeated_attribute_that_does_not_parse_keeps_the_valid_one() -> None:
+    rows = _cookies(
+        "sid=1; Max-Age=3600; Max-Age=x",
+        "sid=1; Domain=example.test; Domain=",
+        "sid=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT; Expires=never",
+    )
+
+    assert [(row.max_age, row.domain, row.expires) for row in rows] == [
+        (3600, None, None),
+        (None, "example.test", None),
+        (None, None, datetime(2026, 10, 21, 7, 28, tzinfo=UTC)),
+    ]
+
+
 def test_cookie_count_matches_the_headers() -> None:
-    result = _result("a=1; Max-Age=3600", "b=2; Domain=.Example.test")
+    # An HTTP/2 server sends every header name in lowercase.
+    result = _result(
+        headers=(("Set-Cookie", "a=1; Max-Age=3600"), ("set-cookie", "b=2; Domain=.Example.test"))
+    )
     (page,) = page_rows(result)
     first, second = cookie_rows(result)
 

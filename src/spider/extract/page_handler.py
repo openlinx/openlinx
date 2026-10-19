@@ -31,7 +31,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             status_code=_required(result.status_code, "status_code"),
             response_time_ms=_required(result.response_time_ms, "response_time_ms"),
             last_modified=_last_modified(result.headers),
-            set_cookie_count=sum(name.lower() == "set-cookie" for name, _ in result.headers),
+            set_cookie_count=len(_set_cookies(result.headers)),
             crawl_timestamp=_required(result.fetched_at, "fetched_at"),
             **({} if data is None else msgspec.structs.asdict(data)),
         ),
@@ -41,10 +41,14 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
 def cookie_rows(result: UrlResult) -> Iterable[CookieRow]:
     if not _is_page(result):
         return ()
-    values = [value for name, value in result.headers if name.lower() == "set-cookie"]
     return tuple(
-        cookie_row(result.url_id, ordinal, value) for ordinal, value in enumerate(values, 1)
+        cookie_row(result.url_id, ordinal, value)
+        for ordinal, value in enumerate(_set_cookies(result.headers), 1)
     )
+
+
+def _set_cookies(headers: tuple[tuple[str, str], ...]) -> list[str]:
+    return [value for name, value in headers if name.lower() == "set-cookie"]
 
 
 def _required[T](value: T | None, name: str) -> T:

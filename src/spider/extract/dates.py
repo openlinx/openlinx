@@ -1,4 +1,4 @@
-"""Times in headers, read leniently, as RFC 9110 and RFC 6265 ask of a recipient."""
+"""Times in headers, read leniently, as RFC 9110 and RFC 6265 ask (030-add-page-data D1, D14)."""
 
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime

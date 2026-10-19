@@ -56,7 +56,7 @@ Titles, meta descriptions, meta keywords and headings follow one pattern:
 
 A Page's cookies are the `Set-Cookie` headers of its response, one `cookies` row each. They come from the response, not the HTML, so a Page that is not analysed, such as a redirect, has its cookies too.
 
-A header is read as RFC 6265 asks of a browser: attribute names match in any letter case, the last of a repeated attribute wins, and an attribute that does not parse leaves its column NULL instead of failing the Page.
+A header is read as RFC 6265 asks of a browser: attribute names match in any letter case, a repeated attribute takes its last value, except that a `Domain`, `Expires` or `Max-Age` whose value does not parse is ignored, and a column without a valid value is NULL instead of failing the Page.
 
 Page data never holds a cookie's value, only its name and attributes, since a value can be a session token that lets anyone who reads the Crawl file sign in as the crawler.
 
