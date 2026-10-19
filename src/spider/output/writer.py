@@ -54,7 +54,7 @@ class Output:
         elif document.format is Format.TABLE:
             width = shutil.get_terminal_size().columns if self._stdout.isatty() else TABLE_WIDTH
             if document.kind == "list":
-                text = render_items_table(document.value["items"], width)
+                text = _list_table(document.value, width)
             else:
                 text = render_table(document.value, width)
             self._stdout.write(text.encode())
@@ -76,6 +76,15 @@ class Output:
         with self._stderr_lock:
             self._stderr.write(line)
             self._stderr.flush()
+
+
+def _list_table(envelope: Mapping[str, Any], width: int) -> str:
+    # An object in the header, such as issue's rule, is shown above the items; a scalar one,
+    # such as schema's schema_version, only in json.
+    blocks = [
+        render_table(member, width) for member in envelope.values() if isinstance(member, Mapping)
+    ]
+    return "".join([*blocks, render_items_table(envelope["items"], width)])
 
 
 def _json_line(value: Any) -> bytes:

@@ -3,6 +3,7 @@ processes)."""
 
 import pytest
 
+from spider.rules.response_codes import INTERNAL_4XX
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.cli import run_cli, run_cli_process
@@ -93,6 +94,28 @@ def test_the_affected_urls_of_an_issue_take_fields(temp_workspace: TempWorkspace
     result = run_cli("issue", "internal-4xx", "--fields", "url")
 
     assert result.json()["items"] == [{"url": "https://example.com/gone"}]
+
+
+def without_layout(table: str) -> str:
+    # The table folds a long cell over lines between box characters; its layout is no contract.
+    return "".join(
+        character
+        for character in table
+        if not character.isspace() and not "\u2500" <= character <= "\u257f"
+    )
+
+
+def test_the_rule_in_the_table_format(temp_workspace: TempWorkspace) -> None:
+    crawl_store(temp_workspace, statuses={"https://example.com/gone": 404}, completed=True)
+
+    shown = without_layout(run_cli("issue", "internal-4xx", "--format", "table").stdout.decode())
+
+    # index raises when the text is missing; the Rule's members come before the Affected URLs.
+    assert (
+        shown.index(without_layout(INTERNAL_4XX.how_to_fix))
+        < shown.index(without_layout(INTERNAL_4XX.reproduce_sql))
+        < shown.index("https://example.com/gone")
+    )
 
 
 E2E_PAGES = Site(
