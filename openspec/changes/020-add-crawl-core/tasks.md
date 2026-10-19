@@ -421,3 +421,10 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 16.3 Docs: the crawl pipeline section of `docs/architecture.md` says what is built (the context, the hooks, store-only units, page preparation behind the in-process executor), and `docs/schema.md` documents `urls`, `origins` and the new `crawl` columns, with their indexes and the values listed for later changes.
 - [ ] 16.4 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
 - [ ] 16.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md` and ADR-0006, then refactor with the whole suite green.
+
+## 17. The crawl package layout
+
+Group 16 runs last, after this group.
+
+- [ ] 17.1 Move `spider.crawl` into the subpackages of design D19, behaviour unchanged: a `git mv` per module, the imports rewritten by `scripts/crawl_layout_codemod.py`, `DiscoveredLink` and `resolve_reference` with its helpers split out of `links` into `references`, and in each package an `__init__.py` whose docstring lists its interface.
+  Done when: every moved top-level function and class has the AST it had, except `_base` and `_from_attribute` of `links` and the new `resolve_base`; a second run of the codemod changes nothing; and the ast guard `test_the_crawl_imports_run_one_way`, with its breach cases red by mutation of a forbidden import, passes and fails on a path it names that does not exist.
