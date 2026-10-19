@@ -47,7 +47,7 @@ def issues_of(crawl_file: Path) -> tuple[list[tuple[str, int]], list[int]]:
 def test_a_crawl_without_a_final_pass_is_read_live(temp_workspace: TempWorkspace) -> None:
     crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
     with CrawlWriter(crawl_file, FakeClock()) as writer:
-        asyncio.run(materialise_issues(writer, RULES), loop_factory=loop_factory)
+        asyncio.run(materialise_issues(writer, RULES, FakeClock()), loop_factory=loop_factory)
         writer.run(record_state("stopped", AT, "max_urls"))
         writer.run(executing(TITLED))
         writer.flush()
@@ -89,7 +89,9 @@ def test_issues_of_a_rule_the_catalogue_lacks_come_after_its_own(
     recorded = replace(missing, id=later.id)
     crawl_file, _ = crawl_with_page(temp_workspace, more_rules=(recorded,), title_count=0)
     with CrawlWriter(crawl_file, FakeClock()) as writer:
-        asyncio.run(materialise_issues(writer, (*RULES, later)), loop_factory=loop_factory)
+        asyncio.run(
+            materialise_issues(writer, (*RULES, later), FakeClock()), loop_factory=loop_factory
+        )
         writer.run(record_state("completed", AT))
 
     assert [issue.rule_id for issue in read_issues(crawl_file, RULES)] == [
@@ -107,7 +109,9 @@ def test_the_affected_urls_of_a_rule_the_catalogue_lacks_are_read_as_stored(
         temp_workspace, more_rules=(replace(missing, id=later.id),), title_count=0
     )
     with CrawlWriter(crawl_file, FakeClock()) as writer:
-        asyncio.run(materialise_issues(writer, (*RULES, later)), loop_factory=loop_factory)
+        asyncio.run(
+            materialise_issues(writer, (*RULES, later), FakeClock()), loop_factory=loop_factory
+        )
         writer.run(record_state("completed", AT))
 
     assert read_affected_urls(crawl_file, "a-later-rule", RULES) == [
@@ -130,7 +134,7 @@ def test_the_issues_of_one_url_are_read_live(temp_workspace: TempWorkspace) -> N
 def test_the_issues_of_one_url_are_read_as_stored(temp_workspace: TempWorkspace) -> None:
     crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
     with CrawlWriter(crawl_file, FakeClock()) as writer:
-        asyncio.run(materialise_issues(writer, RULES), loop_factory=loop_factory)
+        asyncio.run(materialise_issues(writer, RULES, FakeClock()), loop_factory=loop_factory)
         # The Page changes after the pass, so only the stored rows still list title-missing.
         writer.run(executing(TITLED))
         writer.run(record_state("completed", AT))

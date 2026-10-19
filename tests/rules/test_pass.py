@@ -68,7 +68,7 @@ def test_a_second_pass_does_not_duplicate_rows(temp_workspace: TempWorkspace) ->
 
     with CrawlWriter(crawl_file, FakeClock()) as writer:
         for _ in range(2):
-            asyncio.run(materialise_issues(writer, RULES), loop_factory=loop_factory)
+            asyncio.run(materialise_issues(writer, RULES, FakeClock()), loop_factory=loop_factory)
 
     assert query(
         crawl_file, "SELECT count(*) FROM affected_urls WHERE rule_id = 'title-duplicate'"

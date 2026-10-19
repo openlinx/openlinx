@@ -218,6 +218,26 @@ crawl = public_table(
         nullable=False,
         comment="The operating system that created the Crawl, as Python describes it.",
     ),
+    Column(
+        "health_score",
+        Integer,
+        comment="Derived: the Health Score, from 0 to 100; NULL when there is no Internal Page.",
+    ),
+    Column(
+        "health_internal_page_count",
+        Integer,
+        comment="Derived: N, the Internal Pages that the Health Score rates.",
+    ),
+    Column(
+        "health_affected_page_count",
+        Integer,
+        comment="Derived: A, the Internal Pages that are an Affected URL of an Issue-type Rule.",
+    ),
+    Column(
+        "health_calculated_at",
+        Timestamp,
+        comment="Derived: when the post-crawl pass calculated the Health Score.",
+    ),
     comment="The Crawl's metadata, in exactly one row.",
     change=15,
 )

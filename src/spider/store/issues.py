@@ -1,6 +1,8 @@
-"""Rules run over a crawl file, and the pass that stores their Issues (040-add-rules D5, D15)."""
+"""Rules run over a crawl file, and the pass that stores their Issues and the Health Score
+(040-add-rules D5, D8, D15)."""
 
 from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +23,10 @@ from sqlalchemy import (
     select,
     text,
     union_all,
+    update,
 )
 
+from spider.clock import Clock
 from spider.rules.health import health_score
 from spider.rules.model import Rule, rule_not_computable, rule_not_found
 from spider.store.reading import reading
@@ -98,12 +102,29 @@ def all_live_affected_urls(catalogue: Sequence[Rule]) -> Select[Any]:
     return select(union_all(*found).subquery())
 
 
-async def materialise_issues(writer: CrawlWriter, catalogue: Sequence[Rule]) -> None:
-    """The post-crawl pass: the Rules that the Crawl's rules table marks enabled (D5, D6)."""
+async def materialise_issues(writer: CrawlWriter, catalogue: Sequence[Rule], clock: Clock) -> None:
+    """The post-crawl pass: the Rules that the Crawl's rules table marks enabled, then the
+    Health Score over their rows (D5, D6, D8)."""
     enabled = await writer.run_async(_enabled_rule_ids)
     for rule in catalogue:
         if rule.id in enabled:
             await writer.run_async(affected_urls_unit(rule))
+    await writer.run_async(_health_unit(clock.now()))
+
+
+def _health_unit(calculated_at: datetime) -> Callable[[Connection], None]:
+    def unit(connection: Connection) -> None:
+        found = health(connection, INTERNAL_PAGES, STORED_AFFECTED_URLS)
+        connection.execute(
+            update(crawl).values(
+                health_score=found.score,
+                health_internal_page_count=found.internal_pages,
+                health_affected_page_count=found.affected_pages,
+                health_calculated_at=calculated_at,
+            )
+        )
+
+    return unit
 
 
 def issues_in(connection: Connection, catalogue: Sequence[Rule]) -> Select[Any]:

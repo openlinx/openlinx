@@ -34,7 +34,7 @@ def test_warnings_do_not_lower_the_score(temp_workspace: TempWorkspace) -> None:
         base="http://site.test/",
     )
     with CrawlWriter(crawl_file, FakeClock()) as writer:
-        asyncio.run(materialise_issues(writer, RULES), loop_factory=loop_factory)
+        asyncio.run(materialise_issues(writer, RULES, FakeClock()), loop_factory=loop_factory)
 
     with reading(crawl_file) as connection:
         found = health(connection, INTERNAL_PAGES, STORED_AFFECTED_URLS)
@@ -55,7 +55,9 @@ def test_a_page_with_several_issues_counts_once(temp_workspace: TempWorkspace) -
         more_rules=(replace(missing, id=later.id),),
     )
     with CrawlWriter(crawl_file, FakeClock()) as writer:
-        asyncio.run(materialise_issues(writer, (*RULES, later)), loop_factory=loop_factory)
+        asyncio.run(
+            materialise_issues(writer, (*RULES, later), FakeClock()), loop_factory=loop_factory
+        )
 
     with reading(crawl_file) as connection:
         found = health(connection, INTERNAL_PAGES, STORED_AFFECTED_URLS)
@@ -74,7 +76,7 @@ def test_health_score_of_a_segment(temp_workspace: TempWorkspace) -> None:
         {"title_count": 0},
     )
     with CrawlWriter(crawl_file, FakeClock()) as writer:
-        asyncio.run(materialise_issues(writer, RULES), loop_factory=loop_factory)
+        asyncio.run(materialise_issues(writer, RULES, FakeClock()), loop_factory=loop_factory)
     segment = select(pages.c.url_id).where(pages.c.url_id.in_(ids[:4]))
 
     with reading(crawl_file) as connection:

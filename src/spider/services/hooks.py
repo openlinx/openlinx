@@ -19,7 +19,7 @@ def default_hooks() -> Hooks:
 
 
 async def _issues(context: PassContext) -> None:
-    await materialise_issues(context.writer, RULES)
+    await materialise_issues(context.writer, RULES, context.clock)
 
 
 def default_page_executor() -> PageExecutor:
