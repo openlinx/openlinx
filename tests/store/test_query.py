@@ -15,7 +15,7 @@ def test_the_store_hands_out_dicts_with_plain_str_keys(temp_workspace: TempWorks
 
     with reading(crawl_file) as connection:
         read = [
-            *ordered_issues(connection, RULES, IssueFilters()),
+            *ordered_issues(connection, RULES, IssueFilters(), after=0, limit=10)[1],
             *affected_url_page(connection, "internal-4xx", RULES, after=None, limit=10)[1],
             recorded_rule(connection, "internal-4xx"),
         ]

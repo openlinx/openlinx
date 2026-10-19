@@ -1,23 +1,13 @@
 """The Query Service: reading a Crawl for the query Commands (050-add-query-and-segments D14)."""
 
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, get_args
 
 from spider.output.codes import INVALID_VALUE
 from spider.output.diagnostics import SpiderError
-from spider.output.paging import (
-    Fields,
-    Page,
-    decode_cursor,
-    fingerprint,
-    keyset_after,
-    keyset_page,
-    paginate,
-    project,
-    select_fields,
-)
+from spider.output.paging import Fields, Page, PageRequest, fingerprint, select_fields
 from spider.rules.registry import RULES
 from spider.store.records import CrawlFile, IssueFilters, IssueType, Priority, RuleCategory
 from spider.workspace.discovery import resolve_workspace
@@ -90,21 +80,27 @@ def issue_list(
     from spider.store.query.issues import ordered_issues
     from spider.store.reading import reading
 
-    # Checked before the Issues are read: on a running Crawl that runs every Rule's query.
+    # Before the Crawl: a usage error comes first, and the read runs every Rule's query on a
+    # running Crawl.
     chosen = select_fields(fields, ISSUE_FIELDS)
     crawl_file = _crawl_file(request)
-    bound = _fingerprint(
-        ISSUES,
-        crawl_file,
-        type=sorted(filters.issue_types),
-        priority=sorted(filters.priorities),
-        category=sorted(filters.categories),
+    paging = PageRequest.by_index(
+        chosen,
+        limit=limit,
+        cursor=cursor,
+        fingerprint=_fingerprint(
+            ISSUES,
+            crawl_file,
+            type=sorted(filters.issue_types),
+            priority=sorted(filters.priorities),
+            category=sorted(filters.categories),
+        ),
     )
-    if cursor is not None:
-        decode_cursor(cursor, bound)
     with reading(crawl_file.path) as connection:
-        items = ordered_issues(connection, RULES, filters)
-    return paginate(items, limit=limit, cursor=cursor, fingerprint=bound, fields=chosen)
+        total, found = ordered_issues(
+            connection, RULES, filters, after=paging.after, limit=paging.read_limit
+        )
+    return paging.page(found, total)
 
 
 def issue_detail(
@@ -122,16 +118,20 @@ def issue_detail(
 
     chosen = select_fields(fields, AFFECTED_URL_FIELDS)
     crawl_file = _crawl_file(request)
-    bound = _fingerprint(ISSUE, crawl_file, rule_id=rule_id)
-    after = keyset_after(cursor, bound, (str,))
+    paging = PageRequest.by_keys(
+        chosen,
+        limit=limit,
+        cursor=cursor,
+        fingerprint=_fingerprint(ISSUE, crawl_file, rule_id=rule_id),
+        keys={"url": str},
+    )
     with reading(crawl_file.path) as connection:
         # First: the reader refuses a rule id the Crawl's rules table lacks.
         total, found = affected_url_page(
-            connection, rule_id, RULES, after=None if after is None else after[0], limit=limit + 1
+            connection, rule_id, RULES, after=paging.after, limit=paging.read_limit
         )
         rule = recorded_rule(connection, rule_id)
-    page = keyset_page(found, total, limit=limit, fingerprint=bound, keys=("url",))
-    return replace(page, items=project(page.items, chosen), header={"rule": rule})
+    return paging.page(found, total, header={"rule": rule})
 
 
 def _crawl_file(request: QueryRequest) -> CrawlFile:
@@ -142,5 +142,6 @@ def _crawl_file(request: QueryRequest) -> CrawlFile:
 
 
 def _fingerprint(command: str, crawl_file: CrawlFile, **selection: Any) -> str:
-    # The resolved id, never latest: a cursor reused after a new Crawl started is refused.
-    return fingerprint(command, {"crawl": crawl_file.id, **selection})
+    # The resolved id, never latest: a cursor reused after a new Crawl started is refused. In
+    # a member of its own, so no key of the selection can stand in for it.
+    return fingerprint(command, {"crawl": crawl_file.id, "selection": selection})

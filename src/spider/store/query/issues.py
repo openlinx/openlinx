@@ -29,10 +29,17 @@ _PRIORITY_PLACES = {value: place for place, value in enumerate(literal_values(Pr
 
 
 def ordered_issues(
-    connection: Connection, catalogue: Sequence[Rule], filters: IssueFilters
-) -> list[dict[str, Any]]:
-    """The Issues that pass `filters`, with their Rules' descriptions from the Crawl's rules
-    table, by Issue Type, Priority, affected_count descending, then rule id."""
+    connection: Connection,
+    catalogue: Sequence[Rule],
+    filters: IssueFilters,
+    *,
+    after: int,
+    limit: int,
+) -> tuple[int, list[dict[str, Any]]]:
+    """The number of Issues that pass `filters`, and at most `limit` of them after the first
+    `after`, with their Rules' descriptions from the Crawl's rules table, by Issue Type,
+    Priority, affected_count descending, then rule id: an index page, read whole, since there
+    is at most one Issue per Rule."""
     found = issues_in(connection, catalogue).subquery()
     accepted = [
         column.in_(values)
@@ -54,7 +61,8 @@ def ordered_issues(
             found.c.rule_id,
         )
     )
-    return [row_dict(row) for row in connection.execute(ordered)]
+    issues = [row_dict(row) for row in connection.execute(ordered)]
+    return len(issues), issues[after : after + limit]
 
 
 def affected_url_page(
@@ -62,19 +70,19 @@ def affected_url_page(
     rule_id: str,
     catalogue: Sequence[Rule],
     *,
-    after: str | None,
+    after: tuple[Any, ...] | None,
     limit: int,
 ) -> tuple[int, list[dict[str, Any]]]:
     """The number of the Rule's Affected URLs, and at most `limit` of them as {url, detail},
-    in URL order after the URL `after`: a keyset page, which never repeats a URL of an earlier
-    page, though finding it sorts all the Issue's rows (design D4, D15)."""
+    in URL order after the keys `after`, (url,): a keyset page, which never repeats a URL of an
+    earlier page, though finding it sorts all the Issue's rows (design D4, D15)."""
     # One select for both reads: the reader chooses the stored or the live path once.
     found = affected_urls_in(connection, rule_id, catalogue).subquery()
     total: int = connection.execute(select(func.count()).select_from(found)).scalar_one()
     ordered = (
         select(urls.c.url, found.c.detail)
         .join_from(found, urls, urls.c.id == found.c.url_id)
-        .where(*([] if after is None else [urls.c.url > after]))
+        .where(*([] if after is None else [urls.c.url > after[0]]))
         .order_by(urls.c.url)
         .limit(limit)
     )

@@ -2,19 +2,13 @@
 
 import base64
 import re
+from collections.abc import Mapping
 from typing import Any
 
 import pytest
 
 from spider.output.diagnostics import SpiderError
-from spider.output.paging import (
-    Page,
-    decode_cursor,
-    encode_cursor,
-    keyset_after,
-    keyset_page,
-    paginate,
-)
+from spider.output.paging import Page, PageRequest, decode_cursor, encode_cursor
 
 FINGERPRINT = "0123456789abcdef"
 # Payloads of every length modulo 3, and bytes that plain base64 writes as + and /.
@@ -59,41 +53,52 @@ def test_undecodable_cursor(cursor: str) -> None:
 def test_a_cursor_whose_position_is_not_an_index_is_undecodable(keyset: Any) -> None:
     cursor = encode_cursor(FINGERPRINT, keyset)
 
+    # Refused when the request is made, before anything is read.
     with pytest.raises(SpiderError) as raised:
-        paginate([{"n": 1}], limit=1, cursor=cursor, fingerprint=FINGERPRINT, fields=("n",))
+        PageRequest.by_index(("n",), limit=1, cursor=cursor, fingerprint=FINGERPRINT)
 
     assert raised.value.code == "invalid_cursor"
 
 
+def by_keys(cursor: str | None, keys: Mapping[str, type], limit: int = 1) -> PageRequest[Any]:
+    return PageRequest.by_keys(
+        ("url",), limit=limit, cursor=cursor, fingerprint=FINGERPRINT, keys=keys
+    )
+
+
 @pytest.mark.parametrize(
-    ("keyset", "types"),
-    [(5, (str,)), ([5], (str,)), (["a", "b"], (str,)), ([True], (int,)), ([1], (int, str))],
+    ("keyset", "keys"),
+    [
+        (5, {"url": str}),
+        ([5], {"url": str}),
+        (["a", "b"], {"url": str}),
+        ([True], {"n": int}),
+        ([1], {"n": int, "url": str}),
+    ],
 )
 def test_a_keyset_cursor_whose_keyset_has_another_shape_is_refused(
-    keyset: Any, types: tuple[type, ...]
+    keyset: Any, keys: Mapping[str, type]
 ) -> None:
     # The fingerprint matches: only a hand-made cursor has another keyset.
     with pytest.raises(SpiderError) as raised:
-        keyset_after(encode_cursor(FINGERPRINT, keyset), FINGERPRINT, types)
+        by_keys(encode_cursor(FINGERPRINT, keyset), keys)
 
     assert raised.value.code == "invalid_cursor"
 
 
 def test_a_keyset_cursor_gives_its_keys() -> None:
-    assert keyset_after(encode_cursor(FINGERPRINT, [3, "a"]), FINGERPRINT, (int, str)) == (3, "a")
+    cursor = encode_cursor(FINGERPRINT, [3, "a"])
+
+    assert by_keys(cursor, {"n": int, "url": str}).after == (3, "a")
 
 
 def test_a_keyset_page_of_limit_0_has_only_the_total() -> None:
     found = [{"n": 1, "url": "a"}]
 
-    assert keyset_page(found, 7, limit=0, fingerprint=FINGERPRINT, keys=("url",)) == Page(
-        [], 7, None
-    )
+    assert by_keys(None, {"url": str}, limit=0).page(found, 7) == Page([], 7, None)
 
 
 def test_an_exactly_full_last_keyset_page_has_no_next_cursor() -> None:
     found = [{"url": "a"}, {"url": "b"}]
 
-    assert keyset_page(found, 2, limit=2, fingerprint=FINGERPRINT, keys=("url",)) == Page(
-        found, 2, None
-    )
+    assert by_keys(None, {"url": str}, limit=2).page(found, 2) == Page(found, 2, None)

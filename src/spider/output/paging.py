@@ -5,6 +5,7 @@ import hashlib
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 import orjson
@@ -35,6 +36,68 @@ class Page:
     header: Mapping[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class PageRequest[After]:
+    """The paging flags of one list request, its cursor already checked: a reader reads up to
+    read_limit items after `after`, and page() makes the Page of them."""
+
+    fields: tuple[str, ...]
+    limit: int
+    fingerprint: str
+    # Paged by index, the number of items before the page; by keyset, the keys of the previous
+    # page's last item, or None on the first page.
+    after: After
+    keys: tuple[str, ...]
+
+    @staticmethod
+    def by_index(
+        fields: tuple[str, ...], *, limit: int, cursor: str | None, fingerprint: str
+    ) -> "PageRequest[int]":
+        start = 0 if cursor is None else decode_cursor(cursor, fingerprint)
+        # The fingerprint matched, so only a hand-made cursor gets here with another position.
+        if type(start) is not int or start < 0:
+            raise _invalid_cursor()
+        return PageRequest(fields, limit, fingerprint, start, ())
+
+    @staticmethod
+    def by_keys(
+        fields: tuple[str, ...],
+        *,
+        limit: int,
+        cursor: str | None,
+        fingerprint: str,
+        keys: Mapping[str, type],
+    ) -> "PageRequest[tuple[Any, ...] | None]":
+        """Paged by the values of `keys`, in order, each of its type."""
+        after = None if cursor is None else _keys(decode_cursor(cursor, fingerprint), keys)
+        return PageRequest(fields, limit, fingerprint, after, tuple(keys))
+
+    @property
+    def read_limit(self) -> int:
+        # One more than the page: whether it is found says whether a next page exists.
+        return self.limit + 1
+
+    def page(
+        self,
+        found: Sequence[Mapping[str, Any]],
+        total: int,
+        *,
+        header: Mapping[str, Any] = MappingProxyType({}),
+    ) -> Page:
+        """The Page of the items read after `after`, of which `found` holds at least read_limit
+        when that many exist."""
+        items = found[: self.limit]
+        # A limit of 0 asks only for the count, so there is no next page to point to.
+        more = self.limit > 0 and len(found) > self.limit
+        next_cursor = encode_cursor(self.fingerprint, self._next(items)) if more else None
+        return Page(project(items, self.fields), total, next_cursor, header)
+
+    def _next(self, items: Sequence[Mapping[str, Any]]) -> Any:
+        if isinstance(self.after, int):
+            return self.after + self.limit
+        return [items[-1][key] for key in self.keys]
+
+
 def paginate(
     items: Sequence[Mapping[str, Any]],
     *,
@@ -43,52 +106,24 @@ def paginate(
     fingerprint: str,
     fields: Sequence[str],
 ) -> Page:
-    # A static list never changes under the reader, so the keyset can be the next index.
-    start = 0 if cursor is None else decode_cursor(cursor, fingerprint)
-    # The fingerprint matched, so only a hand-made cursor gets here with another keyset.
-    if type(start) is not int or start < 0:
-        raise _invalid_cursor()
-    end = start + limit
-    # A limit of 0 asks only for the count, so there is no next page to point to.
-    more = limit > 0 and end < len(items)
-    next_cursor = encode_cursor(fingerprint, end) if more else None
-    return Page(project(items[start:end], fields), len(items), next_cursor)
+    # A static list never changes under the reader, so it pages by index.
+    request = PageRequest.by_index(
+        tuple(fields), limit=limit, cursor=cursor, fingerprint=fingerprint
+    )
+    return request.page(items[request.after :], len(items))
 
 
-def keyset_after(
-    cursor: str | None, fingerprint: str, types: tuple[type, ...]
-) -> tuple[Any, ...] | None:
-    """The keys that a cursor of keyset_page holds, one of each of `types`, or None without a
-    cursor."""
-    if cursor is None:
-        return None
-    after = decode_cursor(cursor, fingerprint)
+def _keys(keyset: Any, keys: Mapping[str, type]) -> tuple[Any, ...]:
     # The fingerprint matched, so only a hand-made cursor gets here with other keys; the exact
     # type, since True is an int to isinstance.
+    types = tuple(keys.values())
     if not (
-        isinstance(after, list)
-        and len(after) == len(types)
-        and all(type(key) is expected for key, expected in zip(after, types, strict=True))
+        isinstance(keyset, list)
+        and len(keyset) == len(types)
+        and all(type(key) is expected for key, expected in zip(keyset, types, strict=True))
     ):
         raise _invalid_cursor()
-    return tuple(after)
-
-
-def keyset_page(
-    found: Sequence[Mapping[str, Any]],
-    total: int,
-    *,
-    limit: int,
-    fingerprint: str,
-    keys: Sequence[str],
-) -> Page:
-    """A Page of the items read after a cursor's keys in their order, `found` holding up to
-    limit + 1 of them: one more than the page says whether a next page exists."""
-    items = found[:limit]
-    # A limit of 0 asks only for the count, so there is no next page to point to.
-    more = limit > 0 and len(found) > limit
-    next_cursor = encode_cursor(fingerprint, [items[-1][key] for key in keys]) if more else None
-    return Page(items, total, next_cursor)
+    return tuple(keyset)
 
 
 def fingerprint(command: str, selection: Mapping[str, Any]) -> str:
