@@ -91,6 +91,13 @@ def health(connection: Connection, pages: Select[Any], affected: Select[Any]) ->
     )
 
 
+def all_live_affected_urls(catalogue: Sequence[Rule]) -> Select[Any]:
+    """The rule_id and url_id of the catalogue's Affected URLs, computed live, for health()
+    while the Crawl runs."""
+    found = [select(literal(rule.id).label("rule_id"), _found(rule).c.url_id) for rule in catalogue]
+    return select(union_all(*found).subquery())
+
+
 async def materialise_issues(writer: CrawlWriter, catalogue: Sequence[Rule]) -> None:
     """The post-crawl pass: the Rules that the Crawl's rules table marks enabled (D5, D6)."""
     enabled = await writer.run_async(_enabled_rule_ids)

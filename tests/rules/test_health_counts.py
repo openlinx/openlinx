@@ -8,10 +8,16 @@ from sqlalchemy import select
 from spider.aio import loop_factory
 from spider.rules.registry import RULES
 from spider.rules.titles import TITLE_MISSING
-from spider.store.issues import INTERNAL_PAGES, STORED_AFFECTED_URLS, health, materialise_issues
+from spider.store.issues import (
+    INTERNAL_PAGES,
+    STORED_AFFECTED_URLS,
+    all_live_affected_urls,
+    health,
+    materialise_issues,
+)
 from spider.store.reading import reading
 from spider.store.records import Health
-from spider.store.schema import pages
+from spider.store.schema import crawl, pages
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import default_rule_rows
@@ -75,3 +81,17 @@ def test_health_score_of_a_segment(temp_workspace: TempWorkspace) -> None:
         found = health(connection, segment, STORED_AFFECTED_URLS)
 
     assert found == Health(score=75, internal_pages=4, affected_pages=1)
+
+
+def test_live_health_score_of_a_running_crawl(temp_workspace: TempWorkspace) -> None:
+    crawl_file, _ = crawl_with_pages(
+        temp_workspace,
+        {"title_count": 0},
+        {"title_count": 1, "title_1": "Shoes", "title_1_length": 5},
+    )
+
+    with reading(crawl_file) as connection:
+        state: str = connection.execute(select(crawl.c.state)).scalar_one()
+        found = health(connection, INTERNAL_PAGES, all_live_affected_urls(RULES))
+
+    assert (state, found) == ("running", Health(score=50, internal_pages=2, affected_pages=1))
