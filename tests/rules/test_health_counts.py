@@ -21,7 +21,7 @@ from spider.store.schema import crawl, pages
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import default_rule_rows
-from tests.support.rules import crawl_with_pages
+from tests.support.rules import crawl_with_page, crawl_with_pages
 from tests.support.workspace import TempWorkspace
 
 
@@ -95,3 +95,12 @@ def test_live_health_score_of_a_running_crawl(temp_workspace: TempWorkspace) -> 
         found = health(connection, INTERNAL_PAGES, all_live_affected_urls(RULES))
 
     assert (state, found) == ("running", Health(score=50, internal_pages=2, affected_pages=1))
+
+
+def test_a_disabled_rule_does_not_lower_the_live_score(temp_workspace: TempWorkspace) -> None:
+    crawl_file, _ = crawl_with_page(temp_workspace, disabled={TITLE_MISSING.id}, title_count=0)
+
+    with reading(crawl_file) as connection:
+        found = health(connection, INTERNAL_PAGES, all_live_affected_urls(RULES))
+
+    assert found == Health(score=100, internal_pages=1, affected_pages=0)

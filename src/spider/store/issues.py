@@ -50,7 +50,7 @@ _NO_AFFECTED_URLS = _STORED_AFFECTED_URLS.where(false())
 # The selectables of health(): every Internal Page, and the Affected URLs as stored.
 INTERNAL_PAGES = select(pages.c.url_id)
 STORED_AFFECTED_URLS = select(affected_urls.c.rule_id, affected_urls.c.url_id)
-_ISSUE_RULES = select(rules.c.id).where(rules.c.issue_type == "issue")
+_ISSUE_RULES = select(rules.c.id).where(rules.c.issue_type == "issue", rules.c.enabled == 1)
 
 
 def evaluate_rule(crawl_file: Path, rule: Rule) -> list[AffectedUrl]:
