@@ -201,6 +201,38 @@ def test_issue_visible_before_the_crawl_ends(
     )
 
 
+@pytest.mark.slow
+def test_score_before_the_passes(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(SLOW_SITE)
+    # One request at a time: /slow is requested only after the untitled /notitle was recorded.
+    crawl = threading.Thread(
+        target=crawl_result, args=(server.url("/"),), kwargs={"concurrency": 1}
+    )
+    crawl.start()
+    try:
+        waited_for(lambda: True if any(r.path == "/slow" for r in server.requests) else None)
+        crawl_file = waited_for(lambda: next(temp_workspace.home.rglob("*.sqlite"), None))
+        waited_for(
+            lambda: (
+                query(
+                    crawl_file,
+                    "SELECT 1 FROM pages JOIN urls ON urls.id = pages.url_id WHERE urls.url = ?",
+                    (server.url("/notitle"),),
+                )
+                or None
+            )
+        )
+        running = query(
+            crawl_file,
+            "SELECT state, health_score, health_internal_page_count, "
+            "health_affected_page_count, health_calculated_at FROM crawl",
+        )
+    finally:
+        crawl.join()
+
+    assert running == [("running", None, None, None, None)]
+
+
 SLOW_TWINS = Site(
     {
         "/": Page(body='<title>Shoes</title><a href="/twin">a</a> <a href="/slow">b</a>'),
