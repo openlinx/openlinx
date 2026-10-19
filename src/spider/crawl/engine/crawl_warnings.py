@@ -2,9 +2,9 @@
 
 from collections.abc import Iterable
 
-from spider.crawl.context import CrawlContext
-from spider.crawl.links import DiscoveredLink
-from spider.crawl.politeness import BLOCKING_RUN
+from spider.crawl.engine.context import CrawlContext
+from spider.crawl.fetch.politeness import BLOCKING_RUN
+from spider.crawl.references import DiscoveredLink
 from spider.crawl.scope import apex_seed_named_by_page
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.naming import APP_NAME

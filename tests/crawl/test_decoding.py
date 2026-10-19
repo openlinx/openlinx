@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.crawl.decoding import decode_html
+from spider.crawl.pages.decoding import decode_html
 
 _CP1251 = "text/html; charset=windows-1251"
 

@@ -4,7 +4,8 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.crawl.links import DiscoveredLink, extract_links
+from spider.crawl.pages.links import extract_links
+from spider.crawl.references import DiscoveredLink
 from spider.crawl.urls import NormalizedUrl, url_host
 
 SITE = NormalizedUrl("http://site.test/")

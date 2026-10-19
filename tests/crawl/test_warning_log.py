@@ -1,7 +1,7 @@
 """The Crawl's warning log (020-add-crawl-core D10; seam 2)."""
 
+from spider.crawl.engine.warning_log import WarningLog
 from spider.crawl.urls import NormalizedUrl
-from spider.crawl.warning_log import WarningLog
 from spider.output.codes import (
     MAX_URLS_REACHED,
     PARSE_FAILED,

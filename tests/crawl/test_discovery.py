@@ -2,8 +2,8 @@
 
 import pytest
 
-from spider.crawl.discovery import discovered_urls
-from spider.crawl.links import extract_links
+from spider.crawl.engine.discovery import discovered_urls
+from spider.crawl.pages.links import extract_links
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import NewUrl

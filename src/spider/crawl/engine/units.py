@@ -5,23 +5,23 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
-from spider.crawl.context import CrawlContext
-from spider.crawl.crawl_warnings import (
+from spider.crawl.engine.context import CrawlContext
+from spider.crawl.engine.crawl_warnings import (
     parse_failure,
     warn_of_a_blocked_seed,
     warn_of_an_unreachable_robots_txt,
     warn_of_possible_blocking,
     warn_of_seed_base_mismatch,
 )
-from spider.crawl.discovery import RESOURCES, discovered_urls
-from spider.crawl.fetcher import FetchFailure, FetchResult
-from spider.crawl.hooks import Handler, UrlResult
-from spider.crawl.outcomes import Outcomes
-from spider.crawl.pages import is_html_type, response_links
-from spider.crawl.politeness import BlockingRuns, RequestLimits
-from spider.crawl.requester import Requester, UrlLimitRefused
-from spider.crawl.robots import OriginRobots
-from spider.crawl.robots_loader import RobotsLoader
+from spider.crawl.engine.discovery import RESOURCES, discovered_urls
+from spider.crawl.engine.hooks import Handler, UrlResult
+from spider.crawl.engine.outcomes import Outcomes
+from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
+from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
+from spider.crawl.fetch.requester import Requester, UrlLimitRefused
+from spider.crawl.pages.preparation import is_html_type, response_links
+from spider.crawl.robots.loader import RobotsLoader
+from spider.crawl.robots.reader import OriginRobots
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import url_host, url_origin
 from spider.output.codes import (

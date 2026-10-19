@@ -426,5 +426,5 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 Group 16 runs last, after this group.
 
-- [ ] 17.1 Move `spider.crawl` into the subpackages of design D19, behaviour unchanged: a `git mv` per module, the imports rewritten by `scripts/crawl_layout_codemod.py`, `DiscoveredLink` and `resolve_reference` with its helpers split out of `links` into `references`, and in each package an `__init__.py` whose docstring lists its interface.
+- [x] 17.1 Move `spider.crawl` into the subpackages of design D19, behaviour unchanged: a `git mv` per module, the imports rewritten by `scripts/crawl_layout_codemod.py`, `DiscoveredLink` and `resolve_reference` with its helpers split out of `links` into `references`, and in each package an `__init__.py` whose docstring lists its interface.
   Done when: every moved top-level function and class has the AST it had, except `_base` and `_from_attribute` of `links` and the new `resolve_base`; a second run of the codemod changes nothing; and the ast guard `test_the_crawl_imports_run_one_way`, with its breach cases red by mutation of a forbidden import, passes and fails on a path it names that does not exist.

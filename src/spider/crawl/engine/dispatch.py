@@ -2,15 +2,15 @@
 
 import asyncio
 
-from spider.crawl.context import CrawlContext
-from spider.crawl.crawl_warnings import warn_of_the_url_limit
-from spider.crawl.outcomes import Outcomes
-from spider.crawl.pages import PageSettings
-from spider.crawl.politeness import BlockingRuns, RateGate, RequestLimits
-from spider.crawl.requester import Requester
-from spider.crawl.robots_loader import RobotsLoader
+from spider.crawl.engine.context import CrawlContext
+from spider.crawl.engine.crawl_warnings import warn_of_the_url_limit
+from spider.crawl.engine.outcomes import Outcomes
+from spider.crawl.engine.units import Run, unit_of, via_resource
+from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits
+from spider.crawl.fetch.requester import Requester
+from spider.crawl.pages.preparation import PageSettings
+from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision
-from spider.crawl.units import Run, unit_of, via_resource
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import QueuedUrl
 from spider.store.urls import next_depth, queued_batch, record_seed

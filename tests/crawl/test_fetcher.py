@@ -10,7 +10,7 @@ from aiohttp.client_reqrep import ConnectionKey
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
-from spider.crawl.fetcher import AiohttpFetcher, FetchFailure, Request, fetch_error_of
+from spider.crawl.fetch.fetcher import AiohttpFetcher, FetchFailure, Request, fetch_error_of
 from spider.crawl.urls import parse_seed
 from tests.support.clock import FakeClock
 

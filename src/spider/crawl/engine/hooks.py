@@ -8,7 +8,7 @@ from typing import Any
 import msgspec
 
 from spider.clock import Clock
-from spider.crawl.pages import Extractor
+from spider.crawl.pages.preparation import Extractor
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import DiscoveredVia, FetchError, FetchState, ParseError, SkipReason
 from spider.store.rows import RowWriter

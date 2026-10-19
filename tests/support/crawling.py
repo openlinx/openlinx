@@ -8,9 +8,9 @@ from aiohttp.abc import AbstractResolver
 
 from spider.cli.app import build_app
 from spider.clock import Clock, SystemClock
-from spider.crawl.fetcher import Fetcher
-from spider.crawl.hooks import Hooks
-from spider.crawl.pages import PageExecutor
+from spider.crawl.engine.hooks import Hooks
+from spider.crawl.fetch.fetcher import Fetcher
+from spider.crawl.pages.preparation import PageExecutor
 from spider.output.reporter import Collected, Reporter
 from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
 from spider.services.hooks import default_hooks

@@ -3,8 +3,9 @@
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 
-from spider.crawl.links import PAGINATION_RELS, DiscoveredLink, rel_tokens, resolve_reference
-from spider.crawl.refresh import refresh_url
+from spider.crawl.pages.links import PAGINATION_RELS, rel_tokens
+from spider.crawl.pages.refresh import refresh_url
+from spider.crawl.references import DiscoveredLink, resolve_reference
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import LinkType
 

@@ -4,8 +4,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.directives import RobotsDirectives, meta_robots_contents, robots_directives
-from spider.crawl.links import parse_html
+from spider.crawl.pages.directives import RobotsDirectives, meta_robots_contents, robots_directives
+from spider.crawl.pages.links import parse_html
 from spider.naming import DEFAULT_ROBOTS_TOKEN
 
 

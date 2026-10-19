@@ -4,8 +4,8 @@ import asyncio
 from contextlib import suppress
 from typing import Any
 
-from spider.crawl.context import CrawlContext
-from spider.crawl.hooks import UrlResult
+from spider.crawl.engine.context import CrawlContext
+from spider.crawl.engine.hooks import UrlResult
 from spider.output.codes import (
     RECORD_FAILED,
 )
