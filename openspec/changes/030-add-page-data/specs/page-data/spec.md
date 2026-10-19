@@ -324,7 +324,7 @@ The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` 
 
 `(url_id, ordinal)` SHALL be the primary key, and the table SHALL be `WITHOUT ROWID`. `expires` and `max_age` keep their Screaming Frog names; their descriptions give their units.
 
-Attribute names SHALL be matched case-insensitively, and when an attribute is repeated, the last one whose value parses SHALL apply, as RFC 6265 section 5.2 ignores an attribute whose value does not. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
+Attribute names SHALL be matched case-insensitively. When `Domain`, `Expires` or `Max-Age` is repeated, the last one whose value parses SHALL apply, as RFC 6265 section 5.2 ignores one whose value does not; when another attribute is repeated, the last one SHALL apply, as an unknown `SameSite` value is not ignored. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
 
 The cookie value SHALL NOT be stored in any table this change adds. Together with `022-add-fetch-policy`, which stores `Set-Cookie` values as `***` in `response_headers`, no cookie value is stored anywhere in a crawl file.
 
