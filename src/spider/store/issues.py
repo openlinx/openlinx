@@ -49,8 +49,8 @@ _STORED_URL_ISSUES = select(affected_urls.c.rule_id, affected_urls.c.detail).whe
     affected_urls.c.url_id == bindparam("url_id")
 )
 _STORED_ISSUES = select(issues)
-_STORED_AFFECTED_URLS = select(affected_urls.c.url_id, affected_urls.c.detail)
-_NO_AFFECTED_URLS = _STORED_AFFECTED_URLS.where(false())
+_STORED_DETAILS = select(affected_urls.c.url_id, affected_urls.c.detail)
+_NO_AFFECTED_URLS = _STORED_DETAILS.where(false())
 # The selectables of health(): every Internal Page, and the Affected URLs as stored.
 INTERNAL_PAGES = select(pages.c.url_id)
 STORED_AFFECTED_URLS = select(affected_urls.c.rule_id, affected_urls.c.url_id)
@@ -76,15 +76,18 @@ def affected_urls_unit(rule: Rule) -> Callable[[Connection], None]:
     return unit
 
 
-def health(connection: Connection, pages: Select[Any], affected: Select[Any]) -> Health:
-    """The Health Score of the Pages whose url_id `pages` selects, counted against the Affected
-    URLs, rule_id and url_id, that `affected` selects (D8)."""
-    page_ids = pages.subquery()
+def health(connection: Connection, rated: Select[Any], affected: Select[Any]) -> Health:
+    """The Health Score of the Pages among the url_id that `rated` selects, counted against the
+    Affected URLs, rule_id and url_id, that `affected` selects (D8)."""
+    # Only Pages count: a Segment of URLs also holds URLs that are no Page.
+    rated_pages = select(pages.c.url_id).where(
+        pages.c.url_id.in_(select(rated.subquery().c.url_id))
+    )
     found = affected.subquery()
     counted = select(
-        select(func.count()).select_from(page_ids).scalar_subquery(),
+        select(func.count()).select_from(rated_pages.subquery()).scalar_subquery(),
         select(func.count(distinct(found.c.url_id)))
-        .where(found.c.url_id.in_(select(page_ids.c.url_id)), found.c.rule_id.in_(_ISSUE_RULES))
+        .where(found.c.url_id.in_(rated_pages), found.c.rule_id.in_(_ISSUE_RULES))
         .scalar_subquery(),
     )
     internal, affected_pages = connection.execute(counted).one()
@@ -236,7 +239,7 @@ def _live_affected_urls(
 def _stored_affected_urls(connection: Connection, rule_id: str) -> Select[Any]:
     # Known by the file's own rules table: a file of a later tool holds Rules the catalogue lacks.
     _recorded_rule(connection, rule_id)
-    return _STORED_AFFECTED_URLS.where(affected_urls.c.rule_id == rule_id)
+    return _STORED_DETAILS.where(affected_urls.c.rule_id == rule_id)
 
 
 def _recorded_rule(connection: Connection, rule_id: str) -> bool:

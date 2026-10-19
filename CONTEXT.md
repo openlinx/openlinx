@@ -121,7 +121,7 @@ A 0–100 measure of a Page's internal link authority, calculated from the Links
 _Avoid_: PageRank, internal PR
 
 **Health Score**:
-The percentage of Internal Pages that are not an Affected URL of any Issue whose Issue Type is *Issue*.
+A score from 0 to 100 over the Internal Pages, which only the Pages that are an Affected URL of an Issue whose Issue Type is *Issue* lower.
 _Avoid_: site score, audit score
 
 **Crawl Diff**:

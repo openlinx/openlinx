@@ -3,7 +3,9 @@
 import json
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -19,6 +21,7 @@ from spider.store.issues import (
 )
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site, Status
+from tests.fixture_site.server import ServerHandle
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -158,12 +161,12 @@ def waited_for[T](found: Callable[[], T | None], seconds: float = 4.0) -> T:
     return value
 
 
-@pytest.mark.slow
-def test_issue_visible_before_the_crawl_ends(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(SLOW_SITE)
-    # One request at a time: /slow is requested only after /notitle was recorded.
+@contextmanager
+def running_crawl(
+    temp_workspace: TempWorkspace, server: ServerHandle, recorded: str
+) -> Iterator[Path]:
+    """The crawl file of a Crawl of `server` that is still running, once the Page at `recorded`
+    is written: one request at a time, so /slow is requested only after it."""
     crawl = threading.Thread(
         target=crawl_result, args=(server.url("/"),), kwargs={"concurrency": 1}
     )
@@ -176,11 +179,22 @@ def test_issue_visible_before_the_crawl_ends(
                 query(
                     crawl_file,
                     "SELECT 1 FROM pages JOIN urls ON urls.id = pages.url_id WHERE urls.url = ?",
-                    (server.url("/notitle"),),
+                    (server.url(recorded),),
                 )
                 or None
             )
         )
+        yield crawl_file
+    finally:
+        crawl.join()
+
+
+@pytest.mark.slow
+def test_issue_visible_before_the_crawl_ends(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SLOW_SITE)
+    with running_crawl(temp_workspace, server, "/notitle") as crawl_file:
         state = query(crawl_file, "SELECT state FROM crawl")
         issues = [
             (issue.rule_id, issue.affected_count)
@@ -191,8 +205,6 @@ def test_issue_visible_before_the_crawl_ends(
             query(crawl_file, "SELECT url FROM urls WHERE id = ?", (url.url_id,))[0][0]
             for url in read_affected_urls(crawl_file, "title-missing", RULES)
         ]
-    finally:
-        crawl.join()
 
     assert (state, issues, affected) == (
         [("running",)],
@@ -203,32 +215,13 @@ def test_issue_visible_before_the_crawl_ends(
 
 @pytest.mark.slow
 def test_score_before_the_passes(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
-    server = fixture_site(SLOW_SITE)
-    # One request at a time: /slow is requested only after the untitled /notitle was recorded.
-    crawl = threading.Thread(
-        target=crawl_result, args=(server.url("/"),), kwargs={"concurrency": 1}
-    )
-    crawl.start()
-    try:
-        waited_for(lambda: True if any(r.path == "/slow" for r in server.requests) else None)
-        crawl_file = waited_for(lambda: next(temp_workspace.home.rglob("*.sqlite"), None))
-        waited_for(
-            lambda: (
-                query(
-                    crawl_file,
-                    "SELECT 1 FROM pages JOIN urls ON urls.id = pages.url_id WHERE urls.url = ?",
-                    (server.url("/notitle"),),
-                )
-                or None
-            )
-        )
+    # The untitled /notitle is recorded, so a score kept while the Crawl runs would show.
+    with running_crawl(temp_workspace, fixture_site(SLOW_SITE), "/notitle") as crawl_file:
         running = query(
             crawl_file,
             "SELECT state, health_score, health_internal_page_count, "
             "health_affected_page_count, health_calculated_at FROM crawl",
         )
-    finally:
-        crawl.join()
 
     assert running == [("running", None, None, None, None)]
 
@@ -246,25 +239,7 @@ SLOW_TWINS = Site(
 def test_a_running_crawl_writes_no_affected_url(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
-    server = fixture_site(SLOW_TWINS)
-    # One request at a time: /slow is requested only after /twin was recorded.
-    crawl = threading.Thread(
-        target=crawl_result, args=(server.url("/"),), kwargs={"concurrency": 1}
-    )
-    crawl.start()
-    try:
-        waited_for(lambda: True if any(r.path == "/slow" for r in server.requests) else None)
-        crawl_file = waited_for(lambda: next(temp_workspace.home.rglob("*.sqlite"), None))
-        waited_for(
-            lambda: (
-                query(
-                    crawl_file,
-                    "SELECT 1 FROM pages JOIN urls ON urls.id = pages.url_id WHERE urls.url = ?",
-                    (server.url("/twin"),),
-                )
-                or None
-            )
-        )
+    with running_crawl(temp_workspace, fixture_site(SLOW_TWINS), "/twin") as crawl_file:
         state = query(crawl_file, "SELECT state FROM crawl")
         stored = query(crawl_file, "SELECT count(*) FROM affected_urls")
         issues = [
@@ -272,8 +247,6 @@ def test_a_running_crawl_writes_no_affected_url(
             for issue in read_issues(crawl_file, RULES)
             if issue.rule_id == "title-duplicate"
         ]
-    finally:
-        crawl.join()
 
     assert (state, stored, issues) == ([("running",)], [(0,)], [("title-duplicate", 2)])
 

@@ -231,7 +231,9 @@ crawl = public_table(
     Column(
         "health_affected_page_count",
         Integer,
-        comment="Derived: A, the Internal Pages that are an Affected URL of an Issue-type Rule.",
+        comment=(
+            "Derived: A, the Internal Pages that are an Affected URL of an enabled Issue-type Rule."
+        ),
     ),
     Column(
         "health_calculated_at",

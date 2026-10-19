@@ -95,7 +95,7 @@ The Crawl's metadata, in exactly one row.
 | `platform` | TEXT | no | | | | The operating system that created the Crawl, as Python describes it. |
 | `health_score` | INTEGER | yes | | | | Derived: the Health Score, from 0 to 100; NULL when there is no Internal Page. |
 | `health_internal_page_count` | INTEGER | yes | | | | Derived: N, the Internal Pages that the Health Score rates. |
-| `health_affected_page_count` | INTEGER | yes | | | | Derived: A, the Internal Pages that are an Affected URL of an Issue-type Rule. |
+| `health_affected_page_count` | INTEGER | yes | | | | Derived: A, the Internal Pages that are an Affected URL of an enabled Issue-type Rule. |
 | `health_calculated_at` | TEXT | yes | | `timestamp` | | Derived: when the post-crawl pass calculated the Health Score. |
 
 ## Table `seeds`

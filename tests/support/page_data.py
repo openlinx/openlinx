@@ -1,6 +1,8 @@
 """Page data at seam 4: page preparation, then the Page handler (030-add-page-data, Test seams)."""
 
+from dataclasses import fields
 from datetime import UTC, datetime
+from typing import Any
 
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.hooks import UrlResult
@@ -46,3 +48,10 @@ def page_row(html: str | bytes, content_type: str = "text/html; charset=utf-8") 
     )
     (row,) = page_rows(result)
     return row
+
+
+def page_data(html: str) -> dict[str, Any]:
+    """The Page data columns of page_row, without the URL ones, for a seam-2 crawl file."""
+    row = page_row(html)
+    kept = {field.name for field in fields(row)} - {"url_id", "address", "url_encoded_address"}
+    return {name: getattr(row, name) for name in kept}
