@@ -4,10 +4,12 @@ from collections.abc import Callable, Iterator
 from contextlib import ExitStack
 
 import pytest
+from aiohttp.abc import AbstractResolver
 
 from tests.fixture_site.hosts import FixtureHosts, StartHosts, hosts_for
 from tests.fixture_site.routes import Site
 from tests.fixture_site.server import RunningServer, ServerHandle
+from tests.support.proxy import ForwardProxy, StartProxy
 
 StartSite = Callable[[Site], ServerHandle]
 
@@ -41,3 +43,16 @@ def fixture_hosts(fixture_site: StartSite) -> StartHosts:
         return hosts_for(fixture_site(site), fixture_site(other))
 
     return start
+
+
+@pytest.fixture
+def fixture_proxy() -> Iterator[StartProxy]:
+    """A forward proxy that resolves names with the DNS resolver hook it is given."""
+    with ExitStack() as running:
+
+        def start(resolver: AbstractResolver) -> ForwardProxy:
+            proxy = ForwardProxy(resolver)
+            running.callback(proxy.stop)
+            return proxy
+
+        yield start

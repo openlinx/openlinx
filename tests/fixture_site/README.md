@@ -59,6 +59,7 @@ When the server stops, it cancels every handler still running (hanging or delaye
 - **`fixture_hosts`** (function-scoped), for multi-host Crawls: `hosts = fixture_hosts(SITE, OTHER)` starts two instances and returns a `FixtureHosts`:
   - `site`, the `ServerHandle` that `site.test` and `www.site.test` name, and `other`, the one that `other.test` names
   - `resolver`, the DNS resolver hook: an aiohttp resolver that maps those names, on any port, to their instance's address and port, and fails every other name as the system resolver does, so aiohttp reports `ClientConnectorDNSError`. It goes into a Crawl through `tests.support.crawling.crawl_result(..., resolver=hosts.resolver)`, which binds it into the Fetcher factory that the Crawl Service's `start_crawl` takes.
+- **`fixture_proxy`** (function-scoped), for the proxy scenarios: `proxy = fixture_proxy(hosts.resolver)` starts a forward proxy (`tests/support/proxy.py`) at `proxy.url`. It relays each plain-http request it receives in absolute form, resolving the fixture's names with the DNS resolver hook it is given, since behind a proxy the crawler resolves only the proxy's address, and `proxy.requests` holds each relayed URL in order.
 - **`ServerHandle`**:
   - `base_url`, such as `http://127.0.0.1:53124`
   - `url(path)`
