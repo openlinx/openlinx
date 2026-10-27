@@ -13,9 +13,16 @@ from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import query
 from tests.support.page_data import page_data
-from tests.support.rules import SHOES, crawl_with_page, crawl_with_pages
+from tests.support.rules import crawl_with_page, crawl_with_pages
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import replay_now
+
+# A Page whose one Issue is title-missing.
+UNTITLED = page_data(
+    '<meta name="description" content="Everything half price this week.">'
+    "<h1>Sale</h1><p>Everything half price this week.</p>"
+)
+SHOES = page_data("<title>Running shoes</title><h1>Running shoes</h1>")
 
 
 def test_the_units_of_the_issues_pass_run_again_the_same(temp_workspace: TempWorkspace) -> None:
@@ -44,7 +51,7 @@ def test_the_issues_pass_comes_last() -> None:
 def test_a_rule_query_ending_in_a_comment_is_run_as_written(
     temp_workspace: TempWorkspace,
 ) -> None:
-    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    crawl_file, url_id = crawl_with_page(temp_workspace, **UNTITLED)
     commented = replace(
         TITLE_MISSING, reproduce_sql=TITLE_MISSING.reproduce_sql + "\n-- A comment ends it."
     )
@@ -58,7 +65,7 @@ def test_a_rule_query_ending_in_a_comment_is_run_as_written(
 
 
 def test_a_rule_query_with_a_colon_is_run_as_written(temp_workspace: TempWorkspace) -> None:
-    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    crawl_file, url_id = crawl_with_page(temp_workspace, **UNTITLED)
     colon = replace(
         TITLE_MISSING, reproduce_sql=TITLE_MISSING.reproduce_sql + "\n-- Widths come :later."
     )
