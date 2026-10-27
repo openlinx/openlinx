@@ -81,18 +81,15 @@ def global_cap(concurrency: int) -> int:
 
 
 class RequestLimits:
-    """A semaphore per host, the global cap on requests in flight, the bound on URL tasks, and
-    the URL limit, --max-urls, which counts every request it lets start.
+    """The bound on URL tasks and the URL limit, --max-urls, which counts every request it
+    lets start; the Requester holds the hosts' slots and the global cap.
 
     A task holds its permit until its unit is submitted, so `backlog` is how far page
     preparation may fall behind the requests before fetching waits (design D7, 026 D2).
     """
 
-    def __init__(self, concurrency: int, backlog: int = 0, max_urls: int | None = None) -> None:
-        self._concurrency = concurrency
-        self._hosts: dict[str, asyncio.Semaphore] = {}
-        self._requests = asyncio.Semaphore(global_cap(concurrency))
-        self._tasks = asyncio.Semaphore(global_cap(concurrency) + backlog)
+    def __init__(self, cap: int, backlog: int = 0, max_urls: int | None = None) -> None:
+        self._tasks = asyncio.Semaphore(cap + backlog)
         self._max_urls = max_urls
         self._started = 0
         self._refused: int | None = None
@@ -123,13 +120,3 @@ class RequestLimits:
 
     def task_ended(self) -> None:
         self._tasks.release()
-
-    def request(self) -> asyncio.Semaphore:
-        """Taken after the host's slot, so a URL waiting for a busy host holds no permit."""
-        return self._requests
-
-    def host(self, host: str) -> asyncio.Semaphore:
-        semaphore = self._hosts.get(host)
-        if semaphore is None:
-            semaphore = self._hosts[host] = asyncio.Semaphore(self._concurrency)
-        return semaphore
