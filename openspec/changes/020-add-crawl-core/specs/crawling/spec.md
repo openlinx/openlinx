@@ -723,8 +723,8 @@ The crawl store SHALL hold one row for each origin of a URL that the Crawl recor
 | `host` | TEXT | no | | The origin's host in lower-case ASCII (IDNA) form |
 | `is_internal` | INTEGER | no | boolean | 1 when the origin's URLs are Internal URLs |
 | `robots_state` | TEXT | yes | `ok`, `missing`, `unreachable` | Rules applied, everything allowed, or everything disallowed or unanswered; NULL while robots.txt has not been fetched, which happens before the first URL of the origin that the Scope does not skip and the URL limit does not refuse |
-| `robots_status_code` | INTEGER | yes | | Status code of the final robots.txt response; NULL without a response |
-| `robots_fetch_error` | TEXT | yes | the values of `urls.fetch_error` | Why the robots.txt request got no HTTP response; NULL when it got one, or while robots.txt has not been fetched |
+| `robots_status_code` | INTEGER | yes | | Status code of the last robots.txt response; NULL without a response |
+| `robots_fetch_error` | TEXT | yes | the values of `urls.fetch_error` | Why the robots.txt request, or a redirect hop of it, got no HTTP response; NULL when it got one, or while robots.txt has not been fetched |
 | `robots_fetch_error_message` | TEXT | yes | | Human-readable detail of `robots_fetch_error` |
 | `robots_fetched_at` | TEXT | yes | timestamp | UTC time robots.txt was last fetched |
 | `robots_txt` | TEXT | yes | | The robots.txt body as parsed, up to 512,000 bytes |
