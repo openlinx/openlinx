@@ -106,7 +106,7 @@ Seams (docs/testing.md):
 - [x] 5.5 [3+6] Drive "A compressed Resource records both sizes": `auto_decompress=False`, the `brotli` dependency with its allowlist line, decoding in `read_body` with decoders bounded in output, and the `content_encoding`, `size_bytes` and `transferred_bytes` columns (design D1). Done when: the 20 MiB cap applies to the decoded size too, and raw deflate is decoded, by [Pure] tests on real compressed bytes (`test_a_compressed_body_is_capped_after_decoding`, design Risks).
 - [x] 5.5a [3+6] Drive "Stacked encodings are decoded in reverse order", "A corrupt compressed body is an invalid response" and "A body in an encoding that was not offered is not parsed", on real compressed bytes, with the `parse_error` value `unsupported_encoding` (design D1, D10).
 - [x] 5.6 [3+6] Drive "An image's size is recorded".
-- [ ] 5.7 Docs: document the limits, compression and the size columns in `docs/crawling.md`.
+- [x] 5.7 Docs: document the limits, compression and the size columns in `docs/crawling.md`.
 - [ ] 5.8 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. TLS

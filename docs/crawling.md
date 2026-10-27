@@ -144,6 +144,9 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 | What fails | How the URL is recorded |
 |---|---|
 | The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `tls_error` (the TLS handshake failed, such as a self-signed or expired certificate), `timeout` (no complete response within `--timeout`), `connection_error` (any other failure, a connection reset in the middle of the body included). The last attempt's, after the retries (see [Timeouts and retries](#timeouts-and-retries)). |
+| The body is in a coding it does not decode as, such as a gzip label on plain bytes | `fetch_state` = `error`, `fetch_error` = `invalid_response` (see [Body size and compression](#body-size-and-compression)). |
+| A Page's body is larger than 20 MiB | It is recorded with `body_truncated` = 1 and is not parsed: `parse_error` = `body_too_large`. |
+| A Page's body is in a coding that was not offered | It is recorded as received and is not parsed: `parse_error` = `unsupported_encoding`. |
 | The body has bytes its character encoding cannot hold | Nothing: they are decoded as replacement characters, and the Page is parsed as usual. |
 | A registered extractor raises an error | `parsed` stays 1 and the Page's Links are followed; `parse_error` = `extractor_error`, and `parse_error_message` names the extractor and the error's type, such as `title: ValueError`. Only that extractor's output is missing. |
 | A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |
@@ -152,13 +155,14 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 | Only nofollow Links reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `nofollow` (see [Nofollow](#nofollow)). |
 | Only Links of a type that is not requested reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `link_type_not_followed` (see [Link types](#link-types)). |
 | The URL is External, with `--no-check-external` | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `external_not_checked`; an External URL that an `--exclude` pattern matches is `excluded`. |
+| The URL is longer than 2,000 characters | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `url_too_long` (see [URL length](#url-length)). |
 | The URL is deeper than `--max-depth`, and no Resource | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `max_depth` (see [Crawl Depth](#crawl-depth)). |
 
 Each of the three failures of the tool's own code is reported by one counted warning, written to stderr when it first occurs and kept once in the result's `warnings`, however many URLs it affects:
 
 | Code | Counts URLs where | `details` |
 |---|---|---|
-| `parse_failed` | an extractor failed, or a Page's preparation gave nothing (`body_too_large`, `worker_crashed`, `parse_timeout`) | `count`, `first_url` |
+| `parse_failed` | an extractor failed, or a Page's preparation gave nothing (`body_too_large`, `unsupported_encoding`, `worker_crashed`, `parse_timeout`) | `count`, `first_url` |
 | `handler_failed` | a handler failed | `count`, `first_url` |
 | `record_failed` | the rows could not be written | `count`, `first_url` |
 
@@ -332,6 +336,18 @@ The Crawl keeps no cookies: a cookie that a response sets is never sent with a l
 - **Backoff:** before retry n the Crawl waits 2^(n-1) seconds, 1, then 2, then 4, with no jitter. A waiting retry holds none of the host's `--concurrency` slots, and each attempt waits its `--rate` turn again.
 - **Retry-After and 429:** a `Retry-After` header on a 429 or 503 response, in seconds or as an HTTP date, sets the wait instead, capped at 120 seconds; a 429 without one waits 10 seconds. During such a wait the host is paused: no request to it starts, the retried one's or any other, with or without `--rate`. The pause comes whether or not the URL has a retry left, with `--retries 0` too.
 - **What is recorded:** the last attempt's response or failure, and `urls.attempt_count`, the number of requests made for the URL, 0 when it was not requested. A retry is the same URL, so only its first attempt counts towards `--max-urls`.
+
+### Body size and compression
+
+- **Compression:** every request, robots.txt's included, sends `Accept-Encoding: gzip, deflate, br`, and the Crawl decodes those codings itself: gzip, deflate (the zlib format, or raw deflate, as some servers send) and br, several of them in the reverse order of the `Content-Encoding` header.
+- **Sizes:** every response records `content_encoding`, the header as received, `transferred_bytes`, the body as it came over the network, and `size_bytes`, the body after decoding. A script sent as 2,500 bytes of gzip that holds 10,000 bytes has `transferred_bytes` = 2500 and `size_bytes` = 10000. An image or any other Resource has its sizes recorded too, and is never parsed.
+- **The 20 MiB cap:** at most 20 MiB of a body is read, and at most 20 MiB of it is decoded, so a small compressed body that would expand to gigabytes stops there. A body past the cap has `body_truncated` = 1, `transferred_bytes` the bytes read and `size_bytes` NULL, since its full size was never measured. A Page past the cap is not parsed: `parse_error` = `body_too_large`.
+- **A body that fails to decode,** a body labelled gzip that is not, or a stream that ends inside its coding, is recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`, and is not retried.
+- **A coding that was not offered,** such as zstd from a server that ignores `Accept-Encoding`, is kept as received: the URL is `fetched` with `size_bytes` NULL, and a Page in it is not parsed, `parse_error` = `unsupported_encoding`.
+
+### URL length
+
+A URL longer than 2,000 characters is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `url_too_long`, before any `--include` or `--exclude` pattern is matched against it.
 
 ### Proxy variables
 
