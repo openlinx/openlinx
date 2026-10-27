@@ -317,6 +317,12 @@ urls = public_table(
     ),
     Column("fetched_at", Timestamp, comment="UTC time of the request."),
     Column(
+        "body_truncated",
+        Flag,
+        comment="1 when the body was larger than 20 MiB and not read in full; NULL without a "
+        "response.",
+    ),
+    Column(
         "parsed",
         Flag,
         nullable=False,

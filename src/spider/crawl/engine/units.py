@@ -24,6 +24,7 @@ from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
 from spider.crawl.following import is_redirection, redirect_target
 from spider.crawl.pages.preparation import (
+    PreparedPage,
     is_html_type,
     response_directives,
     response_links,
@@ -249,7 +250,14 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
     # An External URL or one outside the Scope is a Checked URL, never parsed (design D5).
     followed = decided.in_scope and 200 <= response.status_code < 300
     prepared = followed and is_html_type(content_type)
-    page = await context.pages.prepare(url, response) if prepared else None
+    if prepared and response.body_truncated:
+        # A Page cut at the cap would be parsed as another, shorter one (022 design D1).
+        page: PreparedPage | None = PreparedPage(
+            parse_error="body_too_large",
+            parse_error_message="The body is larger than 20 MiB.",
+        )
+    else:
+        page = await context.pages.prepare(url, response) if prepared else None
     parsed = page is not None and page.parsed
     # The Link and Refresh headers of an in-Scope 2xx response count, whatever became of its
     # preparation (design D9).
@@ -278,6 +286,7 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
         headers=response.headers,
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
+        body_truncated=response.body_truncated,
         directives=directives,
         redirect_target=target,
     )
@@ -355,6 +364,7 @@ def _fetched_record(
         parsed=fetched.parsed,
         parse_error=fetched.parse_error,
         parse_error_message=fetched.parse_error_message,
+        body_truncated=response.body_truncated,
         blocked_by_robots_txt=fetched.blocked_by_robots_txt,
         discovered=discovered,
         rows=rows,

@@ -12,6 +12,7 @@ from aiohttp.abc import AbstractResolver
 
 from spider import __version__
 from spider.clock import Clock
+from spider.crawl.fetch.body import read_body
 from spider.crawl.fetch.proxy import ProxyVariables
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import APP_NAME, PROJECT_URL
@@ -39,6 +40,8 @@ class FetchResult:
     # When the request was sent, and how long until the whole body arrived.
     fetched_at: datetime
     response_time_ms: int
+    # Larger than the body cap, so read only up to it.
+    body_truncated: bool = False
 
     def header(self, name: str) -> str | None:
         """The first value of the header `name`, in any letter case."""
@@ -59,6 +62,7 @@ class Fetcher(Protocol):
     async def fetch(self, request: Request) -> FetchResult | FetchFailure: ...
 
 
+_CHUNK_BYTES = 64 * 1024
 DEFAULT_USER_AGENT = f"{APP_NAME}/{__version__} (+{PROJECT_URL})"
 
 
@@ -91,7 +95,7 @@ class AiohttpFetcher:
         try:
             proxy = self._proxies.for_url(request.url)
             async with self._session.get(url, allow_redirects=False, proxy=proxy) as response:
-                body = await response.read()
+                body = await read_body(response.content.iter_chunked(_CHUNK_BYTES))
                 # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.
                 headers = tuple(
                     (name.decode("latin-1"), value.decode("latin-1"))
@@ -110,9 +114,10 @@ class AiohttpFetcher:
             status_code=status_code,
             reason=reason,
             headers=headers,
-            body=body,
+            body=body.data,
             fetched_at=fetched_at,
             response_time_ms=round(elapsed * 1000),
+            body_truncated=body.truncated,
         )
 
 

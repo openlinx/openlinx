@@ -30,6 +30,8 @@ class UrlResponse:
     headers: tuple[tuple[str, str], ...]
     fetched_at: datetime
     response_time_ms: int
+    # Larger than the body cap, so read only up to it (022 design D1).
+    body_truncated: bool
     # Page preparation's when the Page was parsed, else the X-Robots-Tag's alone.
     directives: RobotsDirectives
     # Where a 301, 302, 303, 307 or 308 leads; None for any other response (022 design D2).

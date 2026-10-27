@@ -118,6 +118,7 @@ _FETCHED = _URL_ROW.values(
     parsed=bindparam("is_parsed"),
     parse_error=bindparam("parse_failure"),
     parse_error_message=bindparam("parse_failure_message"),
+    body_truncated=bindparam("truncated"),
     blocked_by_robots_txt=bindparam("robots_blocked"),
     **_WRITE_BACK,
 )
@@ -283,6 +284,7 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         "is_parsed": fetched.parsed,
         "parse_failure": fetched.parse_error,
         "parse_failure_message": fetched.parse_error_message,
+        "truncated": fetched.body_truncated,
         "robots_blocked": fetched.blocked_by_robots_txt,
         **_provenance_values(fetched.provenance),
     }
