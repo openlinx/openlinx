@@ -6,8 +6,8 @@ from functools import partial
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import warn_of_the_url_limit
 from spider.crawl.engine.outcomes import Outcomes
-from spider.crawl.engine.seed_chain import SeedChain
-from spider.crawl.engine.units import Run, close_seed_chain, unit_of, via_resource
+from spider.crawl.engine.seed_chain import SeedChain, close_seed_chain
+from spider.crawl.engine.units import Run, unit_of, via_resource
 from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits
 from spider.crawl.fetch.requester import Requester
 from spider.crawl.robots.loader import RobotsLoader
@@ -54,7 +54,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             await _crawl_depth(run, depth)
             if run.seed_chain.is_open and not context.stop.is_set:
                 # No URL of the chain was decided, such as one the URL limit refused.
-                await close_seed_chain(run, responded=False)
+                await close_seed_chain(context, run.seed_chain, responded=False)
             # A stop cancels the checked URLs in flight: the sweep below would wait for them.
             if context.stop.is_set:
                 break

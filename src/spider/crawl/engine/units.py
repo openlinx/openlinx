@@ -11,18 +11,16 @@ from spider.crawl.engine.crawl_warnings import (
     warn_of_an_unreachable_robots_txt,
     warn_of_possible_blocking,
     warn_of_seed_base_mismatch,
-    warn_of_seed_redirected_out_of_scope,
 )
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from spider.crawl.engine.outcomes import Outcomes
-from spider.crawl.engine.seed_chain import SeedChain
+from spider.crawl.engine.seed_chain import SeedChain, close_seed_chain
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
-from spider.crawl.following import RESOURCES, redirect_target
+from spider.crawl.following import RESOURCES, is_redirection, redirect_target
 from spider.crawl.pages.preparation import (
-    PageSettings,
     is_html_type,
     response_directives,
     response_links,
@@ -33,23 +31,21 @@ from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.output.codes import HANDLER_FAILED, PARSE_FAILED
 from spider.output.diagnostics import Diagnostic
-from spider.store.crawls import record_scope
 from spider.store.records import (
     ErroredUrl,
     FetchedUrl,
     NewUrl,
     QueuedUrl,
+    Redirect,
     SkippedUrl,
     SkipReason,
 )
 from spider.store.rows import HandlerRows
 from spider.store.urls import (
     UrlUnit,
-    reclassify_urls,
     record_error,
     record_fetched,
     record_skipped,
-    seed_chain_urls,
 )
 
 
@@ -90,34 +86,8 @@ async def unit_of(
         and recorded is not None
         and (response is None or response.redirect_target is None)
     ):
-        await close_seed_chain(run, responded=False)
+        await close_seed_chain(run.context, run.seed_chain, responded=False)
     return recorded
-
-
-async def close_seed_chain(run: Run, *, responded: bool) -> None:
-    """Closes the Seed's Redirect Chain on the URL it ended on: its URLs are decided again
-    against the Scope it ended in, which the Crawl records when it widened, and page
-    preparation starts with that Scope (022-add-fetch-policy D3)."""
-    context, chain = run.context, run.seed_chain
-    urls = await context.writer.run_async(
-        seed_chain_urls(chain.seed, context.settings.max_redirects)
-    )
-    final_url = urls[-1][1]
-    if chain.scope.is_out_of_scope(final_url):
-        warn_of_seed_redirected_out_of_scope(context, chain.seed, final_url)
-    widened, decisions = chain.close(urls, responded=responded)
-    await context.writer.run_async(reclassify_urls(decisions))
-    if widened is not None:
-        await context.writer.run_async(record_scope(widened.to_json()))
-    await context.pages.start(
-        PageSettings(
-            scope=run.seed_chain.scope,
-            extractors=context.hooks.extractors,
-            robots_token=context.settings.robots_user_agent,
-            follow_nofollow=context.settings.follow_nofollow,
-            strip_params=context.strip_params,
-        )
-    )
 
 
 async def _outcome(
@@ -227,11 +197,11 @@ async def _fetched(
 ) -> tuple[UrlResult, UrlUnit]:
     context, url = run.context, decided.url
     content_type = response.header("Content-Type")
-    location = response.header("Location") if 300 <= response.status_code < 400 else None
+    location = response.header("Location") if is_redirection(response.status_code) else None
     target = redirect_target(url, response.status_code, location, context.strip_params)
     if in_chain and target is None:
         # Before any preparation: the chain's last response may be a Page of the wider Scope.
-        await close_seed_chain(run, responded=True)
+        await close_seed_chain(run.context, run.seed_chain, responded=True)
     scope = run.seed_chain.scope
     # An External URL or one outside the Scope is a Checked URL, never parsed (design D5).
     followed = decided.in_scope and 200 <= response.status_code < 300
@@ -279,19 +249,17 @@ async def _fetched(
     )
     rows = _handler_rows(context, fetched)
     redirect = (
-        None
-        if target is None
-        else _redirect(target, run.seed_chain.decide(target, in_chain=in_chain))
+        Redirect(
+            location=location,
+            target=None
+            if target is None
+            else _redirect(target, run.seed_chain.decide(target, in_chain=in_chain)),
+            max_redirects=context.settings.max_redirects,
+        )
+        if is_redirection(response.status_code)
+        else None
     )
-    record = _fetched_record(
-        fetched,
-        url_response,
-        discovered,
-        rows,
-        location=location,
-        redirect=redirect,
-        max_redirects=context.settings.max_redirects,
-    )
+    record = _fetched_record(fetched, url_response, discovered, rows, redirect=redirect)
     return fetched, record_fetched(record)
 
 
@@ -328,9 +296,7 @@ def _fetched_record(
     discovered: tuple[NewUrl, ...],
     rows: tuple[HandlerRows[Any], ...],
     *,
-    location: str | None,
-    redirect: NewUrl | None,
-    max_redirects: int,
+    redirect: Redirect | None,
 ) -> FetchedUrl:
     return FetchedUrl(
         url_id=fetched.url_id,
@@ -339,9 +305,7 @@ def _fetched_record(
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
         attempt_count=fetched.attempt_count,
-        redirect_location=location,
         redirect=redirect,
-        max_redirects=max_redirects,
         parsed=fetched.parsed,
         parse_error=fetched.parse_error,
         parse_error_message=fetched.parse_error_message,

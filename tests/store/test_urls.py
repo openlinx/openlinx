@@ -17,6 +17,8 @@ from spider.store.records import (
     FetchedUrl,
     NewUrl,
     QueuedUrl,
+    Reclassified,
+    Redirect,
     SkippedUrl,
     SkipReason,
     UrlCounts,
@@ -71,9 +73,7 @@ def _fetched(url_id: int, *discovered: NewUrl) -> FetchedUrl:
         response_time_ms=10,
         parsed=True,
         attempt_count=1,
-        redirect_location=None,
         redirect=None,
-        max_redirects=10,
         discovered=discovered,
     )
 
@@ -114,9 +114,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     response_time_ms=120,
                     parsed=True,
                     attempt_count=2,
-                    redirect_location=None,
                     redirect=None,
-                    max_redirects=10,
                     discovered=found,
                     rows=(HandlerRows(_write_note, (Note(seed_id),)),),
                 ),
@@ -402,9 +400,11 @@ def _redirected(url_id: int, target: str, max_redirects: int) -> FetchedUrl:
         status_code=301,
         content_type=None,
         parsed=False,
-        redirect_location=target,
-        redirect=_new(target, discovered_via="redirect"),
-        max_redirects=max_redirects,
+        redirect=Redirect(
+            location=target,
+            target=_new(target, discovered_via="redirect"),
+            max_redirects=max_redirects,
+        ),
     )
 
 
@@ -426,7 +426,9 @@ def test_the_units_of_redirects_run_again_the_same(temp_workspace: TempWorkspace
         writer.run(record_fetched(_redirected(ids["/cart"], f"{site}/login", 10)))
         login = writer.run(queued_batch(1, mid[0].id, 10, 10))
         writer.run(record_fetched(_redirected(login[0].id, f"{site}/cart", 10)))
-        writer.run(reclassify_urls([(ids["/old"], False, False)]))
+        writer.run(
+            reclassify_urls([Reclassified(url_id=ids["/old"], is_internal=False, in_scope=False)])
+        )
         replay_now(writer)
 
     assert query(

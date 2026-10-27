@@ -181,6 +181,27 @@ class CrawlSummary:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Redirect:
+    """A 3xx response's redirect: its raw Location header, the URL it leads to at the URL's
+    depth, None without a usable Location, and the hop limit the unit holds that URL to,
+    counting back over the file (022-add-fetch-policy D2)."""
+
+    location: str | None
+    target: NewUrl | None
+    max_redirects: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Reclassified:
+    """A URL's is_internal and in_scope decided again: a URL of a Seed's Redirect Chain,
+    against the Scope the chain ended in (022-add-fetch-policy D3)."""
+
+    url_id: int
+    is_internal: bool
+    in_scope: bool
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class FetchedUrl:
     """A URL whose response arrived, with the URLs discovered from it."""
 
@@ -192,11 +213,8 @@ class FetchedUrl:
     response_time_ms: int
     parsed: bool
     attempt_count: int
-    # The raw Location header of a 3xx response, and the URL it leads to, at the URL's depth.
-    redirect_location: str | None
-    redirect: NewUrl | None
-    # The hop limit the unit holds the redirect target to, counting back over the file.
-    max_redirects: int
+    # A 3xx response's redirect; None for any other status.
+    redirect: Redirect | None
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
     # NULL when robots.txt was not checked (design D6).

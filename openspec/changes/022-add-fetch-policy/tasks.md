@@ -94,7 +94,7 @@ Seams (docs/testing.md):
   - The loop walk stops at a URL it has seen, with a guard on `/x` → `/cart` while `/cart` and `/login` loop.
   - The context keeps the planned Scope under a name that says so, and every read of the current Scope goes through the Seed chain's one accessor (design D3); one source of "the URL is in the Seed's chain" and one 3xx predicate, `REDIRECT_STATUSES`.
   - `test_a_hop_that_a_link_reached_first_starts_the_hop_count_again` (design Risks), and the stale "continued unit" comment of the walk back.
-- [ ] 4.17 Refactor with the whole suite green and no behaviour change: one frozen `Redirect` record in place of `redirect_location`, `redirect` and `max_redirects` on `FetchedUrl`; the redirect statements and walks split out of `spider.store.urls` into `spider.store.redirects`; the chain close moved into `seed_chain.py`; a frozen record for the decisions `reclassify_urls` takes.
+- [x] 4.17 Refactor with the whole suite green and no behaviour change: one frozen `Redirect` record in place of `redirect_location`, `redirect` and `max_redirects` on `FetchedUrl`; the redirect statements and walks split out of `spider.store.urls` into `spider.store.redirects`; the chain close moved into `seed_chain.py`; a frozen record for the decisions `reclassify_urls` takes.
 
 ## 5. Limits, compression and Resource sizes
 

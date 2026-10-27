@@ -19,15 +19,16 @@ from sqlalchemy.dialects.sqlite import insert
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.store.origins import ORIGIN_ID, origin_rows, record_origins
 from spider.store.records import (
-    DiscoveredVia,
     DiscoverySkipReason,
     ErroredUrl,
     FetchedUrl,
     NewUrl,
     QueuedUrl,
+    Reclassified,
     SkippedUrl,
     UrlCounts,
 )
+from spider.store.redirects import chain_via, link_redirect, past_the_hop_limit
 from spider.store.rows import write_rows
 from spider.store.schema import literal_values, urls
 
@@ -70,15 +71,6 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
 )
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
-_FOUND_ON = select(urls.c.discovered_via, urls.c.found_on_url_id).where(
-    urls.c.id == bindparam("url_id")
-)
-_REDIRECT_URL_ID = (
-    update(urls)
-    .where(urls.c.id == bindparam("url_id"))
-    .values(redirect_url_id=bindparam("target_id"))
-)
-_REDIRECTS_TO = select(urls.c.redirect_url_id).where(urls.c.id == bindparam("url_id"))
 _SEED_HOP = select(urls.c.id, urls.c.url, urls.c.redirect_url_id).where(
     urls.c.url == bindparam("url")
 )
@@ -86,7 +78,6 @@ _HOP = select(urls.c.id, urls.c.url, urls.c.redirect_url_id).where(urls.c.id == 
 _DEPTH = select(urls.c.crawl_depth).where(urls.c.id == bindparam("url_id"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
-_IN_LOOP = _URL_ROW.values(in_redirect_loop=True)
 _RECLASSIFIED = _URL_ROW.values(is_internal=bindparam("internal"), in_scope=bindparam("scoped"))
 _FETCHED = _URL_ROW.values(
     fetch_state="fetched",
@@ -203,46 +194,14 @@ def queued_batch(
                 crawl_depth=row.crawl_depth,
                 discovered_via=row.discovered_via,
                 found_on_url_id=row.found_on_url_id,
-                chain_via=_chain_back(
+                chain_via=chain_via(
                     connection, row.discovered_via, row.found_on_url_id, max_redirects
-                )[1],
+                ),
             )
             for row in rows
         )
 
     return unit
-
-
-def _chain_back(
-    connection: Connection, via: DiscoveredVia, found_on: int | None, limit: int
-) -> tuple[int, DiscoveredVia]:
-    # The consecutive redirects that led to a URL, read back from the file so a replayed unit
-    # counts the same, and how its chain's first URL was found; at most `limit`
-    # point reads, which no chain passes, since the target past the limit is never queued
-    # (022-add-fetch-policy D2).
-    hops = 0
-    while via == "redirect" and found_on is not None and hops < limit:
-        hops += 1
-        via, found_on = connection.execute(_FOUND_ON, {"url_id": found_on}).one()
-    return hops, via
-
-
-def _loop_through(connection: Connection, url_id: int, target_id: int, limit: int) -> list[int]:
-    # The redirect just stored can only close a loop that runs through it: walk forward from
-    # its target, at most `limit` + 1 reads, back to the URL. A URL seen twice is a loop that
-    # does not run through it, which ends the walk at once (022-add-fetch-policy D2).
-    path = [url_id]
-    for _ in range(limit + 1):
-        if target_id == url_id:
-            return path
-        if target_id in path:
-            break
-        path.append(target_id)
-        following = connection.execute(_REDIRECTS_TO, {"url_id": target_id}).scalar()
-        if following is None:
-            break
-        target_id = following
-    return []
 
 
 def seed_chain_urls(
@@ -277,16 +236,16 @@ def next_depth(depth: int) -> Callable[[Connection], int | None]:
 
 def record_fetched(fetched: FetchedUrl) -> UrlUnit:
     """A unit that records the URL's response, the URLs discovered from it and its rows."""
-    url_id = fetched.url_id
+    url_id, redirect = fetched.url_id, fetched.redirect
     values = {
         "url_id": url_id,
         "response_status": fetched.status_code,
         "response_type": fetched.content_type,
         "response_ms": fetched.response_time_ms,
         "attempts": fetched.attempt_count,
-        "location": fetched.redirect_location,
+        "location": None if redirect is None else redirect.location,
         # 0 for any 3xx response until its redirect closes a loop.
-        "loop_flag": False if 300 <= fetched.status_code < 400 else None,
+        "loop_flag": None if redirect is None else False,
         "request_at": fetched.fetched_at,
         "is_parsed": fetched.parsed,
         "parse_failure": fetched.parse_error,
@@ -295,9 +254,9 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
     }
     new_rows = [_new_row(new, url_id) for new in fetched.discovered]
 
-    redirect = fetched.redirect
-    redirect_row = None if redirect is None else _new_row(redirect, url_id)
-    max_redirects = fetched.max_redirects
+    target = None if redirect is None else redirect.target
+    redirect_row = None if target is None else _new_row(target, url_id)
+    max_redirects = 0 if redirect is None else redirect.max_redirects
 
     def unit(connection: Connection) -> None:
         connection.execute(_FETCHED, values)
@@ -313,16 +272,12 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
             insert_urls(connection, _INSERT_DISCOVERED, rows)
         if redirect_row is not None:
             # A redirect is no Link: its target keeps the depth (022 design D2).
-            target = {**redirect_row, "crawl_depth": depth}
-            via, found_on = connection.execute(_FOUND_ON, {"url_id": url_id}).one()
-            if _chain_back(connection, via, found_on, max_redirects)[0] >= max_redirects:
-                target |= {"fetch_state": "skipped", "skip_reason": "max_redirects"}
-            insert_urls(connection, _INSERT_DISCOVERED, [target])
-            target_id: int = connection.execute(_URL_ID, {"url": target["url"]}).scalar_one()
-            connection.execute(_REDIRECT_URL_ID, {"url_id": url_id, "target_id": target_id})
-            loop = _loop_through(connection, url_id, target_id, max_redirects)
-            if loop:
-                connection.execute(_IN_LOOP, [{"url_id": looping} for looping in loop])
+            row = {**redirect_row, "crawl_depth": depth}
+            if past_the_hop_limit(connection, url_id, max_redirects):
+                row |= {"fetch_state": "skipped", "skip_reason": "max_redirects"}
+            insert_urls(connection, _INSERT_DISCOVERED, [row])
+            target_id: int = connection.execute(_URL_ID, {"url": row["url"]}).scalar_one()
+            link_redirect(connection, url_id, target_id, max_redirects)
         write_rows(connection, fetched.rows)
 
     return unit
@@ -343,12 +298,11 @@ def _new_row(new: NewUrl, found_on: int) -> dict[str, Any]:
     }
 
 
-def reclassify_urls(decisions: Sequence[tuple[int, bool, bool]]) -> UrlUnit:
+def reclassify_urls(decisions: Sequence[Reclassified]) -> UrlUnit:
     """A unit that writes is_internal and in_scope again, by URL id: the URLs of a Seed's
     Redirect Chain, against the Scope it ended in (022-add-fetch-policy D3)."""
     rows = [
-        {"url_id": url_id, "internal": internal, "scoped": scoped}
-        for url_id, internal, scoped in decisions
+        {"url_id": d.url_id, "internal": d.is_internal, "scoped": d.in_scope} for d in decisions
     ]
 
     def unit(connection: Connection) -> None:
