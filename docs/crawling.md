@@ -357,6 +357,18 @@ The Crawl honours the standard proxy variables, as curl, pip and uv do. It is th
 - **When:** the variables are read once, when a run starts, and every request of the run, robots.txt's included, follows them. A resumed Crawl reads them again.
 - **Recorded:** the variables that are set are recorded in the `environment` table of `crawl.config`, under `http_proxy`, `https_proxy` and `no_proxy`. The password of a proxy URL is recorded as `***`, as in `http://u:***@proxy:3128`, and a proxy URL without a password is recorded as `***`.
 
+### TLS
+
+- **Trust:** every https request, robots.txt's included, verifies the server's certificate and its host name against the operating system's trust store, through truststore. Where truststore cannot be loaded, on a Python or OpenSSL it cannot verify with, certifi's CA bundle is used instead.
+- **Speed:** asking the operating system costs no measurable time. `scripts/tls_handshake_speed.py` timed 20 fresh handshakes per trust store to each of five public hosts, in two runs per OS. The median over the hosts that answered, first run / second run:
+
+  | OS | truststore | certifi | truststore minus certifi |
+  |---|---|---|---|
+  | Windows 11, Python 3.14 | 80.7 / 75.5 ms | 80.0 / 74.6 ms | +0.7 / +0.9 ms |
+  | Linux (WSL2), Python 3.13 | 72.3 / 71.9 ms | 70.1 / 73.5 ms | +2.2 / -1.6 ms |
+
+  Per host the difference ran from -4.5 to +6.0 ms, both ways, inside the network's own spread. Building the context, once per Crawl, takes 2 to 6 ms with truststore and 24 to 28 ms with certifi. macOS is not measured yet.
+
 ## Redirects
 
 A redirect is a response, not a Link: the Crawl follows it hop by hop, and each hop is a URL of its own.
