@@ -186,7 +186,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 10.7 Drive "End-to-end score on the fixture site" at seam 3+6. Add the four derived `health_*` fields to the `crawl` row, with `Derived: ` descriptions, written only by the pass's last unit, with `health_calculated_at` from the clock that the composition root passes to the Issues pass (design D8).
 - [x] 10.8 Drive "Health fields are derived" at seam 6.
 - [x] 10.9 Drive "Score before the passes" at seam 3+6.
-- [x] 10.10 Drive "Later edits do not change a completed Crawl" at seam 2.
+- [x] 10.10 Drive "Later edits do not change a completed Crawl" at seam 3+6, through the store reader that `050`'s Commands call.
 - [ ] 10.11 Drive "Resumed Crawl keeps the recorded configuration" at seam 3+6. Stop at `--max-urls`, then resume through the Crawl Service with a higher limit. Waits for `060-min`'s resume.
 - [x] 10.12 Docs: add the Health Score definition, the `health_*` fields, and how `050` and `070` call the function for Segments to `docs/rules.md`, with a link from `docs/architecture.md`.
 - [x] 10.13 Review: run the code-review skill on group 10's commits and then on the whole change, and refactor with the whole suite green.

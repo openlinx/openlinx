@@ -697,7 +697,7 @@ At the end of the post-crawl passes, the Crawl SHALL record these crawl metadata
 | `health_affected_page_count` | INTEGER | yes | | A |
 | `health_calculated_at` | TEXT | yes | timestamp | When the post-crawl pass calculated the score |
 
-Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed Crawl keeps the values of its last pass until its next pass. The Health Score of any subset of Internal Pages, such as a Segment, SHALL use the same formula restricted to that subset, through one function that `050-add-query-and-segments` and `070-add-html-report` call at query time. While the Issues reader computes Issues live, the function takes the live Affected URLs.
+Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed Crawl keeps the values of its last pass until its next pass. The Health Score of any set of URLs, such as a Segment, SHALL use the same formula restricted to its Pages, since only Pages are rated, through one function that `050-add-query-and-segments` and `070-add-html-report` call at query time. While the Issues reader computes Issues live, the function takes the live Affected URLs.
 
 > **v0.1**, except the scenario "Resource Issues do not change the score", which needs the image Rules (**v0.2**).
 
@@ -737,12 +737,16 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **WHEN** the Health Score function is called with a subset of 4 Internal Pages, 1 of which is an Affected URL of an Issue-type Rule
 - **THEN** it returns 75
 
+#### Scenario: Health Score of a Segment of URLs
+- **WHEN** the Health Score function is called with a Segment of 2 Internal URLs: a Page with no Issue-type Issue, and a URL that answered 404 without an HTML body, which is an Affected URL of `internal-4xx` and no Page
+- **THEN** it returns 100, with N = 1
+
 #### Scenario: Live Health Score of a running Crawl
 - **WHEN** a Crawl is still `running`, with 2 Internal Pages, one of them without a `<title>`
 - **THEN** the Health Score function over its live Affected URLs returns 50
 
 #### Scenario: End-to-end score on the fixture site
-- **WHEN** a Crawl of 4 fixture Pages on the plain-HTTP fixture site ends as `completed`, with one Page without a `<title>` and no other Issue-type problem
+- **WHEN** a Crawl of 4 fixture Pages on the plain-HTTP fixture site ends as `completed`, with one Page without a `<title>` and no other Issue-type problem on a Page
 - **THEN** `health_score` is 75
 
 ### Requirement: List Rules
@@ -780,8 +784,8 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** the exit code is 4, the error has the code `rule_not_found`, its `message` contains `nope` and its `hint` contains `spider rules list`
 
 #### Scenario: Windows console output
-- **WHEN** `spider rules show title-too-long` runs as a subprocess on Windows with console code page 1251
-- **THEN** its stdout bytes decode as UTF-8 into a JSON object whose `id` is `title-too-long`
+- **WHEN** `spider rules show title-too-long` runs as a subprocess with its stdout piped, as a Windows console does
+- **THEN** its stdout bytes decode as UTF-8 into a JSON object whose `id` is `title-too-long`, byte for byte the output of the same Command run in process
 
 ### Requirement: Documented Rule tables
 `spider schema` SHALL list the tables `rules` and `affected_urls` with the `kind` `table`, the view `issues` with the `kind` `view`, and the four `health_*` fields of the `crawl` table, following the conventions of `018-add-schema-conventions`:
