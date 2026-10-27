@@ -7,7 +7,7 @@ from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import url_limit_reached
 from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.engine.seed_chain import SeedChain, close_seed_chain
-from spider.crawl.engine.units import Run, unit_of, via_resource
+from spider.crawl.engine.units import Run, TaskFailure, unit_of, via_resource
 from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
 from spider.crawl.fetch.requester import Requester
 from spider.crawl.robots.loader import RobotsLoader
@@ -46,6 +46,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         blocking=BlockingRuns(),
         checked_urls=set(),
         seed_chain=SeedChain(context.planned_scope, seed),
+        task_failure=TaskFailure(context.stop),
     )
     decision = run.seed_chain.scope.decide(seed)
     await context.writer.run_async(
@@ -55,11 +56,12 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     try:
         while depth is not None:
             await _crawl_depth(run, depth)
-            if run.seed_chain.is_open and not context.stop.is_set:
+            if run.seed_chain.is_open and not (context.stop.is_set or run.task_failure.is_set):
                 # No URL of the chain was decided, such as one the URL limit refused.
                 await close_seed_chain(context, run.seed_chain, responded=False)
-            # A stop cancels the checked URLs in flight: the sweep below would wait for them.
-            if context.stop.is_set:
+            # A stop or a bug cancels the checked URLs in flight: the sweep below would wait for
+            # them.
+            if context.stop.is_set or run.task_failure.is_set:
                 break
             if limits.limit_reached() is not None:
                 # The URL limit: what has started ends and is recorded, and nothing more starts.
@@ -82,6 +84,8 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     finally:
         await _cancel_all(run.checked_urls)
         await run.robots.close()
+    # Once every task has ended, including those that the cancellation above ended.
+    run.task_failure.raise_first()
     await run.outcomes.settled()
     limit = limits.limit_reached()
     # Only once every outcome is in: a failure among them outranks the stop.
@@ -113,7 +117,7 @@ async def _crawl_depth(run: Run, depth: int) -> None:
                     if queued.id in checked_in_flight or run.outcomes.is_pending(queued.id):
                         continue
                     await limits.reserve_task()
-                    if context.stop.is_set:
+                    if context.stop.is_set or run.task_failure.is_set:
                         limits.task_ended()
                         return
                     if limits.limit_reached() is not None:
@@ -127,13 +131,11 @@ async def _crawl_depth(run: Run, depth: int) -> None:
                     # The chain's last URL closes it before depth 0 ends (022 D3), even a
                     # checked one, such as a URL off the Seed's site or its folder.
                     if _is_checked_url(queued, decision) and not in_chain:
-                        run.checked_urls.add(task)
-                        task.add_done_callback(run.checked_urls.discard)
+                        run.task_failure.track(run.checked_urls, task)
                         checked_in_flight.add(queued.id)
                         task.add_done_callback(partial(_discard, checked_in_flight, queued.id))
                     else:
-                        running.add(task)
-                        task.add_done_callback(running.discard)
+                        run.task_failure.track(running, task)
                     dispatched = True
                 after = batch[-1].id
             if not dispatched:
@@ -146,7 +148,8 @@ async def _crawl_depth(run: Run, depth: int) -> None:
 async def _cancel_all(tasks: set[asyncio.Task[None]]) -> None:
     for task in tasks:
         task.cancel()
-    # Retrieved, so that no "Task exception was never retrieved" reaches stderr.
+    # Only cancellation is swallowed here: any other exception has reached the run's
+    # TaskFailure through its task's done callback.
     await asyncio.gather(*tasks, return_exceptions=True)
 
 
