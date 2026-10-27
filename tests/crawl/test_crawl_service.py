@@ -75,7 +75,7 @@ def test_a_secret_setting_is_redacted_in_the_recorded_config(
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="UNC paths are Windows paths")
-def test_a_journal_warning_reaches_the_result(
+def test_a_journal_warning_reaches_the_result_and_the_crawl_file(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(HOME_PAGE)
@@ -83,9 +83,13 @@ def test_a_journal_warning_reaches_the_result(
     # The machine's own administrative share: a real UNC path to the same folder.
     share = PureWindowsPath(f"//localhost/{local.drive[0]}$/", *local.parts[1:])
 
-    result = run_cli("crawl", server.url("/"), "--workspace", str(share))
+    result = run_cli("crawl", server.url("/"), "--workspace", str(share)).json()
+    stored = json.loads(crawl_row(Path(result["crawl_file"]))["warnings"])
 
-    assert [warning["code"] for warning in result.json()["warnings"]] == ["store_wal_unavailable"]
+    assert (
+        [warning["code"] for warning in result["warnings"]],
+        [warning["code"] for warning in stored],
+    ) == (["store_wal_unavailable"], ["store_wal_unavailable"])
 
 
 class ReadingFetcher(FakeFetcher):

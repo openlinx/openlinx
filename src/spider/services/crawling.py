@@ -42,7 +42,7 @@ from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
 from spider.services.crawls import create_crawl
 from spider.services.hooks import default_page_executor
-from spider.store.crawls import crawl_summary, record_state
+from spider.store.crawls import crawl_summary, record_state, record_warnings
 from spider.store.records import (
     CrawlFile,
     CrawlState,
@@ -265,6 +265,8 @@ async def _run(crawl: _Crawl) -> tuple[datetime, CrawlSummary, UrlCounts]:
         # One instant: the result's ended_at is the time the file records for the end.
         ended_at = crawl.clock.now()
         state: CrawlState = "completed" if stop_reason is None else "stopped"
+        # Before the end, so a reader that sees the end sees every warning.
+        await writer.run_async(record_warnings([w.to_json() for w in crawl.log.warnings]))
         await writer.run_async(record_state(state, ended_at, stop_reason))
         summary = await writer.run_async(crawl_summary())
         return ended_at, summary, await writer.run_async(url_counts())

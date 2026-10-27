@@ -80,6 +80,7 @@ The Crawl's metadata, in exactly one row.
 | `started_at` | TEXT | no | | `timestamp` | | When the Crawl started. |
 | `completed_at` | TEXT | yes | | `timestamp` | | When the state became completed; NULL in every other state. |
 | `stop_reason` | TEXT | yes | | | `max_urls`, `interrupt`, `requested`, `seed_unreachable`, `site_unreachable`, `write_failed` | Why the Crawl ended early: max_urls, interrupt or requested for a stopped Crawl, seed_unreachable, site_unreachable or write_failed for a failed one; NULL while it runs and when it is completed. |
+| `warnings` | TEXT | no | | `json` | | The Crawl's warnings, as an array of diagnostics of level, code, message, hint and details; [] when the Crawl is created. |
 | `command_argv` | TEXT | no | | `json` | | The command line as an array that starts with the command name, secrets redacted. |
 | `cwd` | TEXT | no | | | | The absolute folder the Command ran in. |
 | `settings_file` | TEXT | yes | | | | The absolute path of the settings file that was read, or NULL without one. |
