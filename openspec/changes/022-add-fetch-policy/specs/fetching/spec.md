@@ -128,7 +128,7 @@ A timeout is a request without an HTTP response, so it counts towards the networ
 - **THEN** `{site}/hang` has `fetch_state` = `error` and `fetch_error` = `timeout`
 
 ### Requirement: Retries with backoff
-The Crawl SHALL retry a request attempt, robots.txt included, that gets no response, a 5xx status or a 429 status, up to `--retries` times (default 2, setting `crawl.retries`).
+The Crawl SHALL retry a request attempt, robots.txt included, that ends with the `fetch_error` `timeout`, `connection_refused` or `connection_error`, or with a 5xx status or a 429 status, up to `--retries` times (default 2, at most 10, setting `crawl.retries`). An attempt that ends with `dns_error`, `tls_error`, `invalid_response` or `watchdog` SHALL NOT be retried. A `--retries` above 10 SHALL be rejected with exit code 2 and error code `invalid_value`.
 - **Backoff:** before retry n (counting from 1), the Crawl SHALL wait 2^(n-1) seconds.
 - **Retry-After:** a `Retry-After` header on a 429 or 503 response SHALL set the wait instead, capped at 120 seconds.
 - **429 without Retry-After:** the wait SHALL be 10 seconds.
@@ -162,6 +162,10 @@ The URL SHALL record the last attempt's response. This change adds this column t
 #### Scenario: A 404 is not retried
 - **WHEN** `/` links to `/missing`, which returns 404
 - **THEN** `{site}/missing` has `attempt_count` = 1
+
+#### Scenario: An unresolvable External host is requested once
+- **WHEN** `http://site.test/` links to `http://gone.test/`, a host name that does not resolve
+- **THEN** `http://gone.test/` has `fetch_error` = `dns_error` and `attempt_count` = 1
 
 ### Requirement: Redirects are followed hop by hop
 The Crawl SHALL NOT follow redirects within one request. For a 301, 302, 303, 307 or 308 response with a `Location` header:
