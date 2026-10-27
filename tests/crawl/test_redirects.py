@@ -166,3 +166,29 @@ def test_a_redirect_target_keeps_the_depth(
         "SELECT crawl_depth, discovered_via FROM urls WHERE url = ?",
         [server.url("/new")],
     ) == [(1, "redirect")]
+
+
+def test_a_redirect_to_an_excluded_url_is_not_followed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # A "Go to account" link that redirects to the logout handler.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/go">Account</a>'),
+                "/go": Redirect("/logout", status=302),
+                "/logout": Page(body="<title>Signed out</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--exclude", "/logout")
+
+    assert (
+        query(
+            crawl_file,
+            "SELECT fetch_state, skip_reason FROM urls WHERE url = ?",
+            [server.url("/logout")],
+        ),
+        "/logout" in [request.path for request in server.requests],
+    ) == ([("skipped", "excluded")], False)
