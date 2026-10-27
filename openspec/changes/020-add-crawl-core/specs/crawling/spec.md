@@ -264,7 +264,7 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 - **Link types that are not requested:** a URL reached only through them SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`.
 - **One row per URL of a Page:** a Page SHALL record each URL it links to once. The URL SHALL be followed when any of its Links on the Page is. Its `discovered_via` SHALL be the type of its first Resource Link on the Page, else of its first followed Link, else of its first Link. A URL that none of them follows SHALL have the `skip_reason` of its first Link.
 - **Templates:** the content of a Page's own `<template>` element SHALL give no Link.
-- **Provenance:** a URL's `discovered_via` SHALL be how it was first found: `seed`, or the Link type. `found_on_url_id` SHALL point to the URL whose response revealed it. For a URL reached through a Link that is not followed and later through one that is, its `discovered_via`, `found_on_url_id` and `crawl_depth` SHALL come from the first Page that follows it. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
+- **Provenance:** a URL's `discovered_via` SHALL be how it was first found: `seed`, or the Link type. `found_on_url_id` SHALL point to the URL whose response revealed it. For a URL reached through a Link that is not followed and later through one that is, its `discovered_via`, `found_on_url_id` and `crawl_depth` SHALL come from the first Page that follows it. A Resource Link SHALL raise a URL that a Link of another type reached first, while the URL is `queued` or skipped as `max_depth`, when it reaches it at the same or a shorter depth: the URL's `discovered_via`, `found_on_url_id` and `crawl_depth` then come from the Resource Link, and a skipped one is queued again. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
 
 #### Scenario: A relative link is resolved against the base href
 - **WHEN** the Links of `http://site.test/` are extracted from `<base href="http://site.test/docs/"><a href="guide">Guide</a>`
@@ -410,6 +410,10 @@ URLs reached through `image`, `css`, `javascript`, `video`, `audio` or `media` L
 #### Scenario: Resources are checked beyond the depth limit
 - **WHEN** `/` holds `<img src="/logo.png">` and `<a href="/about">`, and `spider crawl {site}/ --max-depth 0` runs
 - **THEN** `{site}/logo.png` has `fetch_state` = `fetched`
+
+#### Scenario: An image skipped beyond the depth limit is checked once a Page shows it
+- **WHEN** `/` holds `<img src="/late.html">` and `<a href="/a">`, `/a` holds `<a href="/photo.jpg">`, `/late.html` holds `<img src="/photo.jpg">` and answers after `/photo.jpg` was skipped, and `spider crawl {site}/ --max-depth 1` runs
+- **THEN** `{site}/photo.jpg` has `fetch_state` = `fetched` and `discovered_via` = `image`
 
 #### Scenario: An image that another Page hyperlinked first is checked beyond the depth limit
 - **WHEN** `/` links to `/a` and `/b`, `/a` holds `<a href="/photo.jpg">` and `/b` holds `<img src="/photo.jpg">`, and `spider crawl {site}/ --max-depth 1` runs
@@ -724,7 +728,7 @@ The crawl store SHALL hold one row for each origin of a URL that the Crawl recor
 | `is_internal` | INTEGER | no | boolean | 1 when the origin's URLs are Internal URLs |
 | `robots_state` | TEXT | yes | `ok`, `missing`, `unreachable` | Rules applied, everything allowed, or everything disallowed or unanswered; NULL while robots.txt has not been fetched, which happens before the first URL of the origin that the Scope does not skip and the URL limit does not refuse |
 | `robots_status_code` | INTEGER | yes | | Status code of the last robots.txt response; NULL without a response |
-| `robots_fetch_error` | TEXT | yes | the values of `urls.fetch_error` | Why the robots.txt request, or a redirect hop of it, got no HTTP response; NULL when it got one, or while robots.txt has not been fetched |
+| `robots_fetch_error` | TEXT | yes | the values of `urls.fetch_error` | Why the robots.txt request, or a redirect hop of it, got no HTTP response; NULL when its last request got one, or while robots.txt has not been fetched |
 | `robots_fetch_error_message` | TEXT | yes | | Human-readable detail of `robots_fetch_error` |
 | `robots_fetched_at` | TEXT | yes | timestamp | UTC time robots.txt was last fetched |
 | `robots_txt` | TEXT | yes | | The robots.txt body as parsed, up to 512,000 bytes |
