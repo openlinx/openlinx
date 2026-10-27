@@ -249,7 +249,7 @@ def test_a_section_seed_that_moved_to_the_apex_keeps_its_section(
     )
 
 
-def test_a_seed_blocked_by_robots_txt_at_its_chains_end_is_reported(
+def test_a_seed_blocked_by_robots_txt_at_its_chain_s_end_is_reported(
     temp_workspace: TempWorkspace, fixture_named_hosts: StartNamedHosts
 ) -> None:
     # The site moved to its apex, whose robots.txt still shuts every crawler out.
