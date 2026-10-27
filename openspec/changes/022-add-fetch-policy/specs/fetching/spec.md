@@ -226,7 +226,7 @@ It also adds this index to `urls`, built while the Crawl writes:
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"urls_redirect_url_id","columns":["redirect_url_id"],"unique":false,"where":"redirect_url_id IS NOT NULL"}`
 
 ### Requirement: A Seed that redirects within its site extends the Scope
-When a Seed's Redirect Chain ends on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. The `seed_base_mismatch` check of `020-add-crawl-core` SHALL read the Page that the Seed's Redirect Chain ends on. When the chain ends on another registrable domain, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_off_site` warning whose hint contains the final URL of the chain.
+When a Seed's Redirect Chain ends inside the Seed's section on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. The `seed_base_mismatch` and `seed_blocked_by_robots_txt` checks of `020-add-crawl-core` SHALL read the URL that the Seed's Redirect Chain ends on. When the chain ends outside the Crawl's Scope, on another registrable domain or, under `--scope subfolder`, outside the Seed's folder, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_out_of_scope` warning whose hint contains the final URL of the chain. A chain whose last target is never requested, skipped with `max_redirects` or refused by `--max-urls`, SHALL end on that target.
 
 #### Scenario: A redirect to the apex host stays inside the Scope
 - **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `spider crawl http://www.site.test/` runs
@@ -240,16 +240,28 @@ When a Seed's Redirect Chain ends on a host with the same registrable domain as 
 - **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/old`, which redirects with 301 to `http://other.test/`, and `spider crawl http://www.site.test/` runs
 - **THEN** `http://site.test/old` and `http://other.test/` have `is_internal` = 0, and `crawl.scope` does not list `site.test`
 
+#### Scenario: A Seed blocked by robots.txt at its chain's end is reported
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, whose robots.txt disallows `/`, and `spider crawl http://www.site.test/` runs
+- **THEN** the result's `warnings` hold an entry with code `seed_blocked_by_robots_txt`
+
+#### Scenario: A section Seed whose chain leaves the section is reported
+- **WHEN** `http://site.test/blog/` redirects with 301 to `http://site.test/`, and `spider crawl http://site.test/blog/ --scope subfolder` runs
+- **THEN** the result's `warnings` hold an entry with code `seed_redirected_out_of_scope` whose `hint` contains `http://site.test/`, `http://site.test/` has `in_scope` = 0, and `crawl.scope` keeps the folder `/blog/`
+
+#### Scenario: A Seed chain cut by the URL limit is decided by its final Scope
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, and `spider crawl http://www.site.test/ --max-urls 1` runs
+- **THEN** `http://site.test/` has `fetch_state` = `queued` and `is_internal` = 0, and `crawl.scope` does not list `site.test`
+
 #### Scenario: A Seed chain cut by the hop limit off its site is reported
 - **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `spider crawl http://site.test/ --max-redirects 0` runs
-- **THEN** the result's `warnings` hold an entry with code `seed_redirected_off_site` whose `hint` contains `http://other.test/`, and `http://other.test/` has `is_internal` = 0
+- **THEN** the result's `warnings` hold an entry with code `seed_redirected_out_of_scope` whose `hint` contains `http://other.test/`, and `http://other.test/` has `is_internal` = 0
 
 #### Scenario: A redirect to another site is reported
 - **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `spider crawl http://site.test/` runs
-- **THEN** the result's `warnings` hold an entry with code `seed_redirected_off_site` whose `hint` contains `http://other.test/`
+- **THEN** the result's `warnings` hold an entry with code `seed_redirected_out_of_scope` whose `hint` contains `http://other.test/`
 
 ### Requirement: Redirect hop limit
-The Crawl SHALL NOT follow a redirect that would be more than `--max-redirects` (default 10, setting `crawl.max_redirects`) consecutive redirects from the first URL of its chain. The target of such a redirect SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, a value that `020-add-crawl-core` lists.
+The Crawl SHALL NOT follow a redirect that would be more than `--max-redirects` (default 10, at most 50, setting `crawl.max_redirects`) consecutive redirects from the first URL of its chain. A value above 50 SHALL be rejected as `invalid_value`, and in the settings file as `settings_invalid`. The target of such a redirect SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, a value that `020-add-crawl-core` lists.
 
 #### Scenario: The eleventh redirect is not followed
 - **WHEN** `/` links to `/r1`, and each of `/r1` to `/r11` returns 301 to the next one (`/r1` to `/r2`, and so on up to `/r11` to `/r12`)
@@ -266,6 +278,10 @@ Its values are:
 - It is 1 for every URL in a loop.
 - It is 0 for other 3xx responses.
 - It is NULL for URLs without a 3xx response.
+
+#### Scenario: More than 50 redirects are rejected
+- **WHEN** `spider crawl http://site.test/ --max-redirects 51` runs
+- **THEN** it exits with code 2 and an error with code `invalid_value` that names `--max-redirects`
 
 #### Scenario: A loop of two URLs is marked
 - **WHEN** `/` links to `/loop-a`, `/loop-a` returns 301 to `/loop-b`, and `/loop-b` returns 301 to `/loop-a`

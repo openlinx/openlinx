@@ -63,7 +63,7 @@ Seams (docs/testing.md):
 - [x] 3.10 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 - [x] 3.11 Fix: retry only the failures that may pass (`timeout`, `connection_refused`, `connection_error`) besides 5xx, with a [Pure] table over every `fetch_error` value and the status classes, so a new value must be classified; drive "An unresolvable External host is requested once" at [3+6] with the DNS resolver hook, which logs each name it resolves, since the URL behind its failed robots.txt is never requested itself; and refuse a `--retries` above 10 (design D4).
-- [ ] 3.12 After `022`'s next merge of `020` (its group 18): pass `--retries 0` in the tests whose scenario is not about retries but which still wait a real backoff (a robots.txt 503, a 5xx page), so the suite does not pay it.
+- [ ] 3.12 After `022`'s next merge of `020` (its group 18): pass `--retries 0` in the tests whose scenario is not about retries but which still wait a real backoff (a robots.txt 503, a 5xx page), so the suite does not pay it. With the merge, design Testing's Seam 3+6 sentence reasons from `020`'s virtual clock, whose sleep waits until virtual time reaches the wake and whose time jumps only when nothing runs, not from a FakeClock whose sleeps end at once.
 
 ## 4. Redirects
 
@@ -85,7 +85,15 @@ Seams (docs/testing.md):
 - [x] 4.13 [3+6] **Guard:** "A meta refresh is not recorded as a redirect".
 - [x] 4.14 Docs: document Redirect Chains, hop limits, loops, Seed redirects and the meta refresh boundary in `docs/crawling.md`, and that a redirect is not a Link.
 - [x] 4.15 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) for the redirect, hop-count and loop units, then refactor with the whole suite green.
-- [ ] 4.16 [3+6] Fix the group 4 review findings, red first, in one commit: Drive "A Seed chain cut by the hop limit off its site is reported" (a target skipped with `max_redirects` joins the Seed's chain, gets the final Scope's `is_internal`, and one off its site gives `seed_redirected_off_site`); **Guard:** "A Page reached through an External redirect is followed" (design D2, Resource status); the context keeps the planned Scope under a name that says so, and every read of the current Scope goes through the Seed chain's one accessor (design D3); `test_a_hop_that_a_link_reached_first_starts_the_hop_count_again` (design Risks); and the items of the group 4 verdict.
+- [ ] 4.16 [3+6] Fix the group 4 review findings and verdict, red first, in one commit:
+  - Drive "A Seed chain cut by the hop limit off its site is reported" and "A Seed chain cut by the URL limit is decided by its final Scope": the fallback close walks `redirect_url_id` from the Seed in the store, at most `--max-redirects` + 1 reads, for the final URL and every URL of the chain (design D3).
+  - Drive "A section Seed whose chain leaves the section is reported": a chain that ends outside the Crawl's Scope widens nothing and gives `seed_redirected_out_of_scope`, the renamed `seed_redirected_off_site`; the warning-log guard's crawls follow the rename.
+  - Drive "A Seed blocked by robots.txt at its chain's end is reported": `seed_blocked_by_robots_txt` reads the chain's last URL, as `seed_base_mismatch` does.
+  - Drive "More than 50 redirects are rejected", with its settings-file twin.
+  - **Guard:** "A Page reached through an External redirect is followed" (design D2, Resource status).
+  - The loop walk stops at a URL it has seen, with a guard on `/x` → `/cart` while `/cart` and `/login` loop.
+  - The context keeps the planned Scope under a name that says so, and every read of the current Scope goes through the Seed chain's one accessor (design D3); one source of "the URL is in the Seed's chain" and one 3xx predicate, `REDIRECT_STATUSES`.
+  - `test_a_hop_that_a_link_reached_first_starts_the_hop_count_again` (design Risks), and the stale "continued unit" comment of the walk back.
 - [ ] 4.17 Refactor with the whole suite green and no behaviour change: one frozen `Redirect` record in place of `redirect_location`, `redirect` and `max_redirects` on `FetchedUrl`; the redirect statements and walks split out of `spider.store.urls` into `spider.store.redirects`; the chain close moved into `seed_chain.py`; a frozen record for the decisions `reclassify_urls` takes.
 
 ## 5. Limits, compression and Resource sizes
