@@ -29,9 +29,9 @@ Seams (docs/testing.md):
 
 ## 1. Request identity and cookies
 
-- [ ] 1.0 Refactor, behaviour unchanged: the Crawl Service opens the Fetcher through one factory that takes a frozen `FetchPolicy` and the clock (design D1). `plan_crawl` builds the policy, and tests pass a factory with the DNS resolver hook or a fake Fetcher bound in, so a later slice adds a policy field, not a keyword of `start_crawl`. After `020` task 5.24, which edits the same Fetcher.
+- [ ] 1.0 Refactor, behaviour unchanged: the Crawl Service opens the Fetcher through one factory that takes a frozen `FetchPolicy` and the clock, and the factory replaces `start_crawl`'s `resolver=` and `fetcher=` keywords (design D1). `plan_crawl` builds the policy; `crawl_result` keeps its own keywords and builds the factory from them, so its callers do not change. After `020` task 5.24, which edits the same Fetcher.
 - [ ] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` from `FetchPolicy`, built from `APP_NAME`, `spider.__version__` and a `PROJECT_URL` constant next to `APP_NAME` in `spider.naming`, the repository's URL until the product is named (design D1). No `User-Agent` is set today, so aiohttp's own goes out.
-- [ ] 1.2 [HTTP] Drive "A custom user agent is used on every request": `--user-agent` and `crawl.user_agent`. robots.txt goes through the same Requester and Fetcher, so its request carries it too.
+- [ ] 1.2 [HTTP] Drive "A custom user agent is used on every request", and [CLI] "An invalid user agent is rejected", a pair: `--user-agent` and `crawl.user_agent`, which `setting_rules` refuses when it is empty or holds CR, LF or another control character. robots.txt goes through the same Requester and Fetcher, so its request carries it too.
 - [ ] 1.3 [HTTP] **Guard:** "Cookies set by the site are not sent back". `020`'s Fetcher already has a `DummyCookieJar`. `/` sets the cookie through the route's `headers`, and the request log shows the request for `/check`.
 - [ ] 1.4 Docs: document the user agent and cookies in `docs/crawling.md`.
 - [ ] 1.5 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
@@ -41,7 +41,7 @@ Seams (docs/testing.md):
 - [ ] 2.1 [Fixture] Add a small forward-proxy helper to `tests/support/` that records the requests it relays. It resolves the fixture's names itself through `hosts_for` and `FixtureResolver`, since a proxied request leaves name resolution to the proxy.
 - [ ] 2.2 [HTTP] Drive "The HTTP_PROXY variable is honoured": `getproxies_environment()` read once in `plan_crawl` into `FetchPolicy`, and the proxy chosen per request from that snapshot, with `trust_env=False` (design D1). `000`'s proxy isolation removes the variables before every test, so the test sets them with `monkeypatch.setenv`.
 - [ ] 2.3 [HTTP] Drive "A lower-case proxy variable is honoured".
-- [ ] 2.4 [HTTP] Drive "NO_PROXY bypasses the proxy": `proxy_bypass_environment(host, proxies=snapshot)`.
+- [ ] 2.4 [HTTP] Drive "NO_PROXY bypasses the proxy": `proxy_bypass_environment(host, proxies=snapshot)`, inside a pure `proxy_for(url, snapshot)`, with a [Pure] table of its cases: the lower-case variable wins, `NO_PROXY` bypasses, and `ALL_PROXY` is ignored (`test_the_proxy_of_a_url`, design Risks).
 - [ ] 2.5 [3+6] Drive "A proxy password from a variable is redacted": the Crawl Service adds the `environment` table of the same snapshot to `crawl.config`, and `environment.http_proxy` and `environment.https_proxy` to `NewCrawl.secret_names` (design D8). `crawl_result` passes empty `SecretNames()`, so the service, not the test helper, must add them, or the test cannot go red.
 - [ ] 2.6 Docs: document the proxy variables and `NO_PROXY` in `docs/crawling.md`, and correct `ENVIRONMENT` in `spider.cli.commands`, which names a `--proxy` that v0.1 lacks, with the `commands.json` snapshot.
 - [ ] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
@@ -49,7 +49,7 @@ Seams (docs/testing.md):
 ## 3. Timeouts and retries
 
 - [ ] 3.1 [Fixture] Add response sequences to the fixture site, a new route kind (for example 503 once, then 200).
-- [ ] 3.2 [3+6] Drive "A temporary 503 is retried": `--retries` and `crawl.retries`, the retry loop around the Fetcher in `020`'s Requester (design D4, `020` D7), and the `attempt_count` column. A retry is the same URL: only its first attempt counts towards `--max-urls`, each attempt takes the host's slot and its `--rate` turn again, and the backoff holds no slot.
+- [ ] 3.2 [3+6] Drive "A temporary 503 is retried": `--retries` and `crawl.retries`, the retry loop around the Fetcher in `020`'s Requester (design D4, `020` D7), and the `attempt_count` column, a top-level field of `UrlResult`: `Requester.request_url` returns the outcome with its count, and `FetchedUrl` and `ErroredUrl` copy it. A retry is the same URL: only its first attempt counts towards `--max-urls`, each attempt takes the host's slot and its `--rate` turn again, and the backoff holds no slot.
 - [ ] 3.3 [3+6] Drive "A persistent 500 is recorded after the retries".
 - [ ] 3.4 [3+6] **Guard:** "A 404 is not retried".
 - [ ] 3.5a [Pure] `fetch_error_of` maps `TimeoutError`, from which aiohttp's timeouts derive, to `timeout`, checked before the fallback to `connection_error`; the table in `tests/crawl/test_fetcher.py` that pins them to `connection_error` flips (design D1, Risks).
@@ -64,14 +64,14 @@ Seams (docs/testing.md):
 ## 4. Redirects
 
 - [ ] 4.0 Refactor, behaviour unchanged: one `insert_urls` helper in `spider.store.urls` records the rows' origins before it inserts them, and `record_seed` and `record_fetched` insert through it, so no inserter can forget the origin (design D2). A guard test refuses any other insert into `urls`, red by a mutation that inserts directly.
-- [ ] 4.1 [3+6] Drive "Every hop of a Redirect Chain is recorded", and [CLI] "Index of redirect targets", a pair: the target recorded by the unit of the 3xx response through `insert_urls` at the source's Crawl Depth, the `redirect_location` column, `redirect_url_id` as a declared reference with the partial index `urls_redirect_url_id`, and writing the value `redirect`. Done when: `_crawl_depth` reads the open depth again after its tasks end, so a target recorded at the open depth, or a URL lowered to it below the read cursor, is dispatched in the same run, and no in-flight URL of that depth is dispatched twice (design D2).
-- [ ] 4.2 [3+6] **Guard:** "A relative Location is resolved", through `020`'s `resolve_reference` with the Crawl's `strip_params` (design D2).
-- [ ] 4.3 [3+6] Drive "A redirect without Location has no target", with the fixture's `Status(302)`. Done when: a Location that gives no `NormalizedUrl`, and a 300, 304 or 305 response, have no target either, by a [Pure] table (`test_a_location_that_is_no_http_url_has_no_target`, design Risks).
+- [ ] 4.1 [3+6] Drive "Every hop of a Redirect Chain is recorded", and [CLI] "Index of redirect targets", a pair: `REDIRECT_STATUSES` and the pure `redirect_target(url, status, location, strip_params)` in `spider.crawl.following`, which the robots.txt loader calls too, carried on `UrlResponse.redirect_target`; the target recorded by the unit of the 3xx response through `insert_urls` at the source's Crawl Depth, the `redirect_location` column, `redirect_url_id` as a declared reference with the partial index `urls_redirect_url_id`, and writing the value `redirect`. Done when: `_crawl_depth` reads the open depth again after its tasks end, so a target recorded at the open depth, or a URL lowered to it below the read cursor, is dispatched in the same run, and no in-flight URL of that depth is dispatched twice (design D2).
+- [ ] 4.2 [3+6] **Guard:** "A relative Location is resolved": `redirect_target` resolves through `020`'s `resolve_reference` with the Crawl's `strip_params` (design D2).
+- [ ] 4.3 [3+6] Drive "A redirect without Location has no target", with the fixture's `Status(302)`. Done when: a Location that gives no `NormalizedUrl`, and a 300, 304 or 305 response, have no target either, by a [Pure] table of `redirect_target` (`test_a_location_that_is_no_http_url_has_no_target`, design Risks).
 - [ ] 4.4 [3+6] **Guard:** "A redirect target keeps the depth", red by a mutation that records the target at depth + 1.
 - [ ] 4.5 [3+6] **Guard:** "A redirect to an excluded URL is not followed".
 - [ ] 4.6 [3+6] Drive "A redirect to an External URL is checked", on `020`'s `fixture_hosts`. The target is recorded for any 3xx, whatever the source's Scope, outside the branch that follows Links.
 - [ ] 4.7 [Fixture] Let `fixture_hosts` take a site per name (design D9), test-first in `tests/fixture_site/test_hosts.py`.
-- [ ] 4.8 [3+6] Drive "A redirect to the apex host stays inside the Scope" (design D3). The Scope widens once, when the Seed's Redirect Chain ends: `crawl.scope` gets the host through a unit of its own, the context is replaced, and `pages.start` moves after the widening.
+- [ ] 4.8 [3+6] Drive "A redirect to the apex host stays inside the Scope", and "A Seed chain that ends off its site widens nothing", a pair (design D3). `Run` holds the Seed chain's state, open with its provisional Scope, which admits only the hosts of the Seed's registrable domain and only for a target of the chain. The final URL's unit closes it once: it writes `is_internal` and `in_scope` of every URL of the chain against the final Scope, and, when the chain ends on the Seed's registrable domain with a response, appends the host to `crawl.scope`; then the context is replaced and `pages.start` runs. Done when: every hop of a two-hop chain is checked, not only the last.
 - [ ] 4.8a [3+6] Drive "A www Seed that redirects on its host is checked on its final Page": `020`'s `seed_base_mismatch` reads the final Page of the Seed's Redirect Chain (design D3).
 - [ ] 4.8b [3+6] Drive "A redirected image beyond the depth limit is checked": a redirect target keeps its source's checked status, so the depth limit and the depth barrier treat it as a Resource (design D2).
 - [ ] 4.9 [CLI] Drive "A redirect to another site is reported". Done when: `seed_redirected_off_site` is declared.
@@ -84,11 +84,12 @@ Seams (docs/testing.md):
 
 ## 5. Limits, compression and Resource sizes
 
-- [ ] 5.1 [3+6] Drive "A huge page is not parsed": the 20 MiB cap in a streamed read, and the `body_truncated` column, through `FetchResult`, `UrlResponse` and `FetchedUrl`; the URL's unit gives a capped HTML body `PreparedPage(parse_error="body_too_large")` instead of preparing it. On the fixture's `LargeFile` with `content_type="text/html"`.
+- [ ] 5.1 [3+6] Drive "A huge page is not parsed": the 20 MiB cap in `read_body` of `spider.crawl.fetch.body`, with [Pure] tests of the cap on real bytes, and the `body_truncated` column, through `FetchResult`, `UrlResponse` and `FetchedUrl` (design D1); the URL's unit gives a capped HTML body `PreparedPage(parse_error="body_too_large")` instead of preparing it. On the fixture's `LargeFile` with `content_type="text/html"`.
 - [ ] 5.2 [3+6] Drive "A very long URL is skipped": `ScopeRules.decide` gives `url_too_long` before its patterns (design D12).
 - [ ] 5.3 [HTTP] Drive "Requests accept compressed bodies": `auto_decompress=False` and an explicit `Accept-Encoding: gzip, deflate, br` in `aiohttp_fetcher`, and the `brotli` dependency with its allowlist line.
 - [ ] 5.4 [Fixture] **Guard:** a precompressed gzip file from a site folder, served with `Page(file=..., content_type="text/javascript", headers=[("Content-Encoding", "gzip")])`, keeps its bytes (design D9).
-- [ ] 5.5 [3+6] Drive "A compressed Resource records both sizes": decoding in the tool, and the `content_encoding`, `size_bytes` and `transferred_bytes` columns. Done when: the 20 MiB cap applies to the decoded size too, through decoders bounded in output (`test_a_compressed_body_is_capped_after_decoding`, design Risks).
+- [ ] 5.5 [3+6] Drive "A compressed Resource records both sizes": decoding in `read_body` with decoders bounded in output, and the `content_encoding`, `size_bytes` and `transferred_bytes` columns (design D1). Done when: the 20 MiB cap applies to the decoded size too, and raw deflate is decoded, by [Pure] tests on real compressed bytes (`test_a_compressed_body_is_capped_after_decoding`, design Risks).
+- [ ] 5.5a [3+6] Drive "Stacked encodings are decoded in reverse order", "A corrupt compressed body is an invalid response" and "A body in an encoding that was not offered is not parsed", on real compressed bytes, with the `parse_error` value `unsupported_encoding` (design D1, D10).
 - [ ] 5.6 [3+6] Drive "An image's size is recorded".
 - [ ] 5.7 Docs: document the limits, compression and the size columns in `docs/crawling.md`.
 - [ ] 5.8 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
@@ -105,7 +106,7 @@ Seams (docs/testing.md):
 
 ## 7. Response headers
 
-- [ ] 7.1 [3+6] Drive "Response headers are stored as received", and [CLI] "Columns of response_headers", a pair: the `response_headers` table, declared through `018`'s `public_table()` with `url_id` as its primary key and a declared reference, and no secondary index; `handler("response_headers", handle, write)` in `default_hooks()`, whose `handle` returns no row for a `UrlResult` without a `response`, with a [2] replay test of the writer (design D7, Risks).
+- [ ] 7.1 [3+6] Drive "Response headers are stored as received", and [CLI] "Columns of response_headers", a pair: the `response_headers` table, declared through `018`'s `public_table()` with `url_id` as its primary key and a declared reference, and no secondary index; `handler("response_headers", handle, write)` in `default_hooks()`, whose `handle` returns no row for a `UrlResult` without a `response`, and whose writer runs a plain INSERT, with a [2] replay test of the writer (design D7, Risks).
 - [ ] 7.2 [3+6] Drive "A cookie value is not stored": the Fetcher redacts `Set-Cookie` values where it decodes the received headers, so `FetchResult.headers` never holds one (design D7).
 - [ ] 7.3 [Pure] Drive "A Cookie header is redacted pair by pair", over the same function.
 - [ ] 7.4 Docs: document `response_headers` and the cookie redaction format in `docs/crawling.md`.

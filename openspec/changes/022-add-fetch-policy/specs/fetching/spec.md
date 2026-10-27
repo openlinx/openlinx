@@ -16,7 +16,7 @@ Scenario conventions:
 ## ADDED Requirements
 
 ### Requirement: User agent
-Every request, including robots.txt, SHALL carry the `User-Agent` header `spider/<version> (+<project URL>)` by default, where `<version>` is the tool's version. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request.
+Every request, including robots.txt, SHALL carry the `User-Agent` header `spider/<version> (+<project URL>)` by default, where `<version>` is the tool's version. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request. A value that is empty or holds CR, LF or another control character SHALL be rejected with exit code 2 and error code `invalid_value`.
 
 #### Scenario: The default user agent identifies the tool
 - **WHEN** `spider crawl {site}/` runs
@@ -25,6 +25,10 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `spider
 #### Scenario: A custom user agent is used on every request
 - **WHEN** `spider crawl {site}/ --user-agent "AuditBot/1.0"` runs
 - **THEN** every request the fixture site receives, including the one for `/robots.txt`, has `User-Agent` = `AuditBot/1.0`
+
+#### Scenario: An invalid user agent is rejected
+- **WHEN** `spider crawl {site}/ --user-agent ""` runs
+- **THEN** it exits with code 2 and error code `invalid_value`, and no request is made
 
 ### Requirement: Custom headers
 **(v0.2)** `--header "Name: Value"` SHALL add a request header. It SHALL be accepted more than once, and its setting `crawl.header` SHALL be a list of `Name: Value` strings. A value without `:` SHALL be rejected with exit code 2 and error code `invalid_value`. Custom headers SHALL be sent only with requests for Internal URLs and their robots.txt, never with requests for External URLs.
@@ -223,6 +227,10 @@ When a Seed's Redirect Chain ends on a host with the same registrable domain as 
 - **WHEN** `http://www.site.test/` redirects with 301 to `http://www.site.test/home`, which holds `<link rel="canonical" href="http://site.test/">`, and `spider crawl http://www.site.test/` runs
 - **THEN** the result's `warnings` hold an entry with code `seed_base_mismatch` whose `hint` contains `http://site.test/`
 
+#### Scenario: A Seed chain that ends off its site widens nothing
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/old`, which redirects with 301 to `http://other.test/`, and `spider crawl http://www.site.test/` runs
+- **THEN** `http://site.test/old` and `http://other.test/` have `is_internal` = 0, and `crawl.scope` does not list `site.test`
+
 #### Scenario: A redirect to another site is reported
 - **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `spider crawl http://site.test/` runs
 - **THEN** the result's `warnings` hold an entry with code `seed_redirected_off_site` whose `hint` contains `http://other.test/`
@@ -282,7 +290,7 @@ URLs longer than 2,000 characters SHALL NOT be requested, and SHALL be recorded 
 - **THEN** that URL has `skip_reason` = `url_too_long`
 
 ### Requirement: Compression
-Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Accept-Encoding: gzip, deflate, br, zstd`. The Crawl SHALL decode those encodings itself. This change adds these columns to `urls`:
+Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Accept-Encoding: gzip, deflate, br, zstd`, and offer no other coding. The Crawl SHALL decode those encodings itself, and several of them in the reverse order of the `Content-Encoding` header. A body that fails to decode SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`. A body in a coding that was not offered SHALL be recorded as `fetched`, with `size_bytes` NULL and `parsed` = 0; if it would otherwise have been parsed, it SHALL have `parse_error` = `unsupported_encoding`. This change adds these columns to `urls`:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
@@ -297,6 +305,18 @@ Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Ac
 #### Scenario: A compressed Resource records both sizes
 - **WHEN** `/app.js` returns a 10,000-byte script as a 2,500-byte gzip body with `Content-Encoding: gzip`, and `/` holds `<script src="/app.js">`
 - **THEN** `{site}/app.js` has `size_bytes` = 10000, `transferred_bytes` = 2500 and `content_encoding` = `gzip`
+
+#### Scenario: Stacked encodings are decoded in reverse order
+- **WHEN** `/app.js` returns a 10,000-byte script compressed with gzip and then with br, with `Content-Encoding: gzip, br`, and `/` holds `<script src="/app.js">`
+- **THEN** `{site}/app.js` has `size_bytes` = 10000 and `content_encoding` = `gzip, br`
+
+#### Scenario: A corrupt compressed body is an invalid response
+- **WHEN** `/broken.js` returns bytes that are no gzip stream with `Content-Encoding: gzip`, and `/` holds `<script src="/broken.js">`
+- **THEN** `{site}/broken.js` has `fetch_state` = `error` and `fetch_error` = `invalid_response`
+
+#### Scenario: A body in an encoding that was not offered is not parsed
+- **WHEN** `/` links to `/zstd.html`, an HTML page that returns a zstd body with `Content-Encoding: zstd`
+- **THEN** `{site}/zstd.html` has `fetch_state` = `fetched`, `parsed` = 0, `parse_error` = `unsupported_encoding` and `size_bytes` NULL
 
 ### Requirement: Resource sizes
 Every requested Resource SHALL have its `status_code`, `size_bytes` and `transferred_bytes` recorded, and SHALL NOT be parsed.
