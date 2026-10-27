@@ -41,6 +41,7 @@ from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
 from tests.support.fetcher import FakeFetcher, FakePage
+from tests.support.network import closed_port
 from tests.support.sites import LATE_SHORTER_PATH, NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
@@ -189,6 +190,20 @@ def test_post_crawl_passes_run_when_the_url_limit_stops_a_crawl(
     crawl_result(server.url("/"), hooks, max_urls=3)
 
     assert runs == ["run"]
+
+
+def test_post_crawl_passes_do_not_run_for_a_failed_crawl(temp_workspace: TempWorkspace) -> None:
+    runs: list[str] = []
+
+    async def count_runs(context: PassContext) -> None:
+        runs.append("run")
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
+
+    result = crawl_result(f"http://127.0.0.1:{closed_port()}/", hooks, network_wait=0)
+
+    assert (result.summary.state, runs) == ("failed", [])
 
 
 class Found(msgspec.Struct, frozen=True):
