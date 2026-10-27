@@ -26,3 +26,24 @@ def test_a_huge_page_is_not_parsed(temp_workspace: TempWorkspace, fixture_site: 
         "SELECT fetch_state, body_truncated, parsed, parse_error FROM urls WHERE url = ?",
         [server.url("/huge.html")],
     ) == [("fetched", 1, 0, "body_too_large")]
+
+
+def test_a_very_long_url_is_skipped(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    # A faceted search that writes every filter into the path.
+    long_path = "/" + "a" * 2001
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body=f'<title>Shop</title><a href="{long_path}">All filters</a>'),
+                long_path: Page(body="<title>Filtered</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, skip_reason, is_internal, in_scope FROM urls WHERE url = ?",
+        [server.url(long_path)],
+    ) == [("skipped", "url_too_long", 1, 0)]

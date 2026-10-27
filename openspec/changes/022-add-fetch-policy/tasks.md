@@ -100,7 +100,7 @@ Seams (docs/testing.md):
 ## 5. Limits, compression and Resource sizes
 
 - [x] 5.1 [3+6] Drive "A huge page is not parsed": the 20 MiB cap in `read_body` of `spider.crawl.fetch.body`, with [Pure] tests of the cap on real bytes, and the `body_truncated` column, through `FetchResult`, `UrlResponse` and `FetchedUrl` (design D1); the URL's unit gives a capped HTML body `PreparedPage(parse_error="body_too_large")` instead of preparing it. On the fixture's `LargeFile` with `content_type="text/html"`.
-- [ ] 5.2 [3+6] Drive "A very long URL is skipped": `ScopeRules.decide` gives `url_too_long` before its patterns (design D12).
+- [x] 5.2 [3+6] Drive "A very long URL is skipped": `ScopeRules.decide` gives `url_too_long` before its patterns (design D12).
 - [ ] 5.3 [HTTP] Drive "Requests accept compressed bodies": `auto_decompress=False` and an explicit `Accept-Encoding: gzip, deflate, br` in `aiohttp_fetcher`, and the `brotli` dependency with its allowlist line.
 - [ ] 5.4 [Fixture] **Guard:** a precompressed gzip file from a site folder, served with `Page(file=..., content_type="text/javascript", headers=[("Content-Encoding", "gzip")])`, keeps its bytes (design D9).
 - [ ] 5.5 [3+6] Drive "A compressed Resource records both sizes": decoding in `read_body` with decoders bounded in output, and the `content_encoding`, `size_bytes` and `transferred_bytes` columns (design D1). Done when: the 20 MiB cap applies to the decoded size too, and raw deflate is decoded, by [Pure] tests on real compressed bytes (`test_a_compressed_body_is_capped_after_decoding`, design Risks).

@@ -16,6 +16,9 @@ if TYPE_CHECKING:
     from spider.crawl.references import DiscoveredLink
 
 
+MAX_URL_LENGTH = 2000
+
+
 @dataclass(frozen=True, slots=True)
 class ScopeDecision:
     is_internal: bool
@@ -106,6 +109,11 @@ class ScopeRules:
         is_internal = host in self.seed_hosts or (
             bool(self.registrable_domains) and _registrable_domain(host) in self.registrable_domains
         )
+        if len(url) > MAX_URL_LENGTH:
+            # Before the user's patterns, so none ever runs over such a URL (022 design D12).
+            return ScopeDecision(
+                is_internal=is_internal, in_scope=False, skip_reason="url_too_long"
+            )
         if any(pattern.search(url) for pattern in self.exclude):
             return ScopeDecision(is_internal=is_internal, in_scope=False, skip_reason="excluded")
         in_folder = self._in_folder(url)
