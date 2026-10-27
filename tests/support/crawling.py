@@ -71,5 +71,4 @@ def crawl_result(
 def _fetchers(resolver: AbstractResolver | None, fetcher: Fetcher | None) -> FetcherFactory:
     if fetcher is None:
         return partial(aiohttp_fetcher, resolver=resolver)
-    given = fetcher
-    return lambda policy, clock: nullcontext(given)
+    return lambda policy, clock: nullcontext(fetcher)

@@ -65,7 +65,7 @@ DEFAULT_USER_AGENT = f"{APP_NAME}/{__version__} (+{PROJECT_URL})"
 class FetchPolicy:
     """Every request setting of a Crawl, from its plan to its Fetcher (022-add-fetch-policy D1)."""
 
-    user_agent: str = DEFAULT_USER_AGENT
+    user_agent: str
     # Fixed until --timeout sets it; the watchdog of 020's design D16 outlasts it.
     timeout_seconds: float = 20
 

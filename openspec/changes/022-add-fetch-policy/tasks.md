@@ -34,7 +34,7 @@ Seams (docs/testing.md):
 - [x] 1.2 [HTTP] Drive "A custom user agent is used on every request", and [CLI] "An invalid user agent is rejected", a pair: `--user-agent` and `crawl.user_agent`, which `setting_rules` refuses when it is empty or holds CR, LF or another control character. robots.txt goes through the same Requester and Fetcher, so its request carries it too.
 - [x] 1.3 [HTTP] **Guard:** "Cookies set by the site are not sent back". `020`'s Fetcher already has a `DummyCookieJar`. `/` sets the cookie through the route's `headers`, and the request log shows the request for `/check`.
 - [x] 1.4 Docs: document the user agent and cookies in `docs/crawling.md`.
-- [ ] 1.5 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [x] 1.5 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Proxy variables
 

@@ -19,8 +19,10 @@ def as_rate(rate: float) -> float:
 
 def as_user_agent(user_agent: str) -> str:
     # A control character such as CR or LF would end the header, or start another one.
-    if not user_agent or any(unicodedata.category(char) == "Cc" for char in user_agent):
-        raise ValueError("a user agent is a non-empty header value without control characters")
+    if not user_agent.strip() or any(unicodedata.category(char) == "Cc" for char in user_agent):
+        raise ValueError(
+            "a user agent is a header value with more than spaces, without control characters"
+        )
     return user_agent
 
 

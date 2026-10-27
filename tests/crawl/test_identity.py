@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from spider.naming import APP_NAME, SETTINGS_FILE_NAME
+from spider.naming import SETTINGS_FILE_NAME
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site
@@ -34,7 +34,7 @@ def test_the_default_user_agent_identifies_the_tool(
     assert [
         path
         for path, agent in agents.items()
-        if not re.fullmatch(rf"{APP_NAME}/\d+\.\d+\.\d+\S* \(\+https://\S+\)", agent)
+        if not re.fullmatch(r"spider/\d+\.\d+\.\d+\S* \(\+https://\S+\)", agent)
     ] == []
 
 
@@ -52,8 +52,9 @@ def test_a_custom_user_agent_is_used_on_every_request(
     }
 
 
-# An empty header, one that would add a header of its own, and a bell from a pasted string.
-_NOT_USER_AGENTS = ["", "AuditBot/1.0\r\nX-Forwarded-For: 10.0.0.1", "AuditBot\x07/1.0"]
+# An empty header, a blank one that is empty on the wire, one that would add a header of its own,
+# and a bell from a pasted string.
+_NOT_USER_AGENTS = ["", "   ", "AuditBot/1.0\r\nX-Forwarded-For: 10.0.0.1", "AuditBot\x07/1.0"]
 
 
 @pytest.mark.parametrize("user_agent", _NOT_USER_AGENTS)

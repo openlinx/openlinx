@@ -215,8 +215,7 @@ def start_crawl(
     fetchers: FetcherFactory = aiohttp_fetcher,
 ) -> CrawlResult:
     """`pages` builds the page executor instead of `default_page_executor`, and `fetchers`
-    opens the Fetcher, where a test binds the DNS resolver hook or a fake Fetcher (design D9,
-    D15)."""
+    opens the Fetcher (design D9, D15)."""
     log = WarningLog(reporter)
     crawl = _Crawl(
         plan=plan,
