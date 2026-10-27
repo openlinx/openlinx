@@ -1,4 +1,4 @@
-"""The stop flag of a Crawl: set once, with the stop_reason it ends with (020 D10)."""
+"""The stop flag of a Crawl: set once, with its stop_reason (020-add-crawl-core D10)."""
 
 from spider.store.records import StopReason
 from spider.store.transitions import TRANSITIONS

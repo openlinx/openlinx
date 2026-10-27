@@ -60,6 +60,10 @@ _Avoid_: document
 A non-HTML file that a Page references, such as an image, stylesheet or script. It is checked for status and size but not analysed as a Page.
 _Avoid_: asset
 
+**Checked URL**:
+A URL that a Crawl requests for its response without following it: an External URL, a URL outside the Scope, or one that a Page references as a Resource, unless it is in-Scope HTML, whose Links are then followed.
+_Avoid_: check
+
 **Link**:
 A reference from a Page to a URL (anchor, image, canonical, hreflang, …), with its attributes. Seen from the target it is an **Inlink**; seen from the source it is an **Outlink**.
 _Avoid_: href, reference

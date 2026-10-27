@@ -8,7 +8,10 @@ from typing import Any
 import msgspec
 
 from spider.clock import Clock
-from spider.crawl.pages import Extractor
+from spider.crawl.fetch.fetcher import header_values
+from spider.crawl.pages.directives import RobotsDirectives
+from spider.crawl.pages.preparation import Extractor
+from spider.crawl.references import DiscoveredLink
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import DiscoveredVia, FetchError, FetchState, ParseError, SkipReason
 from spider.store.rows import RowWriter
@@ -16,8 +19,39 @@ from spider.store.writer import CrawlWriter
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class UrlResponse:
+    """The URL's own HTTP response."""
+
+    status_code: int
+    # The status line's reason phrase, as received.
+    reason: str | None
+    # The Content-Type header as received; None without one.
+    content_type: str | None
+    # As received: in order, in their letter case, repeated names kept.
+    headers: tuple[tuple[str, str], ...]
+    fetched_at: datetime
+    response_time_ms: int
+    # Page preparation's when the Page was parsed, else the X-Robots-Tag's alone.
+    directives: RobotsDirectives
+
+    def header(self, name: str) -> str | None:
+        """The first value of the header `name`, in any letter case."""
+        return next(iter(header_values(self.headers, name)), None)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UrlFailure:
+    """Why the URL has no response."""
+
+    fetch_error: FetchError
+    fetch_error_message: str
+    # None without a request of its own: its origin's robots.txt got no response.
+    fetched_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class UrlResult:
-    """A URL that reached its final state: its row values, and its response when it got one."""
+    """A URL that reached its final state: its row values and its outcome's record."""
 
     url_id: int
     url: NormalizedUrl
@@ -27,19 +61,20 @@ class UrlResult:
     is_internal: bool
     in_scope: bool
     fetch_state: FetchState
+    # NULL when robots.txt was not checked (design D6).
+    blocked_by_robots_txt: bool | None = None
     skip_reason: SkipReason | None = None
-    fetch_error: FetchError | None = None
-    fetch_error_message: str | None = None
-    status_code: int | None = None
-    content_type: str | None = None
-    response_time_ms: int | None = None
-    fetched_at: datetime | None = None
+    # A fetched URL has a response, an errored one a failure, a skipped one neither.
+    response: UrlResponse | None = None
+    failure: UrlFailure | None = None
     parsed: bool = False
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
-    # As received: in order, in their letter case, repeated names kept.
-    headers: tuple[tuple[str, str], ...] = ()
-    # By extractor name, for a parsed response; an extractor that failed has none.
+    # The Links the engine read for discovery: an in-Scope 2xx response's header Links,
+    # then its document's when it was prepared (design D5).
+    links: tuple[DiscoveredLink, ...] = ()
+    # By extractor name, for a parsed response; an extractor that failed has none. A handler
+    # reads one with that extractor's output(outputs).
     outputs: Mapping[str, msgspec.Struct] = field(default_factory=dict)
 
 
@@ -79,7 +114,7 @@ class Pass:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Hooks:
-    extractors: tuple[Extractor[Any], ...] = ()
+    extractors: tuple[Extractor[Any, Any], ...] = ()
     handlers: tuple[Handler[Any], ...] = ()
     # One after another in this order, so a pass may read what an earlier one wrote.
     passes: tuple[Pass, ...] = ()

@@ -171,6 +171,16 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.16 Drive "A concurrency of zero is rejected" at seam 1.
 - [x] 5.17 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes and the per-host and global request limits in `docs/crawling.md`.
 - [x] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [x] 5.19 Fix: a handler's writer takes the URL's rows as one sequence and runs one `executemany` (design D9).
+  Done when: a crawl with a handler that returns several rows per URL runs one INSERT per URL's unit, red by mutation of one writer call per row.
+- [x] 5.20 Refactor: `UrlResult.response` and `UrlResult.failure` replace the flat response and failure fields, the store records are built from them, and one header lookup serves `FetchResult`, `UrlResponse` and the `X-Robots-Tag` read (design D9), behaviour unchanged.
+- [x] 5.21 Drive "A handler sees the X-Robots-Tag of a PDF" at seam 3.
+- [x] 5.22 Drive "A handler sees the Links of a Page whose extractor failed" and "A canonical in the body is placed in the body" at seam 3.
+- [x] 5.23 Drive "A nofollow Link does not request its target" at seam 3, with the follow rule in `spider.crawl.following`.
+  Done when: a seam-4 table over the Link type, the Link's nofollow, the Page's nofollow and `--follow-nofollow` pins `requests_target`, red by mutation of each.
+- [x] 5.24 Drive "A handler sees the reason phrase" at seam 3.
+- [x] 5.25 Fix: `Extractor[C, O]` knows its output type, and `output(outputs)` gives its output by type (design D9).
+  Done when: an extractor whose function returns another type than it declares is recorded as an extractor error, and one whose return annotation is not a msgspec struct cannot be built.
 
 ## 6. Internal and External URLs over HTTP (slice)
 
@@ -212,7 +222,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - Response-level Links never depend on the body parse (design D9): the engine derives the Links of the `Link` and `Refresh` headers from the response for every in-Scope 2xx response, and `PreparedPage` carries only the document's Links, numbered after them. A preparation that gives nothing (`worker_crashed`, `parse_timeout`, `body_too_large`) records `parsed` = 0 and keeps the header Links; `extractor_error` keeps `parsed` = 1. A failed `PreparedPage` needs no tree: its fields have defaults. Done when: an engine-seam test with an executor that returns `PreparedPage(parse_error="worker_crashed")` finds `parsed` = 0, the header canonical and Refresh target discovered and the `parse_failed` text for the kind, and a test pins that the engine's header Links and those of `PageInput` have the same ordinals.
   - RFC 8288's `anchor` parameter makes a link-value describe another resource, so such a link-value gives no Link. Done when: a case of the header Links table pins it.
   - An excluded URL that only unfollowed Links reach is recorded `nofollow`, not `excluded` (the spec's Exclude rule). Done when: a test pins it, and `docs/crawling.md` states the exception where it describes `--exclude`.
-  - The noscript ancestor walk of `<link>` and `<meta>` is measured on a deep page: it matters (2,000 of them at depth 3,000 cost 472 ms, one selector pass 16 ms, the parse 4.9 ms), and task 15.1's noscript pre-pass deletes it, since it leaves no `<noscript>` element in the tree (the rulings).
+  - The noscript ancestor walk of `<link>` and `<meta>` is measured on a deep page: it matters (2,000 of them at depth 3,000 cost 472 ms, one selector pass 16 ms, the parse 4.9 ms), and the parse with scripting on deletes it, since the content of a `<noscript>` is text (the rulings).
   - Comments and docstrings say what is true: `_FOLLOWED` in `spider.crawl.discovery`, `response_links`, and no docstring that restates its function's name.
 
 ## 8. Scope over HTTP and Section Crawls (widening)
@@ -297,19 +307,61 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - `CONTRIBUTING.md` allows a `# type: ignore[code]` for a deliberate type guard or a deliberately wrong call in a test.
   - A `robots_user_agent` in `spider.toml` that RFC 9309 refuses gives a `settings_invalid` message that names the allowed characters, from the same pattern.
   - `docs/architecture.md` says what mypy checks, and where.
+- [x] 10.23 Fix the review of the whole branch (main...7801901), each fix red first or red by mutation, each refactor with behaviour unchanged:
+  - A handler gets `blocked_by_robots_txt` in `UrlResult`, so under `--ignore-robots` it sees 1.
+  - A skip decided at dispatch reaches its handlers once, also when a late check lowers the URL's depth first; or, if that fix is out of proportion, a Risks line and a test that its rows are written once, by ruling.
+  - The warning log keys each code by its own identity: the host for `possible_blocking` and `robots_unreachable`. Where a code is kept once per code, D10 says so and a test pins it.
+  - The URL limit's refusal before robots.txt is one Requester method.
+  - `_result` takes typed keywords. `blocked_by_robots_txt` travels inside the unit, and each URL record is built once, in the outcome that decides it.
+  - Refactor:
+    - Split the engine, keeping each module under about 300 lines: the unit building, the outcomes, and the warnings next to the warning log. `BlockingRuns` and the blocking warning move with them.
+    - The Crawl Service's parameters are one record, `fetcher` included.
+    - `CONTRIBUTING.md`'s size sentence is made true, with its `store/schema.py` clause compatible with `026`'s.
+  - Standards:
+    - one-line module docstrings in `tests/crawl/test_headers.py`, `tests/crawl/test_noscript.py` and `tests/test_handler_types.py`;
+    - the tag `020-add-crawl-core Dn`;
+    - a `CONTEXT.md` term for "check" as a noun;
+    - the robots user-agent rule out of `spider.naming`, into `spider.crawl.setting_rules` with the rate's, since `spider.crawl.robots` loads Protego, which `crawl --help` must not;
+    - no task numbers in code comments;
+    - `record_unwritten` shaped like the other `record_*`;
+    - one source for each crawl setting's help and default, or a backlog proposal;
+    - one validator with one message for the robots token and for `--rate`.
+  - Tests for the spec lines of this task's plan:
+    - `robots_unreachable` under `--ignore-robots`;
+    - a final 3xx robots.txt is `missing`;
+    - the skips at dispatch;
+    - a Resource of an in-Scope HTML Resource beyond the limit;
+    - the Provenance of one Page's Links;
+    - a Page's own `<template>`.
+- [x] 10.24 Fix the review of 10.23, each fix red first or red by mutation, each refactor with behaviour unchanged:
+  - One builder per URL record in `spider.crawl.engine.units` takes the `UrlResult`, so a record and the `UrlResult` agree on every field they share; a crawl of the fixture site with a URL in each final state pins it.
+  - The Checked URL term replaces "check" for a URL and "decided" where a Checked URL is meant, in the code, the design and the docs; its definition admits the in-Scope HTML that a Resource Link reaches, which is followed.
+  - A handler's purity is a contract in design D9.
+  - Each warning code declares its warning-log key in `spider.output.codes`, and a test checks that each key names a detail of its code's warnings.
+  - The URL limit: the robots.txt loader answers whether a URL needs a new request, the mutating limit method is named for what it does, and the Requester passes no call through.
+  - The docs say who does what after the engine split, without the drift and the history of `docs/crawling.md`; full change tags; one test for "A Resource of an HTML Resource is beyond the limit"; single-name imports on one line.
+  Done when: the whole suite passes, and each new test fails under the mutation its commit names.
 
 ## 11. Politeness (widening)
 
-- [ ] 11.1 Drive "Requests to a host are spaced by the rate", fake timing.
+- [x] 11.1 Drive "Requests to a host are spaced by the rate", fake timing.
 
-  Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`. The spacing is the Requester's (design D7), so it holds for robots.txt requests too.
-- [ ] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
-- [ ] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared.
-- [ ] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
-- [ ] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+  Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`. The spacing is the Requester's `RateGate` (design D7), so it holds for robots.txt requests too; `--rate` and `crawl.rate` refuse a value that is not a finite number above 0, through one rule function; and a guard in `tests/test_code_style.py` names any wait outside the `Clock`, red by mutation.
+- [x] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
+- [x] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared, and the run of consecutive 403 and 429 responses is kept per Internal host as the spec says.
+- [x] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
+- [x] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+- [x] 11.6 Fix the review of group 11, each fix red first or red by mutation:
+  - The robots.txt 403 of a second Internal origin of the host falls inside a run of the URLs' own 403s, so counting it once goes red.
+  - A request without a response counted as a 403 goes red.
+  - The wait guard resolves module aliases, covers `asyncio`'s submodules, `asyncio.as_completed` with a timeout and `reschedule`, and names its one exemption.
+  - A start that `RateGate.started` reserved is given back when its wait is cancelled.
+  - `--rate` and `crawl.rate` refuse a rate whose interval is not finite, and `crawl.rate` refuses a boolean.
+  - `possible_blocking`'s `details.count` is the length of the run that raises it.
 
 ## 12. Events, failures and backstops (widening)
 
+- [ ] 12.0 An auto-advancing virtual clock for the timing tests: `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once every task is idle, as trio's `MockClock(autojump_threshold=0)` does. The watchdog and the 10-second progress tests use it. Designed at this task, which also lifts task 11.1's serialization from the Risks. A test on it pins the Requester's order, the rate wait before the global cap: a request waiting for its turn on one host lets another host's request start, with a global cap of 1 and two hosts if `RequestLimits` can be built at the Requester's seam without the settings' validation, otherwise with 21 hosts, red by mutation of `wait_turn` moved inside the global cap. Another fills the cap and pins that one host's delayed requests start 1/rate apart, red by mutation of the Requester's `started` call removed. With it, `wait_turn` reserves `next_start` and sleeps without holding the host's lock.
 - [ ] 12.1 Drive "Every stderr line is an event or a diagnostic" at seam 1.
 - [ ] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
 - [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
@@ -322,7 +374,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.8 Drive "Post-crawl passes do not run for a failed Crawl" at seam 2.
 - [ ] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
 
-  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`.
+  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`. `docs/crawling.md` describes `crawl_write_failed` in place of "a later release".
 - [ ] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 1, with a handler and its writer registered for the test. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
 
   Done when: the record-failure count of design D16 trips at `RECORD_FAILURE_LIMIT` (100) URL units in a row that failed on their first run, a URL unit that commits resets it, fallback units do not count, and the constant's comment says why.
@@ -378,7 +430,9 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 ## 15. Reading `<noscript>` as browsers that run scripts do
 
 - [x] 15.1 Fix: page preparation reads `<noscript>` as a browser that runs scripts does, before selectolax offers lexbor's scripting flag (the user's decision of 2026-10-14; design D5). lexbor parses with scripting off, so a head `<noscript><img>`, the common tracking pixel, ends `<head>` and every later head element (canonical, meta description, robots, hreflang) lands in `<body>`, and a head-noscript `<title>` moves out of its `<noscript>`. Before lexbor parses the decoded text, every `<noscript>` start and end tag becomes a `<template>` tag, whose start tag carries the `data-<APP_NAME>-noscript` attribute with the index of the `<noscript>`'s text; HTML allows `<template>` in `<head>`, and its content stays out of the tree. The text of each `<noscript>`, up to the next `</noscript>`, as a browser that runs scripts reads it, is fragment-parsed for its Links: a `<link>` or `<meta>` gives nothing, the other elements give theirs in document order (task 7.19), a head-noscript pixel's `src` included. A page's own `<template>` gives no Link, as before. The noscript ancestor walk goes (task 7.23). Done when: tests at seam 4 pin that a head-noscript pixel keeps the canonical, hreflang and metas in `<head>`, that a head-noscript title and robots meta are ignored, that body-noscript Links are found in document order, that HTML without a `<noscript>` tag is left as it is, that a literal `<noscript` is renamed wherever it stands, and the edges of design Risks; a never-raises property runs over text with noscript tags; and the commit shows each existing noscript test red with the renaming disabled, as the guard of the walk's removal.
-- [ ] 15.2 Waits for the first selectolax release that contains upstream commit 69eddd1, lexbor's scripting flag (rushter/selectolax#228, merged into its master on 2026-10-14 and not yet released); never a pin to a git URL, and 15.1's renaming stays until then. Page preparation then parses with scripting on and fragment-parses the text of each `<noscript>`, which replaces 15.1's renaming; 15.1's tests stay. Done when: the renaming is gone, and 15.1's tests pass.
+- [x] 15.2 Waits for the first selectolax release that contains upstream commit 69eddd1, lexbor's scripting flag (rushter/selectolax#228, released in selectolax 1.0.1); never a pin to a git URL, and 15.1's renaming stays until then. Page preparation then parses with scripting on and fragment-parses the text of each `<noscript>`, which replaces 15.1's renaming; 15.1's tests at seam 4 stay, and the renaming's own unit tests go with it. Done when: the renaming is gone, and 15.1's tests at seam 4 pass.
+- [x] 15.3 Fix: a `<noscript>` at an HTML integration point of SVG or MathML is read as HTML (design D5), and the `<link>` and `<meta>` of a foreign `<noscript>` give no Link.
+  Done when: the noscript table of `tests/crawl/test_links.py` has a row for each kind of integration point, from markup real pages carry (an inline SVG icon's `<title>` and `<desc>`, a `<foreignObject>`, a MathML formula's `<mi>`, an `annotation-xml` of `text/html`), each giving its Link once; a foreign `<noscript>`'s canonical `<link>` gives none; the `<math>` row holds an `<a>`, which stays in the `<noscript>`, not an `<img>`, which the parser moves out; the scripting guard allows `is_fragment=True` only in the fragment parse of a `<noscript>`'s text, resolves aliased imports and fails when it checks no call, each red by mutation; and every nested `st.lists` of a `@given` test has bounded sizes, so that Hypothesis's `too_slow` health check passes on a loaded machine.
 
 ## 16. Change check
 
@@ -387,3 +441,10 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 16.3 Docs: the crawl pipeline section of `docs/architecture.md` says what is built (the context, the hooks, store-only units, page preparation behind the in-process executor), and `docs/schema.md` documents `urls`, `origins` and the new `crawl` columns, with their indexes and the values listed for later changes.
 - [ ] 16.4 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
 - [ ] 16.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md` and ADR-0006, then refactor with the whole suite green.
+
+## 17. The crawl package layout
+
+Group 16 runs last, after this group.
+
+- [x] 17.1 Move `spider.crawl` into the subpackages of design D19, behaviour unchanged: a `git mv` per module, the imports rewritten by `scripts/crawl_layout_codemod.py`, `DiscoveredLink` and `resolve_reference` with its helpers split out of `links` into `references`, and in each package an `__init__.py` whose docstring lists its interface.
+  Done when: every moved top-level function and class has the AST it had, except `_base` and `_from_attribute` of `links`, `_cleaned` and `C0_OR_SPACE` of `references`, the `TYPE_CHECKING` import of `scope`, and the new `resolve_base`; a second run of the codemod changes nothing; and the ast guard `test_the_crawl_imports_run_one_way`, with its breach cases red by mutation of a forbidden import, passes and fails on a path it names that does not exist.

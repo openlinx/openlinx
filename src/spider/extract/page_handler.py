@@ -4,8 +4,8 @@ from collections.abc import Iterable
 
 import msgspec
 
-from spider.crawl.hooks import UrlResult
-from spider.crawl.pages import is_html_type
+from spider.crawl.engine.hooks import UrlResult
+from spider.crawl.pages.preparation import is_html_type
 from spider.extract.addresses import display_address
 from spider.extract.page_data import PAGE_DATA
 from spider.store.page_records import PageRow
@@ -14,7 +14,7 @@ from spider.store.page_records import PageRow
 def page_rows(result: UrlResult) -> Iterable[PageRow]:
     if not _is_page(result):
         return ()
-    data = result.outputs.get(PAGE_DATA.name)
+    data = PAGE_DATA.output(result.outputs)
     return (
         PageRow(
             url_id=result.url_id,
@@ -30,6 +30,6 @@ def _is_page(result: UrlResult) -> bool:
     return (
         result.is_internal
         and result.in_scope
-        and result.fetch_state == "fetched"
-        and is_html_type(result.content_type)
+        and result.response is not None
+        and is_html_type(result.response.content_type)
     )

@@ -1,6 +1,5 @@
 """`spider crawl` over the Crawl Service (020-add-crawl-core D10, D11)."""
 
-import re
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -10,7 +9,8 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
-from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN, ROBOTS_USER_AGENT_PATTERN
+from spider.crawl.setting_rules import as_rate, as_robots_token
+from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN
 from spider.output.codes import OPTION_CONFLICT
 from spider.output.diagnostics import SpiderError
 from spider.output.writer import Format
@@ -20,13 +20,17 @@ CRAWL = "crawl"
 
 
 def _robots_token(token: str) -> str:
-    # The settings file is checked by CrawlSettings' pattern, which gives settings_invalid.
-    if re.fullmatch(ROBOTS_USER_AGENT_PATTERN, token) is None:
-        raise typer.BadParameter(
-            f"{token!r} is not a robots user-agent token: RFC 9309 allows only letters, "
-            "'_' and '-'."
-        )
-    return token
+    try:
+        return as_robots_token(token)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{token!r}: {refusal}.") from None
+
+
+def _rate(rate: float | None) -> float | None:
+    try:
+        return None if rate is None else as_rate(rate)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{rate}: {refusal}.") from None
 
 
 @command_meta(
@@ -90,6 +94,17 @@ def crawl(
             show_default=False,
         ),
         OptionMeta(setting="crawl.max_depth"),
+    ] = None,
+    rate: Annotated[
+        float | None,
+        typer.Option(
+            "--rate",
+            callback=_rate,
+            help="The most requests per second that start to one host, robots.txt's "
+            "included: a finite number above 0. No limit by default.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.rate"),
     ] = None,
     max_urls: Annotated[
         int | None,

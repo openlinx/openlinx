@@ -1,5 +1,6 @@
 """The row writer of the pages table (030-add-page-data D1)."""
 
+from collections.abc import Sequence
 from dataclasses import fields
 
 from sqlalchemy import Connection, insert
@@ -12,5 +13,7 @@ _INSERT_PAGE = insert(pages)
 _COLUMNS = tuple(field.name for field in fields(PageRow))
 
 
-def write_page(connection: Connection, row: PageRow) -> None:
-    connection.execute(_INSERT_PAGE, {name: getattr(row, name) for name in _COLUMNS})
+def write_pages(connection: Connection, rows: Sequence[PageRow]) -> None:
+    connection.execute(
+        _INSERT_PAGE, [{name: getattr(row, name) for name in _COLUMNS} for row in rows]
+    )

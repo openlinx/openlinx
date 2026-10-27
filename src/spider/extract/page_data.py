@@ -3,7 +3,7 @@
 import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
-from spider.crawl.pages import PageInput, extractor
+from spider.crawl.pages.preparation import PageInput, extractor
 from spider.extract.text import element_text, normalized, trimmed
 
 # An element inside svg or math names a picture or a formula. Inside noscript it is no element

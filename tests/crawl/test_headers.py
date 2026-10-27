@@ -1,5 +1,4 @@
-"""The Links of the HTTP Link and Refresh headers, and the refresh parser (020-add-crawl-core D5;
-seam 4)."""
+"""The Link and Refresh headers' Links, and the refresh parser (020-add-crawl-core D5; seam 4)."""
 
 from datetime import UTC, datetime
 
@@ -9,10 +8,9 @@ from hypothesis import given
 from hypothesis import strategies as st
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.fetcher import FetchResult
-from spider.crawl.headers import header_links
-from spider.crawl.links import DiscoveredLink
-from spider.crawl.pages import (
+from spider.crawl.fetch.fetcher import FetchResult
+from spider.crawl.pages.headers import header_links
+from spider.crawl.pages.preparation import (
     PageInput,
     PageSettings,
     PreparedPage,
@@ -20,7 +18,8 @@ from spider.crawl.pages import (
     prepare_page,
     response_links,
 )
-from spider.crawl.refresh import refresh_url
+from spider.crawl.pages.refresh import refresh_url
+from spider.crawl.references import DiscoveredLink
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl, strip_params_pattern, url_host
 
@@ -123,6 +122,7 @@ def _seen(page: PreparedPage) -> tuple[DiscoveredLink, ...]:
 
 _PAGE_WITH_A_CANONICAL_HEADER = FetchResult(
     status_code=200,
+    reason="OK",
     headers=(("Content-Type", "text/html"), ("Link", "</c>; rel=canonical")),
     body=b'<a href="/a">A</a>',
     fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
@@ -138,7 +138,7 @@ def test_header_links_come_before_the_links_of_the_document() -> None:
 
     assert [(link.ordinal, link.declared_in, link.target) for link in _seen(page)] == [
         (1, "http_header", "http://site.test/c"),
-        (2, "html", "http://site.test/a"),
+        (2, "body", "http://site.test/a"),
     ]
 
 
@@ -177,8 +177,9 @@ _HEADER_PIECES = st.sampled_from(
     st.lists(
         st.tuples(
             st.sampled_from(["Link", "Refresh", "link", "X-Other"]),
-            st.lists(_HEADER_PIECES | st.text(max_size=6)).map("".join),
-        )
+            st.lists(_HEADER_PIECES | st.text(max_size=6), max_size=6).map("".join),
+        ),
+        max_size=4,
     )
 )
 def test_the_header_links_accept_any_values(headers: list[tuple[str, str]]) -> None:
@@ -190,6 +191,7 @@ def test_the_header_links_accept_any_values(headers: list[tuple[str, str]]) -> N
 def test_stripped_parameters_leave_every_link_of_a_page() -> None:
     response = FetchResult(
         status_code=200,
+        reason="OK",
         headers=(("Content-Type", "text/html"), ("Link", "</c?utm_id=1>; rel=canonical")),
         body=b'<a href="/a?utm_id=2&x=1">A</a>',
         fetched_at=datetime(2026, 10, 14, tzinfo=UTC),

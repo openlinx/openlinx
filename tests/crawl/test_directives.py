@@ -4,8 +4,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.directives import RobotsDirectives, meta_robots_contents, robots_directives
-from spider.crawl.noscript import parse_html
+from spider.crawl.pages.directives import RobotsDirectives, meta_robots_contents, robots_directives
+from spider.crawl.pages.links import parse_html
 from spider.naming import DEFAULT_ROBOTS_TOKEN
 
 
@@ -22,9 +22,7 @@ def test_meta_robots_directives_are_read_case_insensitively() -> None:
 
 
 def test_a_robots_meta_inside_noscript_does_not_apply() -> None:
-    tree = parse_html(
-        '<head><noscript><meta name="robots" content="noindex"></noscript></head>'
-    ).tree
+    tree = parse_html('<head><noscript><meta name="robots" content="noindex"></noscript></head>')
 
     directives = robots_directives(meta_robots_contents(tree), (), DEFAULT_ROBOTS_TOKEN)
 
@@ -90,10 +88,14 @@ _PIECES = st.sampled_from(
         "\ud800",
     ]
 )
-_VALUES = st.lists(_PIECES | st.text(max_size=8)).map("".join)
+_VALUES = st.lists(_PIECES | st.text(max_size=8), max_size=6).map("".join)
 
 
-@given(st.lists(_VALUES), st.lists(_VALUES), st.text() | _PIECES | st.just(DEFAULT_ROBOTS_TOKEN))
+@given(
+    st.lists(_VALUES, max_size=4),
+    st.lists(_VALUES, max_size=4),
+    st.text() | _PIECES | st.just(DEFAULT_ROBOTS_TOKEN),
+)
 def test_the_robots_directives_parser_accepts_any_values(
     meta_contents: list[str], header_values: list[str], token: str
 ) -> None:

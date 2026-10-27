@@ -1,25 +1,25 @@
 """Page preparation: one pure function of a response, behind an executor (020-add-crawl-core D9)."""
 
 import re
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Protocol
+from typing import Any, Protocol, get_type_hints
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.decoding import decode_html
-from spider.crawl.directives import (
+from spider.crawl.fetch.fetcher import FetchResult, header_values
+from spider.crawl.pages.decoding import decode_html
+from spider.crawl.pages.directives import (
     NO_DIRECTIVES,
     RobotsDirectives,
     meta_robots_contents,
     robots_directives,
 )
-from spider.crawl.fetcher import FetchResult
-from spider.crawl.headers import header_links
-from spider.crawl.links import DiscoveredLink, base_url, links_in_tree
-from spider.crawl.noscript import parse_html
+from spider.crawl.pages.headers import header_links
+from spider.crawl.pages.links import base_url, links_in_tree, parse_html
+from spider.crawl.references import DiscoveredLink
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import DEFAULT_ROBOTS_TOKEN
@@ -50,16 +50,24 @@ class PageInput(msgspec.Struct, frozen=True, kw_only=True):
 
 
 @dataclass(frozen=True, slots=True)
-class Extractor[C: msgspec.Struct | None]:
+class Extractor[C: msgspec.Struct | None, O: msgspec.Struct]:
     """Pure and module-level, so that a 026 worker imports it by name; its config, a struct
     with frozen fields resolved where the hooks are built, travels with it in the settings
     snapshot (design D9)."""
 
     name: str
-    extract: Callable[[LexborHTMLParser, PageInput, C], msgspec.Struct]
+    extract: Callable[[LexborHTMLParser, PageInput, C], O]
     config: C
+    # Read from the function's return annotation, so a handler gets the output it declares.
+    output_type: type[O] = field(init=False)
+
+    def output(self, outputs: Mapping[str, msgspec.Struct]) -> O | None:
+        """This extractor's output among a UrlResult's, or None where it failed."""
+        output = outputs.get(self.name)
+        return output if isinstance(output, self.output_type) else None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "output_type", _output_type(self.name, self.extract))
         config: object = self.config
         # Shared by every Page of the Crawl and by every 026 worker. The check is shallow: a field
         # may still hold a mutable value.
@@ -71,9 +79,16 @@ class Extractor[C: msgspec.Struct | None]:
             )
 
 
-def extractor[C: msgspec.Struct | None](
-    name: str, extract: Callable[[LexborHTMLParser, PageInput, C], msgspec.Struct], config: C
-) -> Extractor[Any]:
+def _output_type(name: str, extract: Callable[..., object]) -> type[Any]:
+    returned = get_type_hints(extract).get("return")
+    if not (isinstance(returned, type) and issubclass(returned, msgspec.Struct)):
+        raise TypeError(f"the function of the extractor {name} returns no msgspec struct")
+    return returned
+
+
+def extractor[C: msgspec.Struct | None, O: msgspec.Struct](
+    name: str, extract: Callable[[LexborHTMLParser, PageInput, C], O], config: C
+) -> Extractor[Any, O]:
     """The one way to build an extractor: mypy checks C here, where the extractor is registered,
     since an Extractor built in place inside Hooks(...) takes C as Any (design D9)."""
     return Extractor(name, extract, config)
@@ -84,8 +99,9 @@ class PageSettings:
     """The settings snapshot: built once per Crawl, and given to each 026 worker once."""
 
     scope: ScopeRules
-    extractors: tuple[Extractor[Any], ...] = ()
+    extractors: tuple[Extractor[Any, Any], ...] = ()
     robots_token: str = DEFAULT_ROBOTS_TOKEN
+    follow_nofollow: bool = False
     strip_params: re.Pattern[str] | None
 
 
@@ -104,28 +120,31 @@ class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
         return self.parse_error in (None, "extractor_error")
 
 
+def response_directives(
+    response: FetchResult, token: str, meta_contents: Iterable[str] = ()
+) -> RobotsDirectives:
+    return robots_directives(meta_contents, header_values(response.headers, "X-Robots-Tag"), token)
+
+
 def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettings) -> PreparedPage:
     """Decodes and parses once; the link extractor and later extractors share the tree."""
     decoded = decode_html(response.body, response.header("Content-Type"))
-    html = parse_html(decoded.text)
-    tree = html.tree
+    tree = parse_html(decoded.text)
     is_internal = partial(_is_internal, settings.scope)
+    directives = response_directives(response, settings.robots_token, meta_robots_contents(tree))
     # The header Links come first, as 030's ordinals count them (design D5).
     from_headers = response_links(url, response, settings.scope, settings.strip_params)
     from_document = tuple(
         links_in_tree(
-            html,
+            tree,
             base=base_url(tree, url, decoded.encoding),
             encoding=decoded.encoding,
             is_internal=is_internal,
             strip_params=settings.strip_params,
+            page_nofollow=directives.nofollow,
+            follow_nofollow=settings.follow_nofollow,
             first_ordinal=len(from_headers) + 1,
         )
-    )
-    directives = robots_directives(
-        meta_robots_contents(tree),
-        [value for name, value in response.headers if name.lower() == "x-robots-tag"],
-        settings.robots_token,
     )
     page = PageInput(
         url=url,
@@ -141,8 +160,9 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     for extractor in settings.extractors:
         try:
             output = extractor.extract(tree, page, extractor.config)
-            # Only a msgspec struct crosses 026's process boundary as it is.
-            if not isinstance(output, msgspec.Struct):
+            # As declared: a handler reads it by its type, and only a msgspec struct crosses
+            # 026's process boundary as it is.
+            if not isinstance(output, extractor.output_type):
                 raise TypeError(f"{extractor.name} returned {type(output).__name__}")
             outputs.append((extractor.name, output))
         # An extractor is later changes' code: its failure costs only its output (design D16).

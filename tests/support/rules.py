@@ -11,7 +11,7 @@ from sqlalchemy import Connection, select
 from spider.crawl.urls import NormalizedUrl
 from spider.rules.model import Rule
 from spider.store.page_records import PageRow
-from spider.store.pages import write_page
+from spider.store.pages import write_pages
 from spider.store.records import (
     ErroredUrl,
     FetchedUrl,
@@ -110,7 +110,7 @@ def crawl_with_page(
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         url_id = writer.run(record_seed(_PAGE_URL, is_internal=True, in_scope=True))
         page = PageRow(url_id=url_id, address=_PAGE_URL, url_encoded_address=_PAGE_URL, **page_data)
-        fetched = _html(url_id, parse_error=parse_error, rows=(HandlerRows(write_page, (page,)),))
+        fetched = _html(url_id, parse_error=parse_error, rows=(HandlerRows(write_pages, (page,)),))
         writer.run(record_fetched(fetched))
     return crawl.path, url_id
 
@@ -156,7 +156,7 @@ def _page(
     url_id: int, url: NormalizedUrl, page_data: Mapping[str, Any]
 ) -> tuple[HandlerRows[Any], ...]:
     page = PageRow(url_id=url_id, address=url, url_encoded_address=url, **page_data)
-    return (HandlerRows(write_page, (page,)),)
+    return (HandlerRows(write_pages, (page,)),)
 
 
 def crawl_with_url(

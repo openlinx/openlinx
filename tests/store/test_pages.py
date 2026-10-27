@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from spider.crawl.urls import parse_seed
 from spider.extract.page_data import PageData
 from spider.store.page_records import PageRow
-from spider.store.pages import write_page
+from spider.store.pages import write_pages
 from spider.store.records import FetchedUrl
 from spider.store.rows import HandlerRows
 from spider.store.schema import pages
@@ -33,7 +33,7 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
             fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
             response_time_ms=12,
             parsed=True,
-            rows=(HandlerRows(write_page, (page,)),),
+            rows=(HandlerRows(write_pages, (page,)),),
         )
         writer.run(record_fetched(fetched))
         replay_now(writer)

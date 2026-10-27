@@ -389,6 +389,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 
 ## Backlog
 
+- **Test names that call a Checked URL a check:** in `tests/crawl/test_depth.py` and `tests/crawl/test_hooks.py`, rename them with the glossary term.
 - **Site metrics beyond Screaming Frog parity:** after v0.1, decide which site-level measurements to add on top of the Screaming Frog tabs. Nothing is chosen yet.
 
 - **Data import (high priority, before Integrations):** `spider import <file> --as <table>` loads a CSV, such as a GSC or Ahrefs export, into the crawl file as an extra table. Agents can then join it with crawl data in SQL and rank Issues by traffic. It is a cheap, agent-first alternative to OAuth integrations, and suits agents that already have Ahrefs or GSC MCP servers.
@@ -398,6 +399,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 - **More analysis:** RDFa, accessibility, spelling, screenshots, more rich-result types.
 - **Rule plugins (after v1.0 only):** stage 2 of User SQL Rules (v0.3): Rules as Python entry-point plugins, once the internal APIs are stable.
 - **Crawl operation:** scheduled or distributed Crawls.
+- **One source for each crawl setting:** generate `spider crawl`'s options from `CrawlSettings`' fields, so help and default are stated once.
 - **Community Skill workflow packs:** workflows such as an e-commerce audit or a migration check, contributed as Markdown through the plugin marketplace.
 - **Distribution:** signed standalone binaries and winget.
 - **Code quality checks (to weigh, nothing decided):** the aim is to stop agent-written functions and modules from growing, without a second linter as a gate.

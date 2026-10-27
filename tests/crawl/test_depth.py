@@ -199,3 +199,24 @@ def test_the_urls_found_on_a_url_lowered_in_flight_are_one_deeper_than_it(
         "SELECT url, crawl_depth FROM urls WHERE url IN (?, ?) ORDER BY id",
         [server.url("/x"), server.url("/y")],
     ) == [(server.url("/x"), 2), (server.url("/y"), 3)]
+
+
+def test_a_resource_of_an_html_resource_is_beyond_the_limit(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<img src="/pic">'),
+                "/pic": Page(body='<img src="/i.png">'),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/"), max_depth=0).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT url, fetch_state, skip_reason FROM urls WHERE url IN (?, ?) ORDER BY id",
+        [server.url("/pic"), server.url("/i.png")],
+    ) == [(server.url("/pic"), "fetched", None), (server.url("/i.png"), "skipped", "max_depth")]

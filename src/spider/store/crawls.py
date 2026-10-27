@@ -55,7 +55,7 @@ def create_crawl_file(
 def set_state(
     connection: Connection, state: CrawlState, at: datetime, stop_reason: StopReason | None = None
 ) -> None:
-    """The one writer of how a Crawl ends, checked against the state it reads (020 D12)."""
+    """The one writer of how a Crawl ends, checked against its state (020-add-crawl-core D12)."""
     current: CrawlState = connection.execute(select(crawl.c.state)).scalar_one()
     check_transition(current, state, stop_reason)
     completed_at = at if state == "completed" else None

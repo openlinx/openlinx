@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from spider.crawl.links import DiscoveredLink
+from spider.crawl.references import DiscoveredLink
 from spider.crawl.scope import ScopeDecision, ScopeRules, apex_seed_named_by_page, scope_rules
 from spider.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url, parse_seed
 from spider.store.records import LinkType
@@ -171,7 +171,8 @@ def _link(link_type: LinkType, target: str) -> DiscoveredLink:
         attribute="href",
         rel=(),
         nofollow=False,
-        declared_in="html",
+        requests_target=True,
+        declared_in="body",
         ordinal=1,
         is_internal=False,
     )

@@ -1,4 +1,4 @@
-"""The aiohttp Fetcher: each request failure is returned with its code (020 D8; seams 3, 4)."""
+"""The aiohttp Fetcher: every failed request has its code (020-add-crawl-core D8; seams 3, 4)."""
 
 import socket
 import ssl
@@ -10,7 +10,7 @@ from aiohttp.client_reqrep import ConnectionKey
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
-from spider.crawl.fetcher import AiohttpFetcher, FetchFailure, Request, fetch_error_of
+from spider.crawl.fetch.fetcher import AiohttpFetcher, FetchFailure, Request, fetch_error_of
 from spider.crawl.urls import parse_seed
 from tests.support.clock import FakeClock
 

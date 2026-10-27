@@ -1,17 +1,12 @@
-"""The robots.txt loader: each origin's robots.txt, requested once in a run (020 D6, D7)."""
+"""The robots.txt loader: each origin's robots.txt, once a run (020-add-crawl-core D6, D7)."""
 
 import asyncio
 from datetime import datetime
 
-from spider.crawl.fetcher import FetchFailure, FetchResult
-from spider.crawl.links import resolve_reference
-from spider.crawl.requester import Requester
-from spider.crawl.robots import (
-    OriginRobots,
-    read_robots_txt,
-    robots_state,
-    robots_txt_text,
-)
+from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
+from spider.crawl.fetch.requester import Requester
+from spider.crawl.references import resolve_reference
+from spider.crawl.robots.reader import OriginRobots, read_robots_txt, robots_state, robots_txt_text
 from spider.crawl.urls import NormalizedUrl, robots_txt_url, url_origin
 from spider.store.origins import record_robots_txt
 from spider.store.records import RobotsTxtRecord

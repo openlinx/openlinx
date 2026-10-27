@@ -1,7 +1,12 @@
-"""Which Links the Crawl follows, over HTTP (020-add-crawl-core D5, crawling; seam 3+6)."""
+"""Which Links the Crawl follows (020-add-crawl-core D5, crawling; seams 3, 4 and 6)."""
 
 from pathlib import Path
+from typing import get_args
 
+import pytest
+
+from spider.crawl.following import requests_target
+from spider.store.records import LinkType
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
@@ -237,3 +242,48 @@ def test_the_robots_user_agent_token_selects_the_x_robots_tag_that_applies(
     crawl_file = crawled(server.url("/"), "--robots-user-agent", "Googlebot")
 
     assert _state(crawl_file, server.url("/x")) == [("skipped", "nofollow", "hyperlink")]
+
+
+# The spec's Link type table; a sitemap's types come from no Page.
+_REQUESTED_BY_TYPE: dict[str, bool] = {
+    **dict.fromkeys(
+        ["hyperlink", "canonical", "pagination", "hreflang", "iframe", "meta_refresh"], True
+    ),
+    **dict.fromkeys(["http_refresh", "image", "css", "javascript", "video", "audio"], True),
+    "media": True,
+    **dict.fromkeys(["amphtml", "mobile_alternate", "misc", "xml_sitemap"], False),
+    **dict.fromkeys(["sitemap_hreflang", "javascript_redirect"], False),
+}
+
+
+def test_each_link_type_requests_its_target_or_not() -> None:
+    assert {
+        link_type: requests_target(link_type, False, page_nofollow=False, follow_nofollow=False)
+        for link_type in get_args(LinkType.__value__)
+    } == _REQUESTED_BY_TYPE
+
+
+@pytest.mark.parametrize(
+    ("link_type", "nofollow", "page_nofollow", "follow_nofollow", "requested"),
+    [
+        ("hyperlink", True, False, False, False),
+        ("hyperlink", False, True, False, False),
+        ("hyperlink", True, True, True, True),
+        ("hyperlink", True, False, True, True),
+        ("hyperlink", False, True, True, True),
+        # nofollow is a hyperlink's alone: a canonical or an image is requested anyway.
+        ("canonical", True, True, False, True),
+        ("image", True, True, False, True),
+        # --follow-nofollow lifts nofollow, not the Link type table.
+        ("amphtml", False, False, True, False),
+    ],
+)
+def test_nofollow_keeps_a_hyperlink_from_requesting_its_target(
+    link_type: LinkType, nofollow: bool, page_nofollow: bool, follow_nofollow: bool, requested: bool
+) -> None:
+    assert (
+        requests_target(
+            link_type, nofollow, page_nofollow=page_nofollow, follow_nofollow=follow_nofollow
+        )
+        == requested
+    )

@@ -1,4 +1,4 @@
-"""The units of the origins table: each URL's origin, with the URL's own unit (020 D14, D18)."""
+"""The origins table's units: each URL's origin, in its unit (020-add-crawl-core D14, D18)."""
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any

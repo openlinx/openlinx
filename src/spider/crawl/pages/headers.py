@@ -3,8 +3,10 @@
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 
-from spider.crawl.links import PAGINATION_RELS, DiscoveredLink, rel_tokens, resolve_reference
-from spider.crawl.refresh import refresh_url
+from spider.crawl.following import requests_target
+from spider.crawl.pages.links import PAGINATION_RELS, rel_tokens
+from spider.crawl.pages.refresh import refresh_url
+from spider.crawl.references import DiscoveredLink, resolve_reference
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import LinkType
 
@@ -41,6 +43,10 @@ def header_links(
                     attribute=None,
                     rel=rel,
                     nofollow="nofollow" in rel,
+                    # A header gives no hyperlink, the one type nofollow applies to.
+                    requests_target=requests_target(
+                        link_type, "nofollow" in rel, page_nofollow=False, follow_nofollow=False
+                    ),
                     declared_in="http_header",
                     ordinal=len(links) + 1,
                     is_internal=is_internal(target),

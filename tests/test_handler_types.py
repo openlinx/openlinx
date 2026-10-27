@@ -1,17 +1,17 @@
-"""Guard: a hook whose types disagree fails mypy where it is registered (020-add-crawl-core D9).
+"""Guard: a hook whose types disagree fails mypy where it is registered (020-add-crawl-core D9)."""
 
-The check is mypy's, in the same run as the rest of the suite: strict mode reports an unused
-ignore, so an ignore below fails the checks the day its mismatch is no longer caught.
-"""
+# mypy checks this module with the rest of the suite: strict mode reports an unused ignore, so
+# an ignore below fails the checks the day its mismatch is no longer caught.
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection
 
-from spider.crawl.hooks import Hooks, UrlResult, handler
-from spider.crawl.pages import PageInput, extractor
+from spider.crawl.engine.hooks import Hooks, UrlResult, handler
+from spider.crawl.pages.preparation import PageInput, extractor
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,8 +28,8 @@ def _page_rows(result: UrlResult) -> tuple[PageRow, ...]:
     return (PageRow(result.url_id),)
 
 
-def _write_cookie(connection: Connection, row: CookieRow) -> None:
-    del connection, row
+def _write_cookie(connection: Connection, rows: Sequence[CookieRow]) -> None:
+    del connection, rows
 
 
 def test_a_handler_and_a_writer_of_different_row_types_fail_mypy() -> None:

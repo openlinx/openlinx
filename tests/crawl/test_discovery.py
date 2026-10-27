@@ -2,8 +2,8 @@
 
 import pytest
 
-from spider.crawl.discovery import discovered_urls
-from spider.crawl.links import extract_links
+from spider.crawl.engine.discovery import discovered_urls
+from spider.crawl.pages.links import extract_links
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import NewUrl
@@ -123,13 +123,23 @@ def test_each_link_type_is_followed_or_recorded_as_not_followed(
     assert _recorded(html) == recorded
 
 
-def test_follow_nofollow_follows_every_nofollow_hyperlink_and_only_those() -> None:
+def _page_nofollow(follow_nofollow: bool) -> tuple[NewUrl, ...]:
     body = b'<a rel="nofollow" href="/n">N</a><a href="/x">X</a><link rel="icon" href="/i">'
-    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True, strip_params=None)
-    scope = scope_rules(SITE)
+    links = extract_links(
+        body,
+        "text/html",
+        SITE,
+        is_internal=lambda url: True,
+        strip_params=None,
+        page_nofollow=True,
+        follow_nofollow=follow_nofollow,
+    )
+    return discovered_urls(links, scope_rules(SITE))
 
-    honoured = discovered_urls(links, scope, nofollow=True)
-    followed = discovered_urls(links, scope, nofollow=True, follow_nofollow=True)
+
+def test_follow_nofollow_follows_every_nofollow_hyperlink_and_only_those() -> None:
+    honoured = _page_nofollow(follow_nofollow=False)
+    followed = _page_nofollow(follow_nofollow=True)
 
     assert (
         [(new.url, new.skip_reason) for new in honoured],

@@ -3,7 +3,8 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from spider.crawl.hooks import UrlResult
+from spider.crawl.engine.hooks import UrlFailure, UrlResponse, UrlResult
+from spider.crawl.pages.directives import NO_DIRECTIVES
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.page_handler import page_rows
 from spider.store.page_records import PageRow
@@ -29,8 +30,15 @@ def _fetched(url: str, **values: Any) -> UrlResult:
     return _result(
         url,
         fetch_state="fetched",
-        status_code=200,
-        content_type="text/html; charset=utf-8",
+        response=UrlResponse(
+            status_code=200,
+            reason="OK",
+            content_type="text/html; charset=utf-8",
+            headers=(("Content-Type", "text/html; charset=utf-8"),),
+            fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+            response_time_ms=12,
+            directives=NO_DIRECTIVES,
+        ),
         **values,
     )
 
@@ -77,20 +85,11 @@ def test_url_without_a_response_is_not_a_page() -> None:
     failed = _result(
         "http://site.test/timeout",
         fetch_state="error",
-        fetch_error="timeout",
-        fetch_error_message="No response within 20 s.",
-        fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
-    )
-
-    assert tuple(page_rows(failed)) == ()
-
-
-def test_a_url_without_a_response_is_no_page_whatever_its_content_type() -> None:
-    failed = _result(
-        "http://site.test/reset",
-        fetch_state="error",
-        fetch_error="connection_error",
-        content_type="text/html",
+        failure=UrlFailure(
+            fetch_error="timeout",
+            fetch_error_message="No response within 20 s.",
+            fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        ),
     )
 
     assert tuple(page_rows(failed)) == ()

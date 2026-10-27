@@ -41,6 +41,9 @@ class DiagnosticCode:
     level: Level
     exit_code: ExitCode | None
     description: str
+    # The detail by which the warning log keeps one warning of the code; without one, each
+    # warning of the code is kept (design D10 of 020-add-crawl-core).
+    once_per: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -56,9 +59,14 @@ DECLARED: list[DiagnosticCode] = []
 
 
 def _declare(
-    code: str, level: Level, exit_code: ExitCode | None, description: str
+    code: str,
+    level: Level,
+    exit_code: ExitCode | None,
+    description: str,
+    *,
+    once_per: str | None = None,
 ) -> DiagnosticCode:
-    declared = DiagnosticCode(code, level, exit_code, description)
+    declared = DiagnosticCode(code, level, exit_code, description, once_per)
     DECLARED.append(declared)
     return declared
 
@@ -197,6 +205,7 @@ SEED_BASE_MISMATCH = _declare(
     None,
     "A www Seed whose Page names its apex host as the site; the hint gives the Seed on the apex "
     "host, and the Crawl went on in its Scope.",
+    once_per="seed",
 )
 SEED_BLOCKED_BY_ROBOTS_TXT = _declare(
     "seed_blocked_by_robots_txt",
@@ -204,14 +213,26 @@ SEED_BLOCKED_BY_ROBOTS_TXT = _declare(
     None,
     "robots.txt disallows the Seed for the robots user-agent token, so it was not requested; "
     "the hint names --ignore-robots, and details.seed holds the Seed.",
+    once_per="seed",
 )
 ROBOTS_UNREACHABLE = _declare(
     "robots_unreachable",
     "warning",
     None,
     "The robots.txt of an Internal origin answered with a server error or 429, so none of its "
-    "URLs was requested; the hint names --ignore-robots, and details.origin, details.host and "
+    "URLs was requested, or under --ignore-robots all were, without its rules; the hint names "
+    "--ignore-robots unless it was given, and details.origin, details.host and "
     "details.status_code say which.",
+    once_per="host",
+)
+POSSIBLE_BLOCKING = _declare(
+    "possible_blocking",
+    "warning",
+    None,
+    "10 responses in a row from an Internal host had status 403 or 429, so it may be "
+    "blocking the Crawl, which went on; the hint names --rate and --concurrency, and "
+    "details.host says which host, and details.count is the length of the run that raises it.",
+    once_per="host",
 )
 PARSE_FAILED = _declare(
     "parse_failed",
