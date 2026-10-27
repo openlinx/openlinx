@@ -212,6 +212,18 @@ def _chain_via(connection: Connection, via: DiscoveredVia, found_on: int | None)
     return via
 
 
+def _hops_to(connection: Connection, url_id: int, limit: int) -> int:
+    # The consecutive redirects that led to the URL, read back from the file, so a replayed
+    # or continued unit counts the same; at most `limit` point reads (022-add-fetch-policy D2).
+    hops = 0
+    while hops < limit:
+        via, found_on = connection.execute(_FOUND_ON, {"url_id": url_id}).one()
+        if via != "redirect" or found_on is None:
+            break
+        hops, url_id = hops + 1, found_on
+    return hops
+
+
 def next_depth(depth: int) -> Callable[[Connection], int | None]:
     """A unit that only reads: the shallowest depth deeper than `depth` with a queued URL."""
 
@@ -242,6 +254,7 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
 
     redirect = fetched.redirect
     redirect_row = None if redirect is None else _new_row(redirect, url_id)
+    max_redirects = fetched.max_redirects
 
     def unit(connection: Connection) -> None:
         connection.execute(_FETCHED, values)
@@ -257,7 +270,10 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
             insert_urls(connection, _INSERT_DISCOVERED, rows)
         if redirect_row is not None:
             # A redirect is no Link: its target keeps the depth (022 design D2).
-            insert_urls(connection, _INSERT_DISCOVERED, [{**redirect_row, "crawl_depth": depth}])
+            target = {**redirect_row, "crawl_depth": depth}
+            if _hops_to(connection, url_id, max_redirects) >= max_redirects:
+                target |= {"fetch_state": "skipped", "skip_reason": "max_redirects"}
+            insert_urls(connection, _INSERT_DISCOVERED, [target])
             connection.execute(_REDIRECT_URL_ID, {"url_id": url_id, "target": redirect_row["url"]})
         write_rows(connection, fetched.rows)
 

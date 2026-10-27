@@ -164,6 +164,16 @@ def crawl(
         ),
         OptionMeta(setting="crawl.retries"),
     ] = 2,
+    max_redirects: Annotated[
+        int,
+        typer.Option(
+            "--max-redirects",
+            min=0,
+            help="The most consecutive redirects followed from the first URL of a Redirect "
+            "Chain; the target of the next one is recorded as skipped.",
+        ),
+        OptionMeta(setting="crawl.max_redirects"),
+    ] = 10,
     robots_user_agent: Annotated[
         str,
         typer.Option(

@@ -65,6 +65,12 @@ class CrawlSettings(BaseModel):
         description="How many times, 0 to 10, a request that timed out, could not connect or "
         "got a 5xx status is tried again, after 1, 2, 4, ... seconds.",
     )
+    max_redirects: int = Field(
+        10,
+        ge=0,
+        description="The most consecutive redirects followed from the first URL of a Redirect "
+        "Chain; the target of the next one is recorded as skipped.",
+    )
     robots_user_agent: str = Field(
         DEFAULT_ROBOTS_TOKEN,
         description="The token that selects robots.txt groups and user-agent-prefixed "

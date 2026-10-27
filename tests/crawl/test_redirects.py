@@ -2,9 +2,10 @@
 
 import pytest
 
+from spider.naming import SETTINGS_FILE_NAME
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Redirect, Site, Status
+from tests.fixture_site.routes import Page, Redirect, Site, Status, redirect_chain
 from tests.support.cli import run_cli
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
@@ -265,3 +266,83 @@ def test_an_image_redirected_twice_beyond_the_depth_limit_is_checked(
         "SELECT fetch_state FROM urls WHERE url = ?",
         [server.url("/static/logo.png")],
     ) == [("fetched",)]
+
+
+def _states(crawl_file: object, *urls: str) -> list[tuple[str, str, str | None]]:
+    return [
+        row
+        for url in urls
+        for row in query(
+            crawl_file,  # type: ignore[arg-type]
+            "SELECT url, fetch_state, skip_reason FROM urls WHERE url = ?",
+            [url],
+        )
+    ]
+
+
+def test_the_eleventh_redirect_is_not_followed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # Eleven site moves, each forwarding the old address to the next one.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Home</title><a href="/r1">Offer</a>'),
+                **redirect_chain("/r", 11, "/r12"),
+                "/r12": Page(body="<title>Offer</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _states(crawl_file, server.url("/r11"), server.url("/r12")) == [
+        (server.url("/r11"), "fetched", None),
+        (server.url("/r12"), "skipped", "max_redirects"),
+    ]
+
+
+def test_a_link_to_a_url_past_the_hop_limit_queues_it_again(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # The chain ends past the limit, and a blog post two Links deeper links the offer itself.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/r1">Offer</a><a href="/blog">Blog</a>'),
+                **redirect_chain("/r", 3, "/offer"),
+                "/offer": Page(body="<title>Offer</title>"),
+                "/blog": Page(body='<a href="/blog/post">Post</a>'),
+                "/blog/post": Page(body='<a href="/offer">The offer</a>'),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--max-redirects", "2")
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, skip_reason, discovered_via, crawl_depth FROM urls WHERE url = ?",
+        [server.url("/offer")],
+    ) == [("fetched", None, "hyperlink", 3)]
+
+
+def test_the_hop_limit_is_read_from_the_settings_file(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/r1">Offer</a>'),
+                **redirect_chain("/r", 2, "/offer"),
+                "/offer": Page(body="<title>Offer</title>"),
+            }
+        )
+    )
+    (temp_workspace.root / SETTINGS_FILE_NAME).write_bytes(b"[crawl]\nmax_redirects = 1\n")
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _states(crawl_file, server.url("/offer")) == [
+        (server.url("/offer"), "skipped", "max_redirects")
+    ]

@@ -276,7 +276,13 @@ async def _fetched(
         else _redirect(target, run.seed_chain.decide(target, in_chain=in_chain))
     )
     record = _fetched_record(
-        fetched, url_response, discovered, rows, location=location, redirect=redirect
+        fetched,
+        url_response,
+        discovered,
+        rows,
+        location=location,
+        redirect=redirect,
+        max_redirects=context.settings.max_redirects,
     )
     return fetched, record_fetched(record)
 
@@ -316,6 +322,7 @@ def _fetched_record(
     *,
     location: str | None,
     redirect: NewUrl | None,
+    max_redirects: int,
 ) -> FetchedUrl:
     return FetchedUrl(
         url_id=fetched.url_id,
@@ -326,6 +333,7 @@ def _fetched_record(
         attempt_count=fetched.attempt_count,
         redirect_location=location,
         redirect=redirect,
+        max_redirects=max_redirects,
         parsed=fetched.parsed,
         parse_error=fetched.parse_error,
         parse_error_message=fetched.parse_error_message,

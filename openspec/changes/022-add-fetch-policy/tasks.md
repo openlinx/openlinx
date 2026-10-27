@@ -79,7 +79,7 @@ Seams (docs/testing.md):
 - [x] 4.8a [3+6] Drive "A www Seed that redirects on its host is checked on its final Page": `020`'s `seed_base_mismatch` reads the final Page of the Seed's Redirect Chain (design D3).
 - [x] 4.8b [3+6] Drive "A redirected image beyond the depth limit is checked": a redirect target keeps its source's checked status, so the depth limit and the depth barrier treat it as a Resource (design D2).
 - [x] 4.9 [CLI] Drive "A redirect to another site is reported". Done when: `seed_redirected_off_site` is declared.
-- [ ] 4.10 [3+6] Drive "The eleventh redirect is not followed": `--max-redirects` and `crawl.max_redirects`, the hop count walked back over `found_on_url_id` (design D2), on the fixture's `redirect_chain("/r", 11, "/r12")`, writing the value `max_redirects`, which joins `DiscoverySkipReason`, so a Link found later queues the URL again.
+- [x] 4.10 [3+6] Drive "The eleventh redirect is not followed": `--max-redirects` and `crawl.max_redirects`, the hop count walked back over `found_on_url_id` (design D2), on the fixture's `redirect_chain("/r", 11, "/r12")`, writing the value `max_redirects`, which joins `DiscoverySkipReason`, so a Link found later queues the URL again.
 - [ ] 4.11 [3+6] Drive "A loop of two URLs is marked": the `in_redirect_loop` column, 0 for any other 3xx, and 1 for a URL that redirects to itself.
 - [ ] 4.12 [HTTP] **Guard:** "A looping URL is requested once".
 - [ ] 4.13 [3+6] **Guard:** "A meta refresh is not recorded as a redirect".

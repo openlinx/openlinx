@@ -72,6 +72,7 @@ def _fetched(url_id: int, *discovered: NewUrl) -> FetchedUrl:
         attempt_count=1,
         redirect_location=None,
         redirect=None,
+        max_redirects=10,
         discovered=discovered,
     )
 
@@ -114,6 +115,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     attempt_count=2,
                     redirect_location=None,
                     redirect=None,
+                    max_redirects=10,
                     discovered=found,
                     rows=(HandlerRows(_write_note, (Note(seed_id),)),),
                 ),
@@ -363,7 +365,7 @@ def test_each_reason_of_a_skip_at_discovery_is_a_skip_reason() -> None:
     discovery = literal_values(DiscoverySkipReason)
 
     assert (discovery, set(discovery) <= set(literal_values(SkipReason))) == (
-        ["nofollow", "link_type_not_followed"],
+        ["nofollow", "link_type_not_followed", "max_redirects"],
         True,
     )
 

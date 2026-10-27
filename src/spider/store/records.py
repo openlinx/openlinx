@@ -48,7 +48,7 @@ type SkipReason = Literal[
 ]
 # The reasons a URL is recorded as skipped when it is discovered, never dispatched; a later
 # followed Link re-queues a URL skipped for one of them (020-add-crawl-core D5).
-type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed"]
+type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed", "max_redirects"]
 type LinkType = Literal[
     "hyperlink",
     "canonical",
@@ -195,6 +195,8 @@ class FetchedUrl:
     # The raw Location header of a 3xx response, and the URL it leads to, at the URL's depth.
     redirect_location: str | None
     redirect: NewUrl | None
+    # The hop limit the unit holds the redirect target to, counting back over the file.
+    max_redirects: int
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
     # NULL when robots.txt was not checked (design D6).
