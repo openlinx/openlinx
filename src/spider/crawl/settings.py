@@ -63,7 +63,8 @@ class CrawlSettings(BaseModel):
         ge=0,
         le=10,
         description="How many times, 0 to 10, a request that timed out, could not connect or "
-        "got a 5xx status is tried again, after 1, 2, 4, ... seconds.",
+        "got a 429 or 5xx status is tried again, after 1, 2, 4, ... seconds or as its "
+        "Retry-After asks.",
     )
     max_redirects: int = Field(
         10,

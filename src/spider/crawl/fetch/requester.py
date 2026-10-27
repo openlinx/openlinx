@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 
 from spider.clock import Clock
 from spider.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
@@ -16,6 +17,9 @@ from spider.store.records import FetchError
 RETRIED_FAILURES: frozenset[FetchError] = frozenset(
     {"timeout", "connection_refused", "connection_error"}
 )
+# A Retry-After past this is a server asking for more than one URL's retry should wait.
+RETRY_AFTER_CAP = 120.0
+TOO_MANY_REQUESTS_WAIT = 10.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,8 +79,11 @@ class Requester:
     async def _retried(self, url: NormalizedUrl, outcome: FetchResult | FetchFailure) -> Attempted:
         attempts = 1
         while attempts <= self._retries and is_retried(outcome):
+            wait, pauses = retry_wait(outcome, attempts)
+            if pauses:
+                self._gate.pause(host_key(url), wait)
             # Outside the slots: a waiting retry holds none of the host's --concurrency.
-            await self._clock.sleep(2 ** (attempts - 1))
+            await self._clock.sleep(wait)
             async with self._slots(url):
                 outcome = await self._send(url)
             attempts += 1
@@ -107,4 +114,35 @@ def is_retried(outcome: FetchResult | FetchFailure) -> bool:
     """Whether an attempt that ended this way is tried again, while retries are left."""
     if isinstance(outcome, FetchFailure):
         return outcome.fetch_error in RETRIED_FAILURES
-    return outcome.status_code >= 500
+    return outcome.status_code >= 500 or outcome.status_code == 429
+
+
+def retry_wait(outcome: FetchResult | FetchFailure, attempt: int) -> tuple[float, bool]:
+    """The seconds before retry `attempt`, and whether the host pauses for them: a
+    Retry-After on a 429 or 503 sets them, capped, and a 429 without one waits 10 seconds;
+    any other retry backs off, 1, 2, 4, ... seconds (022 design D4)."""
+    if isinstance(outcome, FetchResult) and outcome.status_code in (429, 503):
+        after = retry_after(outcome)
+        if after is not None:
+            return min(after, RETRY_AFTER_CAP), True
+        if outcome.status_code == 429:
+            return TOO_MANY_REQUESTS_WAIT, True
+    return 2.0 ** (attempt - 1), False
+
+
+def retry_after(response: FetchResult) -> float | None:
+    """The response's Retry-After in seconds, from a number of seconds or an HTTP date; None
+    without a header that reads as either."""
+    value = response.header("Retry-After")
+    if value is None:
+        return None
+    value = value.strip()
+    if value.isdigit():
+        return float(value)
+    try:
+        date = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if date.tzinfo is None:
+        return None
+    return max(0.0, (date - response.fetched_at).total_seconds())

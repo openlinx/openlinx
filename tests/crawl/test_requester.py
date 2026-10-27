@@ -22,8 +22,8 @@ _FAILURES: dict[str, bool] = {
     "watchdog": False,
     "record_failed": False,
 }
-# One status of each class: only a server error is tried again.
-_STATUSES = {200: False, 301: False, 404: False, 410: False, 500: True, 503: True}
+# One status of each class: a server error and a 429 are tried again, no other 4xx.
+_STATUSES = {200: False, 301: False, 404: False, 410: False, 429: True, 500: True, 503: True}
 
 
 def test_every_fetch_error_is_classified() -> None:
@@ -38,7 +38,9 @@ def test_a_failure_is_retried_only_when_it_may_pass(fetch_error: str, retried: b
 
 
 @pytest.mark.parametrize(("status_code", "retried"), _STATUSES.items())
-def test_a_response_is_retried_only_on_a_server_error(status_code: int, retried: bool) -> None:
+def test_a_response_is_retried_only_on_a_server_error_or_a_429(
+    status_code: int, retried: bool
+) -> None:
     response = FetchResult(
         status_code=status_code,
         reason=None,
