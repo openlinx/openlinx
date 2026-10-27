@@ -326,7 +326,7 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 | robots.txt response | `origins.robots_state` | The origin's URLs |
 |---|---|---|
 | 2xx | `ok` | Requested, unless its rules disallow them for the token: a disallowed URL is `skipped` with `skip_reason` = `blocked_by_robots_txt`. |
-| 4xx other than 429, or more than 5 redirects | `missing` | All requested. |
+| 4xx other than 429, a final 3xx such as 304, more than 5 redirects, or a redirect hop without a response | `missing` | All requested. |
 | 5xx, 429, or a status outside 200–599 | `unreachable` | None requested: each is `skipped` with `skip_reason` = `robots_unreachable`. An Internal origin gives a `robots_unreachable` warning, once per host, whose hint names `--ignore-robots`. |
 | No HTTP response | `unreachable` | None requested: each is `error`, with the `fetch_error` of the robots.txt request, such as `dns_error`, and a `fetch_error_message` that names that request. |
 
