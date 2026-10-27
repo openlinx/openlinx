@@ -317,6 +317,7 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 
 - A robots.txt request goes through the same per-host limits as a URL's, but it is not recorded as a URL and does not count toward `--max-urls`.
 - A redirected robots.txt is followed for up to 5 hops; a longer chain counts as missing.
+- A redirect hop that gets no HTTP response counts as missing too, since the origin itself answered: every URL is allowed, the origin's row keeps the redirect's status and the hop's error, and an Internal origin gives a `robots_redirect_failed` warning.
 - Only its first 512,000 bytes are parsed, without a line that this limit cuts, decoded as UTF-8 with replacement; a leading byte order mark is dropped. So a cut `Disallow: /private` never becomes the shorter `Disallow: /priv`.
 - `Crawl-delay` is recorded, not applied; `--rate` spaces requests instead (see [Requests in flight](#requests-in-flight)).
 

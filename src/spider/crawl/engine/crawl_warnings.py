@@ -5,12 +5,14 @@ from collections.abc import Iterable
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.fetch.politeness import BLOCKING_RUN
 from spider.crawl.references import DiscoveredLink
+from spider.crawl.robots.reader import OriginRobots
 from spider.crawl.scope import apex_seed_named_by_page
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.naming import APP_NAME
 from spider.output.codes import (
     MAX_URLS_REACHED,
     POSSIBLE_BLOCKING,
+    ROBOTS_REDIRECT_FAILED,
     ROBOTS_UNREACHABLE,
     SEED_BASE_MISMATCH,
     SEED_BLOCKED_BY_ROBOTS_TXT,
@@ -50,6 +52,28 @@ def warn_of_an_unreachable_robots_txt(
             message,
             hint=hint,
             details={"origin": origin, "host": url_host(url), "status_code": status_code},
+        )
+    )
+
+
+def warn_of_a_failed_robots_redirect(
+    context: CrawlContext, url: NormalizedUrl, robots: OriginRobots
+) -> None:
+    origin = url_origin(url)
+    # Once per origin, by the warning log: every URL of the origin comes here (design D10).
+    context.reporter.warn(
+        Diagnostic.of(
+            ROBOTS_REDIRECT_FAILED,
+            f"The robots.txt of {origin} redirected to {robots.failed_redirect}, which got "
+            f"no HTTP response ({robots.fetch_error}), so robots.txt counts as missing and "
+            "every URL of the origin was allowed.",
+            hint="Fix the robots.txt redirect of the origin, then run the Crawl again.",
+            details={
+                "origin": origin,
+                "host": url_host(url),
+                "target": robots.failed_redirect,
+                "fetch_error": robots.fetch_error,
+            },
         )
     )
 

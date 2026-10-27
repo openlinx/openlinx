@@ -8,6 +8,7 @@ from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import (
     parse_failure,
     warn_of_a_blocked_seed,
+    warn_of_a_failed_robots_redirect,
     warn_of_an_unreachable_robots_txt,
     warn_of_possible_blocking,
     warn_of_seed_base_mismatch,
@@ -80,7 +81,7 @@ async def unit_of(
             return None
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
         origin_robots = await robots.robots_of(queued.url)
-        if origin_robots.fetch_error is not None:
+        if origin_robots.state == "unreachable" and origin_robots.fetch_error is not None:
             # The origin cannot be reached: the URL gets the error without a request of
             # its own (design D6).
             message = (
@@ -135,6 +136,8 @@ def _robots_verdict(
         if decision.is_internal:
             warn_of_an_unreachable_robots_txt(context, queued.url, origin_robots.status_code)
         return (None, None) if ignore else ("robots_unreachable", None)
+    if origin_robots.failed_redirect is not None and decision.is_internal:
+        warn_of_a_failed_robots_redirect(context, queued.url, origin_robots)
     blocked = not origin_robots.allows(queued.url)
     # --ignore-robots requests it, still labelled as blocked.
     if blocked and not ignore:

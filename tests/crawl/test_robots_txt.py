@@ -269,6 +269,45 @@ def test_a_dead_external_domain_is_a_dns_error(
     )
 
 
+def test_a_robots_txt_redirect_to_a_host_that_does_not_resolve_counts_as_missing(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(
+            routes={
+                # A site moved its robots.txt to a host whose name was never registered.
+                "/robots.txt": Redirect("http://nowhere.test/robots.txt"),
+                "/": Page(body='<a href="/a">A</a>'),
+                "/a": Page(body="<p>A</p>"),
+            }
+        ),
+        Site(routes={}),
+    )
+
+    result = crawl_result("http://site.test/", resolver=hosts.resolver)
+
+    assert (
+        query(
+            result.crawl_file,
+            "SELECT fetch_state FROM urls WHERE url = 'http://site.test/a'",
+        ),
+        query(
+            result.crawl_file,
+            "SELECT robots_state, robots_status_code, robots_fetch_error FROM origins "
+            "WHERE origin = 'http://site.test'",
+        ),
+        [
+            (warning.code, warning.details.get("target"), warning.details.get("fetch_error"))
+            for warning in result.warnings
+            if warning.code.startswith("robots_")
+        ],
+    ) == (
+        [("fetched",)],
+        [("missing", 301, "dns_error")],
+        [("robots_redirect_failed", "http://nowhere.test/robots.txt", "dns_error")],
+    )
+
+
 def test_a_url_that_the_url_limit_refuses_never_requests_robots_txt(
     temp_workspace: TempWorkspace, fixture_hosts: StartHosts
 ) -> None:
