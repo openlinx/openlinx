@@ -444,6 +444,7 @@ Boundary doubles used, all from the approved list:
 - [The robots.txt memo grows with the number of origins in a run, by each origin's parsed rules (the text is not kept, task 10.17)] → If `026`'s 500k-URL benchmark shows that it matters, the memo becomes an LRU that parses `origins.robots_txt` again for an origin it dropped.
 - [Protego 0.7 matches a robots.txt group by prefix, so `User-agent: spi` applies to the token `spider`, while RFC 9309 matches the whole token] → Recorded, not worked around; whether to raise it upstream is the user's decision.
 - [The Fetcher reads a robots.txt's whole body, though only its first 512,000 bytes are parsed] → `022`'s body cap, or streaming, bounds it.
+- [A URL's task whose exception nobody retrieves, which leaves its URL queued for every sweep, or a refusal of an ended writer that a URL's task meets taken for a bug] → In `tests/crawl/test_page_executor.py`, `test_a_url_whose_preparation_raises_ends_the_crawl_while_its_depth_is_dispatched` and `test_a_checked_url_whose_preparation_raises_ends_the_crawl_before_the_sweep`, and in `tests/crawl/test_hooks.py`, `test_a_url_that_meets_an_ended_writer_reports_why_the_writer_ended`.
 - [Post-crawl passes take only the writer, `Pass.run(writer)`, and `040` needs a clock in them] → Task 10.19 gives `Pass.run` one frozen `PassContext(writer, clock)`; `040` adapts its pass when it rebases.
 
 ## Migration Plan

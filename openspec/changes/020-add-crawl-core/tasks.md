@@ -370,7 +370,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 12.0b Fix: `wait_turn` reserves the host's `next_start` and sleeps without holding a lock, so one host's rate waits overlap the other hosts' (design D7).
   Done when: a request waiting for its turn on one host lets another host's request start, with 21 hosts at the default cap, red by mutation of `wait_turn` moved inside the global cap; and one host's requests that the full cap held back start 1/rate apart, red by mutation of the Requester's `started` call removed. Both Risks entries on the turn's order and its serialization go.
 - [x] 12.0c Drive "The global cap bounds requests across hosts", fake timing.
-- [ ] 12.0d Fix: an exception that escapes a URL's task ends the run as a bug, and its URL is never dispatched again (design D16).
+- [x] 12.0d Fix: an exception that escapes a URL's task ends the run as a bug, and its URL is never dispatched again (design D16).
   Done when: through the Crawl Service, with a page executor of the test's own whose `prepare` raises `RuntimeError` for `/broken`, the Crawl raises that error, `/broken` is prepared once and the Crawl stays `running`, both when `/broken` fails before the dispatcher waits on its depth's tasks and when it is a Checked URL that fails before the sweep waits on it, each red by removing the capture; and `_cancel_all` tolerates only `CancelledError`.
 - [ ] 12.1 Drive "Every stderr line is an event or a diagnostic" at seam 1.
 - [ ] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.

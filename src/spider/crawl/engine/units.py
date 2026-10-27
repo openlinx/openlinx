@@ -17,6 +17,7 @@ from spider.crawl.engine.crawl_warnings import (
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
+from spider.crawl.engine.stop import StopSignal
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
@@ -42,6 +43,40 @@ from spider.store.records import (
 )
 from spider.store.rows import HandlerRows
 from spider.store.urls import record_error, record_fetched, record_skipped
+from spider.store.writer import CrawlWriterClosedError
+
+
+class TaskFailure:
+    """The first exception that escaped a URL's task: a bug, which ends the run (design D16)."""
+
+    def __init__(self, stop: StopSignal) -> None:
+        self._stop = stop
+        self._error: BaseException | None = None
+
+    @property
+    def is_set(self) -> bool:
+        return self._error is not None
+
+    def track(self, tasks: set[asyncio.Task[None]], task: asyncio.Task[None]) -> None:
+        tasks.add(task)
+        task.add_done_callback(lambda done: self._ended(tasks, done))
+
+    def raise_first(self) -> None:
+        if self._error is not None:
+            raise self._error
+
+    def _ended(self, tasks: set[asyncio.Task[None]], task: asyncio.Task[None]) -> None:
+        tasks.discard(task)
+        if task.cancelled():
+            return
+        # Retrieved here, since a task that ends before a gather waits on it has already left
+        # its set: unseen, its URL would stay queued and be dispatched again by every sweep.
+        error = task.exception()
+        if isinstance(error, CrawlWriterClosedError):
+            # Not a bug: an ended writer refuses every unit, and its cause says why (017 D6).
+            self._stop.set("write_failed", error.__cause__ or error)
+        elif error is not None and self._error is None:
+            self._error = error
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -56,6 +91,7 @@ class Run:
     blocking: BlockingRuns
     # The tasks of Checked URLs in flight, which never hold the depth barrier (design D3).
     checked_urls: set[asyncio.Task[None]]
+    task_failure: TaskFailure
 
 
 def via_resource(queued: QueuedUrl) -> bool:

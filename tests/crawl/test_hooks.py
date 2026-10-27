@@ -614,6 +614,27 @@ def test_a_writer_that_ends_reports_why_it_ended(
         crawl_result(server.url("/"), hooks)
 
 
+def test_a_url_that_meets_an_ended_writer_reports_why_the_writer_ended(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # /ok answers after the writer has ended on /boom's replay, so its own unit is refused.
+    server = fixture_site(
+        Site(routes={**BOOM_SITE.routes, "/ok": Page(body="<p>OK</p>", delay=0.3)})
+    )
+    hooks = default_hooks()
+    hooks = replace(
+        hooks,
+        handlers=(
+            *hooks.handlers,
+            handler("flaky", _flaky, _write_flaky([])),
+            handler("unwritable", _unwritable, _refuse),
+        ),
+    )
+
+    with pytest.raises(CrawlWriterReplayError):
+        crawl_result(server.url("/"), hooks)
+
+
 @dataclass(frozen=True, slots=True)
 class RowValues:
     url_id: int

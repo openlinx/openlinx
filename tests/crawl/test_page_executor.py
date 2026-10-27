@@ -15,7 +15,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
-from tests.support.crawls import query
+from tests.support.crawls import crawl_row, query
 from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
 
@@ -216,3 +216,84 @@ def test_fetching_waits_while_page_preparation_is_behind_by_its_backlog(
 
     # The global cap of 20 at the default concurrency, plus the pool's backlog of 2.
     assert (pool.most_preparing, len(fetcher.starts)) == (22, 32)
+
+
+class RaisingExecutor:
+    """Page preparation in process that breaks an invariant of its own for `/broken`, as a pool
+    raises "cannot schedule new futures after shutdown" when it is used after its close."""
+
+    backlog = 0
+    workers = 0
+
+    def __init__(self) -> None:
+        self.prepared: list[str] = []
+        self._settings: PageSettings | None = None
+
+    async def start(self, settings: PageSettings) -> None:
+        self._settings = settings
+
+    async def prepare(self, url: NormalizedUrl, response: FetchResult) -> PreparedPage:
+        self.prepared.append(url)
+        if url.endswith("/broken"):
+            raise RuntimeError("cannot schedule new futures after shutdown")
+        assert self._settings is not None
+        return prepare_page(url, response, self._settings)
+
+    async def close(self) -> None:
+        pass
+
+
+def test_a_url_whose_preparation_raises_ends_the_crawl_while_its_depth_is_dispatched(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    slow = [f"/s{n}" for n in range(30)]
+    pages = {
+        "/": FakePage("".join(f'<a href="{path}">L</a>' for path in ["/broken", *slow])),
+        "/broken": FakePage("<p>B</p>"),
+        **{path: FakePage("<p>S</p>", delay=1) for path in slow},
+    }
+    executor = RaisingExecutor()
+    fetcher = FakeFetcher(clock, pages)
+
+    # 31 URLs over a task bound of 20: the dispatcher waits for room until /broken has failed.
+    with pytest.raises(RuntimeError, match="after shutdown"):
+        crawl_result("http://site.test/", clock=clock, fetcher=fetcher, pages=lambda: executor)
+    (crawl_file,) = temp_workspace.home.rglob("*.sqlite")
+
+    # The room /broken freed goes to /s19 before its failure is seen; like a stop, the failure
+    # then lets none of the URLs still waiting for room start.
+    started = {path for path, _ in fetcher.starts}
+    assert (
+        executor.prepared.count("http://site.test/broken"),
+        started & set(slow[20:]),
+        crawl_row(crawl_file)["state"],
+    ) == (1, set(), "running")
+
+
+def test_a_checked_url_whose_preparation_raises_ends_the_crawl_before_the_sweep(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    # An image URL that answers with an HTML page, as a soft 404 does, is prepared as one.
+    pages = {
+        "/": FakePage('<img src="/broken"><a href="/slow">S</a>'),
+        "/broken": FakePage("<p>Not found</p>"),
+        "/slow": FakePage("<p>S</p>", delay=1),
+    }
+    executor = RaisingExecutor()
+
+    # /broken fails while the depth waits a second for /slow, before the sweep waits on it.
+    with pytest.raises(RuntimeError, match="after shutdown"):
+        crawl_result(
+            "http://site.test/",
+            clock=clock,
+            fetcher=FakeFetcher(clock, pages),
+            pages=lambda: executor,
+        )
+    (crawl_file,) = temp_workspace.home.rglob("*.sqlite")
+
+    assert (executor.prepared.count("http://site.test/broken"), crawl_row(crawl_file)["state"]) == (
+        1,
+        "running",
+    )
