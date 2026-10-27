@@ -57,7 +57,7 @@ Seams (docs/testing.md):
 - [x] 3.5 [3+6] Drive "A hanging response times out": `--timeout` and `crawl.timeout`, finite and above 0 through `setting_rules`, through `FetchPolicy.timeout_seconds`, fixed at 20 until then. The timeout feeds `020`'s `watchdog_seconds` here if `020` task 12.14 is merged, or in that task otherwise.
 - [x] 3.6 [Fixture] Add a route option for a body that stalls after its headers and one that trickles forever, test-first (`delay` and `hang` act before the headers). Then **Guard:** a trickling body ends as `timeout` within `--timeout` (`test_a_trickling_body_times_out`, design Risks).
 - [x] 3.7a [Fixture] Let `020`'s fake Fetcher answer a status, headers and a response sequence per path, test-first in `tests/support/`.
-- [ ] 3.7 [Fake timing] Drive "Retries wait one and then two seconds".
+- [x] 3.7 [Fake timing] Drive "Retries wait one and then two seconds".
 - [ ] 3.8 [Fake timing] Drive "Retry-After pauses the host": the host's next allowed start in `020`'s `RateGate`, which must also act without `--rate`. After `020` task 12.0, since the pause makes requests wait concurrently.
 - [ ] 3.9 Docs: document timeouts, retries, backoff, `Retry-After` and the network pause's view of a retry in `docs/crawling.md`.
 - [ ] 3.10 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
