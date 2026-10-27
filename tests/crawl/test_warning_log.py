@@ -123,7 +123,7 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
     )
 
     results = [
-        crawl_result(down.url("/"), ignore_robots=True),
+        crawl_result(down.url("/"), ignore_robots=True, retries=0),
         crawl_result(closed.url("/")),
         crawl_result("http://www.site.test/", resolver=www.resolver),
         crawl_result("http://shop.test/", resolver=moved.resolver),

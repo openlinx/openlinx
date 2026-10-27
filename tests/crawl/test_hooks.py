@@ -882,7 +882,7 @@ def test_each_url_is_recorded_with_the_values_its_handlers_saw(
     hooks = default_hooks()
     hooks = replace(hooks, handlers=(*hooks.handlers, handler("values", _values, _write_values)))
 
-    crawl_file = crawl_result(server.url("/"), hooks, exclude=["/logout$"]).crawl_file
+    crawl_file = crawl_result(server.url("/"), hooks, exclude=["/logout$"], retries=0).crawl_file
 
     seen = {url_id: json.loads(v) for url_id, v in query(crawl_file, "SELECT * FROM test_values")}
     recorded = {row["id"]: row for row in _urls_rows(crawl_file)}

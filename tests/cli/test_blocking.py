@@ -68,7 +68,9 @@ def test_a_request_without_a_response_does_not_end_the_run(
     reset = Page(body="<p>" + "x" * 100_000 + "</p>", reset_after=100)
     server = fixture_site(Site(routes=_links_to(paths, **{"/reset": reset})))
 
-    assert _warning_codes(server.url("/"), "--concurrency", "1") == ["possible_blocking"]
+    assert _warning_codes(server.url("/"), "--concurrency", "1", "--retries", "0") == [
+        "possible_blocking"
+    ]
 
 
 def test_a_host_gets_the_warning_once_in_a_crawl(

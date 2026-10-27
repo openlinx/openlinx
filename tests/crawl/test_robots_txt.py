@@ -158,7 +158,7 @@ def test_an_unreachable_robots_txt_blocks_its_origin(
 ) -> None:
     server = fixture_site(Site(routes={"/robots.txt": Status(503), "/": Page(body="<p>/</p>")}))
 
-    crawl_file = crawled(server.url("/"))
+    crawl_file = crawled(server.url("/"), "--retries", "0")
 
     assert _seed_and_origin(crawl_file, server.base_url) == (
         "skipped",
@@ -405,7 +405,7 @@ def test_an_unreachable_robots_txt_of_an_external_origin_raises_no_warning(
         Site(routes={"/robots.txt": Status(503)}),
     )
 
-    result = crawl_result("http://site.test/", resolver=hosts.resolver)
+    result = crawl_result("http://site.test/", resolver=hosts.resolver, retries=0)
 
     assert [
         warning.code for warning in result.warnings if warning.code == "robots_unreachable"
@@ -417,7 +417,7 @@ def test_an_unreachable_robots_txt_is_reported_under_ignore_robots(
 ) -> None:
     server = fixture_site(Site(routes={"/robots.txt": Status(503), "/": Page(body="<p>/</p>")}))
 
-    result = crawl_result(server.url("/"), ignore_robots=True)
+    result = crawl_result(server.url("/"), ignore_robots=True, retries=0)
 
     assert (
         query(

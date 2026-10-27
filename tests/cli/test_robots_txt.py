@@ -33,7 +33,7 @@ def test_an_unreachable_robots_txt_of_the_site_is_reported(
 ) -> None:
     server = fixture_site(Site(routes={"/robots.txt": Status(503), "/": Page(body="<p>/</p>")}))
 
-    result = run_cli("crawl", server.url("/"))
+    result = run_cli("crawl", server.url("/"), "--retries", "0")
 
     assert [
         "--ignore-robots" in (warning["hint"] or "")

@@ -178,7 +178,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
 ## Test seams
 
 - **HTTP (local fixture site) (3):** everything network-related. The real aiohttp runs against the fixture site's HTTP and HTTPS listeners, with named hosts behind `020`'s DNS resolver hook (`fixture_hosts`).
-- **Seam 3+6:** the new columns and `response_headers` are read through a read-only connection after the Crawl, which runs through `crawl_result` (`tests/support/crawling.py`) or through the CLI (`crawled`). Both run on the real clock, since `020`'s watchdog would cut every request under a `FakeClock`, whose sleeps end at once. So a [3+6] retry test waits its real backoff (1 s, then 2 s), and only the fake-timing scenarios assert exact times.
+- **Seam 3+6:** the new columns and `response_headers` are read through a read-only connection after the Crawl, which runs through `crawl_result` (`tests/support/crawling.py`) or through the CLI (`crawled`). Both run on the real clock. `020`'s virtual clock wakes a sleep when virtual time reaches it and jumps only when nothing runs, but a request waiting on a real socket leaves nothing to run, so time would jump to the watchdog's wake and cut the request. So a [3+6] retry test waits its real backoff (1 s, then 2 s), a [3+6] test whose scenario is not about retries passes `--retries 0`, and only the fake-timing scenarios assert exact times.
 - **Pure-logic modules (4):** the cookie redaction, the redirect target table, the `fetch_error` mapping, and the certifi fallback of the TLS setup.
 - **Services and store API (2):** the `response_headers` writer forces a replay with `replay_now(writer)` (`017` D7).
 - **CLI (1):** argument errors, recorded commands and exit codes.
