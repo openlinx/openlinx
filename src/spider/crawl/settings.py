@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from spider.crawl.setting_rules import as_rate, as_robots_token
+from spider.crawl.setting_rules import as_rate, as_robots_token, as_user_agent
 from spider.naming import DEFAULT_ROBOTS_TOKEN
 from spider.store.records import ScopeKind
 
@@ -46,6 +46,11 @@ class CrawlSettings(BaseModel):
         description="The most URL requests the Crawl starts; robots.txt requests do not "
         "count. No limit when unset.",
     )
+    user_agent: str | None = Field(
+        None,
+        description="The User-Agent request header of every request, robots.txt's included, "
+        "without control characters. The tool's name, version and project URL when unset.",
+    )
     robots_user_agent: str = Field(
         DEFAULT_ROBOTS_TOKEN,
         description="The token that selects robots.txt groups and user-agent-prefixed "
@@ -77,6 +82,11 @@ class CrawlSettings(BaseModel):
     @classmethod
     def _is_a_rate(cls, rate: float | None) -> float | None:
         return None if rate is None else as_rate(rate)
+
+    @field_validator("user_agent")
+    @classmethod
+    def _is_a_user_agent(cls, user_agent: str | None) -> str | None:
+        return None if user_agent is None else as_user_agent(user_agent)
 
     @field_validator("robots_user_agent")
     @classmethod

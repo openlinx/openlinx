@@ -16,7 +16,12 @@ from spider.crawl.engine.dispatch import run_crawl
 from spider.crawl.engine.hooks import Hooks, PassContext
 from spider.crawl.engine.stop import StopSignal
 from spider.crawl.engine.warning_log import WarningLog
-from spider.crawl.fetch.fetcher import FetcherFactory, FetchPolicy, aiohttp_fetcher
+from spider.crawl.fetch.fetcher import (
+    DEFAULT_USER_AGENT,
+    FetcherFactory,
+    FetchPolicy,
+    aiohttp_fetcher,
+)
 from spider.crawl.pages.preparation import PageExecutor
 from spider.crawl.scope import ScopeDecision, ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
@@ -172,7 +177,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         settings=crawl_settings,
         scope=scope,
         strip_params=strip_params,
-        fetch_policy=FetchPolicy(),
+        fetch_policy=FetchPolicy(user_agent=crawl_settings.user_agent or DEFAULT_USER_AGENT),
         new_crawl=new_crawl,
     )
 

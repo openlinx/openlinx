@@ -9,7 +9,7 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
-from spider.crawl.setting_rules import as_rate, as_robots_token
+from spider.crawl.setting_rules import as_rate, as_robots_token, as_user_agent
 from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN
 from spider.output.codes import OPTION_CONFLICT
 from spider.output.diagnostics import SpiderError
@@ -24,6 +24,13 @@ def _robots_token(token: str) -> str:
         return as_robots_token(token)
     except ValueError as refusal:
         raise typer.BadParameter(f"{token!r}: {refusal}.") from None
+
+
+def _user_agent(user_agent: str | None) -> str | None:
+    try:
+        return None if user_agent is None else as_user_agent(user_agent)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{user_agent!r}: {refusal}.") from None
 
 
 def _rate(rate: float | None) -> float | None:
@@ -116,6 +123,17 @@ def crawl(
             show_default=False,
         ),
         OptionMeta(setting="crawl.max_urls"),
+    ] = None,
+    user_agent: Annotated[
+        str | None,
+        typer.Option(
+            "--user-agent",
+            callback=_user_agent,
+            help="The User-Agent request header of every request, robots.txt's included, "
+            "without control characters. The tool's name, version and project URL by default.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.user_agent"),
     ] = None,
     robots_user_agent: Annotated[
         str,
