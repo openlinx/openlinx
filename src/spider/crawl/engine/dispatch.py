@@ -42,9 +42,9 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         robots=RobotsLoader(requester, context.writer, context.settings.robots_user_agent),
         blocking=BlockingRuns(),
         checked_urls=set(),
-        seed_chain=SeedChain(context.scope, seed),
+        seed_chain=SeedChain(context.planned_scope, seed),
     )
-    decision = context.scope.decide(seed)
+    decision = run.seed_chain.scope.decide(seed)
     await context.writer.run_async(
         record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
     )
@@ -54,7 +54,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             await _crawl_depth(run, depth)
             if run.seed_chain.is_open and not context.stop.is_set:
                 # No URL of the chain was decided, such as one the URL limit refused.
-                await close_seed_chain(run, seed, responded=False)
+                await close_seed_chain(run, responded=False)
             # A stop cancels the checked URLs in flight: the sweep below would wait for them.
             if context.stop.is_set:
                 break
@@ -116,7 +116,7 @@ async def _crawl_depth(run: Run, depth: int) -> None:
                     if limits.limit_reached() is not None:
                         limits.task_ended()
                         break
-                    in_chain = run.seed_chain.is_open and queued.crawl_depth == 0
+                    in_chain = run.seed_chain.holds(queued)
                     decision = run.seed_chain.decide(queued.url, in_chain=in_chain)
                     task = asyncio.create_task(_crawl_url(run, queued, decision))
                     # A checked URL never holds the barrier (design D3); the sweep in run_crawl

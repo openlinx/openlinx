@@ -77,25 +77,29 @@ class ScopeRules:
         return replace(self, registrable_domains=self.registrable_domains | {domain})
 
     def widened_to(self, url: NormalizedUrl) -> "ScopeRules | None":
-        """These rules with the host of `url` as a Seed host, when it is outside them and of
-        the registrable domain of the first Seed host; None otherwise (022 D3)."""
+        """These rules with the host of `url` as a Seed host, when it is outside them, of the
+        registrable domain of the first Seed host and inside the Seed's folder; None otherwise
+        (022 D3)."""
         host = _without_trailing_dot(url_host(url))
-        if self.decide(url).is_internal:
+        if self.decide(url).is_internal or not self._in_folder(url):
             return None
         domain = _registrable_domain(host)
         if domain is None or domain != _registrable_domain(self.seed_hosts[0]):
             return None
         return replace(self, seed_hosts=(*self.seed_hosts, host))
 
-    def is_off_site(self, url: NormalizedUrl) -> bool:
-        """Whether `url` is on another registrable domain than the first Seed host's, or on
-        another host when that has none, such as an IP address (022 D3)."""
+    def is_out_of_scope(self, url: NormalizedUrl) -> bool:
+        """Whether a Seed's chain that ends on `url` leaves the Crawl's Scope: `url` is on another
+        registrable domain than the first Seed host's, or on another host when that has none,
+        such as an IP address, or outside the Seed's folder (022 D3)."""
         host = _without_trailing_dot(url_host(url))
         seed_host = self.seed_hosts[0]
         domain, seed_domain = _registrable_domain(host), _registrable_domain(seed_host)
-        if seed_domain is None:
-            return host != seed_host
-        return domain != seed_domain
+        off_site = host != seed_host if seed_domain is None else domain != seed_domain
+        return off_site or not self._in_folder(url)
+
+    def _in_folder(self, url: NormalizedUrl) -> bool:
+        return self.folder is None or url_path(url).startswith(self.folder)
 
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
         host = _without_trailing_dot(url_host(url))
@@ -104,7 +108,7 @@ class ScopeRules:
         )
         if any(pattern.search(url) for pattern in self.exclude):
             return ScopeDecision(is_internal=is_internal, in_scope=False, skip_reason="excluded")
-        in_folder = self.folder is None or url_path(url).startswith(self.folder)
+        in_folder = self._in_folder(url)
         included = not self.include or any(pattern.search(url) for pattern in self.include)
         return ScopeDecision(
             is_internal=is_internal, in_scope=is_internal and in_folder and included

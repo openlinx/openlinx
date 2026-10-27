@@ -68,8 +68,9 @@ class CrawlSettings(BaseModel):
     max_redirects: int = Field(
         10,
         ge=0,
-        description="The most consecutive redirects followed from the first URL of a Redirect "
-        "Chain; the target of the next one is recorded as skipped.",
+        le=50,
+        description="The most consecutive redirects, 0 to 50, followed from the first URL of a "
+        "Redirect Chain; the target of the next one is recorded as skipped.",
     )
     robots_user_agent: str = Field(
         DEFAULT_ROBOTS_TOKEN,

@@ -19,7 +19,8 @@ from spider.store.writer import CrawlWriter
 class CrawlContext:
     crawl_file: CrawlFile
     settings: CrawlSettings
-    scope: ScopeRules
+    # The Scope the Crawl was planned with; the current one is the Seed chain's (022 D3).
+    planned_scope: ScopeRules
     # --strip-params, compiled once: the Seed, the engine and page preparation share it.
     strip_params: re.Pattern[str] | None
     clock: Clock

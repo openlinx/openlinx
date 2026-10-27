@@ -480,3 +480,48 @@ def test_a_url_a_redirect_lowers_to_the_open_depth_is_requested_at_that_depth(
         "SELECT url, crawl_depth FROM urls WHERE url IN (?, ?) ORDER BY url",
         [server.url("/item"), server.url("/sale")],
     ) == [(server.url("/item"), 2), (server.url("/sale"), 1)]
+
+
+def test_a_hop_that_a_link_reached_first_starts_the_hop_count_again(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # Eleven moves, and the home page also links the sixth address of the chain.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/r1">Offer</a><a href="/r6">Offer, newer</a>'),
+                **redirect_chain("/r", 11, "/r12"),
+                "/r12": Page(body="<title>Offer</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _states(crawl_file, server.url("/r12")) == [(server.url("/r12"), "fetched", None)]
+
+
+def test_more_than_50_redirects_are_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--max-redirects", "51")
+
+    assert (
+        result.exit_code,
+        [(error["code"], "--max-redirects" in error["message"]) for error in result.errors()],
+    ) == (2, [("invalid_value", True)])
+
+
+def test_more_than_50_redirects_in_the_settings_file_are_refused(
+    temp_workspace: TempWorkspace,
+) -> None:
+    (temp_workspace.root / SETTINGS_FILE_NAME).write_bytes(b"[crawl]\nmax_redirects = 51\n")
+
+    result = run_cli("crawl", "http://site.test/")
+
+    assert (
+        result.exit_code,
+        [
+            (error["code"], problem["key"])
+            for error in result.errors()
+            for problem in error["details"]["errors"]
+        ],
+    ) == (3, [("settings_invalid", "crawl.max_redirects")])

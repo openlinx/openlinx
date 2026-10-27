@@ -33,6 +33,9 @@ from spider.store.schema import literal_values, urls
 
 type UrlUnit = Callable[[Connection], None]
 
+# A URL of a Seed's Redirect Chain: its id and URL, in the chain's order.
+type SeedChainUrls = tuple[tuple[int, NormalizedUrl], ...]
+
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
 # Each row binds its origin, whose row the unit records first (design D18).
 _INSERT = insert(urls).values(origin_id=ORIGIN_ID)
@@ -76,6 +79,10 @@ _REDIRECT_URL_ID = (
     .values(redirect_url_id=bindparam("target_id"))
 )
 _REDIRECTS_TO = select(urls.c.redirect_url_id).where(urls.c.id == bindparam("url_id"))
+_SEED_HOP = select(urls.c.id, urls.c.url, urls.c.redirect_url_id).where(
+    urls.c.url == bindparam("url")
+)
+_HOP = select(urls.c.id, urls.c.url, urls.c.redirect_url_id).where(urls.c.id == bindparam("url_id"))
 _DEPTH = select(urls.c.crawl_depth).where(urls.c.id == bindparam("url_id"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
@@ -209,8 +216,8 @@ def queued_batch(
 def _chain_back(
     connection: Connection, via: DiscoveredVia, found_on: int | None, limit: int
 ) -> tuple[int, DiscoveredVia]:
-    # The consecutive redirects that led to a URL, read back from the file so a replayed or
-    # continued unit counts the same, and how its chain's first URL was found; at most `limit`
+    # The consecutive redirects that led to a URL, read back from the file so a replayed unit
+    # counts the same, and how its chain's first URL was found; at most `limit`
     # point reads, which no chain passes, since the target past the limit is never queued
     # (022-add-fetch-policy D2).
     hops = 0
@@ -222,17 +229,40 @@ def _chain_back(
 
 def _loop_through(connection: Connection, url_id: int, target_id: int, limit: int) -> list[int]:
     # The redirect just stored can only close a loop that runs through it: walk forward from
-    # its target, at most `limit` + 1 reads, back to the URL (022-add-fetch-policy D2).
+    # its target, at most `limit` + 1 reads, back to the URL. A URL seen twice is a loop that
+    # does not run through it, which ends the walk at once (022-add-fetch-policy D2).
     path = [url_id]
     for _ in range(limit + 1):
         if target_id == url_id:
             return path
+        if target_id in path:
+            break
         path.append(target_id)
         following = connection.execute(_REDIRECTS_TO, {"url_id": target_id}).scalar()
         if following is None:
             break
         target_id = following
     return []
+
+
+def seed_chain_urls(
+    seed: NormalizedUrl, max_redirects: int
+) -> Callable[[Connection], SeedChainUrls]:
+    """A unit that only reads: the Seed's Redirect Chain as the file holds it, from the Seed
+    along redirect_url_id, at most `max_redirects` + 1 hops; its last URL is the one it ends on,
+    a target never requested included (022-add-fetch-policy D3)."""
+
+    def unit(connection: Connection) -> SeedChainUrls:
+        url_id, url, following = connection.execute(_SEED_HOP, {"url": seed}).one()
+        chain = [(url_id, NormalizedUrl(url))]
+        for _ in range(max_redirects + 1):
+            if following is None or any(following == known for known, _ in chain):
+                break
+            url_id, url, following = connection.execute(_HOP, {"url_id": following}).one()
+            chain.append((url_id, NormalizedUrl(url)))
+        return tuple(chain)
+
+    return unit
 
 
 def next_depth(depth: int) -> Callable[[Connection], int | None]:

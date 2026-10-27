@@ -121,13 +121,13 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
             ("robots_unreachable", True),
             ("seed_base_mismatch", True),
             ("seed_blocked_by_robots_txt", True),
-            ("seed_redirected_off_site", True),
+            ("seed_redirected_out_of_scope", True),
         ],
         [
             "possible_blocking",
             "robots_unreachable",
             "seed_base_mismatch",
             "seed_blocked_by_robots_txt",
-            "seed_redirected_off_site",
+            "seed_redirected_out_of_scope",
         ],
     )

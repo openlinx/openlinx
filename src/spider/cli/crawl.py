@@ -169,8 +169,9 @@ def crawl(
         typer.Option(
             "--max-redirects",
             min=0,
-            help="The most consecutive redirects followed from the first URL of a Redirect "
-            "Chain; the target of the next one is recorded as skipped.",
+            max=50,
+            help="The most consecutive redirects, 0 to 50, followed from the first URL of a "
+            "Redirect Chain; the target of the next one is recorded as skipped.",
         ),
         OptionMeta(setting="crawl.max_redirects"),
     ] = 10,

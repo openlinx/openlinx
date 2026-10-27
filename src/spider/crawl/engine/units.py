@@ -11,7 +11,7 @@ from spider.crawl.engine.crawl_warnings import (
     warn_of_an_unreachable_robots_txt,
     warn_of_possible_blocking,
     warn_of_seed_base_mismatch,
-    warn_of_seed_redirected_off_site,
+    warn_of_seed_redirected_out_of_scope,
 )
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
@@ -49,6 +49,7 @@ from spider.store.urls import (
     record_error,
     record_fetched,
     record_skipped,
+    seed_chain_urls,
 )
 
 
@@ -79,9 +80,7 @@ async def unit_of(
     request, which leaves it queued. `decision` is taken once, at dispatch, so a URL found
     on several Pages is recorded once (design D1)."""
     # The Seed's Redirect Chain is depth 0: a redirect target keeps its source's depth.
-    in_chain = run.seed_chain.is_open and queued.crawl_depth == 0
-    if in_chain:
-        run.seed_chain.join(queued.id, queued.url)
+    in_chain = run.seed_chain.holds(queued)
     recorded = await _outcome(run, queued, decision, in_chain)
     response = None if recorded is None else recorded[0].response
     # The chain ended without a response of its own: a failure or a skip.
@@ -91,18 +90,22 @@ async def unit_of(
         and recorded is not None
         and (response is None or response.redirect_target is None)
     ):
-        await close_seed_chain(run, queued.url, responded=False)
+        await close_seed_chain(run, responded=False)
     return recorded
 
 
-async def close_seed_chain(run: Run, final_url: NormalizedUrl, *, responded: bool) -> None:
+async def close_seed_chain(run: Run, *, responded: bool) -> None:
     """Closes the Seed's Redirect Chain on the URL it ended on: its URLs are decided again
     against the Scope it ended in, which the Crawl records when it widened, and page
     preparation starts with that Scope (022-add-fetch-policy D3)."""
-    context = run.context
-    if run.seed_chain.scope.is_off_site(final_url):
-        warn_of_seed_redirected_off_site(context, run.seed_chain.seed, final_url)
-    widened, decisions = run.seed_chain.close(final_url, responded=responded)
+    context, chain = run.context, run.seed_chain
+    urls = await context.writer.run_async(
+        seed_chain_urls(chain.seed, context.settings.max_redirects)
+    )
+    final_url = urls[-1][1]
+    if chain.scope.is_out_of_scope(final_url):
+        warn_of_seed_redirected_out_of_scope(context, chain.seed, final_url)
+    widened, decisions = chain.close(urls, responded=responded)
     await context.writer.run_async(reclassify_urls(decisions))
     if widened is not None:
         await context.writer.run_async(record_scope(widened.to_json()))
@@ -146,7 +149,7 @@ async def _outcome(
                 fetched_at=None,
             )
             return _errored(context, dispatched, failure)
-        skip_reason, blocked = _robots_verdict(context, origin_robots, queued, decision)
+        skip_reason, blocked = _robots_verdict(context, origin_robots, queued, decision, in_chain)
     decided = replace(dispatched, blocked_by_robots_txt=blocked)
     if skip_reason is not None:
         skipped = replace(decided, fetch_state="skipped", skip_reason=skip_reason)
@@ -181,7 +184,11 @@ def _errored(
 
 
 def _robots_verdict(
-    context: CrawlContext, origin_robots: OriginRobots, queued: QueuedUrl, decision: ScopeDecision
+    context: CrawlContext,
+    origin_robots: OriginRobots,
+    queued: QueuedUrl,
+    decision: ScopeDecision,
+    in_chain: bool,
 ) -> tuple[SkipReason | None, bool | None]:
     """robots.txt's skip of a URL that would be requested, and its blocked_by_robots_txt, NULL
     while the rules are unknown (design D6)."""
@@ -193,7 +200,8 @@ def _robots_verdict(
     blocked = not origin_robots.allows(queued.url)
     # --ignore-robots requests it, still labelled as blocked.
     if blocked and not ignore:
-        if queued.discovered_via == "seed":
+        # Any URL of the Seed's chain: the Seed answered with a redirect, its target is blocked.
+        if in_chain:
             warn_of_a_blocked_seed(context, queued.url)
         return "blocked_by_robots_txt", True
     return None, blocked
@@ -223,7 +231,7 @@ async def _fetched(
     target = redirect_target(url, response.status_code, location, context.strip_params)
     if in_chain and target is None:
         # Before any preparation: the chain's last response may be a Page of the wider Scope.
-        await close_seed_chain(run, url, responded=True)
+        await close_seed_chain(run, responded=True)
     scope = run.seed_chain.scope
     # An External URL or one outside the Scope is a Checked URL, never parsed (design D5).
     followed = decided.in_scope and 200 <= response.status_code < 300

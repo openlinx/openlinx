@@ -442,3 +442,39 @@ def test_the_units_of_redirects_run_again_the_same(temp_workspace: TempWorkspace
         (f"{site}/new", "skipped", "max_redirects", None, 1, None),
         (f"{site}/login", "fetched", None, 1, 1, f"{site}/cart"),
     ]
+
+
+def test_a_redirect_into_a_loop_that_does_not_run_through_it_ends_its_walk_at_once(
+    temp_workspace: TempWorkspace,
+) -> None:
+    # /x sends to the cart, while the cart and the login page send each other back.
+    crawl = create_any_crawl(temp_workspace)
+    site = "https://site.test"
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        seed_id = writer.run(record_seed(_url(f"{site}/"), is_internal=True, in_scope=True))
+        writer.run(record_fetched(_fetched(seed_id, _new(f"{site}/cart"), _new(f"{site}/x"))))
+        ids = {
+            queued.url.removeprefix(site): queued.id
+            for queued in writer.run(queued_batch(1, 0, 10, 50))
+        }
+        writer.run(record_fetched(_redirected(ids["/cart"], f"{site}/login", 50)))
+        (login,) = writer.run(queued_batch(1, ids["/x"], 10, 50))
+        writer.run(record_fetched(_redirected(login.id, f"{site}/cart", 50)))
+    walks: list[str] = []
+
+    def keep(_: Any, __: Any, sql: str, *args: Any) -> None:
+        if sql.startswith("SELECT urls.redirect_url_id"):
+            walks.append(sql)
+
+    with opening(crawl.path, role="write") as engine, engine.begin() as connection:
+        event.listen(connection, "before_cursor_execute", keep)
+        record_fetched(_redirected(ids["/x"], f"{site}/cart", 50))(connection)
+
+    assert (
+        len(walks),
+        query(
+            crawl.path,
+            "SELECT url, in_redirect_loop FROM urls WHERE url IN (?, ?, ?) ORDER BY url",
+            [f"{site}/cart", f"{site}/login", f"{site}/x"],
+        ),
+    ) == (2, [(f"{site}/cart", 1), (f"{site}/login", 1), (f"{site}/x", 0)])

@@ -85,7 +85,7 @@ Seams (docs/testing.md):
 - [x] 4.13 [3+6] **Guard:** "A meta refresh is not recorded as a redirect".
 - [x] 4.14 Docs: document Redirect Chains, hop limits, loops, Seed redirects and the meta refresh boundary in `docs/crawling.md`, and that a redirect is not a Link.
 - [x] 4.15 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) for the redirect, hop-count and loop units, then refactor with the whole suite green.
-- [ ] 4.16 [3+6] Fix the group 4 review findings and verdict, red first, in one commit:
+- [x] 4.16 [3+6] Fix the group 4 review findings and verdict, red first, in one commit:
   - Drive "A Seed chain cut by the hop limit off its site is reported" and "A Seed chain cut by the URL limit is decided by its final Scope": the fallback close walks `redirect_url_id` from the Seed in the store, at most `--max-redirects` + 1 reads, for the final URL and every URL of the chain (design D3).
   - Drive "A section Seed whose chain leaves the section is reported": a chain that ends outside the Crawl's Scope widens nothing and gives `seed_redirected_out_of_scope`, the renamed `seed_redirected_off_site`; the warning-log guard's crawls follow the rename.
   - Drive "A Seed blocked by robots.txt at its chain's end is reported": `seed_blocked_by_robots_txt` reads the chain's last URL, as `seed_base_mismatch` does.

@@ -33,7 +33,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | `--ignore-robots` | `ignore_robots` | `false` | Request URLs that robots.txt disallows; they are still recorded with `blocked_by_robots_txt` = 1 (see [`--ignore-robots`](#--ignore-robots)). |
 | `--timeout <s>` | `timeout` | `20` | Seconds within which a request attempt, its body included, must complete: a finite number above 0 (see [Timeouts and retries](#timeouts-and-retries)). |
 | `--retries <n>` | `retries` | `2` | How many times, 0 to 10, a request that timed out, could not connect or got a 5xx status is tried again (see [Timeouts and retries](#timeouts-and-retries)). |
-| `--max-redirects <n>` | `max_redirects` | `10` | The most consecutive redirects followed from the first URL of a Redirect Chain, 0 or more (see [The hop limit](#the-hop-limit)). |
+| `--max-redirects <n>` | `max_redirects` | `10` | The most consecutive redirects followed from the first URL of a Redirect Chain, 0 to 50 (see [The hop limit](#the-hop-limit)). |
 | `--user-agent <string>` | `user_agent` | `spider/<version> (+<project URL>)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `spider` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
@@ -358,7 +358,7 @@ FROM urls AS source JOIN urls AS target ON target.id = source.redirect_url_id
 
 ### The hop limit
 
-`--max-redirects <n>` (default 10, `crawl.max_redirects`) is the most consecutive redirects the Crawl follows from the first URL of a chain. The target of the next one is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, unrequested. The count is read back from the crawl file, never kept in memory. A Link found later to that URL queues it again, as a URL found through the Link. `--max-redirects 0` follows no redirect.
+`--max-redirects <n>` (default 10, at most 50, `crawl.max_redirects`) is the most consecutive redirects the Crawl follows from the first URL of a chain. The target of the next one is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, unrequested. The count is read back from the crawl file, never kept in memory. A Link found later to that URL queues it again, as a URL found through the Link. `--max-redirects 0` follows no redirect. A value above 50 is rejected as `invalid_value`, and in `spider.toml` as `settings_invalid`: a longer chain is a misconfiguration, and each hop is a request.
 
 ### Loops
 
@@ -369,9 +369,10 @@ The Crawl requests each URL at most once in a run, so every redirect loop ends: 
 
 ### A Seed that redirects
 
-- **On its registrable domain:** when a Seed's chain ends on another host of the Seed's registrable domain, such as `www.site.test` → `site.test` or `site.test` → `en.site.test`, that host becomes a Seed host for the rest of the Crawl and is added to `crawl.scope.hosts`. Every URL of the chain is then classified by the wider Scope. The [www rule](#internal-and-external-urls) already makes the `www.` host of an apex Seed internal, so an apex Seed that redirects there needs nothing more.
-- **Off its site:** a chain that ends on another registrable domain changes nothing in the Scope, and the result's `warnings` hold `seed_redirected_off_site`, whose `hint` gives the final URL as the Seed to crawl instead. A chain that ends in a fetch error widens nothing either.
-- **The Seed's checks:** `seed_base_mismatch` reads the Page the chain ends on, since the Seed itself answered with a redirect.
+- **On its registrable domain:** when a Seed's chain ends on another host of the Seed's registrable domain, inside the Seed's folder under `--scope subfolder`, such as `www.site.test` → `site.test` or `site.test` → `en.site.test`, that host becomes a Seed host for the rest of the Crawl and is added to `crawl.scope.hosts`. Every URL of the chain is then classified by the wider Scope. The [www rule](#internal-and-external-urls) already makes the `www.` host of an apex Seed internal, so an apex Seed that redirects there needs nothing more.
+- **Outside the Crawl's Scope:** a chain that ends on another registrable domain, or under `--scope subfolder` outside the Seed's folder, changes nothing in the Scope, and the result's `warnings` hold `seed_redirected_out_of_scope`, whose `hint` gives the final URL as the Seed to crawl instead. A section crawl of `/blog/` that redirects to `/` stays a section crawl. A chain that ends in a fetch error widens nothing either.
+- **A chain cut short:** a chain whose last target is never requested, skipped with `max_redirects` or refused by `--max-urls`, ends on that target: it is read back from the crawl file, from the Seed along `redirect_url_id`, and every URL on it is classified by the Scope it ended in.
+- **The Seed's checks:** `seed_base_mismatch` and `seed_blocked_by_robots_txt` read the URL the chain ends on, since the Seed itself answered with a redirect.
 
 ### Meta refresh
 

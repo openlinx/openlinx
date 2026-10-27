@@ -311,7 +311,7 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
                 yield CrawlContext(
                     crawl_file=crawl_file,
                     settings=plan.settings,
-                    scope=plan.scope,
+                    planned_scope=plan.scope,
                     strip_params=plan.strip_params,
                     clock=clock,
                     reporter=crawl.log,
