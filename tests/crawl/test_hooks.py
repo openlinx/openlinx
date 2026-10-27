@@ -901,3 +901,67 @@ def test_a_handler_sees_the_x_robots_tag_of_a_pdf(
         "WHERE urls.url = ?",
         [server.url("/report.pdf")],
     ) == [(repr((False, True)),)]
+
+
+def _always_exploding(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
+    raise ValueError(page.url)
+
+
+def _links(result: UrlResult) -> tuple[Seen, ...]:
+    return tuple(
+        Seen(result.url_id, repr((link.type, link.target, link.declared_in)))
+        for link in result.links
+    )
+
+
+def _links_seen(crawl_file: Path, url: str) -> list[str]:
+    rows = query(
+        crawl_file,
+        "SELECT test_seen.state FROM test_seen JOIN urls ON urls.id = test_seen.url_id "
+        "WHERE urls.url = ? ORDER BY test_seen.rowid",
+        [url],
+    )
+    return [state for (state,) in rows]
+
+
+def test_a_handler_sees_the_links_of_a_page_whose_extractor_failed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/a">A</a>'), "/a": Page(body="<p>A</p>")})
+    )
+    hooks = replace(
+        _with_extractors(extractor("exploding", _always_exploding, None)),
+        handlers=(handler("links", _links, _write_seen),),
+    )
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert _links_seen(crawl_file, server.url("/")) == [
+        repr(("hyperlink", server.url("/a"), "body"))
+    ]
+
+
+def test_a_canonical_in_the_body_is_placed_in_the_body(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(
+                    body='<html><head><link rel="canonical" href="/c"></head>'
+                    '<body><p>Text</p><link rel="canonical" href="/d"></body></html>'
+                ),
+                "/c": Page(body="<p>C</p>"),
+                "/d": Page(body="<p>D</p>"),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), handlers=(handler("links", _links, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert _links_seen(crawl_file, server.url("/")) == [
+        repr(("canonical", server.url("/c"), "head")),
+        repr(("canonical", server.url("/d"), "body")),
+    ]

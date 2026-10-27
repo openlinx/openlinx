@@ -11,6 +11,7 @@ from spider.clock import Clock
 from spider.crawl.fetch.fetcher import header_values
 from spider.crawl.pages.directives import RobotsDirectives
 from spider.crawl.pages.preparation import Extractor
+from spider.crawl.references import DiscoveredLink
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import DiscoveredVia, FetchError, FetchState, ParseError, SkipReason
 from spider.store.rows import RowWriter
@@ -67,6 +68,9 @@ class UrlResult:
     parsed: bool = False
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
+    # The Links the engine read for discovery: an in-Scope 2xx response's header Links,
+    # then its document's when it was prepared (design D5).
+    links: tuple[DiscoveredLink, ...] = ()
     # By extractor name, for a parsed response; an extractor that failed has none.
     outputs: Mapping[str, msgspec.Struct] = field(default_factory=dict)
 

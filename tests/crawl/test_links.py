@@ -31,7 +31,7 @@ def test_a_relative_link_is_resolved_against_the_base_href() -> None:
             attribute="href",
             rel=(),
             nofollow=False,
-            declared_in="html",
+            declared_in="body",
             ordinal=1,
             is_internal=True,
         )

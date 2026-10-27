@@ -137,7 +137,7 @@ def test_header_links_come_before_the_links_of_the_document() -> None:
 
     assert [(link.ordinal, link.declared_in, link.target) for link in _seen(page)] == [
         (1, "http_header", "http://site.test/c"),
-        (2, "html", "http://site.test/a"),
+        (2, "body", "http://site.test/a"),
     ]
 
 

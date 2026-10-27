@@ -206,6 +206,7 @@ async def _fetched(
         parsed=parsed,
         parse_error=parse_error,
         parse_error_message=parse_error_message,
+        links=links,
         outputs={} if page is None else dict(page.outputs),
     )
     rows = _handler_rows(context, fetched)

@@ -9,7 +9,7 @@ from spider.crawl.pages.decoding import decode_html, query_codec
 from spider.crawl.pages.refresh import refresh_url
 from spider.crawl.references import C0_OR_SPACE, DiscoveredLink, resolve_base, resolve_reference
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import LinkType
+from spider.store.records import DeclaredIn, LinkType
 
 type _Reference = tuple[LinkType, str, str]
 
@@ -99,7 +99,7 @@ def links_in_tree(
     """The Links of a parsed document, for page preparation, which parses once (design D9)."""
     codec = query_codec(encoding)
     links: list[DiscoveredLink] = []
-    for node in _link_nodes(tree):
+    for node, declared_in in _link_nodes(tree):
         attributes = node.attributes
         rel = rel_tokens(attributes.get("rel") or "")
         for link_type, attribute, raw in _references(node.tag or "", attributes, rel, node.parent):
@@ -115,7 +115,7 @@ def links_in_tree(
                     attribute=attribute,
                     rel=rel,
                     nofollow="nofollow" in rel,
-                    declared_in="html",
+                    declared_in=declared_in,
                     ordinal=first_ordinal + len(links),
                     is_internal=is_internal(target),
                 )
@@ -123,14 +123,20 @@ def links_in_tree(
     return links
 
 
-def _link_nodes(tree: LexborHTMLParser) -> Iterator[LexborNode]:
+def _link_nodes(tree: LexborHTMLParser) -> Iterator[tuple[LexborNode, DeclaredIn]]:
     # A foreign <noscript>'s text is decoded markup, and its child elements are in the tree.
     foreign = {node.mem_id for node in tree.css("svg noscript, math noscript") if _is_foreign(node)}
+    # Where the parser placed the element: what it moved out of <head> is in <body>.
+    head = tree.head
+    in_head = set() if head is None else {node.mem_id for node in head.css(_ELEMENTS)}
     for node in tree.css(_ELEMENTS):
+        declared_in: DeclaredIn = "head" if node.mem_id in in_head else "body"
         if node.tag != "noscript":
-            yield node
+            yield node, declared_in
         elif node.mem_id not in foreign:
-            yield from _noscript_links(node.text())
+            # Its fragment's Links take the <noscript>'s place.
+            for found in _noscript_links(node.text()):
+                yield found, declared_in
 
 
 def _is_foreign(noscript: LexborNode) -> bool:
