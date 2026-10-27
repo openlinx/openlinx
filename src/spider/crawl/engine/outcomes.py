@@ -59,7 +59,10 @@ class Outcomes:
     async def _fall_back(self, result: UrlResult, error: BaseException) -> None:
         message = f"{type(error).__name__}: {error}"
         unit = record_unwritten(
-            result.url_id, message, blocked_by_robots_txt=result.blocked_by_robots_txt
+            result.url_id,
+            message,
+            blocked_by_robots_txt=result.blocked_by_robots_txt,
+            attempt_count=result.attempt_count,
         )
         try:
             await (await self._context.writer.submit_async(unit))

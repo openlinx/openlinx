@@ -69,6 +69,7 @@ def _fetched(url_id: int, *discovered: NewUrl) -> FetchedUrl:
         fetched_at=datetime(2026, 10, 14, 9, 0, tzinfo=UTC),
         response_time_ms=10,
         parsed=True,
+        attempt_count=1,
         discovered=discovered,
     )
 
@@ -108,6 +109,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     fetched_at=datetime(2026, 9, 27, 14, 3, 13, tzinfo=UTC),
                     response_time_ms=120,
                     parsed=True,
+                    attempt_count=2,
                     discovered=found,
                     rows=(HandlerRows(_write_note, (Note(seed_id),)),),
                 ),
@@ -125,10 +127,15 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     fetch_error="connection_refused",
                     fetch_error_message="ConnectionRefusedError: refused",
                     fetched_at=datetime(2026, 9, 27, 14, 3, 14, tzinfo=UTC),
+                    attempt_count=3,
                 ),
             )
         )
-        writer.run(record_unwritten(seed_id + 3, "ValueError: no row", blocked_by_robots_txt=False))
+        writer.run(
+            record_unwritten(
+                seed_id + 3, "ValueError: no row", blocked_by_robots_txt=False, attempt_count=1
+            )
+        )
         counts = writer.run(url_counts())
         replay_now(writer)
 

@@ -188,7 +188,7 @@ class FetchedUrl:
     fetched_at: datetime
     response_time_ms: int
     parsed: bool
-    attempt_count: int = 1
+    attempt_count: int
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
     # NULL when robots.txt was not checked (design D6).
@@ -220,7 +220,7 @@ class ErroredUrl:
     # None without a request of its own: its origin's robots.txt got no response.
     fetched_at: datetime | None
     # 0 without a request of its own.
-    attempt_count: int = 0
+    attempt_count: int
     blocked_by_robots_txt: bool | None = None
     rows: tuple[HandlerRows[Any], ...] = ()
 

@@ -130,8 +130,9 @@ def fetch_error_of(error: Exception) -> FetchError:
     # aiohttp reports a response it cannot read as HTTP this way.
     if isinstance(error, aiohttp.ClientResponseError):
         return "invalid_response"
-    # aiohttp's connect and read timeouts derive from TimeoutError, as its total timeout raises.
-    if isinstance(error, TimeoutError):
+    # aiohttp's connect and read timeouts derive from TimeoutError, as its total timeout raises;
+    # the OS's own connect timeout (ETIMEDOUT) comes wrapped in a connector error.
+    if isinstance(cause, TimeoutError):
         return "timeout"
     return "connection_error"
 

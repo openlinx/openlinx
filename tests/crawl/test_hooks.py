@@ -431,15 +431,16 @@ def test_a_url_whose_rows_cannot_be_written_is_recorded_as_an_error(
     assert (
         query(
             result.crawl_file,
-            "SELECT url, fetch_state, fetch_error FROM urls WHERE url IN (?, ?) ORDER BY id",
+            "SELECT url, fetch_state, fetch_error, attempt_count FROM urls "
+            "WHERE url IN (?, ?) ORDER BY id",
             [server.url("/boom"), server.url("/ok")],
         ),
         result.summary.state,
         [(warning.code, warning.details["count"]) for warning in result.warnings],
     ) == (
         [
-            (server.url("/boom"), "error", "record_failed"),
-            (server.url("/ok"), "fetched", None),
+            (server.url("/boom"), "error", "record_failed", 1),
+            (server.url("/ok"), "fetched", None, 1),
         ],
         "completed",
         [("record_failed", 1)],

@@ -26,6 +26,8 @@ class FakeFetcher:
     path and the clock's monotonic time when it started."""
 
     def __init__(self, clock: Clock, pages: Mapping[str, FakePage | Sequence[FakePage]]) -> None:
+        if any(not isinstance(page, FakePage) and not page for page in pages.values()):
+            raise ValueError("a sequence of fake pages takes at least one page")
         self._clock = clock
         self._pages = pages
         self._answered: dict[str, int] = {}

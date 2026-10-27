@@ -68,7 +68,7 @@ Frontier ──► Engine ──► Requester ──► Fetcher ──► Page e
 
 - **Frontier:** the queue of URLs still to crawl lives in the crawl store, which makes it the single source of truth for resume, `status` and queries during a crawl ([ADR-0001](adr/0001-own-asyncio-engine-over-scrapy.md)).
 - **Engine:** reads the frontier depth by depth and decides each URL once, at dispatch: the Scope (URLs outside it are status-checked but not followed), robots.txt (Protego, through the robots.txt loader), the depth limit and the URL limit.
-- **Requester:** makes every request of a Crawl, a URL's own and robots.txt's: the host's slot (per-host concurrency, default 5), the global cap and the URL limit, and later the rate limit, the watchdog, the network pause and retries. Nothing else calls the Fetcher; a guard in `tests/test_code_style.py` names any request made elsewhere.
+- **Requester:** makes every request of a Crawl, a URL's own and robots.txt's: the host's slot (per-host concurrency, default 5), its turn under the rate limit, the global cap, the URL limit and retries, and later the watchdog and the network pause. Nothing else calls the Fetcher; a guard in `tests/test_code_style.py` names any request made elsewhere.
 - **Fetcher:** aiohttp behind an interface, so httpx2, niquests or Playwright (v1.1) can replace it. It makes one hop; `022` follows redirects hop by hop and records every hop. HTTP version is measured once per host with a TLS ALPN check.
 - **Page executor:** in process, or `026`'s process pool, so that parsing never blocks the event loop.
   - Extractors turn a response into Page data, Links and Resources.

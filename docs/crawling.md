@@ -142,7 +142,7 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 
 | What fails | How the URL is recorded |
 |---|---|
-| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `tls_error` (the TLS handshake failed, such as a self-signed or expired certificate), `connection_error` (any other failure, a connection reset in the middle of the body included) |
+| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `tls_error` (the TLS handshake failed, such as a self-signed or expired certificate), `timeout` (no complete response within `--timeout`), `connection_error` (any other failure, a connection reset in the middle of the body included). The last attempt's, after the retries (see [Timeouts and retries](#timeouts-and-retries)). |
 | The body has bytes its character encoding cannot hold | Nothing: they are decoded as replacement characters, and the Page is parsed as usual. |
 | A registered extractor raises an error | `parsed` stays 1 and the Page's Links are followed; `parse_error` = `extractor_error`, and `parse_error_message` names the extractor and the error's type, such as `title: ValueError`. Only that extractor's output is missing. |
 | A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |
@@ -251,7 +251,7 @@ Each URL's row says what it is: `urls.is_internal` is 1 for an Internal URL, and
 
 ### External URLs
 
-A hyperlink to an External URL is checked, not followed: the URL is requested once, its response is recorded (`status_code`, `content_type`, `response_time_ms`), and it is never parsed, so `parsed` = 0 and nothing it links to is recorded. A broken outbound link therefore shows as a 4xx or 5xx `status_code`, or as a `fetch_error`, such as `dns_error` for a host that no longer exists (see [When one URL fails](#when-one-url-fails)).
+A hyperlink to an External URL is checked, not followed: the URL is requested, retried as any request is, its response is recorded (`status_code`, `content_type`, `response_time_ms`), and it is never parsed, so `parsed` = 0 and nothing it links to is recorded. A broken outbound link therefore shows as a 4xx or 5xx `status_code`, or as a `fetch_error`, such as `dns_error` for a host that no longer exists (see [When one URL fails](#when-one-url-fails)).
 
 External URLs count against the same limits as internal ones: at most `--concurrency` requests to each External host, and the cap on URLs in progress in all.
 
@@ -354,8 +354,8 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 |---|---|---|
 | 2xx | `ok` | Requested, unless its rules disallow them for the token: a disallowed URL is `skipped` with `skip_reason` = `blocked_by_robots_txt`. |
 | 4xx other than 429, or more than 5 redirects | `missing` | All requested. |
-| 5xx, 429, or a status outside 200–599 | `unreachable` | None requested: each is `skipped` with `skip_reason` = `robots_unreachable`. An Internal origin gives a `robots_unreachable` warning, once per host, whose hint names `--ignore-robots`. |
-| No HTTP response | `unreachable` | None requested: each is `error`, with the `fetch_error` of the robots.txt request, such as `dns_error`, and a `fetch_error_message` that names that request. |
+| 5xx, 429, or a status outside 200–599, after its retries | `unreachable` | None requested: each is `skipped` with `skip_reason` = `robots_unreachable`. An Internal origin gives a `robots_unreachable` warning, once per host, whose hint names `--ignore-robots`. |
+| No HTTP response, after its retries | `unreachable` | None requested: each is `error`, with the `fetch_error` of the robots.txt request, such as `dns_error`, and a `fetch_error_message` that names that request. |
 
 `urls.blocked_by_robots_txt` is 1 for a URL the rules disallow, 0 for one they allow, and NULL for a URL that was not checked: one skipped before robots.txt mattered, or one of an origin whose rules are unknown.
 
@@ -405,7 +405,7 @@ The Crawl reads Links from every response it parses: an in-Scope 2xx HTML respon
 | `mobile_alternate` | `<link rel="alternate" media>` without `hreflang` | no |
 | `misc` | `<link href>` with any other `rel`, such as `icon`, `manifest`, `preload`, or a feed's `alternate` | no |
 
-- A Resource is checked: requested once to record its response, whenever its Page is followed, even one deeper than `--max-depth`, and parsed only when it turns out to be in-Scope HTML. A broken image shows as its 4xx or 5xx `status_code`.
+- A Resource is checked: requested to record its response, retried as any request is, whenever its Page is followed, even one deeper than `--max-depth`, and parsed only when it turns out to be in-Scope HTML. A broken image shows as its 4xx or 5xx `status_code`.
 - A URL reached only through Links that are not requested is recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`. A Link that is requested, on the same Page or a later one, still requests it.
 - `<link rel="preconnect">` and `rel="dns-prefetch"` name an origin to connect to, not a file, so they give no Link.
 - `rel` tokens are compared without case: `rel="NoFollow"` is `nofollow`.

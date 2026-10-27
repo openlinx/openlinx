@@ -54,6 +54,7 @@ _ERRORS: list[tuple[Exception, str]] = [
     (UnicodeError("label empty or too long"), "dns_error"),
     (aiohttp.ClientConnectorError(_KEY, ConnectionRefusedError()), "connection_refused"),
     (aiohttp.ClientConnectorError(_KEY, OSError("network unreachable")), "connection_error"),
+    (aiohttp.ClientConnectorError(_KEY, TimeoutError("connect timed out")), "timeout"),
     (aiohttp.ClientProxyConnectionError(_KEY, OSError("proxy down")), "connection_error"),
     (aiohttp.ClientOSError(OSError("broken pipe")), "connection_error"),
     (aiohttp.ClientConnectionResetError("reset by peer"), "connection_error"),

@@ -1,6 +1,7 @@
 """The proxy variables (022-add-fetch-policy, fetching; seam 3)."""
 
 import json
+import socket
 
 import pytest
 
@@ -144,3 +145,28 @@ _PROXY_CASES = [
 @pytest.mark.parametrize(("environ", "url", "proxy"), _PROXY_CASES)
 def test_the_proxy_of_a_url(environ: dict[str, str], url: str, proxy: str | None) -> None:
     assert ProxyVariables.of(environ).for_url(url) == proxy
+
+
+def test_a_proxy_that_is_down_is_named_in_the_failure(
+    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A port that nothing listens on: the proxy is down, not the site.
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{port}")
+
+    [(fetch_error, message)] = query(
+        crawled("http://site.test/", "--retries", "0"),
+        "SELECT fetch_error, fetch_error_message FROM urls WHERE url = 'http://site.test/'",
+    )
+
+    assert (
+        fetch_error,
+        "ClientProxyConnectionError" in message,
+        f"127.0.0.1:{port}" in message,
+    ) == (
+        "connection_refused",
+        True,
+        True,
+    )

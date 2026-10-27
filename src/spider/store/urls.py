@@ -85,6 +85,7 @@ _UNWRITTEN = _URL_ROW.values(
     fetch_state="error",
     fetch_error="record_failed",
     fetch_error_message=bindparam("failure_message"),
+    attempt_count=bindparam("attempts"),
     blocked_by_robots_txt=bindparam("robots_blocked"),
 )
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
@@ -260,13 +261,16 @@ def record_error(errored: ErroredUrl) -> UrlUnit:
     return unit
 
 
-def record_unwritten(url_id: int, message: str, *, blocked_by_robots_txt: bool | None) -> UrlUnit:
-    """The fallback unit of a URL whose own unit failed: only its state, and what robots.txt
-    said of it (design D2)."""
+def record_unwritten(
+    url_id: int, message: str, *, blocked_by_robots_txt: bool | None, attempt_count: int
+) -> UrlUnit:
+    """The fallback unit of a URL whose own unit failed: only its state, what robots.txt said
+    of it, and the requests made for it (design D2)."""
     values = {
         "url_id": url_id,
         "failure_message": message,
         "robots_blocked": blocked_by_robots_txt,
+        "attempts": attempt_count,
     }
 
     def unit(connection: Connection) -> None:

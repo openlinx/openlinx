@@ -50,8 +50,10 @@ Every route takes these as keyword arguments:
 - `delay=0.5`: seconds to wait before the response headers.
 - `hang=True`: never answer.
 - `reset_after=100`: send the headers, with the whole body's `Content-Length`, and that many bytes of the body, then reset the connection (TCP RST).
+- `stall_body=True`: send the headers, then never the body.
+- `trickle=True`: send the headers, then the body one byte every 100 ms, never ending, which no per-read timeout ever ends.
 
-When the server stops, it cancels every handler still running (hanging or delayed) before aiohttp's cleanup, which would otherwise wait up to 60 s for them.
+When the server stops, it cancels every handler still running (hanging, delayed, stalled or trickling) before aiohttp's cleanup, which would otherwise wait up to 60 s for them.
 
 ## Fixtures
 
