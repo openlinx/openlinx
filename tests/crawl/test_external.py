@@ -86,6 +86,7 @@ def test_each_url_points_to_its_origin(
             routes={
                 "/": Page(
                     body='<a href="/about">About</a> <a href="http://other.test/page">Other</a> '
+                    # Nothing listens on 8080: a DNS error, whose origin is recorded all the same.
                     '<a href="http://other.test:8080/port">Port</a>'
                 ),
                 "/about": Page(body="<p>About</p>"),

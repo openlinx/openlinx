@@ -359,7 +359,7 @@ The Crawl honours the standard proxy variables, as curl, pip and uv do. It is th
 
 ### TLS
 
-- **Trust:** every https request, robots.txt's included, verifies the server's certificate and its host name against the operating system's trust store, through truststore. Where truststore cannot be loaded, on a Python or OpenSSL it cannot verify with, certifi's CA bundle is used instead.
+- **Trust:** every https request, robots.txt's included, verifies the server's certificate and its host name against the operating system's trust store, through truststore. Where truststore cannot be loaded, on a Python runtime it does not support, certifi's CA bundle is used instead.
 - **A certificate that does not verify,** such as one issued for another name, one from a CA the trust store does not hold, or an expired one, records the URL with `fetch_state` = `error` and `fetch_error` = `tls_error`, and is not retried. When robots.txt's certificate does not verify, every URL of the origin gets that `tls_error` without a request of its own (see [What the response means](#what-the-response-means)).
 - **Speed:** asking the operating system costs no measurable time. `scripts/tls_handshake_speed.py` timed 20 fresh handshakes per trust store to each of five public hosts, in two runs per OS. The median over the hosts that answered, first run / second run:
 
@@ -368,7 +368,7 @@ The Crawl honours the standard proxy variables, as curl, pip and uv do. It is th
   | Windows 11, Python 3.14 | 80.7 / 75.5 ms | 80.0 / 74.6 ms | +0.7 / +0.9 ms |
   | Linux (WSL2), Python 3.13 | 72.3 / 71.9 ms | 70.1 / 73.5 ms | +2.2 / -1.6 ms |
 
-  Per host the difference ran from -4.5 to +6.0 ms, both ways, inside the network's own spread. Building the context, once per Crawl, takes 2 to 6 ms with truststore and 24 to 28 ms with certifi. macOS is not measured yet.
+  Per host the difference ran from -4.5 to +6.0 ms, both ways, inside the network's own spread. Building the context, once per run, takes 2 to 6 ms with truststore and 24 to 28 ms with certifi. macOS is not measured yet.
 
 ## Redirects
 

@@ -31,5 +31,5 @@ selectolax  # the HTML parser of the link extractor, lexbor backend (design D5 o
 protego  # the robots.txt parser (design D6 of 020-add-crawl-core)
 sqlalchemy  # the crawl store: SQLite through SQLAlchemy 2 Core (ADR-0003, 015-add-crawl-store)
 brotli  # the br decoder of read_body, bounded in output (design D1 of 022-add-fetch-policy)
-truststore  # TLS verification against the OS trust store, imported only from spider.crawl.fetch (design D5 of 022-add-fetch-policy)
-certifi  # the CA bundle when truststore cannot be loaded, imported only from spider.crawl.fetch (design D5 of 022-add-fetch-policy)
+truststore  # TLS verification against the OS trust store, imported only from spider.crawl.fetch and scripts/tls_handshake_speed.py (design D5 of 022-add-fetch-policy)
+certifi  # the CA bundle when truststore cannot be loaded, imported only from spider.crawl.fetch and scripts/tls_handshake_speed.py (design D5 of 022-add-fetch-policy)

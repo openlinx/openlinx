@@ -63,11 +63,21 @@ def _summary(samples: list[float]) -> tuple[float, float]:
     return statistics.median(samples), statistics.quantiles(samples, n=10)[-1]
 
 
+def _row(label: str, samples: dict[str, list[float]]) -> None:
+    t_median, t_p90 = _summary(samples["truststore"])
+    c_median, c_p90 = _summary(samples["certifi"])
+    truststore_cell = f"{t_median:.1f} / {t_p90:.1f} ms"
+    certifi_cell = f"{c_median:.1f} / {c_p90:.1f} ms"
+    print(f"{label:<22}{truststore_cell:>24}{certifi_cell:>22}{t_median - c_median:>+7.1f} ms")
+
+
 def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--rounds", type=int, default=20)
     parser.add_argument("hosts", nargs="*", default=list(HOSTS))
     arguments = parser.parse_args(argv)
+    if arguments.rounds < 2:
+        parser.error("--rounds takes at least 2, for a 90th percentile")
 
     contexts = {name: _built(make) for name, make in STORES.items()}
     print(
@@ -91,15 +101,8 @@ def main(argv: list[str]) -> None:
         for name in STORES:
             every[name].extend(samples[name])
         _row(host, samples)
-    _row("all hosts", every)
-
-
-def _row(label: str, samples: dict[str, list[float]]) -> None:
-    t_median, t_p90 = _summary(samples["truststore"])
-    c_median, c_p90 = _summary(samples["certifi"])
-    truststore_cell = f"{t_median:.1f} / {t_p90:.1f} ms"
-    certifi_cell = f"{c_median:.1f} / {c_p90:.1f} ms"
-    print(f"{label:<22}{truststore_cell:>24}{certifi_cell:>22}{t_median - c_median:>+7.1f} ms")
+    if every["truststore"]:
+        _row("all hosts", every)
 
 
 if __name__ == "__main__":

@@ -161,7 +161,7 @@ One row for each origin of a URL that the Crawl recorded.
 | `robots_txt` | TEXT | yes | | | | The robots.txt body as parsed, up to 512,000 bytes. |
 | `robots_crawl_delay_ms` | INTEGER | yes | | | | The Crawl-delay for the robots user-agent token; recorded, not applied. |
 | `robots_sitemaps` | TEXT | yes | | `json` | | JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not been fetched. |
-| `http_version` | TEXT | yes | | | `http_2`, `http_1_1` | Filled from v0.2. The HTTP version that the origin's requests use; NULL when its TLS handshake fails. |
+| `http_version` | TEXT | yes | | | `http_2`, `http_1_1` | Filled from v0.2. The HTTP version that the origin's requests use. |
 
 ### Indexes
 

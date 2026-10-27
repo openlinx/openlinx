@@ -449,8 +449,7 @@ origins = public_table(
     Column(
         "http_version",
         Text,
-        comment="Filled from v0.2. The HTTP version that the origin's requests use; NULL when its "
-        "TLS handshake fails.",
+        comment="Filled from v0.2. The HTTP version that the origin's requests use.",
         info={"values": literal_values(HttpVersion)},
     ),
     comment="One row for each origin of a URL that the Crawl recorded.",

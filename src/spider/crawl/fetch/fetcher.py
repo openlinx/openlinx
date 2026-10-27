@@ -166,7 +166,8 @@ async def aiohttp_fetcher(
     resolver: AbstractResolver | None = None,
     trust_anchors: str | None = None,
 ) -> AsyncIterator[AiohttpFetcher]:
-    """`resolver` and `trust_anchors` are the DNS resolver hook and the test CA of the tests."""
+    """`resolver` and `trust_anchors` (PEM certificates trusted besides the OS store) are for
+    tests: the DNS resolver hook and the test CA."""
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(resolver=resolver, ssl=tls_context(trust_anchors)),
         timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),

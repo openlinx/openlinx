@@ -3,7 +3,6 @@
 import ssl
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack
-from functools import partial
 
 import pytest
 from aiohttp.abc import AbstractResolver
@@ -19,7 +18,7 @@ from tests.fixture_site.hosts import (
 )
 from tests.fixture_site.routes import Site
 from tests.fixture_site.server import RunningServer, Serve, ServerHandle
-from tests.fixture_site.tls import StartTlsHosts, tls_hosts_for
+from tests.fixture_site.tls import SiteOrBuilder, StartTlsHosts, TlsHosts, tls_hosts_for
 from tests.support.proxy import ForwardProxy, StartProxy
 
 StartSite = Callable[[Site], ServerHandle]
@@ -37,7 +36,7 @@ def _serve_sites() -> Iterator[Serve]:
 
 
 @pytest.fixture
-def fixture_site() -> Iterator[StartSite]:
+def fixture_site() -> Iterator[Serve]:
     yield from _serve_sites()
 
 
@@ -68,11 +67,14 @@ def fixture_named_hosts(fixture_site: StartSite) -> StartNamedHosts:
 
 
 @pytest.fixture
-def fixture_tls_hosts() -> Iterator[StartTlsHosts]:
+def fixture_tls_hosts(fixture_site: Serve) -> StartTlsHosts:
     """site.test over http and https, and two https listeners whose certificates fail,
     behind the DNS resolver hook."""
-    for serve in _serve_sites():
-        yield partial(tls_hosts_for, serve)
+
+    def start(site: SiteOrBuilder, other: Site) -> TlsHosts:
+        return tls_hosts_for(fixture_site, site, other)
+
+    return start
 
 
 @pytest.fixture

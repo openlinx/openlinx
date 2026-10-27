@@ -48,11 +48,11 @@ def columns_of(table: str) -> dict[str, dict[str, Any]]:
 def test_the_http_version_is_a_later_column() -> None:
     column = columns_of("origins")["http_version"]
 
-    assert (column["nullable"], column["values"], column["description"][:18]) == (
-        True,
-        ["http_2", "http_1_1"],
-        "Filled from v0.2. ",
-    )
+    assert (
+        column["nullable"],
+        column["values"],
+        column["description"].startswith("Filled from v0.2. "),
+    ) == (True, ["http_2", "http_1_1"], True)
 
 
 def test_column_formats() -> None:

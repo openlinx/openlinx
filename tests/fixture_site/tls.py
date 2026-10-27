@@ -33,34 +33,34 @@ class TlsHosts:
 
 
 # A site, or a function that builds it from the untrusted listener's port, to link to it.
-type SiteOf = Site | Callable[[int], Site]
-StartTlsHosts = Callable[[SiteOf, Site], TlsHosts]
+type SiteOrBuilder = Site | Callable[[int], Site]
+StartTlsHosts = Callable[[SiteOrBuilder, Site], TlsHosts]
 
 
-def tls_hosts_for(serve: Serve, site: SiteOf, other: Site) -> TlsHosts:
-    trusted, untrusted = trustme.CA(), trustme.CA()
-    stranger = serve(other, _listening(untrusted.issue_cert(OTHER_HOST)))
-    stranger_port = urlsplit(stranger.base_url).port or 0
+def tls_hosts_for(serve: Serve, site: SiteOrBuilder, other: Site) -> TlsHosts:
+    trusted_ca, untrusted_ca = trustme.CA(), trustme.CA()
+    untrusted = serve(other, _listening(untrusted_ca.issue_cert(OTHER_HOST)))
+    untrusted_port = urlsplit(untrusted.base_url).port or 0
     if not isinstance(site, Site):
-        site = site(stranger_port)
+        site = site(untrusted_port)
     plain = serve(site)
-    secure = serve(site, _listening(trusted.issue_cert(*SITE_HOSTS)))
-    badcert = serve(other, _listening(trusted.issue_cert(OTHER_HOST)))
+    secure = serve(site, _listening(trusted_ca.issue_cert(*SITE_HOSTS)))
+    badcert = serve(other, _listening(trusted_ca.issue_cert(OTHER_HOST)))
     servers = {
         **{(name, HTTP_PORT): plain for name in SITE_HOSTS},
         **{(name, HTTPS_PORT): secure for name in SITE_HOSTS},
         (BADCERT_HOST, HTTPS_PORT): badcert,
-        (OTHER_HOST, stranger_port): stranger,
+        (OTHER_HOST, untrusted_port): untrusted,
     }
     return TlsHosts(
         site=plain,
         secure_site=secure,
         badcert=badcert,
-        untrusted=stranger,
-        untrusted_port=stranger_port,
+        untrusted=untrusted,
+        untrusted_port=untrusted_port,
         resolver=FixtureResolver(servers),
-        trust_anchors=_pem(trusted),
-        untrusted_anchors=_pem(untrusted),
+        trust_anchors=_pem(trusted_ca),
+        untrusted_anchors=_pem(untrusted_ca),
     )
 
 

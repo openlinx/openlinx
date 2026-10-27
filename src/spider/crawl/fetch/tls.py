@@ -17,7 +17,8 @@ def tls_context(trust_anchors: str | None = None) -> ssl.SSLContext:
 
 def _trust_store_context() -> ssl.SSLContext:
     try:
-        # truststore refuses to load on a Python or OpenSSL it cannot verify with.
+        # truststore refuses to load on a Python runtime it does not support. Imported here, so
+        # that a failed import falls back for this context instead of failing the module.
         import truststore
     except ImportError:
         return ssl.create_default_context(cafile=certifi.where())
