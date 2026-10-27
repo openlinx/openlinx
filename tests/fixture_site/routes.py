@@ -21,6 +21,8 @@ class RouteOptions:
     hang: bool = False
     # Send the headers and this many bytes of the body, then reset the connection.
     reset_after: int | None = None
+    # Answer only once the site has received a request for this path, then after `delay`.
+    after: str | None = None
 
 
 @dataclass(frozen=True)
