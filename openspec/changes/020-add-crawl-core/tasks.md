@@ -370,6 +370,8 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 12.0b Fix: `wait_turn` reserves the host's `next_start` and sleeps without holding a lock, so one host's rate waits overlap the other hosts' (design D7).
   Done when: a request waiting for its turn on one host lets another host's request start, with 21 hosts at the default cap, red by mutation of `wait_turn` moved inside the global cap; and one host's requests that the full cap held back start 1/rate apart, red by mutation of the Requester's `started` call removed. Both Risks entries on the turn's order and its serialization go.
 - [x] 12.0c Drive "The global cap bounds requests across hosts", fake timing.
+- [ ] 12.0d Fix: an exception that escapes a URL's task ends the run as a bug, and its URL is never dispatched again (design D16).
+  Done when: through the Crawl Service, with a page executor of the test's own whose `prepare` raises `RuntimeError` for `/broken`, the Crawl raises that error, `/broken` is prepared once and the Crawl stays `running`, both when `/broken` fails before the dispatcher waits on its depth's tasks and when it is a Checked URL that fails before the sweep waits on it, each red by removing the capture; and `_cancel_all` tolerates only `CancelledError`.
 - [ ] 12.1 Drive "Every stderr line is an event or a diagnostic" at seam 1.
 - [ ] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
 - [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
@@ -382,18 +384,18 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.8 Drive "Post-crawl passes do not run for a failed Crawl" at seam 2.
 - [ ] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
 
-  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`. `docs/crawling.md` describes `crawl_write_failed` in place of "a later release".
+  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`. The full-disk run's stderr holds only event and diagnostic lines, never asyncio's "Task exception was never retrieved". `docs/crawling.md` describes `crawl_write_failed` in place of "a later release".
 - [ ] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 1, with a handler and its writer registered for the test. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
 
   Done when: the record-failure count of design D16 trips at `RECORD_FAILURE_LIMIT` (100) URL units in a row that failed on their first run, a URL unit that commits resets it, fallback units do not count, and the constant's comment says why.
 - [ ] 12.11 Drive "A network wait of zero fails at once" at seam 1, with the reset route of task 5.11.
 
-  Done when: the network pause's count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without an HTTP response, counting the codes D16 lists and the URLs recorded from an Internal origin's robots.txt without a response, but never `tls_error` or an External request; any response resets it; and with `--network-wait 0` the pause ends at once with `site_unreachable`.
+  Done when: the network pause's count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without an HTTP response, counting the codes D16 lists, a request that the watchdog ended among them, and the URLs recorded from an Internal origin's robots.txt without a response, but never `tls_error` or an External request; any response resets it; and with `--network-wait 0` the pause ends at once with `site_unreachable`.
 - [ ] 12.12 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared, with a hint that says how long the Crawl waited and names `spider resume` through `spider.naming`.
 - [ ] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
 - [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing. It runs right after 12.0c, before 12.1, since it needs only the virtual clock and the Requester.
 
-  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without an HTTP response for the network pause. The watchdog is the Requester's (design D7), around every request it makes.
+  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed by one pure function from the Fetcher's total request deadline, which it takes as an argument, `max(120 s, deadline + 30 s)`, tested at seam 4; and a robots.txt request that hangs gives its origin's URLs `fetch_error` = `watchdog` without a request of their own. The watchdog is the Requester's (design D7), around every request it makes.
 - [ ] 12.15 Drive "Probes back off to once a minute" at seam 4. Done when: one pure function gives the probe times of a network wait: 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, none later than the wait.
 - [ ] 12.16 Drive "A dead section does not stop the Crawl", fake timing.
 
