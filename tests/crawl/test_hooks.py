@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing
 from dataclasses import dataclass, fields, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,15 @@ from sqlalchemy import Connection, Engine, event, text
 from sqlalchemy.dialects import sqlite
 
 from spider.clock import Clock
-from spider.crawl.engine.hooks import Hooks, Pass, PassContext, UrlResult, handler
+from spider.crawl.engine.hooks import (
+    Hooks,
+    Pass,
+    PassContext,
+    UrlFailure,
+    UrlResponse,
+    UrlResult,
+    handler,
+)
 from spider.crawl.pages.preparation import Extractor, PageInput, extractor
 from spider.output.reporter import Collected
 from spider.services.hooks import default_hooks
@@ -531,15 +540,16 @@ class RowValues:
 
 
 def _row_values(result: UrlResult) -> tuple[RowValues, ...]:
+    response = result.response
     values = (
         result.fetch_state,
-        result.status_code,
-        result.content_type,
+        None if response is None else response.status_code,
+        None if response is None else response.content_type,
         result.parsed,
         result.discovered_via,
         result.found_on_url_id is not None,
-        result.fetched_at is not None,
-        result.response_time_ms is not None,
+        response is not None,
+        response is not None,
         result.is_internal,
         result.in_scope,
     )
@@ -715,16 +725,29 @@ def test_a_handler_gets_the_robots_txt_verdict_of_the_url(
     ]
 
 
-_RESULT_FIELDS = {field.name for field in fields(UrlResult)}
+# By final state: the store record, and where the UrlResult keeps that outcome's values.
+_OUTCOMES: dict[str, tuple[type, tuple[type, ...]]] = {
+    "fetched": (FetchedUrl, (UrlResponse, UrlResult)),
+    "skipped": (SkippedUrl, (UrlResult,)),
+    "error": (ErroredUrl, (UrlFailure, UrlResult)),
+}
 # By final state, the urls columns that its record shares with the UrlResult.
 _SHARED = {
     state: [
         field.name
         for field in fields(record)
-        if field.name in _RESULT_FIELDS and field.name != "url_id"
+        if field.name != "url_id"
+        and any(field.name in {f.name for f in fields(source)} for source in sources)
     ]
-    for state, record in [("fetched", FetchedUrl), ("skipped", SkippedUrl), ("error", ErroredUrl)]
+    for state, (record, sources) in _OUTCOMES.items()
 }
+
+
+def _value(result: UrlResult, name: str) -> object:
+    for source in (result.response, result.failure, result):
+        if source is not None and name in {f.name for f in fields(source)}:
+            return getattr(source, name)
+    raise AssertionError(f"no {name}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -735,9 +758,10 @@ class Values:
 
 def _values(result: UrlResult) -> tuple[Values, ...]:
     shared = _SHARED.get(result.fetch_state, [])
-    values: dict[str, object] = {name: getattr(result, name) for name in shared}
-    if "fetched_at" in values:
-        values["fetched_at"] = Timestamp().process_bind_param(result.fetched_at, sqlite.dialect())
+    values = {name: _value(result, name) for name in shared}
+    fetched_at = values.get("fetched_at")
+    if isinstance(fetched_at, datetime):
+        values["fetched_at"] = Timestamp().process_bind_param(fetched_at, sqlite.dialect())
     # As the store keeps a flag.
     stored = {name: int(v) if isinstance(v, bool) else v for name, v in values.items()}
     return (Values(result.url_id, json.dumps({"fetch_state": result.fetch_state, **stored})),)
@@ -804,7 +828,8 @@ class Header:
 
 
 def _headers(result: UrlResult) -> tuple[Header, ...]:
-    return tuple(Header(result.url_id, name) for name, _ in result.headers)
+    headers = () if result.response is None else result.response.headers
+    return tuple(Header(result.url_id, name) for name, _ in headers)
 
 
 def _write_headers(connection: Connection, rows: Sequence[Header]) -> None:

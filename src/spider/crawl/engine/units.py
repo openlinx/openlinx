@@ -2,7 +2,6 @@
 
 import asyncio
 from dataclasses import dataclass, replace
-from datetime import datetime
 from typing import Any
 
 from spider.crawl.engine.context import CrawlContext
@@ -14,7 +13,7 @@ from spider.crawl.engine.crawl_warnings import (
     warn_of_seed_base_mismatch,
 )
 from spider.crawl.engine.discovery import RESOURCES, discovered_urls
-from spider.crawl.engine.hooks import Handler, UrlResult
+from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
@@ -29,7 +28,6 @@ from spider.output.diagnostics import Diagnostic
 from spider.store.records import (
     ErroredUrl,
     FetchedUrl,
-    FetchError,
     NewUrl,
     QueuedUrl,
     SkippedUrl,
@@ -84,7 +82,12 @@ async def unit_of(
                 f"The robots.txt request of {url_origin(queued.url)} got no HTTP response, "
                 f"so the URL was not requested: {origin_robots.fetch_error_message}"
             )
-            return _errored(context, dispatched, origin_robots.fetch_error, message, None)
+            failure = UrlFailure(
+                fetch_error=origin_robots.fetch_error,
+                fetch_error_message=message,
+                fetched_at=None,
+            )
+            return _errored(context, dispatched, failure)
         skip_reason, blocked = _robots_verdict(context, origin_robots, queued, decision)
     decided = replace(dispatched, blocked_by_robots_txt=blocked)
     if skip_reason is not None:
@@ -100,28 +103,21 @@ async def unit_of(
     if decision.is_internal and run.blocking.responded(host, status_code):
         warn_of_possible_blocking(context, host)
     if isinstance(response, FetchFailure):
-        return _errored(
-            context, decided, response.fetch_error, response.message, response.fetched_at
+        failure = UrlFailure(
+            fetch_error=response.fetch_error,
+            fetch_error_message=response.message,
+            fetched_at=response.fetched_at,
         )
+        return _errored(context, decided, failure)
     return await _fetched(context, decided, response)
 
 
 def _errored(
-    context: CrawlContext,
-    decided: UrlResult,
-    fetch_error: FetchError,
-    message: str,
-    fetched_at: datetime | None,
+    context: CrawlContext, decided: UrlResult, failure: UrlFailure
 ) -> tuple[UrlResult, UrlUnit]:
-    failed = replace(
-        decided,
-        fetch_state="error",
-        fetch_error=fetch_error,
-        fetch_error_message=message,
-        fetched_at=fetched_at,
-    )
+    failed = replace(decided, fetch_state="error", failure=failure)
     rows = _handler_rows(context, failed)
-    return failed, record_error(_errored_record(failed, fetch_error, message, rows))
+    return failed, record_error(_errored_record(failed, failure, rows))
 
 
 def _robots_verdict(
@@ -187,25 +183,27 @@ async def _fetched(
     if parse_error is not None:
         failure = parse_failure(url, parse_error, parse_error_message)
         context.reporter.count(Diagnostic.of(PARSE_FAILED, failure), url)
+    url_response = UrlResponse(
+        status_code=response.status_code,
+        content_type=content_type,
+        headers=response.headers,
+        fetched_at=response.fetched_at,
+        response_time_ms=response.response_time_ms,
+    )
     fetched = replace(
         decided,
         fetch_state="fetched",
-        status_code=response.status_code,
-        content_type=content_type,
-        response_time_ms=response.response_time_ms,
-        fetched_at=response.fetched_at,
+        response=url_response,
         parsed=parsed,
         parse_error=parse_error,
         parse_error_message=parse_error_message,
-        headers=response.headers,
         outputs={} if page is None else dict(page.outputs),
     )
     rows = _handler_rows(context, fetched)
-    return fetched, record_fetched(_fetched_record(fetched, response, discovered, rows))
+    return fetched, record_fetched(_fetched_record(fetched, url_response, discovered, rows))
 
 
-# Each record reads from the UrlResult every field it shares with it; a field that the
-# record narrows comes from the value that set it in the UrlResult.
+# Each record reads its values from the UrlResult, and from the outcome's record in it.
 def _skipped_record(
     skipped: UrlResult, skip_reason: SkipReason, rows: tuple[HandlerRows[Any], ...]
 ) -> SkippedUrl:
@@ -219,16 +217,13 @@ def _skipped_record(
 
 
 def _errored_record(
-    failed: UrlResult,
-    fetch_error: FetchError,
-    message: str,
-    rows: tuple[HandlerRows[Any], ...],
+    failed: UrlResult, failure: UrlFailure, rows: tuple[HandlerRows[Any], ...]
 ) -> ErroredUrl:
     return ErroredUrl(
         url_id=failed.url_id,
-        fetch_error=fetch_error,
-        fetch_error_message=message,
-        fetched_at=failed.fetched_at,
+        fetch_error=failure.fetch_error,
+        fetch_error_message=failure.fetch_error_message,
+        fetched_at=failure.fetched_at,
         blocked_by_robots_txt=failed.blocked_by_robots_txt,
         rows=rows,
     )
@@ -236,14 +231,14 @@ def _errored_record(
 
 def _fetched_record(
     fetched: UrlResult,
-    response: FetchResult,
+    response: UrlResponse,
     discovered: tuple[NewUrl, ...],
     rows: tuple[HandlerRows[Any], ...],
 ) -> FetchedUrl:
     return FetchedUrl(
         url_id=fetched.url_id,
         status_code=response.status_code,
-        content_type=fetched.content_type,
+        content_type=response.content_type,
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
         parsed=fetched.parsed,

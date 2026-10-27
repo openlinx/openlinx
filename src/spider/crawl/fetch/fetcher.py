@@ -1,6 +1,6 @@
 """The Fetcher: one request, one hop, never a redirect followed (020-add-crawl-core D8)."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -16,6 +16,12 @@ from spider.store.records import FetchError
 
 # Fixed until 022 makes it a setting; the watchdog of design D16 outlasts it.
 _REQUEST_DEADLINE_SECONDS = 20
+
+
+def header_values(headers: Iterable[tuple[str, str]], name: str) -> list[str]:
+    """The values of the header `name`, in any letter case, in the order received."""
+    wanted = name.lower()
+    return [value for key, value in headers if key.lower() == wanted]
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,8 +41,7 @@ class FetchResult:
 
     def header(self, name: str) -> str | None:
         """The first value of the header `name`, in any letter case."""
-        wanted = name.lower()
-        return next((value for key, value in self.headers if key.lower() == wanted), None)
+        return next(iter(header_values(self.headers, name)), None)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

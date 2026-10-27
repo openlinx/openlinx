@@ -9,7 +9,7 @@ from typing import Any, Protocol
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.fetch.fetcher import FetchResult
+from spider.crawl.fetch.fetcher import FetchResult, header_values
 from spider.crawl.pages.decoding import decode_html
 from spider.crawl.pages.directives import (
     NO_DIRECTIVES,
@@ -123,7 +123,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     )
     directives = robots_directives(
         meta_robots_contents(tree),
-        [value for name, value in response.headers if name.lower() == "x-robots-tag"],
+        header_values(response.headers, "X-Robots-Tag"),
         settings.robots_token,
     )
     page = PageInput(

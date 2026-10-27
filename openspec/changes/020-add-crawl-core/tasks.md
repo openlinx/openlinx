@@ -173,7 +173,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 - [x] 5.19 Fix: a handler's writer takes the URL's rows as one sequence and runs one `executemany` (design D9).
   Done when: a crawl with a handler that returns several rows per URL runs one INSERT per URL's unit, red by mutation of one writer call per row.
-- [ ] 5.20 Refactor: `UrlResult.response` and `UrlResult.failure` replace the flat response and failure fields, the store records are built from them, and one header lookup serves `FetchResult`, `UrlResponse` and the `X-Robots-Tag` read (design D9), behaviour unchanged.
+- [x] 5.20 Refactor: `UrlResult.response` and `UrlResult.failure` replace the flat response and failure fields, the store records are built from them, and one header lookup serves `FetchResult`, `UrlResponse` and the `X-Robots-Tag` read (design D9), behaviour unchanged.
 - [ ] 5.21 Drive "A handler sees the X-Robots-Tag of a PDF" at seam 3.
 - [ ] 5.22 Drive "A handler sees the Links of a Page whose extractor failed" and "A canonical in the body is placed in the body" at seam 3.
 - [ ] 5.23 Drive "A nofollow Link does not request its target" at seam 3, with the follow rule in `spider.crawl.following`.
