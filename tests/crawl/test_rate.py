@@ -42,3 +42,23 @@ def test_crawl_delay_is_not_applied(temp_workspace: TempWorkspace) -> None:
         "/p3",
         "/robots.txt",
     ]
+
+
+# The Seed links to its own host twice, once with the trailing dot of a fully qualified name.
+TRAILING_DOT = {
+    "/": FakePage('<a href="http://site.test./p1">P1</a> <a href="/p2">P2</a>'),
+    "/p1": FakePage("<p>P1</p>"),
+    "/p2": FakePage("<p>P2</p>"),
+}
+
+
+def test_a_host_with_a_trailing_dot_shares_the_rate_turn_of_the_host(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    fetcher = FakeFetcher(clock, TRAILING_DOT)
+
+    crawl_result("http://site.test/", clock=clock, fetcher=fetcher, rate=2)
+
+    # One server: its robots.txt twice, as two origins, and the three Pages, one turn each.
+    assert sorted(start for _, start in fetcher.starts) == [0.0, 0.5, 1.0, 1.5, 2.0]

@@ -29,7 +29,7 @@ from spider.crawl.pages.preparation import (
 from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.robots.reader import OriginRobots
 from spider.crawl.scope import ScopeDecision
-from spider.crawl.urls import url_host, url_origin
+from spider.crawl.urls import host_key, url_origin
 from spider.output.codes import PARSE_FAILED
 from spider.output.diagnostics import Diagnostic
 from spider.store.records import (
@@ -105,7 +105,7 @@ async def unit_of(
     response = await run.requester.request_url(queued.url)
     if isinstance(response, UrlLimitRefused):
         return None
-    host = url_host(queued.url)
+    host = host_key(queued.url)
     status_code = None if isinstance(response, FetchFailure) else response.status_code
     if decision.is_internal and run.blocking.responded(host, status_code):
         warn_of_possible_blocking(context, host)

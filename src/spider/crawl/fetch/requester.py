@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from spider.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
 from spider.crawl.fetch.politeness import RateGate, RequestLimits
-from spider.crawl.urls import NormalizedUrl, url_host
+from spider.crawl.urls import NormalizedUrl, host_key
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +41,7 @@ class Requester:
     async def _slots(self, url: NormalizedUrl) -> AsyncIterator[None]:
         # The host's slot, then its turn under --rate, then the global cap: a request waiting
         # for a busy host, or for its turn, holds no global permit.
-        host = url_host(url)
+        host = host_key(url)
         async with self._limits.host(host):
             await self._gate.wait_turn(host)
             async with self._limits.request():
