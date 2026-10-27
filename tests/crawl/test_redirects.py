@@ -426,3 +426,28 @@ def test_a_looping_url_is_requested_once(
         "/loop-a",
         "/loop-b",
     ]
+
+
+def test_a_meta_refresh_is_not_recorded_as_a_redirect(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # An old page kept up only to send its visitors on, the way many CMS do.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/old">Old</a>'),
+                "/old": Page(body='<head><meta http-equiv="refresh" content="0; url=/new"></head>'),
+                "/new": Page(body="<title>New</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT source.status_code, source.redirect_url_id, source.in_redirect_loop, "
+        "target.discovered_via FROM urls AS source JOIN urls AS target "
+        "ON target.found_on_url_id = source.id WHERE source.url = ?",
+        [server.url("/old")],
+    ) == [(200, None, None, "meta_refresh")]
