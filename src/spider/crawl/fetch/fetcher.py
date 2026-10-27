@@ -63,6 +63,7 @@ class Fetcher(Protocol):
 
 
 _CHUNK_BYTES = 64 * 1024
+ACCEPT_ENCODING = "gzip, deflate, br"
 DEFAULT_USER_AGENT = f"{APP_NAME}/{__version__} (+{PROJECT_URL})"
 
 
@@ -149,7 +150,11 @@ async def aiohttp_fetcher(
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(resolver=resolver),
         timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
-        headers={"User-Agent": policy.user_agent},
+        headers={
+            "User-Agent": policy.user_agent,
+            # The codings this tool decodes itself, never aiohttp's own list (design D1).
+            "Accept-Encoding": ACCEPT_ENCODING,
+        },
         # No cookie session: a cookie set by one response would change what later ones return.
         cookie_jar=aiohttp.DummyCookieJar(),
     ) as session:
