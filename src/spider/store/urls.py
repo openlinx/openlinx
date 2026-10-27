@@ -72,13 +72,13 @@ _FOUND_ON = select(urls.c.discovered_via, urls.c.found_on_url_id).where(
 _REDIRECT_URL_ID = (
     update(urls)
     .where(urls.c.id == bindparam("url_id"))
-    .values(
-        redirect_url_id=select(urls.c.id).where(urls.c.url == bindparam("target")).scalar_subquery()
-    )
+    .values(redirect_url_id=bindparam("target_id"))
 )
+_REDIRECTS_TO = select(urls.c.redirect_url_id).where(urls.c.id == bindparam("url_id"))
 _DEPTH = select(urls.c.crawl_depth).where(urls.c.id == bindparam("url_id"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
+_IN_LOOP = _URL_ROW.values(in_redirect_loop=True)
 _RECLASSIFIED = _URL_ROW.values(is_internal=bindparam("internal"), in_scope=bindparam("scoped"))
 _FETCHED = _URL_ROW.values(
     fetch_state="fetched",
@@ -88,6 +88,7 @@ _FETCHED = _URL_ROW.values(
     fetched_at=bindparam("request_at"),
     attempt_count=bindparam("attempts"),
     redirect_location=bindparam("location"),
+    in_redirect_loop=bindparam("redirected"),
     parsed=bindparam("is_parsed"),
     parse_error=bindparam("parse_failure"),
     parse_error_message=bindparam("parse_failure_message"),
@@ -224,6 +225,21 @@ def _hops_to(connection: Connection, url_id: int, limit: int) -> int:
     return hops
 
 
+def _loop_through(connection: Connection, url_id: int, target_id: int, limit: int) -> list[int]:
+    # The redirect just stored can only close a loop that runs through it: walk forward from
+    # its target, at most `limit` reads, back to the URL (022-add-fetch-policy D2).
+    path = [url_id]
+    for _ in range(limit + 1):
+        if target_id == url_id:
+            return path
+        path.append(target_id)
+        following = connection.execute(_REDIRECTS_TO, {"url_id": target_id}).scalar()
+        if following is None:
+            break
+        target_id = following
+    return []
+
+
 def next_depth(depth: int) -> Callable[[Connection], int | None]:
     """A unit that only reads: the shallowest depth deeper than `depth` with a queued URL."""
 
@@ -244,6 +260,8 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         "response_ms": fetched.response_time_ms,
         "attempts": fetched.attempt_count,
         "location": fetched.redirect_location,
+        # 0 for any 3xx response until its redirect closes a loop.
+        "redirected": False if 300 <= fetched.status_code < 400 else None,
         "request_at": fetched.fetched_at,
         "is_parsed": fetched.parsed,
         "parse_failure": fetched.parse_error,
@@ -274,7 +292,11 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
             if _hops_to(connection, url_id, max_redirects) >= max_redirects:
                 target |= {"fetch_state": "skipped", "skip_reason": "max_redirects"}
             insert_urls(connection, _INSERT_DISCOVERED, [target])
-            connection.execute(_REDIRECT_URL_ID, {"url_id": url_id, "target": redirect_row["url"]})
+            target_id: int = connection.execute(_URL_ID, {"url": target["url"]}).scalar_one()
+            connection.execute(_REDIRECT_URL_ID, {"url_id": url_id, "target_id": target_id})
+            loop = _loop_through(connection, url_id, target_id, max_redirects)
+            if loop:
+                connection.execute(_IN_LOOP, [{"url_id": looping} for looping in loop])
         write_rows(connection, fetched.rows)
 
     return unit

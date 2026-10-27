@@ -1,5 +1,7 @@
 """Redirects followed hop by hop, each hop a URL row (022-add-fetch-policy, fetching; seam 3+6)."""
 
+from pathlib import Path
+
 import pytest
 
 from spider.naming import SETTINGS_FILE_NAME
@@ -345,4 +347,61 @@ def test_the_hop_limit_is_read_from_the_settings_file(
 
     assert _states(crawl_file, server.url("/offer")) == [
         (server.url("/offer"), "skipped", "max_redirects")
+    ]
+
+
+def _loop_flags(crawl_file: Path, *urls: str) -> list[tuple[str, int | None]]:
+    return [
+        row
+        for url in urls
+        for row in query(crawl_file, "SELECT url, in_redirect_loop FROM urls WHERE url = ?", [url])
+    ]
+
+
+def test_a_loop_of_two_urls_is_marked(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # Two rewrite rules that undo each other: the cart sends to the login, the login back.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/loop-a">Cart</a>'),
+                "/loop-a": Redirect("/loop-b", status=301),
+                "/loop-b": Redirect("/loop-a", status=301),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _loop_flags(crawl_file, server.url("/loop-a"), server.url("/loop-b")) == [
+        (server.url("/loop-a"), 1),
+        (server.url("/loop-b"), 1),
+    ]
+
+
+def test_only_a_redirect_on_a_loop_is_marked(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # A moved page, and an account page whose redirect sends it to itself.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/old">Old</a><a href="/account">Account</a>'),
+                "/old": Redirect("/new", status=301),
+                "/new": Page(body="<title>New</title>"),
+                "/account": Redirect("/account", status=302),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert _loop_flags(
+        crawl_file, server.url("/"), server.url("/old"), server.url("/new"), server.url("/account")
+    ) == [
+        (server.url("/"), None),
+        (server.url("/old"), 0),
+        (server.url("/new"), None),
+        (server.url("/account"), 1),
     ]

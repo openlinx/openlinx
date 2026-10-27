@@ -304,6 +304,12 @@ urls = public_table(
         "usable Location.",
     ),
     Column(
+        "in_redirect_loop",
+        Flag,
+        comment="1 when the URL is in a redirect loop, 0 for another 3xx response; NULL without a "
+        "3xx response.",
+    ),
+    Column(
         "attempt_count",
         Integer,
         nullable=False,

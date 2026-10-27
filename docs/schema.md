@@ -124,6 +124,7 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `response_time_ms` | INTEGER | yes | | | | Time from sending the request to receiving the whole body. |
 | `redirect_location` | TEXT | yes | | | | The raw Location header of a 3xx response. |
 | `redirect_url_id` | INTEGER | yes | → `urls.id` | | | The redirect's target, resolved against the URL and normalised; NULL without a usable Location. |
+| `in_redirect_loop` | INTEGER | yes | | `boolean` | | 1 when the URL is in a redirect loop, 0 for another 3xx response; NULL without a 3xx response. |
 | `attempt_count` | INTEGER | no | | | | The number of requests made for the URL; 0 when it was not requested. |
 | `fetched_at` | TEXT | yes | | `timestamp` | | UTC time of the request. |
 | `parsed` | INTEGER | no | | `boolean` | | 1 when the response was parsed and its Links were found. |
