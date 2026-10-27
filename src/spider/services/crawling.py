@@ -4,7 +4,7 @@ import asyncio
 import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, nullcontext, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -31,7 +31,9 @@ from spider.crawl.urls import (
     url_origin,
     url_path,
 )
+from spider.naming import APP_NAME
 from spider.output.codes import (
+    CRAWL_WRITE_FAILED,
     INVALID_PATTERN,
     INVALID_URL,
     SEED_OUT_OF_SCOPE,
@@ -49,6 +51,7 @@ from spider.store.records import (
     CrawlSummary,
     NewCrawl,
     SecretNames,
+    StopReason,
     UrlCounts,
 )
 from spider.store.settings import StoreSettings
@@ -97,6 +100,8 @@ class CrawlResult:
     counts: UrlCounts
     crawl_file: Path
     warnings: tuple[Diagnostic, ...]
+    # The error of a failed Crawl, which the Command ends with after printing the result.
+    failure: SpiderError | None = None
 
     def to_json(self) -> dict[str, Any]:
         summary, counts = self.summary, self.counts
@@ -225,15 +230,24 @@ def start_crawl(
         fetcher=fetcher,
     )
     with asyncio.Runner(loop_factory=loop_factory) as runner:
-        ended_at, summary, counts = runner.run(_run(crawl))
+        ended = runner.run(_run(crawl))
     return CrawlResult(
         crawl_id=crawl.crawl_file.id,
-        summary=summary,
-        ended_at=ended_at,
-        counts=counts,
+        summary=ended.summary,
+        ended_at=ended.ended_at,
+        counts=ended.counts,
         crawl_file=crawl.crawl_file.path,
         warnings=log.warnings,
+        failure=ended.failure,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _End:
+    ended_at: datetime
+    summary: CrawlSummary
+    counts: UrlCounts
+    failure: SpiderError | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -250,26 +264,65 @@ class _Crawl:
     fetcher: Fetcher | None
 
 
-async def _run(crawl: _Crawl) -> tuple[datetime, CrawlSummary, UrlCounts]:
+async def _run(crawl: _Crawl) -> _End:
     async with _crawl_context(crawl) as context:
         await run_crawl(context, crawl.plan.seed)
-        stop_reason = context.stop.reason
-        if stop_reason not in (None, "max_urls"):
-            # Neither a write failure nor an interrupt has the end it records yet.
-            raise context.stop.cause or RuntimeError(f"no end is built for {stop_reason}")
-        writer = context.writer
-        # Before the end is written, for completed and stopped alike: 040 reads either state as
-        # "its Issues are materialised".
-        for crawl_pass in crawl.hooks.passes:
-            await crawl_pass.run(PassContext(writer, crawl.clock))
-        # One instant: the result's ended_at is the time the file records for the end.
-        ended_at = crawl.clock.now()
-        state: CrawlState = "completed" if stop_reason is None else "stopped"
-        # Before the end, so a reader that sees the end sees every warning.
-        await writer.run_async(record_warnings([w.to_json() for w in crawl.log.warnings]))
-        await writer.run_async(record_state(state, ended_at, stop_reason))
-        summary = await writer.run_async(crawl_summary())
-        return ended_at, summary, await writer.run_async(url_counts())
+        stop = context.stop
+        if stop.reason == "write_failed":
+            cause = stop.cause
+        elif stop.reason not in (None, "max_urls"):
+            # An interrupt has no end it records yet.
+            raise stop.cause or RuntimeError(f"no end is built for {stop.reason}")
+        else:
+            # Before the end is written, for completed and stopped alike: 040 reads either
+            # state as "its Issues are materialised".
+            for crawl_pass in crawl.hooks.passes:
+                await crawl_pass.run(PassContext(context.writer, crawl.clock))
+            state: CrawlState = "completed" if stop.reason is None else "stopped"
+            return await _end(crawl, context.writer, state, stop.reason)
+    return await _failed_end(crawl, _write_failed(crawl.crawl_file, cause))
+
+
+async def _failed_end(crawl: _Crawl, error: SpiderError) -> _End:
+    """Recorded once more through a fresh writer, since the Crawl's own one may have ended; if
+    that fails too, the file stays running (design D16)."""
+    try:
+        with crawl.clock.off_loop():
+            writer = await asyncio.to_thread(CrawlWriter, crawl.crawl_file.path, crawl.clock)
+        try:
+            async with writer.loop_deadline():
+                ended = await _end(crawl, writer, "failed", "write_failed")
+        finally:
+            await writer.close_async()
+    except Exception as again:
+        raise error from again
+    return replace(ended, failure=error)
+
+
+async def _end(
+    crawl: _Crawl, writer: CrawlWriter, state: CrawlState, stop_reason: StopReason | None
+) -> _End:
+    # One instant: the result's ended_at is the time the file records for the end.
+    ended_at = crawl.clock.now()
+    # Before the end, so a reader that sees the end sees every warning.
+    await writer.run_async(record_warnings([w.to_json() for w in crawl.log.warnings]))
+    await writer.run_async(record_state(state, ended_at, stop_reason))
+    summary = await writer.run_async(crawl_summary())
+    return _End(ended_at, summary, await writer.run_async(url_counts()))
+
+
+def _write_failed(crawl_file: CrawlFile, cause: BaseException | None) -> SpiderError:
+    # A file another connection holds is reported as the writer raised it (exit 5).
+    if isinstance(cause, SpiderError):
+        return cause
+    error = f"{type(cause).__name__}: {cause}"
+    return SpiderError(
+        CRAWL_WRITE_FAILED,
+        f"Writing the crawl file failed, so the Crawl ended failed: {error.rstrip('.')}.",
+        hint="Free disk space or fix the file system, then continue it with: "
+        f"{APP_NAME} resume --crawl {crawl_file.id}",
+        details={"crawl_file": str(crawl_file.path), "error": error},
+    )
 
 
 @asynccontextmanager
@@ -287,6 +340,7 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
             crawl_file=str(crawl_file.path),
             parse_workers=executor.workers,
         )
+        stop = StopSignal()
         # Opening and closing the writer block, so they run off the event loop.
         with clock.off_loop():
             writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
@@ -309,14 +363,19 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
                     fetcher=fetcher,
                     pages=executor,
                     hooks=crawl.hooks,
-                    stop=StopSignal(),
+                    stop=stop,
                 )
         except BaseException:
             # An ended writer raises why it ended once more; the error raised says it first.
             with suppress(CrawlWriterClosedError):
                 await writer.close_async()
             raise
-        await writer.close_async()
+        if stop.reason == "write_failed":
+            # Its failure is the stop's cause already, and the failed end gets a fresh writer.
+            with suppress(Exception):
+                await writer.close_async()
+        else:
+            await writer.close_async()
     finally:
         # 026's pool shuts its workers down here, however the Crawl ended.
         await executor.close()

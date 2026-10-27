@@ -186,25 +186,14 @@ def test_the_first_event_line_is_the_start_event(
     )
 
 
-def _is_event_or_diagnostic(line: bytes) -> bool:
-    try:
-        parsed = json.loads(line)
-    except ValueError:
-        return False
-    return isinstance(parsed, dict) and ("event" in parsed or "level" in parsed)
-
-
 def test_every_stderr_line_is_an_event_or_a_diagnostic(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(ROBOTS_DOWN)
 
-    lines = run_cli("crawl", server.url("/")).stderr.splitlines()
+    result = run_cli("crawl", server.url("/"))
 
-    assert ([line for line in lines if not _is_event_or_diagnostic(line)], bool(lines)) == (
-        [],
-        True,
-    )
+    assert (result.stray_stderr_lines(), bool(result.stderr)) == ([], True)
 
 
 def test_a_warning_is_written_as_a_diagnostic(

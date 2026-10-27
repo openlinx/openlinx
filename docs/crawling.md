@@ -127,11 +127,11 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 | 2 | the Seed is not a valid http or https URL, a pattern is not a valid regular expression, or an option value is not allowed; no crawl file is created | `invalid_url` (with `details.reason`: `malformed`, `unsupported_scheme`, `userinfo`, `missing_host` or `invalid_host`), `invalid_pattern` (with `details.pattern`), `invalid_value` |
 | 3 | `spider.toml` is invalid | `settings_invalid` |
 | 5 | another connection held the crawl file for longer than the writer waits | `crawl_busy` |
-| 7 | the Workspace or the crawl file cannot be written | `workspace_not_writable`, `crawl_not_writable` |
+| 7 | the Workspace or the crawl file cannot be written, or writing the crawl file failed during the Crawl | `workspace_not_writable`, `crawl_not_writable`, `crawl_write_failed` |
 
 A Seed with a user name or password is refused, and the error never repeats it: give the URL without them. Credentials for a site will be an option of their own (`--auth`, planned for v0.2).
 
-When the crawl file itself cannot be written, for example on a full disk, the Crawl stops requesting URLs and the Command ends with the writer's error: `crawl_busy` (exit 5) for a file another connection holds, otherwise `internal_error`. The crawl file is left `running`, with every URL recorded so far.
+When the crawl file itself cannot be written, for example on a full disk, the Crawl stops requesting URLs, records the Crawl State `failed` with `stop_reason` = `write_failed`, prints the result and ends with `crawl_write_failed` (exit 7), or `crawl_busy` (exit 5) for a file another connection holds. `details.error` says what failed. Every URL recorded so far is kept, and the post-crawl passes do not run. The end is written through a new connection; when that fails too, the crawl file is left `running`.
 
 ### When one URL fails
 

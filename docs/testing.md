@@ -58,6 +58,7 @@ These fakes stand in for things outside our code. They are the only test doubles
 - **Processes:** the OS process-spawn call (not our own launcher function)
 - **`doctor`:** network and trust-store probes
 - **SQLite's report of a held `-shm` file:** `SQLITE_IOERR_TRUNCATE`, which a killed writer whose process is still exiting causes on Windows only at random
+- **A full disk:** a connection listener that sets SQLite's `max_page_count` a few pages above the crawl file's size when each connection opens, so SQLite itself reports `SQLITE_FULL` (`tests/support/sqlite_faults.py`)
 
 Never replace our own modules or our own CLI with a double. Installer tests use a real, locally built wheel. The hooks and the page executor are extension points, not doubles: a test registers its own hooks, or passes its own page executor to the Crawl Service as `pages=`, as `026` plugs in its process pool.
 
