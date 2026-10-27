@@ -6,10 +6,11 @@ import re
 import pytest
 
 from spider.naming import APP_NAME, SETTINGS_FILE_NAME
+from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site
 from tests.support.cli import run_cli
-from tests.support.crawling import crawled
+from tests.support.crawling import crawl_result, crawled
 from tests.support.workspace import TempWorkspace
 
 SHOP = Site(
@@ -88,3 +89,29 @@ def test_an_invalid_user_agent_in_the_settings_file_is_refused(
             for problem in error["details"]["errors"]
         ],
     ) == (3, [("settings_invalid", "crawl.user_agent")])
+
+
+def test_cookies_set_by_the_site_are_not_sent_back(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    # On a named host: a cookie jar keeps no cookie of a bare IP address, so it would not show.
+    hosts = fixture_hosts(
+        Site(
+            {
+                "/": Page(
+                    body='<title>Shop</title><a href="/check">Check out</a>',
+                    headers=[("Set-Cookie", "sid=abc123; Path=/; HttpOnly")],
+                ),
+                "/check": Page(body="<title>Check out</title>"),
+            }
+        ),
+        Site({}),
+    )
+
+    crawl_result("http://site.test/", resolver=hosts.resolver)
+
+    assert [(request.path, request.headers.get("Cookie")) for request in hosts.site.requests] == [
+        ("/robots.txt", None),
+        ("/", None),
+        ("/check", None),
+    ]
