@@ -43,7 +43,7 @@ _KEY = ConnectionKey("site.test", 443, True, True, None, None, None, None)
 _REQUEST = aiohttp.RequestInfo(URL("https://site.test/"), "GET", CIMultiDictProxy(CIMultiDict()))
 
 # Every error class the Fetcher can meet, with its code: a subclass that an earlier branch of
-# the mapping catches fails here, not in a Crawl. 022 adds timeout and its own errors.
+# the mapping catches fails here, not in a Crawl.
 _ERRORS: list[tuple[Exception, str]] = [
     (
         aiohttp.ClientConnectorCertificateError(_KEY, ssl.SSLCertVerificationError("self-signed")),
@@ -63,10 +63,10 @@ _ERRORS: list[tuple[Exception, str]] = [
         aiohttp.ClientResponseError(_REQUEST, (), status=400, message="bad status line"),
         "invalid_response",
     ),
-    (aiohttp.ConnectionTimeoutError(), "connection_error"),
-    (aiohttp.SocketTimeoutError(), "connection_error"),
-    # aiohttp's total timeout raises a plain TimeoutError; 022 maps it to timeout.
-    (TimeoutError(), "connection_error"),
+    (aiohttp.ConnectionTimeoutError(), "timeout"),
+    (aiohttp.SocketTimeoutError(), "timeout"),
+    # aiohttp's total timeout, --timeout, raises a plain TimeoutError.
+    (TimeoutError(), "timeout"),
     (aiohttp.InvalidURL("http://[bad"), "connection_error"),
 ]
 
