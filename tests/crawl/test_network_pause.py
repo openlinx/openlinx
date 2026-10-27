@@ -183,7 +183,7 @@ def _pause_events(reporter: Collected) -> list[tuple[str, dict[str, Any]]]:
 
 def test_an_outage_pauses_and_resumes_the_crawl(temp_workspace: TempWorkspace) -> None:
     clock, reporter = FakeClock(), Collected()
-    fetcher = FakeFetcher(clock, _outage_site(), outage=(1, 30))
+    fetcher = FakeFetcher(clock, _outage_site(), outages=[(1, 30)])
 
     result = crawl_result(
         "http://site.test/", clock=clock, fetcher=fetcher, reporter=reporter, concurrency=1
@@ -197,7 +197,7 @@ def test_an_outage_pauses_and_resumes_the_crawl(temp_workspace: TempWorkspace) -
 
 def test_the_pause_events_say_why_which_urls_and_how_long(temp_workspace: TempWorkspace) -> None:
     clock, reporter = FakeClock(), Collected()
-    fetcher = FakeFetcher(clock, _outage_site(), outage=(1, 30))
+    fetcher = FakeFetcher(clock, _outage_site(), outages=[(1, 30)])
 
     result = crawl_result(
         "http://site.test/", clock=clock, fetcher=fetcher, reporter=reporter, concurrency=1
@@ -231,7 +231,7 @@ def test_requests_that_fail_while_paused_are_requested_again_within_the_url_limi
     result = crawl_result(
         "http://site.test/",
         clock=clock,
-        fetcher=FakeFetcher(clock, pages, outage=(1, 30)),
+        fetcher=FakeFetcher(clock, pages, outages=[(1, 30)]),
         concurrency=4,
         max_urls=25,
     )
@@ -240,6 +240,62 @@ def test_requests_that_fail_while_paused_are_requested_again_within_the_url_limi
         "SELECT fetch_state, count(*) FROM urls WHERE fetch_state != 'queued' GROUP BY 1",
     )
 
-    # 25 distinct URLs: the eight that made up the count are errors, and the Seed and 16 Pages,
-    # those in flight when the pause began among them, are fetched.
-    assert sorted(requested) == [("error", 8), ("fetched", 17)]
+    # 25 distinct URLs, those in flight when the pause began and the eight that made up the
+    # count among them, all fetched once the outage is over.
+    assert requested == [("fetched", 25)]
+
+
+def test_urls_that_failed_in_an_outage_are_requested_again(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    fetcher = FakeFetcher(clock, _outage_site(), outages=[(1, 30)])
+
+    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher, concurrency=1)
+    pages = query(
+        result.crawl_file, "SELECT fetch_state, crawl_depth FROM urls WHERE url LIKE '%/p%'"
+    )
+
+    # Requested again at the depth they were found at.
+    assert set(pages) == {("fetched", 1)}
+
+
+def test_an_outage_requeues_a_url_once_a_run(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    # /p2 to /p9 fail until 80 seconds: requested again at 41 when the first outage ends, they
+    # fail into a second outage, which ends at 81 and must not re-queue them again.
+    pages = {
+        **_outage_site(),
+        **{f"/p{n}": FakePage("", fails="connection_error", until=80) for n in range(2, 10)},
+    }
+    fetcher = FakeFetcher(clock, pages, outages=[(1, 30), (42, 80)])
+
+    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher, concurrency=1)
+    states = dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls"))
+
+    assert (
+        {states[f"http://site.test/p{n}"] for n in range(2, 10)},
+        {states[f"http://site.test/p{n}"] for n in range(10, 21)},
+    ) == ({"error"}, {"fetched"})
+
+
+def test_an_outage_drops_the_failed_robots_txt_verdict_of_an_internal_origin(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    posts = range(1, 9)
+    # /p1 answers at one second, when the outage begins, so the blog's robots.txt fails.
+    pages = {
+        "/": FakePage('<a href="/p1">P1</a>'),
+        "/p1": FakePage(
+            "".join(f'<a href="http://blog.site.test/{n}">Post</a>' for n in posts), delay=1
+        ),
+        **{f"http://blog.site.test/{n}": FakePage(f"<p>Post {n}</p>") for n in posts},
+    }
+    fetcher = FakeFetcher(clock, pages, outages=[(1, 30)])
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, scope="subdomains"
+    )
+
+    assert set(
+        query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url LIKE 'http://blog.%'")
+    ) == {("fetched",)}

@@ -1,6 +1,6 @@
 """The urls table's units: the frontier and each URL's outcome (020-add-crawl-core D1, D2, D14)."""
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 
 from sqlalchemy import (
     ColumnElement,
@@ -128,6 +128,21 @@ _UNWRITTEN = _URL_ROW.values(
     blocked_by_robots_txt=bindparam("robots_blocked"),
     **_WRITE_BACK,
 )
+# An error URL that an outage re-queues; its depth and provenance stay (design D3, D16).
+_REQUEUED = (
+    update(urls)
+    .where(
+        urls.c.id.in_(bindparam("url_ids", expanding=True)),
+        urls.c.fetch_state == literal_column("'error'"),
+    )
+    .values(
+        fetch_state="queued",
+        fetch_error=null(),
+        fetch_error_message=null(),
+        fetched_at=null(),
+        blocked_by_robots_txt=null(),
+    )
+)
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
 _IS_QUEUED = urls.c.fetch_state == literal_column("'queued'")
@@ -205,6 +220,16 @@ def queued_batch(
             )
             for row in rows
         )
+
+    return unit
+
+
+def requeue(url_ids: Sequence[int]) -> Callable[[Connection], None]:
+    """A unit that puts error URLs back in the queue, so they are requested again."""
+
+    def unit(connection: Connection) -> None:
+        if url_ids:
+            connection.execute(_REQUEUED, {"url_ids": list(url_ids)})
 
     return unit
 

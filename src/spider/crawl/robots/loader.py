@@ -1,6 +1,7 @@
 """The robots.txt loader: each origin's robots.txt, once a run (020-add-crawl-core D6, D7)."""
 
 import asyncio
+from collections.abc import Callable
 from datetime import datetime
 
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
@@ -23,6 +24,8 @@ class RobotsLoader:
         self._writer = writer
         self._token = token
         self._origins: dict[str, asyncio.Task[OriginRobots]] = {}
+        # The URL that first asked for each origin's robots.txt.
+        self._first_urls: dict[str, NormalizedUrl] = {}
 
     async def robots_of(self, url: NormalizedUrl) -> OriginRobots:
         """The robots.txt of the URL's origin, requested by the origin's first URL."""
@@ -30,12 +33,23 @@ class RobotsLoader:
         task = self._origins.get(origin)
         if task is None:
             task = self._origins[origin] = asyncio.create_task(self._load(robots_txt_url(url)))
+            self._first_urls[origin] = url
         # A URL whose task is cancelled while it waits leaves the request to the others.
         return await asyncio.shield(task)
 
     def requested(self, url: NormalizedUrl) -> bool:
         """Whether the robots.txt of the URL's origin needs no new request."""
         return url_origin(url) in self._origins
+
+    def forget_unanswered(self, is_internal: Callable[[NormalizedUrl], bool]) -> None:
+        """Drops the verdicts of the Internal origins whose robots.txt got no response, so
+        their next URL requests it again: after a network pause, the site may answer
+        (design D16)."""
+        for origin, task in list(self._origins.items()):
+            if not task.done() or task.cancelled() or task.exception() is not None:
+                continue
+            if task.result().origin_error is not None and is_internal(self._first_urls[origin]):
+                del self._origins[origin], self._first_urls[origin]
 
     async def close(self) -> None:
         for task in self._origins.values():

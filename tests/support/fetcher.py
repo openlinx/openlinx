@@ -1,6 +1,6 @@
 """The fake Fetcher: a boundary double for timing scenarios only (020-add-crawl-core D8, D15)."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from http import HTTPStatus
 from urllib.parse import urlsplit
@@ -35,13 +35,13 @@ class FakeFetcher:
         clock: Clock,
         pages: Mapping[str, FakePage],
         *,
-        outage: tuple[float, float] | None = None,
+        outages: Sequence[tuple[float, float]] = (),
     ) -> None:
-        """`outage` is a span of monotonic time in which no request started gets a response,
+        """`outages` are spans of monotonic time in which no request started gets a response,
         whatever its URL: the network itself is down."""
         self._clock = clock
         self._pages = pages
-        self._outage = outage
+        self._outages = outages
         self.starts: list[tuple[str, float]] = []
         self._in_flight = 0
         self.most_in_flight = 0
@@ -85,7 +85,7 @@ class FakeFetcher:
         )
 
     def _fails(self, page: FakePage | None, started: float) -> FetchError | None:
-        if self._outage is not None and self._outage[0] <= started < self._outage[1]:
+        if any(begins <= started < ends for begins, ends in self._outages):
             return "connection_error"
         if page is None or page.fails is None:
             return None

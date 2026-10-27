@@ -1,11 +1,13 @@
 """The engine: the frontier depth by depth, and each URL's task (020-add-crawl-core D1, D2, D3)."""
 
 import asyncio
+from collections.abc import Sequence
+from typing import Literal
 
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import url_limit_reached
 from spider.crawl.engine.outcomes import Outcomes
-from spider.crawl.engine.pause import NetworkPause
+from spider.crawl.engine.pause import Again, NetworkPause, Outcome
 from spider.crawl.engine.units import Run, TaskFailure, unit_of, via_resource
 from spider.crawl.fetch.fetcher import REQUEST_DEADLINE_SECONDS
 from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
@@ -15,7 +17,7 @@ from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import QueuedUrl
-from spider.store.urls import next_depth, queued_batch, record_seed
+from spider.store.urls import next_depth, queued_batch, record_seed, requeue
 from spider.store.writer import CrawlWriterClosedError
 
 # Queued URLs read from the frontier at once.
@@ -39,6 +41,18 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         watchdog_seconds=watchdog_seconds(REQUEST_DEADLINE_SECONDS),
         stopped=lambda: context.stop.is_set,
     )
+    again = Again()
+
+    async def resumed(outcome: Outcome, count: Sequence[QueuedUrl]) -> None:
+        # The site may answer now: robots.txt is asked again (design D16).
+        run.robots.forget_unanswered(lambda url: context.scope.decide(url).is_internal)
+        if outcome == "outage":
+            requeued = again.requeue(count)
+            # Each was counted toward the URL limit once already, as it counts each URL once.
+            for _ in requeued:
+                limits.give_back()
+            await context.writer.run_async(requeue(requeued))
+
     run = Run(
         context=context,
         outcomes=Outcomes(context.writer, context.reporter, context.stop),
@@ -57,7 +71,9 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             requester=requester,
             clock=context.clock,
             log=context.reporter,
+            resumed=resumed,
         ),
+        again=again,
     )
     decision = context.scope.decide(seed)
     await context.writer.run_async(
@@ -96,6 +112,11 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
                 await asyncio.gather(*run.checked_urls)
                 await run.outcomes.settled()
                 depth = await context.writer.run_async(next_depth(_ABOVE_NO_DEPTH))
+                while depth is None and run.pause.paused:
+                    # Nothing is left to request, but a pause may end in an outage, which
+                    # re-queues the URLs of its count.
+                    await run.pause.ended()
+                    depth = await context.writer.run_async(next_depth(_ABOVE_NO_DEPTH))
     # An ended writer refuses every unit; its cause says why it ended (017 D6).
     except CrawlWriterClosedError as closed:
         context.stop.set("write_failed", closed.__cause__ or closed)
@@ -120,28 +141,59 @@ async def _crawl_depth(run: Run, depth: int) -> None:
     try:
         # The cursor of this run: a URL in flight is never read twice (design D1).
         after = 0
-        while limits.limit_reached() is None and (
-            batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH))
-        ):
+        while limits.limit_reached() is None:
+            started = await _start_again(run, running)
+            if started == "stopped":
+                return
+            batch = await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH))
+            if started == "limit" or not batch:
+                break
             for queued in batch:
-                await limits.reserve_task()
-                if context.stop.is_set or run.task_failure.is_set:
-                    limits.task_ended()
+                if not run.again.claim(queued.id):
+                    continue
+                started = await _start_again(run, running)
+                if started == "started":
+                    started = await _start(run, queued, running)
+                if started == "stopped":
                     return
-                if limits.limit_reached() is not None:
-                    limits.task_ended()
+                if started == "limit":
                     break
-                decision = context.scope.decide(queued.url)
-                task = asyncio.create_task(_crawl_url(run, queued, decision))
-                # A checked URL never holds the barrier (design D3); the sweep in run_crawl reads
-                # what one finds after its depth has closed.
-                tasks = run.checked_urls if _is_checked_url(queued, decision) else running
-                run.task_failure.track(tasks, task)
             after = batch[-1].id
         if running:
             await asyncio.gather(*running)
     finally:
         await _cancel_all(running)
+
+
+type _Started = Literal["started", "stopped", "limit"]
+
+
+async def _start_again(run: Run, running: set[asyncio.Task[None]]) -> _Started:
+    """Dispatches what a network pause re-queued or left queued, ahead of the frontier read,
+    each at the depth it was found at (design D3)."""
+    for queued in run.again.take():
+        started = await _start(run, queued, running)
+        if started != "started":
+            return started
+    return "started"
+
+
+async def _start(run: Run, queued: QueuedUrl, running: set[asyncio.Task[None]]) -> _Started:
+    context, limits = run.context, run.limits
+    await limits.reserve_task()
+    if context.stop.is_set or run.task_failure.is_set:
+        limits.task_ended()
+        return "stopped"
+    if limits.limit_reached() is not None:
+        limits.task_ended()
+        return "limit"
+    decision = context.scope.decide(queued.url)
+    task = asyncio.create_task(_crawl_url(run, queued, decision))
+    # A checked URL never holds the barrier (design D3); the sweep in run_crawl reads what one
+    # finds after its depth has closed.
+    tasks = run.checked_urls if _is_checked_url(queued, decision) else running
+    run.task_failure.track(tasks, task)
+    return "started"
 
 
 async def _cancel_all(tasks: set[asyncio.Task[None]]) -> None:
