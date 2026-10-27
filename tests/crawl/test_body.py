@@ -2,6 +2,7 @@
 
 import asyncio
 import gzip
+import hashlib
 import tracemalloc
 import zlib
 from collections.abc import AsyncIterator
@@ -20,27 +21,28 @@ async def _chunks(data: bytes, size: int) -> AsyncIterator[bytes]:
         yield data[start : start + size]
 
 
-def _read(data: bytes, limit: int, chunk_size: int = 4096) -> tuple[int, bool, bool]:
+def _read(data: bytes, limit: int, chunk_size: int = 4096) -> tuple[int, bool, bool, int]:
     body = asyncio.run(read_body(_chunks(data, chunk_size), None, limit))
-    return len(body.data), body.truncated, data.startswith(body.data)
+    return len(body.data), body.truncated, data.startswith(body.data), body.transferred_bytes
 
 
 def test_a_body_at_the_cap_is_read_whole() -> None:
     page = ROW * 1000
 
-    assert _read(page, limit=len(page)) == (len(page), False, True)
+    assert _read(page, limit=len(page)) == (len(page), False, True, len(page))
 
 
 def test_a_body_past_the_cap_is_cut_at_the_cap() -> None:
     page = ROW * 1000
 
-    assert _read(page + b"<p>", limit=len(page)) == (len(page), True, True)
+    # The last chunk was read whole: the bytes read, not the bytes kept.
+    assert _read(page + b"<p>", limit=len(page)) == (len(page), True, True, len(page) + 3)
 
 
 def test_the_cap_falls_inside_a_chunk() -> None:
     page = ROW * 1000
 
-    assert _read(page, limit=10_000, chunk_size=65_536) == (10_000, True, True)
+    assert _read(page, limit=10_000, chunk_size=65_536) == (10_000, True, True, 65_536)
 
 
 def _packed(data: bytes, coding: str) -> bytes:
@@ -67,10 +69,9 @@ def test_a_compressed_body_is_decoded(coding: str) -> None:
 
     body = _decoded(packed, "deflate" if coding == "raw deflate" else coding)
 
-    assert (body.data == page, body.truncated, body.size_bytes, body.transferred_bytes) == (
+    assert (body.data == page, body.truncated, body.transferred_bytes) == (
         True,
         False,
-        len(page),
         len(packed),
     )
 
@@ -82,7 +83,7 @@ def test_a_compressed_body_is_capped_after_decoding(coding: str) -> None:
 
     body = _decoded(packed, coding)
 
-    assert (len(body.data), body.truncated, body.size_bytes) == (BODY_LIMIT, True, None)
+    assert (len(body.data), body.truncated) == (BODY_LIMIT, True)
 
 
 @pytest.mark.parametrize("coding", ["gzip", "br"])
@@ -107,7 +108,7 @@ def test_stacked_codings_are_decoded_last_first() -> None:
 
     body = _decoded(packed, "gzip, br")
 
-    assert (body.data == page, body.size_bytes) == (True, len(page))
+    assert body.data == page
 
 
 @pytest.mark.parametrize(
@@ -129,11 +130,43 @@ def test_a_coding_that_was_not_offered_is_kept_as_received() -> None:
 
     body = _decoded(packed, "zstd")
 
-    assert (body.data, body.size_bytes, body.transferred_bytes) == (packed, None, len(packed))
+    assert (body.data, body.transferred_bytes) == (packed, len(packed))
 
 
 def test_an_empty_body_under_a_coding_is_empty() -> None:
     # A redirect with no body, from a server that labels every response gzip.
     body = _decoded(b"", "gzip")
 
-    assert (body.data, body.size_bytes, body.transferred_bytes) == (b"", 0, 0)
+    assert (body.data, body.transferred_bytes) == (b"", 0)
+
+
+def test_stacked_codings_decode_a_body_up_to_the_cap() -> None:
+    # A server that gzips a file that is gzipped already, sending it a few bytes to a read: near
+    # the cap, the outer layer holds trailer bytes that give no output of their own.
+    photo = b"".join(hashlib.sha256(n.to_bytes(4)).digest() for n in range(2000))
+    page = ROW * 50 + photo
+    packed = gzip.compress(gzip.compress(page, mtime=0), mtime=0)
+
+    body = asyncio.run(read_body(_chunks(packed, 7), "gzip, gzip", len(page)))
+
+    assert (body.data == page, body.truncated) == (True, False)
+
+
+def test_a_zlib_body_whose_first_chunk_is_one_byte_is_decoded() -> None:
+    # A server that trickles its body, one byte to a read.
+    page = ROW * 100
+    packed = zlib.compress(page)
+
+    body = asyncio.run(read_body(_chunks(packed, 1), "deflate", BODY_LIMIT))
+
+    assert body.data == page
+
+
+def test_every_member_of_a_gzip_body_is_decoded() -> None:
+    # Two gzip files concatenated, as a server that appends a compressed footer sends them.
+    head, tail = ROW * 500, b"<footer>Shop</footer>\n"
+    packed = gzip.compress(head, mtime=0) + gzip.compress(tail, mtime=0)
+
+    body = _decoded(packed, "gzip")
+
+    assert body.data == head + tail

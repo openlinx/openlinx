@@ -19,8 +19,8 @@ from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResul
 from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
 from spider.crawl.engine.seed_chain import SeedChain, close_seed_chain
 from spider.crawl.engine.stop import StopSignal
-from spider.crawl.fetch.body import is_decodable
-from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
+from spider.crawl.fetch.body import BODY_LIMIT, is_decodable
+from spider.crawl.fetch.fetcher import FetchFailure, FetchResult, joined_header
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
 from spider.crawl.following import is_redirection, redirect_target
@@ -251,13 +251,13 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
     # An External URL or one outside the Scope is a Checked URL, never parsed (design D5).
     followed = decided.in_scope and 200 <= response.status_code < 300
     prepared = followed and is_html_type(content_type)
-    content_encoding = response.header("Content-Encoding")
+    content_encoding = joined_header(response.headers, "Content-Encoding")
     decoded = is_decodable(content_encoding)
     if prepared and response.body_truncated:
         # A Page cut at the cap would be parsed as another, shorter one (022 design D1).
         page: PreparedPage | None = PreparedPage(
             parse_error="body_too_large",
-            parse_error_message="The body is larger than 20 MiB.",
+            parse_error_message=f"The body is larger than {BODY_LIMIT // 1024 // 1024} MiB.",
         )
     elif prepared and not decoded:
         # A server that ignored the offered codings: its bytes are no text to parse (D1).

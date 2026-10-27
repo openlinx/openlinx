@@ -23,9 +23,10 @@ def test_a_huge_page_is_not_parsed(temp_workspace: TempWorkspace, fixture_site: 
 
     assert query(
         crawl_file,
-        "SELECT fetch_state, body_truncated, parsed, parse_error FROM urls WHERE url = ?",
+        "SELECT fetch_state, body_truncated, parsed, parse_error, size_bytes, "
+        "transferred_bytes > 20 * 1024 * 1024 FROM urls WHERE url = ?",
         [server.url("/huge.html")],
-    ) == [("fetched", 1, 0, "body_too_large")]
+    ) == [("fetched", 1, 0, "body_too_large", None, 1)]
 
 
 def test_a_very_long_url_is_skipped(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:

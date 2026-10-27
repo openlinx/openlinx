@@ -122,3 +122,29 @@ def test_a_body_in_an_encoding_that_was_not_offered_is_not_parsed(
         "SELECT fetch_state, parsed, parse_error, size_bytes FROM urls WHERE url = ?",
         [server.url("/zstd.html")],
     ) == [("fetched", 0, "unsupported_encoding", None)]
+
+
+def test_codings_on_repeated_header_lines_are_decoded_as_one_list(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # A proxy that adds its own Content-Encoding line instead of extending the server's.
+    server = fixture_site(
+        Site(
+            root=exact.SITE.root,
+            routes={
+                "/": Page(body='<title>Shop</title><script src="/app.js"></script>'),
+                "/app.js": Page(
+                    file="app.js.gz.br",
+                    content_type="text/javascript",
+                    headers=[("Content-Encoding", "gzip"), ("Content-Encoding", "br")],
+                ),
+            },
+        )
+    )
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT size_bytes, content_encoding FROM urls WHERE url = ?",
+        [server.url("/app.js")],
+    ) == [(10000, "gzip, br")]

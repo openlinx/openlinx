@@ -12,7 +12,7 @@ from aiohttp.abc import AbstractResolver
 
 from spider import __version__
 from spider.clock import Clock
-from spider.crawl.fetch.body import BodyDecodingError, read_body
+from spider.crawl.fetch.body import OFFERED_CODINGS, BodyDecodingError, read_body
 from spider.crawl.fetch.proxy import ProxyVariables
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import APP_NAME, PROJECT_URL
@@ -23,6 +23,13 @@ def header_values(headers: Iterable[tuple[str, str]], name: str) -> list[str]:
     """The values of the header `name`, in any letter case, in the order received."""
     wanted = name.lower()
     return [value for key, value in headers if key.lower() == wanted]
+
+
+def joined_header(headers: Iterable[tuple[str, str]], name: str) -> str | None:
+    """The header `name` with its repeated lines joined into one list, as RFC 9110 5.3
+    reads them; None without one."""
+    values = header_values(headers, name)
+    return ", ".join(values) if values else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +72,7 @@ class Fetcher(Protocol):
 
 
 _CHUNK_BYTES = 64 * 1024
-ACCEPT_ENCODING = "gzip, deflate, br"
+ACCEPT_ENCODING = ", ".join(OFFERED_CODINGS)
 DEFAULT_USER_AGENT = f"{APP_NAME}/{__version__} (+{PROJECT_URL})"
 
 
@@ -98,14 +105,14 @@ class AiohttpFetcher:
         try:
             proxy = self._proxies.for_url(request.url)
             async with self._session.get(url, allow_redirects=False, proxy=proxy) as response:
-                body = await read_body(
-                    response.content.iter_chunked(_CHUNK_BYTES),
-                    response.headers.get("Content-Encoding"),
-                )
                 # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.
                 headers = tuple(
                     (name.decode("latin-1"), value.decode("latin-1"))
                     for name, value in response.raw_headers
+                )
+                body = await read_body(
+                    response.content.iter_chunked(_CHUNK_BYTES),
+                    joined_header(headers, "Content-Encoding"),
                 )
                 status_code, reason = response.status, response.reason
         # Cancellation is no Exception, so it passes through.

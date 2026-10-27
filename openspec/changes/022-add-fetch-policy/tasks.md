@@ -107,7 +107,7 @@ Seams (docs/testing.md):
 - [x] 5.5a [3+6] Drive "Stacked encodings are decoded in reverse order", "A corrupt compressed body is an invalid response" and "A body in an encoding that was not offered is not parsed", on real compressed bytes, with the `parse_error` value `unsupported_encoding` (design D1, D10).
 - [x] 5.6 [3+6] Drive "An image's size is recorded".
 - [x] 5.7 Docs: document the limits, compression and the size columns in `docs/crawling.md`.
-- [ ] 5.8 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [x] 5.8 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. TLS
 

@@ -339,15 +339,15 @@ The Crawl keeps no cookies: a cookie that a response sets is never sent with a l
 
 ### Body size and compression
 
-- **Compression:** every request, robots.txt's included, sends `Accept-Encoding: gzip, deflate, br`, and the Crawl decodes those codings itself: gzip, deflate (the zlib format, or raw deflate, as some servers send) and br, several of them in the reverse order of the `Content-Encoding` header.
+- **Compression:** every request, robots.txt's included, sends `Accept-Encoding: gzip, deflate, br`, and the Crawl decodes those codings itself: gzip, deflate (the zlib format, or raw deflate, as some servers send) and br, several of them in the reverse order of the `Content-Encoding` header, whose repeated lines count as one list. A gzip body of several members is decoded whole, as gunzip reads it.
 - **Sizes:** every response records `content_encoding`, the header as received, `transferred_bytes`, the body as it came over the network, and `size_bytes`, the body after decoding. A script sent as 2,500 bytes of gzip that holds 10,000 bytes has `transferred_bytes` = 2500 and `size_bytes` = 10000. An image or any other Resource has its sizes recorded too, and is never parsed.
-- **The 20 MiB cap:** at most 20 MiB of a body is read, and at most 20 MiB of it is decoded, so a small compressed body that would expand to gigabytes stops there. A body past the cap has `body_truncated` = 1, `transferred_bytes` the bytes read and `size_bytes` NULL, since its full size was never measured. A Page past the cap is not parsed: `parse_error` = `body_too_large`.
+- **The 20 MiB cap:** at most 20 MiB of a body is read, and at most 20 MiB of it is decoded, so a small compressed body that would expand to gigabytes stops there. A body past the cap, as transferred or as decoded, has `body_truncated` = 1, `transferred_bytes` the bytes read and `size_bytes` NULL, since its full size was never measured. A Page past the cap is not parsed: `parse_error` = `body_too_large`.
 - **A body that fails to decode,** a body labelled gzip that is not, or a stream that ends inside its coding, is recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`, and is not retried.
 - **A coding that was not offered,** such as zstd from a server that ignores `Accept-Encoding`, is kept as received: the URL is `fetched` with `size_bytes` NULL, and a Page in it is not parsed, `parse_error` = `unsupported_encoding`.
 
 ### URL length
 
-A URL longer than 2,000 characters is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `url_too_long`, before any `--include` or `--exclude` pattern is matched against it.
+A URL longer than 2,000 characters, counted on the normalised URL with its non-ASCII characters percent-encoded, is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `url_too_long`, before any `--include` or `--exclude` pattern is matched against it.
 
 ### Proxy variables
 
