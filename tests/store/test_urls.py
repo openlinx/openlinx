@@ -157,7 +157,12 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
     ) == (
         (
             QueuedUrl(
-                id=seed_id, url=seed, crawl_depth=0, discovered_via="seed", found_on_url_id=None
+                id=seed_id,
+                url=seed,
+                crawl_depth=0,
+                discovered_via="seed",
+                found_on_url_id=None,
+                chain_via="seed",
             ),
         ),
         1,
@@ -168,6 +173,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 crawl_depth=1,
                 discovered_via="hyperlink",
                 found_on_url_id=seed_id,
+                chain_via="hyperlink",
             ),
         ),
         UrlCounts(

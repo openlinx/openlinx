@@ -67,7 +67,7 @@ class Run:
 
 
 def via_resource(queued: QueuedUrl) -> bool:
-    return queued.discovered_via in RESOURCES
+    return queued.chain_via in RESOURCES
 
 
 async def unit_of(

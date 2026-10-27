@@ -132,6 +132,9 @@ class QueuedUrl:
     crawl_depth: int
     discovered_via: DiscoveredVia
     found_on_url_id: int | None
+    # The way the URL's Redirect Chain was first found: its own discovered_via, or for a
+    # redirect target the first that is no redirect, so a redirected image is still a Resource.
+    chain_via: DiscoveredVia
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

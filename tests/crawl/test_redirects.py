@@ -219,3 +219,49 @@ def test_a_redirect_to_an_external_url_is_checked(
         ),
         query(crawl_file, "SELECT url FROM urls WHERE url = ?", ["http://other.test/deeper"]),
     ) == ([("fetched", 0, 0)], [])
+
+
+def test_a_redirected_image_beyond_the_depth_limit_is_checked(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # The logo moved under /img/; the old address redirects.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Shop</title><img src="/logo.png">'),
+                "/logo.png": Redirect("/img/logo.png", status=301),
+                "/img/logo.png": Page(body="PNG", content_type="image/png"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--max-depth", "0")
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, status_code FROM urls WHERE url = ?",
+        [server.url("/img/logo.png")],
+    ) == [("fetched", 200)]
+
+
+def test_an_image_redirected_twice_beyond_the_depth_limit_is_checked(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Shop</title><img src="/logo.png">'),
+                "/logo.png": Redirect("/img/logo.png", status=301),
+                "/img/logo.png": Redirect("/static/logo.png", status=302),
+                "/static/logo.png": Page(body="PNG", content_type="image/png"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--max-depth", "0")
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state FROM urls WHERE url = ?",
+        [server.url("/static/logo.png")],
+    ) == [("fetched",)]

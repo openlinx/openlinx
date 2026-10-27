@@ -19,6 +19,7 @@ from sqlalchemy.dialects.sqlite import insert
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.store.origins import ORIGIN_ID, origin_rows, record_origins
 from spider.store.records import (
+    DiscoveredVia,
     DiscoverySkipReason,
     ErroredUrl,
     FetchedUrl,
@@ -65,6 +66,9 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
 )
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
+_FOUND_ON = select(urls.c.discovered_via, urls.c.found_on_url_id).where(
+    urls.c.id == bindparam("url_id")
+)
 _REDIRECT_URL_ID = (
     update(urls)
     .where(urls.c.id == bindparam("url_id"))
@@ -190,11 +194,22 @@ def queued_batch(
                 crawl_depth=row.crawl_depth,
                 discovered_via=row.discovered_via,
                 found_on_url_id=row.found_on_url_id,
+                chain_via=_chain_via(connection, row.discovered_via, row.found_on_url_id),
             )
             for row in rows
         )
 
     return unit
+
+
+def _chain_via(connection: Connection, via: DiscoveredVia, found_on: int | None) -> DiscoveredVia:
+    # Point reads back along the chain, for redirect targets only, at most 20 hops: a loop
+    # ends there (022-add-fetch-policy D2).
+    for _ in range(20):
+        if via != "redirect" or found_on is None:
+            break
+        via, found_on = connection.execute(_FOUND_ON, {"url_id": found_on}).one()
+    return via
 
 
 def next_depth(depth: int) -> Callable[[Connection], int | None]:
