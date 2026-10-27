@@ -2,16 +2,14 @@
 (020-add-crawl-core D5). The Scope plays no part, so 030's shortest paths over the stored Links
 agree with the depths the engine records."""
 
-from spider.store.records import DiscoverySkipReason, LinkType
+from spider.store.records import RESOURCE_LINK_TYPES, DiscoverySkipReason, LinkType
 
 # The spec's Link type table: through these a URL in the Scope is followed, through RESOURCES
 # it is requested as a Resource, and through any other type it is recorded skipped.
 _FOLLOWED: frozenset[LinkType] = frozenset(
     {"hyperlink", "canonical", "pagination", "hreflang", "iframe", "meta_refresh", "http_refresh"}
 )
-RESOURCES: frozenset[LinkType] = frozenset(
-    {"image", "css", "javascript", "video", "audio", "media"}
-)
+RESOURCES = RESOURCE_LINK_TYPES
 _REQUESTED = _FOLLOWED | RESOURCES
 
 

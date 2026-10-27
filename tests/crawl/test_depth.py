@@ -207,6 +207,13 @@ def test_the_urls_found_on_a_url_lowered_in_flight_are_one_deeper_than_it(
         "SELECT url, crawl_depth FROM urls WHERE url IN (?, ?, ?) ORDER BY id",
         [server.url("/b2"), server.url("/x"), server.url("/y")],
     ) == [(server.url("/b2"), 3), (server.url("/x"), 2), (server.url("/y"), 3)]
+    # The lowered /x keeps the late check's provenance, which its depth agrees with.
+    assert query(
+        crawl_file,
+        "SELECT page.url FROM urls AS x JOIN urls AS page ON page.id = x.found_on_url_id "
+        "WHERE x.url = ?",
+        [server.url("/x")],
+    ) == [(server.url("/late.html"),)]
 
 
 def test_a_resource_of_an_html_resource_is_beyond_the_limit(

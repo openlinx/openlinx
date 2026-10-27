@@ -9,6 +9,7 @@ from spider.crawl.engine.hooks import UrlResult
 from spider.output.codes import RECORD_FAILED
 from spider.output.diagnostics import Diagnostic
 from spider.store.failures import is_one_urls_failure
+from spider.store.records import Dispatched
 from spider.store.urls import UrlUnit, record_unwritten
 from spider.store.writer import CrawlWriterClosedError
 
@@ -59,10 +60,21 @@ class Outcomes:
     async def _fall_back(self, result: UrlResult, error: BaseException) -> None:
         message = f"{type(error).__name__}: {error}"
         unit = record_unwritten(
-            result.url_id, message, blocked_by_robots_txt=result.blocked_by_robots_txt
+            result.url_id,
+            message,
+            blocked_by_robots_txt=result.blocked_by_robots_txt,
+            dispatched=dispatched_of(result),
         )
         try:
             await (await self._context.writer.submit_async(unit))
         # A fallback that fails is the file's failure, not the URL's (design D2).
         except Exception as failure:
             self._context.stop.set("write_failed", failure)
+
+
+def dispatched_of(result: UrlResult) -> Dispatched:
+    return Dispatched(
+        crawl_depth=result.crawl_depth,
+        discovered_via=result.discovered_via,
+        found_on_url_id=result.found_on_url_id,
+    )

@@ -455,7 +455,7 @@ Group 16 runs last, after this group.
 
 The fixes of the review of `spider.crawl` along both axes. Group 16 runs last, after this group, and task 12.0 after this group.
 
-- [ ] 18.1 Drive "An image that another Page hyperlinked first is checked beyond the depth limit" at seam 3: a Resource Link raises a still-queued URL's `discovered_via` to its Resource kind (design D5).
+- [x] 18.1 Drive "An image that another Page hyperlinked first is checked beyond the depth limit" at seam 3: a Resource Link raises a still-queued URL's `discovered_via` to its Resource kind (design D5).
 - [x] 18.2 Drive "A robots.txt redirect to a host that does not resolve counts as missing" at seam 3, with the `robots_redirect_failed` warning (design D6).
 - [ ] 18.3 Drive "Two handlers that fail on one URL count it once" at seam 3.
 - [ ] 18.4 Fix: one host key in `spider.crawl.urls`, without a trailing dot, for the Scope, the per-host slots, the rate turn and the blocking runs.

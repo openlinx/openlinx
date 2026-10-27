@@ -13,6 +13,7 @@ from spider.store.connections import opening
 from spider.store.records import (
     DiscoveredVia,
     DiscoverySkipReason,
+    Dispatched,
     ErroredUrl,
     FetchedUrl,
     NewUrl,
@@ -61,9 +62,23 @@ def _new(
     )
 
 
-def _fetched(url_id: int, *discovered: NewUrl) -> FetchedUrl:
+def _as_dispatched(writer: CrawlWriter, url_id: int) -> Dispatched:
+    """The URL's provenance as its dispatch reads it from the queued row."""
+
+    def read(connection: Connection) -> Dispatched:
+        depth, via, found_on = connection.execute(
+            text("SELECT crawl_depth, discovered_via, found_on_url_id FROM urls WHERE id = :id"),
+            {"id": url_id},
+        ).one()
+        return Dispatched(crawl_depth=depth, discovered_via=via, found_on_url_id=found_on)
+
+    return writer.run(read)
+
+
+def _fetched(writer: CrawlWriter, url_id: int, *discovered: NewUrl) -> FetchedUrl:
     return FetchedUrl(
         url_id=url_id,
+        dispatched=_as_dispatched(writer, url_id),
         status_code=200,
         content_type="text/html",
         fetched_at=datetime(2026, 10, 14, 9, 0, tzinfo=UTC),
@@ -103,6 +118,9 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             record_fetched(
                 FetchedUrl(
                     url_id=seed_id,
+                    dispatched=Dispatched(
+                        crawl_depth=0, discovered_via="seed", found_on_url_id=None
+                    ),
                     status_code=200,
                     content_type="text/html",
                     fetched_at=datetime(2026, 9, 27, 14, 3, 13, tzinfo=UTC),
@@ -114,7 +132,13 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             )
         )
         writer.run(
-            record_skipped(SkippedUrl(url_id=seed_id + 2, skip_reason="excluded", crawl_depth=1))
+            record_skipped(
+                SkippedUrl(
+                    url_id=seed_id + 2,
+                    skip_reason="excluded",
+                    dispatched=_as_dispatched(writer, seed_id + 2),
+                )
+            )
         )
         deeper = writer.run(next_depth(0))
         second = writer.run(queued_batch(1, 0, 1))
@@ -122,13 +146,21 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             record_error(
                 ErroredUrl(
                     url_id=seed_id + 1,
+                    dispatched=_as_dispatched(writer, seed_id + 1),
                     fetch_error="connection_refused",
                     fetch_error_message="ConnectionRefusedError: refused",
                     fetched_at=datetime(2026, 9, 27, 14, 3, 14, tzinfo=UTC),
                 ),
             )
         )
-        writer.run(record_unwritten(seed_id + 3, "ValueError: no row", blocked_by_robots_txt=False))
+        writer.run(
+            record_unwritten(
+                seed_id + 3,
+                "ValueError: no row",
+                blocked_by_robots_txt=False,
+                dispatched=_as_dispatched(writer, seed_id + 3),
+            )
+        )
         counts = writer.run(url_counts())
         replay_now(writer)
 
@@ -214,6 +246,7 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
         writer.run(
             record_fetched(
                 _fetched(
+                    writer,
                     seed_id,
                     _new(
                         "https://site.test/amp",
@@ -228,12 +261,19 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
             )
         )
         writer.run(
-            record_skipped(SkippedUrl(url_id=seed_id + 4, skip_reason="excluded", crawl_depth=1))
+            record_skipped(
+                SkippedUrl(
+                    url_id=seed_id + 4,
+                    skip_reason="excluded",
+                    dispatched=_as_dispatched(writer, seed_id + 4),
+                )
+            )
         )
         about_id = seed_id + 5
         writer.run(
             record_fetched(
                 _fetched(
+                    writer,
                     about_id,
                     _new("https://site.test/amp"),
                     _new("https://site.test/p", discovered_via="meta_refresh"),
@@ -269,7 +309,7 @@ def _target_at_depth_three(writer: CrawlWriter) -> dict[str, int]:
     ids = {"/": seed_id}
     for page, links in (("/", ("/1", "/s")), ("/1", ("/2", "/s2")), ("/2", ("/t", "/s3"))):
         news = tuple(_new(f"https://site.test{link}") for link in links)
-        writer.run(record_fetched(_fetched(ids[page], *news)))
+        writer.run(record_fetched(_fetched(writer, ids[page], *news)))
         ids |= {link: seed_id + len(ids) + n for n, link in enumerate(links)}
     return ids
 
@@ -307,11 +347,15 @@ def test_a_followed_link_to_a_recorded_url_changes_it_only_on_a_shorter_path_it_
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         ids = _target_at_depth_three(writer)
         if state == "fetched":
-            writer.run(record_fetched(_fetched(ids["/t"])))
+            writer.run(record_fetched(_fetched(writer, ids["/t"])))
         elif state != "queued":
-            skipped = SkippedUrl(url_id=ids["/t"], skip_reason=state, crawl_depth=3)
+            skipped = SkippedUrl(
+                url_id=ids["/t"],
+                skip_reason=state,
+                dispatched=_as_dispatched(writer, ids["/t"]),
+            )
             writer.run(record_skipped(skipped))
-        writer.run(record_fetched(_fetched(ids[page], _new(_TARGET))))
+        writer.run(record_fetched(_fetched(writer, ids[page], _new(_TARGET))))
         replay_now(writer)
 
     found_on = expected[1]
@@ -326,11 +370,14 @@ def test_a_skip_decided_on_a_depth_lowered_meanwhile_leaves_the_url_queued_witho
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         writer.run(executing(text("CREATE TABLE test_notes (url_id INTEGER)")))
         ids = _target_at_depth_three(writer)
-        writer.run(record_fetched(_fetched(ids["/s"], _new(_TARGET))))
+        writer.run(record_fetched(_fetched(writer, ids["/s"], _new(_TARGET))))
         skipped = SkippedUrl(
             url_id=ids["/t"],
             skip_reason="max_depth",
-            crawl_depth=3,
+            # As dispatched, before /s lowered it to 2.
+            dispatched=Dispatched(
+                crawl_depth=3, discovered_via="hyperlink", found_on_url_id=ids["/2"]
+            ),
             rows=(HandlerRows(_write_note, (Note(ids["/t"]),)),),
         )
         writer.run(record_skipped(skipped))

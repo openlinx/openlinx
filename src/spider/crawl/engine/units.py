@@ -15,7 +15,7 @@ from spider.crawl.engine.crawl_warnings import (
 )
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
-from spider.crawl.engine.outcomes import Outcomes
+from spider.crawl.engine.outcomes import Outcomes, dispatched_of
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
@@ -220,7 +220,7 @@ def _skipped_record(
     return SkippedUrl(
         url_id=skipped.url_id,
         skip_reason=skip_reason,
-        crawl_depth=skipped.crawl_depth,
+        dispatched=dispatched_of(skipped),
         blocked_by_robots_txt=skipped.blocked_by_robots_txt,
         rows=rows,
     )
@@ -231,6 +231,7 @@ def _errored_record(
 ) -> ErroredUrl:
     return ErroredUrl(
         url_id=failed.url_id,
+        dispatched=dispatched_of(failed),
         fetch_error=failure.fetch_error,
         fetch_error_message=failure.fetch_error_message,
         fetched_at=failure.fetched_at,
@@ -247,6 +248,7 @@ def _fetched_record(
 ) -> FetchedUrl:
     return FetchedUrl(
         url_id=fetched.url_id,
+        dispatched=dispatched_of(fetched),
         status_code=response.status_code,
         content_type=response.content_type,
         fetched_at=response.fetched_at,
