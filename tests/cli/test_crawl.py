@@ -207,6 +207,18 @@ def test_every_stderr_line_is_an_event_or_a_diagnostic(
     )
 
 
+def test_a_warning_is_written_as_a_diagnostic(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(ROBOTS_DOWN)
+
+    lines = run_cli("crawl", server.url("/")).stderr_json_lines()
+
+    assert [line["level"] for line in lines if line.get("code") == "robots_unreachable"] == [
+        "warning"
+    ]
+
+
 def test_the_recorded_config_holds_every_registered_crawl_setting(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
