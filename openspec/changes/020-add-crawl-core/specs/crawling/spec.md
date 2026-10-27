@@ -528,6 +528,10 @@ The Crawl SHALL never have more than `--concurrency` requests in flight to one h
 - **WHEN** `/` links to `/slow/1` to `/slow/20`, each answering after 500 ms, and `spider crawl {site}/ --concurrency 2` runs
 - **THEN** the highest number of simultaneous requests the fixture site records is 2
 
+#### Scenario: The global cap bounds requests across hosts
+- **WHEN** `/` links to one Page on each of 30 External hosts, each answering after 1 second, and `spider crawl {site}/` runs with the default `--concurrency` 5
+- **THEN** no more than 20 requests are in flight at once, and the 30 Pages are requested
+
 #### Scenario: A concurrency of zero is rejected
 - **WHEN** `spider crawl {site}/ --concurrency 0` runs
 - **THEN** the Command exits with code 2 and its only stderr error has `code` = `invalid_value`
