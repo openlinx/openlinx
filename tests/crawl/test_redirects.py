@@ -2,10 +2,11 @@
 
 import pytest
 
+from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Site, Status
 from tests.support.cli import run_cli
-from tests.support.crawling import crawled
+from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
@@ -192,3 +193,29 @@ def test_a_redirect_to_an_excluded_url_is_not_followed(
         ),
         "/logout" in [request.path for request in server.requests],
     ) == ([("skipped", "excluded")], False)
+
+
+def test_a_redirect_to_an_external_url_is_checked(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    # A partner link that the shop routes through a redirect of its own.
+    hosts = fixture_hosts(
+        Site(
+            {
+                "/": Page(body='<a href="/out">Partner</a>'),
+                "/out": Redirect("http://other.test/landing", status=301),
+            }
+        ),
+        Site({"/landing": Page(body='<title>Partner</title><a href="/deeper">More</a>')}),
+    )
+
+    crawl_file = crawl_result("http://site.test/", resolver=hosts.resolver).crawl_file
+
+    assert (
+        query(
+            crawl_file,
+            "SELECT fetch_state, is_internal, parsed FROM urls WHERE url = ?",
+            ["http://other.test/landing"],
+        ),
+        query(crawl_file, "SELECT url FROM urls WHERE url = ?", ["http://other.test/deeper"]),
+    ) == ([("fetched", 0, 0)], [])
