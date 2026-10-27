@@ -37,6 +37,7 @@ def _head(tree: LexborHTMLParser, page: PageInput, config: None) -> _Head:
 def _prepared(html: str) -> tuple[PreparedPage, _Head]:
     response = FetchResult(
         status_code=200,
+        reason="OK",
         headers=(("Content-Type", "text/html"),),
         body=html.encode(),
         fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
@@ -128,3 +129,18 @@ def test_a_literal_noscript_tag_in_text_or_an_attribute_is_left_as_it_is() -> No
         ("a<noscript>b",),
         ["/p<noscript>"],
     )
+
+
+def test_a_noscript_s_links_are_placed_where_the_noscript_is() -> None:
+    # The tracking pixels of an analytics snippet, one in the head and one in the body.
+    page, _ = _prepared(
+        '<head><noscript><img height="1" width="1" style="display:none" '
+        'src="https://px.example/tr?id=1&amp;noscript=1"></noscript></head>'
+        '<body><noscript><iframe src="https://tags.example/ns.html?id=2" height="0" width="0">'
+        "</iframe></noscript><p>B</p></body>"
+    )
+
+    assert [(link.target, link.declared_in) for link in page.document_links] == [
+        ("https://px.example/tr?id=1&noscript=1", "head"),
+        ("https://tags.example/ns.html?id=2", "body"),
+    ]

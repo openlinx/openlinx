@@ -392,7 +392,7 @@ An External URL reached through a Link type that is requested SHALL be requested
 - **THEN** `http://other.test/page` has `fetch_state` = `fetched` and `parsed` = 0
 - **AND** the `urls` table holds no row for `http://other.test/deeper`
 
-#### Scenario: External checks can be turned off
+#### Scenario: External URLs can be left unchecked
 - **WHEN** `http://site.test/` links to `http://other.test/page`, and `spider crawl http://site.test/ --no-check-external` runs
 - **THEN** the `other.test` fixture instance receives no request
 
@@ -655,8 +655,8 @@ The crawl store SHALL hold one row for each distinct normalised URL of the Crawl
 | `is_internal` | INTEGER | no | boolean | 1 for an Internal URL, 0 for an External URL |
 | `in_scope` | INTEGER | no | boolean | 1 when the URL is inside the Scope, so it may be followed |
 | `crawl_depth` | INTEGER | no | | Crawl Depth; 0 for Seeds |
-| `discovered_via` | TEXT | no | listed below | How the URL was first found: through its first Resource Link, else through a followed Link once one has reached it |
-| `found_on_url_id` | INTEGER, references `urls.id` | yes | | The URL whose response first revealed this one, through a followed Link once one has reached it; NULL for Seeds |
+| `discovered_via` | TEXT | no | listed below | How the URL was first found (see "Link discovery") |
+| `found_on_url_id` | INTEGER, references `urls.id` | yes | | The URL whose response revealed this one (see "Link discovery"); NULL for Seeds |
 | `fetch_state` | TEXT | no | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested |
 | `skip_reason` | TEXT | yes | listed below | Why a skipped URL was not requested |
 | `blocked_by_robots_txt` | INTEGER | yes | boolean | 1 when robots.txt disallows the URL for the robots user-agent token (also with `--ignore-robots`), 0 when it allows it; NULL when not checked |
@@ -823,11 +823,31 @@ The Crawl Service SHALL be able to continue a Crawl from its store when its Craw
 ### Requirement: Per-response hook
 **In short:** every registered handler's rows for a URL are written once, with the URL's final state and row values.
 
-For each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`) when it is dispatched, the rows of every registered per-response handler SHALL be written exactly once, with that state. A URL that only Links that are not followed reach is recorded `skipped` when it is discovered, and reaches no handler, since a later followed Link may still queue it. A URL skipped as `max_depth` reaches no handler either, since a Link found later at a smaller depth re-queues it. A handler SHALL receive the URL's row values. For a `fetched` URL it SHALL also receive the status code, the response headers and, when the response was parsed, the extractor outputs. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
+For each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`) when it is dispatched, the rows of every registered per-response handler SHALL be written exactly once, with that state. A URL that only Links that are not followed reach is recorded `skipped` when it is discovered, and reaches no handler, since a later followed Link may still queue it. A URL skipped as `max_depth` reaches no handler either, since a Link found later at a smaller depth re-queues it. A handler SHALL receive the URL's row values. For a URL with a response it SHALL also receive the status code, the reason phrase, the response headers, the robots directives (the `X-Robots-Tag` for the robots user-agent token, and the robots `<meta>` when the response was parsed) and, when the response was parsed, the extractor outputs. For an in-Scope 2xx response it SHALL receive the Links the Crawl read: those of the `Link` and `Refresh` headers, whatever became of the response's preparation, then those of the document when it was prepared. Each Link SHALL say where it was declared, `head` or `body` as the parser placed the element, or `http_header`, and whether the Crawl requests its target through it, which the Link type table and nofollow decide. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
 
 #### Scenario: A registered handler sees every URL once
 - **WHEN** a handler registered for the test records the URLs and states it receives, `/` links to `/a`, `/missing` (which returns 404) and `/logout`, and `spider crawl {site}/ --exclude "/logout$"` runs
 - **THEN** the handler has received exactly `({site}/, fetched)`, `({site}/a, fetched)`, `({site}/missing, fetched)` and `({site}/logout, skipped)`, once each
+
+#### Scenario: A handler sees the X-Robots-Tag of a PDF
+- **WHEN** a handler registered for the test records the directives it receives, `/` links to `/report.pdf`, which returns `application/pdf` with the headers `X-Robots-Tag: googlebot: noindex` and `X-Robots-Tag: nofollow`, and `spider crawl {site}/` runs
+- **THEN** the handler has received for `{site}/report.pdf` an X-Robots-Tag that says nofollow and not noindex
+
+#### Scenario: A handler sees the Links of a Page whose extractor failed
+- **WHEN** an extractor registered for the test raises on every Page, a handler registered for the test records the Links it receives, `/` links to `/a`, and `spider crawl {site}/` runs
+- **THEN** the handler has received for `{site}/` one Link, a hyperlink to `{site}/a`
+
+#### Scenario: A canonical in the body is placed in the body
+- **WHEN** a handler registered for the test records the Links it receives, and `/` holds `<head><link rel="canonical" href="/c"></head><body><p>Text</p><link rel="canonical" href="/d"></body>`
+- **THEN** the handler has received for `{site}/` the canonical to `{site}/c` declared in `head`, and the canonical to `{site}/d` declared in `body`
+
+#### Scenario: A nofollow Link does not request its target
+- **WHEN** a handler registered for the test records the Links it receives, and `/` holds `<a href="/a">A</a>` and `<a rel="nofollow" href="/b">B</a>`
+- **THEN** the handler has received for `{site}/` the Link to `{site}/a` as one that requests its target, and the Link to `{site}/b` as one that does not
+
+#### Scenario: A handler sees the reason phrase
+- **WHEN** a handler registered for the test records the reason phrases it receives, `/` links to `/missing`, which returns 404 Not Found, and `spider crawl {site}/` runs
+- **THEN** the handler has received the reason phrase `Not Found` for `{site}/missing`
 
 ### Requirement: Post-crawl passes
 The Crawl SHALL run every registered post-crawl pass when it ends as `completed` or `stopped`, after its last URL is recorded and before its final Crawl State is written. It SHALL NOT run them for a Crawl that ends as `failed`. A continued Crawl SHALL run them again when it ends, so a pass registered by a later change can run more than once for the same Crawl. `030-add-page-data` and `040-add-rules` register passes.

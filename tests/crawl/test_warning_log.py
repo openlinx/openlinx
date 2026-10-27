@@ -97,14 +97,25 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
         crawl_result("http://www.site.test/", resolver=www.resolver),
     ]
 
-    assert sorted(
+    seen = sorted(
         (warning.code, _ONCE_PER[warning.code] in warning.details)
         for result in results
         for warning in result.warnings
         if warning.code in _ONCE_PER
-    ) == [
-        ("possible_blocking", True),
-        ("robots_unreachable", True),
-        ("seed_base_mismatch", True),
-        ("seed_blocked_by_robots_txt", True),
-    ]
+    )
+
+    # Every code kept once per a detail is among them, so a new one needs a crawl here.
+    assert (seen, sorted(_ONCE_PER)) == (
+        [
+            ("possible_blocking", True),
+            ("robots_unreachable", True),
+            ("seed_base_mismatch", True),
+            ("seed_blocked_by_robots_txt", True),
+        ],
+        [
+            "possible_blocking",
+            "robots_unreachable",
+            "seed_base_mismatch",
+            "seed_blocked_by_robots_txt",
+        ],
+    )

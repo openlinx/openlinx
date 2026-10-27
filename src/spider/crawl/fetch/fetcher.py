@@ -1,6 +1,6 @@
 """The Fetcher: one request, one hop, never a redirect followed (020-add-crawl-core D8)."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,6 +18,12 @@ from spider.store.records import FetchError
 _REQUEST_DEADLINE_SECONDS = 20
 
 
+def header_values(headers: Iterable[tuple[str, str]], name: str) -> list[str]:
+    """The values of the header `name`, in any letter case, in the order received."""
+    wanted = name.lower()
+    return [value for key, value in headers if key.lower() == wanted]
+
+
 @dataclass(frozen=True, slots=True)
 class Request:
     url: NormalizedUrl
@@ -26,6 +32,7 @@ class Request:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FetchResult:
     status_code: int
+    reason: str | None
     # As received: in order, in their letter case, repeated names kept.
     headers: tuple[tuple[str, str], ...]
     body: bytes
@@ -35,8 +42,7 @@ class FetchResult:
 
     def header(self, name: str) -> str | None:
         """The first value of the header `name`, in any letter case."""
-        wanted = name.lower()
-        return next((value for key, value in self.headers if key.lower() == wanted), None)
+        return next(iter(header_values(self.headers, name)), None)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -70,7 +76,7 @@ class AiohttpFetcher:
                     (name.decode("latin-1"), value.decode("latin-1"))
                     for name, value in response.raw_headers
                 )
-                status_code = response.status
+                status_code, reason = response.status, response.reason
         # Cancellation is no Exception, so it passes through.
         except Exception as error:
             return FetchFailure(
@@ -81,6 +87,7 @@ class AiohttpFetcher:
         elapsed = self._clock.monotonic() - started
         return FetchResult(
             status_code=status_code,
+            reason=reason,
             headers=headers,
             body=body,
             fetched_at=fetched_at,

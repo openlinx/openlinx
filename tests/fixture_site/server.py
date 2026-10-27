@@ -121,11 +121,12 @@ def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
     match route:
         case Page():
             return _page_response(site, route, base_url)
-        case Status(code=code, body=None):
-            return web.Response(status=code)
-        case Status(code=code, body=body):
+        case Status(code=code, body=None, reason=reason):
+            return web.Response(status=code, reason=reason)
+        case Status(code=code, body=body, reason=reason):
             return web.Response(
                 status=code,
+                reason=reason,
                 body=(body or "").encode(),
                 headers={"Content-Type": CONTENT_TYPES[".html"]},
             )

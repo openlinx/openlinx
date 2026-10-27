@@ -1,5 +1,6 @@
 """The units of spider.store.urls (020-add-crawl-core D1, D2, D14; seam 2)."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -77,9 +78,11 @@ class Note:
     url_id: int
 
 
-def _write_note(connection: Connection, row: Note) -> None:
+def _write_note(connection: Connection, rows: Sequence[Note]) -> None:
     connection.execute(text("CREATE TABLE IF NOT EXISTS test_notes (url_id INTEGER)"))
-    connection.execute(text("INSERT INTO test_notes VALUES (:url_id)"), {"url_id": row.url_id})
+    connection.execute(
+        text("INSERT INTO test_notes VALUES (:url_id)"), [{"url_id": row.url_id} for row in rows]
+    )
 
 
 def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> None:
