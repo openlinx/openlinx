@@ -10,9 +10,12 @@ from sqlalchemy import Connection, select
 
 from spider.crawl.urls import NormalizedUrl
 from spider.rules.model import Rule
+from spider.rules.registry import RULES
+from spider.store.issues import read_affected_urls
 from spider.store.page_records import PageRow
 from spider.store.pages import write_pages
 from spider.store.records import (
+    AffectedUrl,
     ErroredUrl,
     FetchedUrl,
     FetchError,
@@ -53,6 +56,11 @@ TITLE_MULTIPLE = Rule(
 FROM pages JOIN analysed_pages USING (url_id)
 WHERE title_count > 1""",
 )
+
+
+def evaluate_rule(crawl_file: Path, rule: Rule) -> list[AffectedUrl]:
+    # Until each Rule family's tests read through read_affected_urls themselves (task 11.9).
+    return read_affected_urls(crawl_file, rule.id, RULES)
 
 
 def recorded(rule: Rule) -> RuleRow:

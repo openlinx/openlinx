@@ -6,10 +6,10 @@ from spider.rules.response_codes import (
     INTERNAL_BLOCKED_BY_ROBOTS_TXT,
     INTERNAL_NO_RESPONSE,
 )
-from spider.store.issues import evaluate_rule
 from spider.store.records import AffectedUrl
 from tests.support.rules import (
     crawl_with_url,
+    evaluate_rule,
     failed,
     kept_out_by_robots_txt,
     responded,

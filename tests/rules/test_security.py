@@ -1,9 +1,8 @@
 """The security Rule (040-add-rules, rules; seam 2)."""
 
 from spider.rules.security import HTTP_URL
-from spider.store.issues import evaluate_rule
 from spider.store.records import AffectedUrl
-from tests.support.rules import crawl_with_url, responded
+from tests.support.rules import crawl_with_url, evaluate_rule, responded
 from tests.support.workspace import TempWorkspace
 
 

@@ -4,7 +4,7 @@
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import orjson
 from sqlalchemy import (
@@ -35,7 +35,7 @@ from spider.store.schema import affected_urls, crawl, issues, pages, rules
 from spider.store.writer import CrawlWriter
 
 _DELETE = delete(affected_urls).where(affected_urls.c.rule_id == bindparam("rule_id"))
-_ENABLED = select(rules.c.id).where(rules.c.enabled == 1)
+_ENABLED = select(rules.c.id, rules.c.issue_type).where(rules.c.enabled == 1)
 _STATE = select(crawl.c.state)
 _RECORDED_RULE = select(rules.c.enabled).where(rules.c.id == bindparam("rule_id"))
 _RECORDED_IDS = select(rules.c.id)
@@ -51,15 +51,124 @@ _STORED_URL_ISSUES = select(affected_urls.c.rule_id, affected_urls.c.detail).whe
 _STORED_ISSUES = select(issues)
 _STORED_DETAILS = select(affected_urls.c.url_id, affected_urls.c.detail)
 _NO_AFFECTED_URLS = _STORED_DETAILS.where(false())
+_NO_ISSUES = select(*_ISSUE_COLUMNS, literal(0).label("affected_count")).where(false())
 # The selectables of health(): every Internal Page, and the Affected URLs as stored.
 INTERNAL_PAGES = select(pages.c.url_id)
 STORED_AFFECTED_URLS = select(affected_urls.c.rule_id, affected_urls.c.url_id)
+_NO_RULE_URLS = STORED_AFFECTED_URLS.where(false())
 _ISSUE_RULES = select(rules.c.id).where(rules.c.issue_type == "issue", rules.c.enabled == 1)
 
 
-def evaluate_rule(crawl_file: Path, rule: Rule) -> list[AffectedUrl]:
-    with reading(crawl_file) as connection:
-        return _affected_urls(connection, rule)
+class IssueReader(Protocol):
+    """A Crawl's Issues, read one way: as stored by its last pass, or computed live (D16)."""
+
+    def issues(self) -> Select[Any]:
+        """The Issues, in the shape of the issues view."""
+        ...
+
+    def affected_urls(self, rule_id: str) -> Select[Any]:
+        """One Rule's Affected URLs, in the shape of affected_urls; rule_not_found when the
+        Crawl's rules table lacks the Rule."""
+        ...
+
+    def url_issues(self, url_id: int) -> list[UrlIssue]:
+        """The Rules that fired for one URL, in catalogue order."""
+        ...
+
+    def health_affected(self) -> Select[Any]:
+        """The Affected URLs, rule_id and url_id, that health() counts."""
+        ...
+
+
+def issue_reader(connection: Connection, catalogue: Sequence[Rule]) -> IssueReader:
+    """The one choice between a Crawl's stored and live Issues (D16)."""
+    if _materialised(connection):
+        return StoredIssues(connection, catalogue)
+    return LiveIssues(connection, catalogue)
+
+
+class StoredIssues:
+    """The Issues that the Crawl's last pass stored, valid for a completed or stopped Crawl."""
+
+    def __init__(self, connection: Connection, catalogue: Sequence[Rule]) -> None:
+        self._connection = connection
+        self._catalogue = catalogue
+
+    def issues(self) -> Select[Any]:
+        return _STORED_ISSUES
+
+    def affected_urls(self, rule_id: str) -> Select[Any]:
+        # Known by the file's own rules table: a file of a later tool holds Rules the catalogue
+        # lacks.
+        _recorded_rule(self._connection, rule_id)
+        return _STORED_DETAILS.where(affected_urls.c.rule_id == rule_id)
+
+    def url_issues(self, url_id: int) -> list[UrlIssue]:
+        # By the index affected_urls_url_id (D14).
+        stored = {
+            row.rule_id: UrlIssue(rule_id=row.rule_id, url_id=url_id, detail=_detail(row.detail))
+            for row in self._connection.execute(_STORED_URL_ISSUES, {"url_id": url_id})
+        }
+        return _in_catalogue_order(stored, self._catalogue)
+
+    def health_affected(self) -> Select[Any]:
+        return STORED_AFFECTED_URLS
+
+
+class LiveIssues:
+    """The Issues that each enabled Rule's query gives on the rows as they are now."""
+
+    def __init__(self, connection: Connection, catalogue: Sequence[Rule]) -> None:
+        self._connection = connection
+        self._catalogue = catalogue
+        issue_types = {row.id: row.issue_type for row in connection.execute(_ENABLED)}
+        # A Rule that the file records but this catalogue lacks is never computed (D15).
+        self._enabled = [rule for rule in catalogue if rule.id in issue_types]
+        self._issue_rules = [rule for rule in self._enabled if issue_types[rule.id] == "issue"]
+
+    def issues(self) -> Select[Any]:
+        counted = _union(
+            [
+                select(
+                    *_ISSUE_COLUMNS,
+                    select(func.count())
+                    .select_from(_found(rule))
+                    .scalar_subquery()
+                    .label("affected_count"),
+                ).where(rules.c.id == rule.id)
+                for rule in self._enabled
+            ],
+            _NO_ISSUES,
+        ).subquery()
+        return select(counted).where(counted.c.affected_count > 0)
+
+    def affected_urls(self, rule_id: str) -> Select[Any]:
+        if not _recorded_rule(self._connection, rule_id):
+            return _NO_AFFECTED_URLS
+        rule = next((rule for rule in self._catalogue if rule.id == rule_id), None)
+        if rule is None:
+            raise rule_not_computable(rule_id)
+        return select(_found(rule))
+
+    def url_issues(self, url_id: int) -> list[UrlIssue]:
+        found = []
+        for rule in self._enabled:
+            query = _found(rule)
+            found += [
+                UrlIssue(rule_id=rule.id, url_id=url_id, detail=_detail(row.detail))
+                for row in self._connection.execute(select(query).where(query.c.url_id == url_id))
+            ]
+        return found
+
+    def health_affected(self) -> Select[Any]:
+        # Only the Rules that can lower the score: the rest would be counted and then dropped.
+        return _union(
+            [
+                select(literal(rule.id).label("rule_id"), _found(rule).c.url_id)
+                for rule in self._issue_rules
+            ],
+            _NO_RULE_URLS,
+        )
 
 
 def affected_urls_unit(rule: Rule) -> Callable[[Connection], None]:
@@ -99,13 +208,8 @@ def health(connection: Connection, rated: Select[Any], affected: Select[Any]) ->
 
 
 def health_affected_in(connection: Connection, catalogue: Sequence[Rule]) -> Select[Any]:
-    """The Affected URLs, rule_id and url_id, for health(): as stored for a completed or
-    stopped Crawl, otherwise computed live (D16)."""
-    return _stored_or_live(
-        connection,
-        lambda: STORED_AFFECTED_URLS,
-        lambda: _live_rule_urls(catalogue),
-    )
+    """The Affected URLs, rule_id and url_id, for health(), as the Issues reader reads them."""
+    return issue_reader(connection, catalogue).health_affected()
 
 
 async def materialise_issues(writer: CrawlWriter, catalogue: Sequence[Rule], clock: Clock) -> None:
@@ -134,37 +238,26 @@ def _health_unit(calculated_at: datetime) -> Callable[[Connection], None]:
 
 
 def issues_in(connection: Connection, catalogue: Sequence[Rule]) -> Select[Any]:
-    """The Issues, in the shape of the issues view, as stored for a completed or stopped
-    Crawl, otherwise computed live (D16)."""
-    return _stored_or_live(connection, lambda: _STORED_ISSUES, lambda: _live_issues(catalogue))
+    """The Issues, in the shape of the issues view, as the Issues reader reads them."""
+    return issue_reader(connection, catalogue).issues()
 
 
 def affected_urls_in(
     connection: Connection, rule_id: str, catalogue: Sequence[Rule]
 ) -> Select[Any]:
-    """One Rule's Affected URLs, in the shape of affected_urls, as stored for a completed or
-    stopped Crawl, otherwise computed live (D16)."""
-    return _stored_or_live(
-        connection,
-        lambda: _stored_affected_urls(connection, rule_id),
-        lambda: _live_affected_urls(connection, rule_id, catalogue),
-    )
+    """One Rule's Affected URLs, in the shape of affected_urls, as the Issues reader reads
+    them."""
+    return issue_reader(connection, catalogue).affected_urls(rule_id)
 
 
 def read_issues(crawl_file: Path, catalogue: Sequence[Rule]) -> list[Issue]:
     """The Issues of issues_in, in catalogue order, then those of other Rules by id."""
     with reading(crawl_file) as connection:
-        return _issues(connection, issues_in(connection, catalogue), catalogue)
-
-
-def live_issues(crawl_file: Path, catalogue: Sequence[Rule]) -> list[Issue]:
-    with reading(crawl_file) as connection:
-        return _issues(connection, _live_issues(catalogue), catalogue)
-
-
-def stored_issues(crawl_file: Path, catalogue: Sequence[Rule]) -> list[Issue]:
-    with reading(crawl_file) as connection:
-        return _issues(connection, _STORED_ISSUES, catalogue)
+        found = {
+            row.rule_id: Issue(**row._asdict())
+            for row in connection.execute(issues_in(connection, catalogue))
+        }
+        return _in_catalogue_order(found, catalogue)
 
 
 def read_affected_urls(
@@ -172,74 +265,23 @@ def read_affected_urls(
 ) -> list[AffectedUrl]:
     """The Affected URLs of affected_urls_in, by URL id."""
     with reading(crawl_file) as connection:
-        return _affected(connection, affected_urls_in(connection, rule_id, catalogue))
-
-
-def live_affected_urls(
-    crawl_file: Path, rule_id: str, catalogue: Sequence[Rule]
-) -> list[AffectedUrl]:
-    with reading(crawl_file) as connection:
-        return _affected(connection, _live_affected_urls(connection, rule_id, catalogue))
-
-
-def stored_affected_urls(crawl_file: Path, rule_id: str) -> list[AffectedUrl]:
-    with reading(crawl_file) as connection:
-        return _affected(connection, _stored_affected_urls(connection, rule_id))
+        found = affected_urls_in(connection, rule_id, catalogue).subquery()
+        return [
+            AffectedUrl(url_id=row.url_id, detail=_detail(row.detail))
+            for row in connection.execute(select(found).order_by(found.c.url_id))
+        ]
 
 
 def read_url_issues(crawl_file: Path, url_id: int, catalogue: Sequence[Rule]) -> list[UrlIssue]:
-    """The Rules that fired for one URL, in catalogue order, as stored for a completed or
-    stopped Crawl, otherwise computed live (D16)."""
+    """The Rules that fired for one URL, in catalogue order, as the Issues reader reads them."""
     with reading(crawl_file) as connection:
-        return _stored_or_live(
-            connection,
-            lambda: _stored_url_issues(connection, url_id, catalogue),
-            lambda: _live_url_issues(connection, url_id, catalogue),
-        )
+        return issue_reader(connection, catalogue).url_issues(url_id)
 
 
-def _live_rule_urls(catalogue: Sequence[Rule]) -> Select[Any]:
-    found = [select(literal(rule.id).label("rule_id"), _found(rule).c.url_id) for rule in catalogue]
-    return select(union_all(*found).subquery())
-
-
-def _live_issues(catalogue: Sequence[Rule]) -> Select[Any]:
-    counted = union_all(
-        *(
-            select(
-                *_ISSUE_COLUMNS,
-                select(func.count())
-                .select_from(_found(rule))
-                .scalar_subquery()
-                .label("affected_count"),
-            ).where(rules.c.id == rule.id, rules.c.enabled == 1)
-            for rule in catalogue
-        )
-    ).subquery()
-    return select(counted).where(counted.c.affected_count > 0)
-
-
-def _issues(connection: Connection, query: Select[Any], catalogue: Sequence[Rule]) -> list[Issue]:
-    found = {row.rule_id: Issue(**row._asdict()) for row in connection.execute(query)}
-    return _in_catalogue_order(found, catalogue)
-
-
-def _live_affected_urls(
-    connection: Connection, rule_id: str, catalogue: Sequence[Rule]
-) -> Select[Any]:
-    enabled = _recorded_rule(connection, rule_id)
-    if not enabled:
-        return _NO_AFFECTED_URLS
-    rule = next((rule for rule in catalogue if rule.id == rule_id), None)
-    if rule is None:
-        raise rule_not_computable(rule_id)
-    return select(_found(rule))
-
-
-def _stored_affected_urls(connection: Connection, rule_id: str) -> Select[Any]:
-    # Known by the file's own rules table: a file of a later tool holds Rules the catalogue lacks.
-    _recorded_rule(connection, rule_id)
-    return _STORED_DETAILS.where(affected_urls.c.rule_id == rule_id)
+def _union(selects: Sequence[Select[Any]], empty: Select[Any]) -> Select[Any]:
+    if not selects:
+        return empty
+    return select(union_all(*selects).subquery())
 
 
 def _recorded_rule(connection: Connection, rule_id: str) -> bool:
@@ -250,41 +292,6 @@ def _recorded_rule(connection: Connection, rule_id: str) -> bool:
     if enabled is None:
         raise rule_not_found(rule_id, connection.execute(_RECORDED_IDS).scalars().all())
     return enabled
-
-
-def _affected(connection: Connection, query: Select[Any]) -> list[AffectedUrl]:
-    found = query.subquery()
-    return [
-        AffectedUrl(url_id=row.url_id, detail=_detail(row.detail))
-        for row in connection.execute(select(found).order_by(found.c.url_id))
-    ]
-
-
-def _live_url_issues(
-    connection: Connection, url_id: int, catalogue: Sequence[Rule]
-) -> list[UrlIssue]:
-    enabled = _enabled_rule_ids(connection)
-    found = []
-    for rule in catalogue:
-        if rule.id not in enabled:
-            continue
-        query = _found(rule)
-        found += [
-            UrlIssue(rule_id=rule.id, url_id=url_id, detail=_detail(row.detail))
-            for row in connection.execute(select(query).where(query.c.url_id == url_id))
-        ]
-    return found
-
-
-def _stored_url_issues(
-    connection: Connection, url_id: int, catalogue: Sequence[Rule]
-) -> list[UrlIssue]:
-    # By the index affected_urls_url_id (D14).
-    stored = {
-        row.rule_id: UrlIssue(rule_id=row.rule_id, url_id=url_id, detail=_detail(row.detail))
-        for row in connection.execute(_STORED_URL_ISSUES, {"url_id": url_id})
-    }
-    return _in_catalogue_order(stored, catalogue)
 
 
 def _in_catalogue_order[T](by_rule_id: Mapping[str, T], catalogue: Sequence[Rule]) -> list[T]:
@@ -301,24 +308,12 @@ def _found(rule: Rule) -> Subquery:
     return text(written).columns(url_id=Integer, detail=Text).subquery()
 
 
-def _affected_urls(connection: Connection, rule: Rule) -> list[AffectedUrl]:
-    return [
-        AffectedUrl(url_id=url_id, detail=_detail(detail))
-        for url_id, detail in connection.execute(select(_found(rule)))
-    ]
-
-
 def _enabled_rule_ids(connection: Connection) -> frozenset[str]:
     return frozenset(row.id for row in connection.execute(_ENABLED))
 
 
 def _detail(stored: str | None) -> Any:
     return None if stored is None else orjson.loads(stored)
-
-
-def _stored_or_live[T](connection: Connection, stored: Callable[[], T], live: Callable[[], T]) -> T:
-    """The one choice of the readers between a Crawl's stored and live Issues (D16)."""
-    return stored() if _materialised(connection) else live()
 
 
 def _materialised(connection: Connection) -> bool:

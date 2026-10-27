@@ -1,9 +1,8 @@
 """The headings Rules (040-add-rules, rules; seam 2)."""
 
 from spider.rules.headings import H1_MISSING
-from spider.store.issues import evaluate_rule
 from spider.store.records import AffectedUrl
-from tests.support.rules import crawl_with_page
+from tests.support.rules import crawl_with_page, evaluate_rule
 from tests.support.workspace import TempWorkspace
 
 

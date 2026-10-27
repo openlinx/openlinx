@@ -7,11 +7,10 @@ import pytest
 from spider.rules.headings import H1_MISSING
 from spider.rules.meta_descriptions import META_DESCRIPTION_MISSING
 from spider.rules.titles import TITLE_DUPLICATE, TITLE_MISSING, TITLE_TOO_LONG
-from spider.store.issues import evaluate_rule
 from spider.store.page_records import PageRow
 from spider.store.records import AffectedUrl
 from tests.support.crawls import query
-from tests.support.rules import SHOES, crawl_with_page, crawl_with_pages
+from tests.support.rules import SHOES, crawl_with_page, crawl_with_pages, evaluate_rule
 from tests.support.workspace import TempWorkspace
 
 

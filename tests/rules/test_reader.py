@@ -14,13 +14,13 @@ from spider.rules.registry import RULES
 from spider.rules.titles import TITLE_MISSING
 from spider.store.crawls import record_state
 from spider.store.issues import (
+    StoredIssues,
     affected_urls_in,
     issues_in,
     materialise_issues,
     read_affected_urls,
     read_issues,
     read_url_issues,
-    stored_affected_urls,
 )
 from spider.store.reading import reading
 from spider.store.records import AffectedUrl, UrlIssue
@@ -179,8 +179,8 @@ def test_an_unknown_rule_id_gets_the_closest_ids_the_crawl_records(
     crawl_file = later_rule_crawl(temp_workspace)
     with pytest.raises(SpiderError) as live:
         read_affected_urls(crawl_file, "a-later-rul", RULES)
-    with pytest.raises(SpiderError) as stored:
-        stored_affected_urls(crawl_file, "a-later-rul")
+    with reading(crawl_file) as connection, pytest.raises(SpiderError) as stored:
+        StoredIssues(connection, RULES).affected_urls("a-later-rul")
 
     assert (
         live.value.diagnostic.details["suggestions"],

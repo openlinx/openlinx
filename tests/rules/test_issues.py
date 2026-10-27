@@ -12,13 +12,15 @@ import pytest
 
 from spider.rules.registry import RULES
 from spider.store.issues import (
-    live_affected_urls,
-    live_issues,
+    INTERNAL_PAGES,
+    IssueReader,
+    LiveIssues,
+    StoredIssues,
+    health,
     read_affected_urls,
     read_issues,
-    stored_affected_urls,
-    stored_issues,
 )
+from spider.store.reading import reading
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site, Status
 from tests.fixture_site.server import ServerHandle
@@ -258,17 +260,30 @@ def test_live_and_materialised_issues_agree(
     enabled = [
         rule_id for (rule_id,) in query(crawl_file, "SELECT id FROM rules WHERE enabled = 1")
     ]
-    live = {rule_id: live_affected_urls(crawl_file, rule_id, RULES) for rule_id in enabled}
-    stored = {rule_id: stored_affected_urls(crawl_file, rule_id) for rule_id in enabled}
-
-    stored_found = stored_issues(crawl_file, RULES)
+    with reading(crawl_file) as connection:
+        live, stored = (
+            read_through(connection, adapter(connection, RULES), enabled)
+            for adapter in (LiveIssues, StoredIssues)
+        )
 
     # Every Rule fires on RULE_PAGES, so the comparison is not vacuous.
-    assert (
-        live_issues(crawl_file, RULES),
-        live,
-        sorted(issue.rule_id for issue in stored_found),
-    ) == (stored_found, stored, sorted(FIRING_ON_RULE_PAGES))
+    assert (live, sorted(rule_id for rule_id, *_ in stored[0])) == (
+        stored,
+        sorted(FIRING_ON_RULE_PAGES),
+    )
+
+
+def read_through(connection: Any, reader: IssueReader, rule_ids: list[str]) -> tuple[Any, ...]:
+    """What a reader gives: the Issues, each Rule's Affected URLs and those the Health Score
+    scores, each in a fixed order."""
+    return (
+        sorted(tuple(row) for row in connection.execute(reader.issues())),
+        {
+            rule_id: sorted(connection.execute(reader.affected_urls(rule_id)))
+            for rule_id in rule_ids
+        },
+        health(connection, INTERNAL_PAGES, reader.health_affected()),
+    )
 
 
 def test_disabled_rule_produces_no_issue(

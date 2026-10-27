@@ -7,13 +7,13 @@ import pytest
 
 from spider.rules.model import Population, Rule
 from spider.rules.registry import RULES
-from spider.store.issues import evaluate_rule
 from tests.support.crawls import query
 from tests.support.rules import (
     SHOES,
     crawl_with_page,
     crawl_with_pages,
     crawl_with_url,
+    evaluate_rule,
     failed,
     responded,
 )
