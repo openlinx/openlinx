@@ -16,7 +16,14 @@ from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect, not_writable_name, opening
 from spider.store.ids import Choice, crawl_path, new_crawl_id
 from spider.store.journal import JournalChoice, confirm_journal_mode
-from spider.store.records import CrawlFile, CrawlState, CrawlSummary, NewCrawl, StopReason
+from spider.store.records import (
+    CrawlFile,
+    CrawlState,
+    CrawlSummary,
+    NewCrawl,
+    RecordedScope,
+    StopReason,
+)
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
 from spider.store.transitions import check_transition
 from spider.workspace.creation import as_workspace_not_writable, create_data_folder
@@ -70,6 +77,17 @@ def record_state(
 
     def unit(connection: Connection) -> None:
         set_state(connection, state, at, stop_reason)
+
+    return unit
+
+
+def record_scope(scope: RecordedScope) -> Callable[[Connection], None]:
+    """A unit that records the Scope again, once a Seed's Redirect Chain widened it
+    (022-add-fetch-policy D3)."""
+    statement = update(crawl).values(scope=dict(scope))
+
+    def unit(connection: Connection) -> None:
+        connection.execute(statement)
 
     return unit
 

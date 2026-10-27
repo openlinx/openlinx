@@ -15,11 +15,13 @@ from spider.crawl.engine.crawl_warnings import (
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from spider.crawl.engine.outcomes import Outcomes
+from spider.crawl.engine.seed_chain import SeedChain
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
 from spider.crawl.following import RESOURCES, redirect_target
 from spider.crawl.pages.preparation import (
+    PageSettings,
     is_html_type,
     response_directives,
     response_links,
@@ -30,6 +32,7 @@ from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.output.codes import HANDLER_FAILED, PARSE_FAILED
 from spider.output.diagnostics import Diagnostic
+from spider.store.crawls import record_scope
 from spider.store.records import (
     ErroredUrl,
     FetchedUrl,
@@ -39,7 +42,13 @@ from spider.store.records import (
     SkipReason,
 )
 from spider.store.rows import HandlerRows
-from spider.store.urls import UrlUnit, record_error, record_fetched, record_skipped
+from spider.store.urls import (
+    UrlUnit,
+    reclassify_urls,
+    record_error,
+    record_fetched,
+    record_skipped,
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -54,6 +63,7 @@ class Run:
     blocking: BlockingRuns
     # The tasks of Checked URLs in flight, which never hold the depth barrier (design D3).
     checked_urls: set[asyncio.Task[None]]
+    seed_chain: SeedChain
 
 
 def via_resource(queued: QueuedUrl) -> bool:
@@ -67,6 +77,46 @@ async def unit_of(
     and the unit that records it with their rows; or None when the URL limit refuses a new
     request, which leaves it queued. `decision` is taken once, at dispatch, so a URL found
     on several Pages is recorded once (design D1)."""
+    # The Seed's Redirect Chain is depth 0: a redirect target keeps its source's depth.
+    in_chain = run.seed_chain.is_open and queued.crawl_depth == 0
+    if in_chain:
+        run.seed_chain.join(queued.id, queued.url)
+    recorded = await _outcome(run, queued, decision, in_chain)
+    response = None if recorded is None else recorded[0].response
+    # The chain ended without a response of its own: a failure or a skip.
+    if (
+        in_chain
+        and run.seed_chain.is_open
+        and recorded is not None
+        and (response is None or response.redirect_target is None)
+    ):
+        await close_seed_chain(run, queued.url, responded=False)
+    return recorded
+
+
+async def close_seed_chain(run: Run, final_url: NormalizedUrl, *, responded: bool) -> None:
+    """Closes the Seed's Redirect Chain on the URL it ended on: its URLs are decided again
+    against the Scope it ended in, which the Crawl records when it widened, and page
+    preparation starts with that Scope (022-add-fetch-policy D3)."""
+    context = run.context
+    widened, decisions = run.seed_chain.close(final_url, responded=responded)
+    await context.writer.run_async(reclassify_urls(decisions))
+    if widened is not None:
+        await context.writer.run_async(record_scope(widened.to_json()))
+    await context.pages.start(
+        PageSettings(
+            scope=run.seed_chain.scope,
+            extractors=context.hooks.extractors,
+            robots_token=context.settings.robots_user_agent,
+            follow_nofollow=context.settings.follow_nofollow,
+            strip_params=context.strip_params,
+        )
+    )
+
+
+async def _outcome(
+    run: Run, queued: QueuedUrl, decision: ScopeDecision, in_chain: bool
+) -> tuple[UrlResult, UrlUnit] | None:
     context, robots = run.context, run.robots
     dispatched = _dispatched(queued, decision)
     skip_reason = _skip_reason(context, queued, decision)
@@ -116,7 +166,7 @@ async def unit_of(
             fetched_at=response.fetched_at,
         )
         return _errored(context, decided, failure)
-    return await _fetched(context, decided, response)
+    return await _fetched(run, decided, response, in_chain)
 
 
 def _errored(
@@ -162,10 +212,16 @@ def _skip_reason(
 
 
 async def _fetched(
-    context: CrawlContext, decided: UrlResult, response: FetchResult
+    run: Run, decided: UrlResult, response: FetchResult, in_chain: bool
 ) -> tuple[UrlResult, UrlUnit]:
-    url = decided.url
+    context, url = run.context, decided.url
     content_type = response.header("Content-Type")
+    location = response.header("Location") if 300 <= response.status_code < 400 else None
+    target = redirect_target(url, response.status_code, location, context.strip_params)
+    if in_chain and target is None:
+        # Before any preparation: the chain's last response may be a Page of the wider Scope.
+        await close_seed_chain(run, url, responded=True)
+    scope = run.seed_chain.scope
     # An External URL or one outside the Scope is a Checked URL, never parsed (design D5).
     followed = decided.in_scope and 200 <= response.status_code < 300
     prepared = followed and is_html_type(content_type)
@@ -173,7 +229,7 @@ async def _fetched(
     parsed = page is not None and page.parsed
     # The Link and Refresh headers of an in-Scope 2xx response count, whatever became of its
     # preparation (design D9).
-    links = response_links(url, response, context.scope, context.strip_params) if followed else ()
+    links = response_links(url, response, scope, context.strip_params) if followed else ()
     if page is not None:
         links += page.document_links
     if page is not None and page.parsed:
@@ -181,7 +237,7 @@ async def _fetched(
     else:
         # The X-Robots-Tag applies to any response, a PDF's or a failed Page's (D9).
         directives = response_directives(response, context.settings.robots_user_agent)
-    discovered = discovered_urls(links, context.scope)
+    discovered = discovered_urls(links, scope)
     if parsed and decided.discovered_via == "seed":
         warn_of_seed_base_mismatch(context, url, links)
     parse_error = None if page is None else page.parse_error
@@ -189,8 +245,6 @@ async def _fetched(
     if parse_error is not None:
         failure = parse_failure(url, parse_error, parse_error_message)
         context.reporter.count(Diagnostic.of(PARSE_FAILED, failure), url)
-    location = response.header("Location") if 300 <= response.status_code < 400 else None
-    target = redirect_target(url, response.status_code, location, context.strip_params)
     url_response = UrlResponse(
         status_code=response.status_code,
         reason=response.reason,
@@ -212,7 +266,11 @@ async def _fetched(
         outputs={} if page is None else dict(page.outputs),
     )
     rows = _handler_rows(context, fetched)
-    redirect = None if target is None else _redirect(target, context.scope.decide(target))
+    redirect = (
+        None
+        if target is None
+        else _redirect(target, run.seed_chain.decide(target, in_chain=in_chain))
+    )
     record = _fetched_record(
         fetched, url_response, discovered, rows, location=location, redirect=redirect
     )

@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from ipaddress import IPv4Address
 from typing import TYPE_CHECKING
@@ -67,6 +67,25 @@ class ScopeRules:
             "include": [pattern.pattern for pattern in self.include],
             "exclude": [pattern.pattern for pattern in self.exclude],
         }
+
+    def admitting_the_domain_of(self, url: NormalizedUrl) -> "ScopeRules":
+        """These rules, with every host of the registrable domain of `url` internal too: the
+        provisional Scope of a Seed's Redirect Chain (022-add-fetch-policy D3)."""
+        domain = _registrable_domain(_without_trailing_dot(url_host(url)))
+        if domain is None:
+            return self
+        return replace(self, registrable_domains=self.registrable_domains | {domain})
+
+    def widened_to(self, url: NormalizedUrl) -> "ScopeRules | None":
+        """These rules with the host of `url` as a Seed host, when it is outside them and of
+        the registrable domain of the first Seed host; None otherwise (022 D3)."""
+        host = _without_trailing_dot(url_host(url))
+        if self.decide(url).is_internal:
+            return None
+        domain = _registrable_domain(host)
+        if domain is None or domain != _registrable_domain(self.seed_hosts[0]):
+            return None
+        return replace(self, seed_hosts=(*self.seed_hosts, host))
 
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
         host = _without_trailing_dot(url_host(url))

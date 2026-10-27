@@ -75,6 +75,7 @@ _REDIRECT_URL_ID = (
 _DEPTH = select(urls.c.crawl_depth).where(urls.c.id == bindparam("url_id"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
+_RECLASSIFIED = _URL_ROW.values(is_internal=bindparam("internal"), in_scope=bindparam("scoped"))
 _FETCHED = _URL_ROW.values(
     fetch_state="fetched",
     status_code=bindparam("response_status"),
@@ -261,6 +262,20 @@ def _new_row(new: NewUrl, found_on: int) -> dict[str, Any]:
         "skip_reason": new.skip_reason,
         "parsed": False,
     }
+
+
+def reclassify_urls(decisions: Sequence[tuple[int, bool, bool]]) -> UrlUnit:
+    """A unit that writes is_internal and in_scope again, by URL id: the URLs of a Seed's
+    Redirect Chain, against the Scope it ended in (022-add-fetch-policy D3)."""
+    rows = [
+        {"url_id": url_id, "internal": internal, "scoped": scoped}
+        for url_id, internal, scoped in decisions
+    ]
+
+    def unit(connection: Connection) -> None:
+        connection.execute(_RECLASSIFIED, rows)
+
+    return unit
 
 
 def record_skipped(skipped: SkippedUrl) -> UrlUnit:

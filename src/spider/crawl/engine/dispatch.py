@@ -5,10 +5,10 @@ import asyncio
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import warn_of_the_url_limit
 from spider.crawl.engine.outcomes import Outcomes
-from spider.crawl.engine.units import Run, unit_of, via_resource
+from spider.crawl.engine.seed_chain import SeedChain
+from spider.crawl.engine.units import Run, close_seed_chain, unit_of, via_resource
 from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits
 from spider.crawl.fetch.requester import Requester
-from spider.crawl.pages.preparation import PageSettings
 from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import NormalizedUrl
@@ -41,25 +41,19 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         robots=RobotsLoader(requester, context.writer, context.settings.robots_user_agent),
         blocking=BlockingRuns(),
         checked_urls=set(),
+        seed_chain=SeedChain(context.scope, seed),
     )
     decision = context.scope.decide(seed)
     await context.writer.run_async(
         record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
     )
-    # Once, with the final Scope: 022 moves this to the end of the Seed's Redirect Chain.
-    await context.pages.start(
-        PageSettings(
-            scope=context.scope,
-            extractors=context.hooks.extractors,
-            robots_token=context.settings.robots_user_agent,
-            follow_nofollow=context.settings.follow_nofollow,
-            strip_params=context.strip_params,
-        )
-    )
     depth: int | None = 0
     try:
         while depth is not None:
             await _crawl_depth(run, depth)
+            if run.seed_chain.is_open and not context.stop.is_set:
+                # No URL of the chain was decided, such as one the URL limit refused.
+                await close_seed_chain(run, seed, responded=False)
             # A stop cancels the checked URLs in flight: the sweep below would wait for them.
             if context.stop.is_set:
                 break
@@ -114,7 +108,7 @@ async def _crawl_depth(run: Run, depth: int) -> None:
                     if limits.limit_reached() is not None:
                         limits.task_ended()
                         break
-                    decision = context.scope.decide(queued.url)
+                    decision = run.seed_chain.decide(queued.url, in_chain=queued.crawl_depth == 0)
                     task = asyncio.create_task(_crawl_url(run, queued, decision))
                     # A checked URL never holds the barrier (design D3); the sweep in run_crawl
                     # reads what one finds after its depth has closed.
