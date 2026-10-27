@@ -189,4 +189,4 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 10.10 Drive "Later edits do not change a completed Crawl" at seam 2.
 - [ ] 10.11 Drive "Resumed Crawl keeps the recorded configuration" at seam 3+6. Stop at `--max-urls`, then resume through the Crawl Service with a higher limit. Waits for `060-min`'s resume.
 - [x] 10.12 Docs: add the Health Score definition, the `health_*` fields, and how `050` and `070` call the function for Segments to `docs/rules.md`, with a link from `docs/architecture.md`.
-- [ ] 10.13 Review: run the code-review skill on group 10's commits and then on the whole change, and refactor with the whole suite green.
+- [x] 10.13 Review: run the code-review skill on group 10's commits and then on the whole change, and refactor with the whole suite green.

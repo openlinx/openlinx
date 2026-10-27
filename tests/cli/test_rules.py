@@ -36,7 +36,7 @@ def test_every_rule_has_its_guidance() -> None:
     assert [item["id"] for item in items if not all(item[key] for key in GUIDANCE)] == []
 
 
-# The Health Score counts the Pages of internal_pages, Indexable Pages among them.
+# applies_to names no Indexable population: Indexable-only narrows internal_pages.
 APPLIES_TO = {
     "internal-4xx": "internal_urls",
     "internal-5xx": "internal_urls",

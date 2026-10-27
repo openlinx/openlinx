@@ -11,22 +11,29 @@ from spider.store.issues import affected_urls_unit, materialise_issues
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import query
+from tests.support.page_data import page_data
 from tests.support.rules import SHOES, crawl_with_page, crawl_with_pages
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import replay_now
 
 
 def test_the_units_of_the_issues_pass_run_again_the_same(temp_workspace: TempWorkspace) -> None:
-    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    crawl_file, url_id = crawl_with_page(
+        temp_workspace, **page_data("<h1>Sale</h1><p>Everything half price this week.</p>")
+    )
 
     with CrawlWriter(crawl_file, FakeClock()) as writer:
-        writer.run(affected_urls_unit(TITLE_MISSING))
-        writer.run(affected_urls_unit(TITLE_MISSING))
+        for _ in range(2):
+            asyncio.run(materialise_issues(writer, RULES, FakeClock()), loop_factory=loop_factory)
         replay_now(writer)
 
-    assert query(crawl_file, "SELECT rule_id, url_id, detail FROM affected_urls") == [
-        ("title-missing", url_id, None)
-    ]
+    assert query(
+        crawl_file, "SELECT rule_id, url_id, detail FROM affected_urls WHERE rule_id LIKE 'title-%'"
+    ) == [("title-missing", url_id, None)]
+    assert query(
+        crawl_file,
+        "SELECT health_score, health_internal_page_count, health_affected_page_count FROM crawl",
+    ) == [(0, 1, 1)]
 
 
 def test_the_issues_pass_comes_last() -> None:

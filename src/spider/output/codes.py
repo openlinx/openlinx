@@ -113,7 +113,11 @@ CRAWL_NOT_FOUND = _declare(
     "No Crawl in the Workspace has the --crawl id, or no file exists at the --crawl path.",
 )
 RULE_NOT_FOUND = _declare(
-    "rule_not_found", "error", ExitCode.NOT_FOUND, "No Rule has the id given to rules show."
+    "rule_not_found",
+    "error",
+    ExitCode.NOT_FOUND,
+    "No Rule has the id given: rules show looks in this tool's Rules, a read of Issues in the "
+    "Crawl's rules table, and a live read also needs the Rule in this tool.",
 )
 CRAWL_BUSY = _declare(
     "crawl_busy",

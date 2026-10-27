@@ -128,3 +128,16 @@ def test_a_finished_crawl_is_scored_from_its_stored_issues(
         found = health(connection, INTERNAL_PAGES, health_affected_in(connection, RULES))
 
     assert found == Health(score=50, internal_pages=2, affected_pages=1)
+
+
+def test_a_page_too_large_to_parse_is_still_rated(temp_workspace: TempWorkspace) -> None:
+    # A Page over the parse limit: its pages row has no Page data, and no Page Rule
+    # reads it, but it is a Page of the Crawl.
+    crawl_file, _ = crawl_with_page(temp_workspace, parse_error="body_too_large")
+    with CrawlWriter(crawl_file, FakeClock()) as writer:
+        asyncio.run(materialise_issues(writer, RULES, FakeClock()), loop_factory=loop_factory)
+
+    with reading(crawl_file) as connection:
+        found = health(connection, INTERNAL_PAGES, STORED_AFFECTED_URLS)
+
+    assert found == Health(score=100, internal_pages=1, affected_pages=0)

@@ -14,7 +14,7 @@ type ThresholdUnit = Literal["characters", "pixels", "words", "kilobytes", "hops
 # The views that a Rule's query joins (design D19).
 type Population = Literal["internal_urls", "analysed_pages", "indexable_pages"]
 
-# The Health Score counts the Indexable Pages among the Internal Pages.
+# The spec's applies_to names no Indexable population: Indexable-only narrows internal_pages.
 _APPLIES_TO: Mapping[Population, AppliesTo] = {
     "internal_urls": "internal_urls",
     "analysed_pages": "internal_pages",

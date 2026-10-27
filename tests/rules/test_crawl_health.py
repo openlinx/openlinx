@@ -18,8 +18,8 @@ from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
 AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
-# A small shop on plain HTTP, whose sale Page lost its <title> and whose size guide is gone: a
-# PDF that is an Internal URL with an Issue, not a Page.
+# A small shop on plain HTTP, whose sale Page lost its <title> and whose size guide PDF is gone:
+# its 404 is an Internal URL with an Issue, not a Page.
 SHOP = Site(
     {
         "/": Page(
@@ -54,7 +54,7 @@ def test_health_score_of_a_segment_of_urls(
 ) -> None:
     server = fixture_site(SHOP)
     crawl_file = crawled(server.url("/"))
-    # The URLs under /shoes: the Page and the broken PDF, which is no Page to rate.
+    # The URLs under /shoes: the Page and the size guide's 404, which is no Page to rate.
     segment = select(urls.c.id.label("url_id")).where(urls.c.url.startswith(server.url("/shoes")))
 
     with reading(crawl_file) as connection:
