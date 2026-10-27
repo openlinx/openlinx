@@ -22,3 +22,28 @@ def test_an_https_site_signed_by_a_ca_the_crawl_trusts_is_crawled(
     assert query(crawl_file, "SELECT url, fetch_state, status_code FROM urls") == [
         ("https://site.test/", "fetched", 200)
     ]
+
+
+def test_a_certificate_for_another_name_is_a_tls_error(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    hosts = fixture_tls_hosts(
+        Site(
+            routes={
+                "/": Page(
+                    body='<a href="https://badcert.test/">Sale</a> '
+                    '<a href="https://site.test/">Secure home</a>'
+                )
+            }
+        ),
+        OTHER,
+    )
+
+    crawl_file = crawl_result(
+        "http://site.test/", resolver=hosts.resolver, trust_anchors=hosts.trust_anchors
+    ).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT url, fetch_state, fetch_error FROM urls WHERE url LIKE 'https:%' ORDER BY url",
+    ) == [("https://badcert.test/", "error", "tls_error"), ("https://site.test/", "fetched", None)]
