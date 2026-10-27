@@ -461,7 +461,7 @@ The fixes of the review of `spider.crawl` along both axes. Group 16 runs last, a
 - [x] 18.4 Fix: one host key in `spider.crawl.urls`, without a trailing dot, for the Scope, the per-host slots, the rate turn and the blocking runs.
   Done when: two URLs that differ only by a trailing dot on the host share one rate turn, red first.
 - [x] 18.5 Refactor: the tests of `extract_links` move to `prepare_page` at seam 4, the header-first order and `first_ordinal` included, and `extract_links` goes.
-- [ ] 18.6 Refactor: one constructor builds a `DiscoveredLink` for the link extractor and the header Links, and one ordered table maps `rel` tokens to a Link type for both, the headers reading only their types, behaviour unchanged.
+- [x] 18.6 Refactor: one constructor builds a `DiscoveredLink` for the link extractor and the header Links, and one ordered table maps `rel` tokens to a Link type for both, the headers reading only their types, behaviour unchanged.
 - [ ] 18.7 Refactor: the texts of `handler_failed`, `record_failed` and `parse_failed` move into `spider.crawl.engine.crawl_warnings`, and `_robots_verdict` returns its warnings for the caller to give, behaviour unchanged.
 - [ ] 18.8 Refactor: `CrawlContext.reporter` is typed `WarningLog`, the one adapter, and the `CrawlReporter` Protocol goes; `document_links` is renamed `html_links`, and CONTEXT.md notes "reference" as the raw string before it resolves to a Link.
 - [ ] 18.9 Refactor: the duplicate of `test_an_unreachable_robots_txt_is_reported_under_ignore_robots` goes, with its Risks entry.
