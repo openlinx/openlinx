@@ -215,7 +215,7 @@ BOOM_SITE = Site(
 )
 
 
-def _with_extractors(*extractors: Extractor[Any]) -> Hooks:
+def _with_extractors(*extractors: Extractor[Any, Any]) -> Hooks:
     hooks = default_hooks()
     return replace(hooks, extractors=(*hooks.extractors, *extractors))
 
@@ -271,8 +271,17 @@ class Outputs:
     names: str
 
 
+_EXPLODING = extractor("exploding", _exploding, None)
+_FOUND = extractor("found", _found, None)
+
+
 def _outputs(result: UrlResult) -> tuple[Outputs, ...]:
-    return (Outputs(result.url_id, ",".join(sorted(result.outputs))),)
+    found = [
+        registered.name
+        for registered in (_EXPLODING, _FOUND)
+        if registered.output(result.outputs) is not None
+    ]
+    return (Outputs(result.url_id, ",".join(found)),)
 
 
 def _write_outputs(connection: Connection, rows: Sequence[Outputs]) -> None:
@@ -287,9 +296,7 @@ def test_handlers_get_the_outputs_of_the_extractors_that_did_not_fail(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = _with_extractors(
-        extractor("exploding", _exploding, None), extractor("found", _found, None)
-    )
+    hooks = _with_extractors(_EXPLODING, _FOUND)
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, handler("outputs", _outputs, _write_outputs)),
@@ -478,6 +485,38 @@ def test_a_handler_that_fails_midway_keeps_none_of_its_rows(
 
 def _not_a_struct(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
     return {"url": page.url}  # type: ignore[return-value]
+
+
+class Moved(msgspec.Struct, frozen=True):
+    url: str
+    status: int
+
+
+def _found_or_moved(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
+    # A branch that builds the struct of another extractor: mypy is told to look away.
+    if page.url.endswith("/ok"):
+        return Moved(page.url, page.status_code)  # type: ignore[return-value]
+    return Found(page.url)
+
+
+def test_an_extractor_that_returns_another_struct_than_it_declares_is_an_extractor_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+
+    result = crawl_result(
+        server.url("/"), _with_extractors(extractor("found", _found_or_moved, None))
+    )
+
+    assert query(
+        result.crawl_file,
+        "SELECT url, parsed, parse_error, parse_error_message FROM urls WHERE url IN (?, ?) "
+        "ORDER BY id",
+        [server.url("/"), server.url("/ok")],
+    ) == [
+        (server.url("/"), 1, None, None),
+        (server.url("/ok"), 1, "extractor_error", "found: TypeError"),
+    ]
 
 
 def test_an_extractor_that_returns_no_struct_is_an_extractor_error(

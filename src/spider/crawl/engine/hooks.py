@@ -73,7 +73,8 @@ class UrlResult:
     # The Links the engine read for discovery: an in-Scope 2xx response's header Links,
     # then its document's when it was prepared (design D5).
     links: tuple[DiscoveredLink, ...] = ()
-    # By extractor name, for a parsed response; an extractor that failed has none.
+    # By extractor name, for a parsed response; an extractor that failed has none. A handler
+    # reads one with that extractor's output(outputs).
     outputs: Mapping[str, msgspec.Struct] = field(default_factory=dict)
 
 
@@ -113,7 +114,7 @@ class Pass:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Hooks:
-    extractors: tuple[Extractor[Any], ...] = ()
+    extractors: tuple[Extractor[Any, Any], ...] = ()
     handlers: tuple[Handler[Any], ...] = ()
     # One after another in this order, so a pass may read what an earlier one wrote.
     passes: tuple[Pass, ...] = ()

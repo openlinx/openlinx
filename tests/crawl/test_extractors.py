@@ -73,3 +73,13 @@ def test_an_extractor_s_config_must_be_a_struct() -> None:
     with pytest.raises(TypeError, match="struct"):
         # A wrong call on purpose: mypy refuses it, and the check must refuse it at run time too.
         extractor("dict", _from_a_dict, {"text": "hi"})  # type: ignore[type-var]
+
+
+def _headings(tree: LexborHTMLParser, page: PageInput, config: None) -> dict[str, str]:
+    return {"h1": heading.text() if (heading := tree.css_first("h1")) else ""}
+
+
+def test_an_extractor_whose_function_returns_no_struct_cannot_be_built() -> None:
+    with pytest.raises(TypeError, match="struct"):
+        # mypy refuses it too; the check refuses an extractor that mypy never saw.
+        extractor("headings", _headings, None)  # type: ignore[type-var]
