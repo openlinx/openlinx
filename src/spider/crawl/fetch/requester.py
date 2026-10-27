@@ -78,10 +78,13 @@ class Requester:
 
     async def _retried(self, url: NormalizedUrl, outcome: FetchResult | FetchFailure) -> Attempted:
         attempts = 1
-        while attempts <= self._retries and is_retried(outcome):
+        while True:
             wait, pauses = retry_wait(outcome, attempts)
+            # Politeness toward the host, whether or not the URL has a retry left.
             if pauses:
                 self._gate.pause(host_key(url), wait)
+            if attempts > self._retries or not is_retried(outcome):
+                break
             # Outside the slots: a waiting retry holds none of the host's --concurrency.
             await self._clock.sleep(wait)
             async with self._slots(url):

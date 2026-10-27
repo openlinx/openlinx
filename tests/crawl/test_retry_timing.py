@@ -51,6 +51,25 @@ def test_retry_after_pauses_the_host(temp_workspace: TempWorkspace) -> None:
     assert (_starts(fetcher, "/a"), _starts(fetcher, "/b")) == ([0.0, 7.0], [7.0])
 
 
+def test_a_429_pauses_the_host_without_a_retry(temp_workspace: TempWorkspace) -> None:
+    # The same gateway, crawled with no retries: /a is given up, but /b still waits.
+    clock = FakeClock()
+    fetcher = FakeFetcher(
+        clock,
+        {
+            "/": FakePage('<a href="/a">A</a><a href="/b">B</a>'),
+            "/a": FakePage(
+                "<h1>Too Many Requests</h1>", status=429, headers=(("Retry-After", "7"),)
+            ),
+            "/b": FakePage("<title>B</title>"),
+        },
+    )
+
+    crawl_result("http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, retries=0)
+
+    assert (_starts(fetcher, "/a"), _starts(fetcher, "/b")) == ([0.0], [7.0])
+
+
 @pytest.mark.parametrize(
     ("status", "headers", "wait"),
     [
