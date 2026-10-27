@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from spider.naming import APP_NAME, SETTINGS_FILE_NAME
-from spider.workspace.tables import SettingsTables, keyed_entry, named_tables
+from spider.workspace.tables import SettingsTables, keyed_entry, table_kind
 
 HEADER = (
     f"# {APP_NAME} settings. Each setting takes the first value it finds:\n"
@@ -16,14 +16,15 @@ HEADER = (
 def settings_template(tables: SettingsTables) -> str:
     parts = [HEADER]
     for name, table in tables.items():
-        entry = keyed_entry(table)
-        if named_tables(table) is not None:
+        kind = table_kind(table)
+        if kind == "named":
             # Each named table has settings of its own, which its docstring points to.
             lines = [f"# {table.__doc__}", f"# [{name}.<name>]"]
-        elif entry is None:
+        elif kind == "plain":
             lines = [f"[{name}]", *_settings(table)]
         else:
             # No entry exists until the user names one, so even the header stays a comment.
+            entry = keyed_entry(table)
             lines = [f"# {entry.__doc__}", f"# [{name}.<name>]", *_settings(entry)]
         parts.append("\n".join(lines) + "\n")
     return "\n".join(parts)

@@ -961,3 +961,64 @@ def test_a_wait_outside_the_clock_is_named() -> None:
         "spider/crawl/fetch/politeness.py:7 imports asyncio.tasks.sleep by name",
         "spider/services/crawling.py:1 waits outside the Clock: asyncio.timeout(delay=1)",
     ]
+
+
+# A settings table's kind, plain, keyed or named, is decided by table_kind alone: three modules
+# once each re-derived it from what keyed_entry and named_tables return (010 design D2).
+KIND_DECIDER = ("spider/workspace/tables.py", "table_kind")
+KIND_PARTS = {"keyed_entry", "named_tables"}
+
+
+def kind_violations(sources: Mapping[str, str]) -> list[str]:
+    """Functions other than table_kind that test keyed_entry or named_tables against None."""
+    found = []
+    for module, source in sources.items():
+        for func in ast.walk(ast.parse(source)):
+            if not isinstance(func, ast.FunctionDef) or (module, func.name) == KIND_DECIDER:
+                continue
+            parts = {
+                target.id
+                for node in ast.walk(func)
+                if isinstance(node, ast.Assign) and _calls_a_kind_part(node.value)
+                for target in node.targets
+                if isinstance(target, ast.Name)
+            }
+            found += [
+                f"{module}:{node.lineno} decides a table's kind outside table_kind"
+                for node in ast.walk(func)
+                if isinstance(node, ast.Compare)
+                and any(isinstance(c, ast.Constant) and c.value is None for c in node.comparators)
+                and (
+                    _calls_a_kind_part(node.left)
+                    or (isinstance(node.left, ast.Name) and node.left.id in parts)
+                )
+            ]
+    return found
+
+
+def _calls_a_kind_part(node: ast.expr) -> bool:
+    return isinstance(node, ast.Call) and _base_name(node.func) in KIND_PARTS
+
+
+def test_only_table_kind_decides_a_settings_tables_kind() -> None:
+    assert kind_violations(_src_sources()) == []
+
+
+def test_a_kind_decided_outside_table_kind_is_named() -> None:
+    sources = {
+        "spider/workspace/settings.py": (
+            "def load(t):\n    return {} if keyed_entry(t) is not None else t()\n"
+        ),
+        "spider/workspace/template.py": (
+            "def lines(t):\n    entry = tables.keyed_entry(t)\n"
+            "    if entry is None:\n        return []\n"
+        ),
+        "spider/workspace/tables.py": (
+            "def table_kind(t):\n    if named_tables(t) is not None:\n        return 'named'\n"
+        ),
+    }
+
+    assert kind_violations(sources) == [
+        "spider/workspace/settings.py:2 decides a table's kind outside table_kind",
+        "spider/workspace/template.py:3 decides a table's kind outside table_kind",
+    ]

@@ -19,7 +19,7 @@ from pydantic_settings import (
 from spider.output.codes import SETTINGS_INVALID
 from spider.output.diagnostics import SpiderError
 from spider.workspace.discovery import Workspace
-from spider.workspace.tables import SettingsTables, keyed_entry
+from spider.workspace.tables import SettingsTables, keyed_entry, table_kind
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ def load_settings(
     flags: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> Settings:
     fields: dict[str, Any] = {
-        name: (table, {} if keyed_entry(table) is not None else table())
+        name: (table, {} if table_kind(table) == "keyed" else table())
         for name, table in tables.items()
     }
     root_model = create_model(
@@ -138,9 +138,8 @@ def _table_at(root_model: type[BaseModel], parents: list[str]) -> Any:
     model: Any = root_model
     for part in parents:
         # A keyed table's part is an entry's name: the next level is the entry model.
-        entry = keyed_entry(model)
-        if entry is not None:
-            model = entry
+        if table_kind(model) == "keyed":
+            model = keyed_entry(model)
             continue
         # Any other level that is no table model, such as a list of tables, ends the walk.
         field = _field(model, part) if hasattr(model, "model_fields") else None

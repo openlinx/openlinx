@@ -3,7 +3,7 @@
 import importlib
 import math
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, cast, get_args, get_origin
+from typing import TYPE_CHECKING, Any, Literal, cast, get_args, get_origin
 
 if TYPE_CHECKING:
     # Only for typing: pydantic must stay off the CLI's startup path.
@@ -11,6 +11,9 @@ if TYPE_CHECKING:
 
 # A table model, or a keyed table: dict[str, V] whose V is a table model.
 type Table = type[BaseModel] | type[dict[str, Any]]
+# plain: a table model of settings; keyed: entries the user names, each a table model; named: a
+# table model of fixed named tables, each with settings of its own.
+type TableKind = Literal["plain", "keyed", "named"]
 
 
 # The json_schema_extra key of a table model that opts into being a table of named tables,
@@ -42,7 +45,7 @@ class SettingsTables:
         return frozenset(
             f"{name}.{key}"
             for name, table in self.items()
-            if keyed_entry(table) is None
+            if table_kind(table) != "keyed"
             for key in cast(Any, table).model_fields
             if self.is_secret(f"{name}.{key}")
         )
@@ -64,6 +67,14 @@ def keyed_entry(table: Any) -> Any:
     return entry
 
 
+def table_kind(table: Any) -> TableKind:
+    if named_tables(table) is not None:
+        return "named"
+    if keyed_entry(table) is not None:
+        return "keyed"
+    return "plain"
+
+
 def named_tables(table: Any) -> dict[str, Any] | None:
     """The tables of a table of named tables, by name, or None for another table."""
     extra = getattr(table, "model_config", {}).get("json_schema_extra")
@@ -78,13 +89,13 @@ def _is_model(annotation: Any) -> bool:
 
 def check_table(name: str, table: Table) -> None:
     """Raises TypeError unless the table follows the table rules of design D2."""
-    entry = keyed_entry(table)
-    tables = named_tables(table)
-    if tables is not None:
-        _check_named_tables(name, table, tables)
-    elif entry is None:
+    kind = table_kind(table)
+    if kind == "named":
+        _check_named_tables(name, table, cast(dict[str, Any], named_tables(table)))
+    elif kind == "plain":
         _check_model(name, table)
     else:
+        entry = keyed_entry(table)
         # Literal entries (`<name> = <value>`) have no docstring to describe the table in the
         # template, so they wait for the change that needs them (050's [segments]).
         if not _is_model(entry):
