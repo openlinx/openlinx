@@ -47,3 +47,44 @@ def test_a_certificate_for_another_name_is_a_tls_error(
         crawl_file,
         "SELECT url, fetch_state, fetch_error FROM urls WHERE url LIKE 'https:%' ORDER BY url",
     ) == [("https://badcert.test/", "error", "tls_error"), ("https://site.test/", "fetched", None)]
+
+
+def test_a_certificate_from_an_unknown_ca_is_a_tls_error(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    hosts = fixture_tls_hosts(
+        lambda untrusted_port: Site(
+            routes={
+                "/": Page(body=f'<a href="https://other.test:{untrusted_port}/">Partner shop</a>')
+            }
+        ),
+        OTHER,
+    )
+
+    crawl_file = crawl_result(
+        "http://site.test/", resolver=hosts.resolver, trust_anchors=hosts.trust_anchors
+    ).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, fetch_error FROM urls WHERE url = ?",
+        [f"https://other.test:{hosts.untrusted_port}/"],
+    ) == [("error", "tls_error")]
+
+
+def test_a_robots_txt_with_a_bad_certificate_gives_its_urls_tls_error_without_a_request(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    hosts = fixture_tls_hosts(SITE, OTHER)
+
+    crawl_file = crawl_result(
+        "https://badcert.test/", resolver=hosts.resolver, trust_anchors=hosts.trust_anchors
+    ).crawl_file
+
+    assert (
+        query(
+            crawl_file,
+            "SELECT url, fetch_state, fetch_error, fetched_at, attempt_count FROM urls",
+        ),
+        hosts.badcert.requests,
+    ) == ([("https://badcert.test/", "error", "tls_error", None, 0)], ())

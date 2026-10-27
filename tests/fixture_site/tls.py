@@ -32,16 +32,20 @@ class TlsHosts:
     untrusted_anchors: str
 
 
-StartTlsHosts = Callable[[Site, Site], TlsHosts]
+# A site, or a function that builds it from the untrusted listener's port, to link to it.
+type SiteOf = Site | Callable[[int], Site]
+StartTlsHosts = Callable[[SiteOf, Site], TlsHosts]
 
 
-def tls_hosts_for(serve: Serve, site: Site, other: Site) -> TlsHosts:
+def tls_hosts_for(serve: Serve, site: SiteOf, other: Site) -> TlsHosts:
     trusted, untrusted = trustme.CA(), trustme.CA()
+    stranger = serve(other, _listening(untrusted.issue_cert(OTHER_HOST)))
+    stranger_port = urlsplit(stranger.base_url).port or 0
+    if not isinstance(site, Site):
+        site = site(stranger_port)
     plain = serve(site)
     secure = serve(site, _listening(trusted.issue_cert(*SITE_HOSTS)))
     badcert = serve(other, _listening(trusted.issue_cert(OTHER_HOST)))
-    stranger = serve(other, _listening(untrusted.issue_cert(OTHER_HOST)))
-    stranger_port = urlsplit(stranger.base_url).port or 0
     servers = {
         **{(name, HTTP_PORT): plain for name in SITE_HOSTS},
         **{(name, HTTPS_PORT): secure for name in SITE_HOSTS},
