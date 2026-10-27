@@ -18,7 +18,7 @@ from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
-from spider.crawl.following import RESOURCES
+from spider.crawl.following import RESOURCES, redirect_target
 from spider.crawl.pages.preparation import (
     is_html_type,
     response_directives,
@@ -27,7 +27,7 @@ from spider.crawl.pages.preparation import (
 from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.robots.reader import OriginRobots
 from spider.crawl.scope import ScopeDecision
-from spider.crawl.urls import url_host, url_origin
+from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.output.codes import HANDLER_FAILED, PARSE_FAILED
 from spider.output.diagnostics import Diagnostic
 from spider.store.records import (
@@ -189,6 +189,8 @@ async def _fetched(
     if parse_error is not None:
         failure = parse_failure(url, parse_error, parse_error_message)
         context.reporter.count(Diagnostic.of(PARSE_FAILED, failure), url)
+    location = response.header("Location") if 300 <= response.status_code < 400 else None
+    target = redirect_target(url, response.status_code, location, context.strip_params)
     url_response = UrlResponse(
         status_code=response.status_code,
         reason=response.reason,
@@ -197,6 +199,7 @@ async def _fetched(
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
         directives=directives,
+        redirect_target=target,
     )
     fetched = replace(
         decided,
@@ -209,7 +212,11 @@ async def _fetched(
         outputs={} if page is None else dict(page.outputs),
     )
     rows = _handler_rows(context, fetched)
-    return fetched, record_fetched(_fetched_record(fetched, url_response, discovered, rows))
+    redirect = None if target is None else _redirect(target, context.scope.decide(target))
+    record = _fetched_record(
+        fetched, url_response, discovered, rows, location=location, redirect=redirect
+    )
+    return fetched, record_fetched(record)
 
 
 # Each record reads its values from the UrlResult, and from the outcome's record in it.
@@ -244,6 +251,9 @@ def _fetched_record(
     response: UrlResponse,
     discovered: tuple[NewUrl, ...],
     rows: tuple[HandlerRows[Any], ...],
+    *,
+    location: str | None,
+    redirect: NewUrl | None,
 ) -> FetchedUrl:
     return FetchedUrl(
         url_id=fetched.url_id,
@@ -252,12 +262,24 @@ def _fetched_record(
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
         attempt_count=fetched.attempt_count,
+        redirect_location=location,
+        redirect=redirect,
         parsed=fetched.parsed,
         parse_error=fetched.parse_error,
         parse_error_message=fetched.parse_error_message,
         blocked_by_robots_txt=fetched.blocked_by_robots_txt,
         discovered=discovered,
         rows=rows,
+    )
+
+
+def _redirect(target: NormalizedUrl, decision: ScopeDecision) -> NewUrl:
+    # No Link: the Scope, robots.txt and the depth limit decide it at dispatch, as any URL.
+    return NewUrl(
+        url=target,
+        discovered_via="redirect",
+        is_internal=decision.is_internal,
+        in_scope=decision.in_scope,
     )
 
 

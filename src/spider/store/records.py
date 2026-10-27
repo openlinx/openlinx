@@ -189,6 +189,9 @@ class FetchedUrl:
     response_time_ms: int
     parsed: bool
     attempt_count: int
+    # The raw Location header of a 3xx response, and the URL it leads to, at the URL's depth.
+    redirect_location: str | None
+    redirect: NewUrl | None
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
     # NULL when robots.txt was not checked (design D6).

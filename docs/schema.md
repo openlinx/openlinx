@@ -122,6 +122,8 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `fetch_error_message` | TEXT | yes | | | | Human-readable detail of fetch_error. |
 | `content_type` | TEXT | yes | | | | The Content-Type response header as received; NULL without a response or without the header. |
 | `response_time_ms` | INTEGER | yes | | | | Time from sending the request to receiving the whole body. |
+| `redirect_location` | TEXT | yes | | | | The raw Location header of a 3xx response. |
+| `redirect_url_id` | INTEGER | yes | → `urls.id` | | | The redirect's target, resolved against the URL and normalised; NULL without a usable Location. |
 | `attempt_count` | INTEGER | no | | | | The number of requests made for the URL; 0 when it was not requested. |
 | `fetched_at` | TEXT | yes | | `timestamp` | | UTC time of the request. |
 | `parsed` | INTEGER | no | | `boolean` | | 1 when the response was parsed and its Links were found. |
@@ -133,6 +135,7 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | Name | Columns | Unique | Where | Description |
 |---|---|---|---|---|
 | `urls_crawl_depth_id` | `crawl_depth`, `id` | no | `fetch_state = 'queued'` | The frontier: the next queued URLs of the open Crawl Depth, in id order. |
+| `urls_redirect_url_id` | `redirect_url_id` | no | `redirect_url_id IS NOT NULL` | Finding the URLs that redirect to a URL: the reverse walk of a Redirect Chain. |
 | `urls_url` | `url` | yes | | Recording a discovered URL once (ON CONFLICT (url)), and finding one URL's row. |
 
 ## Table `origins`

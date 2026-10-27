@@ -22,6 +22,7 @@ from spider.store.records import (
     DiscoverySkipReason,
     ErroredUrl,
     FetchedUrl,
+    NewUrl,
     QueuedUrl,
     SkippedUrl,
     UrlCounts,
@@ -64,6 +65,13 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
 )
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
+_REDIRECT_URL_ID = (
+    update(urls)
+    .where(urls.c.id == bindparam("url_id"))
+    .values(
+        redirect_url_id=select(urls.c.id).where(urls.c.url == bindparam("target")).scalar_subquery()
+    )
+)
 _DEPTH = select(urls.c.crawl_depth).where(urls.c.id == bindparam("url_id"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
@@ -74,6 +82,7 @@ _FETCHED = _URL_ROW.values(
     response_time_ms=bindparam("response_ms"),
     fetched_at=bindparam("request_at"),
     attempt_count=bindparam("attempts"),
+    redirect_location=bindparam("location"),
     parsed=bindparam("is_parsed"),
     parse_error=bindparam("parse_failure"),
     parse_error_message=bindparam("parse_failure_message"),
@@ -206,40 +215,52 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         "response_type": fetched.content_type,
         "response_ms": fetched.response_time_ms,
         "attempts": fetched.attempt_count,
+        "location": fetched.redirect_location,
         "request_at": fetched.fetched_at,
         "is_parsed": fetched.parsed,
         "parse_failure": fetched.parse_error,
         "parse_failure_message": fetched.parse_error_message,
         "robots_blocked": fetched.blocked_by_robots_txt,
     }
-    new_rows = [
-        {
-            "url": new.url,
-            "host": url_host(new.url),
-            "origin": url_origin(new.url),
-            "is_internal": new.is_internal,
-            "in_scope": new.in_scope,
-            "discovered_via": new.discovered_via,
-            "found_on_url_id": url_id,
-            "fetch_state": "queued" if new.skip_reason is None else "skipped",
-            "skip_reason": new.skip_reason,
-            "parsed": False,
-        }
-        for new in fetched.discovered
-    ]
+    new_rows = [_new_row(new, url_id) for new in fetched.discovered]
+
+    redirect = fetched.redirect
+    redirect_row = None if redirect is None else _new_row(redirect, url_id)
 
     def unit(connection: Connection) -> None:
         connection.execute(_FETCHED, values)
+        if not new_rows and redirect_row is None:
+            write_rows(connection, fetched.rows)
+            return
+        # The stored depth, which a Checked URL answering late may have lowered while the URL
+        # was in flight, so what it links to stays one deeper than it (design D3).
+        depth: int = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one()
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
-            # The stored depth, which a Checked URL answering late may have lowered while the
-            # URL was in flight, so what it links to stays one deeper than it (design D3).
-            depth = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one() + 1
-            rows = [{**row, "crawl_depth": depth} for row in new_rows]
+            rows = [{**row, "crawl_depth": depth + 1} for row in new_rows]
             insert_urls(connection, _INSERT_DISCOVERED, rows)
+        if redirect_row is not None:
+            # A redirect is no Link: its target keeps the depth (022 design D2).
+            insert_urls(connection, _INSERT_DISCOVERED, [{**redirect_row, "crawl_depth": depth}])
+            connection.execute(_REDIRECT_URL_ID, {"url_id": url_id, "target": redirect_row["url"]})
         write_rows(connection, fetched.rows)
 
     return unit
+
+
+def _new_row(new: NewUrl, found_on: int) -> dict[str, Any]:
+    return {
+        "url": new.url,
+        "host": url_host(new.url),
+        "origin": url_origin(new.url),
+        "is_internal": new.is_internal,
+        "in_scope": new.in_scope,
+        "discovered_via": new.discovered_via,
+        "found_on_url_id": found_on,
+        "fetch_state": "queued" if new.skip_reason is None else "skipped",
+        "skip_reason": new.skip_reason,
+        "parsed": False,
+    }
 
 
 def record_skipped(skipped: SkippedUrl) -> UrlUnit:

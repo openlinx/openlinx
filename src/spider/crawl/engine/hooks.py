@@ -32,6 +32,8 @@ class UrlResponse:
     response_time_ms: int
     # Page preparation's when the Page was parsed, else the X-Robots-Tag's alone.
     directives: RobotsDirectives
+    # Where a 301, 302, 303, 307 or 308 leads; None for any other response (022 design D2).
+    redirect_target: NormalizedUrl | None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

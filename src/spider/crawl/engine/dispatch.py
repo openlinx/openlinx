@@ -97,28 +97,34 @@ async def _crawl_depth(run: Run, depth: int) -> None:
     context, limits = run.context, run.limits
     running: set[asyncio.Task[None]] = set()
     try:
-        # The cursor of this run: a URL in flight is never read twice (design D1).
+        # The cursor of this run: a URL in flight is never read twice (design D1). It carries
+        # over to the next read of the depth, which finds the redirect targets that its URLs
+        # recorded at their own depth: new rows, whose ids come after the cursor (022 D2).
         after = 0
-        while limits.limit_reached() is None and (
-            batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH))
-        ):
-            for queued in batch:
-                await limits.reserve_task()
-                if context.stop.is_set:
-                    limits.task_ended()
-                    return
-                if limits.limit_reached() is not None:
-                    limits.task_ended()
-                    break
-                decision = context.scope.decide(queued.url)
-                task = asyncio.create_task(_crawl_url(run, queued, decision))
-                # A checked URL never holds the barrier (design D3); the sweep in run_crawl reads
-                # what one finds after its depth has closed.
-                tasks = run.checked_urls if _is_checked_url(queued, decision) else running
-                tasks.add(task)
-                task.add_done_callback(tasks.discard)
-            after = batch[-1].id
-        if running:
+        while True:
+            dispatched = False
+            while limits.limit_reached() is None and (
+                batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH))
+            ):
+                for queued in batch:
+                    await limits.reserve_task()
+                    if context.stop.is_set:
+                        limits.task_ended()
+                        return
+                    if limits.limit_reached() is not None:
+                        limits.task_ended()
+                        break
+                    decision = context.scope.decide(queued.url)
+                    task = asyncio.create_task(_crawl_url(run, queued, decision))
+                    # A checked URL never holds the barrier (design D3); the sweep in run_crawl
+                    # reads what one finds after its depth has closed.
+                    tasks = run.checked_urls if _is_checked_url(queued, decision) else running
+                    tasks.add(task)
+                    task.add_done_callback(tasks.discard)
+                    dispatched = True
+                after = batch[-1].id
+            if not dispatched:
+                return
             await asyncio.gather(*running)
     finally:
         await _cancel_all(running)

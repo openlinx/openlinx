@@ -5,7 +5,7 @@ from datetime import datetime
 
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.requester import Requester
-from spider.crawl.references import resolve_reference
+from spider.crawl.following import redirect_target
 from spider.crawl.robots.reader import OriginRobots, read_robots_txt, robots_state, robots_txt_text
 from spider.crawl.urls import NormalizedUrl, robots_txt_url, url_origin
 from spider.store.origins import record_robots_txt
@@ -14,7 +14,6 @@ from spider.store.writer import CrawlWriter
 
 # RFC 9309 2.3.1.2: at least five consecutive redirects are followed.
 _REDIRECT_HOPS = 5
-_REDIRECTS = frozenset({301, 302, 303, 307, 308})
 
 
 class RobotsLoader:
@@ -62,12 +61,9 @@ class RobotsLoader:
 def _redirect_target(
     url: NormalizedUrl, response: FetchResult | FetchFailure
 ) -> NormalizedUrl | None:
-    if not isinstance(response, FetchResult) or response.status_code not in _REDIRECTS:
+    if not isinstance(response, FetchResult):
         return None
-    location = response.header("Location")
-    if location is None:
-        return None
-    return resolve_reference(url, location, codec=None, strip_params=None)
+    return redirect_target(url, response.status_code, response.header("Location"), None)
 
 
 def _origin_robots(

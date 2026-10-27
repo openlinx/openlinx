@@ -295,6 +295,14 @@ urls = public_table(
         Integer,
         comment="Time from sending the request to receiving the whole body.",
     ),
+    Column("redirect_location", Text, comment="The raw Location header of a 3xx response."),
+    Column(
+        "redirect_url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        comment="The redirect's target, resolved against the URL and normalised; NULL without a "
+        "usable Location.",
+    ),
     Column(
         "attempt_count",
         Integer,
@@ -328,6 +336,15 @@ Index(
     info={
         "description": "Recording a discovered URL once (ON CONFLICT (url)), and finding one "
         "URL's row."
+    },
+)
+Index(
+    "urls_redirect_url_id",
+    urls.c.redirect_url_id,
+    sqlite_where=urls.c.redirect_url_id.is_not(None),
+    info={
+        "description": "Finding the URLs that redirect to a URL: the reverse walk of a Redirect "
+        "Chain."
     },
 )
 Index(

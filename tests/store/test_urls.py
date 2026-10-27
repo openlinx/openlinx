@@ -70,6 +70,8 @@ def _fetched(url_id: int, *discovered: NewUrl) -> FetchedUrl:
         response_time_ms=10,
         parsed=True,
         attempt_count=1,
+        redirect_location=None,
+        redirect=None,
         discovered=discovered,
     )
 
@@ -110,6 +112,8 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     response_time_ms=120,
                     parsed=True,
                     attempt_count=2,
+                    redirect_location=None,
+                    redirect=None,
                     discovered=found,
                     rows=(HandlerRows(_write_note, (Note(seed_id),)),),
                 ),
