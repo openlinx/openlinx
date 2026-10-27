@@ -264,7 +264,7 @@ With `--no-check-external`, no External URL is requested. Each one is still reco
 
 ### Origins
 
-Every URL belongs to an origin: its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host. The row also records the origin's robots.txt (see [robots.txt](#robotstxt)).
+Every URL belongs to an origin: its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host. The row also records the origin's robots.txt (see [robots.txt](#robotstxt)), and has `http_version`, the HTTP version that the origin's requests use, which is filled from v0.2 and NULL until then.
 
 ### `--scope`
 
@@ -360,6 +360,7 @@ The Crawl honours the standard proxy variables, as curl, pip and uv do. It is th
 ### TLS
 
 - **Trust:** every https request, robots.txt's included, verifies the server's certificate and its host name against the operating system's trust store, through truststore. Where truststore cannot be loaded, on a Python or OpenSSL it cannot verify with, certifi's CA bundle is used instead.
+- **A certificate that does not verify,** such as one issued for another name, one from a CA the trust store does not hold, or an expired one, records the URL with `fetch_state` = `error` and `fetch_error` = `tls_error`, and is not retried. When robots.txt's certificate does not verify, every URL of the origin gets that `tls_error` without a request of its own (see [What the response means](#what-the-response-means)).
 - **Speed:** asking the operating system costs no measurable time. `scripts/tls_handshake_speed.py` timed 20 fresh handshakes per trust store to each of five public hosts, in two runs per OS. The median over the hosts that answered, first run / second run:
 
   | OS | truststore | certifi | truststore minus certifi |
@@ -424,7 +425,7 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 | 2xx | `ok` | Requested, unless its rules disallow them for the token: a disallowed URL is `skipped` with `skip_reason` = `blocked_by_robots_txt`. |
 | 4xx other than 429, a final 3xx such as 304, more than 5 redirects, or a redirect hop without a response | `missing` | All requested. |
 | 5xx, 429, or a status outside 200–599, after its retries | `unreachable` | None requested: each is `skipped` with `skip_reason` = `robots_unreachable`. An Internal origin gives a `robots_unreachable` warning, once per host, whose hint names `--ignore-robots`. |
-| No HTTP response, after its retries | `unreachable` | None requested: each is `error`, with the `fetch_error` of the robots.txt request, such as `dns_error`, and a `fetch_error_message` that names that request. |
+| No HTTP response, after its retries | `unreachable` | None requested: each is `error`, with the `fetch_error` of the robots.txt request, such as `dns_error` or `tls_error`, and a `fetch_error_message` that names that request. |
 
 `urls.blocked_by_robots_txt` is 1 for a URL the rules disallow, 0 for one they allow, and NULL for a URL that was not checked: one skipped before robots.txt mattered, or one of an origin whose rules are unknown.
 

@@ -116,7 +116,7 @@ Seams (docs/testing.md):
 - [x] 6.3 [3+6] Drive "A certificate from an unknown CA is a TLS error", and `test_a_robots_txt_with_a_bad_certificate_gives_its_urls_tls_error_without_a_request` [3+6] over the `badcert.test` listener, since the TLS requirement's robots.txt sentence has no scenario of its own.
 - [ ] 6.4 Speed test: `scripts/tls_handshake_speed.py`, a one-off measurement against public hosts that is never a test and never runs in the gate, measures TLS handshake time with truststore and with certifi on Windows, macOS and Linux (WSL). Record the results in `docs/crawling.md`, and change the default path only if truststore is measurably slower (design D5). macOS is measured when CI minutes return (workflow_dispatch).
 - [x] 6.5 [CLI] Drive "The HTTP version is a later column" (v0.1): `origins.http_version` declared NULL in every row, with its values from a `Literal` in `spider.store.records` and a description that starts with `Filled from v0.2. `. It is the first later column, so `018`'s guard over derived and later columns gains the assertion that it saw one.
-- [ ] 6.6 Docs: document TLS trust, the speed-test result and `http_version` (NULL in v0.1) in `docs/crawling.md`.
+- [x] 6.6 Docs: document TLS trust, the speed-test result and `http_version` (NULL in v0.1) in `docs/crawling.md`.
 - [ ] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Response headers
