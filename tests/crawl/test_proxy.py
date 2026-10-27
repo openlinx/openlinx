@@ -5,7 +5,7 @@ import pytest
 from spider.crawl.fetch.proxy import proxy_for, proxy_variables
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.routes import Page, Site
-from tests.support.crawling import crawled
+from tests.support.crawling import crawl_result, crawled
 from tests.support.proxy import StartProxy
 from tests.support.workspace import TempWorkspace
 
@@ -47,6 +47,26 @@ def test_a_lower_case_proxy_variable_is_honoured(
     assert "http://site.test/" in proxy.requests
 
 
+def test_no_proxy_bypasses_the_proxy(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    proxy = fixture_proxy(hosts.resolver)
+    monkeypatch.setenv("HTTP_PROXY", proxy.url)
+    monkeypatch.setenv("NO_PROXY", "site.test")
+
+    # Direct: the crawler resolves site.test itself, through the DNS resolver hook.
+    crawl_result("http://site.test/", resolver=hosts.resolver)
+
+    assert (proxy.requests, [request.path for request in hosts.site.requests]) == (
+        (),
+        ["/robots.txt", "/", "/shoes"],
+    )
+
+
 # The variables as a process environment holds them, and the proxy of http://site.test/.
 _PROXY_CASES = [
     ({"HTTP_PROXY": "http://upper:3128"}, "http://upper:3128"),
@@ -55,6 +75,12 @@ _PROXY_CASES = [
     ({"HTTPS_PROXY": "http://secure:3128"}, None),
     ({"ALL_PROXY": "http://every:3128"}, None),
     ({}, None),
+    ({"HTTP_PROXY": "http://upper:3128", "NO_PROXY": "site.test"}, None),
+    ({"HTTP_PROXY": "http://upper:3128", "NO_PROXY": "intranet.local, .test"}, None),
+    ({"HTTP_PROXY": "http://upper:3128", "NO_PROXY": "test"}, None),
+    ({"HTTP_PROXY": "http://upper:3128", "NO_PROXY": "*"}, None),
+    ({"HTTP_PROXY": "http://upper:3128", "NO_PROXY": "www.site.test"}, "http://upper:3128"),
+    ({"HTTP_PROXY": "http://upper:3128", "NO_PROXY": "ite.test"}, "http://upper:3128"),
 ]
 
 

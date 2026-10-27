@@ -21,4 +21,14 @@ def proxy_variables(environ: Mapping[str, str]) -> dict[str, str]:
 
 def proxy_for(url: str, proxies: Mapping[str, str]) -> str | None:
     """The proxy that a request for `url` goes through, None when it goes direct."""
-    return proxies.get(urlsplit(url).scheme)
+    parts = urlsplit(url)
+    proxy = proxies.get(parts.scheme)
+    if proxy is None or _bypassed(parts.hostname or "", proxies.get("no", "")):
+        return None
+    return proxy
+
+
+def _bypassed(host: str, no_proxy: str) -> bool:
+    # Host names and domain suffixes, with or without a leading dot, or * for every host.
+    names = [name.strip().lower().removeprefix(".") for name in no_proxy.split(",")]
+    return "*" in names or any(host == name or host.endswith(f".{name}") for name in names if name)
