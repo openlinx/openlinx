@@ -263,7 +263,7 @@ def test_a_url_whose_preparation_raises_ends_the_crawl_while_its_depth_is_dispat
 
     # The room /broken freed goes to /s19 before its failure is seen; like a stop, the failure
     # then lets none of the URLs still waiting for room start.
-    started = {path for path, _ in fetcher.starts}
+    started = {path for path, _ in fetcher.path_starts}
     assert (
         executor.prepared.count("http://site.test/broken"),
         started & set(slow[20:]),

@@ -453,6 +453,7 @@ Boundary doubles used, all from the approved list:
 - [A Seed whose robots.txt answered but whose own request got no response, failed at once as `seed_unreachable` although its origin has answered] → In `tests/crawl/test_network_pause.py`, `test_a_seed_whose_robots_txt_answers_counts_like_any_url`.
 - [A write failure outside a URL's unit, such as a robots.txt row or a pass's rows on a full disk, taken for a bug, so the Crawl ends with `internal_error` and stays `running`] → In `tests/cli/test_crawl_failures.py`, `test_a_full_disk_on_the_robots_txt_row_fails_the_crawl`, and in `tests/crawl/test_hooks.py`, `test_a_full_disk_in_a_post_crawl_pass_fails_the_crawl`.
 - [A threshold of the network pause or of the record-failure count off by one, or its formula changed, with every scenario still green] → `test_the_requests_in_a_row_that_pause_the_crawl` and `test_the_count_trips_at_eight_requests_in_a_row_at_concurrency_one` in `tests/crawl/test_network_pause.py`, and `test_recording_fails_the_crawl_at_100_urls_in_a_row` in `tests/crawl/test_hooks.py`.
+- [A probe counted toward `--max-urls`, or a `network_paused` warning that counts URLs or loses the pauses' seconds] → In `tests/crawl/test_network_pause.py`, `test_probes_do_not_count_toward_the_url_limit` and `test_network_paused_counts_the_pauses_and_their_seconds`.
 - [Post-crawl passes take only the writer, `Pass.run(writer)`, and `040` needs a clock in them] → Task 10.19 gives `Pass.run` one frozen `PassContext(writer, clock)`; `040` adapts its pass when it rebases.
 
 ## Migration Plan

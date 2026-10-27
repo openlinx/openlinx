@@ -49,7 +49,13 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         checked_urls=set(),
         task_failure=TaskFailure(context.stop),
         pause=NetworkPause(
-            context.settings.concurrency, context.settings.network_wait, context.stop
+            concurrency=concurrency,
+            network_wait=context.settings.network_wait,
+            seed=seed,
+            stop=context.stop,
+            requester=requester,
+            clock=context.clock,
+            log=context.reporter,
         ),
     )
     decision = context.scope.decide(seed)
@@ -94,6 +100,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         context.stop.set("write_failed", closed.__cause__ or closed)
     finally:
         await _cancel_all(run.checked_urls)
+        await run.pause.close()
         await run.robots.close()
     # Once every task has ended, including those that the cancellation above ended.
     run.task_failure.raise_first()

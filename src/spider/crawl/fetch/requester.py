@@ -48,11 +48,20 @@ class Requester:
         self._stopped = stopped
         self._hosts: dict[str, asyncio.Semaphore] = {}
         self._requests = asyncio.Semaphore(cap)
+        # The network pause's gate: set while requests may start (design D16).
+        self._open = asyncio.Event()
+        self._open.set()
+
+    def close_gate(self) -> None:
+        self._open.clear()
+
+    def open_gate(self) -> None:
+        self._open.set()
 
     async def request_url(self, url: NormalizedUrl) -> FetchResult | FetchFailure | NotStarted:
         """A URL's own request, which the URL limit counts with the slots held, so the count is
         exact. After a stop, none starts (design D16)."""
-        async with self._slots(url):
+        async with self._gated_slots(url):
             # Refused with its turn under --rate already taken, and never given back: after a
             # stop or at the limit, no request starts again.
             if self._stopped() or not self._limits.start_request():
@@ -61,8 +70,25 @@ class Requester:
 
     async def request_robots_txt(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
         """One hop of an origin's robots.txt, which the URL limit never counts (design D6)."""
+        async with self._gated_slots(url):
+            return await self._send(url)
+
+    async def request_probe(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
+        """A probe of the network pause: through the host's slot, its turn and the global cap,
+        but never the pause's gate or the URL limit (design D16)."""
         async with self._slots(url):
             return await self._send(url)
+
+    @asynccontextmanager
+    async def _gated_slots(self, url: NormalizedUrl) -> AsyncIterator[None]:
+        # Waited before any slot, so a paused request leaves the host's slots to the probes; one
+        # that took them as the pause began gives them back and its turn goes unused.
+        while True:
+            await self._open.wait()
+            async with self._slots(url):
+                if self._open.is_set():
+                    yield
+                    return
 
     @asynccontextmanager
     async def _slots(self, url: NormalizedUrl) -> AsyncIterator[None]:

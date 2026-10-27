@@ -24,6 +24,8 @@ class WarningLog:
         self._written: dict[tuple[str, object], int] = {}
         # By code: where a counted warning is kept, and how many URLs it affected so far.
         self._counted: dict[str, tuple[int, int]] = {}
+        # Where network_paused is kept, how many pauses and how many seconds in all (D10).
+        self._pauses: tuple[int, int, float] | None = None
 
     @property
     def warnings(self) -> tuple[Diagnostic, ...]:
@@ -31,6 +33,11 @@ class WarningLog:
         for index, count in self._counted.values():
             kept = warnings[index]
             warnings[index] = replace(kept, details={**kept.details, "count": count})
+        if self._pauses is not None:
+            index, count, seconds = self._pauses
+            kept = warnings[index]
+            details = {**kept.details, "count": count, "total_seconds": round(seconds, 3)}
+            warnings[index] = replace(kept, details=details)
         return tuple(warnings)
 
     def warn(self, diagnostic: Diagnostic) -> None:
@@ -45,6 +52,19 @@ class WarningLog:
             return
         first = replace(diagnostic, details={**diagnostic.details, "count": 1, "first_url": url})
         self._counted[diagnostic.code] = (self._keep(first), 1)
+
+    def count_pause(self, diagnostic: Diagnostic, seconds: float) -> None:
+        """Counts one more pause of `seconds` for network_paused, which counts pauses, not
+        URLs; only the first is written to stderr."""
+        if self._pauses is not None:
+            index, count, total = self._pauses
+            self._pauses = (index, count + 1, total + seconds)
+            return
+        first = replace(
+            diagnostic,
+            details={**diagnostic.details, "count": 1, "total_seconds": round(seconds, 3)},
+        )
+        self._pauses = (self._keep(first), 1, seconds)
 
     def _write(self, diagnostic: Diagnostic) -> int:
         """Where the warning is kept: one already written for the detail its code names is

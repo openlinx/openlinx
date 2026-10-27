@@ -6,7 +6,8 @@ from http import HTTPStatus
 from urllib.parse import urlsplit
 
 from spider.clock import Clock
-from spider.crawl.fetch.fetcher import FetchResult, Request
+from spider.crawl.fetch.fetcher import FetchFailure, FetchResult, Request
+from spider.store.records import FetchError
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +16,10 @@ class FakePage:
     content_type: str = "text/html"
     # Seconds on the clock before it answers, as a slow server takes.
     delay: float = 0.0
+    # No HTTP response, with this fetch_error, until the clock's monotonic time `until`, or
+    # ever when it is None: a section or a network that is down.
+    fails: FetchError | None = None
+    until: float | None = None
 
 
 _NOT_FOUND = FakePage("")
@@ -22,7 +27,7 @@ _NOT_FOUND = FakePage("")
 
 class FakeFetcher:
     """Answers at once from `pages`, by the whole URL or else by path, so one host can differ
-    from the others, and 404 for any other URL; `starts` records each request's path and the
+    from the others, and 404 for any other URL; `starts` records each request's URL and the
     clock's monotonic time when it started."""
 
     def __init__(self, clock: Clock, pages: Mapping[str, FakePage]) -> None:
@@ -32,10 +37,26 @@ class FakeFetcher:
         self._in_flight = 0
         self.most_in_flight = 0
 
-    async def fetch(self, request: Request) -> FetchResult:
+    @property
+    def path_starts(self) -> list[tuple[str, float]]:
+        """`starts` by path, for a test of one host."""
+        return [(urlsplit(url).path or "/", at) for url, at in self.starts]
+
+    async def fetch(self, request: Request) -> FetchResult | FetchFailure:
         path = urlsplit(request.url).path or "/"
-        self.starts.append((path, self._clock.monotonic()))
+        started = self._clock.monotonic()
+        self.starts.append((request.url, started))
         page = self._pages.get(request.url) or self._pages.get(path)
+        if (
+            page is not None
+            and page.fails is not None
+            and (page.until is None or started < page.until)
+        ):
+            return FetchFailure(
+                fetch_error=page.fails,
+                message="No HTTP response, as the test asks",
+                fetched_at=self._clock.now(),
+            )
         status_code = 200 if page is not None else 404
         page = page or _NOT_FOUND
         self._in_flight += 1

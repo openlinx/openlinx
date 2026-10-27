@@ -9,7 +9,7 @@ import pytest
 
 from spider.cli.app import build_app
 from spider.clock import SystemClock
-from spider.crawl.fetch.fetcher import FetchResult, Request
+from spider.crawl.fetch.fetcher import FetchFailure, FetchResult, Request
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
 from spider.services.hooks import default_hooks
@@ -100,7 +100,7 @@ class ReadingFetcher(FakeFetcher):
         self._home = home
         self.seen: list[tuple[str, str]] = []
 
-    async def fetch(self, request: Request) -> FetchResult:
+    async def fetch(self, request: Request) -> FetchResult | FetchFailure:
         result = await super().fetch(request)
         if request.url.endswith("/probe"):
             (crawl_file,) = self._home.rglob("*.sqlite")

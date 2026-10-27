@@ -6,7 +6,10 @@ from spider.crawl.engine.pause import pause_after, probe_times
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
+from tests.support.crawls import query
+from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
 
 _PAIRS = range(1, 21)
@@ -98,3 +101,59 @@ def test_the_count_trips_at_eight_requests_in_a_row_at_concurrency_one(
 )
 def test_probes_back_off_to_once_a_minute(network_wait: int, times: tuple[int, ...]) -> None:
     assert probe_times(network_wait) == times
+
+
+def _dead_section() -> dict[str, FakePage]:
+    """/ links to /down/1 to /down/20, which never answer, and then to /p1."""
+    links = "".join(f'<a href="/down/{n}">Down {n}</a>' for n in _PAIRS) + '<a href="/p1">P1</a>'
+    return {
+        "/": FakePage(links),
+        **{f"/down/{n}": FakePage("", fails="connection_error") for n in _PAIRS},
+        "/p1": FakePage("<p>P1</p>"),
+    }
+
+
+def test_a_dead_section_does_not_stop_the_crawl(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=FakeFetcher(clock, _dead_section()), concurrency=1
+    )
+    states = dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls"))
+
+    assert (
+        result.summary.state,
+        {states[f"http://site.test/down/{n}"] for n in _PAIRS},
+        states["http://site.test/p1"],
+        [warning.code for warning in result.warnings],
+    ) == ("completed", {"error"}, "fetched", ["network_paused"])
+
+
+def test_network_paused_counts_the_pauses_and_their_seconds(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+
+    # Eight failures pause it twice; the first probe, 5 seconds in, ends each pause.
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=FakeFetcher(clock, _dead_section()), concurrency=1
+    )
+
+    assert [w.details for w in result.warnings if w.code == "network_paused"] == [
+        {"count": 2, "total_seconds": 10.0}
+    ]
+
+
+def test_probes_do_not_count_toward_the_url_limit(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+
+    # The Seed, the twenty dead URLs and /p1 are 22 URL requests; the two probes are not.
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, _dead_section()),
+        concurrency=1,
+        max_urls=22,
+    )
+
+    assert query(
+        result.crawl_file, "SELECT fetch_state FROM urls WHERE url = ?", ["http://site.test/p1"]
+    ) == [("fetched",)]

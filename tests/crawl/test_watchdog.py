@@ -73,5 +73,5 @@ def test_a_stuck_robots_txt_request_gives_its_origins_urls_the_watchdog_error(
             result.crawl_file,
             "SELECT fetch_state, fetch_error FROM urls WHERE url = 'http://www.site.test/page'",
         ),
-        "/page" in {path for path, _ in fetcher.starts},
+        "/page" in {path for path, _ in fetcher.path_starts},
     ) == ([("error", "watchdog")], False)
