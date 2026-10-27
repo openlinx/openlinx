@@ -1,11 +1,14 @@
 """The proxy variables (022-add-fetch-policy, fetching; seam 3)."""
 
+import json
+
 import pytest
 
 from spider.crawl.fetch.proxy import proxy_for, proxy_variables
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawl_result, crawled
+from tests.support.crawls import query
 from tests.support.proxy import StartProxy
 from tests.support.workspace import TempWorkspace
 
@@ -65,6 +68,26 @@ def test_no_proxy_bypasses_the_proxy(
         (),
         ["/robots.txt", "/", "/shoes"],
     )
+
+
+def test_a_proxy_password_from_a_variable_is_redacted(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    proxy = fixture_proxy(hosts.resolver)
+    with_password = proxy.url.replace("http://", "http://u:pw@")
+    monkeypatch.setenv("HTTP_PROXY", with_password)
+    monkeypatch.setenv("NO_PROXY", "intranet.local")
+
+    [(config,)] = query(crawled("http://site.test/"), "SELECT config FROM crawl")
+
+    assert json.loads(config)["environment"] == {
+        "http_proxy": proxy.url.replace("http://", "http://u:***@"),
+        "no_proxy": "intranet.local",
+    }
 
 
 # The variables as a process environment holds them, and the proxy of http://site.test/.

@@ -159,6 +159,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     if not decision.in_scope:
         raise _seed_out_of_scope(seed, decision)
     settings_file = workspace.settings_file if workspace.settings_file.is_file() else None
+    proxies = proxy_variables(os.environ)
     new_crawl = NewCrawl(
         workspace=workspace,
         crawl_mode="spider",
@@ -167,9 +168,12 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         command_argv=request.command_argv,
         cwd=request.cwd,
         # Every registered table, resolved (design D11).
-        config=settings.root.model_dump(mode="json"),
+        config={**settings.root.model_dump(mode="json"), **_environment(proxies)},
         scope=scope.to_json(),
-        secret_names=request.secret_names,
+        secret_names=SecretNames(
+            flags=request.secret_names.flags,
+            settings=request.secret_names.settings | _PROXY_SECRETS,
+        ),
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
         section_crawl=scope.section_crawl,
@@ -181,10 +185,20 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         strip_params=strip_params,
         fetch_policy=FetchPolicy(
             user_agent=crawl_settings.user_agent or DEFAULT_USER_AGENT,
-            proxies=proxy_variables(os.environ),
+            proxies=proxies,
         ),
         new_crawl=new_crawl,
     )
+
+
+# A proxy URL may hold a password; 015's redaction keeps its user and host (design D8).
+_PROXY_SECRETS = frozenset({"environment.http_proxy", "environment.https_proxy"})
+
+
+def _environment(proxies: Mapping[str, str]) -> dict[str, dict[str, str]]:
+    """The proxy variables in use, set ones only, as the environment table of crawl.config."""
+    used = {f"{key}_proxy": value for key, value in proxies.items()}
+    return {"environment": used} if used else {}
 
 
 def _seed(text: str, strip_params: re.Pattern[str] | None) -> NormalizedUrl:
