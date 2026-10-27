@@ -4,8 +4,8 @@ from spider.crawl.engine.hooks import Hooks, Pass, PassContext, handler
 from spider.crawl.pages.preparation import InProcessExecutor, PageExecutor
 from spider.extract.page_data import PAGE_DATA
 from spider.extract.page_handler import page_rows
+from spider.rules.passes import materialise_issues
 from spider.rules.registry import RULES
-from spider.store.issues import materialise_issues
 from spider.store.pages import write_pages
 
 

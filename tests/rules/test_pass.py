@@ -4,10 +4,11 @@ import asyncio
 from dataclasses import replace
 
 from spider.aio import loop_factory
+from spider.rules.passes import materialise_issues
 from spider.rules.registry import RULES
 from spider.rules.titles import TITLE_MISSING
 from spider.services.hooks import default_hooks
-from spider.store.issues import affected_urls_unit, materialise_issues
+from spider.store.issue_units import affected_urls_unit
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import query

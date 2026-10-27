@@ -10,6 +10,7 @@ from sqlalchemy import update
 
 from spider.aio import loop_factory
 from spider.output.diagnostics import SpiderError
+from spider.rules.passes import materialise_issues
 from spider.rules.registry import RULES
 from spider.rules.titles import TITLE_MISSING
 from spider.store.crawls import record_state
@@ -17,7 +18,6 @@ from spider.store.issues import (
     StoredIssues,
     affected_urls_in,
     issues_in,
-    materialise_issues,
     read_affected_urls,
     read_issues,
     read_url_issues,

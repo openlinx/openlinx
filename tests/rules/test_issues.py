@@ -11,12 +11,11 @@ from typing import Any
 import pytest
 
 from spider.rules.registry import RULES
+from spider.store.health import INTERNAL_PAGES, health
 from spider.store.issues import (
-    INTERNAL_PAGES,
     IssueReader,
     LiveIssues,
     StoredIssues,
-    health,
     read_affected_urls,
     read_issues,
 )

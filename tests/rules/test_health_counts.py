@@ -5,16 +5,12 @@ import asyncio
 from sqlalchemy import select
 
 from spider.aio import loop_factory
+from spider.rules.passes import materialise_issues
 from spider.rules.registry import RULES
 from spider.rules.titles import TITLE_MISSING
 from spider.store.crawls import record_state
-from spider.store.issues import (
-    INTERNAL_PAGES,
-    STORED_AFFECTED_URLS,
-    health,
-    health_affected_in,
-    materialise_issues,
-)
+from spider.store.health import INTERNAL_PAGES, health
+from spider.store.issues import STORED_AFFECTED_URLS, health_affected_in
 from spider.store.reading import reading
 from spider.store.records import Health
 from spider.store.schema import affected_urls, crawl, pages

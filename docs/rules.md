@@ -149,7 +149,7 @@ It prints the query that `spider rules show title-missing` prints too. Then run 
 SELECT health_score, health_internal_page_count, health_affected_page_count FROM crawl;
 ```
 
-- **For a Segment or a running Crawl:** `health(connection, rated, affected)` in `spider.store.issues` is the one function that computes it, in SQL. `rated` is a selectable of `url_id`, of which only the Pages count, and `affected` a selectable of `rule_id` and `url_id`:
-  - The whole Crawl: `INTERNAL_PAGES`.
+- **For a Segment or a running Crawl:** `health(connection, rated, affected)` in `spider.store.health` is the one function that computes it, in SQL. `rated` is a selectable of `url_id`, of which only the Pages count, and `affected` a selectable of `rule_id` and `url_id`:
+  - The whole Crawl: `INTERNAL_PAGES`, in the same module.
   - A Segment (`050`) or a Report Section (`070`): a selectable of its URLs' `url_id`, such as `select(urls.c.id.label("url_id")).where(...)`; a URL of it that is no Page, such as a broken PDF, is not rated.
   - Any Crawl: `health_affected_in(connection, catalogue)`, which reads the Affected URLs as the Issues reader does: as stored for a `completed` or `stopped` Crawl, otherwise computed live, so a running, `failed` or `interrupted` Crawl gets its score so far.

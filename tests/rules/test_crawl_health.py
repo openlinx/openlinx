@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from spider.rules.registry import RULES
-from spider.store.issues import health, health_affected_in
+from spider.store.health import health
+from spider.store.issues import health_affected_in
 from spider.store.reading import reading
 from spider.store.records import Health
 from spider.store.schema import urls

@@ -440,6 +440,8 @@ IMPORT_RULES = (
     ImportRule("spider.store", ("spider.crawl",), allowed=("spider.crawl.urls",)),
     # The parse pool's workers import pages, so they never load the writer.
     ImportRule("spider.crawl.pages", ("spider.store",), allowed=("spider.store.records",)),
+    # The Rules sit above the store and pass it their queries (040-add-rules D15).
+    ImportRule("spider.store", ("spider.rules",)),
 )
 
 

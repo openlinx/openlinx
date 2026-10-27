@@ -5,13 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from spider.rules.registry import RULES
-from spider.store.issues import (
-    INTERNAL_PAGES,
-    health,
-    health_affected_in,
-    read_affected_urls,
-    read_issues,
-)
+from spider.store.health import INTERNAL_PAGES, health
+from spider.store.issues import health_affected_in, read_affected_urls, read_issues
 from spider.store.reading import reading
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
