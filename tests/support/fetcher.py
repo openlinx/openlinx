@@ -21,8 +21,9 @@ _NOT_FOUND = FakePage("")
 
 
 class FakeFetcher:
-    """Answers at once from `pages`, by path, and 404 for any other path; `starts` records each
-    request's path and the clock's monotonic time when it started."""
+    """Answers at once from `pages`, by the whole URL or else by path, so one host can differ
+    from the others, and 404 for any other URL; `starts` records each request's path and the
+    clock's monotonic time when it started."""
 
     def __init__(self, clock: Clock, pages: Mapping[str, FakePage]) -> None:
         self._clock = clock
@@ -34,7 +35,7 @@ class FakeFetcher:
     async def fetch(self, request: Request) -> FetchResult:
         path = urlsplit(request.url).path or "/"
         self.starts.append((path, self._clock.monotonic()))
-        page = self._pages.get(path)
+        page = self._pages.get(request.url) or self._pages.get(path)
         status_code = 200 if page is not None else 404
         page = page or _NOT_FOUND
         self._in_flight += 1

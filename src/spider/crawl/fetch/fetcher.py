@@ -15,7 +15,7 @@ from spider.crawl.urls import NormalizedUrl
 from spider.store.records import FetchError
 
 # Fixed until 022 makes it a setting; the watchdog of design D16 outlasts it.
-_REQUEST_DEADLINE_SECONDS = 20
+REQUEST_DEADLINE_SECONDS = 20
 
 
 def header_values(headers: Iterable[tuple[str, str]], name: str) -> list[str]:
@@ -118,7 +118,7 @@ async def aiohttp_fetcher(
 ) -> AsyncIterator[AiohttpFetcher]:
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(resolver=resolver),
-        timeout=aiohttp.ClientTimeout(total=_REQUEST_DEADLINE_SECONDS),
+        timeout=aiohttp.ClientTimeout(total=REQUEST_DEADLINE_SECONDS),
         # No cookie session: a cookie set by one response would change what later ones return.
         cookie_jar=aiohttp.DummyCookieJar(),
     ) as session:

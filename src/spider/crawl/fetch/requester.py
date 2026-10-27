@@ -5,9 +5,16 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
+from spider.clock import Clock
 from spider.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
 from spider.crawl.fetch.politeness import RateGate, RequestLimits
 from spider.crawl.urls import NormalizedUrl, host_key
+
+
+def watchdog_seconds(request_deadline_seconds: float) -> float:
+    """How long a request attempt may take before the watchdog ends it: a backstop behind the
+    Fetcher's own deadline, which it never cuts (design D16)."""
+    return max(120, request_deadline_seconds + 30)
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,11 +34,15 @@ class Requester:
         *,
         concurrency: int,
         cap: int,
+        clock: Clock,
+        watchdog_seconds: float,
     ) -> None:
         self._fetcher = fetcher
         self._limits = limits
         self._gate = gate
         self._concurrency = concurrency
+        self._clock = clock
+        self._watchdog_seconds = watchdog_seconds
         self._hosts: dict[str, asyncio.Semaphore] = {}
         self._requests = asyncio.Semaphore(cap)
 
@@ -67,4 +78,20 @@ class Requester:
         return semaphore
 
     async def _send(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
-        return await self._fetcher.fetch(Request(url))
+        # Each attempt races its own watchdog on the Crawl's Clock, from when it started.
+        fetch = asyncio.ensure_future(self._fetcher.fetch(Request(url)))
+        watchdog = asyncio.ensure_future(self._clock.sleep(self._watchdog_seconds))
+        try:
+            await asyncio.wait((fetch, watchdog), return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            fetch.cancel()
+            watchdog.cancel()
+            # Both have ended before the slots are given back.
+            await asyncio.wait((fetch, watchdog))
+        if not fetch.cancelled():
+            return fetch.result()
+        return FetchFailure(
+            fetch_error="watchdog",
+            message=f"No response within {self._watchdog_seconds:g} seconds",
+            fetched_at=self._clock.now(),
+        )

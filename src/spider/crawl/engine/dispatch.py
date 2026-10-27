@@ -6,8 +6,9 @@ from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import url_limit_reached
 from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.engine.units import Run, TaskFailure, unit_of, via_resource
+from spider.crawl.fetch.fetcher import REQUEST_DEADLINE_SECONDS
 from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
-from spider.crawl.fetch.requester import Requester
+from spider.crawl.fetch.requester import Requester, watchdog_seconds
 from spider.crawl.pages.preparation import PageSettings
 from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision
@@ -27,7 +28,15 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     cap = global_cap(concurrency)
     limits = RequestLimits(cap, context.pages.backlog, context.settings.max_urls)
     gate = RateGate(context.clock, context.settings.rate)
-    requester = Requester(context.fetcher, limits, gate, concurrency=concurrency, cap=cap)
+    requester = Requester(
+        context.fetcher,
+        limits,
+        gate,
+        concurrency=concurrency,
+        cap=cap,
+        clock=context.clock,
+        watchdog_seconds=watchdog_seconds(REQUEST_DEADLINE_SECONDS),
+    )
     run = Run(
         context=context,
         outcomes=Outcomes(context.writer, context.reporter, context.stop),
