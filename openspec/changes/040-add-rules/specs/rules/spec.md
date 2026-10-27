@@ -5,6 +5,8 @@ Defines the Rules that turn a Crawl's data into Issues. It covers the Rule model
 ## ADDED Requirements
 
 ### Requirement: Rule model
+**In short:** every Rule carries an id, a category, an Issue Type, a Priority, a population, its thresholds, three guidance texts and its reproducing query; the categories come in a fixed order.
+
 Every Rule SHALL have these fields:
 
 - `id`: unique, kebab-case (matching `^[a-z0-9]+(-[a-z0-9]+)*$`), and never renamed or reused in a later release
@@ -31,6 +33,8 @@ In the scenarios, `{site}` is the origin of the local fixture site.
 - **THEN** 0 items have an empty `description`, `why_it_matters` or `how_to_fix`
 
 ### Requirement: What Rules apply to
+**In short:** each Rule checks one population: requested or robots-blocked Internal URLs, analysed Pages, or image Resources. A Rule never fires on a value that was not measured.
+
 Each Rule SHALL be evaluated over exactly one population, and its Affected URLs SHALL be members of that population:
 
 - **`internal_urls`**: the rows of the `urls` table of `020-add-crawl-core` (including the columns that `022-add-fetch-policy` adds) with `is_internal` = 1 that were requested (`fetch_state` `fetched` or `error`) or are disallowed by robots.txt (`blocked_by_robots_txt` = 1). Internal URLs outside a Section Crawl's Scope are included.
@@ -69,7 +73,9 @@ The crawl file SHALL hold the views `internal_urls`, `analysed_pages` and `index
 - **THEN** `analysed_pages` has no row for it, and `title-missing` has no Affected URL for it
 
 ### Requirement: The v0.1 catalogue
-The Rule catalogue SHALL contain exactly the Rules defined in the category requirements below: in v0.1 the 15 Rules that their release marks name (ROADMAP, "The v0.1 Rules", the user's decision of 2026-10-05), and from v0.2 all 42, with the Issue Type, Priority, population, default thresholds, condition and `detail` keys given there. Column names refer to the `urls` table and to the tables of `030-add-page-data`.
+**In short:** the catalogue is exactly the Rules of the category requirements below: 15 in v0.1, all 42 from v0.2.
+
+The Rule catalogue SHALL contain exactly the Rules defined in the category requirements below: in v0.1 the 15 Rules that their release marks name (ROADMAP, "The v0.1 Rules"), and from v0.2 all 42, with the Issue Type, Priority, population, default thresholds, condition and `detail` keys given there. Column names refer to the `urls` table and to the tables of `030-add-page-data`.
 
 > **v0.1**: 15 Rules; **v0.2**: all 42.
 
@@ -78,6 +84,8 @@ The Rule catalogue SHALL contain exactly the Rules defined in the category requi
 - **THEN** `total` is 15 (42 from v0.2) and every item has `enabled` true
 
 ### Requirement: Response code Rules
+**In short:** seven Rules over Internal URLs flag client and server errors, missing responses, robots.txt blocks, redirects, Redirect Chains and redirect loops.
+
 The `response_codes` category SHALL contain these Rules, all over `internal_urls`:
 
 | id | Issue Type | Priority | Fires for an Internal URL that… | `detail` |
@@ -137,7 +145,9 @@ A URL's *Redirect Chain length* is the number of 3xx responses met when followin
 - **THEN** `redirect-loop` fires for both `/x` and `/y` with `detail` `{"hops": 2}`
 
 ### Requirement: Security Rule
-The `security` category SHALL contain this Rule. It is a Warning, so it never lowers the Health Score. The maintainer decided this on 2026-09-27.
+**In short:** one Rule, `http-url`, flags Internal URLs served over plain HTTP, as a Warning, so it never lowers the Health Score.
+
+The `security` category SHALL contain this Rule.
 
 | id | Issue Type | Priority | Applies to | Fires for… | `detail` |
 |---|---|---|---|---|---|
@@ -154,6 +164,8 @@ The `security` category SHALL contain this Rule. It is a Warning, so it never lo
 - **THEN** `http-url` has no Affected URL for it
 
 ### Requirement: Title Rules
+**In short:** six Rules over analysed Pages flag a missing, duplicate, too long, too short or repeated title, and a title equal to the H1.
+
 The `titles` category SHALL contain these Rules, all over `internal_pages`:
 
 | id | Issue Type | Priority | Fires for a Page where… | Thresholds | `detail` |
@@ -214,6 +226,8 @@ In v0.1, `title-too-long` checks characters only. `030-add-page-data` fills `tit
 - **THEN** `title-same-as-h1` has no Affected URL for it
 
 ### Requirement: Meta description Rules
+**In short:** five Rules over analysed Pages flag a missing, duplicate, too long, too short or repeated meta description.
+
 The `meta_descriptions` category SHALL contain these Rules, all over `internal_pages`:
 
 | id | Issue Type | Priority | Fires for a Page where… | Thresholds | `detail` |
@@ -251,6 +265,8 @@ The `meta_descriptions` category SHALL contain these Rules, all over `internal_p
 - **THEN** `meta-description-multiple` fires for it with `detail` `{"count": 2}`
 
 ### Requirement: Heading Rules
+**In short:** five Rules over analysed Pages flag a missing, duplicate, repeated or too long H1, and a missing H2.
+
 The `headings` category SHALL contain these Rules, all over `internal_pages`:
 
 | id | Issue Type | Priority | Fires for a Page where… | Thresholds | `detail` |
@@ -288,6 +304,8 @@ The `headings` category SHALL contain these Rules, all over `internal_pages`:
 - **THEN** `h2-missing` fires for it
 
 ### Requirement: Canonical Rules
+**In short:** five Rules over analysed Pages flag a missing, canonicalised, conflicting or relative canonical, and a canonical whose target is non-indexable by `030-add-page-data`'s Indexability.
+
 The `canonicals` category SHALL contain these Rules, all over `internal_pages`:
 
 | id | Issue Type | Priority | Fires for a Page where… | `detail` |
@@ -354,6 +372,8 @@ The *target's Indexability* SHALL come from `030-add-page-data`:
 - **THEN** `canonical-relative` fires for it
 
 ### Requirement: Directive Rules
+**In short:** three Rules over analysed Pages flag noindex and nofollow, from meta robots or X-Robots-Tag, and meta refresh.
+
 The `directives` category SHALL contain these Rules, all over `internal_pages`:
 
 | id | Issue Type | Priority | Fires for a Page where… | `detail` |
@@ -381,6 +401,8 @@ The `directives` category SHALL contain these Rules, all over `internal_pages`:
 - **THEN** `meta-refresh` fires for it with `detail` `{"meta_refresh": "0; url=/new", "redirect_url": "https://example.test/new"}`
 
 ### Requirement: Content Rules
+**In short:** two Rules over Indexable Pages flag thin content and exact duplicates.
+
 The `content` category SHALL contain these Rules, both over `internal_pages`:
 
 | id | Issue Type | Priority | Fires for a Page where… | Thresholds | `detail` |
@@ -411,6 +433,8 @@ The `content` category SHALL contain these Rules, both over `internal_pages`:
 - **THEN** `exact-duplicate` has no Affected URLs
 
 ### Requirement: URL Rules
+**In short:** five Rules over analysed Pages flag uppercase letters, underscores, parameters, excess length and non-ASCII characters in a Page's URL, never in its host.
+
 The `urls` category SHALL contain these Rules, all over `internal_pages`. The *path* and *query* are those of the Page's `address`, and the host is never checked.
 
 | id | Issue Type | Priority | Fires for a Page where… | Thresholds | `detail` |
@@ -460,6 +484,8 @@ The `urls` category SHALL contain these Rules, all over `internal_pages`. The *p
 - **THEN** `url-non-ascii` has no Affected URL for it
 
 ### Requirement: Image Rules
+**In short:** three Rules flag a Page whose images lack alt text, and an image Resource that is too large or broken.
+
 The `images` category SHALL contain these Rules:
 
 | id | Issue Type | Priority | Applies to | Fires for… | Thresholds | `detail` |
@@ -499,6 +525,8 @@ The `images` category SHALL contain these Rules:
 - **THEN** `image-broken` has no Affected URL for it
 
 ### Requirement: Threshold overrides and disabling Rules
+**In short:** a `[rules.<id>]` table in `spider.toml` disables a Rule or replaces its default thresholds.
+
 A table `[rules.<id>]` in the Workspace's `spider.toml` SHALL be able to set:
 
 - `enabled = false` to disable that Rule
@@ -521,6 +549,8 @@ The table name is the Rule id itself. These settings mirror no flag, so `010-add
 - **THEN** its output has `thresholds.max_chars` equal to `{"value": 70, "default": 60, "unit": "characters"}`
 
 ### Requirement: Invalid Rule configuration is rejected
+**In short:** a wrong Rule id, key or value in `[rules]` fails every Command that loads `spider.toml` with `settings_invalid`, naming the dotted key and the closest valid name; `spider crawl` stops before its first request.
+
 Any Command that loads the Workspace's `spider.toml` SHALL fail with the settings error of `010-add-workspace-and-cli-contract` (exit code 3, error code `settings_invalid`), which is checked when the settings load. It SHALL do so in any of these cases:
 
 - `[rules]` names an unknown Rule id
@@ -545,6 +575,8 @@ Each problem's `details.errors[].key` SHALL be the dotted key, for example `rule
 - **THEN** the exit code is 3 and `details.errors[0].key` is `"rules.h1-missing.max_chars"`
 
 ### Requirement: Rule configuration is fixed per Crawl
+**In short:** a Crawl records its Rule configuration in its `rules` table when it starts and keeps it, so editing `spider.toml` later changes none of its Issues.
+
 When a Crawl starts, it SHALL resolve every Rule's enabled state and effective thresholds and write them to its `rules` table, in the same transaction that creates the `crawl` row. The table follows the conventions of `018-add-schema-conventions` (ADR-0005): it is `STRICT`, keyed by the Rule id. It holds one row per catalogue Rule, with these columns:
 
 | Column | Type | Null | Format / values | Description |
@@ -582,6 +614,8 @@ The Crawl SHALL use this configuration throughout, including after `resume`. Edi
 - **THEN** an analysed Page with `title_1_length` 80 written after the resume is an Affected URL of `title-too-long`
 
 ### Requirement: Rules are SQL queries
+**In short:** a Rule is one read-only SQL query over the crawl file, stored and printed with the Rule, and no Rule is evaluated while a URL is recorded.
+
 Every Rule SHALL have a reproducing query and SHALL be evaluated only by it. The query is one read-only SQL `SELECT` over the public schema that returns the Rule's Affected URLs in a crawl file, as the columns `url_id` and `detail`.
 - It SHALL read only stored columns, and the Rule's effective thresholds from the Crawl's `rules` row, so its text is the same in every Workspace and gives the right answer under overrides.
 - A query that leaves out a value the Rule's condition would otherwise match SHALL say why in an SQL comment, as the queries of `internal-no-response` and `image-broken` do for `record_failed`.
@@ -600,6 +634,8 @@ No Rule SHALL be evaluated while a URL is recorded: this change registers no per
 - **THEN** its `reproduce_sql` equals the `reproduce_sql` of the Crawl's `rules` row for `title-missing`
 
 ### Requirement: Issues of a Crawl without a final pass
+**In short:** the Issues reader reads stored Issues for a `completed` or `stopped` Crawl, and computes them live from the Rules' queries in any other Crawl State.
+
 This change SHALL provide the Issues reader, through which `050-add-query-and-segments` reads Issues. It returns:
 - the Issues, in the shape of the `issues` view
 - the Affected URLs of one Rule, and the Issues of one URL, in the shape of `affected_urls`
@@ -625,6 +661,8 @@ A Crawl has materialised Issues exactly when its Crawl State is `completed` or `
 - **THEN** both give the same Issues, and the same Affected URLs for every Rule
 
 ### Requirement: Materialising Issues
+**In short:** when a Crawl ends as `completed` or `stopped`, the post-crawl pass replaces each enabled Rule's stored Affected URLs and then records the Health Score.
+
 This change's post-crawl pass SHALL materialise the Issues when a Crawl ends as `completed` or `stopped`, after `030-add-page-data` has computed link counts:
 1. For each enabled Rule, one writer unit replaces the Rule's rows in `affected_urls` with the rows its query returns.
 2. Then one unit records the Health Score fields.
@@ -642,6 +680,8 @@ It SHALL run again when a resumed Crawl ends, and each run SHALL replace the row
 - **THEN** `affected_urls` still holds exactly 2 `title-duplicate` rows
 
 ### Requirement: Issues and Affected URLs are stored
+**In short:** Affected URLs are rows of `affected_urls`, written only by the post-crawl pass, and `issues` is a view that counts them per Rule.
+
 The crawl store SHALL hold the Affected URLs in a table `affected_urls`, under the conventions of `018-add-schema-conventions`: `STRICT` and `WITHOUT ROWID`, with one row per Rule and Affected URL.
 
 | Column | Type | Null | Format / values | Description |
@@ -681,6 +721,8 @@ The Issues SHALL be a view `issues` over `rules` and `affected_urls`, with one r
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"affected_urls_url_id","columns":["url_id"],"unique":false,"where":null}`
 
 ### Requirement: Health Score
+**In short:** the Health Score is the share of Internal Pages without an Issue-type Issue, as a whole percent rounded down; the post-crawl pass stores it on the `crawl` row, and one function computes it for any set of URLs.
+
 The Health Score of a Crawl SHALL be `floor(100 × (N − A) ÷ N)`:
 
 - N is the number of Internal Pages, meaning rows of `pages` with any status code.
@@ -750,6 +792,8 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** `health_score` is 75
 
 ### Requirement: List Rules
+**In short:** `spider rules list`, or bare `spider rules`, pages through the Rules as the Workspace configures them, in catalogue order, with their thresholds, guidance and query.
+
 `spider rules list` SHALL print the Rules as configured in the current Workspace, without reading any Crawl, and `spider rules` with no arguments SHALL run `spider rules list`. An option given after `spider rules` and before the Command name, other than `--help`, SHALL fail with the error code `usage_error` (exit code 2), whose hint says to put it after the Command name, such as `spider rules list --limit ...`. The output SHALL follow the output contract of `010-add-workspace-and-cli-contract`: the paging envelope `{total, items, next_cursor}` and the `--fields`, `--limit`, `--cursor` and `--format` options. Items SHALL be in catalogue order: by category, in the order of the Rule model, then in the order the Rules appear in their category's table. Each item SHALL have these fields:
 
 - `id`, `category`, `issue_type`, `priority`, `applies_to` and `enabled`
@@ -771,6 +815,8 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** the item with `id` `h1-missing` has `enabled` false
 
 ### Requirement: Show one Rule
+**In short:** `spider rules show <id>` prints one Rule as a list item, and an unknown id is `rule_not_found`.
+
 `spider rules show <id>` SHALL print one JSON object with the same fields as a list item. An unknown id SHALL fail with the error code `rule_not_found`, which maps to exit code 4 under the rules of `010-add-workspace-and-cli-contract`. Its `message` SHALL contain the id and its `hint` SHALL mention `spider rules list`.
 
 > **v0.1.**
@@ -784,10 +830,12 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** the exit code is 4, the error has the code `rule_not_found`, its `message` contains `nope` and its `hint` contains `spider rules list`
 
 #### Scenario: Windows console output
-- **WHEN** `spider rules show title-too-long` runs as a subprocess with its stdout piped, as a Windows console does
+- **WHEN** `spider rules show title-too-long` runs as a subprocess whose stdout is piped
 - **THEN** its stdout bytes decode as UTF-8 into a JSON object whose `id` is `title-too-long`, byte for byte the output of the same Command run in process
 
 ### Requirement: Documented Rule tables
+**In short:** `spider schema` and `docs/schema.md` describe `rules`, `affected_urls`, the `issues` view and the four `health_*` fields under `018-add-schema-conventions`' conventions.
+
 `spider schema` SHALL list the tables `rules` and `affected_urls` with the `kind` `table`, the view `issues` with the `kind` `view`, and the four `health_*` fields of the `crawl` table, following the conventions of `018-add-schema-conventions`:
 
 - `references` for `rule_id` and `url_id`

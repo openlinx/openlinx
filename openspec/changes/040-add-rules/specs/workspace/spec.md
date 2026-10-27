@@ -1,6 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Commented settings template
+**In short:** `spider init` writes a `spider.toml` that sets nothing and shows every setting commented out; a table of named tables, such as `[rules.<id>]`, shows only its commented header.
 
 The `spider.toml` written by `spider init` SHALL be valid TOML that sets no value. It SHALL start with a comment that names the precedence (flag, then `spider.toml`, then default). For every setting the tool knows, except those of a table of named tables, it SHALL contain:
 - the setting's table header, uncommented
@@ -9,7 +10,7 @@ The `spider.toml` written by `spider init` SHALL be valid TOML that sets no valu
 
 A keyed table SHALL appear as a comment describing it and the commented-out header `# [<table>.<name>]`, followed by the commented-out lines of an entry's settings.
 
-A table of named tables SHALL appear as a comment describing it and the commented-out header `# [<table>.<name>]`, with no settings lines, since each of its named tables has settings of its own, such as the thresholds of a Rule in `[rules.<id>]` (`040-add-rules`). A table opts into this kind explicitly; a table of tables that does not is refused, as before.
+A table of named tables SHALL appear as a comment describing it and the commented-out header `# [<table>.<name>]`, with no settings lines, since each of its named tables has settings of its own, such as the thresholds of a Rule in `[rules.<id>]` (`040-add-rules`). A table opts into this kind explicitly; a table of tables that does not is refused.
 
 Loading this file SHALL give the same settings as having no settings file.
 
