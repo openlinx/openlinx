@@ -100,9 +100,11 @@ async def unit_of(
         # Not final: a shorter path re-queues it, and its handlers see it then (D5).
         rows = () if skip_reason == "max_depth" else _handler_rows(context, skipped)
         return skipped, record_skipped(_skipped_record(skipped, skip_reason, rows))
-    response = await run.requester.request_url(queued.url)
-    if isinstance(response, UrlLimitRefused):
+    attempted = await run.requester.request_url(queued.url)
+    if isinstance(attempted, UrlLimitRefused):
         return None
+    response = attempted.outcome
+    decided = replace(decided, attempt_count=attempted.attempt_count)
     host = url_host(queued.url)
     status_code = None if isinstance(response, FetchFailure) else response.status_code
     if decision.is_internal and run.blocking.responded(host, status_code):
@@ -231,6 +233,7 @@ def _errored_record(
         fetch_error=failure.fetch_error,
         fetch_error_message=failure.fetch_error_message,
         fetched_at=failure.fetched_at,
+        attempt_count=failed.attempt_count,
         blocked_by_robots_txt=failed.blocked_by_robots_txt,
         rows=rows,
     )
@@ -248,6 +251,7 @@ def _fetched_record(
         content_type=response.content_type,
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
+        attempt_count=fetched.attempt_count,
         parsed=fetched.parsed,
         parse_error=fetched.parse_error,
         parse_error_message=fetched.parse_error_message,

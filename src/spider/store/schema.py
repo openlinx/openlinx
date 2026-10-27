@@ -295,6 +295,13 @@ urls = public_table(
         Integer,
         comment="Time from sending the request to receiving the whole body.",
     ),
+    Column(
+        "attempt_count",
+        Integer,
+        nullable=False,
+        server_default="0",
+        comment="The number of requests made for the URL; 0 when it was not requested.",
+    ),
     Column("fetched_at", Timestamp, comment="UTC time of the request."),
     Column(
         "parsed",

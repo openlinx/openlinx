@@ -58,6 +58,8 @@ class UrlResult:
     fetch_state: FetchState
     # NULL when robots.txt was not checked (design D6).
     blocked_by_robots_txt: bool | None = None
+    # The requests made for the URL, retries included; 0 when it was not requested.
+    attempt_count: int = 0
     skip_reason: SkipReason | None = None
     # A fetched URL has a response, an errored one a failure, a skipped one neither.
     response: UrlResponse | None = None

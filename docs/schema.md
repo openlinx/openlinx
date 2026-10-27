@@ -122,6 +122,7 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `fetch_error_message` | TEXT | yes | | | | Human-readable detail of fetch_error. |
 | `content_type` | TEXT | yes | | | | The Content-Type response header as received; NULL without a response or without the header. |
 | `response_time_ms` | INTEGER | yes | | | | Time from sending the request to receiving the whole body. |
+| `attempt_count` | INTEGER | no | | | | The number of requests made for the URL; 0 when it was not requested. |
 | `fetched_at` | TEXT | yes | | `timestamp` | | UTC time of the request. |
 | `parsed` | INTEGER | no | | `boolean` | | 1 when the response was parsed and its Links were found. |
 | `parse_error` | TEXT | yes | | | `extractor_error`, `body_too_large`, `worker_crashed`, `parse_timeout` | Why parsing failed in whole or in part: a registered extractor failed (parsed stays 1), or nothing came out of page preparation (parsed = 0). |

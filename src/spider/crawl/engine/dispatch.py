@@ -26,7 +26,13 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     limits = RequestLimits(
         context.settings.concurrency, context.pages.backlog, context.settings.max_urls
     )
-    requester = Requester(context.fetcher, limits, RateGate(context.clock, context.settings.rate))
+    requester = Requester(
+        context.fetcher,
+        limits,
+        RateGate(context.clock, context.settings.rate),
+        clock=context.clock,
+        retries=context.settings.retries,
+    )
     run = Run(
         context=context,
         outcomes=Outcomes(context),

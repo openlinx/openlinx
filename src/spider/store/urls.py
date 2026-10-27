@@ -62,6 +62,7 @@ _FETCHED = _URL_ROW.values(
     content_type=bindparam("response_type"),
     response_time_ms=bindparam("response_ms"),
     fetched_at=bindparam("request_at"),
+    attempt_count=bindparam("attempts"),
     parsed=bindparam("is_parsed"),
     parse_error=bindparam("parse_failure"),
     parse_error_message=bindparam("parse_failure_message"),
@@ -77,6 +78,7 @@ _ERRORED = _URL_ROW.values(
     fetch_error=bindparam("failure"),
     fetch_error_message=bindparam("failure_message"),
     fetched_at=bindparam("request_at"),
+    attempt_count=bindparam("attempts"),
     blocked_by_robots_txt=bindparam("robots_blocked"),
 )
 _UNWRITTEN = _URL_ROW.values(
@@ -184,6 +186,7 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         "response_status": fetched.status_code,
         "response_type": fetched.content_type,
         "response_ms": fetched.response_time_ms,
+        "attempts": fetched.attempt_count,
         "request_at": fetched.fetched_at,
         "is_parsed": fetched.parsed,
         "parse_failure": fetched.parse_error,
@@ -246,6 +249,7 @@ def record_error(errored: ErroredUrl) -> UrlUnit:
         "failure": errored.fetch_error,
         "failure_message": errored.fetch_error_message,
         "request_at": errored.fetched_at,
+        "attempts": errored.attempt_count,
         "robots_blocked": errored.blocked_by_robots_txt,
     }
 

@@ -136,6 +136,16 @@ def crawl(
         ),
         OptionMeta(setting="crawl.user_agent"),
     ] = None,
+    retries: Annotated[
+        int,
+        typer.Option(
+            "--retries",
+            min=0,
+            help="How many times a request without a response, or with a 5xx status, is "
+            "tried again, after 1, 2, 4, ... seconds.",
+        ),
+        OptionMeta(setting="crawl.retries"),
+    ] = 2,
     robots_user_agent: Annotated[
         str,
         typer.Option(

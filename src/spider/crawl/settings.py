@@ -52,6 +52,12 @@ class CrawlSettings(BaseModel):
         "visible ASCII characters, spaces and tabs only. The tool's name, version and project "
         "URL when unset.",
     )
+    retries: int = Field(
+        2,
+        ge=0,
+        description="How many times a request without a response, or with a 5xx status, is "
+        "tried again, after 1, 2, 4, ... seconds.",
+    )
     robots_user_agent: str = Field(
         DEFAULT_ROBOTS_TOKEN,
         description="The token that selects robots.txt groups and user-agent-prefixed "
