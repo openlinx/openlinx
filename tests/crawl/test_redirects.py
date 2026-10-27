@@ -3,7 +3,7 @@
 import pytest
 
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Redirect, Site
+from tests.fixture_site.routes import Page, Redirect, Site, Status
 from tests.support.cli import run_cli
 from tests.support.crawling import crawled
 from tests.support.crawls import query
@@ -128,3 +128,19 @@ def test_a_redirect_target_loses_the_stripped_parameters(
     crawl_file = crawled(server.url("/"), "--strip-params", "utm_*")
 
     assert _redirect_of(crawl_file, server.url("/go")) == [(302, server.url("/offer?id=7"))]
+
+
+def test_a_redirect_without_location_has_no_target(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site({"/": Page(body='<a href="/nolocation">Go</a>'), "/nolocation": Status(302)})
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT status_code, redirect_location, redirect_url_id FROM urls WHERE url = ?",
+        [server.url("/nolocation")],
+    ) == [(302, None, None)]
