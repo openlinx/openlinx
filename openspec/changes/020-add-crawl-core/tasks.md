@@ -181,7 +181,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.24 Drive "A handler sees the reason phrase" at seam 3.
 - [x] 5.25 Fix: `Extractor[C, O]` knows its output type, and `output(outputs)` gives its output by type (design D9).
   Done when: an extractor whose function returns another type than it declares is recorded as an extractor error, and one whose return annotation is not a msgspec struct cannot be built.
-- [ ] 5.26 Refactor: close the review of tasks 5.19-5.25: a parsed Page's robots `<meta>` reaches the handler's directives, `spider.crawl.following` gives a Link's skip reason, which discovery records, a handler sees a custom reason phrase as received and no Links of a 404, and `UrlResponse.header` goes.
+- [x] 5.26 Refactor: close the review of tasks 5.19-5.25: a parsed Page's robots `<meta>` reaches the handler's directives, `spider.crawl.following` gives a Link's skip reason, which discovery records, a handler sees a custom reason phrase as received and no Links of a 404, and `UrlResponse.header` goes.
   Done when: a seam-3 test fails when the engine reads the directives from the headers alone, and the seam-4 tables pin the skip reason of each Link type and nofollow case.
 
 ## 6. Internal and External URLs over HTTP (slice)

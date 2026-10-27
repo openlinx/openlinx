@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable
 
-from spider.crawl.following import REQUESTED_TYPES, RESOURCES
+from spider.crawl.following import RESOURCES
 from spider.crawl.references import DiscoveredLink
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
@@ -18,7 +18,7 @@ def discovered_urls(
     # A Page names most URLs several times, and each row costs its unit an insert.
     chosen: dict[NormalizedUrl, tuple[DiscoveredLink, DiscoverySkipReason | None]] = {}
     for link in links:
-        reason = _skip_reason(link)
+        reason = link.skip_reason
         known = chosen.get(link.target)
         # The Link that gives the URL's provenance; the URL keeps its first place in the order.
         if known is None or _outranks(link, reason, *known):
@@ -37,12 +37,6 @@ def _outranks(
     if reason is not None:
         return False
     return known_reason is not None or (link.type in RESOURCES and known.type not in RESOURCES)
-
-
-def _skip_reason(link: DiscoveredLink) -> DiscoverySkipReason | None:
-    if link.requests_target:
-        return None
-    return "nofollow" if link.type in REQUESTED_TYPES else "link_type_not_followed"
 
 
 def _new_url(link: DiscoveredLink, reason: DiscoverySkipReason | None, scope: ScopeRules) -> NewUrl:

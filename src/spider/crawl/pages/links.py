@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterator, Mapping
 
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
-from spider.crawl.following import requests_target
+from spider.crawl.following import skip_reason
 from spider.crawl.pages.decoding import decode_html, query_codec
 from spider.crawl.pages.refresh import refresh_url
 from spider.crawl.references import C0_OR_SPACE, DiscoveredLink, resolve_base, resolve_reference
@@ -122,7 +122,7 @@ def links_in_tree(
                     attribute=attribute,
                     rel=rel,
                     nofollow="nofollow" in rel,
-                    requests_target=requests_target(
+                    skip_reason=skip_reason(
                         link_type,
                         "nofollow" in rel,
                         page_nofollow=page_nofollow,

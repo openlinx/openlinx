@@ -5,8 +5,8 @@ from typing import get_args
 
 import pytest
 
-from spider.crawl.following import requests_target
-from spider.store.records import LinkType
+from spider.crawl.following import skip_reason
+from spider.store.records import DiscoverySkipReason, LinkType
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
@@ -244,46 +244,54 @@ def test_the_robots_user_agent_token_selects_the_x_robots_tag_that_applies(
     assert _state(crawl_file, server.url("/x")) == [("skipped", "nofollow", "hyperlink")]
 
 
-# The spec's Link type table; a sitemap's types come from no Page.
-_REQUESTED_BY_TYPE: dict[str, bool] = {
+_NOT_FOLLOWED = "link_type_not_followed"
+# The spec's Link type table, None for a type whose target is requested; a sitemap's types
+# come from no Page.
+_SKIP_REASON_BY_TYPE: dict[str, str | None] = {
     **dict.fromkeys(
-        ["hyperlink", "canonical", "pagination", "hreflang", "iframe", "meta_refresh"], True
+        ["hyperlink", "canonical", "pagination", "hreflang", "iframe", "meta_refresh"], None
     ),
-    **dict.fromkeys(["http_refresh", "image", "css", "javascript", "video", "audio"], True),
-    "media": True,
-    **dict.fromkeys(["amphtml", "mobile_alternate", "misc", "xml_sitemap"], False),
-    **dict.fromkeys(["sitemap_hreflang", "javascript_redirect"], False),
+    **dict.fromkeys(["http_refresh", "image", "css", "javascript", "video", "audio"], None),
+    "media": None,
+    **dict.fromkeys(["amphtml", "mobile_alternate", "misc", "xml_sitemap"], _NOT_FOLLOWED),
+    **dict.fromkeys(["sitemap_hreflang", "javascript_redirect"], _NOT_FOLLOWED),
 }
 
 
 def test_each_link_type_requests_its_target_or_not() -> None:
     assert {
-        link_type: requests_target(link_type, False, page_nofollow=False, follow_nofollow=False)
+        link_type: skip_reason(link_type, False, page_nofollow=False, follow_nofollow=False)
         for link_type in get_args(LinkType.__value__)
-    } == _REQUESTED_BY_TYPE
+    } == _SKIP_REASON_BY_TYPE
 
 
 @pytest.mark.parametrize(
-    ("link_type", "nofollow", "page_nofollow", "follow_nofollow", "requested"),
+    ("link_type", "nofollow", "page_nofollow", "follow_nofollow", "reason"),
     [
-        ("hyperlink", True, False, False, False),
-        ("hyperlink", False, True, False, False),
-        ("hyperlink", True, True, True, True),
-        ("hyperlink", True, False, True, True),
-        ("hyperlink", False, True, True, True),
+        ("hyperlink", True, False, False, "nofollow"),
+        ("hyperlink", False, True, False, "nofollow"),
+        ("hyperlink", True, True, True, None),
+        ("hyperlink", True, False, True, None),
+        ("hyperlink", False, True, True, None),
         # nofollow is a hyperlink's alone: a canonical or an image is requested anyway.
-        ("canonical", True, True, False, True),
-        ("image", True, True, False, True),
+        ("canonical", True, True, False, None),
+        ("image", True, True, False, None),
         # --follow-nofollow lifts nofollow, not the Link type table.
-        ("amphtml", False, False, True, False),
+        ("amphtml", False, False, True, _NOT_FOLLOWED),
+        # A nofollow Link of a type that is not followed is not followed for its type.
+        ("amphtml", True, True, False, _NOT_FOLLOWED),
     ],
 )
 def test_nofollow_keeps_a_hyperlink_from_requesting_its_target(
-    link_type: LinkType, nofollow: bool, page_nofollow: bool, follow_nofollow: bool, requested: bool
+    link_type: LinkType,
+    nofollow: bool,
+    page_nofollow: bool,
+    follow_nofollow: bool,
+    reason: DiscoverySkipReason | None,
 ) -> None:
     assert (
-        requests_target(
+        skip_reason(
             link_type, nofollow, page_nofollow=page_nofollow, follow_nofollow=follow_nofollow
         )
-        == requested
+        == reason
     )

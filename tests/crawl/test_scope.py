@@ -171,7 +171,7 @@ def _link(link_type: LinkType, target: str) -> DiscoveredLink:
         attribute="href",
         rel=(),
         nofollow=False,
-        requests_target=True,
+        skip_reason=None,
         declared_in="body",
         ordinal=1,
         is_internal=False,

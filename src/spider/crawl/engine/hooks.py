@@ -8,7 +8,6 @@ from typing import Any
 import msgspec
 
 from spider.clock import Clock
-from spider.crawl.fetch.fetcher import header_values
 from spider.crawl.pages.directives import RobotsDirectives
 from spider.crawl.pages.preparation import Extractor
 from spider.crawl.references import DiscoveredLink
@@ -33,10 +32,6 @@ class UrlResponse:
     response_time_ms: int
     # Page preparation's when the Page was parsed, else the X-Robots-Tag's alone.
     directives: RobotsDirectives
-
-    def header(self, name: str) -> str | None:
-        """The first value of the header `name`, in any letter case."""
-        return next(iter(header_values(self.headers, name)), None)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

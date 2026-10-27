@@ -992,7 +992,8 @@ def test_a_canonical_in_the_body_is_placed_in_the_body(
                     '<body><p>Text</p><link rel="canonical" href="/d"></body></html>'
                 ),
                 "/c": Page(body="<p>C</p>"),
-                "/d": Page(body="<p>D</p>"),
+                # An error page with links, as a site's 404 template has.
+                "/d": Status(404, body='<a href="/">Home</a> <a href="/e">E</a>'),
             }
         )
     )
@@ -1004,6 +1005,7 @@ def test_a_canonical_in_the_body_is_placed_in_the_body(
         repr(("canonical", server.url("/c"), "head")),
         repr(("canonical", server.url("/d"), "body")),
     ]
+    assert _links_seen(crawl_file, server.url("/d")) == []
 
 
 def _requested(result: UrlResult) -> tuple[Seen, ...]:
@@ -1042,10 +1044,53 @@ def test_a_handler_sees_the_reason_phrase(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(
-        Site(routes={"/": Page(body='<a href="/missing">Gone</a>'), "/missing": Status(404)})
+        Site(
+            routes={
+                "/": Page(body='<a href="/missing">Gone</a> <a href="/old">Old</a>'),
+                "/missing": Status(404),
+                # As some servers word it, which no table of phrases rebuilds.
+                "/old": Status(404, reason="Page Not Here"),
+            }
+        )
     )
     hooks = replace(default_hooks(), handlers=(handler("reason", _reason, _write_seen),))
 
     crawl_file = crawl_result(server.url("/"), hooks).crawl_file
 
-    assert _links_seen(crawl_file, server.url("/missing")) == ["Not Found"]
+    assert (
+        _links_seen(crawl_file, server.url("/missing")),
+        _links_seen(crawl_file, server.url("/old")),
+    ) == (["Not Found"], ["Page Not Here"])
+
+
+def _meta_robots(result: UrlResult) -> tuple[Seen, ...]:
+    if result.response is None:
+        return ()
+    directives = result.response.directives
+    said = (directives.meta_robots, directives.meta_robots_noindex, directives.meta_robots_nofollow)
+    return (Seen(result.url_id, repr(said)),)
+
+
+def test_a_handler_sees_the_robots_meta_of_a_parsed_page(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/draft">Draft</a>'),
+                # A staging Page kept out of the index by its meta alone, with no X-Robots-Tag.
+                "/draft": Page(
+                    body='<!doctype html><html lang="en"><head><meta charset="utf-8">'
+                    '<meta name="robots" content="noindex, nofollow"><title>Draft</title></head>'
+                    '<body><h1>Draft</h1><a href="/next">Next</a></body></html>'
+                ),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), handlers=(handler("meta", _meta_robots, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert _links_seen(crawl_file, server.url("/draft")) == [
+        repr(("noindex, nofollow", True, True))
+    ]

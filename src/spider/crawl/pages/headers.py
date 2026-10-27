@@ -3,7 +3,7 @@
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 
-from spider.crawl.following import requests_target
+from spider.crawl.following import skip_reason
 from spider.crawl.pages.links import PAGINATION_RELS, rel_tokens
 from spider.crawl.pages.refresh import refresh_url
 from spider.crawl.references import DiscoveredLink, resolve_reference
@@ -44,7 +44,7 @@ def header_links(
                     rel=rel,
                     nofollow="nofollow" in rel,
                     # A header gives no hyperlink, the one type nofollow applies to.
-                    requests_target=requests_target(
+                    skip_reason=skip_reason(
                         link_type, "nofollow" in rel, page_nofollow=False, follow_nofollow=False
                     ),
                     declared_in="http_header",
