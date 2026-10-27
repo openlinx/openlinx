@@ -963,23 +963,77 @@ def test_a_wait_outside_the_clock_is_named() -> None:
 
 # Work the loop waits for on another thread holds the Clock, so a test's virtual clock never
 # jumps meanwhile (020-add-crawl-core D7).
-HANDOFFS = {"to_thread", "run_in_executor", "wrap_future"}
-# A submitted unit's Future resolves at a commit, after BATCH_SIZE units or a second of clock
-# time: a hold would wait for time that cannot pass.
-WAITS_FOR_CLOCK_TIME = {("spider/store/writer.py", "submit_async")}
+HANDOFFS = {
+    "to_thread",
+    "run_in_executor",
+    "wrap_future",
+    "call_soon_threadsafe",
+    "run_coroutine_threadsafe",
+}
+# A submitted unit's Future resolves at its commit, which comes at the loop's commit deadline
+# and so waits for clock time: a hold would stop the time it waits for. This one call only.
+WAITS_FOR_CLOCK_TIME = {("spider/store/writer.py", "submit_async", "asyncio.wrap_future(done)")}
 
 
-def _held_lines(tree: ast.AST) -> set[int]:
-    held: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.With | ast.AsyncWith) and any(
+class _HandOffs(ast.NodeVisitor):
+    """Hand-offs outside an off_loop() block. A function defined inside the block runs later,
+    when the hold may be gone, so its calls count as outside."""
+
+    def __init__(self, module: str, tree: ast.Module) -> None:
+        self._module = module
+        # `from asyncio import to_thread as off` makes a bare off() a hand-off too.
+        self._names = {
+            alias.asname or alias.name: alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+            if alias.name in HANDOFFS
+        }
+        self._held = 0
+        self._function = ""
+        self.found: list[str] = []
+
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) -> None:
+        held, function = self._held, self._function
+        self._held = 0
+        if not isinstance(node, ast.Lambda):
+            self._function = node.name
+        self.generic_visit(node)
+        self._held, self._function = held, function
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+    visit_Lambda = visit_FunctionDef
+
+    def visit_With(self, node: ast.With | ast.AsyncWith) -> None:
+        for item in node.items:
+            self.visit(item)
+        holds = any(
             isinstance(item.context_expr, ast.Call)
             and isinstance(item.context_expr.func, ast.Attribute)
             and item.context_expr.func.attr == "off_loop"
             for item in node.items
-        ):
-            held.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
-    return held
+        )
+        self._held += holds
+        for statement in node.body:
+            self.visit(statement)
+        self._held -= holds
+
+    visit_AsyncWith = visit_With
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if isinstance(node.func, ast.Attribute):
+            name: str | None = node.func.attr
+        elif isinstance(node.func, ast.Name):
+            name = self._names.get(node.func.id)
+        else:
+            name = None
+        exempt = (self._module, self._function, ast.unparse(node)) in WAITS_FOR_CLOCK_TIME
+        if name in HANDOFFS and not self._held and not exempt:
+            self.found.append(
+                f"{self._module}:{node.lineno} hands off outside clock.off_loop(): "
+                f"{ast.unparse(node.func)}"
+            )
+        self.generic_visit(node)
 
 
 def handoff_violations(sources: Mapping[str, str]) -> list[str]:
@@ -987,23 +1041,9 @@ def handoff_violations(sources: Mapping[str, str]) -> list[str]:
     found: list[str] = []
     for module, source in sources.items():
         tree = ast.parse(source)
-        held = _held_lines(tree)
-        for function in ast.walk(tree):
-            if not isinstance(function, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            if (module, function.name) in WAITS_FOR_CLOCK_TIME:
-                continue
-            for node in ast.walk(function):
-                if (
-                    isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
-                    and node.func.attr in HANDOFFS
-                    and node.lineno not in held
-                ):
-                    found.append(
-                        f"{module}:{node.lineno} hands off outside clock.off_loop(): "
-                        f"{ast.unparse(node.func)}"
-                    )
+        visitor = _HandOffs(module, tree)
+        visitor.visit(tree)
+        found += visitor.found
     return sorted(set(found))
 
 
@@ -1024,13 +1064,98 @@ def test_a_hand_off_outside_the_hold_is_named() -> None:
         "        await asyncio.to_thread(writer.close)\n"
         "    await loop.run_in_executor(None, work)\n",
         "spider/store/writer.py": "async def submit_async(self):\n"
+        "    asyncio.wrap_future(other)\n"
         "    return asyncio.wrap_future(done)\n"
         "async def run_async(self):\n"
         "    return await asyncio.wrap_future(done)\n",
+        "spider/pool.py": "from asyncio import run_coroutine_threadsafe\n"
+        "from asyncio import to_thread as off\n"
+        "async def prepare():\n"
+        "    with clock.off_loop():\n"
+        "        def later():\n"
+        "            loop.call_soon_threadsafe(done)\n"
+        "        await off(work)\n"
+        "    await off(work)\n"
+        "    run_coroutine_threadsafe(job, loop)\n",
     }
 
     assert handoff_violations(sources) == [
+        "spider/pool.py:6 hands off outside clock.off_loop(): loop.call_soon_threadsafe",
+        "spider/pool.py:8 hands off outside clock.off_loop(): off",
+        "spider/pool.py:9 hands off outside clock.off_loop(): run_coroutine_threadsafe",
         "spider/services/crawling.py:2 hands off outside clock.off_loop(): asyncio.to_thread",
         "spider/services/crawling.py:5 hands off outside clock.off_loop(): loop.run_in_executor",
-        "spider/store/writer.py:4 hands off outside clock.off_loop(): asyncio.wrap_future",
+        "spider/store/writer.py:2 hands off outside clock.off_loop(): asyncio.wrap_future",
+        "spider/store/writer.py:5 hands off outside clock.off_loop(): asyncio.wrap_future",
+    ]
+
+
+# Real I/O makes no clock call, so the virtual clock would jump while a request is in flight and
+# fire a deadline that production never fires (020-add-crawl-core D7).
+REAL_IO_CALLS = {"AiohttpFetcher", "aiohttp_fetcher", "ClientSession"}
+REAL_IO_FIXTURES = {"fixture_site", "fixture_hosts"}
+# Without a fake Fetcher, these crawl through the aiohttp Fetcher.
+CRAWLS = {"crawl_result", "start_crawl"}
+
+
+def _called(call: ast.Call) -> str:
+    if isinstance(call.func, ast.Attribute):
+        return call.func.attr
+    return call.func.id if isinstance(call.func, ast.Name) else ""
+
+
+def fake_clock_with_real_io(sources: Mapping[str, str]) -> list[str]:
+    """Test functions that pair FakeClock with the fixture site or the aiohttp Fetcher."""
+    found: list[str] = []
+    for module, source in sources.items():
+        for function in ast.walk(ast.parse(source)):
+            if not isinstance(function, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            calls = [node for node in ast.walk(function) if isinstance(node, ast.Call)]
+            called = {_called(call) for call in calls}
+            if "FakeClock" not in called:
+                continue
+            arguments = {argument.arg for argument in function.args.args}
+            unfaked_crawl = any(
+                _called(call) in CRAWLS
+                and not any(keyword.arg == "fetcher" for keyword in call.keywords)
+                for call in calls
+            )
+            if arguments & REAL_IO_FIXTURES or called & REAL_IO_CALLS or unfaked_crawl:
+                found.append(
+                    f"{module}:{function.lineno} {function.name} pairs FakeClock with real I/O"
+                )
+    return sorted(found)
+
+
+def test_no_test_pairs_the_virtual_clock_with_real_io() -> None:
+    tests = Path(__file__).resolve().parent
+    sources = {
+        path.relative_to(tests.parent).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(tests.rglob("*.py"))
+    }
+
+    assert fake_clock_with_real_io(sources) == []
+
+
+def test_a_virtual_clock_beside_real_io_is_named() -> None:
+    sources = {
+        "tests/crawl/test_timing.py": "def test_site(temp_workspace, fixture_site):\n"
+        "    clock = FakeClock()\n"
+        "async def test_session():\n"
+        "    async with aiohttp.ClientSession() as session:\n"
+        "        await AiohttpFetcher(session, FakeClock()).fetch(request)\n"
+        "def test_crawl(temp_workspace):\n"
+        "    crawl_result(seed, clock=FakeClock())\n"
+        "def test_fake(temp_workspace):\n"
+        "    clock = FakeClock()\n"
+        "    crawl_result(seed, clock=clock, fetcher=FakeFetcher(clock, {}))\n"
+        "def test_system(temp_workspace, fixture_site):\n"
+        "    crawl_result(server.url('/'), clock=SystemClock())\n",
+    }
+
+    assert fake_clock_with_real_io(sources) == [
+        "tests/crawl/test_timing.py:1 test_site pairs FakeClock with real I/O",
+        "tests/crawl/test_timing.py:3 test_session pairs FakeClock with real I/O",
+        "tests/crawl/test_timing.py:6 test_crawl pairs FakeClock with real I/O",
     ]

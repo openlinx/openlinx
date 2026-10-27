@@ -3,9 +3,9 @@
 import asyncio
 import sqlite3
 import threading
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from concurrent.futures import Future
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -95,6 +95,8 @@ class CrawlWriter:
         # run again, and the time of the first one.
         self._batch: list[_Ran] = []
         self._first_uncommitted_at = 0.0
+        self._loop_deadline = False
+        self._unflushed: asyncio.Event | None = None
         started: Future[None] = Future()
         self._thread = threading.Thread(
             target=self._serve, args=(started,), name=f"crawl writer {path.name}", daemon=True
@@ -127,8 +129,35 @@ class CrawlWriter:
         done: Future[T] = _uncancellable()
         await self._submit_without_blocking(_Job(unit, done, submitted=True))
         # Bound to this loop, so its callbacks run here and never on the writer thread. Not
-        # held: the unit commits after BATCH_SIZE units or a second of clock time.
+        # held: the unit commits at the loop's commit deadline, which waits for clock time.
         return asyncio.wrap_future(done)
+
+    @asynccontextmanager
+    async def loop_deadline(self) -> AsyncIterator[None]:
+        """The commit deadline on the loop's Clock, for a writer that an event loop drives, so a
+        test's virtual clock sees it (020-add-crawl-core D7). The caller chooses it; from then
+        on the thread commits on its own only after BATCH_SIZE units, a flush or the close."""
+        self._unflushed = asyncio.Event()
+        self._loop_deadline = True
+        deadline = asyncio.create_task(self._flush_at_deadlines(self._unflushed))
+        try:
+            yield
+        finally:
+            deadline.cancel()
+            with suppress(asyncio.CancelledError):
+                await deadline
+
+    async def _flush_at_deadlines(self, unflushed: asyncio.Event) -> None:
+        while True:
+            await unflushed.wait()
+            await self._clock.sleep(COMMIT_AFTER_SECONDS)
+            # A unit submitted from here on waits for the next deadline.
+            unflushed.clear()
+            try:
+                await self.flush_async()
+            # An ended writer keeps why it ended, and raises it to its next caller and at close.
+            except Exception:
+                return
 
     async def flush_async(self) -> None:
         with self._clock.off_loop():
@@ -196,6 +225,8 @@ class CrawlWriter:
             _fail_queued(self._queue, self._failure)
 
     async def _submit_without_blocking(self, job: _Job) -> None:
+        if self._unflushed is not None:
+            self._unflushed.set()
         try:
             self._submit(job, block=False)
         except Full:
@@ -329,8 +360,10 @@ class CrawlWriter:
     def _commit_if_due(self, connection: Connection) -> None:
         if not connection.in_transaction():
             return
-        waited = self._clock.monotonic() - self._first_uncommitted_at
-        if len(self._batch) >= BATCH_SIZE or waited >= COMMIT_AFTER_SECONDS:
+        if len(self._batch) >= BATCH_SIZE or (
+            not self._loop_deadline
+            and self._clock.monotonic() - self._first_uncommitted_at >= COMMIT_AFTER_SECONDS
+        ):
             self._commit(connection)
 
     def _commit(self, connection: Connection) -> None:

@@ -294,7 +294,8 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
                 if crawl.fetcher is None
                 else nullcontext(crawl.fetcher)
             )
-            async with fetching as fetcher:
+            # The engine drives the writer, so its commits keep the Crawl's clock.
+            async with writer.loop_deadline(), fetching as fetcher:
                 yield CrawlContext(
                     crawl_file=crawl_file,
                     settings=plan.settings,

@@ -44,7 +44,8 @@ def crawl_result(
 
     `crawl` holds settings of the [crawl] table, as their flags would give them. Like the CLI, it
     crawls into the Workspace of the current folder, which `temp_workspace` sets, on the real
-    clock unless `clock` is given: a FakeClock is for timing scenarios, and its sleeps end at once.
+    clock unless `clock` is given: a FakeClock is for timing scenarios with a fake Fetcher, and
+    its time jumps to each sleep's wake once the loop is quiet.
     """
     request = CrawlRequest(
         seed=seed,
