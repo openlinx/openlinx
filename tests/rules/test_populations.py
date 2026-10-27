@@ -7,16 +7,9 @@ import pytest
 
 from spider.rules.model import Population, Rule
 from spider.rules.registry import RULES
+from spider.store.issues import read_affected_urls
 from tests.support.crawls import query
-from tests.support.rules import (
-    SHOES,
-    crawl_with_page,
-    crawl_with_pages,
-    crawl_with_url,
-    evaluate_rule,
-    failed,
-    responded,
-)
+from tests.support.rules import crawl_with_page, crawl_with_pages, crawl_with_url, failed, responded
 from tests.support.workspace import TempWorkspace
 
 MEMBERS: dict[Population, str] = {
@@ -44,17 +37,10 @@ OUTSIDE: dict[str, Callable[[TempWorkspace], Path]] = {
     "external_http": lambda workspace: crawl_with_url(
         workspace, "http://elsewhere.test/a", responded(200), is_internal=False
     )[0],
-    "not_parsed": lambda workspace: crawl_with_page(
-        workspace,
-        parse_error="parse_timeout",
-        title_count=1,
-        title_1="",
-        title_1_length=61,
-        meta_description_count=0,
-        h1_count=0,
-    )[0],
+    # A Page that was not parsed is recorded without its Page data: every column is NULL.
+    "not_parsed": lambda workspace: crawl_with_page(workspace, parse_error="parse_timeout")[0],
     "not_parsed_twins": lambda workspace: crawl_with_pages(
-        workspace, SHOES, SHOES, parse_error="parse_timeout"
+        workspace, {}, {}, parse_error="parse_timeout"
     )[0],
 }
 
@@ -68,5 +54,6 @@ def test_a_rule_s_affected_urls_are_members_of_its_population(
 ) -> None:
     crawl_file = outside(temp_workspace)
     members = {url_id for (url_id,) in query(crawl_file, MEMBERS[rule.population])}
+    found = read_affected_urls(crawl_file, rule.id, RULES)
 
-    assert {affected.url_id for affected in evaluate_rule(crawl_file, rule)} <= members
+    assert {affected.url_id for affected in found} <= members
