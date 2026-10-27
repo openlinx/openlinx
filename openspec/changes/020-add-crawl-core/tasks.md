@@ -464,7 +464,7 @@ The fixes of the review of `spider.crawl` along both axes. Group 16 runs last, a
 - [x] 18.6 Refactor: one constructor builds a `DiscoveredLink` for the link extractor and the header Links, and one ordered table maps `rel` tokens to a Link type for both, the headers reading only their types, behaviour unchanged.
 - [x] 18.7 Refactor: the texts of `handler_failed`, `record_failed` and `parse_failed` move into `spider.crawl.engine.crawl_warnings`, and `_robots_verdict` returns its warnings for the caller to give, behaviour unchanged.
 - [x] 18.8 Refactor: `CrawlContext.reporter` is typed `WarningLog`, the one adapter, and the `CrawlReporter` Protocol goes; `document_links` is renamed `html_links`, and CONTEXT.md notes "reference" as the raw string before it resolves to a Link.
-- [ ] 18.9 Refactor: the duplicate of `test_an_unreachable_robots_txt_is_reported_under_ignore_robots` goes, with its Risks entry.
+- [x] 18.9 Refactor: the duplicate of `test_an_unreachable_robots_txt_is_reported_under_ignore_robots` goes, with its Risks entry.
 - [x] 18.10 Fix: the fixture site's `after` route option, and the two depth tests that order their events by delays wait on it instead, each red when the lowering happens before dispatch.
 - [ ] 18.11 Docs: `docs/crawling.md` lists the final 3xx of robots.txt and drops the provenance acceptance; `docs/architecture.md` lists the rate turn between the host's slot and the global cap.
 - [ ] 18.12 Review: run the code-review skill on group 18's commits, then refactor with the whole suite green.

@@ -167,20 +167,6 @@ def test_an_unreachable_robots_txt_blocks_its_origin(
     )
 
 
-def test_ignore_robots_requests_the_urls_of_an_unreachable_robots_txt_unlabelled(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(Site(routes={"/robots.txt": Status(503), "/": Page(body="<p>/</p>")}))
-
-    crawl_file = crawled(server.url("/"), "--ignore-robots")
-
-    assert query(
-        crawl_file,
-        "SELECT fetch_state, blocked_by_robots_txt FROM urls WHERE url = ?",
-        [server.url("/")],
-    ) == [("fetched", None)]
-
-
 def test_a_redirected_robots_txt_is_followed(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
