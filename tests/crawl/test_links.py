@@ -4,19 +4,15 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.crawl.pages.links import extract_links
 from spider.crawl.references import DiscoveredLink
-from spider.crawl.urls import NormalizedUrl, url_host
+from spider.crawl.urls import NormalizedUrl
+from tests.support.pages import page_links
 
 SITE = NormalizedUrl("http://site.test/")
 
 
-def _on_site(url: NormalizedUrl) -> bool:
-    return url_host(url) == "site.test"
-
-
 def _links(html: str, url: NormalizedUrl = SITE) -> list[DiscoveredLink]:
-    return extract_links(html.encode(), "text/html", url, is_internal=_on_site, strip_params=None)
+    return list(page_links(html.encode(), "text/html", url))
 
 
 def test_a_relative_link_is_resolved_against_the_base_href() -> None:
@@ -172,9 +168,7 @@ def test_a_malformed_reference_is_ignored() -> None:
 def test_links_are_read_from_the_decoded_document() -> None:
     body = '<a href="/й">x</a>'.encode("cp1251")
 
-    links = extract_links(
-        body, "text/html; charset=windows-1251", SITE, is_internal=_on_site, strip_params=None
-    )
+    links = page_links(body, "text/html; charset=windows-1251", SITE)
 
     assert [link.target for link in links] == ["http://site.test/%D0%B9"]
 
@@ -219,9 +213,7 @@ def test_references_resolve_as_browsers_resolve_them(href: str, expected: list[s
 def test_queries_are_encoded_in_the_page_encoding(html: str, charset: str, expected: str) -> None:
     body = html.encode(charset, "xmlcharrefreplace")
 
-    links = extract_links(
-        body, f"text/html; charset={charset}", SITE, is_internal=_on_site, strip_params=None
-    )
+    links = page_links(body, f"text/html; charset={charset}", SITE)
 
     assert [link.target for link in links] == [expected]
 
@@ -281,9 +273,9 @@ _CONTENT_TYPES = (
 
 @given(_BODIES, _CONTENT_TYPES)
 def test_the_link_extractor_accepts_any_bytes(body: bytes, content_type: str | None) -> None:
-    links = extract_links(body, content_type, SITE, is_internal=_on_site, strip_params=None)
+    links = page_links(body, content_type, SITE)
 
-    assert isinstance(links, list)
+    assert isinstance(links, tuple)
 
 
 def test_deeply_nested_html_gives_its_links() -> None:

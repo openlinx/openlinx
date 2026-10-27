@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Mapping
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.following import skip_reason
-from spider.crawl.pages.decoding import decode_html, query_codec
+from spider.crawl.pages.decoding import query_codec
 from spider.crawl.pages.refresh import refresh_url
 from spider.crawl.references import C0_OR_SPACE, DiscoveredLink, resolve_base, resolve_reference
 from spider.crawl.urls import NormalizedUrl
@@ -52,29 +52,6 @@ _ORIGIN_HINTS = frozenset({"preconnect", "dns-prefetch"})
 _SRCSET_CANDIDATE = re.compile(
     r"[\t\n\x0c\r ,]*([^\t\n\x0c\r ]*)(?:(?<!,)(?:[^,(]|\([^)]*\)?)*,?)?"
 )
-
-
-def extract_links(
-    body: bytes,
-    content_type: str | None,
-    url: NormalizedUrl,
-    *,
-    is_internal: Callable[[NormalizedUrl], bool],
-    strip_params: re.Pattern[str] | None,
-    page_nofollow: bool = False,
-    follow_nofollow: bool = False,
-) -> list[DiscoveredLink]:
-    decoded = decode_html(body, content_type)
-    tree = parse_html(decoded.text)
-    return links_in_tree(
-        tree,
-        base=base_url(tree, url, decoded.encoding),
-        encoding=decoded.encoding,
-        is_internal=is_internal,
-        strip_params=strip_params,
-        page_nofollow=page_nofollow,
-        follow_nofollow=follow_nofollow,
-    )
 
 
 def parse_html(text: str) -> LexborHTMLParser:
