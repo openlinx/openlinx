@@ -1,7 +1,9 @@
 """`fixture_site` fixtures: start a site, stop it afterwards (design D9 of 000-scaffold-project)."""
 
+import ssl
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack
+from functools import partial
 
 import pytest
 from aiohttp.abc import AbstractResolver
@@ -13,19 +15,21 @@ from tests.fixture_site.hosts import (
     StartHosts,
     StartNamedHosts,
     hosts_for,
+    on_http_port,
 )
 from tests.fixture_site.routes import Site
-from tests.fixture_site.server import RunningServer, ServerHandle
+from tests.fixture_site.server import RunningServer, Serve, ServerHandle
+from tests.fixture_site.tls import StartTlsHosts, tls_hosts_for
 from tests.support.proxy import ForwardProxy, StartProxy
 
 StartSite = Callable[[Site], ServerHandle]
 
 
-def _serve_sites() -> Iterator[StartSite]:
+def _serve_sites() -> Iterator[Serve]:
     with ExitStack() as running:
 
-        def start(site: Site) -> ServerHandle:
-            server = RunningServer(site)
+        def start(site: Site, tls: ssl.SSLContext | None = None) -> ServerHandle:
+            server = RunningServer(site, tls=tls)
             running.callback(server.stop)
             return server.handle
 
@@ -58,9 +62,17 @@ def fixture_named_hosts(fixture_site: StartSite) -> StartNamedHosts:
 
     def start(sites: Mapping[str, Site]) -> NamedHosts:
         servers = {name: fixture_site(site) for name, site in sites.items()}
-        return NamedHosts(servers, FixtureResolver(servers))
+        return NamedHosts(servers, FixtureResolver(on_http_port(servers)))
 
     return start
+
+
+@pytest.fixture
+def fixture_tls_hosts() -> Iterator[StartTlsHosts]:
+    """site.test over http and https, and two https listeners whose certificates fail,
+    behind the DNS resolver hook."""
+    for serve in _serve_sites():
+        yield partial(tls_hosts_for, serve)
 
 
 @pytest.fixture

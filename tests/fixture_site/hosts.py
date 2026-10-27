@@ -12,12 +12,16 @@ from tests.fixture_site.server import ServerHandle
 
 SITE_HOSTS = ("site.test", "www.site.test")
 OTHER_HOST = "other.test"
+HTTP_PORT = 80
+
+# A name and the port a URL asks for on it.
+type Listener = tuple[str, int]
 
 
 class FixtureResolver(AbstractResolver):
-    """Resolves each name to its fixture instance, the port included, and no other name."""
+    """Resolves each name and port to its fixture instance, and no other name or port."""
 
-    def __init__(self, servers: Mapping[str, ServerHandle]) -> None:
+    def __init__(self, servers: Mapping[Listener, ServerHandle]) -> None:
         self._servers = servers
         self._lookups: list[str] = []
 
@@ -30,10 +34,10 @@ class FixtureResolver(AbstractResolver):
         self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
     ) -> list[ResolveResult]:
         self._lookups.append(host)
-        server = self._servers.get(host)
+        server = self._servers.get((host, port))
         if server is None:
             # As the system resolver fails: aiohttp reports it as ClientConnectorDNSError.
-            raise OSError(None, f"the fixture hosts have no name {host}")
+            raise OSError(None, f"the fixture hosts have no name {host} on port {port}")
         address = urlsplit(server.base_url)
         return [
             ResolveResult(
@@ -73,6 +77,10 @@ class NamedHosts:
 StartNamedHosts = Callable[[Mapping[str, Site]], NamedHosts]
 
 
+def on_http_port(servers: Mapping[str, ServerHandle]) -> dict[Listener, ServerHandle]:
+    return {(name, HTTP_PORT): server for name, server in servers.items()}
+
+
 def hosts_for(site: ServerHandle, other: ServerHandle) -> FixtureHosts:
     servers = {**dict.fromkeys(SITE_HOSTS, site), OTHER_HOST: other}
-    return FixtureHosts(site, other, FixtureResolver(servers))
+    return FixtureHosts(site, other, FixtureResolver(on_http_port(servers)))

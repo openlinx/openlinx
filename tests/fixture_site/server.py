@@ -2,12 +2,13 @@
 
 import asyncio
 import socket
+import ssl
 import struct
 import threading
 import time
 from collections.abc import Awaitable, Callable, Coroutine, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 from xml.sax.saxutils import escape
 
 from aiohttp import web
@@ -270,7 +271,7 @@ def _build_app(
 class ThreadedApp:
     """An aiohttp app on 127.0.0.1, served from a thread of its own."""
 
-    def __init__(self, app: web.Application, name: str) -> None:
+    def __init__(self, app: web.Application, name: str, tls: ssl.SSLContext | None = None) -> None:
         self._in_flight: set[asyncio.Task[Any]] = set()
         app.middlewares.append(self._track)
         self._loop = loop_factory()
@@ -279,12 +280,12 @@ class ThreadedApp:
         self._runner = web.AppRunner(app)
         try:
             self._call(self._runner.setup())
-            self._call(web.TCPSite(self._runner, "127.0.0.1", 0).start())
+            self._call(web.TCPSite(self._runner, "127.0.0.1", 0, ssl_context=tls).start())
         except BaseException:
             self._stop_loop()
             raise
         host, port = self._runner.addresses[0][:2]
-        self.base_url = f"http://{host}:{port}"
+        self.base_url = f"{'https' if tls else 'http'}://{host}:{port}"
 
     @web.middleware
     async def _track(
@@ -319,12 +320,21 @@ class ThreadedApp:
             self._stop_loop()
 
 
+class Serve(Protocol):
+    """Starts a fixture instance for a site, over https when it is given a TLS context."""
+
+    def __call__(self, site: Site, tls: ssl.SSLContext | None = None) -> ServerHandle: ...
+
+
 class RunningServer:
-    def __init__(self, site: Site, after_seconds: float = AFTER_SECONDS) -> None:
+    def __init__(
+        self, site: Site, after_seconds: float = AFTER_SECONDS, tls: ssl.SSLContext | None = None
+    ) -> None:
         self._log = log = RequestLog()
         self._app = ThreadedApp(
             _build_app(site, lambda: self.handle.base_url, log, after_seconds),
             name="fixture-site",
+            tls=tls,
         )
         self.handle = ServerHandle(self._app.base_url, log)
 

@@ -35,14 +35,15 @@ def crawl_result(
     hooks: Hooks | None = None,
     *,
     resolver: AbstractResolver | None = None,
+    trust_anchors: str | None = None,
     pages: Callable[[], PageExecutor] | None = None,
     reporter: Reporter | None = None,
     clock: Clock | None = None,
     fetcher: Fetcher | None = None,
     **crawl: Any,
 ) -> CrawlResult:
-    """Crawls through the Crawl Service, which alone takes test hooks, the DNS resolver hook
-    and the page executor.
+    """Crawls through the Crawl Service, which alone takes test hooks, the DNS resolver hook,
+    the test CA's trust anchors and the page executor.
 
     `crawl` holds settings of the [crawl] table, as their flags would give them. Like the CLI, it
     crawls into the Workspace of the current folder, which `temp_workspace` sets, on the real
@@ -65,11 +66,13 @@ def crawl_result(
         reporter or Collected(),
         hooks or default_hooks(),
         pages=pages,
-        fetchers=_fetchers(resolver, fetcher),
+        fetchers=_fetchers(resolver, trust_anchors, fetcher),
     )
 
 
-def _fetchers(resolver: AbstractResolver | None, fetcher: Fetcher | None) -> FetcherFactory:
+def _fetchers(
+    resolver: AbstractResolver | None, trust_anchors: str | None, fetcher: Fetcher | None
+) -> FetcherFactory:
     if fetcher is None:
-        return partial(aiohttp_fetcher, resolver=resolver)
+        return partial(aiohttp_fetcher, resolver=resolver, trust_anchors=trust_anchors)
     return lambda policy, clock: nullcontext(fetcher)

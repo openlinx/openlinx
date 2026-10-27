@@ -40,6 +40,7 @@ dev = [
     "pytest-cov>=7.1.0",
     "pytest-timeout>=2.4.0",
     "ruff>=0.16.9",
+    "trustme>=1.2.1",
     "types-psutil>=7.2.2.20260906",
 ]
 

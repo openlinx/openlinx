@@ -14,6 +14,7 @@ from spider import __version__
 from spider.clock import Clock
 from spider.crawl.fetch.body import OFFERED_CODINGS, BodyDecodingError, read_body
 from spider.crawl.fetch.proxy import ProxyVariables
+from spider.crawl.fetch.tls import tls_context
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import APP_NAME, PROJECT_URL
 from spider.store.records import FetchError
@@ -160,10 +161,14 @@ def fetch_error_of(error: Exception) -> FetchError:
 
 @asynccontextmanager
 async def aiohttp_fetcher(
-    policy: FetchPolicy, clock: Clock, resolver: AbstractResolver | None = None
+    policy: FetchPolicy,
+    clock: Clock,
+    resolver: AbstractResolver | None = None,
+    trust_anchors: str | None = None,
 ) -> AsyncIterator[AiohttpFetcher]:
+    """`resolver` and `trust_anchors` are the DNS resolver hook and the test CA of the tests."""
     async with aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(resolver=resolver),
+        connector=aiohttp.TCPConnector(resolver=resolver, ssl=tls_context(trust_anchors)),
         timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
         headers={
             "User-Agent": policy.user_agent,
