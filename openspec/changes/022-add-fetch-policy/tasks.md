@@ -62,7 +62,7 @@ Seams (docs/testing.md):
 - [x] 3.9 Docs: document timeouts, retries, backoff and `attempt_count` in `docs/crawling.md`. `Retry-After` comes with 3.8, and the network pause's view of a retry with `020`'s network pause (its group 12).
 - [x] 3.10 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
-- [ ] 3.11 Fix: retry only the failures that may pass (`timeout`, `connection_refused`, `connection_error`) besides 5xx, with a [Pure] table over every `fetch_error` value and the status classes, so a new value must be classified; drive "An unresolvable External host is requested once" at [3+6] with the DNS resolver hook; and refuse a `--retries` above 10 (design D4).
+- [ ] 3.11 Fix: retry only the failures that may pass (`timeout`, `connection_refused`, `connection_error`) besides 5xx, with a [Pure] table over every `fetch_error` value and the status classes, so a new value must be classified; drive "An unresolvable External host is requested once" at [3+6] with the DNS resolver hook, which logs each name it resolves, since the URL behind its failed robots.txt is never requested itself; and refuse a `--retries` above 10 (design D4).
 - [ ] 3.12 After `022`'s next merge of `020` (its group 18): pass `--retries 0` in the tests whose scenario is not about retries but which still wait a real backoff (a robots.txt 503, a 5xx page), so the suite does not pay it.
 
 ## 4. Redirects

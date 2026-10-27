@@ -165,7 +165,7 @@ The URL SHALL record the last attempt's response. This change adds this column t
 
 #### Scenario: An unresolvable External host is requested once
 - **WHEN** `http://site.test/` links to `http://gone.test/`, a host name that does not resolve
-- **THEN** `http://gone.test/` has `fetch_error` = `dns_error` and `attempt_count` = 1
+- **THEN** `http://gone.test/` has `fetch_error` = `dns_error`, and the name `gone.test` is resolved once
 
 ### Requirement: Redirects are followed hop by hop
 The Crawl SHALL NOT follow redirects within one request. For a 301, 302, 303, 307 or 308 response with a `Location` header:
