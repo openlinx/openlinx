@@ -325,8 +325,8 @@ The Crawl keeps no cookies: a cookie that a response sets is never sent with a l
 ### Proxy variables
 
 The Crawl honours the standard proxy variables, as curl, pip and uv do. It is the one place where the tool reads the environment.
-- **Which proxy:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs. Each is read in any letter case, and when both cases are set, the lower-case one wins. `ALL_PROXY` and the variables of other schemes are not read.
-- **Bypass:** `NO_PROXY` is a comma-separated list of host names and domain suffixes, with or without a leading dot, or `*` for every host. A host it names, or a host under a domain suffix it names, is requested directly: `site.test` covers `site.test` and `www.site.test`, but not `mysite.test`.
+- **Which proxy:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs. Each is read in any letter case, and when both cases are set, the lower-case one wins; an empty variable counts as unset. A proxy without a scheme, such as `proxy.corp:3128`, is an http proxy. `ALL_PROXY` and the variables of other schemes are not read.
+- **Bypass:** `NO_PROXY` is a comma-separated list of host names and domain suffixes, with or without a leading dot, or `*` for every host. A host it names, or a host under a domain suffix it names, is requested directly: `site.test` covers `site.test` and `www.site.test`, but not `mysite.test`. Ports, IP addresses and IP ranges in `NO_PROXY` are not read.
 - **When:** the variables are read once, when a run starts, and every request of the run, robots.txt's included, follows them. A resumed Crawl reads them again.
 - **Recorded:** the variables that are set are recorded in the `environment` table of `crawl.config`, under `http_proxy`, `https_proxy` and `no_proxy`. The password of a proxy URL is recorded as `***`, as in `http://u:***@proxy:3128`, and a proxy URL without a password is recorded as `***`.
 

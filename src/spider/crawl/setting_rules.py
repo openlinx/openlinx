@@ -23,7 +23,8 @@ def as_rate(rate: float) -> float:
 def as_user_agent(user_agent: str) -> str:
     if not user_agent.strip() or _HEADER_VALUE.fullmatch(user_agent) is None:
         raise ValueError(
-            "a user agent has visible ASCII characters, spaces and tabs only, and more than spaces"
+            "a user agent has visible ASCII characters, spaces and tabs only, and not only "
+            "whitespace"
         )
     return user_agent
 

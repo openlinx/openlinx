@@ -129,8 +129,9 @@ def crawl(
         typer.Option(
             "--user-agent",
             callback=_user_agent,
-            help="The User-Agent request header of every request, robots.txt's included, "
-            "without control characters. The tool's name, version and project URL by default.",
+            help="The User-Agent request header of every request, robots.txt's included: "
+            "visible ASCII characters, spaces and tabs only. The tool's name, version and "
+            "project URL by default.",
             show_default=False,
         ),
         OptionMeta(setting="crawl.user_agent"),

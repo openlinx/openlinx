@@ -5,7 +5,7 @@ import os
 import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -23,7 +23,7 @@ from spider.crawl.fetch.fetcher import (
     FetchPolicy,
     aiohttp_fetcher,
 )
-from spider.crawl.fetch.proxy import proxy_variables
+from spider.crawl.fetch.proxy import SECRET_KEYS, ProxyVariables
 from spider.crawl.pages.preparation import PageExecutor
 from spider.crawl.scope import ScopeDecision, ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
@@ -159,7 +159,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     if not decision.in_scope:
         raise _seed_out_of_scope(seed, decision)
     settings_file = workspace.settings_file if workspace.settings_file.is_file() else None
-    proxies = proxy_variables(os.environ)
+    proxies = ProxyVariables.of(os.environ)
     new_crawl = NewCrawl(
         workspace=workspace,
         crawl_mode="spider",
@@ -170,9 +170,8 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         # Every registered table, resolved (design D11).
         config={**settings.root.model_dump(mode="json"), **_environment(proxies)},
         scope=scope.to_json(),
-        secret_names=SecretNames(
-            flags=request.secret_names.flags,
-            settings=request.secret_names.settings | _PROXY_SECRETS,
+        secret_names=replace(
+            request.secret_names, settings=request.secret_names.settings | _PROXY_SECRETS
         ),
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
@@ -192,12 +191,11 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
 
 
 # A proxy URL may hold a password; 015's redaction keeps its user and host (design D8).
-_PROXY_SECRETS = frozenset({"environment.http_proxy", "environment.https_proxy"})
+_PROXY_SECRETS = frozenset(f"environment.{key}" for key in SECRET_KEYS)
 
 
-def _environment(proxies: Mapping[str, str]) -> dict[str, dict[str, str]]:
-    """The proxy variables in use, set ones only, as the environment table of crawl.config."""
-    used = {f"{key}_proxy": value for key, value in proxies.items()}
+def _environment(proxies: ProxyVariables) -> dict[str, dict[str, str]]:
+    used = proxies.recorded()
     return {"environment": used} if used else {}
 
 

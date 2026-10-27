@@ -171,21 +171,15 @@ def _pattern_chunks(size: int) -> Iterator[bytes]:
         yield block[: size - start]
 
 
-def _build_app(
-    site: Site, base_url: Callable[[], str], in_flight: set[asyncio.Task[Any]], log: RequestLog
-) -> web.Application:
+def _build_app(site: Site, base_url: Callable[[], str], log: RequestLog) -> web.Application:
     @web.middleware
-    async def log_and_track(
+    async def logged(
         request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
     ) -> web.StreamResponse:
         log.add(request)
-        task = asyncio.current_task()
-        assert task is not None
-        in_flight.add(task)
         try:
             return await handler(request)
         finally:
-            in_flight.discard(task)
             log.answered()
 
     async def handle(request: web.Request) -> web.StreamResponse:
@@ -211,19 +205,20 @@ def _build_app(
             await response.write_eof()
         return response
 
-    app = web.Application(middlewares=[log_and_track])
+    app = web.Application(middlewares=[logged])
     app.router.add_route("*", "/{tail:.*}", handle)
     return app
 
 
-class RunningServer:
-    def __init__(self, site: Site) -> None:
-        self._loop = loop_factory()
-        self._thread = threading.Thread(target=self._loop.run_forever, name="fixture-site")
-        self._thread.start()
+class ThreadedApp:
+    """An aiohttp app on 127.0.0.1, served from a thread of its own."""
+
+    def __init__(self, app: web.Application, name: str) -> None:
         self._in_flight: set[asyncio.Task[Any]] = set()
-        log = RequestLog()
-        app = _build_app(site, lambda: self.handle.base_url, self._in_flight, log)
+        app.middlewares.append(self._track)
+        self._loop = loop_factory()
+        self._thread = threading.Thread(target=self._loop.run_forever, name=name)
+        self._thread.start()
         self._runner = web.AppRunner(app)
         try:
             self._call(self._runner.setup())
@@ -232,7 +227,19 @@ class RunningServer:
             self._stop_loop()
             raise
         host, port = self._runner.addresses[0][:2]
-        self.handle = ServerHandle(f"http://{host}:{port}", log)
+        self.base_url = f"http://{host}:{port}"
+
+    @web.middleware
+    async def _track(
+        self, request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
+    ) -> web.StreamResponse:
+        task = asyncio.current_task()
+        assert task is not None
+        self._in_flight.add(task)
+        try:
+            return await handler(request)
+        finally:
+            self._in_flight.discard(task)
 
     def _call[T](self, coroutine: Coroutine[Any, Any, T]) -> T:
         return asyncio.run_coroutine_threadsafe(coroutine, self._loop).result()
@@ -253,3 +260,15 @@ class RunningServer:
             self._call(self._runner.cleanup())
         finally:
             self._stop_loop()
+
+
+class RunningServer:
+    def __init__(self, site: Site) -> None:
+        log = RequestLog()
+        self._app = ThreadedApp(
+            _build_app(site, lambda: self.handle.base_url, log), name="fixture-site"
+        )
+        self.handle = ServerHandle(self._app.base_url, log)
+
+    def stop(self) -> None:
+        self._app.stop()

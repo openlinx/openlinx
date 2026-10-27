@@ -1,6 +1,6 @@
 """The Fetcher: one request, one hop, never a redirect followed (020-add-crawl-core D8)."""
 
-from collections.abc import AsyncIterator, Callable, Iterable, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,7 +12,7 @@ from aiohttp.abc import AbstractResolver
 
 from spider import __version__
 from spider.clock import Clock
-from spider.crawl.fetch.proxy import proxy_for
+from spider.crawl.fetch.proxy import ProxyVariables
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import APP_NAME, PROJECT_URL
 from spider.store.records import FetchError
@@ -67,8 +67,7 @@ class FetchPolicy:
     """Every request setting of a Crawl, from its plan to its Fetcher (022-add-fetch-policy D1)."""
 
     user_agent: str
-    # The proxy variables read when the run started, as proxy_variables gives them.
-    proxies: Mapping[str, str]
+    proxies: ProxyVariables
     # Fixed until --timeout sets it; the watchdog of 020's design D16 outlasts it.
     timeout_seconds: float = 20
 
@@ -79,7 +78,7 @@ type FetcherFactory = Callable[[FetchPolicy, Clock], AbstractAsyncContextManager
 
 class AiohttpFetcher:
     def __init__(
-        self, session: aiohttp.ClientSession, clock: Clock, proxies: Mapping[str, str]
+        self, session: aiohttp.ClientSession, clock: Clock, proxies: ProxyVariables
     ) -> None:
         self._session = session
         self._clock = clock
@@ -90,7 +89,7 @@ class AiohttpFetcher:
         url = yarl.URL(request.url, encoded=True)
         fetched_at, started = self._clock.now(), self._clock.monotonic()
         try:
-            proxy = proxy_for(request.url, self._proxies)
+            proxy = self._proxies.for_url(request.url)
             async with self._session.get(url, allow_redirects=False, proxy=proxy) as response:
                 body = await response.read()
                 # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.

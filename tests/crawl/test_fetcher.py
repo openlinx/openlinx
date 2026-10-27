@@ -11,6 +11,7 @@ from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
 from spider.crawl.fetch.fetcher import AiohttpFetcher, FetchFailure, Request, fetch_error_of
+from spider.crawl.fetch.proxy import ProxyVariables
 from spider.crawl.urls import parse_seed
 from tests.support.clock import FakeClock
 
@@ -33,7 +34,7 @@ async def test_a_host_that_dns_cannot_encode_is_a_dns_error() -> None:
     connector = aiohttp.TCPConnector(resolver=_Unencodable())
 
     async with aiohttp.ClientSession(connector=connector) as session:
-        result = await AiohttpFetcher(session, FakeClock(), {}).fetch(Request(url))
+        result = await AiohttpFetcher(session, FakeClock(), ProxyVariables()).fetch(Request(url))
 
     assert (type(result), getattr(result, "fetch_error", None)) == (FetchFailure, "dns_error")
 
