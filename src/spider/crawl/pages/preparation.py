@@ -1,7 +1,7 @@
 """Page preparation: one pure function of a response, behind an executor (020-add-crawl-core D9)."""
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Protocol
@@ -104,6 +104,12 @@ class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
         return self.parse_error in (None, "extractor_error")
 
 
+def response_directives(
+    response: FetchResult, token: str, meta_contents: Iterable[str] = ()
+) -> RobotsDirectives:
+    return robots_directives(meta_contents, header_values(response.headers, "X-Robots-Tag"), token)
+
+
 def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettings) -> PreparedPage:
     """Decodes and parses once; the link extractor and later extractors share the tree."""
     decoded = decode_html(response.body, response.header("Content-Type"))
@@ -121,11 +127,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
             first_ordinal=len(from_headers) + 1,
         )
     )
-    directives = robots_directives(
-        meta_robots_contents(tree),
-        header_values(response.headers, "X-Robots-Tag"),
-        settings.robots_token,
-    )
+    directives = response_directives(response, settings.robots_token, meta_robots_contents(tree))
     page = PageInput(
         url=url,
         status_code=response.status_code,

@@ -865,3 +865,39 @@ def test_a_handler_s_rows_for_a_url_are_written_in_one_statement(
         [(2,)],
     )
     assert query(crawl_file, "SELECT count(*) > 2 FROM test_headers") == [(1,)]
+
+
+def _x_robots_tag(result: UrlResult) -> tuple[Seen, ...]:
+    if result.response is None:
+        return ()
+    directives = result.response.directives
+    said = (directives.x_robots_tag_noindex, directives.x_robots_tag_nofollow)
+    return (Seen(result.url_id, repr(said)),)
+
+
+def test_a_handler_sees_the_x_robots_tag_of_a_pdf(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/report.pdf">Report</a>'),
+                "/report.pdf": Page(
+                    body="%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n",
+                    content_type="application/pdf",
+                    headers=[("X-Robots-Tag", "googlebot: noindex"), ("X-Robots-Tag", "nofollow")],
+                ),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), handlers=(handler("directives", _x_robots_tag, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    # (noindex, nofollow): the googlebot line is for another crawler.
+    assert query(
+        crawl_file,
+        "SELECT test_seen.state FROM test_seen JOIN urls ON urls.id = test_seen.url_id "
+        "WHERE urls.url = ?",
+        [server.url("/report.pdf")],
+    ) == [(repr((False, True)),)]

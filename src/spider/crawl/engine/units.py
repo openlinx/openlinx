@@ -18,7 +18,11 @@ from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
-from spider.crawl.pages.preparation import is_html_type, response_links
+from spider.crawl.pages.preparation import (
+    is_html_type,
+    response_directives,
+    response_links,
+)
 from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.robots.reader import OriginRobots
 from spider.crawl.scope import ScopeDecision
@@ -169,11 +173,15 @@ async def _fetched(
     links = response_links(url, response, context.scope, context.strip_params) if followed else ()
     if page is not None:
         links += page.document_links
-    nofollow = page is not None and page.directives.nofollow
+    if page is not None and page.parsed:
+        directives = page.directives
+    else:
+        # The X-Robots-Tag applies to any response, a PDF's or a failed Page's (D9).
+        directives = response_directives(response, context.settings.robots_user_agent)
     discovered = discovered_urls(
         links,
         context.scope,
-        nofollow=nofollow,
+        nofollow=directives.nofollow,
         follow_nofollow=context.settings.follow_nofollow,
     )
     if parsed and decided.discovered_via == "seed":
@@ -189,6 +197,7 @@ async def _fetched(
         headers=response.headers,
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
+        directives=directives,
     )
     fetched = replace(
         decided,

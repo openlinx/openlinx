@@ -9,6 +9,7 @@ import msgspec
 
 from spider.clock import Clock
 from spider.crawl.fetch.fetcher import header_values
+from spider.crawl.pages.directives import RobotsDirectives
 from spider.crawl.pages.preparation import Extractor
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import DiscoveredVia, FetchError, FetchState, ParseError, SkipReason
@@ -27,6 +28,8 @@ class UrlResponse:
     headers: tuple[tuple[str, str], ...]
     fetched_at: datetime
     response_time_ms: int
+    # Page preparation's when the Page was parsed, else the X-Robots-Tag's alone.
+    directives: RobotsDirectives
 
     def header(self, name: str) -> str | None:
         """The first value of the header `name`, in any letter case."""
