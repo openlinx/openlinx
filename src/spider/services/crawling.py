@@ -22,6 +22,7 @@ from spider.crawl.fetch.fetcher import (
     FetchPolicy,
     aiohttp_fetcher,
 )
+from spider.crawl.fetch.proxy import proxy_variables
 from spider.crawl.pages.preparation import PageExecutor
 from spider.crawl.scope import ScopeDecision, ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
@@ -177,7 +178,10 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         settings=crawl_settings,
         scope=scope,
         strip_params=strip_params,
-        fetch_policy=FetchPolicy(user_agent=crawl_settings.user_agent or DEFAULT_USER_AGENT),
+        fetch_policy=FetchPolicy(
+            user_agent=crawl_settings.user_agent or DEFAULT_USER_AGENT,
+            proxies=proxy_variables(),
+        ),
         new_crawl=new_crawl,
     )
 

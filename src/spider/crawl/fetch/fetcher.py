@@ -1,6 +1,6 @@
 """The Fetcher: one request, one hop, never a redirect followed (020-add-crawl-core D8)."""
 
-from collections.abc import AsyncIterator, Callable, Iterable
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,6 +12,7 @@ from aiohttp.abc import AbstractResolver
 
 from spider import __version__
 from spider.clock import Clock
+from spider.crawl.fetch.proxy import proxy_for
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import APP_NAME, PROJECT_URL
 from spider.store.records import FetchError
@@ -66,6 +67,8 @@ class FetchPolicy:
     """Every request setting of a Crawl, from its plan to its Fetcher (022-add-fetch-policy D1)."""
 
     user_agent: str
+    # The proxy variables read when the run started, as proxy_variables gives them.
+    proxies: Mapping[str, str]
     # Fixed until --timeout sets it; the watchdog of 020's design D16 outlasts it.
     timeout_seconds: float = 20
 
@@ -75,16 +78,20 @@ type FetcherFactory = Callable[[FetchPolicy, Clock], AbstractAsyncContextManager
 
 
 class AiohttpFetcher:
-    def __init__(self, session: aiohttp.ClientSession, clock: Clock) -> None:
+    def __init__(
+        self, session: aiohttp.ClientSession, clock: Clock, proxies: Mapping[str, str]
+    ) -> None:
         self._session = session
         self._clock = clock
+        self._proxies = proxies
 
     async def fetch(self, request: Request) -> FetchResult | FetchFailure:
         # As given: yarl would decode a %2F in the query and request another URL than recorded.
         url = yarl.URL(request.url, encoded=True)
         fetched_at, started = self._clock.now(), self._clock.monotonic()
         try:
-            async with self._session.get(url, allow_redirects=False) as response:
+            proxy = proxy_for(request.url, self._proxies)
+            async with self._session.get(url, allow_redirects=False, proxy=proxy) as response:
                 body = await response.read()
                 # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.
                 headers = tuple(
@@ -138,4 +145,4 @@ async def aiohttp_fetcher(
         # No cookie session: a cookie set by one response would change what later ones return.
         cookie_jar=aiohttp.DummyCookieJar(),
     ) as session:
-        yield AiohttpFetcher(session, clock)
+        yield AiohttpFetcher(session, clock, policy.proxies)

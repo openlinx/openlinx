@@ -33,7 +33,7 @@ async def test_a_host_that_dns_cannot_encode_is_a_dns_error() -> None:
     connector = aiohttp.TCPConnector(resolver=_Unencodable())
 
     async with aiohttp.ClientSession(connector=connector) as session:
-        result = await AiohttpFetcher(session, FakeClock()).fetch(Request(url))
+        result = await AiohttpFetcher(session, FakeClock(), {}).fetch(Request(url))
 
     assert (type(result), getattr(result, "fetch_error", None)) == (FetchFailure, "dns_error")
 
