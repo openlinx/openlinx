@@ -18,9 +18,6 @@ _APPLIES_TO: Mapping[Population, AppliesTo] = {
     "indexable_pages": "internal_pages",
 }
 
-# The query of a Rule registered before the slice of its condition, until that slice.
-NO_ROWS = "SELECT id AS url_id, NULL AS detail FROM urls WHERE 0"
-
 
 @dataclass(frozen=True, slots=True)
 class Threshold:

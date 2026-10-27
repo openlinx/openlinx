@@ -12,7 +12,7 @@ from spider.cli.click_compat import Context
 from spider.cli.commands import commands
 from spider.cli.crawl import crawl
 from spider.cli.init import init
-from spider.cli.meta import CommandGroup, check_command
+from spider.cli.meta import CommandGroup, check_command, check_group
 from spider.cli.rules import RULES_GROUP
 from spider.cli.runner import (
     Invocation,
@@ -89,14 +89,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
 
 
 def _group_app(group: CommandGroup) -> typer.Typer:
-    names = {}
-    for command in group.commands:
-        parent, _, name = check_command(command).name.rpartition(" ")
-        if parent != group.name:
-            raise TypeError(f"Command {command.__name__} is not named under {group.name}.")
-        names[command] = name
-    if group.default not in names:
-        raise TypeError(f"The default of group {group.name} is not one of its Commands.")
+    names = check_group(group)
     default = names[group.default]
 
     class Group(TyperGroup):

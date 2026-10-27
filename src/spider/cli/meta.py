@@ -189,3 +189,16 @@ def _envelope(page: Page) -> dict[str, Any]:
         "items": page.items,
         "next_cursor": page.next_cursor,
     }
+
+
+def check_group(group: CommandGroup) -> dict[Callable[..., Any], str]:
+    """Each Command of the group by its name below the group, such as `list` for `rules list`."""
+    names = {}
+    for command in group.commands:
+        parent, _, name = check_command(command).name.rpartition(" ")
+        if parent != group.name:
+            raise TypeError(f"Command {command.__name__} is not named under {group.name}.")
+        names[command] = name
+    if group.default not in names:
+        raise TypeError(f"The default of group {group.name} is not one of its Commands.")
+    return names
