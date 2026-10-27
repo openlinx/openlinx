@@ -45,6 +45,16 @@ def columns_of(table: str) -> dict[str, dict[str, Any]]:
     return {column["name"]: column for column in item["columns"]}
 
 
+def test_the_http_version_is_a_later_column() -> None:
+    column = columns_of("origins")["http_version"]
+
+    assert (column["nullable"], column["values"], column["description"][:18]) == (
+        True,
+        ["http_2", "http_1_1"],
+        "Filled from v0.2. ",
+    )
+
+
 def test_column_formats() -> None:
     columns = columns_of("crawl")
 

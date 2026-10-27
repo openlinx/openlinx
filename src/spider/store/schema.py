@@ -21,6 +21,7 @@ from spider.store.records import (
     DiscoveredVia,
     FetchError,
     FetchState,
+    HttpVersion,
     JournalMode,
     ParseError,
     RobotsState,
@@ -444,6 +445,13 @@ origins = public_table(
         Json,
         comment="JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not "
         "been fetched.",
+    ),
+    Column(
+        "http_version",
+        Text,
+        comment="Filled from v0.2. The HTTP version that the origin's requests use; NULL when its "
+        "TLS handshake fails.",
+        info={"values": literal_values(HttpVersion)},
     ),
     comment="One row for each origin of a URL that the Crawl recorded.",
     change=20,

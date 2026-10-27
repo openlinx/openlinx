@@ -107,12 +107,13 @@ def test_index_names_start_with_their_table() -> None:
 
 
 def test_derived_and_later_columns_may_hold_null() -> None:
-    # Vacuous until 022's or 030's first later column; its task asserts that one was seen.
-    assert [
-        column["name"]
-        for column in all_columns()
-        if LATER_OR_DERIVED.match(column["description"]) and not column["nullable"]
-    ] == []
+    marked = [column for column in all_columns() if LATER_OR_DERIVED.match(column["description"])]
+
+    # A marker that no column matches would pass with no column checked.
+    assert ([column["name"] for column in marked if not column["nullable"]], bool(marked)) == (
+        [],
+        True,
+    )
 
 
 def test_every_unique_rule_is_an_index_and_every_reference_one_key() -> None:
