@@ -8,6 +8,7 @@ from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import url_limit_reached
 from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.engine.pause import Again, NetworkPause, Outcome
+from spider.crawl.engine.progress import UrlCounters, report_progress
 from spider.crawl.engine.units import Run, TaskFailure, unit_of, via_resource
 from spider.crawl.fetch.fetcher import REQUEST_DEADLINE_SECONDS
 from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
@@ -17,7 +18,7 @@ from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import QueuedUrl
-from spider.store.urls import next_depth, queued_batch, record_seed, requeue
+from spider.store.urls import next_depth, queued_batch, record_seed, requeue, url_counts
 from spider.store.writer import CrawlWriterClosedError
 
 # Queued URLs read from the frontier at once.
@@ -42,6 +43,12 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         stopped=lambda: context.stop.is_set,
     )
     again = Again()
+    decision = context.scope.decide(seed)
+    await context.writer.run_async(
+        record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
+    )
+    # Once a run, so a continued Crawl starts from the file's counts (design D10).
+    counters = UrlCounters(await context.writer.run_async(url_counts()))
 
     async def resumed(outcome: Outcome, count: Sequence[QueuedUrl]) -> None:
         # The site may answer now: robots.txt is asked again (design D16).
@@ -50,12 +57,12 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             requeued = again.requeue(count)
             # Each was counted toward the URL limit once already, as it counts each URL once.
             for _ in requeued:
-                limits.give_back()
-            await context.writer.run_async(requeue(requeued))
+                requester.give_back()
+            counters.add(await context.writer.run_async(requeue(requeued)))
 
     run = Run(
         context=context,
-        outcomes=Outcomes(context.writer, context.reporter, context.stop),
+        outcomes=Outcomes(context.writer, context.reporter, context.stop, counters),
         limits=limits,
         requester=requester,
         robots=RobotsLoader(requester, context.writer, context.settings.robots_user_agent),
@@ -75,10 +82,6 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         ),
         again=again,
     )
-    decision = context.scope.decide(seed)
-    await context.writer.run_async(
-        record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
-    )
     # Once, with the final Scope: 022 moves this to the end of the Seed's Redirect Chain.
     await context.pages.start(
         PageSettings(
@@ -87,6 +90,15 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             robots_token=context.settings.robots_user_agent,
             follow_nofollow=context.settings.follow_nofollow,
             strip_params=context.strip_params,
+        )
+    )
+    progress = asyncio.create_task(
+        report_progress(
+            clock=context.clock,
+            log=context.reporter,
+            crawl_id=context.crawl_file.id,
+            counters=counters,
+            rate=requester.rate,
         )
     )
     depth: int | None = 0
@@ -123,6 +135,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     finally:
         await _cancel_all(run.checked_urls)
         await run.pause.close()
+        await _cancel_all({progress})
         await run.robots.close()
     # Once every task has ended, including those that the cancellation above ended.
     run.task_failure.raise_first()

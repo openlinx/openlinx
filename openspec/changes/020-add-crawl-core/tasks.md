@@ -379,7 +379,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 12.1 **Guard:** "Every stderr line is an event or a diagnostic", at seam 1: every stderr line of a Crawl already goes through the CLI's reporter.
 - [x] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
 - [x] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
-- [ ] 12.4 Drive "Progress events come every 10 seconds", fake timing. Done when: the `urls` counts of `progress` come from counters that the outcomes of committed units update, seeded once by a counting query when the run starts, and no count over `urls` runs for each event (design D10); a unit returns a counts delta beside its bool, whose shape the task proposes when it starts; and `progress` carries `rate` over its 60-second window and `elapsed_s`.
+- [x] 12.4 Drive "Progress events come every 10 seconds", fake timing. Done when: the `urls` counts of `progress` come from counters that the outcomes of committed units update, seeded once by a counting query when the run starts, and no count over `urls` runs for each event (design D10); a unit returns a counts delta beside its bool, whose shape the task proposes when it starts; and `progress` carries `rate` over its 60-second window and `elapsed_s`.
 - [x] 12.5 Drive "Events are UTF-8 on Windows (Windows)" at seam 1, subprocess, Windows in CI.
 - [x] 12.6 Drive "An unreachable Seed fails the Crawl" and "An unreachable Seed is reported by one error" at seam 1, after 12.11.
 

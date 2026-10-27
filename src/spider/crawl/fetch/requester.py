@@ -1,6 +1,7 @@
 """The Requester: every request of a Crawl, made politely (020-add-crawl-core D7)."""
 
 import asyncio
+from collections import deque
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -15,6 +16,10 @@ def watchdog_seconds(request_deadline_seconds: float) -> float:
     """How long a request attempt may take before the watchdog ends it: a backstop behind the
     Fetcher's own deadline, which it never cuts (design D16)."""
     return max(120, request_deadline_seconds + 30)
+
+
+# The rate of progress events counts the URL requests started this long ago or since.
+RATE_WINDOW_SECONDS = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +51,7 @@ class Requester:
         self._clock = clock
         self._watchdog_seconds = watchdog_seconds
         self._stopped = stopped
+        self._starts: deque[float] = deque()
         self._hosts: dict[str, asyncio.Semaphore] = {}
         self._requests = asyncio.Semaphore(cap)
         # The network pause's gate: set while requests may start (design D16).
@@ -66,7 +72,23 @@ class Requester:
             # stop or at the limit, no request starts again.
             if self._stopped() or not self._limits.start_request():
                 return NotStarted()
+            self._starts.append(self._clock.monotonic())
             return await self._send(url)
+
+    def give_back(self) -> None:
+        """A URL request that is made again, as if it had not started (design D16)."""
+        self._limits.give_back()
+        if self._starts:
+            self._starts.pop()
+
+    def rate(self, elapsed: float) -> float:
+        """URL requests started per second, over the window or the `elapsed` seconds the run
+        has lasted when that is shorter."""
+        oldest = self._clock.monotonic() - RATE_WINDOW_SECONDS
+        while self._starts and self._starts[0] <= oldest:
+            self._starts.popleft()
+        seconds = min(RATE_WINDOW_SECONDS, elapsed)
+        return round(len(self._starts) / seconds, 3) if seconds > 0 else 0.0
 
     async def request_robots_txt(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
         """One hop of an origin's robots.txt, which the URL limit never counts (design D6)."""

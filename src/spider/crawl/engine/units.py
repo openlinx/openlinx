@@ -169,7 +169,7 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
     ):
         # Ended without a response while paused: not recorded, so its URL stays queued and is
         # requested again, and counts toward the URL limit only then (design D16).
-        run.limits.give_back()
+        run.requester.give_back()
         run.again.add(queued)
         return None
     if decision.is_internal:

@@ -23,17 +23,20 @@ from spider.store.records import (
     DiscoverySkipReason,
     ErroredUrl,
     FetchedUrl,
+    FetchState,
     Provenance,
     QueuedUrl,
+    Recording,
     SkippedUrl,
     UrlCounts,
+    UrlTally,
 )
 from spider.store.rows import write_rows
 from spider.store.schema import literal_values, urls
 
 # True once it recorded the URL's outcome; a skip that a lowering or a raise overtook
 # records nothing, and the URL is decided again (design D5).
-type UrlUnit = Callable[[Connection], bool]
+type UrlUnit = Callable[[Connection], Recording]
 
 
 def _literal_one_of(column: ColumnElement[str], values: Iterable[str]) -> ColumnElement[bool]:
@@ -78,6 +81,7 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     )
     & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
 )
+_INSERT_DISCOVERED_RETURNING = _INSERT_DISCOVERED.returning(urls.c.url, urls.c.fetch_state)
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
 _DEPTH = select(urls.c.crawl_depth).where(urls.c.id == bindparam("url_id"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
@@ -224,12 +228,14 @@ def queued_batch(
     return unit
 
 
-def requeue(url_ids: Sequence[int]) -> Callable[[Connection], None]:
+def requeue(url_ids: Sequence[int]) -> Callable[[Connection], UrlTally]:
     """A unit that puts error URLs back in the queue, so they are requested again."""
 
-    def unit(connection: Connection) -> None:
-        if url_ids:
-            connection.execute(_REQUEUED, {"url_ids": list(url_ids)})
+    def unit(connection: Connection) -> UrlTally:
+        if not url_ids:
+            return UrlTally()
+        count = connection.execute(_REQUEUED, {"url_ids": list(url_ids)}).rowcount
+        return UrlTally(errors=-count, queued=count)
 
     return unit
 
@@ -242,6 +248,55 @@ def next_depth(depth: int) -> Callable[[Connection], int | None]:
         return deeper
 
     return unit
+
+
+_STATE_OF = select(urls.c.url, urls.c.fetch_state).where(
+    urls.c.url.in_(bindparam("urls", expanding=True))
+)
+# The bound parameters of one IN read, well below SQLite's limit.
+_READ_CHUNK = 500
+
+
+def _tally_of(state: FetchState) -> UrlTally:
+    return UrlTally(
+        fetched=state == "fetched",
+        errors=state == "error",
+        skipped=state == "skipped",
+        queued=state == "queued",
+    )
+
+
+_RECORDED_AS = {state: _tally_of(state) for state in ("fetched", "error", "skipped", "queued")}
+_FROM_QUEUED = {
+    state: _RECORDED_AS[state] + UrlTally(queued=-1) for state in ("fetched", "error", "skipped")
+}
+
+
+def _discovered_tally(
+    before: dict[str, FetchState], after: Iterable[tuple[str, FetchState]]
+) -> UrlTally:
+    """`after` holds the rows the upsert inserted or changed: a URL not in `before` is new."""
+    tally = UrlTally()
+    for url, state in after:
+        old = before.get(url)
+        if old is None:
+            tally += _RECORDED_AS[state] + UrlTally(discovered=1)
+        elif old != state:
+            tally += _RECORDED_AS[state] + UrlTally(
+                fetched=-(old == "fetched"),
+                errors=-(old == "error"),
+                skipped=-(old == "skipped"),
+                queued=-(old == "queued"),
+            )
+    return tally
+
+
+def _states(connection: Connection, urls_: list[str]) -> dict[str, FetchState]:
+    states: dict[str, FetchState] = {}
+    for start in range(0, len(urls_), _READ_CHUNK):
+        chunk = urls_[start : start + _READ_CHUNK]
+        states.update((url, state) for url, state in connection.execute(_STATE_OF, {"urls": chunk}))
+    return states
 
 
 def record_fetched(fetched: FetchedUrl) -> UrlUnit:
@@ -275,19 +330,27 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         for new in fetched.discovered
     ]
     origins = origin_rows(new_rows)
+    discovered_urls: list[str] = [new.url for new in fetched.discovered]
 
-    def unit(connection: Connection) -> bool:
+    def unit(connection: Connection) -> Recording:
         connection.execute(_FETCHED, values)
         record_origins(connection, origins)
+        tally = _FROM_QUEUED["fetched"]
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
             # The stored depth, which a Checked URL answering late may have lowered while the
             # URL was in flight, so what it links to stays one deeper than it (design D3).
             depth = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one() + 1
             rows = [{**row, "crawl_depth": depth} for row in new_rows]
-            connection.execute(_INSERT_DISCOVERED, rows)
+            # What the rows were before: the upsert returns what it wrote, never what it found.
+            before = _states(connection, discovered_urls)
+            written = [
+                (url, state)
+                for url, state in connection.execute(_INSERT_DISCOVERED_RETURNING, rows)
+            ]
+            tally += _discovered_tally(before, written)
         write_rows(connection, fetched.rows)
-        return True
+        return Recording(True, tally)
 
     return unit
 
@@ -302,11 +365,11 @@ def record_skipped(skipped: SkippedUrl) -> UrlUnit:
         **_provenance_values(skipped.provenance),
     }
 
-    def unit(connection: Connection) -> bool:
+    def unit(connection: Connection) -> Recording:
         if not connection.execute(_SKIPPED, values).rowcount:
-            return False
+            return Recording(False, UrlTally())
         write_rows(connection, skipped.rows)
-        return True
+        return Recording(True, _FROM_QUEUED["skipped"])
 
     return unit
 
@@ -322,10 +385,10 @@ def record_error(errored: ErroredUrl) -> UrlUnit:
         **_provenance_values(errored.provenance),
     }
 
-    def unit(connection: Connection) -> bool:
+    def unit(connection: Connection) -> Recording:
         connection.execute(_ERRORED, values)
         write_rows(connection, errored.rows)
-        return True
+        return Recording(True, _FROM_QUEUED["error"])
 
     return unit
 
@@ -342,9 +405,9 @@ def record_unwritten(
         **_provenance_values(provenance),
     }
 
-    def unit(connection: Connection) -> bool:
+    def unit(connection: Connection) -> Recording:
         connection.execute(_UNWRITTEN, values)
-        return True
+        return Recording(True, _FROM_QUEUED["error"])
 
     return unit
 
