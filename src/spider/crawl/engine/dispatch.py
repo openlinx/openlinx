@@ -99,6 +99,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             crawl_id=context.crawl_file.id,
             counters=counters,
             rate=requester.rate,
+            paused=lambda: run.pause.paused,
         )
     )
     depth: int | None = 0

@@ -351,3 +351,26 @@ def test_a_seed_that_answers_the_first_probe_is_crawled(temp_workspace: TempWork
     result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher)
 
     assert query(result.crawl_file, "SELECT fetch_state FROM urls WHERE id = 1") == [("fetched",)]
+
+
+def test_progress_events_say_when_the_crawl_is_paused(temp_workspace: TempWorkspace) -> None:
+    clock, reporter = FakeClock(), Collected()
+    # Paused from one second to 41; /p20 then takes 30 seconds, so events come after it too.
+    pages = {**_outage_site(), "/p20": FakePage("<p>P20</p>", delay=30)}
+    fetcher = FakeFetcher(clock, pages, outages=[(1, 30)])
+
+    crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, reporter=reporter, concurrency=1
+    )
+
+    assert [
+        (data["elapsed_s"], data["paused"]) for name, data in reporter.events if name == "progress"
+    ] == [
+        (10.0, True),
+        (20.0, True),
+        (30.0, True),
+        (40.0, True),
+        (50.0, False),
+        (60.0, False),
+        (70.0, False),
+    ]

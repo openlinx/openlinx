@@ -41,9 +41,11 @@ async def report_progress(
     crawl_id: str,
     counters: UrlCounters,
     rate: Callable[[float], float],
+    paused: Callable[[], bool],
 ) -> None:
-    """Writes a progress event every 10 seconds of clock time from the run's start, until it
-    is cancelled. `rate` gives the requests per second for the seconds the run has lasted."""
+    """Writes a progress event every 10 seconds of clock time from the run's start, during a
+    network pause too, until it is cancelled. `rate` gives the requests per second for the
+    seconds the run has lasted."""
     started = clock.monotonic()
     for tick in count(1):
         await clock.sleep(started + tick * PROGRESS_SECONDS - clock.monotonic())
@@ -54,4 +56,5 @@ async def report_progress(
             elapsed_s=round(elapsed, 3),
             urls=counters.to_json(),
             rate=rate(elapsed),
+            paused=paused(),
         )
