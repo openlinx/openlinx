@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterator, Mapping
 
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
+from spider.crawl.following import requests_target
 from spider.crawl.pages.decoding import decode_html, query_codec
 from spider.crawl.pages.refresh import refresh_url
 from spider.crawl.references import C0_OR_SPACE, DiscoveredLink, resolve_base, resolve_reference
@@ -60,6 +61,8 @@ def extract_links(
     *,
     is_internal: Callable[[NormalizedUrl], bool],
     strip_params: re.Pattern[str] | None,
+    page_nofollow: bool = False,
+    follow_nofollow: bool = False,
 ) -> list[DiscoveredLink]:
     decoded = decode_html(body, content_type)
     tree = parse_html(decoded.text)
@@ -69,6 +72,8 @@ def extract_links(
         encoding=decoded.encoding,
         is_internal=is_internal,
         strip_params=strip_params,
+        page_nofollow=page_nofollow,
+        follow_nofollow=follow_nofollow,
     )
 
 
@@ -94,6 +99,8 @@ def links_in_tree(
     encoding: str,
     is_internal: Callable[[NormalizedUrl], bool],
     strip_params: re.Pattern[str] | None,
+    page_nofollow: bool,
+    follow_nofollow: bool,
     first_ordinal: int = 1,
 ) -> list[DiscoveredLink]:
     """The Links of a parsed document, for page preparation, which parses once (design D9)."""
@@ -115,6 +122,12 @@ def links_in_tree(
                     attribute=attribute,
                     rel=rel,
                     nofollow="nofollow" in rel,
+                    requests_target=requests_target(
+                        link_type,
+                        "nofollow" in rel,
+                        page_nofollow=page_nofollow,
+                        follow_nofollow=follow_nofollow,
+                    ),
                     declared_in=declared_in,
                     ordinal=first_ordinal + len(links),
                     is_internal=is_internal(target),

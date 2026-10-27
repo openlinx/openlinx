@@ -965,3 +965,31 @@ def test_a_canonical_in_the_body_is_placed_in_the_body(
         repr(("canonical", server.url("/c"), "head")),
         repr(("canonical", server.url("/d"), "body")),
     ]
+
+
+def _requested(result: UrlResult) -> tuple[Seen, ...]:
+    return tuple(
+        Seen(result.url_id, repr((link.target, link.requests_target))) for link in result.links
+    )
+
+
+def test_a_nofollow_link_does_not_request_its_target(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/a">A</a> <a rel="nofollow" href="/b">B</a>'),
+                "/a": Page(body="<p>A</p>"),
+                "/b": Page(body="<p>B</p>"),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), handlers=(handler("requested", _requested, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert _links_seen(crawl_file, server.url("/")) == [
+        repr((server.url("/a"), True)),
+        repr((server.url("/b"), False)),
+    ]

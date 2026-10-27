@@ -86,6 +86,7 @@ class PageSettings:
     scope: ScopeRules
     extractors: tuple[Extractor[Any], ...] = ()
     robots_token: str = DEFAULT_ROBOTS_TOKEN
+    follow_nofollow: bool = False
     strip_params: re.Pattern[str] | None
 
 
@@ -115,6 +116,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     decoded = decode_html(response.body, response.header("Content-Type"))
     tree = parse_html(decoded.text)
     is_internal = partial(_is_internal, settings.scope)
+    directives = response_directives(response, settings.robots_token, meta_robots_contents(tree))
     # The header Links come first, as 030's ordinals count them (design D5).
     from_headers = response_links(url, response, settings.scope, settings.strip_params)
     from_document = tuple(
@@ -124,10 +126,11 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
             encoding=decoded.encoding,
             is_internal=is_internal,
             strip_params=settings.strip_params,
+            page_nofollow=directives.nofollow,
+            follow_nofollow=settings.follow_nofollow,
             first_ordinal=len(from_headers) + 1,
         )
     )
-    directives = response_directives(response, settings.robots_token, meta_robots_contents(tree))
     page = PageInput(
         url=url,
         status_code=response.status_code,

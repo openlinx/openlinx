@@ -12,12 +12,13 @@ from spider.crawl.engine.crawl_warnings import (
     warn_of_possible_blocking,
     warn_of_seed_base_mismatch,
 )
-from spider.crawl.engine.discovery import RESOURCES, discovered_urls
+from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
+from spider.crawl.following import RESOURCES
 from spider.crawl.pages.preparation import (
     is_html_type,
     response_directives,
@@ -178,12 +179,7 @@ async def _fetched(
     else:
         # The X-Robots-Tag applies to any response, a PDF's or a failed Page's (D9).
         directives = response_directives(response, context.settings.robots_user_agent)
-    discovered = discovered_urls(
-        links,
-        context.scope,
-        nofollow=directives.nofollow,
-        follow_nofollow=context.settings.follow_nofollow,
-    )
+    discovered = discovered_urls(links, context.scope)
     if parsed and decided.discovered_via == "seed":
         warn_of_seed_base_mismatch(context, url, links)
     parse_error = None if page is None else page.parse_error

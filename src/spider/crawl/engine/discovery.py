@@ -2,38 +2,23 @@
 
 from collections.abc import Iterable
 
+from spider.crawl.following import REQUESTED_TYPES, RESOURCES
 from spider.crawl.references import DiscoveredLink
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import DiscoverySkipReason, LinkType, NewUrl
-
-# The spec's Link type table: through these a URL in the Scope is followed, through
-# RESOURCES it is requested as a Resource, and through any other type it is recorded skipped.
-_FOLLOWED: frozenset[LinkType] = frozenset(
-    {"hyperlink", "canonical", "pagination", "hreflang", "iframe", "meta_refresh", "http_refresh"}
-)
-RESOURCES: frozenset[LinkType] = frozenset(
-    {"image", "css", "javascript", "video", "audio", "media"}
-)
-_REQUESTED = _FOLLOWED | RESOURCES
+from spider.store.records import DiscoverySkipReason, NewUrl
 
 
 def discovered_urls(
     links: Iterable[DiscoveredLink],
     scope: ScopeRules,
-    *,
-    nofollow: bool = False,
-    follow_nofollow: bool = False,
 ) -> tuple[NewUrl, ...]:
-    """One row per URL, followed when any of its Links is, in document order (design D5).
-
-    `nofollow` is a page-level nofollow, which applies to every hyperlink of the Page;
-    `follow_nofollow` treats nofollow hyperlinks like any other (--follow-nofollow).
-    """
+    """One row per URL, followed when any of its Links requests it, in document order
+    (design D5)."""
     # A Page names most URLs several times, and each row costs its unit an insert.
     chosen: dict[NormalizedUrl, tuple[DiscoveredLink, DiscoverySkipReason | None]] = {}
     for link in links:
-        reason = _skip_reason(link, nofollow, follow_nofollow)
+        reason = _skip_reason(link)
         known = chosen.get(link.target)
         # The Link that gives the URL's provenance; the URL keeps its first place in the order.
         if known is None or _outranks(link, reason, *known):
@@ -54,14 +39,10 @@ def _outranks(
     return known_reason is not None or (link.type in RESOURCES and known.type not in RESOURCES)
 
 
-def _skip_reason(
-    link: DiscoveredLink, nofollow: bool, follow_nofollow: bool
-) -> DiscoverySkipReason | None:
-    if link.type not in _REQUESTED:
-        return "link_type_not_followed"
-    if link.type == "hyperlink" and (link.nofollow or nofollow) and not follow_nofollow:
-        return "nofollow"
-    return None
+def _skip_reason(link: DiscoveredLink) -> DiscoverySkipReason | None:
+    if link.requests_target:
+        return None
+    return "nofollow" if link.type in REQUESTED_TYPES else "link_type_not_followed"
 
 
 def _new_url(link: DiscoveredLink, reason: DiscoverySkipReason | None, scope: ScopeRules) -> NewUrl:

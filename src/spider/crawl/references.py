@@ -27,6 +27,8 @@ class DiscoveredLink(msgspec.Struct, frozen=True, kw_only=True):
     attribute: str | None
     rel: tuple[str, ...]
     nofollow: bool
+    # Whether the Crawl requests the target through this Link (spider.crawl.following).
+    requests_target: bool
     declared_in: DeclaredIn
     ordinal: int
     is_internal: bool

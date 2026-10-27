@@ -176,7 +176,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.20 Refactor: `UrlResult.response` and `UrlResult.failure` replace the flat response and failure fields, the store records are built from them, and one header lookup serves `FetchResult`, `UrlResponse` and the `X-Robots-Tag` read (design D9), behaviour unchanged.
 - [x] 5.21 Drive "A handler sees the X-Robots-Tag of a PDF" at seam 3.
 - [x] 5.22 Drive "A handler sees the Links of a Page whose extractor failed" and "A canonical in the body is placed in the body" at seam 3.
-- [ ] 5.23 Drive "A nofollow Link does not request its target" at seam 3, with the follow rule in `spider.crawl.following`.
+- [x] 5.23 Drive "A nofollow Link does not request its target" at seam 3, with the follow rule in `spider.crawl.following`.
   Done when: a seam-4 table over the Link type, the Link's nofollow, the Page's nofollow and `--follow-nofollow` pins `requests_target`, red by mutation of each.
 - [ ] 5.24 Drive "A handler sees the reason phrase" at seam 3.
 - [ ] 5.25 Fix: `Extractor[C, O]` knows its output type, and `output(outputs)` gives its output by type (design D9).
