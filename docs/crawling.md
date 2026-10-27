@@ -33,6 +33,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | `--ignore-robots` | `ignore_robots` | `false` | Request URLs that robots.txt disallows; they are still recorded with `blocked_by_robots_txt` = 1 (see [`--ignore-robots`](#--ignore-robots)). |
 | `--timeout <s>` | `timeout` | `20` | Seconds within which a request attempt, its body included, must complete: a finite number above 0 (see [Timeouts and retries](#timeouts-and-retries)). |
 | `--retries <n>` | `retries` | `2` | How many times, 0 to 10, a request that timed out, could not connect or got a 5xx status is tried again (see [Timeouts and retries](#timeouts-and-retries)). |
+| `--max-redirects <n>` | `max_redirects` | `10` | The most consecutive redirects followed from the first URL of a Redirect Chain, 0 or more (see [The hop limit](#the-hop-limit)). |
 | `--user-agent <string>` | `user_agent` | `spider/<version> (+<project URL>)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `spider` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
@@ -339,6 +340,43 @@ The Crawl honours the standard proxy variables, as curl, pip and uv do. It is th
 - **When:** the variables are read once, when a run starts, and every request of the run, robots.txt's included, follows them. A resumed Crawl reads them again.
 - **Recorded:** the variables that are set are recorded in the `environment` table of `crawl.config`, under `http_proxy`, `https_proxy` and `no_proxy`. The password of a proxy URL is recorded as `***`, as in `http://u:***@proxy:3128`, and a proxy URL without a password is recorded as `***`.
 
+## Redirects
+
+A redirect is a response, not a Link: the Crawl follows it hop by hop, and each hop is a URL of its own.
+
+### Redirect Chains
+
+- **A hop is a URL row.** A 301, 302, 303, 307 or 308 response keeps its raw `Location` header in `redirect_location`, and the URL it leads to, resolved against the redirecting URL, stripped by `--strip-params` and normalised, in `redirect_url_id`. The target is recorded with `discovered_via` = `redirect` and `found_on_url_id` = the redirecting URL, at the redirecting URL's Crawl Depth, so a chain does not use up `--max-depth`.
+- **A hop is requested like any URL.** The target goes through the Scope, robots.txt, `--max-depth` and the per-host limits, and counts towards `--max-urls`. It keeps the way its chain was found: a redirected Resource stays a Resource, so it is still checked one deeper than `--max-depth`.
+- **Not a Link.** No Link type, nofollow or Link following rule applies to a redirect, and it is never in the `links` table. A Redirect Chain is read through `redirect_url_id`, forward from its first URL, and the URLs that redirect to a URL through the `urls_redirect_url_id` index.
+- **No target.** A 300, 304 or 305 response keeps its `redirect_location` but has no target. So does a `Location` that gives no http or https URL, such as `ftp://…`, one with a user name, or a malformed reference: `redirect_url_id` stays NULL.
+
+```sql
+SELECT source.url, source.status_code, target.url
+FROM urls AS source JOIN urls AS target ON target.id = source.redirect_url_id
+```
+
+### The hop limit
+
+`--max-redirects <n>` (default 10, `crawl.max_redirects`) is the most consecutive redirects the Crawl follows from the first URL of a chain. The target of the next one is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, unrequested. The count is read back from the crawl file, so a continued Crawl keeps it. A Link found later to that URL queues it again, as a URL found through the Link. `--max-redirects 0` follows no redirect.
+
+### Loops
+
+The Crawl requests each URL at most once in a run, so every redirect loop ends: a redirect back to a URL already requested records the hop and requests nothing. `in_redirect_loop` marks it:
+- 1 for every URL of the loop, a URL that redirects to itself included;
+- 0 for any other 3xx response;
+- NULL for a URL without a 3xx response.
+
+### A Seed that redirects
+
+- **On its registrable domain:** when a Seed's chain ends on another host of the Seed's registrable domain, such as `www.site.test` → `site.test` or `site.test` → `en.site.test`, that host becomes a Seed host for the rest of the Crawl and is added to `crawl.scope.hosts`. Every URL of the chain is then classified by the wider Scope. The [www rule](#internal-and-external-urls) already makes the `www.` host of an apex Seed internal, so an apex Seed that redirects there needs nothing more.
+- **Off its site:** a chain that ends on another registrable domain changes nothing in the Scope, and the result's `warnings` hold `seed_redirected_off_site`, whose `hint` gives the final URL as the Seed to crawl instead. A chain that ends in a fetch error widens nothing either.
+- **The Seed's checks:** `seed_base_mismatch` reads the Page the chain ends on, since the Seed itself answered with a redirect.
+
+### Meta refresh
+
+A `<meta http-equiv="refresh">` and an HTTP `Refresh` header are Links of type `meta_refresh` and `http_refresh` (see [Link types](#link-types)), never redirect hops: the Page keeps its own status code, its `redirect_url_id` and `in_redirect_loop` stay NULL, and its target is one Crawl Depth deeper. Reporting a meta refresh as the Page's redirect belongs to page data.
+
 ## robots.txt
 
 Before its first request to an origin, the Crawl requests the origin's `/robots.txt`, once per origin in a run, and obeys it for the robots user-agent token (see [The robots user-agent token](#the-robots-user-agent-token)). Every origin is asked: Internal ones, External ones and those of Resources. A URL recorded without a request, such as an excluded URL or an External URL under `--no-check-external`, never makes its origin's robots.txt be requested, and neither does a URL that the URL limit refuses.
@@ -415,7 +453,7 @@ The Crawl reads Links from every response it parses: an in-Scope 2xx HTML respon
 
 The same list of types also holds, from v0.1, the types of later releases: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap) in v0.2, and `javascript_redirect` in v1.1, with JavaScript rendering. A URL's `discovered_via` is the type of the Link it was first found through, or `seed`, and `found_on_url_id` points to the URL whose response revealed it. A Page that links to a URL several times records it once. When Links that are not followed reach a URL first and a followed Link reaches it later, its `discovered_via`, `found_on_url_id` and `crawl_depth` come from the first Page that follows it, where a Resource Link to it comes before a followed one, so its depth and where it was found tell one story.
 
-HTTP redirects, HSTS, fonts in CSS, SWF and PDF are not Link types: a redirect is the redirecting URL's `redirect_url_id`, and a PDF is a content type.
+HTTP redirects, HSTS, fonts in CSS, SWF and PDF are not Link types: a redirect is the redirecting URL's `redirect_url_id` (see [Redirects](#redirects)), and a PDF is a content type.
 
 ### Nofollow
 

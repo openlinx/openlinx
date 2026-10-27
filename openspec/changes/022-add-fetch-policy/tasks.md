@@ -83,7 +83,7 @@ Seams (docs/testing.md):
 - [x] 4.11 [3+6] Drive "A loop of two URLs is marked": the `in_redirect_loop` column, 0 for any other 3xx, and 1 for a URL that redirects to itself.
 - [x] 4.12 [HTTP] **Guard:** "A looping URL is requested once".
 - [x] 4.13 [3+6] **Guard:** "A meta refresh is not recorded as a redirect".
-- [ ] 4.14 Docs: document Redirect Chains, hop limits, loops, Seed redirects and the meta refresh boundary in `docs/crawling.md`, and that a redirect is not a Link.
+- [x] 4.14 Docs: document Redirect Chains, hop limits, loops, Seed redirects and the meta refresh boundary in `docs/crawling.md`, and that a redirect is not a Link.
 - [ ] 4.15 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) for the redirect, hop-count and loop units, then refactor with the whole suite green.
 
 ## 5. Limits, compression and Resource sizes
