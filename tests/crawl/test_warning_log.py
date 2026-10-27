@@ -1,6 +1,8 @@
 """The Crawl's warning log (020-add-crawl-core D10; seams 2 and 3)."""
 
+from spider.crawl.engine.crawl_warnings import handler_failure
 from spider.crawl.engine.warning_log import WarningLog
+from spider.crawl.urls import NormalizedUrl
 from spider.output.codes import (
     DECLARED,
     MAX_URLS_REACHED,
@@ -132,3 +134,16 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
             "seed_blocked_by_robots_txt",
         ],
     )
+
+
+def test_a_url_that_fails_again_after_it_is_decided_again_is_counted_once() -> None:
+    log = WarningLog(Collected())
+    lowered, other = NormalizedUrl("http://site.test/x"), NormalizedUrl("http://site.test/y")
+
+    # A skip lost to a lowering leaves /x queued; decided again, its handlers fail again.
+    for url in (lowered, other, lowered):
+        log.count(handler_failure(url, [("pages", ValueError("no title"))]), url)
+
+    assert [(warning.code, warning.details["count"]) for warning in log.warnings] == [
+        ("handler_failed", 2)
+    ]

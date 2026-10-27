@@ -183,10 +183,8 @@ class CrawlSummary:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class Dispatched:
-    """The provenance a URL was dispatched with. Its outcome writes it back while the
-    stored depth is still this one, so a Resource Link that raised the URL in flight
-    leaves no trace; a URL lowered in flight keeps the late provenance (design D5)."""
+class Provenance:
+    """How a URL was found, as its dispatch read it from the URL's queued row."""
 
     crawl_depth: int
     discovered_via: DiscoveredVia
@@ -198,7 +196,7 @@ class FetchedUrl:
     """A URL whose response arrived, with the URLs discovered from it."""
 
     url_id: int
-    dispatched: Dispatched
+    provenance: Provenance
     status_code: int
     # The Content-Type header as received; NULL without one.
     content_type: str | None
@@ -220,9 +218,8 @@ class SkippedUrl:
 
     url_id: int
     skip_reason: SkipReason
-    # Its depth is the one the skip was decided on: a URL lowered since then is decided
-    # again (design D5).
-    dispatched: Dispatched
+    # The skip was decided on it: a URL lowered or raised since then is decided again (D5).
+    provenance: Provenance
     blocked_by_robots_txt: bool | None = None
     rows: tuple[HandlerRows[Any], ...] = ()
 
@@ -232,7 +229,7 @@ class ErroredUrl:
     """A URL whose request got no HTTP response, with what the handlers returned for it."""
 
     url_id: int
-    dispatched: Dispatched
+    provenance: Provenance
     fetch_error: FetchError
     fetch_error_message: str
     # None without a request of its own: its origin's robots.txt got no response.

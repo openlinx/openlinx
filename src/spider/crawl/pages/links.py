@@ -44,17 +44,17 @@ _FOREIGN_ROOTS = frozenset({"svg", "math"})
 _INTEGRATION_POINTS = frozenset({"foreignObject", "desc", "title", "mi", "mo", "mn", "ms", "mtext"})
 _HTML_ENCODINGS = frozenset({"text/html", "application/xhtml+xml"})
 _MEDIA_TYPES: Mapping[str, LinkType] = {"video": "video", "audio": "audio"}
-PAGINATION_RELS = frozenset({"next", "prev", "previous"})
+_PAGINATION_RELS = frozenset({"next", "prev", "previous"})
 # A <link>'s or a Link header's type by its rel tokens and attributes, the first that matches.
-REL_TYPES: tuple[tuple[LinkType, Callable[[tuple[str, ...], Container[str]], bool]], ...] = (
+_REL_TYPES: tuple[tuple[LinkType, Callable[[tuple[str, ...], Container[str]], bool]], ...] = (
     ("canonical", lambda rel, attributes: "canonical" in rel),
     ("css", lambda rel, attributes: "stylesheet" in rel),
     ("amphtml", lambda rel, attributes: "amphtml" in rel),
-    ("pagination", lambda rel, attributes: not PAGINATION_RELS.isdisjoint(rel)),
+    ("pagination", lambda rel, attributes: not _PAGINATION_RELS.isdisjoint(rel)),
     ("hreflang", lambda rel, attributes: "alternate" in rel and "hreflang" in attributes),
     ("mobile_alternate", lambda rel, attributes: "alternate" in rel and "media" in attributes),
 )
-_ALL_REL_TYPES = frozenset(link_type for link_type, _ in REL_TYPES)
+_ALL_REL_TYPES = frozenset(link_type for link_type, _ in _REL_TYPES)
 # These name an origin to connect to, not a file.
 _ORIGIN_HINTS = frozenset({"preconnect", "dns-prefetch"})
 # The srcset grammar of HTML: a URL ends at white space, or at the commas closing it, which
@@ -116,12 +116,12 @@ def discovered_link(
 def rel_link_type(
     rel: tuple[str, ...], attributes: Container[str], types: Container[LinkType]
 ) -> LinkType | None:
-    """The first of `types` that the rel tokens and the attributes name (REL_TYPES)."""
+    """The first of `types` that the rel tokens and the attributes match (_REL_TYPES)."""
     return next(
         (
             link_type
-            for link_type, names in REL_TYPES
-            if link_type in types and names(rel, attributes)
+            for link_type, matches in _REL_TYPES
+            if link_type in types and matches(rel, attributes)
         ),
         None,
     )

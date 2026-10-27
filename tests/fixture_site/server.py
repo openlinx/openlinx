@@ -44,7 +44,7 @@ AFTER_SECONDS = 10.0
 class RequestLog:
     def __init__(self) -> None:
         self._entries: list[LoggedRequest] = []
-        self.failures: list[str] = []
+        self._failures: list[str] = []
         self._lock = threading.Lock()
         self._in_flight = 0
         self._most_in_flight = 0
@@ -60,6 +60,15 @@ class RequestLog:
             self._entries.append(entry)
             self._in_flight += 1
             self._most_in_flight = max(self._most_in_flight, self._in_flight)
+
+    def fail(self, message: str) -> None:
+        with self._lock:
+            self._failures.append(message)
+
+    @property
+    def failures(self) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(self._failures)
 
     def answered(self) -> None:
         with self._lock:
@@ -212,7 +221,7 @@ def _build_app(
                 async with asyncio.timeout(after_seconds):
                     await seen(route.after).wait()
             except TimeoutError:
-                log.failures.append(
+                log.fail(
                     f"{request.path} waited {after_seconds} s for a request for "
                     f"{route.after}, which never came"
                 )

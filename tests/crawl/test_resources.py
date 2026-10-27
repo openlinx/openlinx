@@ -1,7 +1,5 @@
 """Resources: requested, never parsed unless in-Scope HTML (020-add-crawl-core D5; seam 3+6)."""
 
-from pathlib import Path
-
 import pytest
 
 from tests.fixture_site.plugin import StartSite
@@ -84,14 +82,6 @@ def test_an_image_a_page_also_hyperlinks_is_checked_beyond_the_depth_limit(
 _PHOTO = Page(body="\xff\xd8\xff\xe0 JFIF", content_type="image/jpeg")
 
 
-def _photo_rows(crawl_file: Path, *urls: str) -> list[tuple[object, ...]]:
-    return query(
-        crawl_file,
-        "SELECT url, fetch_state, discovered_via FROM urls WHERE url IN (?, ?) ORDER BY id",
-        list(urls),
-    )
-
-
 def test_an_image_that_another_page_hyperlinked_first_is_checked_beyond_the_depth_limit(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
@@ -114,10 +104,40 @@ def test_an_image_that_another_page_hyperlinked_first_is_checked_beyond_the_dept
     crawl_file = crawled(server.url("/"), "--max-depth", "1")
 
     # /a recorded the photo before /b recorded /next, so /b's image raised it.
-    assert _photo_rows(crawl_file, server.url("/photo.jpg"), server.url("/next")) == [
+    assert query(
+        crawl_file,
+        "SELECT url, fetch_state, discovered_via FROM urls WHERE url IN (?, ?) ORDER BY id",
+        [server.url("/photo.jpg"), server.url("/next")],
+    ) == [
         (server.url("/photo.jpg"), "fetched", "image"),
         (server.url("/next"), "skipped", "hyperlink"),
     ]
+
+
+def test_an_image_skipped_beyond_the_depth_limit_is_checked_once_a_page_shows_it(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<img src="/late.html"><a href="/a">A</a>'),
+                # The photo is skipped at depth 2 when its depth opens, before the logo starts.
+                "/a": Page(body='<a href="/photo.jpg">Full size</a> <img src="/logo.png">'),
+                "/logo.png": Page(body="PNG", content_type="image/png"),
+                # A check that answers once the logo is requested, so after the photo's skip.
+                "/late.html": Page(body='<img src="/photo.jpg">', after="/logo.png"),
+                "/photo.jpg": _PHOTO,
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--max-depth", "1")
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, discovered_via FROM urls WHERE url = ?",
+        [server.url("/photo.jpg")],
+    ) == [("fetched", "image")]
 
 
 @pytest.mark.slow
@@ -128,23 +148,35 @@ def test_a_resource_link_to_a_url_in_flight_leaves_the_provenance_its_dispatch_a
         Site(
             routes={
                 "/": Page(body='<img src="/late.html"><a href="/a">A</a>'),
-                "/a": Page(body='<a href="/photo.jpg">Full size</a>'),
+                "/a": Page(body='<a href="/photo">Photo</a>'),
                 # A check that answers only once the photo is requested, so its image Link
                 # reaches the photo in flight, at the photo's own depth.
-                "/late.html": Page(body='<img src="/photo.jpg">', after="/photo.jpg"),
-                "/photo.jpg": Page(
-                    body="\xff\xd8\xff\xe0 JFIF", content_type="image/jpeg", delay=2.0
-                ),
+                "/late.html": Page(body='<a href="/z">Z</a> <img src="/photo">', after="/photo"),
+                # An attachment Page that a CMS serves at the image's address.
+                "/photo": Page(body='<a href="/after">After</a>', delay=2.0),
+                "/z": Page(body="<p>Z</p>"),
+                "/after": Page(body="<p>After</p>"),
             }
         )
     )
 
     crawl_file = crawled(server.url("/"))
 
-    assert query(
-        crawl_file,
-        "SELECT photo.fetch_state, photo.crawl_depth, photo.discovered_via, page.url "
-        "FROM urls AS photo JOIN urls AS page ON page.id = photo.found_on_url_id "
-        "WHERE photo.url = ?",
-        [server.url("/photo.jpg")],
-    ) == [("fetched", 2, "hyperlink", server.url("/a"))]
+    assert (
+        query(
+            crawl_file,
+            "SELECT photo.fetch_state, photo.crawl_depth, photo.discovered_via, page.url "
+            "FROM urls AS photo JOIN urls AS page ON page.id = photo.found_on_url_id "
+            "WHERE photo.url = ?",
+            [server.url("/photo")],
+        ),
+        # The check's unit came before the photo's: the raise reached the photo in flight.
+        query(
+            crawl_file,
+            "SELECT url FROM urls WHERE url IN (?, ?) ORDER BY id",
+            [server.url("/z"), server.url("/after")],
+        ),
+    ) == (
+        [("fetched", 2, "hyperlink", server.url("/a"))],
+        [(server.url("/z"),), (server.url("/after"),)],
+    )

@@ -294,6 +294,27 @@ def test_a_robots_txt_redirect_to_a_host_that_does_not_resolve_counts_as_missing
     )
 
 
+def test_a_failed_robots_txt_redirect_of_an_external_origin_gives_no_warning(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(routes={"/": Page(body='<a href="http://other.test/a">Partner</a>')}),
+        Site(
+            routes={
+                "/robots.txt": Redirect("http://nowhere.test/robots.txt"),
+                "/a": Page(body="<p>A</p>"),
+            }
+        ),
+    )
+
+    result = crawl_result("http://site.test/", resolver=hosts.resolver)
+
+    assert (
+        query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url = 'http://other.test/a'"),
+        [warning.code for warning in result.warnings if warning.code.startswith("robots_")],
+    ) == ([("fetched",)], [])
+
+
 def test_a_url_that_the_url_limit_refuses_never_requests_robots_txt(
     temp_workspace: TempWorkspace, fixture_hosts: StartHosts
 ) -> None:

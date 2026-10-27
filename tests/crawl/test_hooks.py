@@ -31,7 +31,7 @@ from spider.output.reporter import Collected
 from spider.services.hooks import default_hooks
 from spider.store.connections import connect
 from spider.store.crawls import crawl_summary
-from spider.store.records import CrawlState, Dispatched, ErroredUrl, FetchedUrl, SkippedUrl
+from spider.store.records import CrawlState, ErroredUrl, FetchedUrl, Provenance, SkippedUrl
 from spider.store.types import Timestamp
 from spider.store.writer import CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
@@ -817,8 +817,8 @@ _SHARED = {
     state: [
         name
         # The provenance its dispatch acted on is written back with each outcome.
-        for name in [f.name for f in fields(record)] + [f.name for f in fields(Dispatched)]
-        if name not in {"url_id", "dispatched"}
+        for name in [f.name for f in fields(record)] + [f.name for f in fields(Provenance)]
+        if name not in {"url_id", "provenance"}
         and any(name in {f.name for f in fields(source)} for source in sources)
     ]
     for state, (record, sources) in _OUTCOMES.items()

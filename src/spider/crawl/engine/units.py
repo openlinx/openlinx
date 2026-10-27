@@ -7,20 +7,19 @@ from typing import Any
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import (
     blocked_seed,
-    failed_robots_redirect,
     handler_failure,
     parse_failure,
+    possible_blocking,
+    robots_redirect_failure,
+    seed_base_mismatch,
     unreachable_robots_txt,
-    warn_of_possible_blocking,
-    warn_of_seed_base_mismatch,
 )
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
-from spider.crawl.engine.outcomes import Outcomes, dispatched_of
+from spider.crawl.engine.outcomes import Outcomes, provenance_of
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
-from spider.crawl.following import RESOURCES
 from spider.crawl.pages.preparation import (
     is_html_type,
     response_directives,
@@ -33,6 +32,7 @@ from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import host_key, url_origin
 from spider.output.diagnostics import Diagnostic
 from spider.store.records import (
+    RESOURCE_LINK_TYPES,
     ErroredUrl,
     FetchedUrl,
     NewUrl,
@@ -59,7 +59,7 @@ class Run:
 
 
 def via_resource(queued: QueuedUrl) -> bool:
-    return queued.discovered_via in RESOURCES
+    return queued.discovered_via in RESOURCE_LINK_TYPES
 
 
 async def unit_of(
@@ -82,7 +82,8 @@ async def unit_of(
             return None
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
         origin_robots = await robots.robots_of(queued.url)
-        if origin_robots.state == "unreachable" and origin_robots.fetch_error is not None:
+        origin_error = origin_robots.origin_error
+        if origin_error is not None:
             # The origin cannot be reached: the URL gets the error without a request of
             # its own (design D6).
             message = (
@@ -90,7 +91,7 @@ async def unit_of(
                 f"so the URL was not requested: {origin_robots.fetch_error_message}"
             )
             failure = UrlFailure(
-                fetch_error=origin_robots.fetch_error,
+                fetch_error=origin_error,
                 fetch_error_message=message,
                 fetched_at=None,
             )
@@ -112,7 +113,7 @@ async def unit_of(
     host = host_key(queued.url)
     status_code = None if isinstance(response, FetchFailure) else response.status_code
     if decision.is_internal and run.blocking.responded(host, status_code):
-        warn_of_possible_blocking(context, host)
+        context.reporter.warn(possible_blocking(host))
     if isinstance(response, FetchFailure):
         failure = UrlFailure(
             fetch_error=response.fetch_error,
@@ -143,8 +144,9 @@ def _robots_verdict(
             status_code = origin_robots.status_code
             warnings = (unreachable_robots_txt(queued.url, status_code, ignore_robots=ignore),)
         return (None, None, warnings) if ignore else ("robots_unreachable", None, warnings)
-    if origin_robots.failed_redirect is not None and decision.is_internal:
-        warnings = (failed_robots_redirect(queued.url, origin_robots),)
+    target, fetch_error = origin_robots.failed_redirect, origin_robots.fetch_error
+    if target is not None and fetch_error is not None and decision.is_internal:
+        warnings = (robots_redirect_failure(queued.url, target, fetch_error),)
     blocked = not origin_robots.allows(queued.url)
     # --ignore-robots requests it, still labelled as blocked.
     if blocked and not ignore:
@@ -191,7 +193,9 @@ async def _fetched(
         directives = response_directives(response, context.settings.robots_user_agent)
     discovered = discovered_urls(links, context.scope)
     if parsed and decided.discovered_via == "seed":
-        warn_of_seed_base_mismatch(context, url, links)
+        mismatch = seed_base_mismatch(url, links, context.scope)
+        if mismatch is not None:
+            context.reporter.warn(mismatch)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
@@ -226,7 +230,7 @@ def _skipped_record(
     return SkippedUrl(
         url_id=skipped.url_id,
         skip_reason=skip_reason,
-        dispatched=dispatched_of(skipped),
+        provenance=provenance_of(skipped),
         blocked_by_robots_txt=skipped.blocked_by_robots_txt,
         rows=rows,
     )
@@ -237,7 +241,7 @@ def _errored_record(
 ) -> ErroredUrl:
     return ErroredUrl(
         url_id=failed.url_id,
-        dispatched=dispatched_of(failed),
+        provenance=provenance_of(failed),
         fetch_error=failure.fetch_error,
         fetch_error_message=failure.fetch_error_message,
         fetched_at=failure.fetched_at,
@@ -254,7 +258,7 @@ def _fetched_record(
 ) -> FetchedUrl:
     return FetchedUrl(
         url_id=fetched.url_id,
-        dispatched=dispatched_of(fetched),
+        provenance=provenance_of(fetched),
         status_code=response.status_code,
         content_type=response.content_type,
         fetched_at=response.fetched_at,

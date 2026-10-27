@@ -4,13 +4,13 @@ agree with the depths the engine records."""
 
 from spider.store.records import RESOURCE_LINK_TYPES, DiscoverySkipReason, LinkType
 
-# The spec's Link type table: through these a URL in the Scope is followed, through RESOURCES
-# it is requested as a Resource, and through any other type it is recorded skipped.
+# The spec's Link type table: through these a URL in the Scope is followed, through
+# RESOURCE_LINK_TYPES, which the store's upsert reads too, it is requested as a Resource,
+# and through any other type it is recorded skipped.
 _FOLLOWED: frozenset[LinkType] = frozenset(
     {"hyperlink", "canonical", "pagination", "hreflang", "iframe", "meta_refresh", "http_refresh"}
 )
-RESOURCES = RESOURCE_LINK_TYPES
-_REQUESTED = _FOLLOWED | RESOURCES
+_REQUESTED = _FOLLOWED | RESOURCE_LINK_TYPES
 
 
 def skip_reason(

@@ -24,6 +24,8 @@ class WarningLog:
         self._written: dict[tuple[str, object], int] = {}
         # By code: where a counted warning is kept, and how many URLs it affected so far.
         self._counted: dict[str, tuple[int, int]] = {}
+        # A URL decided again after a lost skip reaches its handlers twice (design D5).
+        self._counted_urls: dict[str, set[NormalizedUrl]] = {}
 
     @property
     def warnings(self) -> tuple[Diagnostic, ...]:
@@ -37,7 +39,12 @@ class WarningLog:
         self._write(diagnostic)
 
     def count(self, diagnostic: Diagnostic, url: NormalizedUrl) -> None:
-        """Counts one more URL for a counted warning; only the first is written to stderr."""
+        """Counts one more URL for a counted warning, each URL once; only the first is written
+        to stderr."""
+        urls = self._counted_urls.setdefault(diagnostic.code, set())
+        if url in urls:
+            return
+        urls.add(url)
         counted = self._counted.get(diagnostic.code)
         if counted is not None:
             index, count = counted

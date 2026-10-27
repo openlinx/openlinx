@@ -8,7 +8,7 @@ from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import record_failure
 from spider.crawl.engine.hooks import UrlResult
 from spider.store.failures import is_one_urls_failure
-from spider.store.records import Dispatched
+from spider.store.records import Provenance
 from spider.store.urls import UrlUnit, record_unwritten
 from spider.store.writer import CrawlWriterClosedError
 
@@ -55,7 +55,7 @@ class Outcomes:
             result.url_id,
             message,
             blocked_by_robots_txt=result.blocked_by_robots_txt,
-            dispatched=dispatched_of(result),
+            provenance=provenance_of(result),
         )
         try:
             await (await self._context.writer.submit_async(unit))
@@ -64,8 +64,8 @@ class Outcomes:
             self._context.stop.set("write_failed", failure)
 
 
-def dispatched_of(result: UrlResult) -> Dispatched:
-    return Dispatched(
+def provenance_of(result: UrlResult) -> Provenance:
+    return Provenance(
         crawl_depth=result.crawl_depth,
         discovered_via=result.discovered_via,
         found_on_url_id=result.found_on_url_id,
