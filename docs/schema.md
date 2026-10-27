@@ -168,3 +168,12 @@ One row for each origin of a URL that the Crawl recorded.
 | Name | Columns | Unique | Where | Description |
 |---|---|---|---|---|
 | `origins_origin` | `origin` | yes | | Recording an origin once (ON CONFLICT (origin)), and finding an origin's row. |
+
+## Table `response_headers`
+
+The response headers of each requested URL's last attempt that got a response.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | PK, → `urls.id` | | | The URL whose response the headers are. |
+| `headers` | TEXT | no | | `json` | | JSON array of [name, value] pairs in the order and letter case they were received; cookie values are ***. |

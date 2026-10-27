@@ -45,6 +45,36 @@ def columns_of(table: str) -> dict[str, dict[str, Any]]:
     return {column["name"]: column for column in item["columns"]}
 
 
+def test_columns_of_response_headers() -> None:
+    (item,) = run_cli("schema", "response_headers").json()["items"]
+
+    assert (
+        [
+            {key: column[key] for key in ("name", "type", "nullable", "primary_key", "references")}
+            for column in item["columns"]
+        ],
+        item["indexes"],
+    ) == (
+        [
+            {
+                "name": "url_id",
+                "type": "INTEGER",
+                "nullable": False,
+                "primary_key": True,
+                "references": "urls.id",
+            },
+            {
+                "name": "headers",
+                "type": "TEXT",
+                "nullable": False,
+                "primary_key": False,
+                "references": None,
+            },
+        ],
+        [],
+    )
+
+
 def test_the_http_version_is_a_later_column() -> None:
     column = columns_of("origins")["http_version"]
 
