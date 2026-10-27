@@ -75,5 +75,5 @@
   - `070`: the Health Score, Issues, how-to-fix text, and the mapping from categories to Report Sections
   - `080`: the Skill's Rules reference, generated from `spider rules list`, and the cost of live Issues during a Crawl against materialised ones
   - `090`: the `rules` MCP tool
-- **Code:** `src/spider/rules/` (registry, Rule modules with their queries, thresholds, Health Score), `src/spider/cli/rules.py`, `spider.store.schema` (the tables and the view), `spider.store.issues` (the Issues reader), `spider.store.issue_units` and `spider.store.health` (the post-crawl pass's units and the Health Score), Command groups in `spider.cli`, `docs/schema.md`, `docs/rules.md`, and the pass's entry in `020`'s `default_hooks()`.
+- **Code:** `src/spider/rules/` (registry, Rule modules with their queries, thresholds, the post-crawl pass), `src/spider/cli/rules.py`, `spider.store.schema_rules` (the tables and the views, which `spider.store.schema` re-exports), `spider.store.issues` (the Issues reader), `spider.store.issue_units` and `spider.store.health` (the post-crawl pass's units and the Health Score), Command groups in `spider.cli`, `docs/schema.md`, `docs/rules.md`, and the pass's entry in `020`'s `default_hooks()`.
 - **Dependencies:** none new.
