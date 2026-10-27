@@ -53,7 +53,7 @@ Seams (docs/testing.md):
 - [ ] 3.3 [3+6] Drive "A persistent 500 is recorded after the retries".
 - [ ] 3.4 [3+6] **Guard:** "A 404 is not retried".
 - [ ] 3.5a [Pure] `fetch_error_of` maps `TimeoutError`, from which aiohttp's timeouts derive, to `timeout`, checked before the fallback to `connection_error`; the table in `tests/crawl/test_fetcher.py` that pins them to `connection_error` flips (design D1, Risks).
-- [ ] 3.5 [3+6] Drive "A hanging response times out": `--timeout` and `crawl.timeout`, finite and above 0 through `setting_rules`, through `FetchPolicy` in place of `_REQUEST_DEADLINE_SECONDS`. The timeout feeds `020`'s `watchdog_seconds` here if `020` task 12.14 is merged, or in that task otherwise.
+- [ ] 3.5 [3+6] Drive "A hanging response times out": `--timeout` and `crawl.timeout`, finite and above 0 through `setting_rules`, through `FetchPolicy.timeout_seconds`, fixed at 20 until then. The timeout feeds `020`'s `watchdog_seconds` here if `020` task 12.14 is merged, or in that task otherwise.
 - [ ] 3.6 [Fixture] Add a route option for a body that stalls after its headers and one that trickles forever, test-first (`delay` and `hang` act before the headers). Then **Guard:** a trickling body ends as `timeout` within `--timeout` (`test_a_trickling_body_times_out`, design Risks).
 - [ ] 3.7a [Fixture] Let `020`'s fake Fetcher answer a status, headers and a response sequence per path, test-first in `tests/support/`.
 - [ ] 3.7 [Fake timing] Drive "Retries wait one and then two seconds".
