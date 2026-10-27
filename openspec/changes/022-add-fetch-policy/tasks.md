@@ -122,7 +122,7 @@ Seams (docs/testing.md):
 ## 7. Response headers
 
 - [x] 7.1 [3+6] Drive "Response headers are stored as received", and [CLI] "Columns of response_headers", a pair: the `response_headers` table, declared through `018`'s `public_table()` with `url_id` as its primary key and a declared reference, and no secondary index; `handler("response_headers", handle, write)` in `default_hooks()`, whose `handle` returns no row for a `UrlResult` without a `response`, and whose writer runs a plain INSERT, with a [2] replay test of the writer (design D7, Risks).
-- [ ] 7.2 [3+6] Drive "A cookie value is not stored": the Fetcher redacts `Set-Cookie` values where it decodes the received headers, so `FetchResult.headers` never holds one (design D7).
+- [x] 7.2 [3+6] Drive "A cookie value is not stored": the Fetcher redacts `Set-Cookie` values where it decodes the received headers, so `FetchResult.headers` never holds one (design D7).
 - [ ] 7.3 [Pure] Drive "A Cookie header is redacted pair by pair", over the same function, with the spec's `Set-Cookie` value that has no `=` before its first `;`.
 - [ ] 7.4 Docs: document `response_headers` and the cookie redaction format in `docs/crawling.md`.
 - [ ] 7.5 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.

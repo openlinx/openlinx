@@ -35,3 +35,33 @@ def test_response_headers_are_stored_as_received(
     assert [(url, ["X-Robots-Tag", "noindex"] in json.loads(headers)) for url, headers in rows] == [
         (server.url("/"), True)
     ]
+
+
+def test_a_cookie_value_is_not_stored(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(
+                    body="<title>Your basket</title>",
+                    headers=[("Set-Cookie", "sid=abc123; Path=/; HttpOnly")],
+                )
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    ((headers,),) = query(
+        crawl_file,
+        "SELECT headers FROM response_headers JOIN urls ON urls.id = response_headers.url_id "
+        "WHERE urls.url = ?",
+        [server.url("/")],
+    )
+    # The crawl file with its -wal and -shm files, whatever the writer left in each.
+    files = sorted(crawl_file.parent.glob(f"{crawl_file.name}*"))
+    assert (
+        ["Set-Cookie", "sid=***; Path=/; HttpOnly"] in json.loads(headers),
+        [file.name for file in files if b"abc123" in file.read_bytes()],
+    ) == (True, [])

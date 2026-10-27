@@ -13,6 +13,7 @@ from aiohttp.abc import AbstractResolver
 from spider import __version__
 from spider.clock import Clock
 from spider.crawl.fetch.body import OFFERED_CODINGS, BodyDecodingError, read_body
+from spider.crawl.fetch.cookies import redacted_header
 from spider.crawl.fetch.proxy import ProxyVariables
 from spider.crawl.fetch.tls import tls_context
 from spider.crawl.urls import NormalizedUrl
@@ -31,6 +32,12 @@ def joined_header(headers: Iterable[tuple[str, str]], name: str) -> str | None:
     reads them; None without one."""
     values = header_values(headers, name)
     return ", ".join(values) if values else None
+
+
+def _decoded(name: bytes, value: bytes) -> tuple[str, str]:
+    # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.
+    text = name.decode("latin-1")
+    return text, redacted_header(text, value.decode("latin-1"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,11 +113,7 @@ class AiohttpFetcher:
         try:
             proxy = self._proxies.for_url(request.url)
             async with self._session.get(url, allow_redirects=False, proxy=proxy) as response:
-                # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.
-                headers = tuple(
-                    (name.decode("latin-1"), value.decode("latin-1"))
-                    for name, value in response.raw_headers
-                )
+                headers = tuple(_decoded(*header) for header in response.raw_headers)
                 body = await read_body(
                     response.content.iter_chunked(_CHUNK_BYTES),
                     joined_header(headers, "Content-Encoding"),
