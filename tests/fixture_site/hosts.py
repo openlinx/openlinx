@@ -62,6 +62,17 @@ class FixtureHosts:
 StartHosts = Callable[[Site, Site], FixtureHosts]
 
 
+@dataclass(frozen=True)
+class NamedHosts:
+    """A site per host name, such as www.site.test apart from site.test (022 design D9)."""
+
+    servers: Mapping[str, ServerHandle]
+    resolver: FixtureResolver
+
+
+StartNamedHosts = Callable[[Mapping[str, Site]], NamedHosts]
+
+
 def hosts_for(site: ServerHandle, other: ServerHandle) -> FixtureHosts:
     servers = {**dict.fromkeys(SITE_HOSTS, site), OTHER_HOST: other}
     return FixtureHosts(site, other, FixtureResolver(servers))
