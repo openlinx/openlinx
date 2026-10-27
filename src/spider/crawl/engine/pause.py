@@ -168,6 +168,10 @@ class NetworkPause:
     async def _probe(self, reason: _Reason) -> None:
         began = self._clock.monotonic()
         outcome = await self._answered(began)
+        if outcome == "dead_section" and reason == "seed_unreachable":
+            # The Seed is no section of the site: its first answer is the network's, so its
+            # robots.txt and the Seed are requested again (design D16).
+            outcome = "outage"
         seconds = self._clock.monotonic() - began
         self._log.count_pause(network_paused(self._seed), seconds)
         if outcome is None:

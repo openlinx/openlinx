@@ -456,6 +456,7 @@ Boundary doubles used, all from the approved list:
 - [A probe counted toward `--max-urls`, or a `network_paused` warning that counts URLs or loses the pauses' seconds] → In `tests/crawl/test_network_pause.py`, `test_probes_do_not_count_toward_the_url_limit` and `test_network_paused_counts_the_pauses_and_their_seconds`.
 - [Pause events without the data of the event table, or a request that ends without a response while paused recorded as an error, or counted twice toward `--max-urls`] → In `tests/crawl/test_network_pause.py`, `test_the_pause_events_say_why_which_urls_and_how_long` and `test_requests_that_fail_while_paused_are_requested_again_within_the_url_limit`.
 - [An outage that re-queues a URL more than once a run, dispatches a re-queued URL twice, or keeps the failed robots.txt verdict of an Internal origin, whose URLs then stay errors] → In `tests/crawl/test_network_pause.py`, `test_an_outage_requeues_a_url_once_a_run` and `test_an_outage_drops_the_failed_robots_txt_verdict_of_an_internal_origin`.
+- [A Seed whose first probe answers taken for a dead section, so the Seed is never requested again and the Crawl completes with nothing] → In `tests/crawl/test_network_pause.py`, `test_a_seed_that_answers_the_first_probe_is_crawled`.
 - [Post-crawl passes take only the writer, `Pass.run(writer)`, and `040` needs a clock in them] → Task 10.19 gives `Pass.run` one frozen `PassContext(writer, clock)`; `040` adapts its pass when it rebases.
 
 ## Migration Plan

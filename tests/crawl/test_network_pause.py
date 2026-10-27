@@ -322,3 +322,32 @@ def test_a_crawl_that_waits_longer_than_the_network_wait_fails(
         "failed",
         "site_unreachable",
     )
+
+
+def _seed_starts(fetcher: FakeFetcher) -> list[float]:
+    return [at for url, at in fetcher.starts if url == "http://site.test/"]
+
+
+def test_a_seed_that_answers_late_is_crawled(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    fetcher = FakeFetcher(clock, {"/": FakePage("<p>Home</p>")}, outages=[(0, 12)])
+
+    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher)
+    seed = query(result.crawl_file, "SELECT fetch_state FROM urls WHERE id = 1")
+
+    # The Seed's own request comes only once its robots.txt answers, after the probes at 5, 10
+    # and 20 seconds; the last of them is the first to answer.
+    assert (_seed_starts(fetcher), result.summary.state, seed) == (
+        [5, 10, 20, 20],
+        "completed",
+        [("fetched",)],
+    )
+
+
+def test_a_seed_that_answers_the_first_probe_is_crawled(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    fetcher = FakeFetcher(clock, {"/": FakePage("<p>Home</p>")}, outages=[(0, 3)])
+
+    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher)
+
+    assert query(result.crawl_file, "SELECT fetch_state FROM urls WHERE id = 1") == [("fetched",)]
