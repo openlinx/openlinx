@@ -18,7 +18,7 @@ from tests.support.rules import crawl_with_page, crawl_with_pages
 from tests.support.workspace import TempWorkspace
 
 UNTITLED = page_data("<h1>Sale</h1><p>Everything half price this week.</p>")
-SHOES = "Waterproof trail running shoes for wet and rocky ground"
+SHOES_TITLE = "Waterproof trail running shoes for wet and rocky ground"
 
 
 def titled(title: str) -> dict[str, Any]:
@@ -66,7 +66,7 @@ def test_a_page_that_was_not_parsed_is_not_analysed(temp_workspace: TempWorkspac
 
 
 def test_title_too_long_by_characters(temp_workspace: TempWorkspace) -> None:
-    crawl_file, url_id = crawl_with_page(temp_workspace, **titled(f"{SHOES} | Run"))
+    crawl_file, url_id = crawl_with_page(temp_workspace, **titled(f"{SHOES_TITLE} | Run"))
 
     assert read_affected_urls(crawl_file, TITLE_TOO_LONG.id, RULES) == [
         AffectedUrl(url_id=url_id, detail={"length": 61})
@@ -74,7 +74,7 @@ def test_title_too_long_by_characters(temp_workspace: TempWorkspace) -> None:
 
 
 def test_title_at_the_limit(temp_workspace: TempWorkspace) -> None:
-    crawl_file, _ = crawl_with_page(temp_workspace, **titled(f"{SHOES} | Up"))
+    crawl_file, _ = crawl_with_page(temp_workspace, **titled(f"{SHOES_TITLE} | Up"))
 
     assert read_affected_urls(crawl_file, TITLE_TOO_LONG.id, RULES) == []
 
@@ -83,7 +83,7 @@ def test_raised_title_limit(temp_workspace: TempWorkspace) -> None:
     crawl_file, _ = crawl_with_page(
         temp_workspace,
         thresholds={"title-too-long": {"max_chars": 70}},
-        **titled(f"{SHOES} | Trailco"),
+        **titled(f"{SHOES_TITLE} | Trailco"),
     )
     [(stored_sql,)] = query(
         crawl_file, "SELECT reproduce_sql FROM rules WHERE id = 'title-too-long'"
@@ -97,8 +97,8 @@ def test_raised_title_limit(temp_workspace: TempWorkspace) -> None:
 
 
 def test_duplicate_titles_among_indexable_pages(temp_workspace: TempWorkspace) -> None:
-    crawl_file, ids = crawl_with_pages(temp_workspace, titled(SHOES), titled(SHOES))
-    detail = {"title_1": SHOES, "pages": 2}
+    crawl_file, ids = crawl_with_pages(temp_workspace, titled(SHOES_TITLE), titled(SHOES_TITLE))
+    detail = {"title_1": SHOES_TITLE, "pages": 2}
 
     assert read_affected_urls(crawl_file, TITLE_DUPLICATE.id, RULES) == [
         AffectedUrl(url_id=url_id, detail=detail) for url_id in ids
@@ -115,8 +115,8 @@ def test_duplicate_titles_among_indexable_pages(temp_workspace: TempWorkspace) -
 def test_non_indexable_pages_are_not_compared(temp_workspace: TempWorkspace) -> None:
     crawl_file, _ = crawl_with_pages(
         temp_workspace,
-        {**titled(SHOES), "indexability": "indexable"},
-        {**titled(SHOES), "indexability": "non_indexable", "indexability_status": "noindex"},
+        {**titled(SHOES_TITLE), "indexability": "indexable"},
+        {**titled(SHOES_TITLE), "indexability": "non_indexable", "indexability_status": "noindex"},
     )
 
     assert read_affected_urls(crawl_file, TITLE_DUPLICATE.id, RULES) == []

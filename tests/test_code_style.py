@@ -963,8 +963,8 @@ def test_a_wait_outside_the_clock_is_named() -> None:
     ]
 
 
-# A settings table's kind, plain, keyed or named, is decided by table_kind alone: three modules
-# once each re-derived it from what keyed_entry and named_tables return (010 design D2).
+# A settings table's kind, plain, keyed or named, is decided by table_kind alone, not again
+# from what keyed_entry and named_tables return (010 design D2).
 KIND_DECIDER = ("spider/workspace/tables.py", "table_kind")
 KIND_PARTS = {"keyed_entry", "named_tables"}
 
@@ -1021,4 +1021,50 @@ def test_a_kind_decided_outside_table_kind_is_named() -> None:
     assert kind_violations(sources) == [
         "spider/workspace/settings.py:2 decides a table's kind outside table_kind",
         "spider/workspace/template.py:3 decides a table's kind outside table_kind",
+    ]
+
+
+# The schema's parts are imported only through spider.store.schema, whose metadata holds them
+# all: a module that imported the core tables alone would see a metadata without the Rule tables.
+SCHEMA_PARTS = {
+    "spider.store.schema_core": ("spider/store/schema.py", "spider/store/schema_rules.py"),
+    "spider.store.schema_rules": ("spider/store/schema.py",),
+}
+
+
+def schema_part_violations(sources: Mapping[str, str]) -> list[str]:
+    """Imports of a part of the schema by a module other than the ones that assemble it."""
+    return [
+        f"{path} imports {name}"
+        for path, source in sources.items()
+        for name in _imported(path, ast.parse(source))
+        for part, importers in SCHEMA_PARTS.items()
+        if _within(name, part) and path not in importers
+    ]
+
+
+def test_the_schema_s_parts_are_imported_through_the_schema() -> None:
+    root = SRC.parent
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    } | {
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((root / "tests").rglob("*.py"))
+    }
+
+    assert schema_part_violations(sources) == []
+
+
+def test_an_import_of_a_schema_part_is_named() -> None:
+    sources = {
+        "spider/store/crawls.py": "from spider.store.schema_core import metadata\n",
+        "tests/store/test_schema.py": "from spider.store.schema_rules import rules\n",
+        "spider/store/schema_rules.py": "from spider.store.schema_core import pages\n",
+        "spider/store/schema.py": "from spider.store.schema_rules import rules\n",
+    }
+
+    assert schema_part_violations(sources) == [
+        "spider/store/crawls.py imports spider.store.schema_core.metadata",
+        "tests/store/test_schema.py imports spider.store.schema_rules.rules",
     ]

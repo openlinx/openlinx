@@ -17,7 +17,8 @@ MEMBERS: dict[Population, str] = {
     "analysed_pages": "SELECT url_id FROM analysed_pages",
     "indexable_pages": "SELECT url_id FROM indexable_pages",
 }
-# Rows outside every population, on which a Rule that read its table alone would fire.
+# Rows outside every population. A Page that was not parsed holds NULL Page data, so only a
+# Rule that read pages alone and took a NULL as missing would fire on it.
 OUTSIDE: dict[str, Callable[[TempWorkspace], Path]] = {
     "external_4xx": lambda workspace: crawl_with_url(
         workspace, "https://elsewhere.test/gone", responded(404), is_internal=False

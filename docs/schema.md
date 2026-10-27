@@ -57,7 +57,7 @@ Every public table, column and index follows the conventions of [ADR-0005](adr/0
 ## How to add a table
 
 A change that stores new data adds its tables and columns in the slice whose scenario first needs them:
-1. **Declare it** with `public_table(name, *columns, comment=..., change=<n>)` in `spider.store.schema`, the only definition of the schema, with the change's number as `change`. It makes the table `STRICT` and adds the CHECKs of its enumerations and flags, so no CHECK is written by hand.
+1. **Declare it** with `public_table(name, *columns, comment=..., change=<n>)` in `spider.store.schema_core`, or in `spider.store.schema_rules` for a Rule table, both gathered by `spider.store.schema`, the only definition of the schema, with the change's number as `change`. It makes the table `STRICT` and adds the CHECKs of its enumerations and flags, so no CHECK is written by hand.
    - Give every column a `comment`, and use the shared column types for timestamps (`Timestamp`), JSON (`Json`) and booleans (`Flag`).
    - Declare a real number with `sqlalchemy.REAL`: `Float` and `Double` declare `FLOAT` and `DOUBLE`, which STRICT refuses.
    - Read an enumeration's `values` from the `Literal` the code uses.

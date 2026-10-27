@@ -204,4 +204,4 @@ A refactor, behaviour unchanged: no spec change, and every scenario test stays g
 - [x] 11.7 Settings table kinds are decided in one place (`spider.workspace.tables`), which the template and the settings lookup ask.
 - [x] 11.8 Docs: every decision of design.md and every requirement of the delta specs opens with `**In short:**`, without history (dates, rulings, task or group numbers, red-first logs in Risks); "Windows console output" says what its test drives: a subprocess whose piped stdout is the in-process output byte for byte.
 - [x] 11.9 The seam-2 Rule tests that write Page rows by hand (`title_count=0`, `title_1="x" * 61`, `h1_count` NULL) take `page_data(html)` of realistic markup instead, each keeping a red by a realistic breakage: one commit each for the title, heading, meta description, population, reader and pass tests.
-- [ ] 11.10 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+- [x] 11.10 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.

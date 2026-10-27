@@ -1,5 +1,5 @@
-"""The Rule tables and views of the declared public schema, which spider.store.schema re-exports
-into its one metadata (040-add-rules D14, D19). Import them from spider.store.schema."""
+"""The Rule tables and views of the declared public schema (040-add-rules D14, D19), on the core
+tables' metadata; spider.store.schema gathers them."""
 
 from typing import Any
 
@@ -18,7 +18,7 @@ from sqlalchemy import (
 
 from spider.naming import APP_NAME, SETTINGS_FILE_NAME
 from spider.store.records import AppliesTo, IssueType, Priority, RuleCategory
-from spider.store.schema import (
+from spider.store.schema_core import (
     literal_values,
     pages,
     public_table,
@@ -27,7 +27,7 @@ from spider.store.schema import (
 )
 from spider.store.types import Flag, Json
 
-rules: Table = public_table(
+rules = public_table(
     "rules",
     Column(
         "id",
@@ -86,7 +86,7 @@ rules: Table = public_table(
     change=40,
 )
 
-affected_urls: Table = public_table(
+affected_urls = public_table(
     "affected_urls",
     Column(
         "rule_id",
@@ -120,7 +120,7 @@ Index(
     info={"description": "The Issues of one URL, and the Health Score's count of affected Pages."},
 )
 
-issues: Table = public_view(
+issues = public_view(
     "issues",
     Column(
         "rule_id",
@@ -197,7 +197,7 @@ def _analysed_page_ids() -> Select[Any]:
     )
 
 
-internal_urls: Table = _population(
+internal_urls = _population(
     "internal_urls",
     select(urls.c.id.label("url_id")).where(
         urls.c.is_internal == 1,
@@ -205,12 +205,12 @@ internal_urls: Table = _population(
     ),
     "The Internal URLs that were requested, or that robots.txt disallows.",
 )
-analysed_pages: Table = _population(
+analysed_pages = _population(
     "analysed_pages",
     _analysed_page_ids(),
     "The Pages that were parsed, also when one of their extractors failed.",
 )
-indexable_pages: Table = _population(
+indexable_pages = _population(
     "indexable_pages",
     _analysed_page_ids(),
     "The analysed Pages that are indexable. The store records no Indexability yet, so it holds "

@@ -72,7 +72,6 @@ def recorded(rule: Rule) -> RuleRow:
     )
 
 
-# The Page data of two Pages whose titles are the same.
 def crawl_with_page(
     temp_workspace: TempWorkspace,
     *,

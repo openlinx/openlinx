@@ -40,7 +40,7 @@ def rule_items(request: RulesRequest, tables: SettingsTables) -> list[dict[str, 
 def rule_item(request: RulesRequest, tables: SettingsTables, rule_id: str) -> dict[str, Any]:
     configured = _configured(request, tables)
     rule = find_rule(RULES, rule_id)
-    return _item(next(found for found in configured if found.rule is rule))
+    return _item(configured[RULES.index(rule)])
 
 
 def _configured(request: RulesRequest, tables: SettingsTables) -> tuple[ConfiguredRule, ...]:
@@ -79,19 +79,21 @@ def _item(configured: ConfiguredRule) -> dict[str, Any]:
 
 def rule_rows(configured: Sequence[ConfiguredRule]) -> tuple[RuleRow, ...]:
     """Every Rule as a Crawl records it, with its settings."""
-    return tuple(
-        RuleRow(
-            id=found.rule.id,
-            category=found.rule.category,
-            issue_type=found.rule.issue_type,
-            priority=found.rule.priority,
-            applies_to=found.rule.applies_to,
-            enabled=found.enabled,
-            thresholds=found.thresholds,
-            description=found.rule.description,
-            why_it_matters=found.rule.why_it_matters,
-            how_to_fix=found.rule.how_to_fix,
-            reproduce_sql=found.rule.reproduce_sql,
-        )
-        for found in configured
+    return tuple(_row(rule) for rule in configured)
+
+
+def _row(configured: ConfiguredRule) -> RuleRow:
+    rule = configured.rule
+    return RuleRow(
+        id=rule.id,
+        category=rule.category,
+        issue_type=rule.issue_type,
+        priority=rule.priority,
+        applies_to=rule.applies_to,
+        enabled=configured.enabled,
+        thresholds=configured.thresholds,
+        description=rule.description,
+        why_it_matters=rule.why_it_matters,
+        how_to_fix=rule.how_to_fix,
+        reproduce_sql=rule.reproduce_sql,
     )
