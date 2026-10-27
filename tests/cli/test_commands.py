@@ -146,6 +146,16 @@ def test_warning_and_info_codes_of_this_change() -> None:
     ] == [("warning", None), ("info", None)]
 
 
+def test_the_codes_of_the_fetch_policy_are_listed() -> None:
+    diagnostics = run_cli("commands").json()["diagnostics"]
+
+    assert [
+        (d["code"], d["level"], d["exit_code"])
+        for d in diagnostics
+        if d["code"] in {"seed_redirected_out_of_scope"}
+    ] == [("seed_redirected_out_of_scope", "warning", None)]
+
+
 def test_naming_rule_for_input_errors() -> None:
     diagnostics = run_cli("commands").json()["diagnostics"]
 

@@ -131,7 +131,7 @@ Seams (docs/testing.md):
 
 - [x] 8.1 Verify that every `#### Scenario:` in `specs/fetching/spec.md` that groups 1–7 drive has exactly one test named after it, with `scripts/scenario_coverage.py <spec.md>`, written here as the one shared check (`020` task 16.1 reuses it): it reports missing scenarios, scenarios with more than one test and tests named close to a scenario that no longer exists, and a v0.2 scenario as waiting. It is a check that is run, not a test.
 - [ ] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate, when CI minutes return (workflow_dispatch). Until then the gate runs Python 3.14 on Windows, and one full-suite run on Python 3.12 in WSL Linux proves the minimum version.
-- [ ] 8.3 **Guard:** every code this change declares (design D11) is listed by `spider commands` with its level and exit code [CLI], with the `commands.json` snapshot.
+- [x] 8.3 **Guard:** every code this change declares (design D11) is listed by `spider commands` with its level and exit code [CLI], with the `commands.json` snapshot.
 - [ ] 8.4 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.
 
 ## 9. (v0.2) Custom headers and credentials
