@@ -879,7 +879,7 @@ The Crawl SHALL run every registered post-crawl pass when it ends as `completed`
 - **THEN** the pass has run once
 
 #### Scenario: Post-crawl passes do not run for a failed Crawl
-- **WHEN** a pass registered for the test counts its runs, and `spider crawl http://127.0.0.1:{closed_port}/` runs
+- **WHEN** a pass registered for the test counts its runs, and `spider crawl http://127.0.0.1:{closed_port}/ --network-wait 0` runs
 - **THEN** the pass has run 0 times
 
 #### Scenario: Post-crawl passes run again after a continue
@@ -973,11 +973,11 @@ The Seed parser, URL normalisation, HTML decoding, the link extractor, the robot
 - **The watchdog:** a request that has not ended within the watchdog time after it started SHALL be cancelled. The watchdog time SHALL be the longer of 120 seconds and the Fetcher's total request deadline plus 30 seconds, so it never cuts a response that the Fetcher still allows. Its URL SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `watchdog`, and the Crawl SHALL go on. A request ended by the watchdog SHALL count as a request without an HTTP response for the network pause.
 
 #### Scenario: A network wait of zero fails at once
-- **WHEN** `/` links to `/down/1` to `/down/20` and then to `/p1`, every `/down/<n>` resets its connection before answering, and `spider crawl {site}/ --concurrency 1 --network-wait 0` runs
+- **WHEN** `/` links to `/down/1` to `/down/20` and then to `/p1`, every `/down/<n>` resets its connection, and `spider crawl {site}/ --concurrency 1 --network-wait 0` runs
 - **THEN** stdout holds the result with `"state": "failed"` and `"stop_reason": "site_unreachable"`, and `{site}/p1` has `fetch_state` = `queued`
 
 #### Scenario: Losing the site is reported by one error
-- **WHEN** `/` links to `/down/1` to `/down/20`, every `/down/<n>` resets its connection before answering, and `spider crawl {site}/ --concurrency 1 --network-wait 0` runs
+- **WHEN** `/` links to `/down/1` to `/down/20`, every `/down/<n>` resets its connection, and `spider crawl {site}/ --concurrency 1 --network-wait 0` runs
 - **THEN** the Command exits with code 8, and stderr holds exactly one error line, as its last line, with `code` = `site_unreachable` and a `hint` that contains `spider resume`
 
 #### Scenario: A dead section does not stop the Crawl
@@ -1086,7 +1086,7 @@ For every non-zero exit, stderr SHALL hold exactly one error diagnostic, as its 
 - **THEN** its `crawl` entry has `"output": "document"`
 
 #### Scenario: A write failure fails the Crawl
-- **WHEN** the file system reports once that the disk is full while the Crawl writes (injected at the file-system boundary)
+- **WHEN** SQLite reports that the disk is full while the Crawl writes
 - **THEN** the Command exits with code 7, stdout holds the result with `"state": "failed"`, and the last stderr line is an error with `code` = `crawl_write_failed`
 
 ### Requirement: Unreachable Seed
