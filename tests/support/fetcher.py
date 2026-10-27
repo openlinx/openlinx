@@ -13,6 +13,8 @@ from spider.crawl.fetch.fetcher import FetchResult, Request
 class FakePage:
     body: str
     content_type: str = "text/html"
+    # Seconds on the clock before it answers, as a slow server takes.
+    delay: float = 0.0
 
 
 _NOT_FOUND = FakePage("")
@@ -33,6 +35,8 @@ class FakeFetcher:
         page = self._pages.get(path)
         status_code = 200 if page is not None else 404
         page = page or _NOT_FOUND
+        if page.delay:
+            await self._clock.sleep(page.delay)
         return FetchResult(
             status_code=status_code,
             reason=HTTPStatus(status_code).phrase,
