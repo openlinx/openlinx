@@ -1,98 +1,106 @@
 """The titles Rules (040-add-rules, rules; seam 2)."""
 
 from dataclasses import fields
+from typing import Any
 
 import pytest
 
 from spider.rules.headings import H1_MISSING
 from spider.rules.meta_descriptions import META_DESCRIPTION_MISSING
+from spider.rules.registry import RULES
 from spider.rules.titles import TITLE_DUPLICATE, TITLE_MISSING, TITLE_TOO_LONG
+from spider.store.issues import read_affected_urls
 from spider.store.page_records import PageRow
 from spider.store.records import AffectedUrl
 from tests.support.crawls import query
-from tests.support.rules import SHOES, crawl_with_page, crawl_with_pages, evaluate_rule
+from tests.support.page_data import page_data
+from tests.support.rules import crawl_with_page, crawl_with_pages
 from tests.support.workspace import TempWorkspace
+
+UNTITLED = page_data("<h1>Sale</h1><p>Everything half price this week.</p>")
+SHOES = "Waterproof trail running shoes for wet and rocky ground"
+
+
+def titled(title: str) -> dict[str, Any]:
+    return page_data(f"<title>{title}</title><h1>Sale</h1>")
 
 
 def test_missing_title(temp_workspace: TempWorkspace) -> None:
-    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    crawl_file, url_id = crawl_with_page(temp_workspace, **UNTITLED)
 
-    assert evaluate_rule(crawl_file, TITLE_MISSING) == [AffectedUrl(url_id=url_id, detail=None)]
+    assert read_affected_urls(crawl_file, TITLE_MISSING.id, RULES) == [
+        AffectedUrl(url_id=url_id, detail=None)
+    ]
 
 
 def test_empty_title_counts_as_missing(temp_workspace: TempWorkspace) -> None:
-    crawl_file, url_id = crawl_with_page(
-        temp_workspace, title_count=1, title_1="", title_1_length=0
-    )
+    crawl_file, url_id = crawl_with_page(temp_workspace, **titled(""))
 
-    assert evaluate_rule(crawl_file, TITLE_MISSING) == [AffectedUrl(url_id=url_id, detail=None)]
+    assert read_affected_urls(crawl_file, TITLE_MISSING.id, RULES) == [
+        AffectedUrl(url_id=url_id, detail=None)
+    ]
 
 
 def test_a_failed_extractor_raises_no_issue_for_its_missing_columns(
     temp_workspace: TempWorkspace,
 ) -> None:
     # The Page stays among the analysed Pages: a column that an extractor filled still fires.
-    filled, filled_id = crawl_with_page(
-        temp_workspace, parse_error="extractor_error", title_count=0
-    )
+    filled, filled_id = crawl_with_page(temp_workspace, parse_error="extractor_error", **UNTITLED)
     missing, _ = crawl_with_page(temp_workspace, parse_error="extractor_error")
 
     assert (
-        evaluate_rule(filled, TITLE_MISSING),
-        evaluate_rule(missing, TITLE_MISSING),
-        evaluate_rule(missing, H1_MISSING),
-        evaluate_rule(missing, META_DESCRIPTION_MISSING),
+        read_affected_urls(filled, TITLE_MISSING.id, RULES),
+        read_affected_urls(missing, TITLE_MISSING.id, RULES),
+        read_affected_urls(missing, H1_MISSING.id, RULES),
+        read_affected_urls(missing, META_DESCRIPTION_MISSING.id, RULES),
     ) == ([AffectedUrl(url_id=filled_id, detail=None)], [], [], [])
 
 
 def test_a_page_that_was_not_parsed_is_not_analysed(temp_workspace: TempWorkspace) -> None:
-    crawl_file, _ = crawl_with_page(temp_workspace, parse_error="parse_timeout", title_count=0)
+    crawl_file, _ = crawl_with_page(temp_workspace, parse_error="parse_timeout")
 
     assert (
         query(crawl_file, "SELECT url_id FROM analysed_pages"),
-        evaluate_rule(crawl_file, TITLE_MISSING),
+        read_affected_urls(crawl_file, TITLE_MISSING.id, RULES),
     ) == ([], [])
 
 
 def test_title_too_long_by_characters(temp_workspace: TempWorkspace) -> None:
-    crawl_file, url_id = crawl_with_page(
-        temp_workspace, title_count=1, title_1="x" * 61, title_1_length=61
-    )
+    crawl_file, url_id = crawl_with_page(temp_workspace, **titled(f"{SHOES} | Run"))
 
-    assert evaluate_rule(crawl_file, TITLE_TOO_LONG) == [
+    assert read_affected_urls(crawl_file, TITLE_TOO_LONG.id, RULES) == [
         AffectedUrl(url_id=url_id, detail={"length": 61})
     ]
 
 
 def test_title_at_the_limit(temp_workspace: TempWorkspace) -> None:
-    crawl_file, _ = crawl_with_page(
-        temp_workspace, title_count=1, title_1="x" * 60, title_1_length=60
-    )
+    crawl_file, _ = crawl_with_page(temp_workspace, **titled(f"{SHOES} | Up"))
 
-    assert evaluate_rule(crawl_file, TITLE_TOO_LONG) == []
+    assert read_affected_urls(crawl_file, TITLE_TOO_LONG.id, RULES) == []
 
 
 def test_raised_title_limit(temp_workspace: TempWorkspace) -> None:
     crawl_file, _ = crawl_with_page(
         temp_workspace,
         thresholds={"title-too-long": {"max_chars": 70}},
-        title_count=1,
-        title_1="x" * 65,
-        title_1_length=65,
+        **titled(f"{SHOES} | Trailco"),
     )
     [(stored_sql,)] = query(
         crawl_file, "SELECT reproduce_sql FROM rules WHERE id = 'title-too-long'"
     )
 
     # The file's own query, run alone, agrees: it binds no threshold.
-    assert (evaluate_rule(crawl_file, TITLE_TOO_LONG), query(crawl_file, stored_sql)) == ([], [])
+    assert (
+        read_affected_urls(crawl_file, TITLE_TOO_LONG.id, RULES),
+        query(crawl_file, stored_sql),
+    ) == ([], [])
 
 
 def test_duplicate_titles_among_indexable_pages(temp_workspace: TempWorkspace) -> None:
-    crawl_file, ids = crawl_with_pages(temp_workspace, SHOES, SHOES)
-    detail = {"title_1": "Shoes", "pages": 2}
+    crawl_file, ids = crawl_with_pages(temp_workspace, titled(SHOES), titled(SHOES))
+    detail = {"title_1": SHOES, "pages": 2}
 
-    assert sorted(evaluate_rule(crawl_file, TITLE_DUPLICATE), key=lambda url: url.url_id) == [
+    assert read_affected_urls(crawl_file, TITLE_DUPLICATE.id, RULES) == [
         AffectedUrl(url_id=url_id, detail=detail) for url_id in ids
     ]
 
@@ -107,8 +115,8 @@ def test_duplicate_titles_among_indexable_pages(temp_workspace: TempWorkspace) -
 def test_non_indexable_pages_are_not_compared(temp_workspace: TempWorkspace) -> None:
     crawl_file, _ = crawl_with_pages(
         temp_workspace,
-        {**SHOES, "indexability": "indexable"},
-        {**SHOES, "indexability": "non_indexable", "indexability_status": "noindex"},
+        {**titled(SHOES), "indexability": "indexable"},
+        {**titled(SHOES), "indexability": "non_indexable", "indexability_status": "noindex"},
     )
 
-    assert evaluate_rule(crawl_file, TITLE_DUPLICATE) == []
+    assert read_affected_urls(crawl_file, TITLE_DUPLICATE.id, RULES) == []
