@@ -68,8 +68,8 @@ class FetchPolicy:
 
     user_agent: str
     proxies: ProxyVariables
-    # Fixed until --timeout sets it; the watchdog of 020's design D16 outlasts it.
-    timeout_seconds: float = 20
+    # The watchdog of 020's design D16 outlasts it.
+    timeout_seconds: float
 
 
 # Opens the Crawl's Fetcher: tests bind the DNS resolver hook or a fake Fetcher into one.

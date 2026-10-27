@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from spider.crawl.setting_rules import as_rate, as_robots_token, as_user_agent
+from spider.crawl.setting_rules import as_rate, as_robots_token, as_timeout, as_user_agent
 from spider.naming import DEFAULT_ROBOTS_TOKEN
 from spider.store.records import ScopeKind
 
@@ -52,6 +52,12 @@ class CrawlSettings(BaseModel):
         "visible ASCII characters, spaces and tabs only. The tool's name, version and project "
         "URL when unset.",
     )
+    timeout: float = Field(
+        20,
+        strict=True,
+        description="Seconds within which a request attempt, its body included, must complete: "
+        "a finite number above 0.",
+    )
     retries: int = Field(
         2,
         ge=0,
@@ -89,6 +95,11 @@ class CrawlSettings(BaseModel):
     @classmethod
     def _is_a_rate(cls, rate: float | None) -> float | None:
         return None if rate is None else as_rate(rate)
+
+    @field_validator("timeout")
+    @classmethod
+    def _is_a_timeout(cls, timeout: float) -> float:
+        return as_timeout(timeout)
 
     @field_validator("user_agent")
     @classmethod

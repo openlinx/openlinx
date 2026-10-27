@@ -185,6 +185,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         fetch_policy=FetchPolicy(
             user_agent=crawl_settings.user_agent or DEFAULT_USER_AGENT,
             proxies=proxies,
+            timeout_seconds=crawl_settings.timeout,
         ),
         new_crawl=new_crawl,
     )

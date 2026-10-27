@@ -9,7 +9,7 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
-from spider.crawl.setting_rules import as_rate, as_robots_token, as_user_agent
+from spider.crawl.setting_rules import as_rate, as_robots_token, as_timeout, as_user_agent
 from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN
 from spider.output.codes import OPTION_CONFLICT
 from spider.output.diagnostics import SpiderError
@@ -31,6 +31,13 @@ def _user_agent(user_agent: str | None) -> str | None:
         return None if user_agent is None else as_user_agent(user_agent)
     except ValueError as refusal:
         raise typer.BadParameter(f"{user_agent!r}: {refusal}.") from None
+
+
+def _timeout(timeout: float) -> float:
+    try:
+        return as_timeout(timeout)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{timeout}: {refusal}.") from None
 
 
 def _rate(rate: float | None) -> float | None:
@@ -136,6 +143,16 @@ def crawl(
         ),
         OptionMeta(setting="crawl.user_agent"),
     ] = None,
+    timeout: Annotated[
+        float,
+        typer.Option(
+            "--timeout",
+            callback=_timeout,
+            help="Seconds within which a request attempt, its body included, must complete: "
+            "a finite number above 0.",
+        ),
+        OptionMeta(setting="crawl.timeout"),
+    ] = 20,
     retries: Annotated[
         int,
         typer.Option(

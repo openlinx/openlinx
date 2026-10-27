@@ -20,6 +20,12 @@ def as_rate(rate: float) -> float:
     return rate
 
 
+def as_timeout(timeout: float) -> float:
+    if not (math.isfinite(timeout) and timeout > 0):
+        raise ValueError("a timeout is a finite number of seconds above 0")
+    return timeout
+
+
 def as_user_agent(user_agent: str) -> str:
     if not user_agent.strip() or _HEADER_VALUE.fullmatch(user_agent) is None:
         raise ValueError(
