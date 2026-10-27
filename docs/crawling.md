@@ -329,6 +329,14 @@ Every request, robots.txt's included, carries the header `User-Agent: spider/<ve
 
 The Crawl keeps no cookies: a cookie that a response sets is never sent with a later request, so every URL is requested as a first visit is. A site that needs a session cookie shows it, as it does to a search engine's crawler, in redirect loops or 403 responses.
 
+### Response headers
+
+The `response_headers` table keeps the headers of each URL's last attempt that got a response, one row per URL (see [schema.md](schema.md#table-response_headers)). `headers` is a JSON array of `[name, value]` pairs, in the order and letter case they were received, repeated names kept. A URL without a response has no row. A query that filters by a header reads `headers` with `json_each`.
+
+- **Cookie values are never stored.** They are replaced by `***` as the headers are received, so no part of the Crawl holds one. Header names, cookie names, attributes and the order of the headers are kept.
+- **`Set-Cookie`:** the cookie value, the text after the first `=` and before the first `;`, becomes `***`: `sid=abc123; Path=/; HttpOnly` is stored as `sid=***; Path=/; HttpOnly`. A value with no `=` before its first `;` is stored as `***` followed by its attributes.
+- **`Cookie`:** the value of each `name=value` pair becomes `***`: `a=1; b=2` is stored as `a=***; b=***`.
+
 ### Timeouts and retries
 
 - **Timeout:** a request attempt that has not completed within `--timeout` seconds (default 20) fails, its body included, so a server that sends its headers and then the body a byte at a time is cut off too. A URL whose attempts all time out is recorded with `fetch_state` = `error` and `fetch_error` = `timeout`. A value of 0, a negative one or one that is not finite is rejected as `invalid_value` (exit code 2), or in `spider.toml` as `settings_invalid` (exit code 3).
