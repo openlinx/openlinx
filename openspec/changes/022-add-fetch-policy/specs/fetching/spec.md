@@ -132,7 +132,7 @@ The Crawl SHALL retry a request attempt, robots.txt included, that ends with the
 - **Backoff:** before retry n (counting from 1), the Crawl SHALL wait 2^(n-1) seconds.
 - **Retry-After:** a `Retry-After` header on a 429 or 503 response SHALL set the wait instead, capped at 120 seconds.
 - **429 without Retry-After:** the wait SHALL be 10 seconds.
-- **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start.
+- **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start. A 429 or a `Retry-After` SHALL pause the host even when the URL is not retried, with `--retries 0` or on its last attempt.
 - **Other 4xx statuses** SHALL NOT be retried.
 - **URL limit:** a retry is the same URL, so only a URL's first attempt SHALL count towards `--max-urls`.
 - **Network pause:** while the Crawl is paused waiting for the network (`020-add-crawl-core`), a request attempt that fails SHALL be neither retried nor recorded; its URL stays `queued` and is requested after the pause.
@@ -154,6 +154,10 @@ The URL SHALL record the last attempt's response. This change adds this column t
 #### Scenario: Retries wait one and then two seconds
 - **WHEN** a fake Fetcher always returns 500 for `http://site.test/down`, with a fake clock
 - **THEN** the three attempts start at 0, 1 and 3 seconds
+
+#### Scenario: A 429 pauses the host without a retry
+- **WHEN** a fake Fetcher returns 429 with `Retry-After: 7` for `http://site.test/a` at 0 seconds, with a fake clock and `--retries 0`
+- **THEN** the next request to `site.test` starts at 7 seconds
 
 #### Scenario: Retry-After pauses the host
 - **WHEN** a fake Fetcher returns 429 with `Retry-After: 7` for `http://site.test/a` at 0 seconds, with a fake clock

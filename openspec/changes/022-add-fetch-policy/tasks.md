@@ -64,6 +64,7 @@ Seams (docs/testing.md):
 
 - [x] 3.11 Fix: retry only the failures that may pass (`timeout`, `connection_refused`, `connection_error`) besides 5xx, with a [Pure] table over every `fetch_error` value and the status classes, so a new value must be classified; drive "An unresolvable External host is requested once" at [3+6] with the DNS resolver hook, which logs each name it resolves, since the URL behind its failed robots.txt is never requested itself; and refuse a `--retries` above 10 (design D4).
 - [x] 3.12 After `022`'s next merge of `020` (its group 18): pass `--retries 0` in the tests whose scenario is not about retries but which still wait a real backoff (a robots.txt 503, a 5xx page), so the suite does not pay it. With the merge, design Testing's Seam 3+6 sentence reasons from `020`'s virtual clock, whose sleep waits until virtual time reaches the wake and whose time jumps only when nothing runs, not from a FakeClock whose sleeps end at once.
+- [ ] 3.13 [Fake timing] Drive "A 429 pauses the host without a retry": the Requester pauses the host for every 429, and for every 429 or 503 with `Retry-After`, then decides the retry on its own, so a URL without a retry left still slows its host down.
 
 ## 4. Redirects
 
