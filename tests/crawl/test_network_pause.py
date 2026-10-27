@@ -299,3 +299,26 @@ def test_an_outage_drops_the_failed_robots_txt_verdict_of_an_internal_origin(
     assert set(
         query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url LIKE 'http://blog.%'")
     ) == {("fetched",)}
+
+
+def test_a_crawl_that_waits_longer_than_the_network_wait_fails(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    # / answers at one second, and from then on nothing does: the pause begins at one second.
+    pages = {
+        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY), delay=1),
+        **{f"/p{n}": FakePage(f"<p>P{n}</p>") for n in _TWENTY},
+    }
+    fetcher = FakeFetcher(clock, pages, outages=[(1, float("inf"))])
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, network_wait=30
+    )
+    probes = [at for url, at in fetcher.starts if url == "http://site.test/" and at > 0]
+
+    assert (probes, result.summary.state, result.summary.stop_reason) == (
+        [6, 11, 21],
+        "failed",
+        "site_unreachable",
+    )
