@@ -40,7 +40,7 @@ from spider.output.codes import (
 from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
-from spider.rules.settings import RulesSettings
+from spider.rules.settings import RulesSettings, configured_rules
 from spider.services.crawls import create_crawl
 from spider.services.hooks import default_page_executor
 from spider.services.rules import rule_rows
@@ -167,7 +167,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         scope=scope.to_json(),
         secret_names=request.secret_names,
         journal_setting=settings.table(StoreSettings).journal_mode,
-        rules=rule_rows(settings.table(RulesSettings).model_dump(by_alias=True)),
+        rules=rule_rows(configured_rules(settings.table(RulesSettings))),
         settings_file=settings_file,
         section_crawl=scope.section_crawl,
     )

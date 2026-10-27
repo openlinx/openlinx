@@ -76,6 +76,13 @@ def test_show_a_rule_with_thresholds() -> None:
     )
 
 
+def test_show_gives_the_fields_of_a_list_item() -> None:
+    (listed,) = run_cli("rules", "list", "--limit", "1").json()["items"]
+    shown = run_cli("rules", "show", listed["id"]).json()
+
+    assert list(shown) == list(listed)
+
+
 def test_override_shown_by_the_rules_command(shop: Path) -> None:
     (shop / "spider.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
 

@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import Connection, delete, insert
 
 from spider.output.reporter import Collected
-from spider.rules.settings import RulesSettings
+from spider.rules.settings import RulesSettings, configured_rules
 from spider.services.crawls import create_crawl
 from spider.services.rules import rule_rows
 from spider.store.connections import connect
@@ -35,7 +35,7 @@ def current_workspace(temp_workspace: TempWorkspace) -> Workspace:
 
 def default_rule_rows() -> tuple[RuleRow, ...]:
     """Every Rule as a Crawl records it with no [rules.<id>] settings."""
-    return rule_rows(RulesSettings().model_dump(by_alias=True))
+    return rule_rows(configured_rules(RulesSettings()))
 
 
 def new_crawl(workspace: Workspace) -> NewCrawl:

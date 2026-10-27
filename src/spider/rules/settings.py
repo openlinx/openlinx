@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from spider.naming import APP_NAME
-from spider.rules.model import Rule
+from spider.rules.model import ConfiguredRule, Rule
 from spider.rules.registry import RULES
 from spider.workspace.tables import NAMED_TABLES
 
@@ -42,11 +42,15 @@ def _tables() -> dict[str, Any]:
     tables: dict[str, Any] = {}
     for rule in RULES:
         table = _rule_table(rule)
-        tables[rule.id.replace("-", "_")] = (
+        tables[_field_name(rule)] = (
             table,
             Field(default_factory=table, alias=rule.id, description=rule.description),
         )
     return tables
+
+
+def _field_name(rule: Rule) -> str:
+    return rule.id.replace("-", "_")
 
 
 RulesSettings = create_model(
@@ -59,3 +63,20 @@ RulesSettings = create_model(
     f"[rules.title-too-long]; {APP_NAME} rules list lists the ids and thresholds.",
     **_tables(),
 )
+
+
+def configured_rules(settings: BaseModel) -> tuple[ConfiguredRule, ...]:
+    """Every Rule of the catalogue with its table of `settings`, a RulesSettings."""
+    configured = []
+    for rule in RULES:
+        table = getattr(settings, _field_name(rule))
+        configured.append(
+            ConfiguredRule(
+                rule=rule,
+                enabled=table.enabled,
+                thresholds={
+                    threshold.name: getattr(table, threshold.name) for threshold in rule.thresholds
+                },
+            )
+        )
+    return tuple(configured)

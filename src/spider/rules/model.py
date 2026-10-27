@@ -48,6 +48,15 @@ class Rule:
         return _APPLIES_TO[self.population]
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConfiguredRule:
+    """A Rule with its [rules.<id>] settings: whether it runs, and its threshold values."""
+
+    rule: Rule
+    enabled: bool
+    thresholds: Mapping[str, int]
+
+
 def find_rule(catalogue: Sequence[Rule], rule_id: str) -> Rule:
     found = next((rule for rule in catalogue if rule.id == rule_id), None)
     if found is None:
