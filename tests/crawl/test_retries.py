@@ -3,10 +3,11 @@
 import pytest
 
 from spider.naming import SETTINGS_FILE_NAME
+from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Responses, Robots, Site, Status
 from tests.support.cli import run_cli
-from tests.support.crawling import crawled
+from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
@@ -255,3 +256,46 @@ def test_only_the_first_attempt_counts_towards_the_url_limit(
         "SELECT status_code, attempt_count FROM urls WHERE url = ?",
         [server.url("/flaky")],
     ) == [(200, 2)]
+
+
+def test_an_unresolvable_external_host_is_requested_once(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    # A blog post that links to a shop whose domain has lapsed.
+    hosts = fixture_hosts(
+        Site({"/": Page(body='<title>Blog</title><a href="http://gone.test/">Old shop</a>')}),
+        Site({}),
+    )
+
+    crawl_file = crawl_result("http://site.test/", resolver=hosts.resolver).crawl_file
+
+    assert (
+        query(crawl_file, "SELECT fetch_error FROM urls WHERE url = 'http://gone.test/'"),
+        hosts.resolver.lookups.count("gone.test"),
+    ) == ([("dns_error",)], 1)
+
+
+def test_more_than_10_retries_are_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--retries", "11")
+
+    assert (
+        result.exit_code,
+        [(error["code"], "--retries" in error["message"]) for error in result.errors()],
+    ) == (2, [("invalid_value", True)])
+
+
+def test_more_than_10_retries_in_the_settings_file_are_refused(
+    temp_workspace: TempWorkspace,
+) -> None:
+    (temp_workspace.root / SETTINGS_FILE_NAME).write_bytes(b"[crawl]\nretries = 11\n")
+
+    result = run_cli("crawl", "http://site.test/")
+
+    assert (
+        result.exit_code,
+        [
+            (error["code"], problem["key"])
+            for error in result.errors()
+            for problem in error["details"]["errors"]
+        ],
+    ) == (3, [("settings_invalid", "crawl.retries")])

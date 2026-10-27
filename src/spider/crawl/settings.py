@@ -61,8 +61,9 @@ class CrawlSettings(BaseModel):
     retries: int = Field(
         2,
         ge=0,
-        description="How many times a request without a response, or with a 5xx status, is "
-        "tried again, after 1, 2, 4, ... seconds.",
+        le=10,
+        description="How many times, 0 to 10, a request that timed out, could not connect or "
+        "got a 5xx status is tried again, after 1, 2, 4, ... seconds.",
     )
     robots_user_agent: str = Field(
         DEFAULT_ROBOTS_TOKEN,

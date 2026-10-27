@@ -19,10 +19,17 @@ class FixtureResolver(AbstractResolver):
 
     def __init__(self, servers: Mapping[str, ServerHandle]) -> None:
         self._servers = servers
+        self._lookups: list[str] = []
+
+    @property
+    def lookups(self) -> tuple[str, ...]:
+        """Each name the resolver was asked, in order, a name that failed included."""
+        return tuple(self._lookups)
 
     async def resolve(
         self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
     ) -> list[ResolveResult]:
+        self._lookups.append(host)
         server = self._servers.get(host)
         if server is None:
             # As the system resolver fails: aiohttp reports it as ClientConnectorDNSError.

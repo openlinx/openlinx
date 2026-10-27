@@ -8,6 +8,13 @@ from spider.clock import Clock
 from spider.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
 from spider.crawl.fetch.politeness import RateGate, RequestLimits
 from spider.crawl.urls import NormalizedUrl, url_host
+from spider.store.records import FetchError
+
+# The failures that may pass on a later attempt (022 design D4). A DNS, TLS or protocol error
+# is the name's or the server's answer, and the watchdog has waited past --timeout already.
+RETRIED_FAILURES: frozenset[FetchError] = frozenset(
+    {"timeout", "connection_refused", "connection_error"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,7 +68,7 @@ class Requester:
 
     async def _retried(self, url: NormalizedUrl, outcome: FetchResult | FetchFailure) -> Attempted:
         attempts = 1
-        while attempts <= self._retries and _worth_retrying(outcome):
+        while attempts <= self._retries and is_retried(outcome):
             # Outside the slots: a waiting retry holds none of the host's --concurrency.
             await self._clock.sleep(2 ** (attempts - 1))
             async with self._slots(url):
@@ -84,6 +91,8 @@ class Requester:
         return await self._fetcher.fetch(Request(url))
 
 
-def _worth_retrying(outcome: FetchResult | FetchFailure) -> bool:
-    # No response, or a server error, may pass; any other status is the server's answer.
-    return isinstance(outcome, FetchFailure) or outcome.status_code >= 500
+def is_retried(outcome: FetchResult | FetchFailure) -> bool:
+    """Whether an attempt that ended this way is tried again, while retries are left."""
+    if isinstance(outcome, FetchFailure):
+        return outcome.fetch_error in RETRIED_FAILURES
+    return outcome.status_code >= 500

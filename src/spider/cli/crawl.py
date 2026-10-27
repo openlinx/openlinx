@@ -158,8 +158,9 @@ def crawl(
         typer.Option(
             "--retries",
             min=0,
-            help="How many times a request without a response, or with a 5xx status, is "
-            "tried again, after 1, 2, 4, ... seconds.",
+            max=10,
+            help="How many times, 0 to 10, a request that timed out, could not connect or "
+            "got a 5xx status is tried again, after 1, 2, 4, ... seconds.",
         ),
         OptionMeta(setting="crawl.retries"),
     ] = 2,
