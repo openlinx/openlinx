@@ -59,7 +59,7 @@ The Seed has `crawl_depth` = 0, and every other URL the fewest Links followed fr
 - **Checked URLs never wait:** External URLs, URLs outside the Scope and Resources are Checked URLs. They start in their depth's turn but never hold the next depth back, so a slow image or a slow outbound link costs no time.
 - **A Checked URL that is HTML:** a Resource Link to in-Scope HTML is parsed when it answers, even after its depth has ended. When nothing is left to start, the Crawl waits for every Checked URL and reads the queue again from the smallest depth, so what such a URL found is still crawled. A URL it reaches that is still `queued`, or in flight, takes the shorter depth, and the URLs found on a URL are recorded one deeper than its depth as the crawl file holds it; a URL already fetched keeps its depth.
 
-With `--max-depth <n>`, a URL deeper than `n` is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_depth`. Resources of followed Pages are the exception, one deeper than `n` and no deeper, so with `--max-depth 0` the Seed's images are still checked. A URL that a Page reaches through a Resource Link is a Resource, even when the Page also hyperlinks it; one that another Page hyperlinked first stays a followed URL. There is no depth limit by default.
+With `--max-depth <n>`, a URL deeper than `n` is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_depth`. Resources of followed Pages are the exception, one deeper than `n` and no deeper, so with `--max-depth 0` the Seed's images are still checked. A URL that a Page reaches through a Resource Link is a Resource, even when that Page or another Page at the same depth or above hyperlinked it first, while it was not yet requested: an image that a gallery hyperlinks is still checked beyond the limit. There is no depth limit by default.
 
 The rows of `spider crawl site.test --max-depth 1`, for a Seed that links to `/a` and holds `/logo.png`, where `/a` links to `/b` and holds `/a.png`:
 
@@ -384,6 +384,7 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 
 - A robots.txt request goes through the same per-host limits as a URL's, but it is not recorded as a URL and does not count toward `--max-urls`.
 - A redirected robots.txt is followed for up to 5 hops; a longer chain counts as missing.
+- A redirect hop that gets no HTTP response counts as missing too, since the origin itself answered: every URL is allowed, the origin's row keeps the redirect's status and the hop's error, and an Internal origin gives a `robots_redirect_failed` warning.
 - Only its first 512,000 bytes are parsed, without a line that this limit cuts, decoded as UTF-8 with replacement; a leading byte order mark is dropped. So a cut `Disallow: /private` never becomes the shorter `Disallow: /priv`.
 - `Crawl-delay` is recorded, not applied; `--rate` spaces requests instead (see [Requests in flight](#requests-in-flight)).
 
@@ -392,7 +393,7 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 | robots.txt response | `origins.robots_state` | The origin's URLs |
 |---|---|---|
 | 2xx | `ok` | Requested, unless its rules disallow them for the token: a disallowed URL is `skipped` with `skip_reason` = `blocked_by_robots_txt`. |
-| 4xx other than 429, or more than 5 redirects | `missing` | All requested. |
+| 4xx other than 429, a final 3xx such as 304, more than 5 redirects, or a redirect hop without a response | `missing` | All requested. |
 | 5xx, 429, or a status outside 200–599, after its retries | `unreachable` | None requested: each is `skipped` with `skip_reason` = `robots_unreachable`. An Internal origin gives a `robots_unreachable` warning, once per host, whose hint names `--ignore-robots`. |
 | No HTTP response, after its retries | `unreachable` | None requested: each is `error`, with the `fetch_error` of the robots.txt request, such as `dns_error`, and a `fetch_error_message` that names that request. |
 
@@ -452,7 +453,7 @@ The Crawl reads Links from every response it parses: an in-Scope 2xx HTML respon
 - `<noscript>` is read as a browser that runs scripts reads it: as text, up to the next `</noscript>`, which never ends `<head>`, so a tracking pixel in a head `<noscript>` leaves the canonical, robots and hreflang declarations after it in `<head>`. Inside it, a `<link>` or `<meta>` gives no Link, and a `<title>`, `<base>` or robots `<meta>` is not read, as such a browser never sees them; the other elements there, such as `<a>` and `<img>`, give their Links, in document order, since a crawler without rendering finds every URL the raw HTML holds. That includes a pixel in a head `<noscript>`.
 - Inside a `<template>`, nothing gives a Link: its content is markup that scripts copy into the Page, often with placeholder URLs such as `{{ item.url }}`.
 
-The same list of types also holds, from v0.1, the types of later releases: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap) in v0.2, and `javascript_redirect` in v1.1, with JavaScript rendering. A URL's `discovered_via` is the type of the Link it was first found through, or `seed`, and `found_on_url_id` points to the URL whose response revealed it. A Page that links to a URL several times records it once. When Links that are not followed reach a URL first and a followed Link reaches it later, its `discovered_via`, `found_on_url_id` and `crawl_depth` come from the first Page that follows it, where a Resource Link to it comes before a followed one, so its depth and where it was found tell one story.
+The same list of types also holds, from v0.1, the types of later releases: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap) in v0.2, and `javascript_redirect` in v1.1, with JavaScript rendering. A URL's `discovered_via` is the type of the Link it was found through, or `seed`, and `found_on_url_id` points to the URL whose response gave that Link: the first Link that reached it, unless a followed Link or a Resource Link reached it later, as below. A Page that links to a URL several times records it once. When Links that are not followed reach a URL first and a followed Link reaches it later, its `discovered_via`, `found_on_url_id` and `crawl_depth` come from the first Page that follows it, where a Resource Link to it comes before a followed one, so its depth and where it was found tell one story.
 
 HTTP redirects, HSTS, fonts in CSS, SWF and PDF are not Link types: a redirect is the redirecting URL's `redirect_url_id` (see [Redirects](#redirects)), and a PDF is a content type.
 

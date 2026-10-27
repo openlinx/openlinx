@@ -1,7 +1,7 @@
 """A Seed's Redirect Chain, and the Scope while it is open (022-add-fetch-policy D3)."""
 
 from spider.crawl.engine.context import CrawlContext
-from spider.crawl.engine.crawl_warnings import warn_of_seed_redirected_out_of_scope
+from spider.crawl.engine.crawl_warnings import seed_redirected_out_of_scope
 from spider.crawl.pages.preparation import PageSettings
 from spider.crawl.scope import ScopeDecision, ScopeRules
 from spider.crawl.urls import NormalizedUrl
@@ -60,7 +60,7 @@ async def close_seed_chain(context: CrawlContext, chain: SeedChain, *, responded
     )
     final_url = urls[-1][1]
     if chain.scope.is_out_of_scope(final_url):
-        warn_of_seed_redirected_out_of_scope(context, chain.seed, final_url)
+        context.reporter.warn(seed_redirected_out_of_scope(chain.seed, final_url))
     widened, decisions = chain.close(urls, responded=responded)
     await context.writer.run_async(reclassify_urls(decisions))
     if widened is not None:

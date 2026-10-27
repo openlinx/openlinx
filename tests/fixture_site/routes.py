@@ -25,6 +25,8 @@ class RouteOptions:
     stall_body: bool = False
     # Send the headers, then the body one byte every 100 ms, never ending.
     trickle: bool = False
+    # Answer only once the site has received a request for this path, then after `delay`.
+    after: str | None = None
 
 
 @dataclass(frozen=True)

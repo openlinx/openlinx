@@ -1,6 +1,13 @@
 """The Crawl's warning log (020-add-crawl-core D10; seams 2 and 3)."""
 
+from datetime import UTC, datetime
+
+from spider.crawl.engine.crawl_warnings import handler_failure
+from spider.crawl.engine.hooks import UrlResult
+from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
+from spider.crawl.engine.stop import StopSignal
 from spider.crawl.engine.warning_log import WarningLog
+from spider.crawl.urls import NormalizedUrl
 from spider.output.codes import (
     DECLARED,
     MAX_URLS_REACHED,
@@ -9,10 +16,15 @@ from spider.output.codes import (
 )
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Collected
+from spider.store.records import FetchedUrl, LinkType, NewUrl, Provenance, QueuedUrl, SkippedUrl
+from spider.store.urls import queued_batch, record_fetched, record_seed, record_skipped
+from spider.store.writer import CrawlWriter
 from tests.fixture_site.hosts import StartHosts, StartNamedHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status
+from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
+from tests.support.crawls import create_any_crawl, query
 from tests.support.workspace import TempWorkspace
 
 
@@ -99,12 +111,23 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
             "other.test": Site({"/": Page(body="<title>New owner</title>")}),
         }
     )
+    robots_moved = fixture_hosts(
+        Site(
+            routes={
+                "/robots.txt": Redirect("http://nowhere.test/robots.txt"),
+                "/": Page(body='<a href="/a">A</a>'),
+                "/a": Page(body="<p>A</p>"),
+            }
+        ),
+        Site(routes={}),
+    )
 
     results = [
         crawl_result(down.url("/"), ignore_robots=True),
         crawl_result(closed.url("/")),
         crawl_result("http://www.site.test/", resolver=www.resolver),
         crawl_result("http://shop.test/", resolver=moved.resolver),
+        crawl_result("http://site.test/", resolver=robots_moved.resolver),
     ]
 
     seen = sorted(
@@ -118,6 +141,7 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
     assert (seen, sorted(_ONCE_PER)) == (
         [
             ("possible_blocking", True),
+            ("robots_redirect_failed", True),
             ("robots_unreachable", True),
             ("seed_base_mismatch", True),
             ("seed_blocked_by_robots_txt", True),
@@ -125,9 +149,88 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
         ],
         [
             "possible_blocking",
+            "robots_redirect_failed",
             "robots_unreachable",
             "seed_base_mismatch",
             "seed_blocked_by_robots_txt",
             "seed_redirected_out_of_scope",
         ],
     )
+
+
+def _fetched(url_id: int, provenance: Provenance, *discovered: NewUrl) -> FetchedUrl:
+    return FetchedUrl(
+        url_id=url_id,
+        provenance=provenance,
+        status_code=200,
+        content_type="text/html",
+        fetched_at=datetime(2026, 10, 27, tzinfo=UTC),
+        response_time_ms=1,
+        parsed=True,
+        attempt_count=1,
+        redirect=None,
+        discovered=discovered,
+    )
+
+
+def _new(url: str, discovered_via: LinkType = "hyperlink") -> NewUrl:
+    return NewUrl(
+        url=NormalizedUrl(url), discovered_via=discovered_via, is_internal=True, in_scope=True
+    )
+
+
+def _skipped(queued: QueuedUrl, failure: Diagnostic) -> Recorded:
+    """A URL that robots.txt blocks, decided on its queued row, whose handler failed."""
+    result = UrlResult(
+        url_id=queued.id,
+        url=queued.url,
+        crawl_depth=queued.crawl_depth,
+        discovered_via=queued.discovered_via,
+        found_on_url_id=queued.found_on_url_id,
+        is_internal=True,
+        in_scope=True,
+        fetch_state="skipped",
+        skip_reason="blocked_by_robots_txt",
+        blocked_by_robots_txt=True,
+    )
+    skipped = SkippedUrl(
+        url_id=queued.id,
+        skip_reason="blocked_by_robots_txt",
+        provenance=provenance_of(result),
+        blocked_by_robots_txt=True,
+    )
+    return Recorded(result, record_skipped(skipped), failure)
+
+
+async def test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_decided_again(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+    log = WarningLog(Collected())
+    seed = NormalizedUrl("http://site.test/")
+    page_at = Provenance(crawl_depth=0, discovered_via="seed", found_on_url_id=None)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        seed_id = writer.run(record_seed(seed, is_internal=True, in_scope=True))
+        page, late = _new("http://site.test/a"), _new("http://site.test/late.html", "image")
+        writer.run(record_fetched(_fetched(seed_id, page_at, page, late)))
+        a_at = Provenance(crawl_depth=1, discovered_via="hyperlink", found_on_url_id=seed_id)
+        writer.run(record_fetched(_fetched(seed_id + 1, a_at, _new("http://site.test/x"))))
+        (dispatched,) = writer.run(queued_batch(2, 0, 10, 10))
+        late_at = Provenance(crawl_depth=1, discovered_via="image", found_on_url_id=seed_id)
+        # The late check's image Link raises /x while its skip is on its way.
+        image = _new("http://site.test/x", "image")
+        writer.run(record_fetched(_fetched(seed_id + 2, late_at, image)))
+        outcomes = Outcomes(writer, log, StopSignal())
+        failure = handler_failure(dispatched.url, [("pages", ValueError("no title"))])
+        await outcomes.submit(_skipped(dispatched, failure))
+        await outcomes.settled()
+        # Decided again on its raised row, its handlers fail again.
+        (again,) = writer.run(queued_batch(2, 0, 10, 10))
+        await outcomes.submit(_skipped(again, failure))
+        await outcomes.settled()
+
+    assert (
+        [(warning.code, warning.details["count"]) for warning in log.warnings],
+        query(crawl.path, "SELECT fetch_state, discovered_via FROM urls WHERE id = ?", [again.id]),
+    ) == ([("handler_failed", 1)], [("skipped", "image")])

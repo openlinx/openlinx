@@ -1,10 +1,18 @@
-"""`FakeClock` and `SystemClock` (designs D6 and D8 of 000-scaffold-project)."""
+"""`FakeClock` and `SystemClock` (designs D6 and D8 of 000-scaffold-project, D7 of
+020-add-crawl-core)."""
 
+import asyncio
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import Connection
+
 from spider.clock import Clock, SystemClock
+from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
+from tests.support.crawls import create_any_crawl
+from tests.support.workspace import TempWorkspace
 
 
 def test_fake_clock_starts_at_new_year_2026_utc() -> None:
@@ -53,3 +61,38 @@ async def test_system_clock_sleep_waits_in_real_time() -> None:
 
     # Loose bound: on Windows a timer can fire up to ~16 ms early.
     assert clock.monotonic() - before >= 0.03
+
+
+async def test_each_sleep_wakes_at_its_own_time() -> None:
+    clock = FakeClock()
+    woke: list[tuple[str, float]] = []
+
+    async def nap(name: str, seconds: float) -> None:
+        await clock.sleep(seconds)
+        woke.append((name, clock.monotonic()))
+
+    await asyncio.gather(nap("long", 1.0), nap("short", 0.5), nap("also short", 0.5))
+
+    assert woke == [("short", 0.5), ("also short", 0.5), ("long", 1.0)]
+
+
+async def test_the_clock_does_not_jump_while_the_writer_runs_a_unit_the_loop_waits_for(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+    clock = FakeClock()
+    release = threading.Event()
+
+    def slow_read(connection: Connection) -> float:
+        # A unit that takes real time on the writer's thread, as a large one does.
+        release.wait(5)
+        return clock.monotonic()
+
+    with CrawlWriter(crawl.path, clock) as writer:
+        # A deadline that is due once the loop has nothing else to do.
+        pending = asyncio.ensure_future(clock.sleep(1))
+        threading.Timer(0.2, release.set).start()
+        seen = await writer.run_async(slow_read)
+        await pending
+
+    assert (seen, clock.monotonic()) == (0.0, 1.0)

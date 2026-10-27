@@ -16,6 +16,7 @@ from spider.store.records import (
     ErroredUrl,
     FetchedUrl,
     NewUrl,
+    Provenance,
     QueuedUrl,
     Reclassified,
     Redirect,
@@ -64,9 +65,23 @@ def _new(
     )
 
 
-def _fetched(url_id: int, *discovered: NewUrl) -> FetchedUrl:
+def _as_dispatched(writer: CrawlWriter, url_id: int) -> Provenance:
+    """The URL's provenance as its dispatch reads it from the queued row."""
+
+    def read(connection: Connection) -> Provenance:
+        depth, via, found_on = connection.execute(
+            text("SELECT crawl_depth, discovered_via, found_on_url_id FROM urls WHERE id = :id"),
+            {"id": url_id},
+        ).one()
+        return Provenance(crawl_depth=depth, discovered_via=via, found_on_url_id=found_on)
+
+    return writer.run(read)
+
+
+def _fetched(writer: CrawlWriter, url_id: int, *discovered: NewUrl) -> FetchedUrl:
     return FetchedUrl(
         url_id=url_id,
+        provenance=_as_dispatched(writer, url_id),
         status_code=200,
         content_type="text/html",
         fetched_at=datetime(2026, 10, 14, 9, 0, tzinfo=UTC),
@@ -108,6 +123,9 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             record_fetched(
                 FetchedUrl(
                     url_id=seed_id,
+                    provenance=Provenance(
+                        crawl_depth=0, discovered_via="seed", found_on_url_id=None
+                    ),
                     status_code=200,
                     content_type="text/html",
                     fetched_at=datetime(2026, 9, 27, 14, 3, 13, tzinfo=UTC),
@@ -121,7 +139,13 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             )
         )
         writer.run(
-            record_skipped(SkippedUrl(url_id=seed_id + 2, skip_reason="excluded", crawl_depth=1))
+            record_skipped(
+                SkippedUrl(
+                    url_id=seed_id + 2,
+                    skip_reason="excluded",
+                    provenance=_as_dispatched(writer, seed_id + 2),
+                )
+            )
         )
         deeper = writer.run(next_depth(0))
         second = writer.run(queued_batch(1, 0, 1, 10))
@@ -129,6 +153,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             record_error(
                 ErroredUrl(
                     url_id=seed_id + 1,
+                    provenance=_as_dispatched(writer, seed_id + 1),
                     fetch_error="connection_refused",
                     fetch_error_message="ConnectionRefusedError: refused",
                     fetched_at=datetime(2026, 9, 27, 14, 3, 14, tzinfo=UTC),
@@ -138,7 +163,11 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
         )
         writer.run(
             record_unwritten(
-                seed_id + 3, "ValueError: no row", blocked_by_robots_txt=False, attempt_count=1
+                seed_id + 3,
+                "ValueError: no row",
+                blocked_by_robots_txt=False,
+                attempt_count=1,
+                provenance=_as_dispatched(writer, seed_id + 3),
             )
         )
         counts = writer.run(url_counts())
@@ -232,6 +261,7 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
         writer.run(
             record_fetched(
                 _fetched(
+                    writer,
                     seed_id,
                     _new(
                         "https://site.test/amp",
@@ -246,12 +276,19 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
             )
         )
         writer.run(
-            record_skipped(SkippedUrl(url_id=seed_id + 4, skip_reason="excluded", crawl_depth=1))
+            record_skipped(
+                SkippedUrl(
+                    url_id=seed_id + 4,
+                    skip_reason="excluded",
+                    provenance=_as_dispatched(writer, seed_id + 4),
+                )
+            )
         )
         about_id = seed_id + 5
         writer.run(
             record_fetched(
                 _fetched(
+                    writer,
                     about_id,
                     _new("https://site.test/amp"),
                     _new("https://site.test/p", discovered_via="meta_refresh"),
@@ -280,14 +317,17 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
 _TARGET = "https://site.test/t"
 
 
-def _target_at_depth_three(writer: CrawlWriter) -> dict[str, int]:
-    """/ links to /1 and /s, /1 to /2 and /s2, /2 to /t and /s3: /t is queued at depth 3, and
-    /s, /s2 and /s3, at depths 1, 2 and 3, can link to it."""
+def _target_at_depth_three(writer: CrawlWriter, via: DiscoveredVia = "hyperlink") -> dict[str, int]:
+    """/ links to /1 and /s, /1 to /2 and /s2, /2 to /t (through `via`) and /s3: /t is queued
+    at depth 3, and /s, /s2 and /s3, at depths 1, 2 and 3, can link to it."""
     seed_id = writer.run(record_seed(_url("https://site.test/"), is_internal=True, in_scope=True))
     ids = {"/": seed_id}
     for page, links in (("/", ("/1", "/s")), ("/1", ("/2", "/s2")), ("/2", ("/t", "/s3"))):
-        news = tuple(_new(f"https://site.test{link}") for link in links)
-        writer.run(record_fetched(_fetched(ids[page], *news)))
+        news = tuple(
+            _new(f"https://site.test{link}", discovered_via=via if link == "/t" else "hyperlink")
+            for link in links
+        )
+        writer.run(record_fetched(_fetched(writer, ids[page], *news)))
         ids |= {link: seed_id + len(ids) + n for n, link in enumerate(links)}
     return ids
 
@@ -325,11 +365,15 @@ def test_a_followed_link_to_a_recorded_url_changes_it_only_on_a_shorter_path_it_
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         ids = _target_at_depth_three(writer)
         if state == "fetched":
-            writer.run(record_fetched(_fetched(ids["/t"])))
+            writer.run(record_fetched(_fetched(writer, ids["/t"])))
         elif state != "queued":
-            skipped = SkippedUrl(url_id=ids["/t"], skip_reason=state, crawl_depth=3)
+            skipped = SkippedUrl(
+                url_id=ids["/t"],
+                skip_reason=state,
+                provenance=_as_dispatched(writer, ids["/t"]),
+            )
             writer.run(record_skipped(skipped))
-        writer.run(record_fetched(_fetched(ids[page], _new(_TARGET))))
+        writer.run(record_fetched(_fetched(writer, ids[page], _new(_TARGET))))
         replay_now(writer)
 
     found_on = expected[1]
@@ -344,11 +388,14 @@ def test_a_skip_decided_on_a_depth_lowered_meanwhile_leaves_the_url_queued_witho
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         writer.run(executing(text("CREATE TABLE test_notes (url_id INTEGER)")))
         ids = _target_at_depth_three(writer)
-        writer.run(record_fetched(_fetched(ids["/s"], _new(_TARGET))))
+        writer.run(record_fetched(_fetched(writer, ids["/s"], _new(_TARGET))))
         skipped = SkippedUrl(
             url_id=ids["/t"],
             skip_reason="max_depth",
-            crawl_depth=3,
+            # As dispatched, before /s lowered it to 2.
+            provenance=Provenance(
+                crawl_depth=3, discovered_via="hyperlink", found_on_url_id=ids["/2"]
+            ),
             rows=(HandlerRows(_write_note, (Note(ids["/t"]),)),),
         )
         writer.run(record_skipped(skipped))
@@ -358,6 +405,126 @@ def test_a_skip_decided_on_a_depth_lowered_meanwhile_leaves_the_url_queued_witho
         [(2, "https://site.test/s", "queued", None)],
         [],
     )
+
+
+def _raised(crawl_file: Any) -> list[tuple[object, ...]]:
+    return query(
+        crawl_file,
+        "SELECT target.crawl_depth, page.url, target.fetch_state, target.discovered_via "
+        "FROM urls AS target JOIN urls AS page ON page.id = target.found_on_url_id "
+        "WHERE target.url = ?",
+        [_TARGET],
+    )
+
+
+@pytest.mark.parametrize(
+    ("first", "state", "page", "expected"),
+    [
+        # An image Link at the same depth raises a queued URL, and at a shorter one too.
+        ("hyperlink", "queued", "/s2", (3, "/s2", "queued", "image")),
+        ("hyperlink", "queued", "/s", (2, "/s", "queued", "image")),
+        # A deeper one changes nothing, so the depth and the Page never disagree.
+        ("hyperlink", "queued", "/s3", (3, "/2", "queued", "hyperlink")),
+        # A URL skipped beyond the limit is queued again as the Resource.
+        ("hyperlink", "max_depth", "/s2", (3, "/s2", "queued", "image")),
+        # A fetched URL keeps how it was fetched, and a Resource its first Page.
+        ("hyperlink", "fetched", "/s2", (3, "/2", "fetched", "hyperlink")),
+        ("css", "queued", "/s2", (3, "/2", "queued", "css")),
+    ],
+)
+def test_a_resource_link_raises_a_url_that_a_link_of_another_type_reached_first(
+    temp_workspace: TempWorkspace,
+    first: DiscoveredVia,
+    state: Literal["queued", "fetched", "max_depth"],
+    page: str,
+    expected: tuple[object, ...],
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        ids = _target_at_depth_three(writer, first)
+        if state == "fetched":
+            writer.run(record_fetched(_fetched(writer, ids["/t"])))
+        elif state == "max_depth":
+            provenance = _as_dispatched(writer, ids["/t"])
+            skipped = SkippedUrl(url_id=ids["/t"], skip_reason=state, provenance=provenance)
+            writer.run(record_skipped(skipped))
+        image = _new(_TARGET, discovered_via="image")
+        writer.run(record_fetched(_fetched(writer, ids[page], image)))
+        replay_now(writer)
+
+    depth, found_on, *rest = expected
+    assert _raised(crawl.path) == [(depth, f"https://site.test{found_on}", *rest)]
+
+
+@pytest.mark.parametrize("outcome", ["fetched", "error", "unwritten"])
+@pytest.mark.parametrize(
+    ("page", "expected"),
+    [
+        # A raise at the URL's own depth: the outcome writes back what its dispatch acted on.
+        ("/s2", (3, "/2", "hyperlink")),
+        # A raise that also lowered it: the late Link's provenance stays, as its depth does.
+        ("/s", (2, "/s", "image")),
+    ],
+)
+def test_an_outcome_after_a_raise_in_flight_keeps_the_provenance_its_depth_agrees_with(
+    temp_workspace: TempWorkspace,
+    outcome: Literal["fetched", "error", "unwritten"],
+    page: str,
+    expected: tuple[object, ...],
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        ids = _target_at_depth_three(writer)
+        dispatched = _as_dispatched(writer, ids["/t"])
+        image = _new(_TARGET, discovered_via="image")
+        writer.run(record_fetched(_fetched(writer, ids[page], image)))
+        if outcome == "fetched":
+            writer.run(record_fetched(replace(_fetched(writer, ids["/t"]), provenance=dispatched)))
+        elif outcome == "error":
+            errored = ErroredUrl(
+                url_id=ids["/t"],
+                provenance=dispatched,
+                fetch_error="connection_refused",
+                fetch_error_message="ConnectionRefusedError: refused",
+                fetched_at=datetime(2026, 10, 27, tzinfo=UTC),
+                attempt_count=1,
+            )
+            writer.run(record_error(errored))
+        else:
+            message = "ValueError: no row"
+            unit = record_unwritten(
+                ids["/t"],
+                message,
+                blocked_by_robots_txt=None,
+                attempt_count=1,
+                provenance=dispatched,
+            )
+            writer.run(unit)
+        replay_now(writer)
+
+    depth, found_on, via = expected
+    state = "fetched" if outcome == "fetched" else "error"
+    assert _raised(crawl.path) == [(depth, f"https://site.test{found_on}", state, via)]
+
+
+def test_a_skip_that_a_resource_link_overtook_leaves_the_url_queued(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        ids = _target_at_depth_three(writer)
+        dispatched = _as_dispatched(writer, ids["/t"])
+        # The image Link lands between the skip's dispatch and its unit.
+        image = _new(_TARGET, discovered_via="image")
+        writer.run(record_fetched(_fetched(writer, ids["/s2"], image)))
+        skipped = SkippedUrl(url_id=ids["/t"], skip_reason="max_depth", provenance=dispatched)
+        writer.run(record_skipped(skipped))
+        replay_now(writer)
+
+    assert _raised(crawl.path) == [(3, "https://site.test/s2", "queued", "image")]
 
 
 def test_each_reason_of_a_skip_at_discovery_is_a_skip_reason() -> None:
@@ -394,9 +561,9 @@ def test_the_frontier_read_uses_its_index(temp_workspace: TempWorkspace) -> None
     assert ("USING INDEX urls_crawl_depth_id" in plan, "TEMP B-TREE" in plan) == (True, False), plan
 
 
-def _redirected(url_id: int, target: str, max_redirects: int) -> FetchedUrl:
+def _redirected(writer: CrawlWriter, url_id: int, target: str, max_redirects: int) -> FetchedUrl:
     return replace(
-        _fetched(url_id),
+        _fetched(writer, url_id),
         status_code=301,
         content_type=None,
         parsed=False,
@@ -415,17 +582,19 @@ def test_the_units_of_redirects_run_again_the_same(temp_workspace: TempWorkspace
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         seed_id = writer.run(record_seed(_url(f"{site}/"), is_internal=True, in_scope=True))
-        writer.run(record_fetched(_fetched(seed_id, _new(f"{site}/old"), _new(f"{site}/cart"))))
+        writer.run(
+            record_fetched(_fetched(writer, seed_id, _new(f"{site}/old"), _new(f"{site}/cart")))
+        )
         ids = {
             queued.url.removeprefix(site): queued.id
             for queued in writer.run(queued_batch(1, 0, 10, 10))
         }
-        writer.run(record_fetched(_redirected(ids["/old"], f"{site}/mid", 1)))
+        writer.run(record_fetched(_redirected(writer, ids["/old"], f"{site}/mid", 1)))
         mid = writer.run(queued_batch(1, ids["/cart"], 10, 1))
-        writer.run(record_fetched(_redirected(mid[0].id, f"{site}/new", 1)))
-        writer.run(record_fetched(_redirected(ids["/cart"], f"{site}/login", 10)))
+        writer.run(record_fetched(_redirected(writer, mid[0].id, f"{site}/new", 1)))
+        writer.run(record_fetched(_redirected(writer, ids["/cart"], f"{site}/login", 10)))
         login = writer.run(queued_batch(1, mid[0].id, 10, 10))
-        writer.run(record_fetched(_redirected(login[0].id, f"{site}/cart", 10)))
+        writer.run(record_fetched(_redirected(writer, login[0].id, f"{site}/cart", 10)))
         writer.run(
             reclassify_urls([Reclassified(url_id=ids["/old"], is_internal=False, in_scope=False)])
         )
@@ -454,14 +623,17 @@ def test_a_redirect_into_a_loop_that_does_not_run_through_it_ends_its_walk_at_on
     site = "https://site.test"
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         seed_id = writer.run(record_seed(_url(f"{site}/"), is_internal=True, in_scope=True))
-        writer.run(record_fetched(_fetched(seed_id, _new(f"{site}/cart"), _new(f"{site}/x"))))
+        writer.run(
+            record_fetched(_fetched(writer, seed_id, _new(f"{site}/cart"), _new(f"{site}/x")))
+        )
         ids = {
             queued.url.removeprefix(site): queued.id
             for queued in writer.run(queued_batch(1, 0, 10, 50))
         }
-        writer.run(record_fetched(_redirected(ids["/cart"], f"{site}/login", 50)))
+        writer.run(record_fetched(_redirected(writer, ids["/cart"], f"{site}/login", 50)))
         (login,) = writer.run(queued_batch(1, ids["/x"], 10, 50))
-        writer.run(record_fetched(_redirected(login.id, f"{site}/cart", 50)))
+        writer.run(record_fetched(_redirected(writer, login.id, f"{site}/cart", 50)))
+        x_to_cart = _redirected(writer, ids["/x"], f"{site}/cart", 50)
     walks: list[str] = []
 
     def keep(_: Any, __: Any, sql: str, *args: Any) -> None:
@@ -470,7 +642,7 @@ def test_a_redirect_into_a_loop_that_does_not_run_through_it_ends_its_walk_at_on
 
     with opening(crawl.path, role="write") as engine, engine.begin() as connection:
         event.listen(connection, "before_cursor_execute", keep)
-        record_fetched(_redirected(ids["/x"], f"{site}/cart", 50))(connection)
+        record_fetched(x_to_cart)(connection)
 
     assert (
         len(walks),

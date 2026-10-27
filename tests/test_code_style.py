@@ -1035,3 +1035,78 @@ def test_an_insert_into_urls_outside_insert_urls_is_named() -> None:
         "spider/store/urls.py:6 runs _INSERT_URL outside insert_urls",
         "spider/store/links.py inserts into urls",
     ]
+
+
+# Work the loop waits for on another thread holds the Clock, so a test's virtual clock never
+# jumps meanwhile (020-add-crawl-core D7).
+HANDOFFS = {"to_thread", "run_in_executor", "wrap_future"}
+# A submitted unit's Future resolves at a commit, after BATCH_SIZE units or a second of clock
+# time: a hold would wait for time that cannot pass.
+WAITS_FOR_CLOCK_TIME = {("spider/store/writer.py", "submit_async")}
+
+
+def _held_lines(tree: ast.AST) -> set[int]:
+    held: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.With | ast.AsyncWith) and any(
+            isinstance(item.context_expr, ast.Call)
+            and isinstance(item.context_expr.func, ast.Attribute)
+            and item.context_expr.func.attr == "off_loop"
+            for item in node.items
+        ):
+            held.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+    return held
+
+
+def handoff_violations(sources: Mapping[str, str]) -> list[str]:
+    """Hand-offs to another thread or process outside the Clock's hold, by module path."""
+    found: list[str] = []
+    for module, source in sources.items():
+        tree = ast.parse(source)
+        held = _held_lines(tree)
+        for function in ast.walk(tree):
+            if not isinstance(function, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if (module, function.name) in WAITS_FOR_CLOCK_TIME:
+                continue
+            for node in ast.walk(function):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr in HANDOFFS
+                    and node.lineno not in held
+                ):
+                    found.append(
+                        f"{module}:{node.lineno} hands off outside clock.off_loop(): "
+                        f"{ast.unparse(node.func)}"
+                    )
+    return sorted(set(found))
+
+
+def test_every_hand_off_to_another_thread_holds_the_clock() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert handoff_violations(sources) == []
+
+
+def test_a_hand_off_outside_the_hold_is_named() -> None:
+    sources = {
+        "spider/services/crawling.py": "async def open():\n"
+        "    writer = await asyncio.to_thread(CrawlWriter, path)\n"
+        "    with clock.off_loop():\n"
+        "        await asyncio.to_thread(writer.close)\n"
+        "    await loop.run_in_executor(None, work)\n",
+        "spider/store/writer.py": "async def submit_async(self):\n"
+        "    return asyncio.wrap_future(done)\n"
+        "async def run_async(self):\n"
+        "    return await asyncio.wrap_future(done)\n",
+    }
+
+    assert handoff_violations(sources) == [
+        "spider/services/crawling.py:2 hands off outside clock.off_loop(): asyncio.to_thread",
+        "spider/services/crawling.py:5 hands off outside clock.off_loop(): loop.run_in_executor",
+        "spider/store/writer.py:4 hands off outside clock.off_loop(): asyncio.wrap_future",
+    ]

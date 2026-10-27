@@ -227,6 +227,15 @@ ROBOTS_UNREACHABLE = _declare(
     "details.status_code say which.",
     once_per="host",
 )
+ROBOTS_REDIRECT_FAILED = _declare(
+    "robots_redirect_failed",
+    "warning",
+    None,
+    "The robots.txt of an Internal origin redirected to a URL that got no HTTP response, so "
+    "robots.txt counts as missing and every URL of the origin is allowed; details.origin, "
+    "details.host, details.target and details.fetch_error say which.",
+    once_per="origin",
+)
 POSSIBLE_BLOCKING = _declare(
     "possible_blocking",
     "warning",

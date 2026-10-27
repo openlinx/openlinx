@@ -110,12 +110,13 @@ class CrawlWriter:
     async def run_async[T](self, unit: Callable[[Connection], T]) -> T:
         done: Future[T] = Future()
         await self._submit_without_blocking(_Job(unit, done))
-        waiting = asyncio.wrap_future(done)
-        while True:
-            try:
-                return await asyncio.wait_for(asyncio.shield(waiting), ALIVE_CHECK_SECONDS)
-            except TimeoutError:
-                self._check_alive(done)
+        with self._clock.off_loop():
+            waiting = asyncio.wrap_future(done)
+            while True:
+                try:
+                    return await asyncio.wait_for(asyncio.shield(waiting), ALIVE_CHECK_SECONDS)
+                except TimeoutError:
+                    self._check_alive(done)
 
     def submit[T](self, unit: Callable[[Connection], T]) -> Future[T]:
         done: Future[T] = _uncancellable()
@@ -125,8 +126,17 @@ class CrawlWriter:
     async def submit_async[T](self, unit: Callable[[Connection], T]) -> asyncio.Future[T]:
         done: Future[T] = _uncancellable()
         await self._submit_without_blocking(_Job(unit, done, submitted=True))
-        # Bound to this loop, so its callbacks run here and never on the writer thread.
+        # Bound to this loop, so its callbacks run here and never on the writer thread. Not
+        # held: the unit commits after BATCH_SIZE units or a second of clock time.
         return asyncio.wrap_future(done)
+
+    async def flush_async(self) -> None:
+        with self._clock.off_loop():
+            await asyncio.to_thread(self.flush)
+
+    async def close_async(self) -> None:
+        with self._clock.off_loop():
+            await asyncio.to_thread(self.close)
 
     def flush(self) -> None:
         done: Future[None] = Future()
@@ -189,8 +199,10 @@ class CrawlWriter:
         try:
             self._submit(job, block=False)
         except Full:
-            # Waits for room in the window or the queue without blocking the event loop.
-            await asyncio.to_thread(self._submit, job)
+            # Waits for room in the window or the queue without blocking the event loop; the
+            # BATCH_SIZE-th unit commits without clock time, so room comes without it.
+            with self._clock.off_loop():
+                await asyncio.to_thread(self._submit, job)
 
     def _refuse_own_thread(self) -> None:
         # A unit that waited for its own writer would wait forever.

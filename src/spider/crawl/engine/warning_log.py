@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import replace
-from typing import Any, Protocol
+from typing import Any
 
 from spider.crawl.urls import NormalizedUrl
 from spider.output.codes import DECLARED
@@ -13,16 +13,6 @@ from spider.output.reporter import Reporter
 _ONCE_PER: Mapping[str, str] = {
     code.code: code.once_per for code in DECLARED if code.once_per is not None
 }
-
-
-class CrawlReporter(Protocol):
-    """A Reporter that also counts the counted warnings of D16."""
-
-    def warn(self, diagnostic: Diagnostic) -> None: ...
-
-    def event(self, name: str, **data: Any) -> None: ...
-
-    def count(self, diagnostic: Diagnostic, url: NormalizedUrl) -> None: ...
 
 
 class WarningLog:

@@ -305,7 +305,8 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
             parse_workers=executor.workers,
         )
         # Opening and closing the writer block, so they run off the event loop.
-        writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
+        with clock.off_loop():
+            writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
         try:
             async with crawl.fetchers(plan.fetch_policy, clock) as fetcher:
                 yield CrawlContext(
@@ -324,9 +325,9 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
         except BaseException:
             # An ended writer raises why it ended once more; the error raised says it first.
             with suppress(CrawlWriterClosedError):
-                await asyncio.to_thread(writer.close)
+                await writer.close_async()
             raise
-        await asyncio.to_thread(writer.close)
+        await writer.close_async()
     finally:
         # 026's pool shuts its workers down here, however the Crawl ended.
         await executor.close()

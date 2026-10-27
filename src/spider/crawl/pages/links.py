@@ -1,12 +1,12 @@
 """The link extractor (020-add-crawl-core D5)."""
 
 import re
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Container, Iterator, Mapping
 
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.following import skip_reason
-from spider.crawl.pages.decoding import decode_html, query_codec
+from spider.crawl.pages.decoding import query_codec
 from spider.crawl.pages.refresh import refresh_url
 from spider.crawl.references import C0_OR_SPACE, DiscoveredLink, resolve_base, resolve_reference
 from spider.crawl.urls import NormalizedUrl
@@ -44,7 +44,17 @@ _FOREIGN_ROOTS = frozenset({"svg", "math"})
 _INTEGRATION_POINTS = frozenset({"foreignObject", "desc", "title", "mi", "mo", "mn", "ms", "mtext"})
 _HTML_ENCODINGS = frozenset({"text/html", "application/xhtml+xml"})
 _MEDIA_TYPES: Mapping[str, LinkType] = {"video": "video", "audio": "audio"}
-PAGINATION_RELS = frozenset({"next", "prev", "previous"})
+_PAGINATION_RELS = frozenset({"next", "prev", "previous"})
+# A <link>'s or a Link header's type by its rel tokens and attributes, the first that matches.
+_REL_TYPES: tuple[tuple[LinkType, Callable[[tuple[str, ...], Container[str]], bool]], ...] = (
+    ("canonical", lambda rel, attributes: "canonical" in rel),
+    ("css", lambda rel, attributes: "stylesheet" in rel),
+    ("amphtml", lambda rel, attributes: "amphtml" in rel),
+    ("pagination", lambda rel, attributes: not _PAGINATION_RELS.isdisjoint(rel)),
+    ("hreflang", lambda rel, attributes: "alternate" in rel and "hreflang" in attributes),
+    ("mobile_alternate", lambda rel, attributes: "alternate" in rel and "media" in attributes),
+)
+_ALL_REL_TYPES = frozenset(link_type for link_type, _ in _REL_TYPES)
 # These name an origin to connect to, not a file.
 _ORIGIN_HINTS = frozenset({"preconnect", "dns-prefetch"})
 # The srcset grammar of HTML: a URL ends at white space, or at the commas closing it, which
@@ -52,29 +62,6 @@ _ORIGIN_HINTS = frozenset({"preconnect", "dns-prefetch"})
 _SRCSET_CANDIDATE = re.compile(
     r"[\t\n\x0c\r ,]*([^\t\n\x0c\r ]*)(?:(?<!,)(?:[^,(]|\([^)]*\)?)*,?)?"
 )
-
-
-def extract_links(
-    body: bytes,
-    content_type: str | None,
-    url: NormalizedUrl,
-    *,
-    is_internal: Callable[[NormalizedUrl], bool],
-    strip_params: re.Pattern[str] | None,
-    page_nofollow: bool = False,
-    follow_nofollow: bool = False,
-) -> list[DiscoveredLink]:
-    decoded = decode_html(body, content_type)
-    tree = parse_html(decoded.text)
-    return links_in_tree(
-        tree,
-        base=base_url(tree, url, decoded.encoding),
-        encoding=decoded.encoding,
-        is_internal=is_internal,
-        strip_params=strip_params,
-        page_nofollow=page_nofollow,
-        follow_nofollow=follow_nofollow,
-    )
 
 
 def parse_html(text: str) -> LexborHTMLParser:
@@ -90,6 +77,54 @@ def rel_tokens(rel: str) -> tuple[str, ...]:
 def base_url(tree: LexborHTMLParser, url: NormalizedUrl, encoding: str) -> str:
     """What the Page's references resolve against: its base href, else the response URL."""
     return _base(tree, url, query_codec(encoding))
+
+
+def discovered_link(
+    link_type: LinkType,
+    target: NormalizedUrl,
+    raw: str,
+    *,
+    element: str | None,
+    attribute: str | None,
+    rel: tuple[str, ...],
+    declared_in: DeclaredIn,
+    ordinal: int,
+    is_internal: bool,
+    page_nofollow: bool,
+    follow_nofollow: bool,
+) -> DiscoveredLink:
+    """A Link of the document or of a header: its nofollow is its rel's, and the follow rule
+    gives its skip reason (design D5)."""
+    nofollow = "nofollow" in rel
+    return DiscoveredLink(
+        type=link_type,
+        target=target,
+        raw=raw,
+        element=element,
+        attribute=attribute,
+        rel=rel,
+        nofollow=nofollow,
+        skip_reason=skip_reason(
+            link_type, nofollow, page_nofollow=page_nofollow, follow_nofollow=follow_nofollow
+        ),
+        declared_in=declared_in,
+        ordinal=ordinal,
+        is_internal=is_internal,
+    )
+
+
+def rel_link_type(
+    rel: tuple[str, ...], attributes: Container[str], types: Container[LinkType]
+) -> LinkType | None:
+    """The first of `types` that the rel tokens and the attributes match (_REL_TYPES)."""
+    return next(
+        (
+            link_type
+            for link_type, matches in _REL_TYPES
+            if link_type in types and matches(rel, attributes)
+        ),
+        None,
+    )
 
 
 def links_in_tree(
@@ -114,23 +149,18 @@ def links_in_tree(
             if target is None:
                 continue
             links.append(
-                DiscoveredLink(
-                    type=link_type,
-                    target=target,
-                    raw=raw,
+                discovered_link(
+                    link_type,
+                    target,
+                    raw,
                     element=node.tag,
                     attribute=attribute,
                     rel=rel,
-                    nofollow="nofollow" in rel,
-                    skip_reason=skip_reason(
-                        link_type,
-                        "nofollow" in rel,
-                        page_nofollow=page_nofollow,
-                        follow_nofollow=follow_nofollow,
-                    ),
                     declared_in=declared_in,
                     ordinal=first_ordinal + len(links),
                     is_internal=is_internal(target),
+                    page_nofollow=page_nofollow,
+                    follow_nofollow=follow_nofollow,
                 )
             )
     return links
@@ -203,18 +233,9 @@ def _references(
 
 
 def _link_type(rel: tuple[str, ...], attributes: Mapping[str, str | None]) -> LinkType | None:
-    if "canonical" in rel:
-        return "canonical"
-    if "stylesheet" in rel:
-        return "css"
-    if "amphtml" in rel:
-        return "amphtml"
-    if not PAGINATION_RELS.isdisjoint(rel):
-        return "pagination"
-    if "alternate" in rel and "hreflang" in attributes:
-        return "hreflang"
-    if "alternate" in rel and "media" in attributes:
-        return "mobile_alternate"
+    link_type = rel_link_type(rel, attributes, _ALL_REL_TYPES)
+    if link_type is not None:
+        return link_type
     if rel and _ORIGIN_HINTS.issuperset(rel):
         return None
     return "misc"

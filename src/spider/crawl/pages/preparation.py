@@ -107,7 +107,7 @@ class PageSettings:
 
 class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
     # Numbered after the Links of the response's headers, which the engine reads itself.
-    document_links: tuple[DiscoveredLink, ...] = ()
+    html_links: tuple[DiscoveredLink, ...] = ()
     directives: RobotsDirectives = NO_DIRECTIVES
     # By extractor name, without the outputs of extractors that failed.
     outputs: tuple[tuple[str, msgspec.Struct], ...] = ()
@@ -134,7 +134,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     directives = response_directives(response, settings.robots_token, meta_robots_contents(tree))
     # The header Links come first, as 030's ordinals count them (design D5).
     from_headers = response_links(url, response, settings.scope, settings.strip_params)
-    from_document = tuple(
+    from_html = tuple(
         links_in_tree(
             tree,
             base=base_url(tree, url, decoded.encoding),
@@ -151,7 +151,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
         status_code=response.status_code,
         headers=response.headers,
         length=len(decoded.text),
-        links=from_headers + from_document,
+        links=from_headers + from_html,
         directives=directives,
         settings=settings,
     )
@@ -169,7 +169,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
         except Exception as error:
             failures.append(f"{extractor.name}: {type(error).__name__}")
     return PreparedPage(
-        document_links=from_document,
+        html_links=from_html,
         directives=directives,
         outputs=tuple(outputs),
         parse_error="extractor_error" if failures else None,

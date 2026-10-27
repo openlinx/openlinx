@@ -38,9 +38,14 @@ class LoggedRequest:
     received_at: float
 
 
+# How long a route with `after` waits for its path before it fails the test.
+AFTER_SECONDS = 10.0
+
+
 class RequestLog:
     def __init__(self) -> None:
         self._entries: list[LoggedRequest] = []
+        self._failures: list[str] = []
         self._lock = threading.Lock()
         self._in_flight = 0
         self._most_in_flight = 0
@@ -56,6 +61,15 @@ class RequestLog:
             self._entries.append(entry)
             self._in_flight += 1
             self._most_in_flight = max(self._most_in_flight, self._in_flight)
+
+    def fail(self, message: str) -> None:
+        with self._lock:
+            self._failures.append(message)
+
+    @property
+    def failures(self) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(self._failures)
 
     def answered(self) -> None:
         with self._lock:
@@ -185,12 +199,20 @@ def _pattern_chunks(size: int) -> Iterator[bytes]:
         yield block[: size - start]
 
 
-def _build_app(site: Site, base_url: Callable[[], str], log: RequestLog) -> web.Application:
+def _build_app(
+    site: Site, base_url: Callable[[], str], log: RequestLog, after_seconds: float
+) -> web.Application:
+    requested: dict[str, asyncio.Event] = {}
+
+    def seen(path: str) -> asyncio.Event:
+        return requested.setdefault(path, asyncio.Event())
+
     @web.middleware
     async def logged(
         request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
     ) -> web.StreamResponse:
         log.add(request)
+        seen(request.path).set()
         try:
             return await handler(request)
         finally:
@@ -209,6 +231,16 @@ def _build_app(site: Site, base_url: Callable[[], str], log: RequestLog) -> web.
             route = found.answers[min(count, len(found.answers) - 1)]
         else:
             route = found
+        if route.after is not None:
+            try:
+                async with asyncio.timeout(after_seconds):
+                    await seen(route.after).wait()
+            except TimeoutError:
+                log.fail(
+                    f"{request.path} waited {after_seconds} s for a request for "
+                    f"{route.after}, which never came"
+                )
+                raise web.HTTPServiceUnavailable from None
         if route.delay:
             await asyncio.sleep(route.delay)
         if route.hang:
@@ -288,12 +320,16 @@ class ThreadedApp:
 
 
 class RunningServer:
-    def __init__(self, site: Site) -> None:
-        log = RequestLog()
+    def __init__(self, site: Site, after_seconds: float = AFTER_SECONDS) -> None:
+        self._log = log = RequestLog()
         self._app = ThreadedApp(
-            _build_app(site, lambda: self.handle.base_url, log), name="fixture-site"
+            _build_app(site, lambda: self.handle.base_url, log, after_seconds),
+            name="fixture-site",
         )
         self.handle = ServerHandle(self._app.base_url, log)
 
     def stop(self) -> None:
         self._app.stop()
+        # At the test's teardown: a route that waited in vain fails the test.
+        if self._log.failures:
+            raise AssertionError("; ".join(self._log.failures))

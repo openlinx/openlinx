@@ -363,7 +363,13 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 12. Events, failures and backstops (widening)
 
-- [ ] 12.0 An auto-advancing virtual clock for the timing tests: `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once every task is idle, as trio's `MockClock(autojump_threshold=0)` does. The watchdog and the 10-second progress tests use it. Designed at this task, which also lifts task 11.1's serialization from the Risks. A test on it pins the Requester's order, the rate wait before the global cap: a request waiting for its turn on one host lets another host's request start, with a global cap of 1 and two hosts if `RequestLimits` can be built at the Requester's seam without the settings' validation, otherwise with 21 hosts, red by mutation of `wait_turn` moved inside the global cap. Another fills the cap and pins that one host's delayed requests start 1/rate apart, red by mutation of the Requester's `started` call removed. With it, `wait_turn` reserves `next_start` and sleeps without holding the host's lock.
+- [x] 12.0 Fix: `FakeClock` becomes the virtual clock of the timing tests: `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once nothing else can run, as trio's `MockClock(autojump_threshold=0)` does; `advance()` stays for tests without a loop.
+  Done when: two hosts that each wait 0.5 s under `--rate` move the clock 0.5 s, not 1 s, red first through the fake Fetcher; a sleep never wakes before its wake time; the clock does not jump while a writer unit that the loop waits for runs, red by mutation of the hold dropped from `run_async`, with the unit held by a handler's writer that blocks on a `threading.Event`; the guard names a thread hand-off in `src` outside `off_loop()`; and the Risks entry on `FakeClock` sleeps that add up goes.
+- [x] 12.0a Refactor: the Requester owns the host's slots and the global cap, and `RequestLimits` keeps the URL limit and the task bound (design D7), behaviour unchanged.
+  Done when: the Requester is built with its cap, as `dispatch` computes it with `global_cap`, and the politeness tests reach the limits only through the Crawl Service with the fake Fetcher and the virtual clock, or through the pure `global_cap`; `docs/testing.md` names that seam for politeness timing.
+- [x] 12.0b Fix: `wait_turn` reserves the host's `next_start` and sleeps without holding a lock, so one host's rate waits overlap the other hosts' (design D7).
+  Done when: a request waiting for its turn on one host lets another host's request start, with 21 hosts at the default cap, red by mutation of `wait_turn` moved inside the global cap; and one host's requests that the full cap held back start 1/rate apart, red by mutation of the Requester's `started` call removed. Both Risks entries on the turn's order and its serialization go.
+- [x] 12.0c Drive "The global cap bounds requests across hosts", fake timing.
 - [ ] 12.1 Drive "Every stderr line is an event or a diagnostic" at seam 1.
 - [ ] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
 - [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
@@ -385,7 +391,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: the network pause's count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without an HTTP response, counting the codes D16 lists and the URLs recorded from an Internal origin's robots.txt without a response, but never `tls_error` or an External request; any response resets it; and with `--network-wait 0` the pause ends at once with `site_unreachable`.
 - [ ] 12.12 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared, with a hint that says how long the Crawl waited and names `spider resume` through `spider.naming`.
 - [ ] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
-- [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing.
+- [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing. It runs right after 12.0c, before 12.1, since it needs only the virtual clock and the Requester.
 
   Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without an HTTP response for the network pause. The watchdog is the Requester's (design D7), around every request it makes.
 - [ ] 12.15 Drive "Probes back off to once a minute" at seam 4. Done when: one pure function gives the probe times of a network wait: 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, none later than the wait.
@@ -450,3 +456,24 @@ Group 16 runs last, after this group.
 
 - [x] 17.1 Move `spider.crawl` into the subpackages of design D19, behaviour unchanged: a `git mv` per module, the imports rewritten by `scripts/crawl_layout_codemod.py`, `DiscoveredLink` and `resolve_reference` with its helpers split out of `links` into `references`, and in each package an `__init__.py` whose docstring lists its interface.
   Done when: every moved top-level function and class has the AST it had, except `_base` and `_from_attribute` of `links`, `_cleaned` and `C0_OR_SPACE` of `references`, the `TYPE_CHECKING` import of `scope`, and the new `resolve_base`; a second run of the codemod changes nothing; and the ast guard `test_the_crawl_imports_run_one_way`, with its breach cases red by mutation of a forbidden import, passes and fails on a path it names that does not exist.
+
+## 18. Review of the crawl core
+
+The fixes of the review of `spider.crawl` along both axes. Group 16 runs last, after this group, and task 12.0 after this group.
+
+- [x] 18.1 Drive "An image that another Page hyperlinked first is checked beyond the depth limit" at seam 3: a Resource Link raises a still-queued URL's `discovered_via` to its Resource kind (design D5).
+- [x] 18.2 Drive "A robots.txt redirect to a host that does not resolve counts as missing" at seam 3, with the `robots_redirect_failed` warning (design D6).
+- [x] 18.3 Drive "Two handlers that fail on one URL count it once" at seam 3.
+- [x] 18.4 Fix: one host key in `spider.crawl.urls`, without a trailing dot, for the Scope, the per-host slots, the rate turn and the blocking runs.
+  Done when: two URLs that differ only by a trailing dot on the host share one rate turn, red first.
+- [x] 18.5 Refactor: the tests of `extract_links` move to `prepare_page` at seam 4, the header-first order and `first_ordinal` included, and `extract_links` goes.
+- [x] 18.6 Refactor: one constructor builds a `DiscoveredLink` for the link extractor and the header Links, and one ordered table maps `rel` tokens to a Link type for both, the headers reading only their types, behaviour unchanged.
+- [x] 18.7 Refactor: the texts of `handler_failed`, `record_failed` and `parse_failed` move into `spider.crawl.engine.crawl_warnings`, and `_robots_verdict` returns its warnings for the caller to give, behaviour unchanged.
+- [x] 18.8 Refactor: `CrawlContext.reporter` is typed `WarningLog`, the one adapter, and the `CrawlReporter` Protocol goes; `document_links` is renamed `html_links`, and CONTEXT.md notes "reference" as the raw string before it resolves to a Link.
+- [x] 18.9 Refactor: the duplicate of `test_an_unreachable_robots_txt_is_reported_under_ignore_robots` goes, with its Risks entry.
+- [x] 18.10 Fix: the fixture site's `after` route option, and the two depth tests that order their events by delays wait on it instead, each red when the lowering happens before dispatch.
+- [x] 18.11 Docs: `docs/crawling.md` lists the final 3xx of robots.txt and drops the provenance acceptance; `docs/architecture.md` lists the rate turn between the host's slot and the global cap.
+- [x] 18.12 Review: run the code-review skill on group 18's commits, then refactor with the whole suite green.
+- [x] 18.13 Refactor: close the review of group 18: a skip's handler failures count once its unit has applied, so the warning log keeps no URLs; the outcome write-backs of `record_error` and `record_unwritten` are pinned; the provenance texts say what the Provenance rule says.
+  Done when: a skip that lost to a raise or a lowering counts its handler failures only when it is decided again, red by mutation of the count made before the unit applied, and removing either write-back fails the store table.
+

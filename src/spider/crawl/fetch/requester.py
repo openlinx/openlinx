@@ -1,5 +1,6 @@
 """The Requester: every request of a Crawl, made politely (020-add-crawl-core D7)."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -7,7 +8,7 @@ from dataclasses import dataclass
 from spider.clock import Clock
 from spider.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
 from spider.crawl.fetch.politeness import RateGate, RequestLimits
-from spider.crawl.urls import NormalizedUrl, url_host
+from spider.crawl.urls import NormalizedUrl, host_key
 from spider.store.records import FetchError
 
 # The failures that may pass on a later attempt (022 design D4). A DNS, TLS or protocol error
@@ -40,12 +41,17 @@ class Requester:
         limits: RequestLimits,
         gate: RateGate,
         *,
+        concurrency: int,
+        cap: int,
         clock: Clock,
         retries: int,
     ) -> None:
         self._fetcher = fetcher
         self._limits = limits
         self._gate = gate
+        self._concurrency = concurrency
+        self._hosts: dict[str, asyncio.Semaphore] = {}
+        self._requests = asyncio.Semaphore(cap)
         self._clock = clock
         self._retries = retries
 
@@ -80,12 +86,18 @@ class Requester:
     async def _slots(self, url: NormalizedUrl) -> AsyncIterator[None]:
         # The host's slot, then its turn under --rate, then the global cap: a request waiting
         # for a busy host, or for its turn, holds no global permit.
-        host = url_host(url)
-        async with self._limits.host(host):
+        host = host_key(url)
+        async with self._host(host):
             await self._gate.wait_turn(host)
-            async with self._limits.request():
+            async with self._requests:
                 await self._gate.started(host)
                 yield
+
+    def _host(self, host: str) -> asyncio.Semaphore:
+        semaphore = self._hosts.get(host)
+        if semaphore is None:
+            semaphore = self._hosts[host] = asyncio.Semaphore(self._concurrency)
+        return semaphore
 
     async def _send(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
         return await self._fetcher.fetch(Request(url))

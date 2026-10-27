@@ -1,12 +1,14 @@
 """The urls table's units: the frontier and each URL's outcome (020-add-crawl-core D1, D2, D14)."""
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import (
+    ColumnElement,
     Connection,
     Insert,
     bindparam,
+    case,
     func,
     literal_column,
     null,
@@ -19,10 +21,12 @@ from sqlalchemy.dialects.sqlite import insert
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.store.origins import ORIGIN_ID, origin_rows, record_origins
 from spider.store.records import (
+    RESOURCE_LINK_TYPES,
     DiscoverySkipReason,
     ErroredUrl,
     FetchedUrl,
     NewUrl,
+    Provenance,
     QueuedUrl,
     Reclassified,
     SkippedUrl,
@@ -32,7 +36,15 @@ from spider.store.redirects import chain_via, link_redirect, past_the_hop_limit
 from spider.store.rows import write_rows
 from spider.store.schema import literal_values, urls
 
-type UrlUnit = Callable[[Connection], None]
+# True once it recorded the URL's outcome; a skip that a lowering or a raise overtook
+# records nothing, and the URL is decided again (design D5).
+type UrlUnit = Callable[[Connection], bool]
+
+
+def _literal_one_of(column: ColumnElement[str], values: Iterable[str]) -> ColumnElement[bool]:
+    # An OR chain, never IN (ADR-0005), of statement-level literals, as an executemany needs.
+    return or_(*(column == literal_column(f"'{value}'") for value in sorted(values)))
+
 
 # A URL of a Seed's Redirect Chain: its id and URL, in the chain's order.
 type SeedChainUrls = tuple[tuple[int, NormalizedUrl], ...]
@@ -40,12 +52,19 @@ type SeedChainUrls = tuple[tuple[int, NormalizedUrl], ...]
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
 # Each row binds its origin, whose row the unit records first (design D18).
 _INSERT = insert(urls).values(origin_id=ORIGIN_ID)
+
+
 _INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])
+# A row that dispatch decides again when a better Link reaches it.
+_DECIDED_AGAIN = (urls.c.fetch_state == literal_column("'queued'")) | (
+    urls.c.skip_reason == literal_column("'max_depth'")
+)
 # A followed Link re-queues a URL skipped where it was found, through unfollowed Links or past
 # the hop limit, as found through it, and gives the shorter path that a Checked URL found after
 # its depth closed (design D3) to a URL still queued, or skipped beyond the depth limit, which
-# dispatch then decides again; every other conflict changes nothing, so a replayed unit gives
-# the same rows (design D5).
+# dispatch then decides again. A Resource Link raises such a URL that a Link of another type
+# recorded first, at its depth or a shorter one, so the Resource is requested. Every other
+# conflict changes nothing, so a replayed unit gives the same rows (design D5).
 _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     index_elements=[urls.c.url],
     set_={
@@ -57,15 +76,12 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     },
     where=(
         or_(
-            *(
-                urls.c.skip_reason == literal_column(f"'{reason}'")
-                for reason in literal_values(DiscoverySkipReason)
-            ),
-            (
-                (urls.c.fetch_state == literal_column("'queued'"))
-                | (urls.c.skip_reason == literal_column("'max_depth'"))
-            )
-            & (urls.c.crawl_depth > _INSERT.excluded.crawl_depth),
+            _literal_one_of(urls.c.skip_reason, literal_values(DiscoverySkipReason)),
+            _DECIDED_AGAIN & (urls.c.crawl_depth > _INSERT.excluded.crawl_depth),
+            _DECIDED_AGAIN
+            & _literal_one_of(_INSERT.excluded.discovered_via, RESOURCE_LINK_TYPES)
+            & ~_literal_one_of(urls.c.discovered_via, RESOURCE_LINK_TYPES)
+            & (urls.c.crawl_depth >= _INSERT.excluded.crawl_depth),
         )
     )
     & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
@@ -79,6 +95,17 @@ _DEPTH = select(urls.c.crawl_depth).where(urls.c.id == bindparam("url_id"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
 _RECLASSIFIED = _URL_ROW.values(is_internal=bindparam("internal"), in_scope=bindparam("scoped"))
+_AT_THE_DISPATCHED_DEPTH = urls.c.crawl_depth == bindparam("dispatched_depth")
+# What the dispatch acted on, unless a late check lowered the URL meanwhile (design D5).
+_WRITE_BACK = {
+    "discovered_via": case(
+        (_AT_THE_DISPATCHED_DEPTH, bindparam("dispatched_via")), else_=urls.c.discovered_via
+    ),
+    "found_on_url_id": case(
+        (_AT_THE_DISPATCHED_DEPTH, bindparam("dispatched_found_on")),
+        else_=urls.c.found_on_url_id,
+    ),
+}
 _FETCHED = _URL_ROW.values(
     fetch_state="fetched",
     status_code=bindparam("response_status"),
@@ -92,8 +119,12 @@ _FETCHED = _URL_ROW.values(
     parse_error=bindparam("parse_failure"),
     parse_error_message=bindparam("parse_failure_message"),
     blocked_by_robots_txt=bindparam("robots_blocked"),
+    **_WRITE_BACK,
 )
-_SKIPPED = _URL_ROW.where(urls.c.crawl_depth == bindparam("decided_depth")).values(
+# Only on what the skip was decided on: a URL lowered or raised since then stays queued.
+_SKIPPED = _URL_ROW.where(
+    _AT_THE_DISPATCHED_DEPTH, urls.c.discovered_via == bindparam("dispatched_via")
+).values(
     fetch_state="skipped",
     skip_reason=bindparam("reason"),
     blocked_by_robots_txt=bindparam("robots_blocked"),
@@ -105,6 +136,7 @@ _ERRORED = _URL_ROW.values(
     fetched_at=bindparam("request_at"),
     attempt_count=bindparam("attempts"),
     blocked_by_robots_txt=bindparam("robots_blocked"),
+    **_WRITE_BACK,
 )
 _UNWRITTEN = _URL_ROW.values(
     fetch_state="error",
@@ -112,6 +144,7 @@ _UNWRITTEN = _URL_ROW.values(
     fetch_error_message=bindparam("failure_message"),
     attempt_count=bindparam("attempts"),
     blocked_by_robots_txt=bindparam("robots_blocked"),
+    **_WRITE_BACK,
 )
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
@@ -251,6 +284,7 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         "parse_failure": fetched.parse_error,
         "parse_failure_message": fetched.parse_error_message,
         "robots_blocked": fetched.blocked_by_robots_txt,
+        **_provenance_values(fetched.provenance),
     }
     new_rows = [_new_row(new, url_id) for new in fetched.discovered]
 
@@ -258,11 +292,11 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
     redirect_row = None if target is None else _new_row(target, url_id)
     max_redirects = 0 if redirect is None else redirect.max_redirects
 
-    def unit(connection: Connection) -> None:
+    def unit(connection: Connection) -> bool:
         connection.execute(_FETCHED, values)
         if not new_rows and redirect_row is None:
             write_rows(connection, fetched.rows)
-            return
+            return True
         # The stored depth, which a Checked URL answering late may have lowered while the URL
         # was in flight, so what it links to stays one deeper than it (design D3).
         depth: int = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one()
@@ -279,6 +313,7 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
             target_id: int = connection.execute(_URL_ID, {"url": row["url"]}).scalar_one()
             link_redirect(connection, url_id, target_id, max_redirects)
         write_rows(connection, fetched.rows)
+        return True
 
     return unit
 
@@ -305,8 +340,9 @@ def reclassify_urls(decisions: Sequence[Reclassified]) -> UrlUnit:
         {"url_id": d.url_id, "internal": d.is_internal, "scoped": d.in_scope} for d in decisions
     ]
 
-    def unit(connection: Connection) -> None:
+    def unit(connection: Connection) -> bool:
         connection.execute(_RECLASSIFIED, rows)
+        return True
 
     return unit
 
@@ -317,13 +353,15 @@ def record_skipped(skipped: SkippedUrl) -> UrlUnit:
     values = {
         "url_id": skipped.url_id,
         "reason": skipped.skip_reason,
-        "decided_depth": skipped.crawl_depth,
         "robots_blocked": skipped.blocked_by_robots_txt,
+        **_provenance_values(skipped.provenance),
     }
 
-    def unit(connection: Connection) -> None:
-        if connection.execute(_SKIPPED, values).rowcount:
-            write_rows(connection, skipped.rows)
+    def unit(connection: Connection) -> bool:
+        if not connection.execute(_SKIPPED, values).rowcount:
+            return False
+        write_rows(connection, skipped.rows)
+        return True
 
     return unit
 
@@ -337,17 +375,24 @@ def record_error(errored: ErroredUrl) -> UrlUnit:
         "request_at": errored.fetched_at,
         "attempts": errored.attempt_count,
         "robots_blocked": errored.blocked_by_robots_txt,
+        **_provenance_values(errored.provenance),
     }
 
-    def unit(connection: Connection) -> None:
+    def unit(connection: Connection) -> bool:
         connection.execute(_ERRORED, values)
         write_rows(connection, errored.rows)
+        return True
 
     return unit
 
 
 def record_unwritten(
-    url_id: int, message: str, *, blocked_by_robots_txt: bool | None, attempt_count: int
+    url_id: int,
+    message: str,
+    *,
+    blocked_by_robots_txt: bool | None,
+    attempt_count: int,
+    provenance: Provenance,
 ) -> UrlUnit:
     """The fallback unit of a URL whose own unit failed: only its state, what robots.txt said
     of it, and the requests made for it (design D2)."""
@@ -356,12 +401,22 @@ def record_unwritten(
         "failure_message": message,
         "robots_blocked": blocked_by_robots_txt,
         "attempts": attempt_count,
+        **_provenance_values(provenance),
     }
 
-    def unit(connection: Connection) -> None:
+    def unit(connection: Connection) -> bool:
         connection.execute(_UNWRITTEN, values)
+        return True
 
     return unit
+
+
+def _provenance_values(provenance: Provenance) -> dict[str, object]:
+    return {
+        "dispatched_depth": provenance.crawl_depth,
+        "dispatched_via": provenance.discovered_via,
+        "dispatched_found_on": provenance.found_on_url_id,
+    }
 
 
 def url_counts() -> Callable[[Connection], UrlCounts]:

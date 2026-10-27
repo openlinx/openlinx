@@ -11,23 +11,19 @@ class RateGate:
     def __init__(self, clock: Clock, rate: float | None) -> None:
         self._clock = clock
         self._interval = None if rate is None else 1 / rate
-        self._turns: dict[str, asyncio.Lock] = {}
         self._next_starts: dict[str, float] = {}
         self._last_starts: dict[str, float] = {}
 
     async def wait_turn(self, host: str) -> None:
         if self._interval is None:
             return
-        turn = self._turns.get(host)
-        if turn is None:
-            turn = self._turns[host] = asyncio.Lock()
-        # One waiter per host at a time, so the starts follow one another in order.
-        async with turn:
-            now = self._clock.monotonic()
-            start = max(now, self._next_starts.get(host, now))
-            if start > now:
-                await self._clock.sleep(start - now)
-            self._next_starts[host] = start + self._interval
+        now = self._clock.monotonic()
+        start = max(now, self._next_starts.get(host, now))
+        # Reserved before the wait, so the host's waiters take turns in order, and hold no
+        # lock that would make one host's wait another's.
+        self._next_starts[host] = start + self._interval
+        if start > now:
+            await self._clock.sleep(start - now)
 
     async def started(self, host: str) -> None:
         """With the global permit held: waits out what is left of the interval since the
@@ -40,17 +36,7 @@ class RateGate:
         # Taken before the wait, so the next caller counts from this start.
         self._last_starts[host] = start
         if start > now:
-            try:
-                await self._clock.sleep(start - now)
-            except asyncio.CancelledError:
-                # A cancelled request never starts: the next caller counts from the start
-                # before it, unless another caller has taken a start since.
-                if self._last_starts[host] == start:
-                    if last is None:
-                        del self._last_starts[host]
-                    else:
-                        self._last_starts[host] = last
-                raise
+            await self._clock.sleep(start - now)
 
 
 # Consecutive 403 and 429 responses of one host before the warning that it may be blocking.
@@ -81,18 +67,15 @@ def global_cap(concurrency: int) -> int:
 
 
 class RequestLimits:
-    """A semaphore per host, the global cap on requests in flight, the bound on URL tasks, and
-    the URL limit, --max-urls, which counts every request it lets start.
+    """The bound on URL tasks and the URL limit, --max-urls, which counts every request it
+    lets start; the Requester holds the hosts' slots and the global cap.
 
     A task holds its permit until its unit is submitted, so `backlog` is how far page
     preparation may fall behind the requests before fetching waits (design D7, 026 D2).
     """
 
-    def __init__(self, concurrency: int, backlog: int = 0, max_urls: int | None = None) -> None:
-        self._concurrency = concurrency
-        self._hosts: dict[str, asyncio.Semaphore] = {}
-        self._requests = asyncio.Semaphore(global_cap(concurrency))
-        self._tasks = asyncio.Semaphore(global_cap(concurrency) + backlog)
+    def __init__(self, cap: int, backlog: int = 0, max_urls: int | None = None) -> None:
+        self._tasks = asyncio.Semaphore(cap + backlog)
         self._max_urls = max_urls
         self._started = 0
         self._refused: int | None = None
@@ -123,13 +106,3 @@ class RequestLimits:
 
     def task_ended(self) -> None:
         self._tasks.release()
-
-    def request(self) -> asyncio.Semaphore:
-        """Taken after the host's slot, so a URL waiting for a busy host holds no permit."""
-        return self._requests
-
-    def host(self, host: str) -> asyncio.Semaphore:
-        semaphore = self._hosts.get(host)
-        if semaphore is None:
-            semaphore = self._hosts[host] = asyncio.Semaphore(self._concurrency)
-        return semaphore

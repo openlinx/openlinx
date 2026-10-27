@@ -1,4 +1,5 @@
-"""Route options: headers, content_type, delay, hang, reset_after, endless bodies (000 D9)."""
+"""Route options: headers, content_type, delay, hang, reset_after, endless bodies, after
+(design D9 of 000)."""
 
 import asyncio
 import time
@@ -100,3 +101,40 @@ async def test_trickle_sends_the_body_byte_by_byte_without_end(fixture_site: Sta
             await asyncio.wait_for(response.read(), timeout=0.5)
 
     assert (response.status, len(first)) == (200, 1)
+
+
+async def test_after_holds_the_response_until_the_site_receives_the_other_path(
+    fixture_site: StartSite,
+) -> None:
+    server = fixture_site(Site(routes={"/a": Page(body="a", after="/b"), "/b": Page(body="b")}))
+
+    async with aiohttp.ClientSession() as session:
+
+        async def answered(path: str) -> float:
+            async with session.get(server.url(path)) as response:
+                await response.read()
+            return time.monotonic()
+
+        held = asyncio.create_task(answered("/a"))
+        # Time for /a to reach the site first; the order below fails if it did not.
+        await asyncio.sleep(0.2)
+        await answered("/b")
+        a_answered = await held
+
+    requests = server.requests
+    assert ([request.path for request in requests], a_answered > requests[1].received_at) == (
+        ["/a", "/b"],
+        True,
+    )
+
+
+async def test_after_fails_the_test_when_its_path_is_never_requested() -> None:
+    server = RunningServer(Site(routes={"/a": Page(body="a", after="/never")}), after_seconds=0.2)
+    try:
+        async with aiohttp.ClientSession() as session, session.get(server.handle.url("/a")) as got:
+            status = got.status
+    finally:
+        with pytest.raises(AssertionError, match=r"/a waited 0.2 s for a request for /never"):
+            server.stop()
+
+    assert status == 503

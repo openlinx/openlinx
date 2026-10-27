@@ -4,11 +4,11 @@ import asyncio
 from functools import partial
 
 from spider.crawl.engine.context import CrawlContext
-from spider.crawl.engine.crawl_warnings import warn_of_the_url_limit
+from spider.crawl.engine.crawl_warnings import url_limit_reached
 from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.engine.seed_chain import SeedChain, close_seed_chain
 from spider.crawl.engine.units import Run, unit_of, via_resource
-from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits
+from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
 from spider.crawl.fetch.requester import Requester
 from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision
@@ -24,19 +24,22 @@ _ABOVE_NO_DEPTH = -1
 
 
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
-    limits = RequestLimits(
-        context.settings.concurrency, context.pages.backlog, context.settings.max_urls
-    )
+    concurrency = context.settings.concurrency
+    cap = global_cap(concurrency)
+    limits = RequestLimits(cap, context.pages.backlog, context.settings.max_urls)
+    gate = RateGate(context.clock, context.settings.rate)
     requester = Requester(
         context.fetcher,
         limits,
-        RateGate(context.clock, context.settings.rate),
+        gate,
+        concurrency=concurrency,
+        cap=cap,
         clock=context.clock,
         retries=context.settings.retries,
     )
     run = Run(
         context=context,
-        outcomes=Outcomes(context),
+        outcomes=Outcomes(context.writer, context.reporter, context.stop),
         limits=limits,
         requester=requester,
         robots=RobotsLoader(requester, context.writer, context.settings.robots_user_agent),
@@ -83,7 +86,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     limit = limits.limit_reached()
     # Only once every outcome is in: a failure among them outranks the stop.
     if limit is not None and context.stop.reason == "max_urls":
-        warn_of_the_url_limit(context, limit)
+        context.reporter.warn(url_limit_reached(context.crawl_file.id, limit))
 
 
 async def _crawl_depth(run: Run, depth: int) -> None:
@@ -160,6 +163,6 @@ async def _crawl_url(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> No
         recorded = await unit_of(run, queued, decision)
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
         if recorded is not None:
-            await run.outcomes.submit(*recorded)
+            await run.outcomes.submit(recorded)
     finally:
         run.limits.task_ended()

@@ -52,6 +52,7 @@ Every route takes these as keyword arguments:
 - `reset_after=100`: send the headers, with the whole body's `Content-Length`, and that many bytes of the body, then reset the connection (TCP RST).
 - `stall_body=True`: send the headers, then never the body.
 - `trickle=True`: send the headers, then the body one byte every 100 ms, never ending, which no per-read timeout ever ends.
+- `after="/b"`: answer only once the site has received a request for `/b`, then after `delay`. It orders a test's events by what the Crawl requests instead of by time. A route that waits in vain for 10 s answers 503, and the server fails the test at its teardown, naming both paths. The awaited path must be one the Crawl requests without the held response, or the test fails.
 
 When the server stops, it cancels every handler still running (hanging, delayed, stalled or trickling) before aiohttp's cleanup, which would otherwise wait up to 60 s for them.
 

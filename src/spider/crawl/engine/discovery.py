@@ -2,11 +2,10 @@
 
 from collections.abc import Iterable
 
-from spider.crawl.following import RESOURCES
 from spider.crawl.references import DiscoveredLink
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import DiscoverySkipReason, NewUrl
+from spider.store.records import RESOURCE_LINK_TYPES, DiscoverySkipReason, NewUrl
 
 
 def discovered_urls(
@@ -36,7 +35,9 @@ def _outranks(
     # Resource is the Link's own property, which the depth limit and the barrier read (D5).
     if reason is not None:
         return False
-    return known_reason is not None or (link.type in RESOURCES and known.type not in RESOURCES)
+    return known_reason is not None or (
+        link.type in RESOURCE_LINK_TYPES and known.type not in RESOURCE_LINK_TYPES
+    )
 
 
 def _new_url(link: DiscoveredLink, reason: DiscoverySkipReason | None, scope: ScopeRules) -> NewUrl:

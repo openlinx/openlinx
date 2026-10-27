@@ -7,7 +7,7 @@ import re
 
 from spider.crawl.references import resolve_reference
 from spider.crawl.urls import NormalizedUrl
-from spider.store.records import DiscoverySkipReason, LinkType
+from spider.store.records import RESOURCE_LINK_TYPES, DiscoverySkipReason, LinkType
 
 # The statuses whose Location is followed; a 300, 304 or 305 keeps its Location and no target.
 REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
@@ -18,15 +18,13 @@ def is_redirection(status_code: int) -> bool:
     return 300 <= status_code < 400
 
 
-# The spec's Link type table: through these a URL in the Scope is followed, through RESOURCES
-# it is requested as a Resource, and through any other type it is recorded skipped.
+# The spec's Link type table: through these a URL in the Scope is followed, through
+# RESOURCE_LINK_TYPES, which the store's upsert reads too, it is requested as a Resource,
+# and through any other type it is recorded skipped.
 _FOLLOWED: frozenset[LinkType] = frozenset(
     {"hyperlink", "canonical", "pagination", "hreflang", "iframe", "meta_refresh", "http_refresh"}
 )
-RESOURCES: frozenset[LinkType] = frozenset(
-    {"image", "css", "javascript", "video", "audio", "media"}
-)
-_REQUESTED = _FOLLOWED | RESOURCES
+_REQUESTED = _FOLLOWED | RESOURCE_LINK_TYPES
 
 
 def skip_reason(
