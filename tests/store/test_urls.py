@@ -1,7 +1,7 @@
 """The units of spider.store.urls (020-add-crawl-core D1, D2, D14; seam 2)."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -26,6 +26,7 @@ from spider.store.schema import literal_values
 from spider.store.urls import (
     next_depth,
     queued_batch,
+    reclassify_urls,
     record_error,
     record_fetched,
     record_seed,
@@ -102,7 +103,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         seed_id = writer.run(record_seed(seed, is_internal=True, in_scope=True))
         writer.run(record_seed(seed, is_internal=True, in_scope=True))
-        first = writer.run(queued_batch(0, 0, 10))
+        first = writer.run(queued_batch(0, 0, 10, 10))
         writer.run(
             record_fetched(
                 FetchedUrl(
@@ -125,7 +126,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             record_skipped(SkippedUrl(url_id=seed_id + 2, skip_reason="excluded", crawl_depth=1))
         )
         deeper = writer.run(next_depth(0))
-        second = writer.run(queued_batch(1, 0, 1))
+        second = writer.run(queued_batch(1, 0, 1, 10))
         writer.run(
             record_error(
                 ErroredUrl(
@@ -390,6 +391,54 @@ def test_the_frontier_read_uses_its_index(temp_workspace: TempWorkspace) -> None
     crawl = create_any_crawl(temp_workspace)
 
     with opening(crawl.path, role="read") as engine, engine.connect() as connection:
-        plan = _plan_of_first_statement(connection, queued_batch(1, 0, 10))
+        plan = _plan_of_first_statement(connection, queued_batch(1, 0, 10, 10))
 
     assert ("USING INDEX urls_crawl_depth_id" in plan, "TEMP B-TREE" in plan) == (True, False), plan
+
+
+def _redirected(url_id: int, target: str, max_redirects: int) -> FetchedUrl:
+    return replace(
+        _fetched(url_id),
+        status_code=301,
+        content_type=None,
+        parsed=False,
+        redirect_location=target,
+        redirect=_new(target, discovered_via="redirect"),
+        max_redirects=max_redirects,
+    )
+
+
+def test_the_units_of_redirects_run_again_the_same(temp_workspace: TempWorkspace) -> None:
+    # A move chain past a hop limit of 1, and a cart and a login page that send each other back.
+    crawl = create_any_crawl(temp_workspace)
+    site = "https://site.test"
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        seed_id = writer.run(record_seed(_url(f"{site}/"), is_internal=True, in_scope=True))
+        writer.run(record_fetched(_fetched(seed_id, _new(f"{site}/old"), _new(f"{site}/cart"))))
+        ids = {
+            queued.url.removeprefix(site): queued.id
+            for queued in writer.run(queued_batch(1, 0, 10, 10))
+        }
+        writer.run(record_fetched(_redirected(ids["/old"], f"{site}/mid", 1)))
+        mid = writer.run(queued_batch(1, ids["/cart"], 10, 1))
+        writer.run(record_fetched(_redirected(mid[0].id, f"{site}/new", 1)))
+        writer.run(record_fetched(_redirected(ids["/cart"], f"{site}/login", 10)))
+        login = writer.run(queued_batch(1, mid[0].id, 10, 10))
+        writer.run(record_fetched(_redirected(login[0].id, f"{site}/cart", 10)))
+        writer.run(reclassify_urls([(ids["/old"], False, False)]))
+        replay_now(writer)
+
+    assert query(
+        crawl.path,
+        "SELECT source.url, source.fetch_state, source.skip_reason, source.in_redirect_loop, "
+        "source.is_internal, target.url FROM urls AS source "
+        "LEFT JOIN urls AS target ON target.id = source.redirect_url_id ORDER BY source.id",
+    ) == [
+        (f"{site}/", "fetched", None, None, 1, None),
+        (f"{site}/old", "fetched", None, 0, 0, f"{site}/mid"),
+        (f"{site}/cart", "fetched", None, 1, 1, f"{site}/login"),
+        (f"{site}/mid", "fetched", None, 0, 1, f"{site}/new"),
+        (f"{site}/new", "skipped", "max_redirects", None, 1, None),
+        (f"{site}/login", "fetched", None, 1, 1, f"{site}/cart"),
+    ]

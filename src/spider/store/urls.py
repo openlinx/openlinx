@@ -37,10 +37,11 @@ type UrlUnit = Callable[[Connection], None]
 # Each row binds its origin, whose row the unit records first (design D18).
 _INSERT = insert(urls).values(origin_id=ORIGIN_ID)
 _INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])
-# A followed Link re-queues a URL that only unfollowed Links reached, as found through it, and
-# gives the shorter path that a Checked URL found after its depth closed (design D3) to a URL
-# still queued, or skipped beyond the depth limit, which dispatch then decides again; every
-# other conflict changes nothing, so a replayed unit gives the same rows (design D5).
+# A followed Link re-queues a URL skipped where it was found, through unfollowed Links or past
+# the hop limit, as found through it, and gives the shorter path that a Checked URL found after
+# its depth closed (design D3) to a URL still queued, or skipped beyond the depth limit, which
+# dispatch then decides again; every other conflict changes nothing, so a replayed unit gives
+# the same rows (design D5).
 _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     index_elements=[urls.c.url],
     set_={
@@ -88,7 +89,7 @@ _FETCHED = _URL_ROW.values(
     fetched_at=bindparam("request_at"),
     attempt_count=bindparam("attempts"),
     redirect_location=bindparam("location"),
-    in_redirect_loop=bindparam("redirected"),
+    in_redirect_loop=bindparam("loop_flag"),
     parsed=bindparam("is_parsed"),
     parse_error=bindparam("parse_failure"),
     parse_error_message=bindparam("parse_failure_message"),
@@ -181,7 +182,7 @@ def insert_urls(
 
 
 def queued_batch(
-    depth: int, after: int, size: int
+    depth: int, after: int, size: int, max_redirects: int
 ) -> Callable[[Connection], tuple[QueuedUrl, ...]]:
     """A unit that only reads: the next queued URLs at `depth` whose id is above `after`."""
 
@@ -195,7 +196,9 @@ def queued_batch(
                 crawl_depth=row.crawl_depth,
                 discovered_via=row.discovered_via,
                 found_on_url_id=row.found_on_url_id,
-                chain_via=_chain_via(connection, row.discovered_via, row.found_on_url_id),
+                chain_via=_chain_back(
+                    connection, row.discovered_via, row.found_on_url_id, max_redirects
+                )[1],
             )
             for row in rows
         )
@@ -203,31 +206,23 @@ def queued_batch(
     return unit
 
 
-def _chain_via(connection: Connection, via: DiscoveredVia, found_on: int | None) -> DiscoveredVia:
-    # Point reads back along the chain, for redirect targets only, at most 20 hops: a loop
-    # ends there (022-add-fetch-policy D2).
-    for _ in range(20):
-        if via != "redirect" or found_on is None:
-            break
-        via, found_on = connection.execute(_FOUND_ON, {"url_id": found_on}).one()
-    return via
-
-
-def _hops_to(connection: Connection, url_id: int, limit: int) -> int:
-    # The consecutive redirects that led to the URL, read back from the file, so a replayed
-    # or continued unit counts the same; at most `limit` point reads (022-add-fetch-policy D2).
+def _chain_back(
+    connection: Connection, via: DiscoveredVia, found_on: int | None, limit: int
+) -> tuple[int, DiscoveredVia]:
+    # The consecutive redirects that led to a URL, read back from the file so a replayed or
+    # continued unit counts the same, and how its chain's first URL was found; at most `limit`
+    # point reads, which no chain passes, since the target past the limit is never queued
+    # (022-add-fetch-policy D2).
     hops = 0
-    while hops < limit:
-        via, found_on = connection.execute(_FOUND_ON, {"url_id": url_id}).one()
-        if via != "redirect" or found_on is None:
-            break
-        hops, url_id = hops + 1, found_on
-    return hops
+    while via == "redirect" and found_on is not None and hops < limit:
+        hops += 1
+        via, found_on = connection.execute(_FOUND_ON, {"url_id": found_on}).one()
+    return hops, via
 
 
 def _loop_through(connection: Connection, url_id: int, target_id: int, limit: int) -> list[int]:
     # The redirect just stored can only close a loop that runs through it: walk forward from
-    # its target, at most `limit` reads, back to the URL (022-add-fetch-policy D2).
+    # its target, at most `limit` + 1 reads, back to the URL (022-add-fetch-policy D2).
     path = [url_id]
     for _ in range(limit + 1):
         if target_id == url_id:
@@ -261,7 +256,7 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         "attempts": fetched.attempt_count,
         "location": fetched.redirect_location,
         # 0 for any 3xx response until its redirect closes a loop.
-        "redirected": False if 300 <= fetched.status_code < 400 else None,
+        "loop_flag": False if 300 <= fetched.status_code < 400 else None,
         "request_at": fetched.fetched_at,
         "is_parsed": fetched.parsed,
         "parse_failure": fetched.parse_error,
@@ -289,7 +284,8 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         if redirect_row is not None:
             # A redirect is no Link: its target keeps the depth (022 design D2).
             target = {**redirect_row, "crawl_depth": depth}
-            if _hops_to(connection, url_id, max_redirects) >= max_redirects:
+            via, found_on = connection.execute(_FOUND_ON, {"url_id": url_id}).one()
+            if _chain_back(connection, via, found_on, max_redirects)[0] >= max_redirects:
                 target |= {"fetch_state": "skipped", "skip_reason": "max_redirects"}
             insert_urls(connection, _INSERT_DISCOVERED, [target])
             target_id: int = connection.execute(_URL_ID, {"url": target["url"]}).scalar_one()

@@ -1,6 +1,7 @@
 """A Seed's Redirect Chain and the Scope (022-add-fetch-policy, fetching; seam 3+6)."""
 
 import json
+from pathlib import Path
 
 from tests.fixture_site.hosts import StartNamedHosts
 from tests.fixture_site.routes import Page, Redirect, Site
@@ -9,20 +10,20 @@ from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
 
-def _internal(crawl_file: object, *urls: str) -> list[tuple[str, int, int]]:
+def _internal(crawl_file: Path, *urls: str) -> list[tuple[str, int, int]]:
     return [
         row
         for url in urls
         for row in query(
-            crawl_file,  # type: ignore[arg-type]
+            crawl_file,
             "SELECT url, is_internal, in_scope FROM urls WHERE url = ?",
             [url],
         )
     ]
 
 
-def _scope_hosts(crawl_file: object) -> list[str]:
-    [(scope,)] = query(crawl_file, "SELECT scope FROM crawl")  # type: ignore[arg-type]
+def _scope_hosts(crawl_file: Path) -> list[str]:
+    [(scope,)] = query(crawl_file, "SELECT scope FROM crawl")
     hosts: list[str] = json.loads(scope)["hosts"]
     return hosts
 
@@ -145,3 +146,26 @@ def test_a_redirect_to_another_site_is_reported(
         ],
         "other.test" in _scope_hosts(result.crawl_file),
     ) == ([True], False)
+
+
+def test_a_blog_seed_that_moved_to_the_apex_widens_the_scope_once_its_chain_ends(
+    temp_workspace: TempWorkspace, fixture_named_hosts: StartNamedHosts
+) -> None:
+    # The blog moved from www.site.test/blog/ to site.test/news/, outside the Seed's folder.
+    hosts = fixture_named_hosts(
+        {
+            "www.site.test": Site({"/blog/": Redirect("http://site.test/news/", status=301)}),
+            "site.test": Site({"/news/": Page(body="<title>News</title>")}),
+        }
+    )
+
+    result = crawl_result("http://www.site.test/blog/", resolver=hosts.resolver, scope="subfolder")
+
+    assert (
+        query(
+            result.crawl_file,
+            "SELECT fetch_state, is_internal, in_scope FROM urls WHERE url = ?",
+            ["http://site.test/news/"],
+        ),
+        "site.test" in _scope_hosts(result.crawl_file),
+    ) == ([("fetched", 1, 0)], True)

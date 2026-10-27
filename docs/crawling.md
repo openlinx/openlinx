@@ -358,7 +358,7 @@ FROM urls AS source JOIN urls AS target ON target.id = source.redirect_url_id
 
 ### The hop limit
 
-`--max-redirects <n>` (default 10, `crawl.max_redirects`) is the most consecutive redirects the Crawl follows from the first URL of a chain. The target of the next one is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, unrequested. The count is read back from the crawl file, so a continued Crawl keeps it. A Link found later to that URL queues it again, as a URL found through the Link. `--max-redirects 0` follows no redirect.
+`--max-redirects <n>` (default 10, `crawl.max_redirects`) is the most consecutive redirects the Crawl follows from the first URL of a chain. The target of the next one is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, unrequested. The count is read back from the crawl file, never kept in memory. A Link found later to that URL queues it again, as a URL found through the Link. `--max-redirects 0` follows no redirect.
 
 ### Loops
 

@@ -19,10 +19,16 @@ class Outcomes:
     def __init__(self, context: CrawlContext) -> None:
         self._context = context
         self._pending: set[asyncio.Future[Any]] = set()
+        self._pending_urls: set[int] = set()
+
+    def is_pending(self, url_id: int) -> bool:
+        """True from the submit of the URL's unit until its outcome, a fallback's included."""
+        return url_id in self._pending_urls
 
     async def submit(self, result: UrlResult, unit: UrlUnit) -> None:
         future = await self._context.writer.submit_async(unit)
         self._pending.add(future)
+        self._pending_urls.add(result.url_id)
         future.add_done_callback(lambda done: self._unit_done(result, done))
 
     async def settled(self) -> None:
@@ -39,10 +45,10 @@ class Outcomes:
     def _unit_done(self, result: UrlResult, done: asyncio.Future[None]) -> None:
         self._pending.discard(done)
         error = done.exception()
-        if error is None:
-            return
-        if not is_one_urls_failure(error):
-            self._context.stop.set("write_failed", error)
+        if error is None or not is_one_urls_failure(error):
+            self._pending_urls.discard(result.url_id)
+            if error is not None:
+                self._context.stop.set("write_failed", error)
             return
         self._context.reporter.count(
             Diagnostic.of(
@@ -55,6 +61,7 @@ class Outcomes:
         fallback = asyncio.ensure_future(self._fall_back(result, error))
         self._pending.add(fallback)
         fallback.add_done_callback(self._pending.discard)
+        fallback.add_done_callback(lambda _: self._pending_urls.discard(result.url_id))
 
     async def _fall_back(self, result: UrlResult, error: BaseException) -> None:
         message = f"{type(error).__name__}: {error}"

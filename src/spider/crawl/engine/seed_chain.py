@@ -31,6 +31,8 @@ class SeedChain:
         """Closes the chain once, on the URL it ended on: the Scope it widens to, when the
         chain ended with a response on another host of the Seed's registrable domain, and
         each URL of the chain decided again against the Scope it ended in."""
+        if not self.is_open:
+            raise RuntimeError(f"the Seed's Redirect Chain is already closed, at {final_url}")
         self.is_open = False
         widened = self.scope.widened_to(final_url) if responded else None
         if widened is not None:

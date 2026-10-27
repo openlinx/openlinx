@@ -1,6 +1,7 @@
 """The engine: the frontier depth by depth, and each URL's task (020-add-crawl-core D1, D2, D3)."""
 
 import asyncio
+from functools import partial
 
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import warn_of_the_url_limit
@@ -91,16 +92,23 @@ async def _crawl_depth(run: Run, depth: int) -> None:
     context, limits = run.context, run.limits
     running: set[asyncio.Task[None]] = set()
     try:
-        # The cursor of this run: a URL in flight is never read twice (design D1). It carries
-        # over to the next read of the depth, which finds the redirect targets that its URLs
-        # recorded at their own depth: new rows, whose ids come after the cursor (022 D2).
-        after = 0
+        # A pass reads the depth from the top, so it also finds a queued URL that a redirect
+        # lowered to it below the last pass's cursor (022 D2). Within a pass the cursor keeps a
+        # URL in flight from being read twice (design D1); across passes only the depth's
+        # checked URLs are still in flight, bounded by the task cap, and the URLs whose outcome
+        # is pending, bounded by the writer's batch.
+        checked_in_flight: set[int] = set()
         while True:
-            dispatched = False
+            dispatched, after = False, 0
             while limits.limit_reached() is None and (
-                batch := await context.writer.run_async(queued_batch(depth, after, _FRONTIER_BATCH))
+                batch := await context.writer.run_async(
+                    queued_batch(depth, after, _FRONTIER_BATCH, context.settings.max_redirects)
+                )
             ):
                 for queued in batch:
+                    # A URL whose unit failed is still queued until its fallback is in.
+                    if queued.id in checked_in_flight or run.outcomes.is_pending(queued.id):
+                        continue
                     await limits.reserve_task()
                     if context.stop.is_set:
                         limits.task_ended()
@@ -108,13 +116,21 @@ async def _crawl_depth(run: Run, depth: int) -> None:
                     if limits.limit_reached() is not None:
                         limits.task_ended()
                         break
-                    decision = run.seed_chain.decide(queued.url, in_chain=queued.crawl_depth == 0)
+                    in_chain = run.seed_chain.is_open and queued.crawl_depth == 0
+                    decision = run.seed_chain.decide(queued.url, in_chain=in_chain)
                     task = asyncio.create_task(_crawl_url(run, queued, decision))
                     # A checked URL never holds the barrier (design D3); the sweep in run_crawl
                     # reads what one finds after its depth has closed.
-                    tasks = run.checked_urls if _is_checked_url(queued, decision) else running
-                    tasks.add(task)
-                    task.add_done_callback(tasks.discard)
+                    # The chain's last URL closes it before depth 0 ends (022 D3), even a
+                    # checked one, such as a URL off the Seed's site or its folder.
+                    if _is_checked_url(queued, decision) and not in_chain:
+                        run.checked_urls.add(task)
+                        task.add_done_callback(run.checked_urls.discard)
+                        checked_in_flight.add(queued.id)
+                        task.add_done_callback(partial(_discard, checked_in_flight, queued.id))
+                    else:
+                        running.add(task)
+                        task.add_done_callback(running.discard)
                     dispatched = True
                 after = batch[-1].id
             if not dispatched:
@@ -133,6 +149,10 @@ async def _cancel_all(tasks: set[asyncio.Task[None]]) -> None:
 
 def _is_checked_url(queued: QueuedUrl, decision: ScopeDecision) -> bool:
     return not decision.in_scope or via_resource(queued)
+
+
+def _discard(ids: set[int], url_id: int, _: object) -> None:
+    ids.discard(url_id)
 
 
 async def _crawl_url(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> None:

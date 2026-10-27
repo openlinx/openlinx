@@ -27,7 +27,7 @@ _TARGETS = [
 
 
 @pytest.mark.parametrize(("status_code", "location", "target"), _TARGETS)
-def test_a_location_that_is_no_http_url_has_no_target(
+def test_a_redirect_gives_the_http_url_its_location_names_or_no_target(
     status_code: int, location: str | None, target: str | None
 ) -> None:
     assert redirect_target(_URL, status_code, location, None) == target

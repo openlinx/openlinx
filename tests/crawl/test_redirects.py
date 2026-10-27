@@ -14,9 +14,9 @@ from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
 
-def _redirect_of(crawl_file: object, url: str) -> list[tuple[int, str | None]]:
+def _redirect_of(crawl_file: Path, url: str) -> list[tuple[int, str | None]]:
     return query(
-        crawl_file,  # type: ignore[arg-type]
+        crawl_file,
         "SELECT source.status_code, target.url FROM urls AS source "
         "LEFT JOIN urls AS target ON target.id = source.redirect_url_id WHERE source.url = ?",
         [url],
@@ -270,12 +270,12 @@ def test_an_image_redirected_twice_beyond_the_depth_limit_is_checked(
     ) == [("fetched",)]
 
 
-def _states(crawl_file: object, *urls: str) -> list[tuple[str, str, str | None]]:
+def _states(crawl_file: Path, *urls: str) -> list[tuple[str, str, str | None]]:
     return [
         row
         for url in urls
         for row in query(
-            crawl_file,  # type: ignore[arg-type]
+            crawl_file,
             "SELECT url, fetch_state, skip_reason FROM urls WHERE url = ?",
             [url],
         )
@@ -451,3 +451,32 @@ def test_a_meta_refresh_is_not_recorded_as_a_redirect(
         "ON target.found_on_url_id = source.id WHERE source.url = ?",
         [server.url("/old")],
     ) == [(200, None, None, "meta_refresh")]
+
+
+def test_a_url_a_redirect_lowers_to_the_open_depth_is_requested_at_that_depth(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # An old sale address forwards twice to /sale, which the shop's category page also links,
+    # and /sale links the item that a deeper guide links too.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/shop">Shop</a><a href="/old-sale">Sale</a>'),
+                "/shop": Page(body='<a href="/sale">Sale</a><a href="/guide">Guide</a>'),
+                "/old-sale": Redirect("/sale-2025", status=301),
+                "/sale-2025": Redirect("/sale-2026", status=301),
+                "/sale-2026": Redirect("/sale", status=301),
+                "/sale": Page(body='<a href="/item">Item</a>'),
+                "/guide": Page(body='<a href="/item">Item</a>'),
+                "/item": Page(body="<title>Item</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT url, crawl_depth FROM urls WHERE url IN (?, ?) ORDER BY url",
+        [server.url("/item"), server.url("/sale")],
+    ) == [(server.url("/item"), 2), (server.url("/sale"), 1)]
