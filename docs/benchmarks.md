@@ -34,3 +34,25 @@ A 5,000-Page run (`--pages 5000`) that proves the script. It is not a run agains
 | RSS peak | 148.7 MiB |
 | Reader | 760 reads, 0 busy |
 | Atomicity | ok: 5 of 5 failing units failed and left 0 rows; 4,995 Pages and 2,327,670 Link rows stored |
+
+## TLS handshake
+
+`scripts/tls_handshake_speed.py` compares the two trust store paths of the crawler's TLS setup ([crawling.md](crawling.md#tls)): truststore, which asks the operating system, and certifi's bundle.
+
+- **What it does:** for each of five public hosts (www.python.org, github.com, www.wikipedia.org, www.cloudflare.com, pypi.org) it connects once to find an address that answers, then times 20 fresh TLS handshakes per trust store, alternating them, certificate verification included. A host that does not answer is named and skipped.
+- **Running it:** `uv run python scripts/tls_handshake_speed.py`. `--rounds` and a list of host names change the run. It prints the median and 90th percentile handshake per host and over all hosts.
+- **The result:** truststore is not measurably slower than certifi, so it stays the default path. macOS is not measured yet.
+
+### Runs, 2026-10-27
+
+- **The machine:** the machine of the writer's smoke run above, on a home network connection. Linux is WSL2 (kernel 6.18) on the same machine.
+- **The numbers:** the median handshake over the hosts that answered.
+
+| OS | Python | Hosts | truststore | certifi | Difference |
+|---|---|---|---|---|---|
+| Windows 11 | 3.14.7 | 4 | 80.7 ms | 80.0 ms | +0.7 ms |
+| Windows 11 | 3.14.7 | 5 | 75.5 ms | 74.6 ms | +0.9 ms |
+| Linux (WSL2) | 3.13.18 | 3 | 72.3 ms | 70.1 ms | +2.2 ms |
+| Linux (WSL2) | 3.13.18 | 5 | 71.9 ms | 73.5 ms | -1.6 ms |
+
+Per host the difference ran from -4.5 to +6.0 ms, both ways, inside the network's own spread. Building the context takes 2 to 6 ms with truststore and 24 to 28 ms with certifi, once per run.
