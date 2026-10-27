@@ -10,8 +10,10 @@ import aiohttp
 import yarl
 from aiohttp.abc import AbstractResolver
 
+from spider import __version__
 from spider.clock import Clock
 from spider.crawl.urls import NormalizedUrl
+from spider.naming import APP_NAME, PROJECT_URL
 from spider.store.records import FetchError
 
 
@@ -60,6 +62,7 @@ class Fetcher(Protocol):
 class FetchPolicy:
     """Every request setting of a Crawl, from its plan to its Fetcher (022-add-fetch-policy D1)."""
 
+    user_agent: str = f"{APP_NAME}/{__version__} (+{PROJECT_URL})"
     # Fixed until --timeout sets it; the watchdog of 020's design D16 outlasts it.
     timeout_seconds: float = 20
 
@@ -128,6 +131,7 @@ async def aiohttp_fetcher(
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(resolver=resolver),
         timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
+        headers={"User-Agent": policy.user_agent},
         # No cookie session: a cookie set by one response would change what later ones return.
         cookie_jar=aiohttp.DummyCookieJar(),
     ) as session:

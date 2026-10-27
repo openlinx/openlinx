@@ -2,6 +2,9 @@
 
 # A working name until the product name is chosen; a rename edits this module only.
 APP_NAME = "spider"
+# Named in every request's User-Agent: the repository until the product is named, and public
+# before the release (ROADMAP, Release).
+PROJECT_URL = "https://github.com/bogzak/seo_spider"
 DATA_DIR_NAME = f".{APP_NAME}"
 SETTINGS_FILE_NAME = f"{APP_NAME}.toml"
 # Selects robots.txt groups and prefixed robots directives unless --robots-user-agent is given.
