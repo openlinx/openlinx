@@ -65,7 +65,7 @@ def _write_seen(connection: Connection, rows: Sequence[Seen]) -> None:
     )
 
 
-def test_a_registered_handler_sees_every_url_once(
+def test_a_registered_handler_sees_each_recorded_outcome_once(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(
