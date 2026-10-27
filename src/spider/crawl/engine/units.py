@@ -183,7 +183,7 @@ async def _fetched(
     # preparation (design D9).
     links = response_links(url, response, context.scope, context.strip_params) if followed else ()
     if page is not None:
-        links += page.document_links
+        links += page.html_links
     if page is not None and page.parsed:
         directives = page.directives
     else:

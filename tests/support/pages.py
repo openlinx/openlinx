@@ -25,4 +25,4 @@ def page_links(
     settings = PageSettings(
         scope=scope_rules(url), strip_params=None, follow_nofollow=follow_nofollow
     )
-    return prepare_page(url, response, settings).document_links
+    return prepare_page(url, response, settings).html_links

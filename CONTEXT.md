@@ -67,6 +67,7 @@ _Avoid_: check
 **Link**:
 A reference from a Page to a URL (anchor, image, canonical, hreflang, …), with its attributes. Seen from the target it is an **Inlink**; seen from the source it is an **Outlink**.
 _Avoid_: href, reference
+In code, a _reference_ is only the raw string of an attribute or a header before it resolves to a Link, as the URL Standard names it (`spider.crawl.references`).
 
 **Redirect Chain**:
 The hops from a URL to its final destination, each with its own status.
