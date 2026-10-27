@@ -322,6 +322,14 @@ Every request, robots.txt's included, carries the header `User-Agent: spider/<ve
 
 The Crawl keeps no cookies: a cookie that a response sets is never sent with a later request, so every URL is requested as a first visit is. A site that needs a session cookie shows it, as it does to a search engine's crawler, in redirect loops or 403 responses.
 
+### Proxy variables
+
+The Crawl honours the standard proxy variables, as curl, pip and uv do. It is the one place where the tool reads the environment.
+- **Which proxy:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs. Each is read in any letter case, and when both cases are set, the lower-case one wins. `ALL_PROXY` and the variables of other schemes are not read.
+- **Bypass:** `NO_PROXY` is a comma-separated list of host names and domain suffixes, with or without a leading dot, or `*` for every host. A host it names, or a host under a domain suffix it names, is requested directly: `site.test` covers `site.test` and `www.site.test`, but not `mysite.test`.
+- **When:** the variables are read once, when a run starts, and every request of the run, robots.txt's included, follows them. A resumed Crawl reads them again.
+- **Recorded:** the variables that are set are recorded in the `environment` table of `crawl.config`, under `http_proxy`, `https_proxy` and `no_proxy`. The password of a proxy URL is recorded as `***`, as in `http://u:***@proxy:3128`, and a proxy URL without a password is recorded as `***`.
+
 ## robots.txt
 
 Before its first request to an origin, the Crawl requests the origin's `/robots.txt`, once per origin in a run, and obeys it for the robots user-agent token (see [The robots user-agent token](#the-robots-user-agent-token)). Every origin is asked: Internal ones, External ones and those of Resources. A URL recorded without a request, such as an excluded URL or an External URL under `--no-check-external`, never makes its origin's robots.txt be requested, and neither does a URL that the URL limit refuses.
