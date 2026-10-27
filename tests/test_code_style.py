@@ -1,4 +1,5 @@
-"""Guard: code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14, D19)."""
+"""Guard: code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14, D19;
+022-add-fetch-policy D2)."""
 
 import ast
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -958,4 +959,79 @@ def test_a_wait_outside_the_clock_is_named() -> None:
         "spider/crawl/fetch/politeness.py:2 imports time.sleep by name",
         "spider/crawl/fetch/politeness.py:7 imports asyncio.tasks.sleep by name",
         "spider/services/crawling.py:1 waits outside the Clock: asyncio.timeout(delay=1)",
+    ]
+
+
+# Every row goes into urls through insert_urls, which records its origin first: an insert that
+# forgets it fails on a NULL origin_id and ends as a silent record_failed (022-add-fetch-policy
+# design D2).
+URLS_MODULE = "spider/store/urls.py"
+
+
+def _inserts_into_urls(node: ast.AST) -> bool:
+    return any(
+        isinstance(call, ast.Call)
+        and _base_name(call.func) == "insert"
+        and bool(call.args)
+        and isinstance(call.args[0], ast.Name)
+        and call.args[0].id == "urls"
+        for call in ast.walk(node)
+    )
+
+
+def url_insert_violations(sources: Mapping[str, str]) -> list[str]:
+    """Inserts into urls that bypass insert_urls, given every module's source by its path."""
+    found = []
+    for path, source in sources.items():
+        tree = ast.parse(source)
+        if path != URLS_MODULE:
+            if _inserts_into_urls(tree):
+                found.append(f"{path} inserts into urls")
+            continue
+        statements: set[str] = set()
+        for node in tree.body:
+            if (
+                isinstance(node, ast.Assign)
+                and isinstance(node.targets[0], ast.Name)
+                and (
+                    _inserts_into_urls(node.value)
+                    or any(
+                        isinstance(name, ast.Name) and name.id in statements
+                        for name in ast.walk(node.value)
+                    )
+                )
+            ):
+                statements.add(node.targets[0].id)
+        for call, function in _calls_in_functions(tree):
+            if (
+                _base_name(call.func) == "execute"
+                and call.args
+                and isinstance(call.args[0], ast.Name)
+                and call.args[0].id in statements
+                and function != "insert_urls"
+            ):
+                found.append(f"{path}:{call.lineno} runs {call.args[0].id} outside insert_urls")
+    return found
+
+
+def test_every_insert_into_urls_goes_through_insert_urls() -> None:
+    assert url_insert_violations(_src_sources()) == []
+
+
+def test_an_insert_into_urls_outside_insert_urls_is_named() -> None:
+    sources = {
+        URLS_MODULE: (
+            "_INSERT = insert(urls).values(origin_id=ORIGIN_ID)\n"
+            "_INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])\n"
+            "def insert_urls(connection, statement, rows):\n"
+            "    connection.execute(statement, rows)\n"
+            "def record_seed(connection, row):\n"
+            "    connection.execute(_INSERT_URL, row)\n"
+        ),
+        "spider/store/links.py": "_LINK_TARGET = insert(urls)\n",
+    }
+
+    assert url_insert_violations(sources) == [
+        "spider/store/urls.py:6 runs _INSERT_URL outside insert_urls",
+        "spider/store/links.py inserts into urls",
     ]

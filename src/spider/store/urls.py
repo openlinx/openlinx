@@ -1,8 +1,19 @@
 """The urls table's units: the frontier and each URL's outcome (020-add-crawl-core D1, D2, D14)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
-from sqlalchemy import Connection, bindparam, func, literal_column, null, or_, select, update
+from sqlalchemy import (
+    Connection,
+    Insert,
+    bindparam,
+    func,
+    literal_column,
+    null,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.dialects.sqlite import insert
 
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
@@ -136,15 +147,22 @@ def record_seed(
         "fetch_state": "queued",
         "parsed": False,
     }
-    origins = origin_rows([row])
 
     def unit(connection: Connection) -> int:
-        record_origins(connection, origins)
-        connection.execute(_INSERT_URL, row)
+        insert_urls(connection, _INSERT_URL, [row])
         url_id: int = connection.execute(_URL_ID, {"url": url}).scalar_one()
         return url_id
 
     return unit
+
+
+def insert_urls(
+    connection: Connection, statement: Insert, rows: Sequence[Mapping[str, Any]]
+) -> None:
+    """The one way rows go into urls: each binds its origin, whose row is recorded first, or
+    the insert fails on a NULL origin_id (design D18)."""
+    record_origins(connection, origin_rows(rows))
+    connection.execute(statement, list(rows))
 
 
 def queued_batch(
@@ -209,18 +227,16 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         }
         for new in fetched.discovered
     ]
-    origins = origin_rows(new_rows)
 
     def unit(connection: Connection) -> None:
         connection.execute(_FETCHED, values)
-        record_origins(connection, origins)
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
             # The stored depth, which a Checked URL answering late may have lowered while the
             # URL was in flight, so what it links to stays one deeper than it (design D3).
             depth = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one() + 1
             rows = [{**row, "crawl_depth": depth} for row in new_rows]
-            connection.execute(_INSERT_DISCOVERED, rows)
+            insert_urls(connection, _INSERT_DISCOVERED, rows)
         write_rows(connection, fetched.rows)
 
     return unit
