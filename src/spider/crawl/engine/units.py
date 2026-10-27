@@ -17,7 +17,7 @@ from spider.crawl.engine.crawl_warnings import (
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
-from spider.crawl.engine.pause import NetworkPause
+from spider.crawl.engine.pause import NO_RESPONSE, NetworkPause
 from spider.crawl.engine.stop import StopSignal
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
@@ -126,7 +126,7 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
         origin_error = origin_robots.origin_error
         if origin_error is not None:
             if decision.is_internal:
-                run.pause.failed(origin_error)
+                run.pause.failed(origin_error, queued.url)
             # The origin cannot be reached: the URL gets the error without a request of
             # its own (design D6).
             message = (
@@ -161,9 +161,18 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
         return None
     host = host_key(queued.url)
     status_code = None if isinstance(response, FetchFailure) else response.status_code
+    if (
+        isinstance(response, FetchFailure)
+        and run.pause.paused
+        and response.fetch_error in NO_RESPONSE
+    ):
+        # Ended without a response while paused: not recorded, so its URL stays queued and is
+        # requested again, and counts toward the URL limit only then (design D16).
+        run.limits.give_back()
+        return None
     if decision.is_internal:
         if isinstance(response, FetchFailure):
-            run.pause.failed(response.fetch_error)
+            run.pause.failed(response.fetch_error, queued.url)
         else:
             run.pause.responded()
     if decision.is_internal and run.blocking.responded(host, status_code):

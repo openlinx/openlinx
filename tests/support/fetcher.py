@@ -30,9 +30,18 @@ class FakeFetcher:
     from the others, and 404 for any other URL; `starts` records each request's URL and the
     clock's monotonic time when it started."""
 
-    def __init__(self, clock: Clock, pages: Mapping[str, FakePage]) -> None:
+    def __init__(
+        self,
+        clock: Clock,
+        pages: Mapping[str, FakePage],
+        *,
+        outage: tuple[float, float] | None = None,
+    ) -> None:
+        """`outage` is a span of monotonic time in which no request started gets a response,
+        whatever its URL: the network itself is down."""
         self._clock = clock
         self._pages = pages
+        self._outage = outage
         self.starts: list[tuple[str, float]] = []
         self._in_flight = 0
         self.most_in_flight = 0
@@ -47,13 +56,13 @@ class FakeFetcher:
         started = self._clock.monotonic()
         self.starts.append((request.url, started))
         page = self._pages.get(request.url) or self._pages.get(path)
-        if (
-            page is not None
-            and page.fails is not None
-            and (page.until is None or started < page.until)
-        ):
+        fails = self._fails(page, started)
+        if fails is not None:
+            # A failure takes the page's delay too, as a connection that times out does.
+            if page is not None and page.delay:
+                await self._clock.sleep(page.delay)
             return FetchFailure(
-                fetch_error=page.fails,
+                fetch_error=fails,
                 message="No HTTP response, as the test asks",
                 fetched_at=self._clock.now(),
             )
@@ -74,3 +83,10 @@ class FakeFetcher:
             fetched_at=self._clock.now(),
             response_time_ms=0,
         )
+
+    def _fails(self, page: FakePage | None, started: float) -> FetchError | None:
+        if self._outage is not None and self._outage[0] <= started < self._outage[1]:
+            return "connection_error"
+        if page is None or page.fails is None:
+            return None
+        return page.fails if page.until is None or started < page.until else None

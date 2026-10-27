@@ -52,6 +52,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             concurrency=concurrency,
             network_wait=context.settings.network_wait,
             seed=seed,
+            crawl_id=context.crawl_file.id,
             stop=context.stop,
             requester=requester,
             clock=context.clock,

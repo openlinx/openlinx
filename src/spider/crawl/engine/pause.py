@@ -44,6 +44,10 @@ def probe_times(network_wait: int) -> tuple[int, ...]:
     return tuple(times)
 
 
+type _Reason = Literal["seed_unreachable", "site_unreachable"]
+type _Outcome = Literal["dead_section", "outage"]
+
+
 class NetworkPause:
     """Kept by the engine from each Internal URL's outcome, since only it knows which URLs are
     Internal and every code that counts, a robots.txt one included; the Requester holds its
@@ -55,6 +59,7 @@ class NetworkPause:
         concurrency: int,
         network_wait: int,
         seed: NormalizedUrl,
+        crawl_id: str,
         stop: StopSignal,
         requester: Requester,
         clock: Clock,
@@ -63,78 +68,101 @@ class NetworkPause:
         self._limit = pause_after(concurrency)
         self._network_wait = network_wait
         self._seed = seed
+        self._crawl_id = crawl_id
         self._stop = stop
         self._requester = requester
         self._clock = clock
         self._log = log
-        self._in_a_row = 0
+        # The URLs of the requests in a row without a response, which make up the count.
+        self._in_a_row: list[NormalizedUrl] = []
         # The Seed is requested first, so the first Internal answer is its origin's.
         self._seed_answered = False
         self._probing: asyncio.Task[None] | None = None
 
+    @property
+    def paused(self) -> bool:
+        return self._probing is not None
+
     def responded(self) -> None:
-        self._in_a_row = 0
+        self._in_a_row.clear()
         self._seed_answered = True
 
     def robots_txt_answered(self) -> None:
         self._seed_answered = True
 
-    def failed(self, fetch_error: FetchError) -> None:
+    def failed(self, fetch_error: FetchError, url: NormalizedUrl) -> None:
         if fetch_error not in NO_RESPONSE:
             return
-        self._in_a_row += 1
+        self._in_a_row.append(url)
         # Until the Seed's origin answers, one failure pauses: a network may be coming up or
         # switching just as the Crawl starts (design D16).
         if not self._seed_answered:
-            self._pause("seed_unreachable")
-        elif self._in_a_row >= self._limit:
-            self._pause("site_unreachable")
+            self._pause("seed_unreachable", fetch_error)
+        elif len(self._in_a_row) >= self._limit:
+            self._pause("site_unreachable", fetch_error)
 
     async def close(self) -> None:
         if self._probing is not None:
             self._probing.cancel()
             await asyncio.gather(self._probing, return_exceptions=True)
 
-    def _pause(self, reason: Literal["seed_unreachable", "site_unreachable"]) -> None:
+    def _pause(self, reason: _Reason, fetch_error: FetchError) -> None:
         if self._network_wait == 0:
             self._stop.set(reason)
         elif self._probing is None:
             self._requester.close_gate()
+            self._log.event(
+                "crawl_paused",
+                crawl_id=self._crawl_id,
+                reason=fetch_error,
+                urls=list(self._in_a_row),
+            )
             self._probing = asyncio.create_task(self._probe(reason))
 
-    async def _probe(self, reason: Literal["seed_unreachable", "site_unreachable"]) -> None:
+    async def _probe(self, reason: _Reason) -> None:
         began = self._clock.monotonic()
-        answered = await self._answered(began)
-        self._log.count_pause(network_paused(self._seed), self._clock.monotonic() - began)
-        if not answered:
+        outcome = await self._answered(began)
+        seconds = self._clock.monotonic() - began
+        self._log.count_pause(network_paused(self._seed), seconds)
+        if outcome is None:
             self._stop.set(reason)
-        self._in_a_row = 0
+        else:
+            self._log.event(
+                "crawl_resumed",
+                crawl_id=self._crawl_id,
+                duration_s=round(seconds, 3),
+                outcome=outcome,
+            )
+        self._in_a_row.clear()
         self._probing = None
         # Open after giving up too: the stop then refuses the requests that waited.
         self._requester.open_gate()
 
-    async def _answered(self, began: float) -> bool:
-        """Whether a probe answered before the wait ended, when the probes still in flight are
-        cancelled; one that started exactly at the wait is awaited."""
-        probes: set[asyncio.Task[bool]] = set()
+    async def _answered(self, began: float) -> _Outcome | None:
+        """How a probe answered before the wait ended, when the probes still in flight are
+        cancelled; one that started exactly at the wait is awaited. The first probe's answer
+        means a dead section, a later one's an outage."""
+        probes: list[asyncio.Task[bool]] = []
         at_the_wait: asyncio.Task[bool] | None = None
         try:
             for at in probe_times(self._network_wait):
                 if await self._answer_before(probes, began + at):
-                    return True
+                    return _outcome(probes)
                 probe = asyncio.create_task(self._probe_once())
-                probes.add(probe)
+                probes.append(probe)
                 if at == self._network_wait:
                     at_the_wait = probe
-            if await self._answer_before(probes, began + self._network_wait):
-                return True
-            return at_the_wait is not None and await at_the_wait
+            if await self._answer_before(probes, began + self._network_wait) or (
+                at_the_wait is not None and await at_the_wait
+            ):
+                return _outcome(probes)
+            return None
         finally:
             for probe in probes:
                 probe.cancel()
             await asyncio.gather(*probes, return_exceptions=True)
 
-    async def _answer_before(self, probes: set[asyncio.Task[bool]], until: float) -> bool:
+    async def _answer_before(self, probes: list[asyncio.Task[bool]], until: float) -> bool:
         while not any(_answered(probe) for probe in probes):
             delay = until - self._clock.monotonic()
             if delay <= 0:
@@ -155,3 +183,7 @@ class NetworkPause:
 
 def _answered(probe: asyncio.Task[bool]) -> bool:
     return probe.done() and not probe.cancelled() and probe.result()
+
+
+def _outcome(probes: list[asyncio.Task[bool]]) -> _Outcome:
+    return "dead_section" if _answered(probes[0]) else "outage"
