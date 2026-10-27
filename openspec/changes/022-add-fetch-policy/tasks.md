@@ -38,6 +38,7 @@ Seams (docs/testing.md):
 
 ## 2. Proxy variables
 
+- [x] 2.0 Fix: a user agent holds visible ASCII characters, spaces and tabs only (RFC 9110 VCHAR, SP, HTAB), with a Cyrillic and an accented name in "An invalid user agent is rejected".
 - [ ] 2.1 [Fixture] Add a small forward-proxy helper to `tests/support/` that records the requests it relays. It resolves the fixture's names itself through `hosts_for` and `FixtureResolver`, since a proxied request leaves name resolution to the proxy.
 - [ ] 2.2 [HTTP] Drive "The HTTP_PROXY variable is honoured": `getproxies_environment()` read once in `plan_crawl` into `FetchPolicy`, and the proxy chosen per request from that snapshot, with `trust_env=False` (design D1). `000`'s proxy isolation removes the variables before every test, so the test sets them with `monkeypatch.setenv`.
 - [ ] 2.3 [HTTP] Drive "A lower-case proxy variable is honoured".

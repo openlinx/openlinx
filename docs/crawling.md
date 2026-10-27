@@ -316,7 +316,7 @@ An agent reads it to know what a Crawl covered without parsing its command line.
 
 ### The User-Agent header
 
-Every request, robots.txt's included, carries the header `User-Agent: spider/<version> (+<project URL>)`, where the version is the tool's and the project URL its repository's, so a site owner can tell the crawler apart and reach its maintainer. `--user-agent <string>` replaces it on every request. An empty value or one of spaces only, which is empty on the wire, or one with a control character such as CR or LF, is rejected as `invalid_value` (exit code 2), or in `spider.toml` as `settings_invalid` (exit code 3): it would end the header, or add one. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
+Every request, robots.txt's included, carries the header `User-Agent: spider/<version> (+<project URL>)`, where the version is the tool's and the project URL its repository's, so a site owner can tell the crawler apart and reach its maintainer. `--user-agent <string>` replaces it on every request. It holds visible ASCII characters, spaces and tabs only: an empty value or one of spaces only, which is empty on the wire, a CR or LF, which would end the header or add one, and a character outside ASCII, which servers and log pipelines misread, are rejected as `invalid_value` (exit code 2), or in `spider.toml` as `settings_invalid` (exit code 3). When it is not given, `crawl.config` records `user_agent` as null; the default it stood for follows from `crawl.tool_version`. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
 
 ### Cookies
 

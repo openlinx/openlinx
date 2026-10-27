@@ -16,7 +16,7 @@ Scenario conventions:
 ## ADDED Requirements
 
 ### Requirement: User agent
-Every request, including robots.txt, SHALL carry the `User-Agent` header `spider/<version> (+<project URL>)` by default, where `<version>` is the tool's version. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request. A value that is empty or only spaces, or holds CR, LF or another control character, SHALL be rejected with exit code 2 and error code `invalid_value`.
+Every request, including robots.txt, SHALL carry the `User-Agent` header `spider/<version> (+<project URL>)` by default, where `<version>` is the tool's version. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request. A value that is empty or only spaces, or holds a character other than visible ASCII, space and tab (RFC 9110's VCHAR, SP and HTAB), SHALL be rejected with exit code 2 and error code `invalid_value`.
 
 #### Scenario: The default user agent identifies the tool
 - **WHEN** `spider crawl {site}/` runs

@@ -53,8 +53,16 @@ def test_a_custom_user_agent_is_used_on_every_request(
 
 
 # An empty header, a blank one that is empty on the wire, one that would add a header of its own,
-# and a bell from a pasted string.
-_NOT_USER_AGENTS = ["", "   ", "AuditBot/1.0\r\nX-Forwarded-For: 10.0.0.1", "AuditBot\x07/1.0"]
+# a bell from a pasted string, and names that go out as bytes outside ASCII, which servers and
+# log pipelines misread.
+_NOT_USER_AGENTS = [
+    "",
+    "   ",
+    "AuditBot/1.0\r\nX-Forwarded-For: 10.0.0.1",
+    "AuditBot\x07/1.0",
+    "Мой бот/1.0",
+    "Crawlér/2.0",
+]
 
 
 @pytest.mark.parametrize("user_agent", _NOT_USER_AGENTS)
