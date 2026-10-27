@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from sqlalchemy import Connection
 
-type RowWriter[R] = Callable[[Connection, R], None]
+# One call per handler and URL, so a writer runs one executemany, 017's fast path (D9).
+type RowWriter[R] = Callable[[Connection, Sequence[R]], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,5 +22,4 @@ class HandlerRows[R]:
 
 def write_rows(connection: "Connection", batches: Sequence[HandlerRows[Any]]) -> None:
     for batch in batches:
-        for row in batch.rows:
-            batch.write(connection, row)
+        batch.write(connection, batch.rows)

@@ -171,7 +171,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.16 Drive "A concurrency of zero is rejected" at seam 1.
 - [x] 5.17 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes and the per-host and global request limits in `docs/crawling.md`.
 - [x] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
-- [ ] 5.19 Fix: a handler's writer takes the URL's rows as one sequence and runs one `executemany` (design D9).
+- [x] 5.19 Fix: a handler's writer takes the URL's rows as one sequence and runs one `executemany` (design D9).
   Done when: a crawl with a handler that returns several rows per URL runs one INSERT per URL's unit, red by mutation of one writer call per row.
 - [ ] 5.20 Refactor: `UrlResult.response` and `UrlResult.failure` replace the flat response and failure fields, the store records are built from them, and one header lookup serves `FetchResult`, `UrlResponse` and the `X-Robots-Tag` read (design D9), behaviour unchanged.
 - [ ] 5.21 Drive "A handler sees the X-Robots-Tag of a PDF" at seam 3.

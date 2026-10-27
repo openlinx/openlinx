@@ -3,7 +3,7 @@
 import json
 import sqlite3
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
@@ -12,7 +12,7 @@ from typing import Any
 import msgspec
 import pytest
 from selectolax.lexbor import LexborHTMLParser
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection, Engine, event, text
 from sqlalchemy.dialects import sqlite
 
 from spider.clock import Clock
@@ -44,11 +44,11 @@ def _seen(result: UrlResult) -> tuple[Seen, ...]:
     return (Seen(result.url_id, result.fetch_state),)
 
 
-def _write_seen(connection: Connection, row: Seen) -> None:
+def _write_seen(connection: Connection, rows: Sequence[Seen]) -> None:
     connection.execute(text("CREATE TABLE IF NOT EXISTS test_seen (url_id INTEGER, state TEXT)"))
     connection.execute(
         text("INSERT INTO test_seen VALUES (:url_id, :state)"),
-        {"url_id": row.url_id, "state": row.fetch_state},
+        [{"url_id": row.url_id, "state": row.fetch_state} for row in rows],
     )
 
 
@@ -266,11 +266,11 @@ def _outputs(result: UrlResult) -> tuple[Outputs, ...]:
     return (Outputs(result.url_id, ",".join(sorted(result.outputs))),)
 
 
-def _write_outputs(connection: Connection, row: Outputs) -> None:
+def _write_outputs(connection: Connection, rows: Sequence[Outputs]) -> None:
     connection.execute(text("CREATE TABLE IF NOT EXISTS test_outputs (url_id INTEGER, names TEXT)"))
     connection.execute(
         text("INSERT INTO test_outputs VALUES (:url_id, :names)"),
-        {"url_id": row.url_id, "names": row.names},
+        [{"url_id": row.url_id, "names": row.names} for row in rows],
     )
 
 
@@ -389,15 +389,15 @@ def _unwritable(result: UrlResult) -> tuple[Unwritable, ...]:
     return (Unwritable(result.url_id),) if result.url.endswith("/boom") else ()
 
 
-def _refuse(connection: Connection, row: Unwritable) -> None:
-    raise ValueError(f"no row for {row.url_id}")
+def _refuse(connection: Connection, rows: Sequence[Unwritable]) -> None:
+    raise ValueError(f"no row for {rows[0].url_id}")
 
 
-def _refuse_with_the_file(connection: Connection, row: Unwritable) -> None:
+def _refuse_with_the_file(connection: Connection, rows: Sequence[Unwritable]) -> None:
     raise sqlite3.OperationalError("disk I/O error")
 
 
-def _with_row_writer(writer: Callable[[Connection, Unwritable], None]) -> Hooks:
+def _with_row_writer(writer: Callable[[Connection, Sequence[Unwritable]], None]) -> Hooks:
     hooks = default_hooks()
     return replace(
         hooks,
@@ -496,12 +496,12 @@ def _flaky(result: UrlResult) -> tuple[Flaky, ...]:
     return (Flaky(result.url_id),) if result.crawl_depth == 0 else ()
 
 
-def _write_flaky(written: list[int]) -> Callable[[Connection, Flaky], None]:
-    def write(connection: Connection, row: Flaky) -> None:
+def _write_flaky(written: list[int]) -> Callable[[Connection, Sequence[Flaky]], None]:
+    def write(connection: Connection, rows: Sequence[Flaky]) -> None:
         # Fails when the writer runs the unit again, which ends the writer (017 D6).
         if written:
             raise RuntimeError("not the same twice")
-        written.append(row.url_id)
+        written.extend(row.url_id for row in rows)
 
     return write
 
@@ -546,11 +546,11 @@ def _row_values(result: UrlResult) -> tuple[RowValues, ...]:
     return (RowValues(result.url_id, repr(values)),)
 
 
-def _write_row_values(connection: Connection, row: RowValues) -> None:
+def _write_row_values(connection: Connection, rows: Sequence[RowValues]) -> None:
     connection.execute(text("CREATE TABLE IF NOT EXISTS test_values (url_id INTEGER, v TEXT)"))
     connection.execute(
         text("INSERT INTO test_values VALUES (:url_id, :v)"),
-        {"url_id": row.url_id, "v": row.values},
+        [{"url_id": row.url_id, "v": row.values} for row in rows],
     )
 
 
@@ -594,12 +594,12 @@ def test_a_handler_gets_the_row_values_of_the_url(
 
 
 def _slowly(
-    writer: Callable[[Connection, Unwritable], None],
-) -> Callable[[Connection, Unwritable], None]:
-    def write(connection: Connection, row: Unwritable) -> None:
+    writer: Callable[[Connection, Sequence[Unwritable]], None],
+) -> Callable[[Connection, Sequence[Unwritable]], None]:
+    def write(connection: Connection, rows: Sequence[Unwritable]) -> None:
         # Still running when the engine goes on, so the failure reaches it later.
         time.sleep(0.5)
-        writer(connection, row)
+        writer(connection, rows)
 
     return write
 
@@ -743,11 +743,11 @@ def _values(result: UrlResult) -> tuple[Values, ...]:
     return (Values(result.url_id, json.dumps({"fetch_state": result.fetch_state, **stored})),)
 
 
-def _write_values(connection: Connection, row: Values) -> None:
+def _write_values(connection: Connection, rows: Sequence[Values]) -> None:
     connection.execute(text("CREATE TABLE IF NOT EXISTS test_values (url_id INTEGER, v TEXT)"))
     connection.execute(
         text("INSERT INTO test_values VALUES (:url_id, :v)"),
-        {"url_id": row.url_id, "v": row.values},
+        [{"url_id": row.url_id, "v": row.values} for row in rows],
     )
 
 
@@ -795,3 +795,48 @@ def _urls_rows(file: Path) -> list[sqlite3.Row]:
         connection.row_factory = sqlite3.Row
         rows: list[sqlite3.Row] = connection.execute("SELECT * FROM urls").fetchall()
         return rows
+
+
+@dataclass(frozen=True, slots=True)
+class Header:
+    url_id: int
+    name: str
+
+
+def _headers(result: UrlResult) -> tuple[Header, ...]:
+    return tuple(Header(result.url_id, name) for name, _ in result.headers)
+
+
+def _write_headers(connection: Connection, rows: Sequence[Header]) -> None:
+    connection.execute(text("CREATE TABLE IF NOT EXISTS test_headers (url_id INTEGER, name TEXT)"))
+    connection.execute(
+        text("INSERT INTO test_headers VALUES (:url_id, :name)"),
+        [{"url_id": row.url_id, "name": row.name} for row in rows],
+    )
+
+
+def test_a_handler_s_rows_for_a_url_are_written_in_one_statement(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/a">A</a>'), "/a": Page(body="<p>A</p>")})
+    )
+    hooks = default_hooks()
+    hooks = replace(hooks, handlers=(*hooks.handlers, handler("headers", _headers, _write_headers)))
+    inserts: list[str] = []
+
+    def count(conn: object, cursor: object, statement: str, *args: object) -> None:
+        if statement.startswith("INSERT INTO test_headers"):
+            inserts.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", count)
+    try:
+        crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+    finally:
+        event.remove(Engine, "before_cursor_execute", count)
+
+    assert (len(inserts), query(crawl_file, "SELECT count(DISTINCT url_id) FROM test_headers")) == (
+        2,
+        [(2,)],
+    )
+    assert query(crawl_file, "SELECT count(*) > 2 FROM test_headers") == [(1,)]
