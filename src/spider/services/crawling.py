@@ -16,6 +16,7 @@ from spider.clock import Clock
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.dispatch import run_crawl
 from spider.crawl.engine.hooks import Hooks, PassContext
+from spider.crawl.engine.pause import pause_after
 from spider.crawl.engine.stop import StopSignal
 from spider.crawl.engine.warning_log import WarningLog
 from spider.crawl.fetch.fetcher import Fetcher, aiohttp_fetcher
@@ -37,6 +38,7 @@ from spider.output.codes import (
     INVALID_PATTERN,
     INVALID_URL,
     SEED_OUT_OF_SCOPE,
+    SITE_UNREACHABLE,
     SUBFOLDER_IS_ROOT,
 )
 from spider.output.diagnostics import Diagnostic, SpiderError
@@ -270,6 +272,9 @@ async def _run(crawl: _Crawl) -> _End:
         stop = context.stop
         if stop.reason == "write_failed":
             cause = stop.cause
+        elif stop.reason == "site_unreachable":
+            ended = await _end(crawl, context.writer, "failed", stop.reason)
+            return replace(ended, failure=_site_unreachable(crawl))
         elif stop.reason not in (None, "max_urls"):
             # An interrupt has no end it records yet.
             raise stop.cause or RuntimeError(f"no end is built for {stop.reason}")
@@ -309,6 +314,19 @@ async def _end(
     await writer.run_async(record_state(state, ended_at, stop_reason))
     summary = await writer.run_async(crawl_summary())
     return _End(ended_at, summary, await writer.run_async(url_counts()))
+
+
+def _site_unreachable(crawl: _Crawl) -> SpiderError:
+    wait = crawl.plan.settings.network_wait
+    return SpiderError(
+        SITE_UNREACHABLE,
+        f"{pause_after(crawl.plan.settings.concurrency)} requests in a row to the site got no "
+        f"HTTP response, and it did not answer within --network-wait {wait}, so the Crawl "
+        "ended failed.",
+        hint=f"The Crawl waited {wait} seconds. Check the network access to the site, then "
+        f"continue it with: {APP_NAME} resume --crawl {crawl.crawl_file.id}",
+        details={"network_wait": wait},
+    )
 
 
 def _write_failed(crawl_file: CrawlFile, cause: BaseException | None) -> SpiderError:

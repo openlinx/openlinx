@@ -392,10 +392,10 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 2, through the Crawl Service with a handler and its writer registered for the test, since the CLI takes no test hooks; 12.9 pins exit 7 at seam 1. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
 
   Done when: the record-failure count of design D16 trips at `RECORD_FAILURE_LIMIT` (100) URL units in a row that failed on their first run, a URL unit that commits resets it, fallback units do not count, and the constant's comment says why.
-- [ ] 12.11 Drive "A network wait of zero fails at once" and "Losing the site is reported by one error" at seam 1, with the reset route of task 5.11.
+- [x] 12.11 Drive "A network wait of zero fails at once" and "Losing the site is reported by one error" at seam 1, with the reset route of task 5.11.
 
   Done when: the network pause's count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without an HTTP response, counting the codes D16 lists, a request that the watchdog ended among them, and the URLs recorded from an Internal origin's robots.txt without a response, but never `tls_error` or an External request; any response resets it; with `--network-wait 0` the pause ends at once, and the Crawl takes the `failed` end of 12.9 with `site_unreachable`; and `site_unreachable` is declared, with a hint that says how long the Crawl waited and names `spider resume` through `spider.naming`. The engine keeps the count from each Internal URL's outcome, and the Requester holds the gate (design D7, D16).
-- [ ] 12.12 Merged into 12.11, which declares the code it needs.
+- [x] 12.12 Merged into 12.11, which declares the code it needs.
 - [ ] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 2 with the fixture hosts, since only the Crawl Service takes the DNS resolver hook.
 - [x] 12.14 Drive "A stuck request is ended by the watchdog", fake timing. It runs right after 12.0c, before 12.1, since it needs only the virtual clock and the Requester.
 

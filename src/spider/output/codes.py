@@ -192,6 +192,13 @@ CRAWL_WRITE_FAILED = _declare(
     "Writing the crawl file failed during a Crawl, such as on a full disk; the Crawl ended "
     "failed, with write_failed, and details.error says what failed.",
 )
+SITE_UNREACHABLE = _declare(
+    "site_unreachable",
+    "error",
+    ExitCode.NETWORK,
+    "Internal requests in a row got no HTTP response, and the site did not answer within "
+    "--network-wait; the Crawl ended failed, and details.network_wait says how long it waited.",
+)
 MAX_URLS_REACHED = _declare(
     "max_urls_reached",
     "warning",

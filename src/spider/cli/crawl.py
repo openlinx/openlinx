@@ -106,6 +106,16 @@ def crawl(
         ),
         OptionMeta(setting="crawl.rate"),
     ] = None,
+    network_wait: Annotated[
+        int,
+        typer.Option(
+            "--network-wait",
+            min=0,
+            help="The seconds a Crawl paused by lost network access waits for its Seed to "
+            "answer before it fails; 0 fails at once.",
+        ),
+        OptionMeta(setting="crawl.network_wait"),
+    ] = 1800,
     max_urls: Annotated[
         int | None,
         typer.Option(
