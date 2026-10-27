@@ -17,7 +17,7 @@ The response headers must also be stored, without cookie values, because `page -
 
 > **Blueprint edits (2026-10-11):** the schema parts follow ADR-0005, `018-add-schema-conventions` and the rulings on the schema blueprint (design D10).
 
-> **Re-grounded (2026-10-14)** against `020-add-crawl-core`'s code through its group 6, its first pull request: the `Fetcher` Protocol in `spider.crawl.fetcher` with `FetchResult | FetchFailure`, `CrawlSettings`, the context builder, `Hooks` and the `fetch_error` codes. The parts of `020` that land later (robots.txt, `--rate`, the network pause, the watchdog and the fake Fetcher) are named in tasks.md where a task waits for them, and the v0.2 parts are marked there and in the design.
+> **Built on `020-add-crawl-core`'s code** with its `UrlResult` shape: the `Fetcher` Protocol and the Requester in `spider.crawl.fetch`, `CrawlSettings`, the context builder, `Hooks` with `handler(...)`, and the `fetch_error` codes. The parts of `020` not merged yet are named in tasks.md where a task waits for them, and the v0.2 parts are marked there and in the design.
 
 - **Request identity:**
   - `--user-agent <string>`. The default is `spider/<version> (+<project URL>)`.
@@ -32,18 +32,18 @@ The response headers must also be stored, without cookie values, because `page -
 - **No cookies are sent:** `Set-Cookie` is never replayed. `020`'s Fetcher already keeps no cookies, and this change pins that.
 - **Timeouts and retries:**
   - `--timeout <s>` (default 20), which also sets `020`'s watchdog.
-  - `--retries <n>` (default 2), with 1 s/2 s backoff. `Retry-After` is honoured up to 120 s, and 429 pauses the host. The engine retries around the Fetcher, which makes one attempt per call.
+  - `--retries <n>` (default 2), with 1 s/2 s backoff. `Retry-After` is honoured up to 120 s, and 429 pauses the host. `020`'s Requester retries around the Fetcher, which makes one attempt per call, and a retry does not count again towards `--max-urls`.
   - The `urls.attempt_count` column.
 - **Redirects:**
   - Followed hop by hop, by the engine. Every hop is a `urls` row with `redirect_location`/`redirect_url_id`, and a target keeps the Crawl Depth of its source.
   - `--max-redirects <n>` (default 10). Loops are marked with `in_redirect_loop`.
-  - A Seed that redirects within its registrable domain extends the Scope (whether v0.1 keeps it is the user's decision, still open in the design). An off-site Seed redirect is a warning.
+  - A Seed that redirects within its registrable domain extends the Scope, once, when its Redirect Chain ends. An off-site Seed redirect is a warning.
   - A meta refresh stays a Link, never a redirect hop.
 - **Limits:** response bodies are read up to 20 MiB, before and after decoding (`body_truncated`, `parse_error = body_too_large`), and URLs longer than 2,000 characters are skipped (`url_too_long`).
 - **Compression:** gzip, deflate and br, decoded by the tool; zstd from v0.2, so v0.1 sends `Accept-Encoding: gzip, deflate, br`. The `content_encoding`, `size_bytes` and `transferred_bytes` columns record status and size checks for Resources.
 - **TLS trust:** certificates are verified with truststore (the OS trust store), falling back to certifi. A speed test decides the default path. Failures are `tls_error`.
 - **HTTP version:** one ALPN handshake per https origin gives `origins.http_version` = `http_2` or `http_1_1` (v0.2). In v0.1 the column exists and is NULL, and its description starts with `Filled from v0.2. `.
-- **The `response_headers` table:** one JSON row per URL with a response, keyed by `url_id`. Headers keep their received order and letter case, and `Set-Cookie` values are stored as `***`.
+- **The `response_headers` table:** one JSON row per URL with a response, keyed by `url_id`. Headers keep their received order and letter case, and cookie values in `Set-Cookie` and `Cookie` are stored as `***`, with their names and attributes kept.
 - **Store, under ADR-0005 and `018`:**
   - the `urls` columns `attempt_count`, `redirect_location`, `redirect_url_id`, `in_redirect_loop`, `body_truncated`, `content_encoding`, `size_bytes` and `transferred_bytes`
   - the partial index `urls_redirect_url_id`
@@ -76,7 +76,7 @@ The response headers must also be stored, without cookie values, because `page -
 ## Impact
 
 - **Depends on:**
-  - `020-add-crawl-core`: from its first pull request, the Fetcher interface, the engine, the per-host limits, `CrawlSettings`, the context builder, `Hooks`, the DNS resolver hook, and the `urls`/`origins` tables; from its later groups, the meta refresh Link, `crawl.scope`, Resource checks, robots.txt, the next allowed start of `--rate`, the network pause, the watchdog and the fake Fetcher.
+  - `020-add-crawl-core`: from its first pull request, the Fetcher interface, the engine, the per-host limits, `CrawlSettings`, the context builder, `Hooks`, the DNS resolver hook, and the `urls`/`origins` tables; its `UrlResult` shape (`response` and `failure`), the Requester and `RateGate`, `crawl.scope`, Resource checks, robots.txt and the fake Fetcher; and, not merged yet, the auto-advancing fake clock, the network pause with the watchdog, and the scenario script.
   - `015-add-crawl-store`: whole and partial redaction, and secret settings.
   - `017-speed-up-crawl-writer`: the writer through which `020`'s units run, and its unit contract.
   - `018-add-schema-conventions`: `public_table()` and the schema contract test.
@@ -88,12 +88,14 @@ The response headers must also be stored, without cookie values, because `page -
   - `060` (`--auth` on resume)
   - `080` (`doctor`'s TLS check reuses this TLS setup)
 - **Code:**
-  - `spider.crawl.fetcher` (`020`'s module): the policy Fetcher, its decoding and its proxy choice
-  - `spider.crawl.tls`: the TLS setup that `080`'s `doctor` reuses, and from v0.2 the ALPN check
-  - `spider.crawl.engine`: the retry loop and redirects
+  - `spider.crawl.fetch.fetcher` (`020`'s module): `FetchPolicy`, the policy Fetcher, its decoding and its proxy choice
+  - `spider.crawl.fetch.requester`: the retry loop
+  - `spider.crawl.fetch.tls`: the TLS setup that `080`'s `doctor` reuses, and from v0.2 the ALPN check
+  - `spider.crawl.engine`: redirects, the open depth read again, and the Seed-redirect Scope rule
   - `spider.crawl.scope`: the URL length limit in `ScopeRules.decide`
   - `spider.crawl.settings` and `spider.cli.crawl`: the new keys and options
   - `spider.store.schema` and `spider.store.urls`: the new columns, the index and the redirect units
   - `spider.store.response_headers`: the `response_headers` table's row writer
+  - `spider.services.crawling`: the Fetcher factory, the `environment` table and its secrets
 - **New dependencies:** `truststore`, `certifi` and `brotli`. **(v0.2)** `zstandard`, shared with `030`, and `compression.zstd` on Python 3.14. `trustme` is a test dependency.
 - **Docs:** the fetching part of `docs/crawling.md` (identity, credentials, proxy, retries, redirects, limits, compression, TLS, HTTP version).

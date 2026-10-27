@@ -1,20 +1,19 @@
-> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
-
 ## Context
 
 See proposal.md (Why) for the motivation. The approach is shaped by these constraints:
 
-- **`020-add-crawl-core`,** re-grounded on 2026-10-14 against its code through group 6 (its first pull request), provides:
-  - the `Fetcher` Protocol in `spider.crawl.fetcher`, `async def fetch(self, request: Request) -> FetchResult | FetchFailure`: one attempt and one hop, never a redirect followed, and nothing raised but cancellation (`020` D8). `Request` holds the `NormalizedUrl`. `FetchResult` is `kw_only` (`status_code`, `headers` as received, `body`, `fetched_at`, `response_time_ms`, and `header(name)`), and `FetchFailure` is a separate record of `fetch_error`, `message` (the exception's type and text) and `fetched_at`
-  - the minimal `AiohttpFetcher(session, clock)`, which requests `yarl.URL(url, encoded=True)` so the request is the recorded URL. `aiohttp_fetcher(clock, resolver)` opens it with a fixed 20-second total timeout (`_REQUEST_DEADLINE_SECONDS`), aiohttp's default TLS context and a `DummyCookieJar`, and `_fetch_error` maps an exception to `dns_error`, `connection_refused`, `invalid_response` or `connection_error`
-  - the context builder (`020` D15): `_crawl_context` in `spider.services.crawling` opens the writer and the Fetcher and yields the frozen `CrawlContext` (`settings`, `scope`, `clock`, `reporter`, `writer`, `fetcher`, `pages`, `hooks`, `stop`). Boundary doubles go in through it: `start_crawl(..., resolver=...)` takes the DNS resolver hook, which reaches the Fetcher's `TCPConnector`
-  - `CrawlSettings` in `spider.crawl.settings`, the pydantic model of `[crawl]`, to which this change adds its keys. Options declare `OptionMeta(setting="crawl.<key>")` in `spider.cli.crawl`, and an option and its setting come with the task that applies them (`020` D11, no inert option)
-  - the engine in `spider.crawl.engine`: the frontier read depth by depth (`queued_batch`, `next_depth`), one task per URL whose dispatch decision is made once with `ScopeRules.decide` (a `ScopeDecision` of `is_internal`, `in_scope` and `skip_reason`), and `RequestLimits` (`020` D7): the global cap on URL tasks, and a semaphore per host around each `fetch`
-  - `Hooks` in `spider.crawl.hooks` (`extractors`, `handlers`, `passes` and `row_writers`), with `Handler`, `Pass` and `UrlResult`, the URL's row values that a handler gets, and `default_hooks()` in `spider.services.hooks`, the composition root, which lists the built-in hooks, so the crawl core never imports its plugins (`020` D9, D14)
-  - `is_html_type(content_type)` in `spider.crawl.pages`, the one rule of an HTML response, which decides with the Scope and a 2xx status whether a response is parsed (`020` D5)
-  - the `urls` and `origins` tables, and the enumeration values this change writes, which `020` already lists (D18): `redirect` (`discovered_via`), `max_redirects` and `url_too_long` (`skip_reason`), `timeout` and `tls_error` (`fetch_error`), and `body_too_large` (`parse_error`)
-  - the fixture site's `Redirect`, `redirect_chain`, `Status` and `LargeFile` routes, the `headers`, `content_type`, `delay`, `hang` and `reset_after` options, and the request log with each request's headers. `fixture_hosts(site, other)` starts two instances, and its DNS resolver hook (`tests/fixture_site/hosts.py`) maps `site.test` and `www.site.test` to the first and `other.test` to the second, on any port
-- **What `020` builds after its first pull request,** which some tasks here wait for (tasks.md names the `020` task each time): the meta refresh Link followed (task 7.7), `crawl.scope` recorded (task 8.11), Resource Links requested (task 9.1), the robots.txt loader (group 10), the per-host "next allowed start" of `--rate` (task 11.1), and the network pause, the watchdog with its `watchdog_seconds` function and the fake Fetcher of its fake-timing tasks (groups 11 and 12).
+- **`020-add-crawl-core`** provides:
+  - the `Fetcher` Protocol in `spider.crawl.fetch.fetcher`, `async def fetch(self, request: Request) -> FetchResult | FetchFailure`: one attempt and one hop, never a redirect followed, and nothing raised but cancellation (`020` D8). `Request` holds the `NormalizedUrl`. `FetchResult` holds the status, the headers as received, the body and the timing, and `FetchFailure` the `fetch_error`, its message and the time
+  - the minimal `AiohttpFetcher`, opened by `aiohttp_fetcher(clock, resolver)` with a fixed 20-second total timeout (`_REQUEST_DEADLINE_SECONDS`), aiohttp's default TLS context and a `DummyCookieJar`, and `fetch_error_of`, which maps an exception to a `fetch_error`
+  - the Requester in `spider.crawl.fetch.requester`, through which a URL's request and robots.txt go, with the per-host slots and `RateGate` of `spider.crawl.fetch.politeness`
+  - the context builder (`020` D15) in `spider.services.crawling`, which opens the writer and the Fetcher and yields the frozen `CrawlContext`. `start_crawl` takes the DNS resolver hook and a fake Fetcher as keywords today
+  - `CrawlSettings` in `spider.crawl.settings`, to which this change adds its keys, and options with `OptionMeta(setting="crawl.<key>")` in `spider.cli.crawl`, declared by the task that applies them (`020` D11)
+  - the engine in `spider.crawl.engine`: `dispatch` reads the frontier depth by depth, and `units` makes one unit per URL from its `UrlResult`, whose outcome is a `UrlResponse` (`response`) or a `UrlFailure` (`failure`), from which the store record is built (`020` task 5.20)
+  - `Hooks` in `spider.crawl.engine.hooks`, with `handler(name, handle, write)`, whose writer takes a URL's rows as one sequence (`020` task 5.19), and `default_hooks()` in `spider.services.hooks`, the composition root (`020` D9, D14)
+  - `resolve_reference` in `spider.crawl.references`, by which a Link's reference is resolved, and from `020` task 5.23 the Link following rule in `spider.crawl.following`
+  - the `urls` and `origins` tables, and the enumeration values this change writes (`020` D18): `redirect` (`discovered_via`), `max_redirects` and `url_too_long` (`skip_reason`), `timeout` and `tls_error` (`fetch_error`), and `body_too_large` (`parse_error`)
+  - the fixture site's `Redirect`, `redirect_chain`, `Status` and `LargeFile` routes, the `headers`, `content_type`, `delay`, `hang` and `reset_after` options, the request log with each request's headers, and `fixture_hosts(site, other)`, whose DNS resolver hook maps `site.test` and `www.site.test` to one instance and `other.test` to another, on any port
+- **What `020` has not merged yet,** which some tasks here wait for (tasks.md names each): the auto-advancing fake clock (task 12.0), the watchdog with its `watchdog_seconds` (task 12.14), and the scenario script (task 16.1).
 - **`015-add-crawl-store`** redacts secrets in `create_crawl`, from `NewCrawl.secret_names` (a `SecretNames(flags, settings)`): whole values become `***`, and a URL's password becomes `user:***@host` (the private `_redact_value` in `spider.store.redaction`). It has no header form yet (`Cookie: ***`), which this change adds in v0.2.
 - **`017-speed-up-crawl-writer`** gives the writer that `020`'s unit per URL goes through. A unit may run twice, so the units of this change follow its D7 contract, including the hop count and the loop walk of D2.
 - **`018-add-schema-conventions` and ADR-0005** set the schema rules. Every column, index and table of this change is declared through `018`'s `public_table()` (D10).
@@ -37,67 +36,80 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 ## Decisions
 
 ### D1. The aiohttp policy Fetcher
-`aiohttp_fetcher` opens the policy Fetcher in the context builder, from the resolved `CrawlSettings`, behind the same Protocol: one attempt per `fetch`, one hop, `FetchResult | FetchFailure` with nothing raised but cancellation, and the `yarl.URL(url, encoded=True)` request. The fields it adds to `FetchResult` have defaults, so `020`'s call sites and its fake Fetcher keep working. `UrlResult` gains the same row values (`content_encoding`, `size_bytes`, `transferred_bytes`, `redirect_url_id`), which `030`'s handler copies.
+**In short:** one frozen `FetchPolicy` carries every request setting from the Crawl's plan to the Fetcher, which stays one attempt and one hop behind `020`'s Protocol.
+- **The policy:** `plan_crawl` builds `FetchPolicy` from the resolved `CrawlSettings` and the proxy variables: the user agent, the timeout and the proxy snapshot. The Crawl Service opens the Fetcher through one factory that takes the policy and the clock, and tests pass a factory with the DNS resolver hook, the test CA or a fake Fetcher bound in. A new request setting is then a field of the policy, not a keyword of `start_crawl` (`020` D15).
+  - *Alternative: a keyword of `start_crawl` per setting.* The user agent, the proxy, the timeout, decoding and trust anchors would widen it five times, and every test helper with it. Rejected.
+- **The values it adds** to `FetchResult` have defaults, so `020`'s fake Fetcher keeps working, and they reach `UrlResponse` and the store record: `content_encoding`, `size_bytes`, `transferred_bytes` and `body_truncated`. A redirect's target id is assigned in the URL's unit, so it is never on `UrlResult`; `030` reads `urls.redirect_url_id`.
 - **Errors:** `TimeoutError`, from which aiohttp's timeouts derive, is `timeout`. `aiohttp.ClientSSLError` (a certificate that does not verify, or another TLS failure) is `tls_error`, tested before `020`'s `ClientConnectorError` branch, which would make it `connection_error`. The rest stay as `020` D8 maps them, a host the resolver cannot encode included (`dns_error`).
 - **Timeout:** `--timeout` replaces `_REQUEST_DEADLINE_SECONDS` in `aiohttp.ClientTimeout(total=...)`, which covers the body read too, so a stalled or trickling body times out. It also feeds `020`'s `watchdog_seconds`, `max(120, timeout + 30)` (`020` D16).
-- **Identity:** the session's `User-Agent` is built from `spider.naming` and the tool's version, and `--user-agent` replaces it. Its project URL is a `PROJECT_URL` constant next to `APP_NAME` in `spider.naming`, set with the product name (ruled 2026-10-14).
+- **Identity:** the session's `User-Agent` is built from `APP_NAME`, `spider.__version__` and `PROJECT_URL`, and `--user-agent` replaces it. `PROJECT_URL` is one constant next to `APP_NAME` in `spider.naming`: the repository's URL until the product is named, changed with the name.
 - **Redirects:** `allow_redirects=False` on every request, as `020`'s Fetcher does already.
-- **Decoding:** `auto_decompress=False` and an explicit `Accept-Encoding`, `gzip, deflate, br` in v0.1 (ruled 2026-10-14). The Fetcher decodes gzip and deflate (`zlib`) and br (`brotli`) itself, so it measures both `transferred_bytes` and `size_bytes`. **(v0.2)** zstd (`zstandard`, or `compression.zstd` on 3.14).
-- **Body limit:** the body is streamed up to 20 MiB, and its decoded size is capped at the same 20 MiB by a decoder bounded in output, so a small compressed body cannot expand past the cap. `Request` gains its dispatch decision's `in_scope`: a URL outside the Scope is only checked, never parsed (`020` D5), so when its response has a `Content-Length` and no `Content-Encoding` the Fetcher may stop after the headers and take both sizes from `Content-Length`.
+- **Decoding:** `auto_decompress=False` and an explicit `Accept-Encoding`, `gzip, deflate, br` in v0.1. The Fetcher decodes gzip and deflate (`zlib`) and br (`brotli`) itself, so it measures both `transferred_bytes` and `size_bytes`. **(v0.2)** zstd (`zstandard`, or `compression.zstd` on 3.14).
+- **Body limit:** the body is streamed up to 20 MiB, and its decoded size is capped at the same 20 MiB by a decoder bounded in output, so a small compressed body cannot expand past the cap. A capped body has `body_truncated`, `transferred_bytes` the bytes read, and `size_bytes` NULL, since its full size was not measured; the URL's unit gives a capped HTML body `parse_error` = `body_too_large` instead of preparing it.
+  - **(v0.2)** `Request` gains its dispatch decision's `in_scope`: a URL outside the Scope is only checked, never parsed (`020` D5), so when its response has a `Content-Length` and no `Content-Encoding` the Fetcher may stop after the headers and take both sizes from `Content-Length`. The 20 MiB cap bounds such a body in v0.1.
 - **No cookies:** `020`'s `DummyCookieJar` stays, so no cookie is ever replayed. This change pins it with a guard.
 - **Environment:** `trust_env=False`, aiohttp's default, which `020` keeps, so aiohttp reads no `.netrc` and no variables by itself. The Fetcher chooses the proxy per request:
   1. **(v0.2)** `--proxy` or `[crawl] proxy` when set
-  2. otherwise `urllib.request.getproxies_environment()` (any case; lower-case wins) and `proxy_bypass_environment()` for `NO_PROXY`, read when each run starts, so a resumed Crawl reads them again
+  2. otherwise `urllib.request.getproxies_environment()` (any case; lower-case wins) and `proxy_bypass_environment()` for `NO_PROXY`, read once into `FetchPolicy` when each run starts, so a resumed Crawl reads them again, and the `environment` table of D8 records the same snapshot
 
   **(v0.2)** The ALPN check uses the same choice.
 - **TLS:** the context of D5 goes into the `TCPConnector`, next to the resolver.
 - **(v0.2) Internal URLs only:** custom headers and preemptive basic auth are added only when `Request` says the URL is internal (its dispatch decision's `is_internal`), never for External URLs. Each redirect hop is its own `Request` with its own decision, so a hop to an External URL never carries them.
 
 ### D2. Redirects are URL rows
-Every hop is a normal `urls` row with its own status and timing, linked through `redirect_url_id`. The engine follows them, never the Fetcher: the unit that records a 3xx response records its target as a URL discovered from it, with `discovered_via` = `redirect` and the source's Crawl Depth, and the target goes through the Scope, robots.txt and the per-host limits like any URL.
-- **Location:** it is resolved against the redirecting URL as `020`'s link extractor resolves a reference, by the URL Standard (`020` task 3.8), through a public function that this change makes of `_resolved` in `spider.crawl.links`, and then normalised. A Location that gives no `NormalizedUrl` (a scheme other than http or https, userinfo, or a malformed reference) is not usable: `redirect_url_id` stays NULL, and `redirect_location` keeps the raw text.
-- **The open depth:** `020`'s engine stops reading a depth at the first empty frontier read and then waits for that depth's tasks, and `next_depth` looks only deeper. So `_crawl_depth` reads the open depth again from its cursor after its tasks end, until a read is empty while no task runs. A target recorded at the open depth in the meantime is then dispatched in the same run, and `020`'s depth barrier (D3) stays exact.
+**In short:** every hop is a `urls` row linked through `redirect_url_id`, and the engine, never the Fetcher, follows it as a URL of its own.
+
+The unit that records a 3xx response records its target as a URL discovered from it, with `discovered_via` = `redirect` and the source's Crawl Depth, and the target goes through the Scope, robots.txt and the per-host limits like any URL. A redirect is not a Link: no Link type, nofollow or Link following rule applies to it.
+- **Which statuses:** 301, 302, 303, 307 and 308, one constant shared with the robots.txt loader, which follows the same set. A 300, 304 or 305 keeps its `redirect_location` and has no target.
+- **The insert:** one `insert_urls` helper in `spider.store.urls` records the rows' origins before it inserts them, and every inserter goes through it: today an inserter that forgot `record_origins` would get a NULL `origin_id`, an integrity error, and a silent `record_failed`. A target is inserted at its source's depth, a Link's target at depth + 1.
+- **Checked status:** a target keeps its source's checked status, so a redirected Resource beyond `--max-depth` is still checked, and the depth barrier treats it as a Resource.
+- **Location:** it is resolved against the redirecting URL as `020`'s link extractor resolves a reference, by the URL Standard, through `020`'s `resolve_reference` with the Crawl's `strip_params`, and then normalised. A Location that gives no `NormalizedUrl` (a scheme other than http or https, userinfo, or a malformed reference) is not usable: `redirect_url_id` stays NULL, and `redirect_location` keeps the raw text.
+- **The open depth:** `020`'s engine stops reading a depth at the first empty frontier read and then waits for that depth's tasks, and `next_depth` looks only deeper. So `_crawl_depth` reads the open depth again after its tasks end, until a read is empty while no task runs, skipping the URLs still in flight. A target recorded at the open depth in the meantime, or a URL lowered to it below the read cursor, is then dispatched in the same run, and `020`'s depth barrier (D3) stays exact.
+- **Shortest paths:** a redirect is an edge of weight 0 that is not a Link, so `030`'s shortest-path pass over the stored Links agrees with the engine's depths (`020` D5) only if it walks `urls.redirect_url_id` at weight 0 too.
 - **Hop limit:** the unit that records a 3xx response counts the consecutive redirects that led to its URL by walking `found_on_url_id` back while `discovered_via` = `redirect`, at most `--max-redirects` reads by primary key. A target beyond `--max-redirects` is recorded in that unit as `skipped` with `max_redirects`. The count comes from the file, so the unit gives the same result when it runs again (`017` D7), and a continue keeps it.
-  - *Alternative:* a count per target kept in memory by the engine, as the draft had. It grows with the queued redirect targets, is lost on a continue, and goes against `020` D1, where memory follows the site's shape and not its size. Rejected at the re-grounding of 2026-10-14.
+  - *Alternative:* a count per target kept in memory by the engine, as the draft had. It grows with the queued redirect targets, is lost on a continue, and goes against `020` D1, where memory follows the site's shape and not its size. Rejected.
 - **Loops:** when the writer stores a redirect whose target is already known, it walks `redirect_url_id` forward, bounded by the hop limit, and sets `in_redirect_loop` on every URL on a cycle. The walk reads only the file, so the unit gives the same result when it runs again (`017` D7).
 - *Alternative:* a `redirect_hops` table keyed by the first URL of each chain. It stores the same hop once per chain. Rejected.
 - *Alternative:* following chains inside the Fetcher. That bypasses politeness and robots.txt for each hop. Rejected.
 
 ### D3. The Seed-redirect Scope rule
-`020`'s www rule (its D4) already makes `www.<host>` a Seed host of an apex Seed, so `site.test` → `www.site.test` needs nothing from this change. This rule covers what that one leaves out: a `www.` Seed that redirects to its apex (`020` goes one direction only), and an apex that redirects to another subdomain, such as `en.` or `m.`. A redirect to another registrable domain (SSO, parking pages) only raises a warning, so the Crawl never wanders onto a third-party site.
-- **How it lands:** `CrawlContext` is frozen with one `ScopeRules`, and page preparation's settings snapshot (`PageSettings`, which holds the Scope) is what `026`'s workers start with. A Seed's Redirect Chain is made of 3xx responses, so no Page is prepared before it ends. At the hop that extends the Scope, the engine builds the wider `ScopeRules`, the target's dispatch decision uses them, and the snapshot is built from them before the first Page is prepared.
-- **Recorded:** hosts added this way are appended to `crawl.scope.hosts` (`020` task 8.11) in the unit that records that hop, and a continue rebuilds the Scope from `crawl.scope`.
-- Whether v0.1 keeps this rule, and how it lands, is the user's decision, still open (below).
+**In short:** a Seed whose Redirect Chain ends on another host of its registrable domain widens the Scope once, when the chain ends; one that ends on another registrable domain only raises a warning.
+
+`020`'s www rule (its D4) already makes `www.<host>` a Seed host of an apex Seed, so `site.test` → `www.site.test` needs nothing from this change. This rule covers a `www.` Seed that redirects to its apex, and an apex that redirects to another subdomain, such as `en.` or `m.`. It is in v0.1. A redirect to another registrable domain (SSO, parking pages) raises `seed_redirected_off_site`, so the Crawl never wanders onto a third-party site.
+- **How it lands:** `CrawlContext` is frozen with one `ScopeRules`, and page preparation's settings snapshot, which holds the Scope, is what `026`'s workers start with. A Seed's Redirect Chain is made of 3xx responses, so no Page is prepared before it ends. When the chain ends, the engine replaces the context with one whose `ScopeRules` holds the new host, and starts page preparation after that, so its snapshot holds the wider Scope.
+- **Recorded:** a unit of its own appends the host to `crawl.scope.hosts`, and a continue rebuilds the Scope from `crawl.scope`. Under `--scope subdomains` the Scope already holds every host of the registrable domain, so nothing widens.
+- **The Seed's checks:** `020`'s `seed_base_mismatch` reads the Page that the Seed's chain ends on, since the Seed itself answered with a redirect.
 
 ### D4. Retries and backoff
-- **Where:** one retry loop in `020`'s Requester (`020` D7), around the Fetcher, so a URL's own request and a robots.txt request both get it. Each attempt is one `fetch` inside the host's semaphore, raced by `020`'s watchdog on its own. Backoff waits on the context's `Clock` outside the semaphore, so a waiting retry holds none of the host's `--concurrency` slots. `020`'s fake Fetcher then drives the retries in the timing scenarios; a retry loop inside the Fetcher would bypass it.
+- **Where:** one retry loop in `020`'s Requester (`020` D7), around the Fetcher, so a URL's own request and a robots.txt request both get it. Each attempt is one `fetch` that takes the host's slot and its `--rate` turn again, raced by `020`'s watchdog on its own. Backoff waits on the context's `Clock` outside the slot, so a waiting retry holds none of the host's `--concurrency` slots.
+- **`--max-urls`:** a retry is the same URL, so only the first attempt counts towards the limit, and a retry is never refused by it. `020`'s fake Fetcher then drives the retries in the timing scenarios; a retry loop inside the Fetcher would bypass it.
 - **Retries:** on no response, 5xx or 429, as `--retries`. The URL's unit writes `attempt_count`.
 - **Backoff:** 1 s, 2 s, …, with no jitter, so fake-clock tests assert exact times.
 - **Retry-After:** seconds or an HTTP date, capped at 120 s. A 429 without `Retry-After` pauses the host for 10 s.
-- **Pauses** set the host's "next allowed start" in `020`'s per-host gate (D7; `RequestLimits` gains it with `--rate`, `020` task 11.1), so every request to that host waits, not only the retried one.
-- **`020`'s network pause** (decided 2026-10-14): a timeout counts as a request without a response, like a refused connection; a `tls_error` does not count (ruled 2026-10-14), because a certificate failure is an answer of sorts, and a site-wide one would otherwise wait out `--network-wait` (1800 s by default) and fail as a misleading `site_unreachable`.
-  - A URL counts once, when its last attempt has failed, so the count does not depend on `--retries` (ruled 2026-10-14).
+- **Pauses** set the host's "next allowed start" in `020`'s `RateGate`, which then acts without `--rate` too, so every request to that host waits, not only the retried one.
+- **`020`'s network pause**: a timeout counts as a request without a response, like a refused connection; a `tls_error` does not count, because a certificate failure is an answer of sorts, and a site-wide one would otherwise wait out `--network-wait` (1800 s by default) and fail as a misleading `site_unreachable`.
+  - A URL counts once, when its last attempt has failed, so the count does not depend on `--retries`.
   - While the Crawl is paused, an attempt that fails is neither retried nor recorded: no request starts during the pause (`020` D16), so its URL stays `queued` and is requested after the pause. An outage spends no retries and leaves no false `timeout` rows.
 - **robots.txt without a response:** after its retries, a robots.txt that timed out or failed TLS gives its origin's URLs the same `fetch_error` without a request (`020` D6); one that answered 5xx or 429 stays `robots_unreachable`.
 
 ### D5. TLS trust
-- **The default:** `truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)`, in a module of its own (`spider.crawl.tls`), uses the OS trust store on Windows, macOS and Linux.
+- **The default:** `truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)`, in a module of its own (`spider.crawl.fetch.tls`), uses the OS trust store on Windows, macOS and Linux. truststore and certifi are imported only from `spider.crawl.fetch`, which `--help` never loads.
 - **The fallback:** if truststore cannot be loaded, `ssl.create_default_context(cafile=certifi.where())`.
 - **Speed test:** a benchmark task measures handshake cost with truststore and with certifi on each OS, and records the result in the docs. If truststore is measurably slower, only the default path changes, not the behaviour.
 - **Shared setup:** the same context is used for requests and robots.txt, and from v0.2 for the ALPN check. `080`'s `doctor` TLS check reuses it.
-- **Tests:** the TLS setup accepts extra trust anchors, and tests pass the trustme CA through them. They go into a Crawl through the context builder, as the DNS resolver hook does (a keyword of `start_crawl`, `020` D15). The maintainer approved this on 2026-09-27 as a boundary double, and docs/testing.md lists it. The real TLS stack still verifies every certificate.
+- **Tests:** the TLS setup accepts extra trust anchors, and tests pass the trustme CA through them. They go into a Crawl through the Fetcher factory of D1, as the DNS resolver hook does. It is an approved boundary double, and docs/testing.md lists it. The real TLS stack still verifies every certificate.
 
 ### D6. (v0.2) HTTP version by ALPN
 There is one `asyncio.open_connection(host, port, ssl=ctx, server_hostname=host)` per https origin, with `ctx.set_alpn_protocols(["h2", "http/1.1"])`. It runs in parallel with the origin's robots.txt request and is closed right after the handshake. With a proxy, it tunnels through `CONNECT`. Any failure gives NULL.
 
 ### D7. Response headers and cookie values
-- **Source:** `FetchResult.headers`, which `020`'s Fetcher decodes from aiohttp's `raw_headers` as Latin-1, keeping order and letter case.
-- **Cookie redaction happens before storage,** in the exact format of the spec: `sid=abc123; Path=/` becomes `sid=***; Path=/`, and `a=1; b=2` becomes `a=***; b=***`. Names and attributes stay. The `crawl` redaction itself is `015`'s. This is value hygiene for crawled data, applied by the Fetcher to `FetchResult.headers`, so no layer ever holds a cookie value it could store.
-- **How it is written:** this change's per-response handler returns one `response_headers` row for a `fetched` URL, as a frozen row type declared in a module of `spider.store` that loads no sqlalchemy. `spider.store.response_headers` registers the row's writer in `Hooks.row_writers`, and both are listed in `default_hooks()` in `spider.services.hooks` (`020` D9, D14). A URL without a response gets no row.
+- **Source:** `FetchResult.headers`, which `020`'s Fetcher decodes from aiohttp's `raw_headers` as Latin-1, keeping order and letter case, and which reaches `UrlResponse.headers`.
+- **Cookie redaction happens before storage,** in the exact format of the spec: `sid=abc123; Path=/` becomes `sid=***; Path=/`, and `a=1; b=2` becomes `a=***; b=***`. Names and attributes stay. The `crawl` redaction itself is `015`'s. This is value hygiene for crawled data, applied where the Fetcher decodes the received headers, so no layer ever holds a cookie value it could store.
+- **How it is written:** `handler("response_headers", handle, write)` in `default_hooks()` (`020` D9, D14). `handle` returns one row for a `UrlResult` with a `response`, and none otherwise; it reads the engine's `UrlResult`, so it lives outside `spider.store`, which imports nothing of the engine. The row type is declared in `spider.store.records`, and the writer in `spider.store.response_headers` takes the URL's rows as one sequence.
 - **Consumers:** `030` reads cookie names and attributes from `UrlResult.headers`, so the redaction loses nothing for Page data.
 
 ### D8. What is secret
-- **v0.1, the proxy variables:** the ones that are set are recorded in an `environment` table of `crawl.config`, which the Crawl Service adds to `NewCrawl.config` next to the registered tables. `environment.http_proxy` and `environment.https_proxy` are added to `SecretNames.settings`, so `015`'s `create_crawl` redacts them by its URL form (`user:***@host`), and no public `redact_url` is needed (ROADMAP's 022-min item). `no_proxy` is not a secret. A proxy URL without a password is then recorded as `***`, as `015` records every secret that has none (ruled 2026-10-14 for v0.1).
+- **v0.1, the proxy variables:** the ones that are set are recorded in an `environment` table of `crawl.config`, which the Crawl Service adds to `NewCrawl.config` next to the registered tables. `environment.http_proxy` and `environment.https_proxy` are added to `SecretNames.settings`, so `015`'s `create_crawl` redacts them by its URL form (`user:***@host`), and no public `redact_url` is needed (ROADMAP's 022-min item). `no_proxy` is not a secret. A proxy URL without a password is then recorded as `***`, as `015` records every secret that has none.
   - *Alternative:* a public `redact_url` in `spider.store.redaction` that keeps a URL without a password, called by the Crawl Service for the `environment` table. It makes the Crawl Service a second redactor. Not taken in v0.1.
 - **(v0.2) The flags** declare their secret form, and `015` does all the redaction:
   - `--auth` is a whole secret, so `015` writes `***`.
@@ -123,7 +135,7 @@ Each is added test-first in `tests/fixture_site/` or `tests/support/` by the fir
 - **No cookie-echo route:** the request log already keeps each request's headers.
 
 ### D10. The schema under ADR-0005
-This change adds to `020`'s tables and adds one of its own, all through `018`'s `public_table()` (`STRICT`, and CHECKs from the declared values and flags). Each new column carries `info={"change": 22}`.
+This change adds to `020`'s tables and adds one of its own, all through `018`'s `public_table()` (`STRICT`, and CHECKs from the declared values and flags). `response_headers` passes `change=22`; the columns added to `urls` and `origins` carry no change tag, since `public_table()` tags tables only.
 - **`urls` columns:**
   - `attempt_count` (ADR-0005 rule 5: a count ends with `_count`), NOT NULL with a default of 0, so the inserts of `020`'s units need no change
   - `redirect_location`, the raw header text
@@ -133,7 +145,7 @@ This change adds to `020`'s tables and adds one of its own, all through `018`'s 
   - `content_encoding`, `size_bytes` and `transferred_bytes`
 - **Enumeration values:** `redirect`, `max_redirects`, `url_too_long`, `timeout`, `tls_error` and `body_too_large` are already listed by `020` (its D18), so this change adds no value to a CHECK.
 - **`urls_redirect_url_id`** on `(redirect_url_id) WHERE redirect_url_id IS NOT NULL`: it serves "which URLs redirect to this one", the reverse walk of a Redirect Chain. The forward walk reads `redirect_url_id` from the row and needs no index. The index is partial, because most URLs do not redirect, so most rows have no entry.
-- **`origins.http_version`** exists from v0.1 and is NULL until v0.2's ALPN check fills it. Its description starts with `Filled from v0.2. ` (ADR-0005), so the `origins` contract does not change in v0.2.
+- **`origins.http_version`** exists from v0.1 and is NULL until v0.2's ALPN check fills it. Its description starts with `Filled from v0.2. ` (ADR-0005), so the `origins` contract does not change in v0.2. It is the schema's first later column, so `018`'s guard over derived and later columns asserts from then on that it saw one.
 - **`response_headers`:**
   - It has `url_id` as an `INTEGER PRIMARY KEY` (a rowid alias), with a declared reference to `urls.id`.
   - `headers` is one `Json` array per URL (ruling Q5). `080` documents a `json_each` recipe for filtering by a header.
@@ -154,14 +166,14 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
 
 - **HTTP (local fixture site) (3):** everything network-related. The real aiohttp runs against the fixture site's HTTP and HTTPS listeners, with named hosts behind `020`'s DNS resolver hook (`fixture_hosts`).
 - **Seam 3+6:** the new columns and `response_headers` are read through a read-only connection after the Crawl, which runs through `crawl_result` (`tests/support/crawling.py`) or through the CLI (`crawled`). Both run on the real clock, since `020`'s watchdog would cut every request under a `FakeClock`, whose sleeps end at once. So a [3+6] retry test waits its real backoff (1 s, then 2 s), and only the fake-timing scenarios assert exact times.
-- **Pure-logic modules (4):** the cookie redaction, and the Location resolution table.
+- **Pure-logic modules (4):** the cookie redaction, the redirect target table, the `fetch_error` mapping, and the certifi fallback of the TLS setup.
 - **Services and store API (2):** the `response_headers` writer forces a replay with `replay_now(writer)` (`017` D7).
 - **CLI (1):** argument errors, recorded commands and exit codes.
 - **Boundary doubles,** from the approved list:
-  - **The fake Fetcher and the injectable clock:** only for "Retries wait one and then two seconds" and "Retry-After pauses the host".
+  - **The fake Fetcher and the injectable clock:** only for "Retries wait one and then two seconds" and "Retry-After pauses the host". The fake Fetcher gains a status, headers and a response sequence per path.
   - **The DNS resolver hook:** for named hosts.
   - **A local test proxy:** for the proxy scenarios. `000`'s proxy isolation removes the proxy variables before every test, so a scenario sets them itself with `monkeypatch.setenv`.
-  - **The trustme test CA:** passed into the crawler's TLS setup through the context builder. It is an approved boundary double.
+  - **The trustme test CA:** passed into the crawler's TLS setup through the Fetcher factory. It is an approved boundary double.
 - **Store contract (6):** every column, index and table is declared through `018`'s `public_table()` and documented in `docs/schema.md` by the slice that needs it. `018`'s contract test also compares the index and STRICT.
 
 ## Risks / Trade-offs
@@ -172,9 +184,11 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
 - [Stateless requests on sites that need a session cookie] → These show up as redirect loops or 403 responses, which Googlebot also meets. A cookie option is an open question.
 - [truststore behaves differently per OS] → The fallback to certifi, and `doctor` (`080`) reports which trust store is in use.
 - [A developer's or CI machine's proxy variables leak into tests] → `000`'s proxy isolation removes them before every test, so the fixture site is never proxied unless a scenario sets them.
-- [`response_headers` takes a large share of a 500k-URL crawl file] → `026`'s 500k run reports its share; above 10%, the table keeps Internal URLs only (decided 2026-10-11).
+- [`response_headers` takes a large share of a 500k-URL crawl file] → `026`'s 500k run reports its share; above 10%, the table keeps Internal URLs only.
 - [A retry waiting for `Retry-After` (up to 120 s) keeps its URL task, and its place under `020`'s global cap] → The host pause makes that host's other requests wait anyway, and the cap of 20–100 tasks leaves room for other hosts.
-- [Tests of this change named after no scenario, which the scenario count of task 8.1 ignores] → `test_a_trickling_body_times_out` (task 3.6), `test_a_location_that_is_no_http_url_has_no_target` (task 4.3), `test_a_compressed_body_is_capped_after_decoding` (task 5.5) and the replay test of `spider.store.response_headers` (task 7.1).
+- [Tests of this change named after no scenario, which the scenario count ignores] → `test_a_trickling_body_times_out`, since `--timeout` must bound a body that never ends; `test_a_location_that_is_no_http_url_has_no_target`, since an unusable Location or a 300, 304 or 305 must leave no target; `test_a_compressed_body_is_capped_after_decoding`, since a decompression bomb must stop at the cap; the `fetch_error` table that maps aiohttp's timeouts to `timeout`; the guard that every insert into `urls` goes through `insert_urls`; the fallback test of the TLS setup; and the replay test of `spider.store.response_headers`.
+- [`PROJECT_URL` names a private repository] → A site owner who follows the user agent's link gets a 404 until the repository is public. The release (`085`) does not start before the product is named and `PROJECT_URL` points to a public page (ROADMAP, Release).
+- [`seed_base_mismatch` reads the depth-0 Page of a Seed's chain] → In Spider mode, depth 0 is exactly the Seed and its Redirect Chain. `024`'s listed Seeds are all depth 0 too, so `024` decides how the check finds a Seed's chain there.
 
 ## Migration Plan
 
@@ -182,13 +196,7 @@ None. Before v0.1 the schema is not yet public. This change adds its columns, it
 
 ## Open Questions
 
-**The user's decision, before this change starts:**
-- **The Seed-redirect Scope rule in v0.1** (D3, task 4.8). `020`'s www rule already covers `site.test` → `www.site.test`, so the scenario "A redirect to the www host stays inside the Scope" passes without this rule. The rule is left with two cases: a `www.` Seed that redirects to its apex, and an apex that redirects to another subdomain (`en.`, `m.`).
-  - It needs a seam that `020` and `026` do not have yet: `CrawlContext` holds one frozen `ScopeRules`, and `026`'s workers start with the settings snapshot that holds the Scope. The interface point it would add to `020`: the Scope widens once, when the Seed's Redirect Chain ends, before the chain's final Page is prepared, and the settings snapshot, which `026`'s workers start with, is built after that.
-  - Kept in v0.1: the spec's scenario then becomes a `www.` Seed that redirects to its apex (`http://www.site.test/` → `http://site.test/`, which links to `/a`, and `http://site.test/a` is `fetched` with `is_internal` = 1).
-  - Moved to v0.2: v0.1 keeps `seed_redirected_off_site` for every Seed chain that ends on a host outside the Scope, with a hint that names the final URL to crawl instead.
-
-**To add when `020`'s network pause lands** (its group 12), with its final numbers then (ruled 2026-10-14 as a draft):
+**To add when `020`'s network pause lands** (its group 12), with its final numbers then:
 - A scenario under "Retries with backoff": "A request that fails during a network pause is not retried". WHEN `/` links to `/p1` to `/p20`, a fake Fetcher gets no response for any request after the one for `/`, and the Crawl runs with `--concurrency 1`, `--network-wait 30` and a fake clock; THEN no URL is requested again after the pause began until the Crawl ends, and the URL whose attempt failed during the pause stays `queued`.
 
 **Deferrable, each additive:**

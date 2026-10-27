@@ -129,6 +129,7 @@ The Crawl SHALL retry a request attempt, robots.txt included, that gets no respo
 - **429 without Retry-After:** the wait SHALL be 10 seconds.
 - **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start.
 - **Other 4xx statuses** SHALL NOT be retried.
+- **URL limit:** a retry is the same URL, so only a URL's first attempt SHALL count towards `--max-urls`.
 - **Network pause:** while the Crawl is paused waiting for the network (`020-add-crawl-core`), a request attempt that fails SHALL be neither retried nor recorded; its URL stays `queued` and is requested after the pause.
 
 The URL SHALL record the last attempt's response. This change adds this column to `urls`, under the conventions of `018-add-schema-conventions`:
@@ -158,12 +159,12 @@ The URL SHALL record the last attempt's response. This change adds this column t
 - **THEN** `{site}/missing` has `attempt_count` = 1
 
 ### Requirement: Redirects are followed hop by hop
-The Crawl SHALL NOT follow redirects within one request. For a 3xx response with a `Location` header:
+The Crawl SHALL NOT follow redirects within one request. For a 301, 302, 303, 307 or 308 response with a `Location` header:
 - **On the redirecting URL** it SHALL record the status code, the raw header in `redirect_location`, and the target in `redirect_url_id`.
 - **The target** is resolved against the redirecting URL and normalised. It SHALL be recorded as a URL with `discovered_via` = `redirect`, `found_on_url_id` pointing to the redirecting URL, and the same Crawl Depth.
 - **Requests:** each target SHALL be requested on its own, subject to the Scope, robots.txt and `--exclude`. The target of a URL that is only checked SHALL also be checked.
 
-A 3xx response without a usable `Location` SHALL have `redirect_url_id` NULL.
+A 3xx response without a usable `Location`, and a 300, 304 or 305 response, SHALL have `redirect_url_id` NULL; any 3xx response SHALL keep its raw `Location` header in `redirect_location`.
 
 `redirect` is a value of `urls.discovered_via` that `020-add-crawl-core` lists. This change adds these columns to `urls`, under the conventions of `018-add-schema-conventions`:
 
@@ -203,16 +204,24 @@ It also adds this index to `urls`, built while the Crawl writes:
 - **WHEN** `http://site.test/` links to `http://site.test/out`, which returns 301 to `http://other.test/landing`
 - **THEN** `http://other.test/landing` has `fetch_state` = `fetched` and `parsed` = 0
 
+#### Scenario: A redirected image beyond the depth limit is checked
+- **WHEN** `/` holds `<img src="/logo.png">`, `/logo.png` returns 301 to `/img/logo.png`, and `spider crawl {site}/ --max-depth 0` runs
+- **THEN** `{site}/img/logo.png` has `fetch_state` = `fetched`
+
 #### Scenario: Index of redirect targets
 - **WHEN** `spider schema urls --fields indexes` runs
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"urls_redirect_url_id","columns":["redirect_url_id"],"unique":false,"where":"redirect_url_id IS NOT NULL"}`
 
 ### Requirement: A Seed that redirects within its site extends the Scope
-When a Seed's Redirect Chain ends on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. When the chain ends on another registrable domain, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_off_site` warning whose hint contains the final URL of the chain.
+When a Seed's Redirect Chain ends on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. The `seed_base_mismatch` check of `020-add-crawl-core` SHALL read the Page that the Seed's Redirect Chain ends on. When the chain ends on another registrable domain, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_off_site` warning whose hint contains the final URL of the chain.
 
-#### Scenario: A redirect to the www host stays inside the Scope
-- **WHEN** `http://site.test/` redirects with 301 to `http://www.site.test/`, which links to `/a`, and `spider crawl http://site.test/` runs
-- **THEN** `http://www.site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1
+#### Scenario: A redirect to the apex host stays inside the Scope
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `spider crawl http://www.site.test/` runs
+- **THEN** `http://site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1
+
+#### Scenario: A www Seed that redirects on its host is checked on its final Page
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://www.site.test/home`, which holds `<link rel="canonical" href="http://site.test/">`, and `spider crawl http://www.site.test/` runs
+- **THEN** the result's `warnings` hold an entry with code `seed_base_mismatch` whose `hint` contains `http://site.test/`
 
 #### Scenario: A redirect to another site is reported
 - **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `spider crawl http://site.test/` runs
@@ -259,7 +268,7 @@ The Crawl SHALL read at most 20,971,520 bytes (20 MiB) of a response body. This 
 |---|---|---|---|---|
 | `body_truncated` | INTEGER | yes | boolean | 1 when the body was larger and not read in full |
 
-A URL with a larger body SHALL have `body_truncated` = 1 and `parsed` = 0. If it would otherwise have been parsed, it SHALL have `parse_error` = `body_too_large`, a value that `020-add-crawl-core` lists.
+A URL with a larger body SHALL have `body_truncated` = 1, `parsed` = 0, `size_bytes` NULL, and `transferred_bytes` the number of bytes read. If it would otherwise have been parsed, it SHALL have `parse_error` = `body_too_large`, a value that `020-add-crawl-core` lists.
 
 #### Scenario: A huge page is not parsed
 - **WHEN** `/` links to `/huge.html`, a 26,214,400-byte (25 MiB) HTML page
