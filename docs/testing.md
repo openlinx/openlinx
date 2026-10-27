@@ -98,8 +98,9 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 - **Shared fixture sites** (`tests/support/sites.py`): sites that several test modules crawl, named after the spec's examples, such as `NINE_PAGES`, where `/` links to `/p1` to `/p9`.
 - **`FakeClock`** (`tests/support/clock.py`): implements `spider.clock.Clock`.
   - `now()` starts at `2026-01-01T00:00:00+00:00`, or at the `start` given, as in `FakeClock(start=datetime(2026, 9, 27, 14, 3, 12, tzinfo=UTC))`. `monotonic()` starts at `0.0`.
-  - `advance(seconds)` moves both.
-  - `await sleep(seconds)` advances virtual time and yields once to the event loop, with no real wait.
+  - `advance(seconds)` moves both, and wakes the sleeps that are due.
+  - `await sleep(seconds)` waits until virtual time reaches its wake time, with no real wait. Time jumps to the earliest wake once nothing else can run: no clock call in 20 yields of the loop in a row, and no `off_loop()` hold open. So two sleeps at once move the clock once, as two hosts' rate waits do.
+  - `off_loop()` is held while the loop waits for work on another thread that finishes without clock time, such as a writer unit (design D7 of 020).
 
   Production code takes a `Clock`, which is `SystemClock` outside tests.
 - **`FakeFetcher(clock, pages)`** (`tests/support/fetcher.py`): the fake Fetcher, for timing scenarios only. It answers at once from `pages`, a `FakePage(body, content_type="text/html")` per path, and 404 for any other path. `starts` holds each request's path and the `clock.monotonic()` at which it started. Pass it with its `FakeClock`: `crawl_result(seed, clock=clock, fetcher=fetcher)`.

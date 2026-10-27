@@ -62,3 +62,21 @@ def test_a_host_with_a_trailing_dot_shares_the_rate_turn_of_the_host(
 
     # One server: its robots.txt twice, as two origins, and the three Pages, one turn each.
     assert sorted(start for _, start in fetcher.starts) == [0.0, 0.5, 1.0, 1.5, 2.0]
+
+
+# Each host's first request starts at once, and its second one 0.5 s later, side by side.
+TWO_HOSTS = {
+    "/": FakePage('<a href="/p">P</a> <a href="http://other.test/q">Q</a>'),
+    "/p": FakePage("<p>P</p>"),
+    "/q": FakePage("<p>Q</p>"),
+}
+
+
+def test_two_hosts_wait_for_their_turns_at_the_same_time(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    fetcher = FakeFetcher(clock, TWO_HOSTS)
+
+    crawl_result("http://site.test/", clock=clock, fetcher=fetcher, rate=2)
+
+    # site.test: robots.txt, /, /p; other.test: robots.txt, /q, each 0.5 s after its last.
+    assert sorted(start for _, start in fetcher.starts) == [0.0, 0.5, 0.5, 1.0, 1.0]

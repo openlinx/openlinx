@@ -363,7 +363,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 12. Events, failures and backstops (widening)
 
-- [ ] 12.0 Fix: `FakeClock` becomes the virtual clock of the timing tests: `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once nothing else can run, as trio's `MockClock(autojump_threshold=0)` does; `advance()` stays for tests without a loop.
+- [x] 12.0 Fix: `FakeClock` becomes the virtual clock of the timing tests: `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once nothing else can run, as trio's `MockClock(autojump_threshold=0)` does; `advance()` stays for tests without a loop.
   Done when: two hosts that each wait 0.5 s under `--rate` move the clock 0.5 s, not 1 s, red first through the fake Fetcher; a sleep never wakes before its wake time; the clock does not jump while a writer unit that the loop waits for runs, red by mutation of the hold dropped from `run_async`, with the unit held by a handler's writer that blocks on a `threading.Event`; the guard names a thread hand-off in `src` outside `off_loop()`; and the Risks entry on `FakeClock` sleeps that add up goes.
 - [ ] 12.0a Refactor: the Requester owns the host's slots and the global cap, and `RequestLimits` keeps the URL limit and the task bound (design D7), behaviour unchanged.
   Done when: the Requester is built with its cap, as `dispatch` computes it with `global_cap`, and the politeness tests reach the limits only through the Crawl Service with the fake Fetcher and the virtual clock, or through the pure `global_cap`; `docs/testing.md` names that seam for politeness timing.

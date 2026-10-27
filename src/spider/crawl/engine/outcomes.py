@@ -46,7 +46,7 @@ class Outcomes:
             # The writer commits on its own only every 500 units or second of clock time.
             with suppress(CrawlWriterClosedError):
                 # An ended writer has already failed every Future it held.
-                await asyncio.to_thread(self._writer.flush)
+                await self._writer.flush_async()
             # Outcomes that the flush resolved have already left the set.
             if self._pending:
                 await asyncio.wait(set(self._pending))
