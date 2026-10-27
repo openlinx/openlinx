@@ -99,7 +99,8 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 - **`FakeClock`** (`tests/support/clock.py`): implements `spider.clock.Clock`.
   - `now()` starts at `2026-01-01T00:00:00+00:00`, or at the `start` given, as in `FakeClock(start=datetime(2026, 9, 27, 14, 3, 12, tzinfo=UTC))`. `monotonic()` starts at `0.0`.
   - `advance(seconds)` moves both, and wakes the sleeps that are due.
-  - `await sleep(seconds)` waits until virtual time reaches its wake time, with no real wait. Time jumps to the earliest wake once nothing else can run: no clock call in 20 yields of the loop in a row, and no `off_loop()` hold open. So two sleeps at once move the clock once, as two hosts' rate waits do.
+  - `await sleep(seconds)` waits until virtual time reaches its wake time, with no real wait. Time jumps to the earliest wake once nothing else can run: no clock call in 100 turns of the loop in a row, and no `off_loop()` hold open. So two sleeps at once move the clock once, as two hosts' rate waits do.
+  - It models the event loop and the writer thread, never real I/O, which makes no clock call: a test with the fixture site or the aiohttp Fetcher uses `SystemClock`, and `tests/test_code_style.py` names a `FakeClock` beside either.
   - `off_loop()` is held while the loop waits for work on another thread that finishes without clock time, such as a writer unit (design D7 of 020).
 
   Production code takes a `Clock`, which is `SystemClock` outside tests.

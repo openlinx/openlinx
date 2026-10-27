@@ -7,8 +7,10 @@ from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Responses, Robots, Site, Status
 from tests.support.cli import run_cli
+from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
+from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
 
 
@@ -126,6 +128,24 @@ def test_a_trickling_body_times_out(temp_workspace: TempWorkspace, fixture_site:
         "SELECT fetch_state, fetch_error FROM urls WHERE url = ?",
         [server.url("/feed")],
     ) == [("error", "timeout")]
+
+
+def test_a_raised_timeout_raises_the_watchdog_with_it(temp_workspace: TempWorkspace) -> None:
+    # 150 seconds outlasts the watchdog of the default timeout (120) but not that of 200 (230).
+    clock = FakeClock()
+    pages = {
+        "/": FakePage('<a href="/report">Report</a>'),
+        "/report": FakePage("<p>Report</p>", delay=150),
+    }
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=FakeFetcher(clock, pages), timeout=200
+    )
+
+    assert query(result.crawl_file, "SELECT url, fetch_state, fetch_error FROM urls") == [
+        ("http://site.test/", "fetched", None),
+        ("http://site.test/report", "fetched", None),
+    ]
 
 
 @pytest.mark.parametrize("timeout", ["0", "-1", "nan", "inf"])

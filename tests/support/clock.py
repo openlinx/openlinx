@@ -8,15 +8,18 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
-# Yields of the loop in a row with no clock call between them, after which nothing else can
-# run: each yield lets every callback that was ready run once.
-_QUIET_YIELDS = 20
+# Turns of the loop in a row with no clock call, taken to mean that no task is ready: each turn
+# runs every callback that was ready once. A chain of more turns with no clock call, or real
+# I/O, which makes none, breaks it (020-add-crawl-core D7); turns cost microseconds, so the
+# margin is free.
+_QUIET_YIELDS = 100
 
 
 class FakeClock:
-    """Each sleep wakes at its own time. Time jumps to the earliest wake once nothing else can
-    run on the loop and nothing the loop waits for runs off it, as trio's
-    MockClock(autojump_threshold=0) does; advance() moves it by hand, for tests without a loop."""
+    """Each sleep wakes at its own time. Time jumps to the earliest wake once the loop has been
+    quiet for _QUIET_YIELDS turns while no off_loop() hold is open, as trio's
+    MockClock(autojump_threshold=0) does; advance() moves it by hand, for tests without a loop.
+    It models the loop and the writer thread, never real I/O."""
 
     def __init__(self, start: datetime | None = None) -> None:
         self._now = datetime(2026, 1, 1, tzinfo=UTC) if start is None else start

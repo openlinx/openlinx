@@ -9,7 +9,7 @@ from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.engine.seed_chain import SeedChain, close_seed_chain
 from spider.crawl.engine.units import Run, TaskFailure, unit_of, via_resource
 from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
-from spider.crawl.fetch.requester import Requester
+from spider.crawl.fetch.requester import Requester, watchdog_seconds
 from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import NormalizedUrl
@@ -36,6 +36,8 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         cap=cap,
         clock=context.clock,
         retries=context.settings.retries,
+        # The Fetcher's own deadline is the timeout setting, as its policy takes it.
+        watchdog_seconds=watchdog_seconds(context.settings.timeout),
     )
     run = Run(
         context=context,

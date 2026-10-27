@@ -308,7 +308,11 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
         with clock.off_loop():
             writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
         try:
-            async with crawl.fetchers(plan.fetch_policy, clock) as fetcher:
+            # The engine drives the writer, so its commits keep the Crawl's clock.
+            async with (
+                writer.loop_deadline(),
+                crawl.fetchers(plan.fetch_policy, clock) as fetcher,
+            ):
                 yield CrawlContext(
                     crawl_file=crawl_file,
                     settings=plan.settings,

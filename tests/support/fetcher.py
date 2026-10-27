@@ -23,9 +23,10 @@ _NOT_FOUND = FakePage("", status=404)
 
 
 class FakeFetcher:
-    """Answers from `pages`, by path, after the page's delay, and 404 for any other path; a
-    sequence of pages answers in turn, one per request, then repeats its last. `starts` records
-    each request's path and the clock's monotonic time when it started."""
+    """Answers from `pages`, by the whole URL or else by path, so one host can differ from the
+    others, after the page's delay, and 404 for any other URL; a sequence of pages answers in
+    turn, one per request, then repeats its last. `starts` records each request's path and the
+    clock's monotonic time when it started."""
 
     def __init__(self, clock: Clock, pages: Mapping[str, FakePage | Sequence[FakePage]]) -> None:
         if any(not isinstance(page, FakePage) and not page for page in pages.values()):
@@ -40,7 +41,7 @@ class FakeFetcher:
     async def fetch(self, request: Request) -> FetchResult:
         path = urlsplit(request.url).path or "/"
         self.starts.append((path, self._clock.monotonic()))
-        page = self._page(path)
+        page = self._page(request.url if request.url in self._pages else path)
         self._in_flight += 1
         self.most_in_flight = max(self.most_in_flight, self._in_flight)
         try:
@@ -57,10 +58,10 @@ class FakeFetcher:
             response_time_ms=0,
         )
 
-    def _page(self, path: str) -> FakePage:
-        found = self._pages.get(path, _NOT_FOUND)
+    def _page(self, key: str) -> FakePage:
+        found = self._pages.get(key, _NOT_FOUND)
         if isinstance(found, FakePage):
             return found
-        count = self._answered.get(path, 0)
-        self._answered[path] = count + 1
+        count = self._answered.get(key, 0)
+        self._answered[key] = count + 1
         return found[min(count, len(found) - 1)]
