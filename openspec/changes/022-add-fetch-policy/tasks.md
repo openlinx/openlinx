@@ -49,7 +49,7 @@ Seams (docs/testing.md):
 
 ## 3. Timeouts and retries
 
-- [ ] 3.1 [Fixture] Add response sequences to the fixture site, a new route kind (for example 503 once, then 200).
+- [x] 3.1 [Fixture] Add response sequences to the fixture site, a new route kind (for example 503 once, then 200).
 - [ ] 3.2 [3+6] Drive "A temporary 503 is retried": `--retries` and `crawl.retries`, the retry loop around the Fetcher in `020`'s Requester (design D4, `020` D7), and the `attempt_count` column, a top-level field of `UrlResult`: `Requester.request_url` returns the outcome with its count, and `FetchedUrl` and `ErroredUrl` copy it. A retry is the same URL: only its first attempt counts towards `--max-urls`, each attempt takes the host's slot and its `--rate` turn again, and the backoff holds no slot.
 - [ ] 3.3 [3+6] Drive "A persistent 500 is recorded after the retries".
 - [ ] 3.4 [3+6] **Guard:** "A 404 is not retried".

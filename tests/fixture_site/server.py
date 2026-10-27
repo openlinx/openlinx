@@ -17,11 +17,12 @@ from spider.aio import loop_factory
 from tests.fixture_site.routes import (
     CONTENT_TYPES,
     DEFAULT_CONTENT_TYPE,
+    Answer,
     LargeFile,
     Page,
     Redirect,
+    Responses,
     Robots,
-    Route,
     Site,
     Sitemap,
     SitemapIndex,
@@ -117,7 +118,7 @@ def _xml_response(body: bytes) -> web.Response:
     return web.Response(body=body, headers={"Content-Type": CONTENT_TYPES[".xml"]})
 
 
-def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
+def _respond(site: Site, route: Answer, base_url: str) -> web.StreamResponse:
     match route:
         case Page():
             return _page_response(site, route, base_url)
@@ -182,10 +183,19 @@ def _build_app(site: Site, base_url: Callable[[], str], log: RequestLog) -> web.
         finally:
             log.answered()
 
+    # Requests so far, per path of a Responses route.
+    answered: dict[str, int] = {}
+
     async def handle(request: web.Request) -> web.StreamResponse:
-        route = site.routes.get(request.path)
-        if route is None:
+        found = site.routes.get(request.path)
+        if found is None:
             raise web.HTTPNotFound
+        if isinstance(found, Responses):
+            count = answered.get(request.path, 0)
+            answered[request.path] = count + 1
+            route = found.answers[min(count, len(found.answers) - 1)]
+        else:
+            route = found
         if route.delay:
             await asyncio.sleep(route.delay)
         if route.hang:

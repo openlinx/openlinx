@@ -71,7 +71,21 @@ class LargeFile(RouteOptions):
     size: int
 
 
-Route = Page | Status | Redirect | Robots | Sitemap | SitemapIndex | LargeFile
+Answer = Page | Status | Redirect | Robots | Sitemap | SitemapIndex | LargeFile
+
+
+@dataclass(frozen=True)
+class Responses:
+    """One path's answers in turn, one per request to it, the last repeated after that."""
+
+    answers: Sequence[Answer]
+
+    def __post_init__(self) -> None:
+        if not self.answers:
+            raise ValueError("Responses takes at least one answer")
+
+
+Route = Answer | Responses
 
 
 def redirect_chain(prefix: str, hops: int, to: str) -> dict[str, Route]:
