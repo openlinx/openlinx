@@ -91,7 +91,9 @@ type FetchError = Literal[
     "tls_error",
 ]
 # extractor_error keeps parsed = 1; the others mean nothing came out of page preparation.
-type ParseError = Literal["extractor_error", "body_too_large", "worker_crashed", "parse_timeout"]
+type ParseError = Literal[
+    "extractor_error", "body_too_large", "unsupported_encoding", "worker_crashed", "parse_timeout"
+]
 
 # The --crawl value that selects the Crawl that started last.
 LATEST = "latest"

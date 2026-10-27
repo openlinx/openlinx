@@ -12,7 +12,7 @@ from aiohttp.abc import AbstractResolver
 
 from spider import __version__
 from spider.clock import Clock
-from spider.crawl.fetch.body import read_body
+from spider.crawl.fetch.body import BodyDecodingError, read_body
 from spider.crawl.fetch.proxy import ProxyVariables
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import APP_NAME, PROJECT_URL
@@ -133,6 +133,8 @@ def fetch_error_of(error: Exception) -> FetchError:
     # an answer of sorts, which the network pause must never count (design D16).
     if isinstance(error, aiohttp.ClientSSLError):
         return "tls_error"
+    if isinstance(error, BodyDecodingError):
+        return "invalid_response"
     # The system resolver cannot encode a name such as a..b.test, and aiohttp passes that on.
     if isinstance(error, aiohttp.ClientConnectorDNSError | UnicodeError):
         return "dns_error"

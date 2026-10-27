@@ -132,7 +132,7 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `fetched_at` | TEXT | yes | | `timestamp` | | UTC time of the request. |
 | `body_truncated` | INTEGER | yes | | `boolean` | | 1 when the body was larger than 20 MiB and not read in full; NULL without a response. |
 | `parsed` | INTEGER | no | | `boolean` | | 1 when the response was parsed and its Links were found. |
-| `parse_error` | TEXT | yes | | | `extractor_error`, `body_too_large`, `worker_crashed`, `parse_timeout` | Why parsing failed in whole or in part: a registered extractor failed (parsed stays 1), or nothing came out of page preparation (parsed = 0). |
+| `parse_error` | TEXT | yes | | | `extractor_error`, `body_too_large`, `unsupported_encoding`, `worker_crashed`, `parse_timeout` | Why parsing failed in whole or in part: a registered extractor failed (parsed stays 1), or nothing came out of page preparation (parsed = 0). |
 | `parse_error_message` | TEXT | yes | | | | Human-readable detail of parse_error. |
 
 ### Indexes

@@ -1,4 +1,4 @@
-"""Files whose exact bytes matter: mixed line endings, windows-1251 and a precompressed script
+"""Files whose exact bytes matter: mixed line endings, windows-1251 and precompressed bodies
 (design D9 of 000)."""
 
 from pathlib import Path
@@ -15,6 +15,18 @@ SITE = Site(
             file="app.js.gz",
             content_type="text/javascript",
             headers=[("Content-Encoding", "gzip")],
+        ),
+        # The same script compressed with gzip and then with br.
+        "/app.js.gz.br": Page(
+            file="app.js.gz.br",
+            content_type="text/javascript",
+            headers=[("Content-Encoding", "gzip, br")],
+        ),
+        # A server that compresses with zstd, which no request offers.
+        "/trail-shoes.html": Page(
+            file="trail-shoes.html.zst",
+            content_type="text/html",
+            headers=[("Content-Encoding", "zstd")],
         ),
     },
 )

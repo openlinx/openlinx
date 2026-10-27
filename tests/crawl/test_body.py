@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 import brotli
 import pytest
 
-from spider.crawl.fetch.body import BODY_LIMIT, Body, read_body
+from spider.crawl.fetch.body import BODY_LIMIT, Body, BodyDecodingError, read_body
 
 # A product listing, as a shop's category page repeats it.
 ROW = b'<li class="product"><a href="/p/1">Trail shoe</a> <span>89.00</span></li>\n'
@@ -99,3 +99,41 @@ def test_a_bomb_in_one_chunk_is_decoded_only_up_to_the_cap(coding: str) -> None:
         tracemalloc.stop()
 
     assert (len(body.data), body.truncated, peak < 8 * limit) == (limit, True, True)
+
+
+def test_stacked_codings_are_decoded_last_first() -> None:
+    page = ROW * 1000
+    packed = brotli.compress(gzip.compress(page, mtime=0))
+
+    body = _decoded(packed, "gzip, br")
+
+    assert (body.data == page, body.size_bytes) == (True, len(page))
+
+
+@pytest.mark.parametrize(
+    ("packed", "coding"),
+    [
+        (ROW * 10, "gzip"),
+        (ROW * 10, "br"),
+        (gzip.compress(ROW * 1000, mtime=0)[:-100], "gzip"),
+    ],
+    ids=["not gzip", "not br", "gzip cut short"],
+)
+def test_a_body_that_fails_to_decode_is_refused(packed: bytes, coding: str) -> None:
+    with pytest.raises(BodyDecodingError):
+        _decoded(packed, coding)
+
+
+def test_a_coding_that_was_not_offered_is_kept_as_received() -> None:
+    packed = ROW * 10
+
+    body = _decoded(packed, "zstd")
+
+    assert (body.data, body.size_bytes, body.transferred_bytes) == (packed, None, len(packed))
+
+
+def test_an_empty_body_under_a_coding_is_empty() -> None:
+    # A redirect with no body, from a server that labels every response gzip.
+    body = _decoded(b"", "gzip")
+
+    assert (body.data, body.size_bytes, body.transferred_bytes) == (b"", 0, 0)
