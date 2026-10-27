@@ -5,9 +5,8 @@ from contextlib import suppress
 from typing import Any
 
 from spider.crawl.engine.context import CrawlContext
+from spider.crawl.engine.crawl_warnings import record_failure
 from spider.crawl.engine.hooks import UrlResult
-from spider.output.codes import RECORD_FAILED
-from spider.output.diagnostics import Diagnostic
 from spider.store.failures import is_one_urls_failure
 from spider.store.records import Dispatched
 from spider.store.urls import UrlUnit, record_unwritten
@@ -45,14 +44,7 @@ class Outcomes:
         if not is_one_urls_failure(error):
             self._context.stop.set("write_failed", error)
             return
-        self._context.reporter.count(
-            Diagnostic.of(
-                RECORD_FAILED,
-                f"Recording {result.url} failed ({type(error).__name__}), so it was recorded "
-                "as an error, without the URLs found on it and its handlers' rows.",
-            ),
-            result.url,
-        )
+        self._context.reporter.count(record_failure(result.url, error), result.url)
         fallback = asyncio.ensure_future(self._fall_back(result, error))
         self._pending.add(fallback)
         fallback.add_done_callback(self._pending.discard)

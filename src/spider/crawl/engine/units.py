@@ -6,11 +6,11 @@ from typing import Any
 
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import (
+    blocked_seed,
+    failed_robots_redirect,
     handler_failure,
     parse_failure,
-    warn_of_a_blocked_seed,
-    warn_of_a_failed_robots_redirect,
-    warn_of_an_unreachable_robots_txt,
+    unreachable_robots_txt,
     warn_of_possible_blocking,
     warn_of_seed_base_mismatch,
 )
@@ -29,8 +29,8 @@ from spider.crawl.pages.preparation import (
 from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.robots.reader import OriginRobots
 from spider.crawl.scope import ScopeDecision
+from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import host_key, url_origin
-from spider.output.codes import PARSE_FAILED
 from spider.output.diagnostics import Diagnostic
 from spider.store.records import (
     ErroredUrl,
@@ -95,7 +95,11 @@ async def unit_of(
                 fetched_at=None,
             )
             return _errored(context, dispatched, failure)
-        skip_reason, blocked = _robots_verdict(context, origin_robots, queued, decision)
+        skip_reason, blocked, warnings = _robots_verdict(
+            context.settings, origin_robots, queued, decision
+        )
+        for warning in warnings:
+            context.reporter.warn(warning)
     decided = replace(dispatched, blocked_by_robots_txt=blocked)
     if skip_reason is not None:
         skipped = replace(decided, fetch_state="skipped", skip_reason=skip_reason)
@@ -128,24 +132,26 @@ def _errored(
 
 
 def _robots_verdict(
-    context: CrawlContext, origin_robots: OriginRobots, queued: QueuedUrl, decision: ScopeDecision
-) -> tuple[SkipReason | None, bool | None]:
-    """robots.txt's skip of a URL that would be requested, and its blocked_by_robots_txt, NULL
-    while the rules are unknown (design D6)."""
-    ignore = context.settings.ignore_robots
+    settings: CrawlSettings, origin_robots: OriginRobots, queued: QueuedUrl, decision: ScopeDecision
+) -> tuple[SkipReason | None, bool | None, tuple[Diagnostic, ...]]:
+    """robots.txt's skip of a URL that would be requested, its blocked_by_robots_txt, NULL
+    while the rules are unknown, and the warnings for the caller to give (design D6)."""
+    ignore = settings.ignore_robots
+    warnings: tuple[Diagnostic, ...] = ()
     if origin_robots.state == "unreachable":
         if decision.is_internal:
-            warn_of_an_unreachable_robots_txt(context, queued.url, origin_robots.status_code)
-        return (None, None) if ignore else ("robots_unreachable", None)
+            status_code = origin_robots.status_code
+            warnings = (unreachable_robots_txt(queued.url, status_code, ignore_robots=ignore),)
+        return (None, None, warnings) if ignore else ("robots_unreachable", None, warnings)
     if origin_robots.failed_redirect is not None and decision.is_internal:
-        warn_of_a_failed_robots_redirect(context, queued.url, origin_robots)
+        warnings = (failed_robots_redirect(queued.url, origin_robots),)
     blocked = not origin_robots.allows(queued.url)
     # --ignore-robots requests it, still labelled as blocked.
     if blocked and not ignore:
         if queued.discovered_via == "seed":
-            warn_of_a_blocked_seed(context, queued.url)
-        return "blocked_by_robots_txt", True
-    return None, blocked
+            warnings += (blocked_seed(queued.url, settings.robots_user_agent),)
+        return "blocked_by_robots_txt", True, warnings
+    return None, blocked, warnings
 
 
 def _skip_reason(
@@ -189,8 +195,7 @@ async def _fetched(
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
-        failure = parse_failure(url, parse_error, parse_error_message)
-        context.reporter.count(Diagnostic.of(PARSE_FAILED, failure), url)
+        context.reporter.count(parse_failure(url, parse_error, parse_error_message), url)
     url_response = UrlResponse(
         status_code=response.status_code,
         reason=response.reason,

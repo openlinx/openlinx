@@ -12,7 +12,9 @@ from spider.naming import APP_NAME
 from spider.output.codes import (
     HANDLER_FAILED,
     MAX_URLS_REACHED,
+    PARSE_FAILED,
     POSSIBLE_BLOCKING,
+    RECORD_FAILED,
     ROBOTS_REDIRECT_FAILED,
     ROBOTS_UNREACHABLE,
     SEED_BASE_MISMATCH,
@@ -35,47 +37,41 @@ def warn_of_the_url_limit(context: CrawlContext, limit: int) -> None:
     )
 
 
-def warn_of_an_unreachable_robots_txt(
-    context: CrawlContext, url: NormalizedUrl, status_code: int | None
-) -> None:
+def unreachable_robots_txt(
+    url: NormalizedUrl, status_code: int | None, *, ignore_robots: bool
+) -> Diagnostic:
     origin = url_origin(url)
     answered = f"The robots.txt of {origin} answered {status_code}"
-    if context.settings.ignore_robots:
+    if ignore_robots:
         message = f"{answered}, so its URLs were requested without its rules."
         hint = "Run the Crawl again later to crawl the origin by its rules."
     else:
         message = f"{answered}, so none of its URLs was requested."
         hint = "Run the Crawl again later, or give --ignore-robots to crawl the origin anyway."
     # Once per host, by the warning log: every URL of the origin comes here (design D10).
-    context.reporter.warn(
-        Diagnostic.of(
-            ROBOTS_UNREACHABLE,
-            message,
-            hint=hint,
-            details={"origin": origin, "host": url_host(url), "status_code": status_code},
-        )
+    return Diagnostic.of(
+        ROBOTS_UNREACHABLE,
+        message,
+        hint=hint,
+        details={"origin": origin, "host": url_host(url), "status_code": status_code},
     )
 
 
-def warn_of_a_failed_robots_redirect(
-    context: CrawlContext, url: NormalizedUrl, robots: OriginRobots
-) -> None:
+def failed_robots_redirect(url: NormalizedUrl, robots: OriginRobots) -> Diagnostic:
     origin = url_origin(url)
     # Once per origin, by the warning log: every URL of the origin comes here (design D10).
-    context.reporter.warn(
-        Diagnostic.of(
-            ROBOTS_REDIRECT_FAILED,
-            f"The robots.txt of {origin} redirected to {robots.failed_redirect}, which got "
-            f"no HTTP response ({robots.fetch_error}), so robots.txt counts as missing and "
-            "every URL of the origin was allowed.",
-            hint="Fix the robots.txt redirect of the origin, then run the Crawl again.",
-            details={
-                "origin": origin,
-                "host": url_host(url),
-                "target": robots.failed_redirect,
-                "fetch_error": robots.fetch_error,
-            },
-        )
+    return Diagnostic.of(
+        ROBOTS_REDIRECT_FAILED,
+        f"The robots.txt of {origin} redirected to {robots.failed_redirect}, which got "
+        f"no HTTP response ({robots.fetch_error}), so robots.txt counts as missing and "
+        "every URL of the origin was allowed.",
+        hint="Fix the robots.txt redirect of the origin, then run the Crawl again.",
+        details={
+            "origin": origin,
+            "host": url_host(url),
+            "target": robots.failed_redirect,
+            "fetch_error": robots.fetch_error,
+        },
     )
 
 
@@ -92,17 +88,14 @@ def warn_of_possible_blocking(context: CrawlContext, host: str) -> None:
     )
 
 
-def warn_of_a_blocked_seed(context: CrawlContext, seed: NormalizedUrl) -> None:
-    context.reporter.warn(
-        Diagnostic.of(
-            SEED_BLOCKED_BY_ROBOTS_TXT,
-            f"robots.txt disallows the Seed {seed} for the robots user-agent token "
-            f"{context.settings.robots_user_agent}, so it was not requested and nothing was "
-            "crawled from it.",
-            hint="Give --ignore-robots to crawl it anyway, or --robots-user-agent with the "
-            "token the site allows.",
-            details={"seed": seed},
-        )
+def blocked_seed(seed: NormalizedUrl, robots_token: str) -> Diagnostic:
+    return Diagnostic.of(
+        SEED_BLOCKED_BY_ROBOTS_TXT,
+        f"robots.txt disallows the Seed {seed} for the robots user-agent token "
+        f"{robots_token}, so it was not requested and nothing was crawled from it.",
+        hint="Give --ignore-robots to crawl it anyway, or --robots-user-agent with the "
+        "token the site allows.",
+        details={"seed": seed},
     )
 
 
@@ -132,14 +125,24 @@ def handler_failure(url: NormalizedUrl, failed: Sequence[tuple[str, BaseExceptio
     return Diagnostic.of(HANDLER_FAILED, message)
 
 
-def parse_failure(url: NormalizedUrl, parse_error: ParseError, message: str | None) -> str:
+def parse_failure(url: NormalizedUrl, parse_error: ParseError, message: str | None) -> Diagnostic:
     if parse_error == "extractor_error":
-        return (
+        return Diagnostic.of(
+            PARSE_FAILED,
             f"An extractor failed on {url} ({message}); the Page was recorded without its "
-            "output, and its Links were followed."
+            "output, and its Links were followed.",
         )
     detail = parse_error if message is None else f"{parse_error}: {message}"
-    return (
+    return Diagnostic.of(
+        PARSE_FAILED,
         f"Preparing {url} gave nothing ({detail}); it was recorded unparsed, with only the "
-        "Links of its headers."
+        "Links of its headers.",
+    )
+
+
+def record_failure(url: NormalizedUrl, error: BaseException) -> Diagnostic:
+    return Diagnostic.of(
+        RECORD_FAILED,
+        f"Recording {url} failed ({type(error).__name__}), so it was recorded as an error, "
+        "without the URLs found on it and its handlers' rows.",
     )
