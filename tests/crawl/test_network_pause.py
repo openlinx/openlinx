@@ -2,7 +2,7 @@
 
 import pytest
 
-from spider.crawl.engine.pause import pause_after
+from spider.crawl.engine.pause import pause_after, probe_times
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
@@ -81,3 +81,20 @@ def test_the_count_trips_at_eight_requests_in_a_row_at_concurrency_one(
     result = crawl_result(server.url("/"), concurrency=1, network_wait=0)
 
     assert result.summary.state == state
+
+
+@pytest.mark.parametrize(
+    ("network_wait", "times"),
+    [
+        (200, (5, 10, 20, 40, 100, 160)),
+        (30, (5, 10, 20)),
+        # A probe exactly at the wait still starts.
+        (40, (5, 10, 20, 40)),
+        (100, (5, 10, 20, 40, 100)),
+        (4, ()),
+        (0, ()),
+        (1800, (5, 10, 20, 40, *range(100, 1781, 60))),
+    ],
+)
+def test_probes_back_off_to_once_a_minute(network_wait: int, times: tuple[int, ...]) -> None:
+    assert probe_times(network_wait) == times

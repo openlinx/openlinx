@@ -24,6 +24,19 @@ def pause_after(concurrency: int) -> int:
     return max(8, 2 * concurrency)
 
 
+# Seconds after the pause began.
+_FIRST_PROBES = (5, 10, 20, 40)
+_PROBE_INTERVAL = 60
+
+
+def probe_times(network_wait: int) -> tuple[int, ...]:
+    """When the probes of a pause start; one exactly at the wait still starts (design D16)."""
+    times = [t for t in _FIRST_PROBES if t <= network_wait]
+    later = _FIRST_PROBES[-1] + _PROBE_INTERVAL
+    times += range(later, network_wait + 1, _PROBE_INTERVAL)
+    return tuple(times)
+
+
 class NetworkPause:
     """Kept by the engine from each Internal URL's outcome, since only it knows which URLs are
     Internal and every code that counts, a robots.txt one included."""
