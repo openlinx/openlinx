@@ -86,3 +86,45 @@ def test_a_redirect_target_is_requested_before_the_next_depth(
 
     paths = [request.path for request in server.requests]
     assert paths.index("/new") < paths.index("/blog/post")
+
+
+def test_a_relative_location_is_resolved(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/dir/r">Moved</a>'),
+                "/dir/r": Redirect("../x", status=301),
+                "/x": Page(body="<title>X</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT source.redirect_location, target.url FROM urls AS source "
+        "JOIN urls AS target ON target.id = source.redirect_url_id WHERE source.url = ?",
+        [server.url("/dir/r")],
+    ) == [("../x", server.url("/x"))]
+
+
+def test_a_redirect_target_loses_the_stripped_parameters(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # A campaign redirect that tags its target, on a Crawl that strips the tags.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/go">Offer</a>'),
+                "/go": Redirect("/offer?utm_source=mail&id=7", status=302),
+                "/offer": Page(body="<title>Offer</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--strip-params", "utm_*")
+
+    assert _redirect_of(crawl_file, server.url("/go")) == [(302, server.url("/offer?id=7"))]
