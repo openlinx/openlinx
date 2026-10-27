@@ -58,8 +58,8 @@ Seams (docs/testing.md):
 - [x] 3.6 [Fixture] Add a route option for a body that stalls after its headers and one that trickles forever, test-first (`delay` and `hang` act before the headers). Then **Guard:** a trickling body ends as `timeout` within `--timeout` (`test_a_trickling_body_times_out`, design Risks).
 - [x] 3.7a [Fixture] Let `020`'s fake Fetcher answer a status, headers and a response sequence per path, test-first in `tests/support/`.
 - [x] 3.7 [Fake timing] Drive "Retries wait one and then two seconds".
-- [ ] 3.8 [Fake timing] Drive "Retry-After pauses the host": the host's next allowed start in `020`'s `RateGate`, which must also act without `--rate`. After `020` task 12.0, since the pause makes requests wait concurrently.
-- [x] 3.9 Docs: document timeouts, retries, backoff, `Retry-After` and the network pause's view of a retry in `docs/crawling.md`.
+- [ ] 3.8 [Fake timing] Drive "Retry-After pauses the host": the host's next allowed start in `020`'s `RateGate`, which must also act without `--rate`. A 429 is retried here, with its 10-second wait. After `020` task 12.0, since the pause makes requests wait concurrently. Done when: `docs/crawling.md` documents `Retry-After` and the 429 wait, and its retry rule, the `--retries` help and the `crawl.retries` description name 429 beside 5xx.
+- [x] 3.9 Docs: document timeouts, retries, backoff and `attempt_count` in `docs/crawling.md`. `Retry-After` comes with 3.8, and the network pause's view of a retry with `020`'s network pause (its group 12).
 - [x] 3.10 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. Redirects
