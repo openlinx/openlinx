@@ -1,6 +1,7 @@
 """The Crawl Service: a foreground Spider-mode Crawl (020-add-crawl-core D11, D15)."""
 
 import asyncio
+import os
 import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, suppress
@@ -180,7 +181,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         strip_params=strip_params,
         fetch_policy=FetchPolicy(
             user_agent=crawl_settings.user_agent or DEFAULT_USER_AGENT,
-            proxies=proxy_variables(),
+            proxies=proxy_variables(os.environ),
         ),
         new_crawl=new_crawl,
     )

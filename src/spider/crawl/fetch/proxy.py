@@ -2,17 +2,21 @@
 
 from collections.abc import Mapping
 from urllib.parse import urlsplit
-from urllib.request import getproxies_environment
 
 # HTTP_PROXY, HTTPS_PROXY and NO_PROXY only: ALL_PROXY and the other schemes' are not honoured.
 _HONOURED = ("http", "https", "no")
 
 
-def proxy_variables() -> dict[str, str]:
-    """The proxy variables set when a run starts, by lower-case scheme, and `no` for NO_PROXY;
-    of two letter cases, the lower-case variable wins."""
-    found = getproxies_environment()
-    return {key: found[key] for key in _HONOURED if key in found}
+def proxy_variables(environ: Mapping[str, str]) -> dict[str, str]:
+    """The proxy variables of a process environment, by lower-case scheme, and `no` for
+    NO_PROXY; of two letter cases, the lower-case variable wins, as curl's does."""
+    found = {}
+    for key in _HONOURED:
+        # On Windows the environment ignores letter case, so both names find the one variable.
+        value = environ.get(f"{key}_proxy") or environ.get(f"{key.upper()}_PROXY")
+        if value:
+            found[key] = value
+    return found
 
 
 def proxy_for(url: str, proxies: Mapping[str, str]) -> str | None:
