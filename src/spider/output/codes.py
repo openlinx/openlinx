@@ -192,6 +192,14 @@ CRAWL_WRITE_FAILED = _declare(
     "Writing the crawl file failed during a Crawl, such as on a full disk; the Crawl ended "
     "failed, with write_failed, and details.error says what failed.",
 )
+SEED_UNREACHABLE = _declare(
+    "seed_unreachable",
+    "error",
+    ExitCode.NETWORK,
+    "The Seed's robots.txt or the Seed got no HTTP response, and its origin did not answer "
+    "within --network-wait; the Crawl ended failed, and details.network_wait says how long it "
+    "waited.",
+)
 SITE_UNREACHABLE = _declare(
     "site_unreachable",
     "error",

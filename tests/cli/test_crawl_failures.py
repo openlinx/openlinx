@@ -6,6 +6,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Route, Site
 from tests.support.cli import run_cli
 from tests.support.crawls import query
+from tests.support.network import closed_port
 from tests.support.sqlite_faults import disk_full_after
 from tests.support.workspace import TempWorkspace
 
@@ -85,3 +86,24 @@ def test_losing_the_site_is_reported_by_one_error(
         errors[-1:] == result.stderr_json_lines()[-1:],
         all("spider resume" in (error["hint"] or "") for error in errors),
     ) == (8, ["site_unreachable"], True, True)
+
+
+def test_an_unreachable_seed_fails_the_crawl(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", f"http://127.0.0.1:{closed_port()}/", "--network-wait", "0")
+
+    assert (result.exit_code, result.json()["state"], result.json()["stop_reason"]) == (
+        8,
+        "failed",
+        "seed_unreachable",
+    )
+
+
+def test_an_unreachable_seed_is_reported_by_one_error(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", f"http://127.0.0.1:{closed_port()}/", "--network-wait", "0")
+    errors = result.errors()
+
+    assert (
+        [error["code"] for error in errors],
+        errors[-1:] == result.stderr_json_lines()[-1:],
+        all("waited 0 seconds" in (error["hint"] or "") for error in errors),
+    ) == (["seed_unreachable"], True, True)

@@ -134,6 +134,8 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
                 fetched_at=None,
             )
             return _errored(context, dispatched, failure)
+        if decision.is_internal:
+            run.pause.robots_txt_answered()
         skip_reason, blocked, warnings = _robots_verdict(
             context.settings, origin_robots, queued, decision
         )

@@ -41,3 +41,14 @@ def test_the_urls_of_an_internal_origin_whose_robots_txt_gets_no_response_count(
     )
 
     assert (result.summary.state, result.summary.stop_reason) == ("failed", "site_unreachable")
+
+
+def test_a_seed_whose_robots_txt_answers_counts_like_any_url(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # robots.txt answers 404, so the Seed's origin has answered before its home page resets.
+    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>", reset_after=0)}))
+
+    result = crawl_result(server.url("/"), network_wait=0)
+
+    assert (result.summary.state, result.counts.errors) == ("completed", 1)

@@ -38,6 +38,7 @@ from spider.output.codes import (
     INVALID_PATTERN,
     INVALID_URL,
     SEED_OUT_OF_SCOPE,
+    SEED_UNREACHABLE,
     SITE_UNREACHABLE,
     SUBFOLDER_IS_ROOT,
 )
@@ -272,6 +273,9 @@ async def _run(crawl: _Crawl) -> _End:
         stop = context.stop
         if stop.reason == "write_failed":
             cause = stop.cause
+        elif stop.reason == "seed_unreachable":
+            ended = await _end(crawl, context.writer, "failed", stop.reason)
+            return replace(ended, failure=_seed_unreachable(crawl))
         elif stop.reason == "site_unreachable":
             ended = await _end(crawl, context.writer, "failed", stop.reason)
             return replace(ended, failure=_site_unreachable(crawl))
@@ -314,6 +318,20 @@ async def _end(
     await writer.run_async(record_state(state, ended_at, stop_reason))
     summary = await writer.run_async(crawl_summary())
     return _End(ended_at, summary, await writer.run_async(url_counts()))
+
+
+def _seed_unreachable(crawl: _Crawl) -> SpiderError:
+    seed, wait = crawl.plan.seed, crawl.plan.settings.network_wait
+    return SpiderError(
+        SEED_UNREACHABLE,
+        f"The Seed {seed} got no HTTP response, and its origin did not answer within "
+        f"--network-wait {wait}, so the Crawl ended failed.",
+        hint=f"The Crawl waited {wait} seconds. Check that this machine can reach "
+        f"{url_origin(seed)}: an agent's sandbox often blocks network access, so allow it, or "
+        "run the Command outside the sandbox. Raise --network-wait for a network that is still "
+        "coming up.",
+        details={"seed": seed, "network_wait": wait},
+    )
 
 
 def _site_unreachable(crawl: _Crawl) -> SpiderError:

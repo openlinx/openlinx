@@ -449,6 +449,7 @@ Boundary doubles used, all from the approved list:
 - [A URL's task whose exception nobody retrieves, which leaves its URL queued for every sweep, or a refusal of an ended writer that a URL's task meets taken for a bug] → In `tests/crawl/test_page_executor.py`, `test_a_url_whose_preparation_raises_ends_the_crawl_while_its_depth_is_dispatched` and `test_a_checked_url_whose_preparation_raises_ends_the_crawl_before_the_sweep`, and in `tests/crawl/test_hooks.py`, `test_a_url_that_meets_an_ended_writer_reports_why_the_writer_ended`.
 - [A record-failure count that a recorded URL does not reset, so a Crawl whose handler fails on every other URL fails once 100 have failed in all] → In `tests/crawl/test_hooks.py`, `test_recording_that_fails_for_half_the_urls_does_not_fail_the_crawl`.
 - [A network pause count that a response does not reset, or that misses the URLs an Internal origin's robots.txt without a response leaves unrequested] → In `tests/crawl/test_network_pause.py`, `test_a_response_resets_the_count` and `test_the_urls_of_an_internal_origin_whose_robots_txt_gets_no_response_count`.
+- [A Seed whose robots.txt answered but whose own request got no response, failed at once as `seed_unreachable` although its origin has answered] → In `tests/crawl/test_network_pause.py`, `test_a_seed_whose_robots_txt_answers_counts_like_any_url`.
 - [Post-crawl passes take only the writer, `Pass.run(writer)`, and `040` needs a clock in them] → Task 10.19 gives `Pass.run` one frozen `PassContext(writer, clock)`; `040` adapts its pass when it rebases.
 
 ## Migration Plan

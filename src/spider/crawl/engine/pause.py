@@ -1,6 +1,8 @@
 """The network pause: Internal requests in a row without an HTTP response (020-add-crawl-core
 D16)."""
 
+from typing import Literal
+
 from spider.crawl.engine.stop import StopSignal
 from spider.store.records import FetchError
 
@@ -31,13 +33,27 @@ class NetworkPause:
         self._network_wait = network_wait
         self._stop = stop
         self._in_a_row = 0
+        # The Seed is requested first, so the first Internal answer is its origin's.
+        self._seed_answered = False
 
     def responded(self) -> None:
         self._in_a_row = 0
+        self._seed_answered = True
+
+    def robots_txt_answered(self) -> None:
+        self._seed_answered = True
 
     def failed(self, fetch_error: FetchError) -> None:
         if fetch_error not in NO_RESPONSE:
             return
         self._in_a_row += 1
-        if self._in_a_row >= self._limit and self._network_wait == 0:
-            self._stop.set("site_unreachable")
+        # Until the Seed's origin answers, one failure pauses: a network may be coming up or
+        # switching just as the Crawl starts (design D16).
+        if not self._seed_answered:
+            self._pause("seed_unreachable")
+        elif self._in_a_row >= self._limit:
+            self._pause("site_unreachable")
+
+    def _pause(self, reason: Literal["seed_unreachable", "site_unreachable"]) -> None:
+        if self._network_wait == 0:
+            self._stop.set(reason)
