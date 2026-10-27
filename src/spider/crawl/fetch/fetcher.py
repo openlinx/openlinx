@@ -32,6 +32,7 @@ class Request:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FetchResult:
     status_code: int
+    reason: str | None
     # As received: in order, in their letter case, repeated names kept.
     headers: tuple[tuple[str, str], ...]
     body: bytes
@@ -75,7 +76,7 @@ class AiohttpFetcher:
                     (name.decode("latin-1"), value.decode("latin-1"))
                     for name, value in response.raw_headers
                 )
-                status_code = response.status
+                status_code, reason = response.status, response.reason
         # Cancellation is no Exception, so it passes through.
         except Exception as error:
             return FetchFailure(
@@ -86,6 +87,7 @@ class AiohttpFetcher:
         elapsed = self._clock.monotonic() - started
         return FetchResult(
             status_code=status_code,
+            reason=reason,
             headers=headers,
             body=body,
             fetched_at=fetched_at,

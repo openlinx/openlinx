@@ -15,6 +15,7 @@ from spider.crawl.urls import NormalizedUrl
 SITE = NormalizedUrl("http://site.test/")
 _PAGE = FetchResult(
     status_code=200,
+    reason="OK",
     headers=(("Content-Type", "text/html"),),
     body=b"<p>Hello</p>",
     fetched_at=datetime(2026, 10, 16, tzinfo=UTC),

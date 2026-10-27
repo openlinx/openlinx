@@ -23,6 +23,8 @@ class UrlResponse:
     """The URL's own HTTP response."""
 
     status_code: int
+    # The status line's reason phrase, as received.
+    reason: str | None
     # The Content-Type header as received; None without one.
     content_type: str | None
     # As received: in order, in their letter case, repeated names kept.

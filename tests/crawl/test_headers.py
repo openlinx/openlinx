@@ -122,6 +122,7 @@ def _seen(page: PreparedPage) -> tuple[DiscoveredLink, ...]:
 
 _PAGE_WITH_A_CANONICAL_HEADER = FetchResult(
     status_code=200,
+    reason="OK",
     headers=(("Content-Type", "text/html"), ("Link", "</c>; rel=canonical")),
     body=b'<a href="/a">A</a>',
     fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
@@ -190,6 +191,7 @@ def test_the_header_links_accept_any_values(headers: list[tuple[str, str]]) -> N
 def test_stripped_parameters_leave_every_link_of_a_page() -> None:
     response = FetchResult(
         status_code=200,
+        reason="OK",
         headers=(("Content-Type", "text/html"), ("Link", "</c?utm_id=1>; rel=canonical")),
         body=b'<a href="/a?utm_id=2&x=1">A</a>',
         fetched_at=datetime(2026, 10, 14, tzinfo=UTC),

@@ -189,6 +189,7 @@ async def _fetched(
         context.reporter.count(Diagnostic.of(PARSE_FAILED, failure), url)
     url_response = UrlResponse(
         status_code=response.status_code,
+        reason=response.reason,
         content_type=content_type,
         headers=response.headers,
         fetched_at=response.fetched_at,

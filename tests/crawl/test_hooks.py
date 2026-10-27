@@ -993,3 +993,20 @@ def test_a_nofollow_link_does_not_request_its_target(
         repr((server.url("/a"), True)),
         repr((server.url("/b"), False)),
     ]
+
+
+def _reason(result: UrlResult) -> tuple[Seen, ...]:
+    return () if result.response is None else (Seen(result.url_id, result.response.reason or ""),)
+
+
+def test_a_handler_sees_the_reason_phrase(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/missing">Gone</a>'), "/missing": Status(404)})
+    )
+    hooks = replace(default_hooks(), handlers=(handler("reason", _reason, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert _links_seen(crawl_file, server.url("/missing")) == ["Not Found"]

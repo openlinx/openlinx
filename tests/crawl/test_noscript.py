@@ -37,6 +37,7 @@ def _head(tree: LexborHTMLParser, page: PageInput, config: None) -> _Head:
 def _prepared(html: str) -> tuple[PreparedPage, _Head]:
     response = FetchResult(
         status_code=200,
+        reason="OK",
         headers=(("Content-Type", "text/html"),),
         body=html.encode(),
         fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
