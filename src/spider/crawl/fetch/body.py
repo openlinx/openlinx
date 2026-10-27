@@ -84,11 +84,14 @@ class _Brotli:
         self._inflate = brotli.Decompressor()
 
     def decode(self, data: bytes, limit: int) -> bytes:
+        # Bytes after the stream are ignored, as gzip's are; brotli would refuse them.
+        if self._inflate.is_finished():
+            return b""
         output: bytes = self._inflate.process(data, output_buffer_limit=limit)
         return output
 
     def drain(self, limit: int) -> bytes:
-        if self._inflate.can_accept_more_data():
+        if self._inflate.is_finished() or self._inflate.can_accept_more_data():
             return b""
         output: bytes = self._inflate.process(b"", output_buffer_limit=limit)
         return output

@@ -170,3 +170,30 @@ def test_every_member_of_a_gzip_body_is_decoded() -> None:
     body = _decoded(packed, "gzip")
 
     assert body.data == head + tail
+
+
+async def _pieces(*pieces: bytes) -> AsyncIterator[bytes]:
+    for piece in pieces:
+        yield piece
+
+
+@pytest.mark.parametrize("coding", ["gzip", "deflate", "br"])
+def test_bytes_after_a_finished_stream_are_ignored(coding: str) -> None:
+    # A server that ends every response with a line break after the compressed body.
+    page = ROW * 100
+
+    body = asyncio.run(read_body(_pieces(_packed(page, coding), b"\r\n"), coding, BODY_LIMIT))
+
+    assert body.data == page
+
+
+def test_a_gzip_member_boundary_split_after_its_first_byte_is_decoded() -> None:
+    head, tail = ROW * 500, b"<footer>Shop</footer>\n"
+    first = gzip.compress(head, mtime=0)
+    packed = first + gzip.compress(tail, mtime=0)
+    # The read ends right after the next member's first byte, 0x1f.
+    split = len(first) + 1
+
+    body = asyncio.run(read_body(_pieces(packed[:split], packed[split:]), "gzip", BODY_LIMIT))
+
+    assert body.data == head + tail
