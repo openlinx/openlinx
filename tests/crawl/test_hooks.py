@@ -43,6 +43,7 @@ from tests.support.crawls import crawl_row, query
 from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.network import closed_port
 from tests.support.sites import LATE_SHORTER_PATH, NINE_PAGES
+from tests.support.sqlite_faults import disk_full_after
 from tests.support.workspace import TempWorkspace
 
 
@@ -190,6 +191,46 @@ def test_post_crawl_passes_run_when_the_url_limit_stops_a_crawl(
     crawl_result(server.url("/"), hooks, max_urls=3)
 
     assert runs == ["run"]
+
+
+_RULES = ("missing_title", "missing_description", "missing_h1", "thin_content")
+
+
+async def _materialise_issues(context: PassContext) -> None:
+    """Writes an Issue of each rule for every URL, as 040's pass does."""
+
+    def unit(connection: Connection) -> None:
+        connection.execute(
+            text("CREATE TABLE test_issues (url_id INTEGER, rule TEXT, details TEXT)")
+        )
+        urls = connection.execute(text("SELECT id, url FROM urls")).all()
+        connection.execute(
+            text("INSERT INTO test_issues VALUES (:url_id, :rule, :details)"),
+            [
+                {"url_id": id, "rule": rule, "details": json.dumps({"url": url, "why": rule * 40})}
+                for id, url in urls
+                for rule in _RULES
+            ],
+        )
+
+    await context.writer.run_async(unit)
+
+
+def test_a_full_disk_in_a_post_crawl_pass_fails_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(_articles(120))
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("issues", _materialise_issues)))
+
+    with disk_full_after(pages=24):
+        result = crawl_result(server.url("/"), hooks)
+
+    assert (*_failed_with(result)[:2], crawl_row(result.crawl_file)["state"]) == (
+        "failed",
+        "write_failed",
+        "failed",
+    )
 
 
 def test_post_crawl_passes_do_not_run_for_a_failed_crawl(temp_workspace: TempWorkspace) -> None:
@@ -537,6 +578,21 @@ def test_recording_that_fails_for_every_url_fails_the_crawl(
         "write_failed",
         "crawl_write_failed",
     )
+
+
+@pytest.mark.parametrize(("articles", "state"), [(99, "completed"), (100, "failed")])
+def test_recording_fails_the_crawl_at_100_urls_in_a_row(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, articles: int, state: str
+) -> None:
+    server = fixture_site(_articles(articles))
+    hooks = default_hooks()
+    hooks = replace(
+        hooks, handlers=(*hooks.handlers, handler("unwritable", _unwritable_but_the_seed, _refuse))
+    )
+
+    result = crawl_result(server.url("/"), hooks)
+
+    assert result.summary.state == state
 
 
 def test_recording_that_fails_for_half_the_urls_does_not_fail_the_crawl(

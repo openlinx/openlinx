@@ -53,7 +53,8 @@ class Requester:
         """A URL's own request, which the URL limit counts with the slots held, so the count is
         exact. After a stop, none starts (design D16)."""
         async with self._slots(url):
-            # The start the gate gave it stays taken: after a refusal, no request starts.
+            # Refused with its turn under --rate already taken, and never given back: after a
+            # stop or at the limit, no request starts again.
             if self._stopped() or not self._limits.start_request():
                 return NotStarted()
             return await self._send(url)

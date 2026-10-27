@@ -33,6 +33,7 @@ from spider.crawl.scope import ScopeDecision
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import host_key, url_origin
 from spider.output.diagnostics import Diagnostic
+from spider.store.failures import is_write_failure
 from spider.store.records import (
     RESOURCE_LINK_TYPES,
     ErroredUrl,
@@ -76,6 +77,10 @@ class TaskFailure:
         if isinstance(error, CrawlWriterClosedError):
             # Not a bug: an ended writer refuses every unit, and its cause says why (017 D6).
             self._stop.set("write_failed", error.__cause__ or error)
+        elif error is not None and is_write_failure(error):
+            # Not a bug either: the file refused a write outside the URL's unit, such as its
+            # origin's robots.txt row.
+            self._stop.set("write_failed", error)
         elif error is not None and self._error is None:
             self._error = error
 

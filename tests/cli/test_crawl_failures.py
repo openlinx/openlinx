@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Route, Site
+from tests.fixture_site.routes import Page, Robots, Route, Site
 from tests.support.cli import run_cli
 from tests.support.crawls import query
 from tests.support.network import closed_port
@@ -107,3 +107,21 @@ def test_an_unreachable_seed_is_reported_by_one_error(temp_workspace: TempWorksp
         errors[-1:] == result.stderr_json_lines()[-1:],
         all("waited 0 seconds" in (error["hint"] or "") for error in errors),
     ) == (["seed_unreachable"], True, True)
+
+
+def test_a_full_disk_on_the_robots_txt_row_fails_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # A robots.txt of many groups, as large sites serve: its stored text overflows the disk.
+    groups = "".join(f"User-agent: bot-{n}\nDisallow: /private-{n}/\n\n" for n in range(3000))
+    server = fixture_site(Site(routes={"/robots.txt": Robots(groups), "/": Page(body="<p>/</p>")}))
+
+    with disk_full_after(pages=16):
+        result = run_cli("crawl", server.url("/"))
+
+    assert (
+        result.exit_code,
+        result.json()["state"],
+        result.stderr_json_lines()[-1]["code"],
+        result.stray_stderr_lines(),
+    ) == (7, "failed", "crawl_write_failed", [])

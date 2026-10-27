@@ -3,7 +3,7 @@
 import asyncio
 import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager, nullcontext, suppress
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -48,6 +48,7 @@ from spider.output.reporter import Reporter
 from spider.services.crawls import create_crawl
 from spider.services.hooks import default_page_executor
 from spider.store.crawls import crawl_summary, record_state, record_warnings
+from spider.store.failures import is_write_failure
 from spider.store.records import (
     CrawlFile,
     CrawlState,
@@ -268,12 +269,35 @@ class _Crawl:
 
 
 async def _run(crawl: _Crawl) -> _End:
+    try:
+        return await _crawl_and_end(crawl)
+    except _WriteFailed as failed:
+        cause = failed.cause
+    except Exception as error:
+        # Raised outside a URL's unit: by the Seed's record, a pass, the end's own writes or the
+        # final commit. It outranks a network reason whose end it kept from being written.
+        if not is_write_failure(error):
+            raise
+        cause = error
+    return await _failed_end(crawl, _write_failed(crawl.crawl_file, cause))
+
+
+class _WriteFailed(Exception):
+    """The stop flag's write_failed, raised out of the Crawl's context so that its writer
+    closes before the fresh one opens."""
+
+    def __init__(self, cause: BaseException | None) -> None:
+        super().__init__()
+        self.cause = cause
+
+
+async def _crawl_and_end(crawl: _Crawl) -> _End:
     async with _crawl_context(crawl) as context:
         await run_crawl(context, crawl.plan.seed)
         stop = context.stop
         if stop.reason == "write_failed":
-            cause = stop.cause
-        elif stop.reason == "seed_unreachable":
+            raise _WriteFailed(stop.cause)
+        if stop.reason == "seed_unreachable":
             ended = await _end(crawl, context.writer, "failed", stop.reason)
             return replace(ended, failure=_seed_unreachable(crawl))
         elif stop.reason == "site_unreachable":
@@ -289,7 +313,6 @@ async def _run(crawl: _Crawl) -> _End:
                 await crawl_pass.run(PassContext(context.writer, crawl.clock))
             state: CrawlState = "completed" if stop.reason is None else "stopped"
             return await _end(crawl, context.writer, state, stop.reason)
-    return await _failed_end(crawl, _write_failed(crawl.crawl_file, cause))
 
 
 async def _failed_end(crawl: _Crawl, error: SpiderError) -> _End:
@@ -351,6 +374,9 @@ def _write_failed(crawl_file: CrawlFile, cause: BaseException | None) -> SpiderE
     # A file another connection holds is reported as the writer raised it (exit 5).
     if isinstance(cause, SpiderError):
         return cause
+    # An ended writer refuses with the error it ended on as the cause (017 D6).
+    if isinstance(cause, CrawlWriterClosedError) and cause.__cause__ is not None:
+        cause = cause.__cause__
     error = f"{type(cause).__name__}: {cause}"
     return SpiderError(
         CRAWL_WRITE_FAILED,
@@ -376,7 +402,6 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
             crawl_file=str(crawl_file.path),
             parse_workers=executor.workers,
         )
-        stop = StopSignal()
         # Opening and closing the writer block, so they run off the event loop.
         with clock.off_loop():
             writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
@@ -399,19 +424,17 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
                     fetcher=fetcher,
                     pages=executor,
                     hooks=crawl.hooks,
-                    stop=stop,
+                    stop=StopSignal(),
                 )
         except BaseException:
             # An ended writer raises why it ended once more; the error raised says it first.
-            with suppress(CrawlWriterClosedError):
+            try:
                 await writer.close_async()
+            except Exception as again:
+                if not is_write_failure(again):
+                    raise
             raise
-        if stop.reason == "write_failed":
-            # Its failure is the stop's cause already, and the failed end gets a fresh writer.
-            with suppress(Exception):
-                await writer.close_async()
-        else:
-            await writer.close_async()
+        await writer.close_async()
     finally:
         # 026's pool shuts its workers down here, however the Crawl ended.
         await executor.close()

@@ -1,5 +1,8 @@
-"""The network pause's count (020-add-crawl-core D16; seams 2 and 3)."""
+"""The network pause's count (020-add-crawl-core D16; seams 2, 3 and 4)."""
 
+import pytest
+
+from spider.crawl.engine.pause import pause_after
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
@@ -52,3 +55,29 @@ def test_a_seed_whose_robots_txt_answers_counts_like_any_url(
     result = crawl_result(server.url("/"), network_wait=0)
 
     assert (result.summary.state, result.counts.errors) == ("completed", 1)
+
+
+@pytest.mark.parametrize(("concurrency", "requests"), [(1, 8), (4, 8), (5, 10), (50, 100)])
+def test_the_requests_in_a_row_that_pause_the_crawl(concurrency: int, requests: int) -> None:
+    assert pause_after(concurrency) == requests
+
+
+@pytest.mark.parametrize(("down", "state"), [(7, "completed"), (8, "failed")])
+def test_the_count_trips_at_eight_requests_in_a_row_at_concurrency_one(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, down: int, state: str
+) -> None:
+    downs = range(1, down + 1)
+    links = "".join(f'<a href="/down/{n}">Down</a>' for n in downs) + '<a href="/up">Up</a>'
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body=links),
+                **{f"/down/{n}": Page(body="<p>Down</p>", reset_after=0) for n in downs},
+                "/up": Page(body="<p>Up</p>"),
+            }
+        )
+    )
+
+    result = crawl_result(server.url("/"), concurrency=1, network_wait=0)
+
+    assert result.summary.state == state

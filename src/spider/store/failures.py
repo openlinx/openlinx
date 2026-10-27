@@ -1,4 +1,4 @@
-"""Which failures of a URL's unit are that URL's alone (020-add-crawl-core D2)."""
+"""Which write failures are one URL's, and which the crawl file's (020-add-crawl-core D2, D16)."""
 
 import sqlite3
 
@@ -12,15 +12,24 @@ from spider.store.writer import CrawlWriterClosedError, CrawlWriterReplayError
 _ONE_ROW = (sqlite3.IntegrityError, sqlite3.DataError, sqlite3.InterfaceError)
 
 
-def is_one_urls_failure(error: BaseException) -> bool:
-    """True when the URL alone failed, so a fallback unit records it; else the file failed."""
+def is_write_failure(error: BaseException) -> bool:
+    """True when writing the crawl file failed, wherever it was written: the writer ended or
+    its replay failed, another connection held the file, or the database refused for a reason
+    that is not one row's (020-add-crawl-core D16)."""
     # The writer's own errors first: none of them is a database error.
     if isinstance(error, CrawlWriterClosedError | CrawlWriterReplayError):
-        return False
-    if isinstance(error, SpiderError) and error.code == CRAWL_BUSY.code:
-        return False
-    cause = error.orig if isinstance(error, DBAPIError) else error
-    if isinstance(cause, _ONE_ROW):
         return True
-    # Every other database error is the file's or the connection's; our row code's are one row's.
-    return isinstance(cause, Exception) and not isinstance(cause, sqlite3.Error)
+    if isinstance(error, SpiderError) and error.code == CRAWL_BUSY.code:
+        return True
+    cause = _database_error(error)
+    return isinstance(cause, sqlite3.Error) and not isinstance(cause, _ONE_ROW)
+
+
+def is_one_urls_failure(error: BaseException) -> bool:
+    """True when the URL alone failed, so a fallback unit records it; else the file failed."""
+    # A row the file refuses, or our own row code's error: one row's.
+    return not is_write_failure(error) and isinstance(_database_error(error), Exception)
+
+
+def _database_error(error: BaseException) -> BaseException | None:
+    return error.orig if isinstance(error, DBAPIError) else error
