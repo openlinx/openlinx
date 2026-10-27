@@ -238,8 +238,9 @@ async def _fetched(
         # The X-Robots-Tag applies to any response, a PDF's or a failed Page's (D9).
         directives = response_directives(response, context.settings.robots_user_agent)
     discovered = discovered_urls(links, scope)
-    if parsed and decided.discovered_via == "seed":
-        warn_of_seed_base_mismatch(context, url, links)
+    # The Page the Seed's Redirect Chain ends on, the Seed's own when it answered at once.
+    if parsed and in_chain:
+        warn_of_seed_base_mismatch(context, url, links, scope)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:

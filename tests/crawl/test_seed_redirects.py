@@ -95,3 +95,30 @@ def test_a_seed_chain_that_ends_off_its_site_widens_nothing(
         _internal(crawl_file, "http://site.test/old", "http://other.test/"),
         "site.test" in _scope_hosts(crawl_file),
     ) == ([("http://site.test/old", 0, 0), ("http://other.test/", 0, 0)], False)
+
+
+def test_a_www_seed_that_redirects_on_its_host_is_checked_on_its_final_page(
+    temp_workspace: TempWorkspace, fixture_named_hosts: StartNamedHosts
+) -> None:
+    # The www home page moved to /home, whose canonical names the apex as the site.
+    hosts = fixture_named_hosts(
+        {
+            "www.site.test": Site(
+                {
+                    "/": Redirect("/home", status=301),
+                    "/home": Page(
+                        body='<link rel="canonical" href="http://site.test/"><title>Shop</title>'
+                    ),
+                }
+            ),
+            "site.test": Site({"/": Page(body="<title>Shop</title>")}),
+        }
+    )
+
+    result = crawl_result("http://www.site.test/", resolver=hosts.resolver)
+
+    assert [
+        "http://site.test/" in (warning.hint or "")
+        for warning in result.warnings
+        if warning.code == "seed_base_mismatch"
+    ] == [True]

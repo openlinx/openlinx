@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.fetch.politeness import BLOCKING_RUN
 from spider.crawl.references import DiscoveredLink
-from spider.crawl.scope import apex_seed_named_by_page
+from spider.crawl.scope import ScopeRules, apex_seed_named_by_page
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.naming import APP_NAME
 from spider.output.codes import (
@@ -82,9 +82,12 @@ def warn_of_a_blocked_seed(context: CrawlContext, seed: NormalizedUrl) -> None:
 
 
 def warn_of_seed_base_mismatch(
-    context: CrawlContext, seed: NormalizedUrl, links: Iterable[DiscoveredLink]
+    context: CrawlContext,
+    seed: NormalizedUrl,
+    links: Iterable[DiscoveredLink],
+    scope: ScopeRules,
 ) -> None:
-    apex_seed = apex_seed_named_by_page(seed, links, context.scope)
+    apex_seed = apex_seed_named_by_page(seed, links, scope)
     if apex_seed is not None:
         context.reporter.warn(
             Diagnostic.of(
