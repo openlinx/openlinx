@@ -3,13 +3,11 @@
 import asyncio
 import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager, nullcontext, suppress
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-
-from aiohttp.abc import AbstractResolver
 
 from spider.aio import loop_factory
 from spider.clock import Clock
@@ -18,7 +16,7 @@ from spider.crawl.engine.dispatch import run_crawl
 from spider.crawl.engine.hooks import Hooks, PassContext
 from spider.crawl.engine.stop import StopSignal
 from spider.crawl.engine.warning_log import WarningLog
-from spider.crawl.fetch.fetcher import Fetcher, aiohttp_fetcher
+from spider.crawl.fetch.fetcher import FetcherFactory, FetchPolicy, aiohttp_fetcher
 from spider.crawl.pages.preparation import PageExecutor
 from spider.crawl.scope import ScopeDecision, ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
@@ -84,6 +82,7 @@ class CrawlPlan:
     settings: CrawlSettings
     scope: ScopeRules
     strip_params: re.Pattern[str] | None
+    fetch_policy: FetchPolicy
     new_crawl: NewCrawl
 
 
@@ -173,6 +172,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         settings=crawl_settings,
         scope=scope,
         strip_params=strip_params,
+        fetch_policy=FetchPolicy(),
         new_crawl=new_crawl,
     )
 
@@ -206,13 +206,12 @@ def start_crawl(
     reporter: Reporter,
     hooks: Hooks,
     *,
-    resolver: AbstractResolver | None = None,
     pages: Callable[[], PageExecutor] | None = None,
-    fetcher: Fetcher | None = None,
+    fetchers: FetcherFactory = aiohttp_fetcher,
 ) -> CrawlResult:
-    """`resolver` is the DNS resolver hook of multi-host tests, `pages` builds the page
-    executor instead of `default_page_executor`, and `fetcher` is the fake Fetcher of the
-    timing scenarios, used instead of aiohttp's (design D9, D15)."""
+    """`pages` builds the page executor instead of `default_page_executor`, and `fetchers`
+    opens the Fetcher, where a test binds the DNS resolver hook or a fake Fetcher (design D9,
+    D15)."""
     log = WarningLog(reporter)
     crawl = _Crawl(
         plan=plan,
@@ -220,9 +219,8 @@ def start_crawl(
         clock=clock,
         log=log,
         hooks=hooks,
-        resolver=resolver,
         pages=pages or default_page_executor,
-        fetcher=fetcher,
+        fetchers=fetchers,
     )
     with asyncio.Runner(loop_factory=loop_factory) as runner:
         ended_at, summary, counts = runner.run(_run(crawl))
@@ -245,9 +243,8 @@ class _Crawl:
     clock: Clock
     log: WarningLog
     hooks: Hooks
-    resolver: AbstractResolver | None
     pages: Callable[[], PageExecutor]
-    fetcher: Fetcher | None
+    fetchers: FetcherFactory
 
 
 async def _run(crawl: _Crawl) -> tuple[datetime, CrawlSummary, UrlCounts]:
@@ -288,12 +285,7 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
         # Opening and closing the writer block, so they run off the event loop.
         writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
         try:
-            fetching = (
-                aiohttp_fetcher(clock, crawl.resolver)
-                if crawl.fetcher is None
-                else nullcontext(crawl.fetcher)
-            )
-            async with fetching as fetcher:
+            async with crawl.fetchers(plan.fetch_policy, clock) as fetcher:
                 yield CrawlContext(
                     crawl_file=crawl_file,
                     settings=plan.settings,

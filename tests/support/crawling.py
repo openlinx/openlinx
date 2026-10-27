@@ -1,6 +1,8 @@
 """Crawling the fixture site in tests (020-add-crawl-core, seam 3+6)."""
 
 from collections.abc import Callable
+from contextlib import nullcontext
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +11,7 @@ from aiohttp.abc import AbstractResolver
 from spider.cli.app import build_app
 from spider.clock import Clock, SystemClock
 from spider.crawl.engine.hooks import Hooks
-from spider.crawl.fetch.fetcher import Fetcher
+from spider.crawl.fetch.fetcher import Fetcher, FetcherFactory, aiohttp_fetcher
 from spider.crawl.pages.preparation import PageExecutor
 from spider.output.reporter import Collected, Reporter
 from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
@@ -61,7 +63,13 @@ def crawl_result(
         clock or SystemClock(),
         reporter or Collected(),
         hooks or default_hooks(),
-        resolver=resolver,
         pages=pages,
-        fetcher=fetcher,
+        fetchers=_fetchers(resolver, fetcher),
     )
+
+
+def _fetchers(resolver: AbstractResolver | None, fetcher: Fetcher | None) -> FetcherFactory:
+    if fetcher is None:
+        return partial(aiohttp_fetcher, resolver=resolver)
+    given = fetcher
+    return lambda policy, clock: nullcontext(given)

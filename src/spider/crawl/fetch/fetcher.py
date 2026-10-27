@@ -1,7 +1,7 @@
 """The Fetcher: one request, one hop, never a redirect followed (020-add-crawl-core D8)."""
 
-from collections.abc import AsyncIterator, Iterable
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Iterable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -13,9 +13,6 @@ from aiohttp.abc import AbstractResolver
 from spider.clock import Clock
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import FetchError
-
-# Fixed until 022 makes it a setting; the watchdog of design D16 outlasts it.
-_REQUEST_DEADLINE_SECONDS = 20
 
 
 def header_values(headers: Iterable[tuple[str, str]], name: str) -> list[str]:
@@ -57,6 +54,18 @@ class FetchFailure:
 
 class Fetcher(Protocol):
     async def fetch(self, request: Request) -> FetchResult | FetchFailure: ...
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FetchPolicy:
+    """Every request setting of a Crawl, from its plan to its Fetcher (022-add-fetch-policy D1)."""
+
+    # Fixed until --timeout sets it; the watchdog of 020's design D16 outlasts it.
+    timeout_seconds: float = 20
+
+
+# Opens the Crawl's Fetcher: tests bind the DNS resolver hook or a fake Fetcher into one.
+type FetcherFactory = Callable[[FetchPolicy, Clock], AbstractAsyncContextManager[Fetcher]]
 
 
 class AiohttpFetcher:
@@ -114,11 +123,11 @@ def fetch_error_of(error: Exception) -> FetchError:
 
 @asynccontextmanager
 async def aiohttp_fetcher(
-    clock: Clock, resolver: AbstractResolver | None = None
+    policy: FetchPolicy, clock: Clock, resolver: AbstractResolver | None = None
 ) -> AsyncIterator[AiohttpFetcher]:
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(resolver=resolver),
-        timeout=aiohttp.ClientTimeout(total=_REQUEST_DEADLINE_SECONDS),
+        timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
         # No cookie session: a cookie set by one response would change what later ones return.
         cookie_jar=aiohttp.DummyCookieJar(),
     ) as session:
