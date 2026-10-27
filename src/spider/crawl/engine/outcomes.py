@@ -15,6 +15,14 @@ from spider.store.records import Provenance
 from spider.store.urls import UrlUnit, record_unwritten
 from spider.store.writer import CrawlWriter, CrawlWriterClosedError
 
+# URL units in a row that fail on their first run: a broken handler or store writer, not a
+# hundred bad URLs, so the Crawl fails instead of recording the rest of the site as errors.
+RECORD_FAILURE_LIMIT = 100
+
+
+class RecordingFailedError(Exception):
+    """Recording kept failing for one URL after another (design D16)."""
+
 
 @dataclass(frozen=True, slots=True)
 class Recorded:
@@ -34,6 +42,7 @@ class Outcomes:
         self._reporter = reporter
         self._stop = stop
         self._pending: set[asyncio.Future[Any]] = set()
+        self._failed_in_a_row = 0
 
     async def submit(self, recorded: Recorded) -> None:
         future = await self._writer.submit_async(recorded.unit)
@@ -58,11 +67,20 @@ class Outcomes:
         if failure is not None and (error is not None or done.result()):
             self._reporter.count(failure, result.url)
         if error is None:
+            self._failed_in_a_row = 0
             return
         if not is_one_urls_failure(error):
             self._stop.set("write_failed", error)
             return
         self._reporter.count(record_failure(result.url, error), result.url)
+        self._failed_in_a_row += 1
+        if self._failed_in_a_row >= RECORD_FAILURE_LIMIT:
+            failed = RecordingFailedError(
+                f"{RECORD_FAILURE_LIMIT} URLs in a row could not be recorded, the last with "
+                f"{type(error).__name__}: {error}"
+            )
+            failed.__cause__ = error
+            self._stop.set("write_failed", failed)
         fallback = asyncio.ensure_future(self._fall_back(result, error))
         self._pending.add(fallback)
         fallback.add_done_callback(self._pending.discard)

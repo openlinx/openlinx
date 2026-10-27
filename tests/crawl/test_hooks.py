@@ -488,6 +488,60 @@ def test_a_url_whose_rows_cannot_be_written_is_recorded_as_an_error(
     )
 
 
+def _articles(count: int) -> Site:
+    articles = range(1, count + 1)
+    return Site(
+        routes={
+            "/": Page(body="".join(f'<a href="/p{n}">Article {n}</a>' for n in articles)),
+            **{f"/p{n}": Page(body=f"<h1>Article {n}</h1>") for n in articles},
+        }
+    )
+
+
+def _unwritable_but_the_seed(result: UrlResult) -> tuple[Unwritable, ...]:
+    return () if result.url.endswith("/") else (Unwritable(result.url_id),)
+
+
+def _unwritable_odd_articles(result: UrlResult) -> tuple[Unwritable, ...]:
+    return (Unwritable(result.url_id),) if result.url[-1] in "13579" else ()
+
+
+def test_recording_that_fails_for_every_url_fails_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(_articles(120))
+    hooks = default_hooks()
+    hooks = replace(
+        hooks, handlers=(*hooks.handlers, handler("unwritable", _unwritable_but_the_seed, _refuse))
+    )
+
+    result = crawl_result(server.url("/"), hooks)
+
+    assert (*_failed_with(result)[:2], result.failure and result.failure.code) == (
+        "failed",
+        "write_failed",
+        "crawl_write_failed",
+    )
+
+
+def test_recording_that_fails_for_half_the_urls_does_not_fail_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # More failures than the limit, but a recorded URL between any two.
+    server = fixture_site(_articles(220))
+    hooks = default_hooks()
+    hooks = replace(
+        hooks, handlers=(*hooks.handlers, handler("unwritable", _unwritable_odd_articles, _refuse))
+    )
+
+    result = crawl_result(server.url("/"), hooks)
+
+    assert (
+        result.summary.state,
+        [(w.code, w.details["count"]) for w in result.warnings if w.code == "record_failed"],
+    ) == ("completed", [("record_failed", 110)])
+
+
 def test_a_checked_url_whose_rows_cannot_be_written_is_recorded_when_it_ends_last(
     temp_workspace: TempWorkspace,
 ) -> None:
