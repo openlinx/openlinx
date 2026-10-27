@@ -14,6 +14,7 @@ from spider.output.codes import (
     ROBOTS_UNREACHABLE,
     SEED_BASE_MISMATCH,
     SEED_BLOCKED_BY_ROBOTS_TXT,
+    SEED_REDIRECTED_OFF_SITE,
 )
 from spider.output.diagnostics import Diagnostic
 from spider.store.records import ParseError
@@ -77,6 +78,20 @@ def warn_of_a_blocked_seed(context: CrawlContext, seed: NormalizedUrl) -> None:
             hint="Give --ignore-robots to crawl it anyway, or --robots-user-agent with the "
             "token the site allows.",
             details={"seed": seed},
+        )
+    )
+
+
+def warn_of_seed_redirected_off_site(
+    context: CrawlContext, seed: NormalizedUrl, final_url: NormalizedUrl
+) -> None:
+    context.reporter.warn(
+        Diagnostic.of(
+            SEED_REDIRECTED_OFF_SITE,
+            f"The Seed {seed} redirects to {final_url}, on another site, so the Crawl stayed "
+            "in the Seed's Scope and found little or nothing of it.",
+            hint=f"Give {final_url} as the Seed to crawl the site the Seed redirects to.",
+            details={"seed": seed, "final_url": final_url},
         )
     )
 

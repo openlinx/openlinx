@@ -122,3 +122,26 @@ def test_a_www_seed_that_redirects_on_its_host_is_checked_on_its_final_page(
         for warning in result.warnings
         if warning.code == "seed_base_mismatch"
     ] == [True]
+
+
+def test_a_redirect_to_another_site_is_reported(
+    temp_workspace: TempWorkspace, fixture_named_hosts: StartNamedHosts
+) -> None:
+    # The shop's domain now forwards to the company that bought it.
+    hosts = fixture_named_hosts(
+        {
+            "site.test": Site({"/": Redirect("http://other.test/", status=301)}),
+            "other.test": Site({"/": Page(body="<title>New owner</title>")}),
+        }
+    )
+
+    result = crawl_result("http://site.test/", resolver=hosts.resolver)
+
+    assert (
+        [
+            "http://other.test/" in (warning.hint or "")
+            for warning in result.warnings
+            if warning.code == "seed_redirected_off_site"
+        ],
+        "other.test" in _scope_hosts(result.crawl_file),
+    ) == ([True], False)

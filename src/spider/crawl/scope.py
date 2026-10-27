@@ -87,6 +87,16 @@ class ScopeRules:
             return None
         return replace(self, seed_hosts=(*self.seed_hosts, host))
 
+    def is_off_site(self, url: NormalizedUrl) -> bool:
+        """Whether `url` is on another registrable domain than the first Seed host's, or on
+        another host when that has none, such as an IP address (022 D3)."""
+        host = _without_trailing_dot(url_host(url))
+        seed_host = self.seed_hosts[0]
+        domain, seed_domain = _registrable_domain(host), _registrable_domain(seed_host)
+        if seed_domain is None:
+            return host != seed_host
+        return domain != seed_domain
+
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
         host = _without_trailing_dot(url_host(url))
         is_internal = host in self.seed_hosts or (

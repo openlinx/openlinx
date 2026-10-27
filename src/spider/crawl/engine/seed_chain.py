@@ -13,6 +13,7 @@ class SeedChain:
 
     def __init__(self, scope: ScopeRules, seed: NormalizedUrl) -> None:
         self.scope = scope
+        self.seed = seed
         self._provisional = scope.admitting_the_domain_of(seed)
         self._urls: list[tuple[int, NormalizedUrl]] = []
         self.is_open = True

@@ -11,6 +11,7 @@ from spider.crawl.engine.crawl_warnings import (
     warn_of_an_unreachable_robots_txt,
     warn_of_possible_blocking,
     warn_of_seed_base_mismatch,
+    warn_of_seed_redirected_off_site,
 )
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
@@ -99,6 +100,8 @@ async def close_seed_chain(run: Run, final_url: NormalizedUrl, *, responded: boo
     against the Scope it ended in, which the Crawl records when it widened, and page
     preparation starts with that Scope (022-add-fetch-policy D3)."""
     context = run.context
+    if run.seed_chain.scope.is_off_site(final_url):
+        warn_of_seed_redirected_off_site(context, run.seed_chain.seed, final_url)
     widened, decisions = run.seed_chain.close(final_url, responded=responded)
     await context.writer.run_async(reclassify_urls(decisions))
     if widened is not None:

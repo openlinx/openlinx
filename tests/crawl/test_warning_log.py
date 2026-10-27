@@ -9,9 +9,9 @@ from spider.output.codes import (
 )
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Collected
-from tests.fixture_site.hosts import StartHosts
+from tests.fixture_site.hosts import StartHosts, StartNamedHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Robots, Site, Status
+from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status
 from tests.support.crawling import crawl_result
 from tests.support.workspace import TempWorkspace
 
@@ -82,7 +82,10 @@ _DOWN = Site(
 
 
 def test_a_warning_kept_once_per_a_detail_carries_that_detail(
-    temp_workspace: TempWorkspace, fixture_site: StartSite, fixture_hosts: StartHosts
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    fixture_hosts: StartHosts,
+    fixture_named_hosts: StartNamedHosts,
 ) -> None:
     down = fixture_site(_DOWN)
     closed = fixture_site(Site(routes={"/robots.txt": Robots("User-agent: *\nDisallow: /\n")}))
@@ -90,11 +93,18 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
         Site(routes={"/": Page(body='<link rel="canonical" href="http://site.test/">')}),
         Site(routes={}),
     )
+    moved = fixture_named_hosts(
+        {
+            "shop.test": Site({"/": Redirect("http://other.test/", status=301)}),
+            "other.test": Site({"/": Page(body="<title>New owner</title>")}),
+        }
+    )
 
     results = [
         crawl_result(down.url("/"), ignore_robots=True),
         crawl_result(closed.url("/")),
         crawl_result("http://www.site.test/", resolver=www.resolver),
+        crawl_result("http://shop.test/", resolver=moved.resolver),
     ]
 
     seen = sorted(
@@ -111,11 +121,13 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
             ("robots_unreachable", True),
             ("seed_base_mismatch", True),
             ("seed_blocked_by_robots_txt", True),
+            ("seed_redirected_off_site", True),
         ],
         [
             "possible_blocking",
             "robots_unreachable",
             "seed_base_mismatch",
             "seed_blocked_by_robots_txt",
+            "seed_redirected_off_site",
         ],
     )

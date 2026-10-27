@@ -192,6 +192,14 @@ MAX_URLS_REACHED = _declare(
     "The Crawl reached --max-urls and stopped with URLs left queued; the hint is the command "
     "that continues it with a higher limit.",
 )
+SEED_REDIRECTED_OFF_SITE = _declare(
+    "seed_redirected_off_site",
+    "warning",
+    None,
+    "A Seed's Redirect Chain ended on another registrable domain; the Scope did not change, and "
+    "the hint gives the URL the chain ended on.",
+    once_per="seed",
+)
 SEED_BASE_MISMATCH = _declare(
     "seed_base_mismatch",
     "warning",
