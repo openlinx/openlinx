@@ -21,6 +21,10 @@ class RouteOptions:
     hang: bool = False
     # Send the headers and this many bytes of the body, then reset the connection.
     reset_after: int | None = None
+    # Send the headers, then never the body.
+    stall_body: bool = False
+    # Send the headers, then the body one byte every 100 ms, never ending.
+    trickle: bool = False
 
 
 @dataclass(frozen=True)

@@ -145,6 +145,19 @@ def _respond(site: Site, route: Answer, base_url: str) -> web.StreamResponse:
             return response
 
 
+async def _endless_body(
+    request: web.Request, response: web.StreamResponse, *, trickle: bool
+) -> web.StreamResponse:
+    # The declared headers, then a body that never ends: a hostile server's slow read.
+    stream = web.StreamResponse(status=response.status, headers=response.headers)
+    await stream.prepare(request)
+    if not trickle:
+        await asyncio.Event().wait()
+    while True:
+        await stream.write(b" ")
+        await asyncio.sleep(0.1)
+
+
 async def _reset_inside_body(
     request: web.Request, response: web.Response, sent: int
 ) -> web.StreamResponse:
@@ -208,6 +221,8 @@ def _build_app(site: Site, base_url: Callable[[], str], log: RequestLog) -> web.
         if route.reset_after is not None:
             assert isinstance(response, web.Response)
             return await _reset_inside_body(request, response, route.reset_after)
+        if route.stall_body or route.trickle:
+            return await _endless_body(request, response, trickle=route.trickle)
         if isinstance(route, LargeFile):
             await response.prepare(request)
             for chunk in _pattern_chunks(route.size):

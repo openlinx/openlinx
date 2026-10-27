@@ -94,6 +94,26 @@ def test_a_hanging_response_times_out(
     ) == [("error", None, "timeout")]
 
 
+def test_a_trickling_body_times_out(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    # A hostile or broken server: the headers, then one byte at a time, never ending.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Shop</title><a href="/feed">Feed</a>'),
+                "/feed": Page(body="never", trickle=True),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--timeout", "1", "--retries", "0")
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, fetch_error FROM urls WHERE url = ?",
+        [server.url("/feed")],
+    ) == [("error", "timeout")]
+
+
 @pytest.mark.parametrize("timeout", ["0", "-1", "nan", "inf"])
 def test_a_timeout_that_is_not_a_finite_number_above_0_is_rejected(
     temp_workspace: TempWorkspace, timeout: str

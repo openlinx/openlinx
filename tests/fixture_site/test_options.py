@@ -1,5 +1,6 @@
-"""Route options: headers, content_type, delay, hang, reset_after (design D9 of 000)."""
+"""Route options: headers, content_type, delay, hang, reset_after, endless bodies (000 D9)."""
 
+import asyncio
 import time
 
 import aiohttp
@@ -77,3 +78,25 @@ async def test_reset_after_resets_the_connection_inside_the_body(fixture_site: S
             await response.read()
 
     assert received == (200, 100_000)
+
+
+async def test_stall_body_sends_the_headers_and_never_the_body(fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/stall": Page(body="never", stall_body=True)}))
+
+    async with aiohttp.ClientSession() as session, session.get(server.url("/stall")) as response:
+        status = response.status
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(response.content.read(1), timeout=0.5)
+
+    assert status == 200
+
+
+async def test_trickle_sends_the_body_byte_by_byte_without_end(fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/trickle": Page(body="never", trickle=True)}))
+
+    async with aiohttp.ClientSession() as session, session.get(server.url("/trickle")) as response:
+        first = await asyncio.wait_for(response.content.read(1), timeout=2)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(response.read(), timeout=0.5)
+
+    assert (response.status, len(first)) == (200, 1)
