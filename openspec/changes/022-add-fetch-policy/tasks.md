@@ -16,7 +16,7 @@ A value that a handler or the store needs from a response goes on `020`'s `UrlRe
 
 **v0.1 and v0.2:** groups 1–8 are 022-min, in v0.1 (ROADMAP). Groups 9–12 are marked (v0.2) and wait for v0.2.
 
-**Order against `020`:** this change builds on `020`'s accepted code with its `UrlResult` shape (`020` tasks 5.19–5.25), merged in at the manager's SHA. A task that needs a part of `020` that is not merged yet says "after `020` task N": 12.0 (the auto-advancing clock), 12.14 (the watchdog) and 16.1 (the scenario script) are still open.
+**Order against `020`:** this change builds on `020`'s accepted code with its `UrlResult` shape (`020` tasks 5.19–5.25), merged in at the manager's SHA. A task that needs a part of `020` that is not merged yet says "after `020` task N": 16.1 (the scenario script) is still open.
 
 Seams (docs/testing.md):
 - **[Pure]**: seam 4, pure-logic modules
