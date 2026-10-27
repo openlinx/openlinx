@@ -30,6 +30,32 @@ def test_an_invalid_seed_is_rejected(temp_workspace: TempWorkspace) -> None:
     )
 
 
+def test_a_negative_network_wait_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--network-wait", "-1")
+
+    assert (result.exit_code, [error["code"] for error in result.errors()]) == (
+        2,
+        ["invalid_value"],
+    )
+
+
+def test_a_negative_network_wait_in_the_settings_file_is_refused(
+    temp_workspace: TempWorkspace,
+) -> None:
+    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nnetwork_wait = -1\n")
+
+    result = run_cli("crawl", "http://site.test/")
+
+    assert (
+        result.exit_code,
+        [
+            (error["code"], problem["key"])
+            for error in result.errors()
+            for problem in error["details"]["errors"]
+        ],
+    ) == (3, [("settings_invalid", "crawl.network_wait")])
+
+
 def test_a_seed_with_userinfo_is_rejected_with_a_hint_about_auth(
     temp_workspace: TempWorkspace,
 ) -> None:
