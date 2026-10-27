@@ -415,7 +415,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 12.20 Drive "Progress events say when the Crawl is paused", fake timing. Done when: `progress` carries `paused`, and its events go on during a pause.
 - [x] 12.21 **Guard:** "A negative network wait is rejected", at seam 1, since 12.6 declares the bound; it also pins that `network_wait = -1` in a settings file is refused with exit 3.
 - [x] 12.22 Drive "A Seed that answers late is crawled", fake timing. Done when: a probe that answers before any response from the Seed's origin drops the failed robots.txt verdict of the Seed's origin and re-requests its robots.txt and the Seed; the test tells the probes from the Seed's own request by their start times.
-- [ ] 12.23 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), the network pause with its probes, outcomes, events and `--network-wait`, and the backstops in `docs/crawling.md`, with `watchdog` in its `fetch_error` list and exit codes 7, 8 and 130; and `docs/architecture.md` no longer says that the watchdog comes later.
+- [x] 12.23 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), the network pause with its probes, outcomes, events and `--network-wait`, and the backstops in `docs/crawling.md`, with `watchdog` in its `fetch_error` list and exit codes 7, 8 and 130; and `docs/architecture.md` no longer says that the watchdog comes later.
 - [ ] 12.24 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
 
 ## 13. Stopping with an interrupt (widening)
