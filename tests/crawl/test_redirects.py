@@ -405,3 +405,24 @@ def test_only_a_redirect_on_a_loop_is_marked(
         (server.url("/new"), None),
         (server.url("/account"), 1),
     ]
+
+
+def test_a_looping_url_is_requested_once(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/loop-a">Cart</a>'),
+                "/loop-a": Redirect("/loop-b", status=301),
+                "/loop-b": Redirect("/loop-a", status=301),
+            }
+        )
+    )
+
+    crawled(server.url("/"))
+
+    assert [request.path for request in server.requests if request.path.startswith("/loop")] == [
+        "/loop-a",
+        "/loop-b",
+    ]
