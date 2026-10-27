@@ -287,6 +287,10 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
         body_truncated=response.body_truncated,
+        content_encoding=response.header("Content-Encoding"),
+        # Measured on the decoded body, unless the cap cut it (022 design D1).
+        size_bytes=None if response.body_truncated else len(response.body),
+        transferred_bytes=response.transferred_bytes,
         directives=directives,
         redirect_target=target,
     )
@@ -365,6 +369,9 @@ def _fetched_record(
         parse_error=fetched.parse_error,
         parse_error_message=fetched.parse_error_message,
         body_truncated=response.body_truncated,
+        content_encoding=response.content_encoding,
+        size_bytes=response.size_bytes,
+        transferred_bytes=response.transferred_bytes,
         blocked_by_robots_txt=fetched.blocked_by_robots_txt,
         discovered=discovered,
         rows=rows,

@@ -290,6 +290,23 @@ urls = public_table(
         "without the header.",
     ),
     Column(
+        "content_encoding",
+        Text,
+        comment="The Content-Encoding response header as received; NULL without a response or "
+        "without the header.",
+    ),
+    Column(
+        "size_bytes",
+        Integer,
+        comment="The body size after content decoding; NULL without a response, for a body "
+        "larger than 20 MiB, or for a coding that was not offered.",
+    ),
+    Column(
+        "transferred_bytes",
+        Integer,
+        comment="The body size as transferred, before decoding; NULL without a response.",
+    ),
+    Column(
         "response_time_ms",
         Integer,
         comment="Time from sending the request to receiving the whole body.",

@@ -121,6 +121,9 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `fetch_error` | TEXT | yes | | | `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`, `record_failed`, `timeout`, `tls_error` | Why no response is recorded for the URL. |
 | `fetch_error_message` | TEXT | yes | | | | Human-readable detail of fetch_error. |
 | `content_type` | TEXT | yes | | | | The Content-Type response header as received; NULL without a response or without the header. |
+| `content_encoding` | TEXT | yes | | | | The Content-Encoding response header as received; NULL without a response or without the header. |
+| `size_bytes` | INTEGER | yes | | | | The body size after content decoding; NULL without a response, for a body larger than 20 MiB, or for a coding that was not offered. |
+| `transferred_bytes` | INTEGER | yes | | | | The body size as transferred, before decoding; NULL without a response. |
 | `response_time_ms` | INTEGER | yes | | | | Time from sending the request to receiving the whole body. |
 | `redirect_location` | TEXT | yes | | | | The raw Location header of a 3xx response. |
 | `redirect_url_id` | INTEGER | yes | → `urls.id` | | | The redirect's target, resolved against the URL and normalised; NULL without a usable Location. |

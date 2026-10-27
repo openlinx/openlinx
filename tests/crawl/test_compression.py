@@ -2,7 +2,9 @@
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site
+from tests.fixture_site.sites.exact import site as exact
 from tests.support.crawling import crawled
+from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
 SHOP = Site(
@@ -28,3 +30,25 @@ def test_requests_accept_compressed_bodies(
         "/": "gzip, deflate, br",
         "/shoes": "gzip, deflate, br",
     }
+
+
+def test_a_compressed_resource_records_both_sizes(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            root=exact.SITE.root,
+            routes={
+                "/": Page(body='<title>Shop</title><script src="/app.js"></script>'),
+                "/app.js": exact.SITE.routes["/app.js"],
+            },
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT size_bytes, transferred_bytes, content_encoding FROM urls WHERE url = ?",
+        [server.url("/app.js")],
+    ) == [(10000, 2500, "gzip")]

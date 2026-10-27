@@ -233,6 +233,9 @@ class FetchedUrl:
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
     body_truncated: bool = False
+    content_encoding: str | None = None
+    size_bytes: int | None = None
+    transferred_bytes: int | None = None
     # NULL when robots.txt was not checked (design D6).
     blocked_by_robots_txt: bool | None = None
     discovered: tuple[NewUrl, ...] = ()

@@ -32,6 +32,11 @@ class UrlResponse:
     response_time_ms: int
     # Larger than the body cap, so read only up to it (022 design D1).
     body_truncated: bool
+    # The Content-Encoding header as received; None without one.
+    content_encoding: str | None
+    # The body after decoding, and as transferred; None where not measured (022 design D1).
+    size_bytes: int | None
+    transferred_bytes: int | None
     # Page preparation's when the Page was parsed, else the X-Robots-Tag's alone.
     directives: RobotsDirectives
     # Where a 301, 302, 303, 307 or 308 leads; None for any other response (022 design D2).

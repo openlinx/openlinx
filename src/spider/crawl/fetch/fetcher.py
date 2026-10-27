@@ -42,6 +42,8 @@ class FetchResult:
     response_time_ms: int
     # Larger than the body cap, so read only up to it.
     body_truncated: bool = False
+    # The bytes read before decoding; None from a fake Fetcher, which sends its body as is.
+    transferred_bytes: int | None = None
 
     def header(self, name: str) -> str | None:
         """The first value of the header `name`, in any letter case."""
@@ -96,7 +98,10 @@ class AiohttpFetcher:
         try:
             proxy = self._proxies.for_url(request.url)
             async with self._session.get(url, allow_redirects=False, proxy=proxy) as response:
-                body = await read_body(response.content.iter_chunked(_CHUNK_BYTES))
+                body = await read_body(
+                    response.content.iter_chunked(_CHUNK_BYTES),
+                    response.headers.get("Content-Encoding"),
+                )
                 # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.
                 headers = tuple(
                     (name.decode("latin-1"), value.decode("latin-1"))
@@ -119,6 +124,7 @@ class AiohttpFetcher:
             fetched_at=fetched_at,
             response_time_ms=round(elapsed * 1000),
             body_truncated=body.truncated,
+            transferred_bytes=body.transferred_bytes,
         )
 
 
@@ -157,5 +163,7 @@ async def aiohttp_fetcher(
         },
         # No cookie session: a cookie set by one response would change what later ones return.
         cookie_jar=aiohttp.DummyCookieJar(),
+        # read_body decodes, so it measures the body both as transferred and as decoded.
+        auto_decompress=False,
     ) as session:
         yield AiohttpFetcher(session, clock, policy.proxies)
