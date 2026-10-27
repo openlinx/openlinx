@@ -25,3 +25,27 @@ def test_a_temporary_503_is_retried(temp_workspace: TempWorkspace, fixture_site:
         "SELECT status_code, attempt_count FROM urls WHERE url = ?",
         [server.url("/flaky")],
     ) == [(200, 2)]
+
+
+def test_a_persistent_500_is_recorded_after_the_retries(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Shop</title><a href="/down">Stock</a>'),
+                "/down": Status(500, body="<h1>Internal Server Error</h1>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert (
+        query(
+            crawl_file,
+            "SELECT fetch_state, status_code, attempt_count FROM urls WHERE url = ?",
+            [server.url("/down")],
+        ),
+        [request.path for request in server.requests].count("/down"),
+    ) == ([("fetched", 500, 3)], 3)

@@ -51,7 +51,7 @@ Seams (docs/testing.md):
 
 - [x] 3.1 [Fixture] Add response sequences to the fixture site, a new route kind (for example 503 once, then 200).
 - [x] 3.2 [3+6] Drive "A temporary 503 is retried": `--retries` and `crawl.retries`, the retry loop around the Fetcher in `020`'s Requester (design D4, `020` D7), and the `attempt_count` column, a top-level field of `UrlResult`: `Requester.request_url` returns the outcome with its count, and `FetchedUrl` and `ErroredUrl` copy it. A retry is the same URL: only its first attempt counts towards `--max-urls`, each attempt takes the host's slot and its `--rate` turn again, and the backoff holds no slot.
-- [ ] 3.3 [3+6] Drive "A persistent 500 is recorded after the retries".
+- [x] 3.3 [3+6] Drive "A persistent 500 is recorded after the retries".
 - [ ] 3.4 [3+6] **Guard:** "A 404 is not retried".
 - [ ] 3.5a [Pure] `fetch_error_of` maps `TimeoutError`, from which aiohttp's timeouts derive, to `timeout`, checked before the fallback to `connection_error`; the table in `tests/crawl/test_fetcher.py` that pins them to `connection_error` flips (design D1, Risks).
 - [ ] 3.5 [3+6] Drive "A hanging response times out": `--timeout` and `crawl.timeout`, finite and above 0 through `setting_rules`, through `FetchPolicy.timeout_seconds`, fixed at 20 until then. The timeout feeds `020`'s `watchdog_seconds` here if `020` task 12.14 is merged, or in that task otherwise.
