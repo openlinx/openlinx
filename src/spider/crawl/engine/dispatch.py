@@ -29,7 +29,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     requester = Requester(context.fetcher, limits, RateGate(context.clock, context.settings.rate))
     run = Run(
         context=context,
-        outcomes=Outcomes(context),
+        outcomes=Outcomes(context.writer, context.reporter, context.stop),
         limits=limits,
         requester=requester,
         robots=RobotsLoader(requester, context.writer, context.settings.robots_user_agent),
@@ -134,6 +134,6 @@ async def _crawl_url(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> No
         recorded = await unit_of(run, queued, decision)
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
         if recorded is not None:
-            await run.outcomes.submit(*recorded)
+            await run.outcomes.submit(recorded)
     finally:
         run.limits.task_ended()

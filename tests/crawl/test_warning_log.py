@@ -1,6 +1,11 @@
 """The Crawl's warning log (020-add-crawl-core D10; seams 2 and 3)."""
 
+from datetime import UTC, datetime
+
 from spider.crawl.engine.crawl_warnings import handler_failure
+from spider.crawl.engine.hooks import UrlResult
+from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
+from spider.crawl.engine.stop import StopSignal
 from spider.crawl.engine.warning_log import WarningLog
 from spider.crawl.urls import NormalizedUrl
 from spider.output.codes import (
@@ -11,10 +16,15 @@ from spider.output.codes import (
 )
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Collected
+from spider.store.records import FetchedUrl, LinkType, NewUrl, Provenance, QueuedUrl, SkippedUrl
+from spider.store.urls import queued_batch, record_fetched, record_seed, record_skipped
+from spider.store.writer import CrawlWriter
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status
+from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
+from tests.support.crawls import create_any_crawl, query
 from tests.support.workspace import TempWorkspace
 
 
@@ -136,14 +146,77 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
     )
 
 
-def test_a_url_that_fails_again_after_it_is_decided_again_is_counted_once() -> None:
+def _fetched(url_id: int, provenance: Provenance, *discovered: NewUrl) -> FetchedUrl:
+    return FetchedUrl(
+        url_id=url_id,
+        provenance=provenance,
+        status_code=200,
+        content_type="text/html",
+        fetched_at=datetime(2026, 10, 27, tzinfo=UTC),
+        response_time_ms=1,
+        parsed=True,
+        discovered=discovered,
+    )
+
+
+def _new(url: str, discovered_via: LinkType = "hyperlink") -> NewUrl:
+    return NewUrl(
+        url=NormalizedUrl(url), discovered_via=discovered_via, is_internal=True, in_scope=True
+    )
+
+
+def _skipped(queued: QueuedUrl, failure: Diagnostic) -> Recorded:
+    """A URL that robots.txt blocks, decided on its queued row, whose handler failed."""
+    result = UrlResult(
+        url_id=queued.id,
+        url=queued.url,
+        crawl_depth=queued.crawl_depth,
+        discovered_via=queued.discovered_via,
+        found_on_url_id=queued.found_on_url_id,
+        is_internal=True,
+        in_scope=True,
+        fetch_state="skipped",
+        skip_reason="blocked_by_robots_txt",
+        blocked_by_robots_txt=True,
+    )
+    skipped = SkippedUrl(
+        url_id=queued.id,
+        skip_reason="blocked_by_robots_txt",
+        provenance=provenance_of(result),
+        blocked_by_robots_txt=True,
+    )
+    return Recorded(result, record_skipped(skipped), failure)
+
+
+async def test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_decided_again(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
     log = WarningLog(Collected())
-    lowered, other = NormalizedUrl("http://site.test/x"), NormalizedUrl("http://site.test/y")
+    seed = NormalizedUrl("http://site.test/")
+    page_at = Provenance(crawl_depth=0, discovered_via="seed", found_on_url_id=None)
 
-    # A skip lost to a lowering leaves /x queued; decided again, its handlers fail again.
-    for url in (lowered, other, lowered):
-        log.count(handler_failure(url, [("pages", ValueError("no title"))]), url)
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        seed_id = writer.run(record_seed(seed, is_internal=True, in_scope=True))
+        page, late = _new("http://site.test/a"), _new("http://site.test/late.html", "image")
+        writer.run(record_fetched(_fetched(seed_id, page_at, page, late)))
+        a_at = Provenance(crawl_depth=1, discovered_via="hyperlink", found_on_url_id=seed_id)
+        writer.run(record_fetched(_fetched(seed_id + 1, a_at, _new("http://site.test/x"))))
+        (dispatched,) = writer.run(queued_batch(2, 0, 10))
+        late_at = Provenance(crawl_depth=1, discovered_via="image", found_on_url_id=seed_id)
+        # The late check's image Link raises /x while its skip is on its way.
+        image = _new("http://site.test/x", "image")
+        writer.run(record_fetched(_fetched(seed_id + 2, late_at, image)))
+        outcomes = Outcomes(writer, log, StopSignal())
+        failure = handler_failure(dispatched.url, [("pages", ValueError("no title"))])
+        await outcomes.submit(_skipped(dispatched, failure))
+        await outcomes.settled()
+        # Decided again on its raised row, its handlers fail again.
+        (again,) = writer.run(queued_batch(2, 0, 10))
+        await outcomes.submit(_skipped(again, failure))
+        await outcomes.settled()
 
-    assert [(warning.code, warning.details["count"]) for warning in log.warnings] == [
-        ("handler_failed", 2)
-    ]
+    assert (
+        [(warning.code, warning.details["count"]) for warning in log.warnings],
+        query(crawl.path, "SELECT fetch_state, discovered_via FROM urls WHERE id = ?", [again.id]),
+    ) == ([("handler_failed", 1)], [("skipped", "image")])

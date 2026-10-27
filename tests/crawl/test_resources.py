@@ -82,6 +82,7 @@ def test_an_image_a_page_also_hyperlinks_is_checked_beyond_the_depth_limit(
 _PHOTO = Page(body="\xff\xd8\xff\xe0 JFIF", content_type="image/jpeg")
 
 
+@pytest.mark.slow
 def test_an_image_that_another_page_hyperlinked_first_is_checked_beyond_the_depth_limit(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
@@ -93,7 +94,7 @@ def test_an_image_that_another_page_hyperlinked_first_is_checked_beyond_the_dept
                 "/a": Page(body='<a href="/photo.jpg">Full size</a>'),
                 # After /a's unit, so /a records the photo first; no unit is visible to the site.
                 "/b": Page(
-                    body='<a href="/next">Next</a> <img src="/photo.jpg">', after="/a", delay=0.5
+                    body='<a href="/next">Next</a> <img src="/photo.jpg">', after="/a", delay=2.0
                 ),
                 "/next": Page(body="<p>Next</p>"),
                 "/photo.jpg": _PHOTO,

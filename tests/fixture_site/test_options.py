@@ -87,15 +87,22 @@ async def test_after_holds_the_response_until_the_site_receives_the_other_path(
 
     async with aiohttp.ClientSession() as session:
 
-        async def body(path: str) -> str:
+        async def answered(path: str) -> float:
             async with session.get(server.url(path)) as response:
-                return await response.text()
+                await response.read()
+            return time.monotonic()
 
-        held = asyncio.create_task(body("/a"))
-        done, _ = await asyncio.wait({held}, timeout=0.3)
-        answered = (len(done), await body("/b"), await held)
+        held = asyncio.create_task(answered("/a"))
+        # Time for /a to reach the site first; the order below fails if it did not.
+        await asyncio.sleep(0.2)
+        await answered("/b")
+        a_answered = await held
 
-    assert answered == (0, "b", "a")
+    requests = server.requests
+    assert ([request.path for request in requests], a_answered > requests[1].received_at) == (
+        ["/a", "/b"],
+        True,
+    )
 
 
 async def test_after_fails_the_test_when_its_path_is_never_requested() -> None:

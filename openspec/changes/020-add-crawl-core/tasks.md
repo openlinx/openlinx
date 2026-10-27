@@ -474,6 +474,6 @@ The fixes of the review of `spider.crawl` along both axes. Group 16 runs last, a
 - [x] 18.10 Fix: the fixture site's `after` route option, and the two depth tests that order their events by delays wait on it instead, each red when the lowering happens before dispatch.
 - [x] 18.11 Docs: `docs/crawling.md` lists the final 3xx of robots.txt and drops the provenance acceptance; `docs/architecture.md` lists the rate turn between the host's slot and the global cap.
 - [x] 18.12 Review: run the code-review skill on group 18's commits, then refactor with the whole suite green.
-- [ ] 18.13 Refactor: close the review of group 18: a skip's handler failures count once its unit has applied, so the warning log keeps no URLs; the outcome write-backs of `record_error` and `record_unwritten` are pinned; the provenance texts say what the Provenance rule says.
+- [x] 18.13 Refactor: close the review of group 18: a skip's handler failures count once its unit has applied, so the warning log keeps no URLs; the outcome write-backs of `record_error` and `record_unwritten` are pinned; the provenance texts say what the Provenance rule says.
   Done when: a skip that lost to a raise or a lowering counts its handler failures only when it is decided again, red by mutation of the count made before the unit applied, and removing either write-back fails the store table.
 

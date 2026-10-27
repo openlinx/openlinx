@@ -1,7 +1,7 @@
 """The units of spider.store.urls (020-add-crawl-core D1, D2, D14; seam 2)."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -440,6 +440,53 @@ def test_a_resource_link_raises_a_url_that_a_link_of_another_type_reached_first(
 
     depth, found_on, *rest = expected
     assert _raised(crawl.path) == [(depth, f"https://site.test{found_on}", *rest)]
+
+
+@pytest.mark.parametrize("outcome", ["fetched", "error", "unwritten"])
+@pytest.mark.parametrize(
+    ("page", "expected"),
+    [
+        # A raise at the URL's own depth: the outcome writes back what its dispatch acted on.
+        ("/s2", (3, "/2", "hyperlink")),
+        # A raise that also lowered it: the late Link's provenance stays, as its depth does.
+        ("/s", (2, "/s", "image")),
+    ],
+)
+def test_an_outcome_after_a_raise_in_flight_keeps_the_provenance_its_depth_agrees_with(
+    temp_workspace: TempWorkspace,
+    outcome: Literal["fetched", "error", "unwritten"],
+    page: str,
+    expected: tuple[object, ...],
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        ids = _target_at_depth_three(writer)
+        dispatched = _as_dispatched(writer, ids["/t"])
+        image = _new(_TARGET, discovered_via="image")
+        writer.run(record_fetched(_fetched(writer, ids[page], image)))
+        if outcome == "fetched":
+            writer.run(record_fetched(replace(_fetched(writer, ids["/t"]), provenance=dispatched)))
+        elif outcome == "error":
+            errored = ErroredUrl(
+                url_id=ids["/t"],
+                provenance=dispatched,
+                fetch_error="connection_refused",
+                fetch_error_message="ConnectionRefusedError: refused",
+                fetched_at=datetime(2026, 10, 27, tzinfo=UTC),
+            )
+            writer.run(record_error(errored))
+        else:
+            message = "ValueError: no row"
+            unit = record_unwritten(
+                ids["/t"], message, blocked_by_robots_txt=None, provenance=dispatched
+            )
+            writer.run(unit)
+        replay_now(writer)
+
+    depth, found_on, via = expected
+    state = "fetched" if outcome == "fetched" else "error"
+    assert _raised(crawl.path) == [(depth, f"https://site.test{found_on}", state, via)]
 
 
 def test_a_skip_that_a_resource_link_overtook_leaves_the_url_queued(

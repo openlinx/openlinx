@@ -16,7 +16,7 @@ from spider.crawl.engine.crawl_warnings import (
 )
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
-from spider.crawl.engine.outcomes import Outcomes, provenance_of
+from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import Requester, UrlLimitRefused
@@ -41,7 +41,7 @@ from spider.store.records import (
     SkipReason,
 )
 from spider.store.rows import HandlerRows
-from spider.store.urls import UrlUnit, record_error, record_fetched, record_skipped
+from spider.store.urls import record_error, record_fetched, record_skipped
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -62,9 +62,7 @@ def via_resource(queued: QueuedUrl) -> bool:
     return queued.discovered_via in RESOURCE_LINK_TYPES
 
 
-async def unit_of(
-    run: Run, queued: QueuedUrl, decision: ScopeDecision
-) -> tuple[UrlResult, UrlUnit] | None:
+async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recorded | None:
     """The URL's final state as its handlers see it, which a fallback unit keeps part of,
     and the unit that records it with their rows; or None when the URL limit refuses a new
     request, which leaves it queued. `decision` is taken once, at dispatch, so a URL found
@@ -105,8 +103,12 @@ async def unit_of(
     if skip_reason is not None:
         skipped = replace(decided, fetch_state="skipped", skip_reason=skip_reason)
         # Not final: a shorter path re-queues it, and its handlers see it then (D5).
-        rows = () if skip_reason == "max_depth" else _handler_rows(context, skipped)
-        return skipped, record_skipped(_skipped_record(skipped, skip_reason, rows))
+        rows, failed_handlers = (
+            ((), None) if skip_reason == "max_depth" else _handler_rows(context, skipped)
+        )
+        return Recorded(
+            skipped, record_skipped(_skipped_record(skipped, skip_reason, rows)), failed_handlers
+        )
     response = await run.requester.request_url(queued.url)
     if isinstance(response, UrlLimitRefused):
         return None
@@ -124,12 +126,11 @@ async def unit_of(
     return await _fetched(context, decided, response)
 
 
-def _errored(
-    context: CrawlContext, decided: UrlResult, failure: UrlFailure
-) -> tuple[UrlResult, UrlUnit]:
+def _errored(context: CrawlContext, decided: UrlResult, failure: UrlFailure) -> Recorded:
     failed = replace(decided, fetch_state="error", failure=failure)
-    rows = _handler_rows(context, failed)
-    return failed, record_error(_errored_record(failed, failure, rows))
+    rows, failed_handlers = _handler_rows(context, failed)
+    unit = record_error(_errored_record(failed, failure, rows))
+    return Recorded(failed, unit, failed_handlers)
 
 
 def _robots_verdict(
@@ -144,9 +145,9 @@ def _robots_verdict(
             status_code = origin_robots.status_code
             warnings = (unreachable_robots_txt(queued.url, status_code, ignore_robots=ignore),)
         return (None, None, warnings) if ignore else ("robots_unreachable", None, warnings)
-    target, fetch_error = origin_robots.failed_redirect, origin_robots.fetch_error
-    if target is not None and fetch_error is not None and decision.is_internal:
-        warnings = (robots_redirect_failure(queued.url, target, fetch_error),)
+    redirect_failure = origin_robots.redirect_failure
+    if redirect_failure is not None and decision.is_internal:
+        warnings = (robots_redirect_failure(queued.url, *redirect_failure),)
     blocked = not origin_robots.allows(queued.url)
     # --ignore-robots requests it, still labelled as blocked.
     if blocked and not ignore:
@@ -171,9 +172,7 @@ def _skip_reason(
     return None
 
 
-async def _fetched(
-    context: CrawlContext, decided: UrlResult, response: FetchResult
-) -> tuple[UrlResult, UrlUnit]:
+async def _fetched(context: CrawlContext, decided: UrlResult, response: FetchResult) -> Recorded:
     url = decided.url
     content_type = response.header("Content-Type")
     # An External URL or one outside the Scope is a Checked URL, never parsed (design D5).
@@ -219,8 +218,9 @@ async def _fetched(
         links=links,
         outputs={} if page is None else dict(page.outputs),
     )
-    rows = _handler_rows(context, fetched)
-    return fetched, record_fetched(_fetched_record(fetched, url_response, discovered, rows))
+    rows, failed_handlers = _handler_rows(context, fetched)
+    unit = record_fetched(_fetched_record(fetched, url_response, discovered, rows))
+    return Recorded(fetched, unit, failed_handlers)
 
 
 # Each record reads its values from the UrlResult, and from the outcome's record in it.
@@ -287,7 +287,10 @@ def _dispatched(queued: QueuedUrl, decision: ScopeDecision) -> UrlResult:
     )
 
 
-def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[HandlerRows[Any], ...]:
+def _handler_rows(
+    context: CrawlContext, result: UrlResult
+) -> tuple[tuple[HandlerRows[Any], ...], Diagnostic | None]:
+    """The handlers' rows, and their failure, which counts once the unit records it."""
     rows: list[HandlerRows[Any]] = []
     failed: list[tuple[str, BaseException]] = []
     for handler in context.hooks.handlers:
@@ -300,9 +303,7 @@ def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[HandlerRows
         if batch is not None:
             rows.append(batch)
     # One count per URL, however many of its handlers failed (design D16).
-    if failed:
-        context.reporter.count(handler_failure(result.url, failed), result.url)
-    return tuple(rows)
+    return tuple(rows), handler_failure(result.url, failed) if failed else None
 
 
 def _rows_of[R](handler: Handler[R], result: UrlResult) -> HandlerRows[R] | None:

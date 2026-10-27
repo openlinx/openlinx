@@ -58,6 +58,13 @@ class OriginRobots:
         """Why the origin gave no response at all, so its URLs are errors (design D6)."""
         return self.fetch_error if self.failed_redirect is None else None
 
+    @property
+    def redirect_failure(self) -> tuple[NormalizedUrl, FetchError] | None:
+        """The redirect target that got no response, and its error; the origin answered."""
+        if self.failed_redirect is None or self.fetch_error is None:
+            return None
+        return self.failed_redirect, self.fetch_error
+
     def allows(self, url: str) -> bool:
         return self.rules is None or self.rules.allows(url)
 
