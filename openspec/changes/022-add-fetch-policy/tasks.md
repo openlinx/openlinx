@@ -59,7 +59,7 @@ Seams (docs/testing.md):
 - [x] 3.7a [Fixture] Let `020`'s fake Fetcher answer a status, headers and a response sequence per path, test-first in `tests/support/`.
 - [x] 3.7 [Fake timing] Drive "Retries wait one and then two seconds".
 - [ ] 3.8 [Fake timing] Drive "Retry-After pauses the host": the host's next allowed start in `020`'s `RateGate`, which must also act without `--rate`. After `020` task 12.0, since the pause makes requests wait concurrently.
-- [ ] 3.9 Docs: document timeouts, retries, backoff, `Retry-After` and the network pause's view of a retry in `docs/crawling.md`.
+- [x] 3.9 Docs: document timeouts, retries, backoff, `Retry-After` and the network pause's view of a retry in `docs/crawling.md`.
 - [ ] 3.10 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. Redirects

@@ -31,6 +31,8 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | `--max-depth <n>` | `max_depth` | none | The deepest Crawl Depth whose URLs are requested, 0 or more; Resources of followed Pages are requested one deeper (see [Crawl Depth](#crawl-depth)). |
 | `--max-urls <n>` | `max_urls` | none | The most URL requests the Crawl starts, 1 or more (see [The URL limit](#the-url-limit)). |
 | `--ignore-robots` | `ignore_robots` | `false` | Request URLs that robots.txt disallows; they are still recorded with `blocked_by_robots_txt` = 1 (see [`--ignore-robots`](#--ignore-robots)). |
+| `--timeout <s>` | `timeout` | `20` | Seconds within which a request attempt, its body included, must complete: a finite number above 0 (see [Timeouts and retries](#timeouts-and-retries)). |
+| `--retries <n>` | `retries` | `2` | How many times a request without a response, or with a 5xx status, is tried again (see [Timeouts and retries](#timeouts-and-retries)). |
 | `--user-agent <string>` | `user_agent` | `spider/<version> (+<project URL>)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `spider` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
@@ -321,6 +323,13 @@ Every request, robots.txt's included, carries the header `User-Agent: spider/<ve
 ### Cookies
 
 The Crawl keeps no cookies: a cookie that a response sets is never sent with a later request, so every URL is requested as a first visit is. A site that needs a session cookie shows it, as it does to a search engine's crawler, in redirect loops or 403 responses.
+
+### Timeouts and retries
+
+- **Timeout:** a request attempt that has not completed within `--timeout` seconds (default 20) fails, its body included, so a server that sends its headers and then the body a byte at a time is cut off too. A URL whose attempts all time out is recorded with `fetch_state` = `error` and `fetch_error` = `timeout`. A value of 0, a negative one or one that is not finite is rejected as `invalid_value` (exit code 2), or in `spider.toml` as `settings_invalid` (exit code 3).
+- **Retries:** a request that gets no response, or a 5xx status, is tried again up to `--retries` times (default 2), robots.txt's included. Any other status is the server's answer and is not retried: a 404 is requested once.
+- **Backoff:** before retry n the Crawl waits 2^(n-1) seconds, 1, then 2, then 4, with no jitter. A waiting retry holds none of the host's `--concurrency` slots, and each attempt waits its `--rate` turn again.
+- **What is recorded:** the last attempt's response or failure, and `urls.attempt_count`, the number of requests made for the URL, 0 when it was not requested. A retry is the same URL, so only its first attempt counts towards `--max-urls`.
 
 ### Proxy variables
 
