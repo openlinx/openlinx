@@ -1,6 +1,6 @@
 """The warnings a Crawl gives, with their texts and details (020-add-crawl-core D10)."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.fetch.politeness import BLOCKING_RUN
@@ -10,6 +10,7 @@ from spider.crawl.scope import apex_seed_named_by_page
 from spider.crawl.urls import NormalizedUrl, url_host, url_origin
 from spider.naming import APP_NAME
 from spider.output.codes import (
+    HANDLER_FAILED,
     MAX_URLS_REACHED,
     POSSIBLE_BLOCKING,
     ROBOTS_REDIRECT_FAILED,
@@ -119,6 +120,16 @@ def warn_of_seed_base_mismatch(
                 details={"seed": seed, "apex_seed": apex_seed},
             )
         )
+
+
+def handler_failure(url: NormalizedUrl, failed: Sequence[tuple[str, BaseException]]) -> Diagnostic:
+    names = [f"{name} ({type(error).__name__})" for name, error in failed]
+    if len(names) == 1:
+        message = f"The handler {names[0]} raised on {url}; the URL was recorded without its rows."
+    else:
+        listed = ", ".join(names[:-1]) + f" and {names[-1]}"
+        message = f"The handlers {listed} raised on {url}; the URL was recorded without their rows."
+    return Diagnostic.of(HANDLER_FAILED, message)
 
 
 def parse_failure(url: NormalizedUrl, parse_error: ParseError, message: str | None) -> str:

@@ -340,6 +340,48 @@ def _boom(result: UrlResult) -> tuple[Seen, ...]:
     return (Seen(result.url_id, result.fetch_state),)
 
 
+def _boom_too(result: UrlResult) -> tuple[Outputs, ...]:
+    if result.url.endswith("/boom"):
+        raise KeyError("canonical")
+    return ()
+
+
+def test_two_handlers_that_fail_on_one_url_count_it_once(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/boom">Boom</a> <a href="/ok">OK</a>'),
+                "/boom": Page(body="<p>Boom</p>"),
+                "/ok": Page(body="<p>OK</p>"),
+            }
+        )
+    )
+    hooks = default_hooks()
+    hooks = replace(
+        hooks,
+        handlers=(
+            *hooks.handlers,
+            handler("boom", _boom, _write_seen),
+            handler("boom too", _boom_too, _write_outputs),
+        ),
+    )
+
+    result = crawl_result(server.url("/"), hooks)
+
+    assert [
+        (warning.code, warning.details["count"], warning.message) for warning in result.warnings
+    ] == [
+        (
+            "handler_failed",
+            1,
+            "The handlers boom (ValueError) and boom too (KeyError) raised on "
+            f"{server.url('/boom')}; the URL was recorded without their rows.",
+        )
+    ]
+
+
 def test_a_failing_handler_does_not_stop_the_crawl(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:

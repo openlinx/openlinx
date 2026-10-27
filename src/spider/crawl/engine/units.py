@@ -6,6 +6,7 @@ from typing import Any
 
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import (
+    handler_failure,
     parse_failure,
     warn_of_a_blocked_seed,
     warn_of_a_failed_robots_redirect,
@@ -29,7 +30,7 @@ from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.robots.reader import OriginRobots
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import url_host, url_origin
-from spider.output.codes import HANDLER_FAILED, PARSE_FAILED
+from spider.output.codes import PARSE_FAILED
 from spider.output.diagnostics import Diagnostic
 from spider.store.records import (
     ErroredUrl,
@@ -279,22 +280,19 @@ def _dispatched(queued: QueuedUrl, decision: ScopeDecision) -> UrlResult:
 
 def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[HandlerRows[Any], ...]:
     rows: list[HandlerRows[Any]] = []
+    failed: list[tuple[str, BaseException]] = []
     for handler in context.hooks.handlers:
         try:
             batch = _rows_of(handler, result)
         # A handler is later changes' code: its failure costs only its rows (design D16).
         except Exception as error:
-            context.reporter.count(
-                Diagnostic.of(
-                    HANDLER_FAILED,
-                    f"The handler {handler.name} raised {type(error).__name__} on "
-                    f"{result.url}; the URL was recorded without its rows.",
-                ),
-                result.url,
-            )
+            failed.append((handler.name, error))
             continue
         if batch is not None:
             rows.append(batch)
+    # One count per URL, however many of its handlers failed (design D16).
+    if failed:
+        context.reporter.count(handler_failure(result.url, failed), result.url)
     return tuple(rows)
 
 
