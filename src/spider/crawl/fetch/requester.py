@@ -78,7 +78,9 @@ class Requester:
         return semaphore
 
     async def _send(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
-        # Each attempt races its own watchdog on the Crawl's Clock, from when it started.
+        # Each attempt races its own watchdog on the Crawl's Clock, from when it started, which
+        # its row keeps as the Fetcher's would.
+        started_at = self._clock.now()
         fetch = asyncio.ensure_future(self._fetcher.fetch(Request(url)))
         watchdog = asyncio.ensure_future(self._clock.sleep(self._watchdog_seconds))
         try:
@@ -93,5 +95,5 @@ class Requester:
         return FetchFailure(
             fetch_error="watchdog",
             message=f"No response within {self._watchdog_seconds:g} seconds",
-            fetched_at=self._clock.now(),
+            fetched_at=started_at,
         )

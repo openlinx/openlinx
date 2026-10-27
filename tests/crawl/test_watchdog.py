@@ -32,11 +32,18 @@ def test_a_stuck_request_is_ended_by_the_watchdog(temp_workspace: TempWorkspace)
 
     result = crawl_result("http://site.test/", clock=clock, fetcher=FakeFetcher(clock, pages))
 
+    # /stuck started with / at virtual 0, and its row keeps when it started, as any request's does.
+    started = query(
+        result.crawl_file,
+        "SELECT COUNT(DISTINCT fetched_at) FROM urls WHERE url IN (?, ?)",
+        ["http://site.test/", "http://site.test/stuck"],
+    )
     assert (
         query(
             result.crawl_file,
             "SELECT url, fetch_state, fetch_error, fetch_error_message FROM urls ORDER BY id",
         ),
+        started,
         result.summary.state,
     ) == (
         [
@@ -44,6 +51,7 @@ def test_a_stuck_request_is_ended_by_the_watchdog(temp_workspace: TempWorkspace)
             ("http://site.test/stuck", "error", "watchdog", "No response within 120 seconds"),
             ("http://site.test/ok", "fetched", None, None),
         ],
+        [(1,)],
         "completed",
     )
 
