@@ -1,10 +1,15 @@
-"""UTF-8 output on every OS (010-add-workspace-and-cli-contract, cli-contract)."""
+"""UTF-8 output on every OS (010-add-workspace-and-cli-contract, cli-contract; 020-add-crawl-core,
+crawling)."""
 
+import json
 import os
 import sys
+from typing import Any
 
 import pytest
 
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site
 from tests.support.cli import run_cli, run_cli_process
 from tests.support.workspace import TempWorkspace
 
@@ -53,3 +58,26 @@ def test_no_carriage_returns_on_windows() -> None:
     stdout = run_cli_process("commands").stdout
 
     assert (stdout.endswith(b"}\n"), b"\r" in stdout) == (True, False)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the Windows console code page")
+def test_events_are_utf8_on_windows(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>/</p>")}))
+    workspace = temp_workspace.root / "Ünits"
+    run_cli("init", "--workspace", str(workspace))
+
+    stderr = run_cli_process("crawl", server.url("/"), "--workspace", str(workspace)).stderr
+    crawl_files = [
+        event["data"]["crawl_file"]
+        for event in map(_utf8_json, stderr.splitlines())
+        if isinstance(event, dict) and event.get("event") == "crawl_started"
+    ]
+
+    assert ["Ünits" in crawl_file for crawl_file in crawl_files] == [True]
+
+
+def _utf8_json(line: bytes) -> Any:
+    try:
+        return json.loads(line.decode("utf-8"))
+    except ValueError:
+        return None

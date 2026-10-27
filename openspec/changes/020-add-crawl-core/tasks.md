@@ -380,7 +380,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
 - [x] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
 - [ ] 12.4 Drive "Progress events come every 10 seconds", fake timing. Done when: the `urls` counts of `progress` come from counters that the outcomes of committed units update, seeded once by a counting query when the run starts, and no count over `urls` runs for each event (design D10); a unit returns a counts delta beside its bool, whose shape the task proposes when it starts; and `progress` carries `rate` over its 60-second window and `elapsed_s`.
-- [ ] 12.5 Drive "Events are UTF-8 on Windows (Windows)" at seam 1, subprocess, Windows in CI.
+- [x] 12.5 Drive "Events are UTF-8 on Windows (Windows)" at seam 1, subprocess, Windows in CI.
 - [ ] 12.6 Drive "An unreachable Seed fails the Crawl" and "An unreachable Seed is reported by one error" at seam 1, after 12.11.
 
   Done when: `--network-wait` is declared with `OptionMeta(setting="crawl.network_wait")`, default 1800, `Field(ge=0)` and the option's `min=0`, in `CrawlSettings`; until the Seed's origin has given an HTTP response, its robots.txt or Seed request without one pauses the Crawl at once, and with `--network-wait 0` the pause ends at once and no probe starts; the Crawl takes the `failed` end of 12.9 with `seed_unreachable`; and `seed_unreachable` is declared, with a hint about network access and sandboxed agents that says how long the Crawl waited (design D16).
