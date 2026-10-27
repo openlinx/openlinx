@@ -144,3 +144,25 @@ def test_a_redirect_without_location_has_no_target(
         "SELECT status_code, redirect_location, redirect_url_id FROM urls WHERE url = ?",
         [server.url("/nolocation")],
     ) == [(302, None, None)]
+
+
+def test_a_redirect_target_keeps_the_depth(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/moved">Moved</a>'),
+                "/moved": Redirect("/new", status=301),
+                "/new": Page(body="<title>New</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT crawl_depth, discovered_via FROM urls WHERE url = ?",
+        [server.url("/new")],
+    ) == [(1, "redirect")]
