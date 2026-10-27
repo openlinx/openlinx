@@ -31,6 +31,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | `--max-depth <n>` | `max_depth` | none | The deepest Crawl Depth whose URLs are requested, 0 or more; Resources of followed Pages are requested one deeper (see [Crawl Depth](#crawl-depth)). |
 | `--max-urls <n>` | `max_urls` | none | The most URL requests the Crawl starts, 1 or more (see [The URL limit](#the-url-limit)). |
 | `--ignore-robots` | `ignore_robots` | `false` | Request URLs that robots.txt disallows; they are still recorded with `blocked_by_robots_txt` = 1 (see [`--ignore-robots`](#--ignore-robots)). |
+| `--user-agent <string>` | `user_agent` | `spider/<version> (+<project URL>)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `spider` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
 `--workspace` and `--format` are the global flags of every Command.
@@ -310,6 +311,16 @@ spider crawl site.test/blog/ --scope subfolder --exclude "/draft"
 ```
 
 An agent reads it to know what a Crawl covered without parsing its command line.
+
+## Requests
+
+### The User-Agent header
+
+Every request, robots.txt's included, carries the header `User-Agent: spider/<version> (+<project URL>)`, where the version is the tool's and the project URL its repository's, so a site owner can tell the crawler apart and reach its maintainer. `--user-agent <string>` replaces it on every request. An empty value, or one with a control character such as CR or LF, is rejected as `invalid_value` (exit code 2), or in `spider.toml` as `settings_invalid` (exit code 3): it would end the header, or add one. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
+
+### Cookies
+
+The Crawl keeps no cookies: a cookie that a response sets is never sent with a later request, so every URL is requested as a first visit is. A site that needs a session cookie shows it, as it does to a search engine's crawler, in redirect loops or 403 responses.
 
 ## robots.txt
 
