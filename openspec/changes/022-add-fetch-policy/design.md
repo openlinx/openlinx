@@ -52,7 +52,8 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 - **No cookies:** `020`'s `DummyCookieJar` stays, so no cookie is ever replayed. This change pins it with a guard.
 - **Environment:** `trust_env=False`, aiohttp's default, which `020` keeps, so aiohttp reads no `.netrc` and no variables by itself. The Fetcher chooses the proxy per request:
   1. **(v0.2)** `--proxy` or `[crawl] proxy` when set
-  2. otherwise `urllib.request.getproxies_environment()` (any case; lower-case wins) and `proxy_bypass_environment()` for `NO_PROXY`, read once into `FetchPolicy` when each run starts, so a resumed Crawl reads them again, and the `environment` table of D8 records the same snapshot
+  2. otherwise `ProxyVariables` in `spider.crawl.fetch.proxy`: `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` read once from the environment into `FetchPolicy` when each run starts, so a resumed Crawl reads them again, and the `environment` table of D8 records the same record. It applies the spec's rule itself: the lower-case name wins, an empty variable is unset, a proxy without a scheme is an http proxy, as curl reads it, and `NO_PROXY` names hosts and domain suffixes.
+     - *Alternative: urllib's `getproxies_environment()` and `proxy_bypass_environment()`.* The second is undocumented and has no type stubs, both read every scheme's variable, `ALL_PROXY` included, and the bypass also matches ports and IP addresses, which the spec does not define. Rejected.
 
   **(v0.2)** The ALPN check uses the same choice.
 - **TLS:** the context of D5 goes into the `TCPConnector`, next to the resolver.

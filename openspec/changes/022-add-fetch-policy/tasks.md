@@ -31,7 +31,7 @@ Seams (docs/testing.md):
 
 - [x] 1.0 Refactor, behaviour unchanged: the Crawl Service opens the Fetcher through one factory that takes a frozen `FetchPolicy` and the clock, and the factory replaces `start_crawl`'s `resolver=` and `fetcher=` keywords (design D1). `plan_crawl` builds the policy; `crawl_result` keeps its own keywords and builds the factory from them, so its callers do not change. After `020` task 5.24, which edits the same Fetcher.
 - [x] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` from `FetchPolicy`, built from `APP_NAME`, `spider.__version__` and a `PROJECT_URL` constant next to `APP_NAME` in `spider.naming`, the repository's URL until the product is named (design D1). No `User-Agent` is set today, so aiohttp's own goes out.
-- [x] 1.2 [HTTP] Drive "A custom user agent is used on every request", and [CLI] "An invalid user agent is rejected", a pair: `--user-agent` and `crawl.user_agent`, which `setting_rules` refuses when it is empty or holds CR, LF or another control character. robots.txt goes through the same Requester and Fetcher, so its request carries it too.
+- [x] 1.2 [HTTP] Drive "A custom user agent is used on every request", and [CLI] "An invalid user agent is rejected", a pair: `--user-agent` and `crawl.user_agent`, which `setting_rules` refuses when it is empty or holds CR, LF or another control character (narrowed to visible ASCII, spaces and tabs by 2.0). robots.txt goes through the same Requester and Fetcher, so its request carries it too.
 - [x] 1.3 [HTTP] **Guard:** "Cookies set by the site are not sent back". `020`'s Fetcher already has a `DummyCookieJar`. `/` sets the cookie through the route's `headers`, and the request log shows the request for `/check`.
 - [x] 1.4 Docs: document the user agent and cookies in `docs/crawling.md`.
 - [x] 1.5 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
@@ -40,11 +40,11 @@ Seams (docs/testing.md):
 
 - [x] 2.0 Fix: a user agent holds visible ASCII characters, spaces and tabs only (RFC 9110 VCHAR, SP, HTAB), with a Cyrillic and an accented name in "An invalid user agent is rejected".
 - [x] 2.1 [Fixture] Add a small forward-proxy helper to `tests/support/` that records the requests it relays. It resolves the fixture's names itself through `hosts_for` and `FixtureResolver`, since a proxied request leaves name resolution to the proxy.
-- [x] 2.2 [HTTP] Drive "The HTTP_PROXY variable is honoured": `getproxies_environment()` read once in `plan_crawl` into `FetchPolicy`, and the proxy chosen per request from that snapshot, with `trust_env=False` (design D1). `000`'s proxy isolation removes the variables before every test, so the test sets them with `monkeypatch.setenv`.
+- [x] 2.2 [HTTP] Drive "The HTTP_PROXY variable is honoured": the proxy variables read once in `plan_crawl` into `FetchPolicy`, and the proxy chosen per request from that snapshot, with `trust_env=False` (design D1). `000`'s proxy isolation removes the variables before every test, so the test sets them with `monkeypatch.setenv`.
 - [x] 2.3 [HTTP] Drive "A lower-case proxy variable is honoured".
 - [x] 2.4 [HTTP] Drive "NO_PROXY bypasses the proxy": the spec's NO_PROXY rule inside a pure `proxy_for(url, snapshot)`, since urllib's `proxy_bypass_environment` is undocumented, with a [Pure] table of its cases: the lower-case variable wins, `NO_PROXY` bypasses, and `ALL_PROXY` is ignored (`test_the_proxy_of_a_url`, design Risks).
 - [x] 2.5 [3+6] Drive "A proxy password from a variable is redacted": the Crawl Service adds the `environment` table of the same snapshot to `crawl.config`, and `environment.http_proxy` and `environment.https_proxy` to `NewCrawl.secret_names` (design D8). `crawl_result` passes empty `SecretNames()`, so the service, not the test helper, must add them, or the test cannot go red.
-- [x] 2.6 Docs: document the proxy variables and `NO_PROXY` in `docs/crawling.md`, and correct `ENVIRONMENT` in `spider.cli.commands`, which names a `--proxy` that v0.1 lacks, with the `commands.json` snapshot.
+- [x] 2.6 Docs: document the proxy variables and `NO_PROXY` in `docs/crawling.md`, and correct `ENVIRONMENT` in `spider.cli.commands`, which names a `--proxy` that v0.1 lacks.
 - [x] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. Timeouts and retries

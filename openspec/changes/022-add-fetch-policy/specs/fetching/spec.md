@@ -76,11 +76,12 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `spider
 Without `--proxy` or `[crawl] proxy`, the Crawl SHALL honour the standard proxy variables, as curl, pip and uv do:
 - **Which variable:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs.
 - **Bypass:** `NO_PROXY`, a comma-separated list of host names and domain suffixes, or `*`, names the hosts that bypass the proxy.
-- **Letter case:** each variable is read in any letter case. When both cases are set, the lower-case one wins.
+- **Letter case:** each variable is read in any letter case. When both cases are set, the lower-case one wins. An empty variable counts as unset.
+- **Scheme:** a proxy given without a scheme, such as `proxy.corp:3128`, SHALL be used as the http proxy `http://proxy.corp:3128`.
 
 The proxy variables are honoured from v0.1. This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. From v0.2, `--proxy` and `[crawl] proxy` SHALL override the variables, and the scenarios that pass `--proxy` apply. A resumed Crawl SHALL read the variables again.
 
-The password in a proxy URL SHALL be marked partly secret, whether it comes from `--proxy` or from a variable, and `015-add-crawl-store` records it as `http://<user>:***@<host>:<port>`. The proxy variables in use SHALL be recorded, set ones only, in the `environment` table of `crawl.config` under the lower-case keys `http_proxy`, `https_proxy` and `no_proxy`.
+The password in a proxy URL SHALL be marked partly secret, whether it comes from `--proxy` or from a variable, and `015-add-crawl-store` records it as `http://<user>:***@<host>:<port>`; a proxy URL from a variable without a password is recorded as `***`. The proxy variables in use SHALL be recorded, set ones only, in the `environment` table of `crawl.config` under the lower-case keys `http_proxy`, `https_proxy` and `no_proxy`.
 
 #### Scenario: Requests go through the proxy
 - **WHEN** a test proxy listens on `127.0.0.1:{proxy_port}`, and `spider crawl http://site.test/ --proxy http://127.0.0.1:{proxy_port}` runs
