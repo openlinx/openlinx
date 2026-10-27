@@ -28,13 +28,20 @@ from spider.store.schema import pages
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import default_rule_rows, query
+from tests.support.page_data import page_data
 from tests.support.rules import crawl_with_page
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing
 
 AT = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+SALE = (
+    '<meta name="description" content="Everything half price this week.">'
+    "<h1>Sale</h1><p>Everything half price this week.</p>"
+)
+# A Page whose one Issue is title-missing.
+UNTITLED = page_data(SALE)
 # What a later run that records the Page again with a title would leave in its row.
-TITLED = update(pages).values(title_count=1, title_1="Shoes", title_1_length=5)
+TITLED = update(pages).values(**page_data(f"<title>Sale</title>{SALE}"))
 
 
 def issues_of(crawl_file: Path) -> tuple[list[tuple[str, int]], list[int]]:
@@ -45,7 +52,7 @@ def issues_of(crawl_file: Path) -> tuple[list[tuple[str, int]], list[int]]:
 
 
 def test_a_crawl_without_a_final_pass_is_read_live(temp_workspace: TempWorkspace) -> None:
-    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    crawl_file, url_id = crawl_with_page(temp_workspace, **UNTITLED)
     with CrawlWriter(crawl_file, FakeClock()) as writer:
         asyncio.run(materialise_issues(writer, RULES, FakeClock()), loop_factory=loop_factory)
         writer.run(record_state("stopped", AT, "max_urls"))
@@ -66,13 +73,13 @@ def test_a_crawl_without_a_final_pass_is_read_live(temp_workspace: TempWorkspace
 
 
 def test_a_disabled_rule_has_no_affected_urls_read_live(temp_workspace: TempWorkspace) -> None:
-    crawl_file, _ = crawl_with_page(temp_workspace, disabled={"title-missing"}, title_count=0)
+    crawl_file, _ = crawl_with_page(temp_workspace, disabled={"title-missing"}, **UNTITLED)
 
     assert read_affected_urls(crawl_file, "title-missing", RULES) == []
 
 
 def test_an_unknown_rule_id_is_rule_not_found(temp_workspace: TempWorkspace) -> None:
-    crawl_file, _ = crawl_with_page(temp_workspace, title_count=0)
+    crawl_file, _ = crawl_with_page(temp_workspace, **UNTITLED)
 
     with pytest.raises(SpiderError) as raised:
         read_affected_urls(crawl_file, "nope", RULES)
@@ -87,7 +94,7 @@ def test_issues_of_a_rule_the_catalogue_lacks_come_after_its_own(
     later = replace(TITLE_MISSING, id="a-later-rule")
     (missing,) = [row for row in default_rule_rows() if row.id == TITLE_MISSING.id]
     recorded = replace(missing, id=later.id)
-    crawl_file, _ = crawl_with_page(temp_workspace, more_rules=(recorded,), title_count=0)
+    crawl_file, _ = crawl_with_page(temp_workspace, more_rules=(recorded,), **UNTITLED)
     with CrawlWriter(crawl_file, FakeClock()) as writer:
         asyncio.run(
             materialise_issues(writer, (*RULES, later), FakeClock()), loop_factory=loop_factory
@@ -106,7 +113,7 @@ def test_the_affected_urls_of_a_rule_the_catalogue_lacks_are_read_as_stored(
     later = replace(TITLE_MISSING, id="a-later-rule")
     (missing,) = [row for row in default_rule_rows() if row.id == TITLE_MISSING.id]
     crawl_file, url_id = crawl_with_page(
-        temp_workspace, more_rules=(replace(missing, id=later.id),), title_count=0
+        temp_workspace, more_rules=(replace(missing, id=later.id),), **UNTITLED
     )
     with CrawlWriter(crawl_file, FakeClock()) as writer:
         asyncio.run(
@@ -120,10 +127,8 @@ def test_the_affected_urls_of_a_rule_the_catalogue_lacks_are_read_as_stored(
 
 
 def test_the_issues_of_one_url_are_read_live(temp_workspace: TempWorkspace) -> None:
-    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
-    disabled, disabled_id = crawl_with_page(
-        temp_workspace, disabled={"title-missing"}, title_count=0
-    )
+    crawl_file, url_id = crawl_with_page(temp_workspace, **UNTITLED)
+    disabled, disabled_id = crawl_with_page(temp_workspace, disabled={"title-missing"}, **UNTITLED)
 
     assert (
         read_url_issues(crawl_file, url_id, RULES),
@@ -132,7 +137,7 @@ def test_the_issues_of_one_url_are_read_live(temp_workspace: TempWorkspace) -> N
 
 
 def test_the_issues_of_one_url_are_read_as_stored(temp_workspace: TempWorkspace) -> None:
-    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    crawl_file, url_id = crawl_with_page(temp_workspace, **UNTITLED)
     with CrawlWriter(crawl_file, FakeClock()) as writer:
         asyncio.run(materialise_issues(writer, RULES, FakeClock()), loop_factory=loop_factory)
         # The Page changes after the pass, so only the stored rows still list title-missing.
@@ -147,7 +152,7 @@ def test_the_issues_of_one_url_are_read_as_stored(temp_workspace: TempWorkspace)
 def test_an_issue_and_its_affected_urls_are_read_from_one_snapshot(
     temp_workspace: TempWorkspace,
 ) -> None:
-    crawl_file, url_id = crawl_with_page(temp_workspace, title_count=0)
+    crawl_file, url_id = crawl_with_page(temp_workspace, **UNTITLED)
     with CrawlWriter(crawl_file, FakeClock()) as writer, reading(crawl_file) as connection:
         issues = [
             (row.rule_id, row.affected_count)
@@ -168,7 +173,7 @@ def later_rule_crawl(temp_workspace: TempWorkspace) -> Path:
     """A running Crawl whose rules table records a-later-rule, which RULES lacks."""
     (missing,) = [row for row in default_rule_rows() if row.id == TITLE_MISSING.id]
     crawl_file, _ = crawl_with_page(
-        temp_workspace, more_rules=(replace(missing, id="a-later-rule"),), title_count=0
+        temp_workspace, more_rules=(replace(missing, id="a-later-rule"),), **UNTITLED
     )
     return crawl_file
 
