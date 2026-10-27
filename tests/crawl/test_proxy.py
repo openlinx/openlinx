@@ -7,6 +7,7 @@ import pytest
 
 from spider.crawl.fetch.proxy import ProxyVariables
 from tests.fixture_site.hosts import StartHosts
+from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
@@ -92,6 +93,21 @@ def test_a_proxy_password_from_a_variable_is_redacted(
         "https_proxy": "***",
         "no_proxy": "intranet.local",
     }
+
+
+def test_only_the_proxy_variables_that_are_set_are_recorded(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    server = fixture_site(SHOP)
+    [(without,)] = query(crawled(server.url("/")), "SELECT config FROM crawl")
+    # Only a bypass list, as a laptop on a corporate network may keep set.
+    monkeypatch.setenv("NO_PROXY", "intranet.local")
+    [(bypass_only,)] = query(crawled(server.url("/")), "SELECT config FROM crawl")
+
+    assert ("environment" in json.loads(without), json.loads(bypass_only)["environment"]) == (
+        False,
+        {"no_proxy": "intranet.local"},
+    )
 
 
 # The variables as a process environment holds them, a URL, and the proxy it goes through.

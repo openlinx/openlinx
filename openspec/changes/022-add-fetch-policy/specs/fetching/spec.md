@@ -76,7 +76,7 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `spider
 Without `--proxy` or `[crawl] proxy`, the Crawl SHALL honour the standard proxy variables, as curl, pip and uv do:
 - **Which variable:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs.
 - **Bypass:** `NO_PROXY`, a comma-separated list of host names and domain suffixes, or `*`, names the hosts that bypass the proxy.
-- **Letter case:** each variable is read in any letter case. When both cases are set, the lower-case one wins. An empty variable counts as unset.
+- **Letter case:** each variable is read under its lower-case and its upper-case name, as curl reads them. When both are set, the lower-case one wins. An empty variable counts as unset.
 - **Scheme:** a proxy given without a scheme, such as `proxy.corp:3128`, SHALL be used as the http proxy `http://proxy.corp:3128`.
 
 The proxy variables are honoured from v0.1. This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. From v0.2, `--proxy` and `[crawl] proxy` SHALL override the variables, and the scenarios that pass `--proxy` apply. A resumed Crawl SHALL read the variables again.
@@ -119,7 +119,7 @@ The Crawl SHALL NOT send cookies that responses set. After a response with `Set-
 - **THEN** the request for `/check` has no `Cookie` header
 
 ### Requirement: Timeouts
-A request attempt that has not completed within `--timeout` seconds (default 20, setting `crawl.timeout`) SHALL fail. When no attempt for a URL succeeds, the URL SHALL be recorded with `fetch_state` = `error`, `status_code` NULL and `fetch_error` = `timeout`. `timeout` is a value of `urls.fetch_error` that `020-add-crawl-core` lists.
+A request attempt that has not completed within `--timeout` seconds (default 20, setting `crawl.timeout`) SHALL fail. When every attempt for a URL times out, the URL SHALL be recorded with `fetch_state` = `error`, `status_code` NULL and `fetch_error` = `timeout`. `timeout` is a value of `urls.fetch_error` that `020-add-crawl-core` lists.
 
 A timeout is a request without an HTTP response, so it counts towards the network pause of `020-add-crawl-core`. When every attempt at an origin's robots.txt times out, the origin's URLs SHALL be recorded with `fetch_error` = `timeout` without a request, as `020-add-crawl-core` records the URLs behind a robots.txt that got no HTTP response; a robots.txt that answers 5xx or 429 after the retries stays `robots_unreachable`.
 
@@ -230,7 +230,7 @@ It also adds this index to `urls`, built while the Crawl writes:
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"urls_redirect_url_id","columns":["redirect_url_id"],"unique":false,"where":"redirect_url_id IS NOT NULL"}`
 
 ### Requirement: A Seed that redirects within its site extends the Scope
-When a Seed's Redirect Chain ends inside the Seed's section on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. The `seed_base_mismatch` and `seed_blocked_by_robots_txt` checks of `020-add-crawl-core` SHALL read the URL that the Seed's Redirect Chain ends on. When the chain ends outside the Crawl's Scope, on another registrable domain or, under `--scope subfolder`, outside the Seed's folder, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_out_of_scope` warning whose hint contains the final URL of the chain. A chain whose last target is never requested, skipped with `max_redirects` or refused by `--max-urls`, SHALL end on that target.
+When a Seed's Redirect Chain ends with a response inside the Seed's section on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. The `seed_base_mismatch` and `seed_blocked_by_robots_txt` checks of `020-add-crawl-core` SHALL read the URL that the Seed's Redirect Chain ends on. When the chain ends outside the Crawl's Scope, on another registrable domain or, under `--scope subfolder`, outside the Seed's folder, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_out_of_scope` warning whose hint contains the final URL of the chain. A chain whose last target is never requested, skipped with `max_redirects` or refused by `--max-urls`, SHALL end on that target.
 
 #### Scenario: A redirect to the apex host stays inside the Scope
 - **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `spider crawl http://www.site.test/` runs
@@ -303,7 +303,7 @@ A `<meta http-equiv="refresh">` SHALL stay a Link of type `meta_refresh` (`020-a
 - **THEN** `{site}/old` has `status_code` = 200 and `redirect_url_id` NULL
 
 ### Requirement: Response size limit
-The Crawl SHALL read at most 20,971,520 bytes (20 MiB) of a response body. This change adds this column to `urls`:
+The Crawl SHALL stop reading a response body within one read past 20,971,520 bytes (20 MiB), and keep at most 20 MiB of it. This change adds this column to `urls`:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|

@@ -87,7 +87,8 @@ DEFAULT_USER_AGENT = f"{APP_NAME}/{__version__} (+{PROJECT_URL})"
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FetchPolicy:
-    """Every request setting of a Crawl, from its plan to its Fetcher (022-add-fetch-policy D1)."""
+    """The Fetcher's settings of a Crawl, from its plan to its Fetcher; retries and the hop limit
+    are the Requester's and the engine's (022-add-fetch-policy D1)."""
 
     user_agent: str
     proxies: ProxyVariables

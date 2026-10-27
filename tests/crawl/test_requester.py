@@ -12,7 +12,7 @@ from spider.store.records import FetchError
 _AT = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
 
 # Every fetch_error the store knows, classified: a new value fails here until it is.
-_FAILURES: dict[str, bool] = {
+_FAILURES: dict[FetchError, bool] = {
     "timeout": True,
     "connection_refused": True,
     "connection_error": True,
@@ -22,8 +22,20 @@ _FAILURES: dict[str, bool] = {
     "watchdog": False,
     "record_failed": False,
 }
-# One status of each class: a server error and a 429 are tried again, no other 4xx.
-_STATUSES = {200: False, 301: False, 404: False, 410: False, 429: True, 500: True, 503: True}
+# One status of each class: a server error and a 429 are tried again, no other 4xx. A status
+# past 599, such as the 999 some sites send crawlers, is no server error.
+_STATUSES = {
+    200: False,
+    301: False,
+    404: False,
+    410: False,
+    429: True,
+    500: True,
+    503: True,
+    599: True,
+    600: False,
+    999: False,
+}
 
 
 def test_every_fetch_error_is_classified() -> None:
@@ -31,8 +43,8 @@ def test_every_fetch_error_is_classified() -> None:
 
 
 @pytest.mark.parametrize(("fetch_error", "retried"), _FAILURES.items())
-def test_a_failure_is_retried_only_when_it_may_pass(fetch_error: str, retried: bool) -> None:
-    failure = FetchFailure(fetch_error=fetch_error, message="", fetched_at=_AT)  # type: ignore[arg-type]
+def test_a_failure_is_retried_only_when_it_may_pass(fetch_error: FetchError, retried: bool) -> None:
+    failure = FetchFailure(fetch_error=fetch_error, message="", fetched_at=_AT)
 
     assert is_retried(failure) is retried
 

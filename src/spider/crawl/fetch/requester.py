@@ -141,7 +141,7 @@ def is_retried(outcome: FetchResult | FetchFailure) -> bool:
     """Whether an attempt that ended this way is tried again, while retries are left."""
     if isinstance(outcome, FetchFailure):
         return outcome.fetch_error in RETRIED_FAILURES
-    return outcome.status_code >= 500 or outcome.status_code == 429
+    return 500 <= outcome.status_code <= 599 or outcome.status_code == 429
 
 
 def retry_wait(outcome: FetchResult | FetchFailure, attempt: int) -> tuple[float, bool]:

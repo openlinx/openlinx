@@ -30,6 +30,27 @@ def _scope_hosts(crawl_file: Path) -> list[str]:
     return hosts
 
 
+def test_a_seed_chain_that_ends_without_a_response_widens_nothing(
+    temp_workspace: TempWorkspace, fixture_named_hosts: StartNamedHosts
+) -> None:
+    # The site moved to its apex, whose server drops every connection inside the body.
+    hosts = fixture_named_hosts(
+        {
+            "www.site.test": Site({"/": Redirect("http://site.test/", status=301)}),
+            "site.test": Site({"/": Page(body="<title>Shop</title>", reset_after=0)}),
+        }
+    )
+
+    crawl_file = crawl_result(
+        "http://www.site.test/", resolver=hosts.resolver, retries=0
+    ).crawl_file
+
+    assert (
+        query(crawl_file, "SELECT fetch_state FROM urls WHERE url = 'http://site.test/'"),
+        "site.test" in _scope_hosts(crawl_file),
+    ) == ([("error",)], False)
+
+
 def test_a_redirect_to_the_apex_host_stays_inside_the_scope(
     temp_workspace: TempWorkspace, fixture_named_hosts: StartNamedHosts
 ) -> None:

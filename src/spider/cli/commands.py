@@ -32,7 +32,7 @@ TYPE_NAMES = {
 ENVIRONMENT = [
     {
         "names": ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"],
-        "description": "The proxy for fetching, read when a run starts, in any letter case; "
+        "description": "The proxy for fetching, read when a run starts, in lower or upper case; "
         "the lower-case one wins. NO_PROXY lists hosts and domain suffixes that go direct.",
     }
 ]

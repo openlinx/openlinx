@@ -92,6 +92,28 @@ def test_a_redirect_target_is_requested_before_the_next_depth(
     assert paths.index("/new") < paths.index("/blog/post")
 
 
+def test_a_location_without_a_target_is_kept_as_received(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # A catalogue moved to an FTP server: the Crawl follows no ftp URL, but records the header.
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/catalogue">Catalogue</a>'),
+                "/catalogue": Redirect("ftp://files.site.test/catalogue.pdf", status=301),
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT status_code, redirect_location, redirect_url_id FROM urls WHERE url = ?",
+        [server.url("/catalogue")],
+    ) == [(301, "ftp://files.site.test/catalogue.pdf", None)]
+
+
 def test_a_relative_location_is_resolved(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:

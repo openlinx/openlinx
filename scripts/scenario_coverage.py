@@ -1,4 +1,4 @@
-"""Checks that every scenario of a spec has exactly one test named after it.
+"""Checks that every scenario of a spec has exactly one test named after it (docs/testing.md).
 
 A check that is run, never a test, since a scenario of a later version has no test yet:
 
@@ -13,6 +13,7 @@ or `-`; a missing one also gets any test whose name is close to it, as a renamed
 behind. Then a count of each. It exits 1 when a scenario is missing or has more than one test.
 """
 
+import argparse
 import difflib
 import re
 import subprocess
@@ -110,10 +111,9 @@ def test_names(root: Path) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 1:
-        print(__doc__)
-        return 2
-    spec = Path(argv[0]).resolve()
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("spec", type=Path, help="a spec.md with #### Scenario: headings")
+    spec = parser.parse_args(argv).spec.resolve()
     root = Path(__file__).resolve().parents[1]
     tasks = tasks_of(spec)
     names = test_names(root)

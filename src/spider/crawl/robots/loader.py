@@ -49,7 +49,7 @@ class RobotsLoader:
         for _ in range(_REDIRECT_HOPS):
             if isinstance(response, FetchFailure):
                 break
-            target = _redirect_target(url, response)
+            target = redirect_target(url, response.status_code, response.header("Location"), None)
             if target is None:
                 break
             redirect, url = response, target
@@ -63,10 +63,6 @@ class RobotsLoader:
         record = _robots_txt_record(url_origin(robots_url), robots, text, response.fetched_at)
         await self._writer.run_async(record_robots_txt(record))
         return robots
-
-
-def _redirect_target(url: NormalizedUrl, response: FetchResult) -> NormalizedUrl | None:
-    return redirect_target(url, response.status_code, response.header("Location"), None)
 
 
 def _failed_redirect(

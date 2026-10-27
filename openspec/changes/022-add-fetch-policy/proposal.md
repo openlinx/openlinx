@@ -76,7 +76,7 @@ The response headers must also be stored, without cookie values, because `page -
 ## Impact
 
 - **Depends on:**
-  - `020-add-crawl-core`: from its first pull request, the Fetcher interface, the engine, the per-host limits, `CrawlSettings`, the context builder, `Hooks`, the DNS resolver hook, and the `urls`/`origins` tables; its `UrlResult` shape (`response` and `failure`), the Requester and `RateGate`, `crawl.scope`, Resource checks, robots.txt and the fake Fetcher; and, not merged yet, the auto-advancing fake clock, the network pause with the watchdog, and the scenario script.
+  - `020-add-crawl-core`: from its first pull request, the Fetcher interface, the engine, the per-host limits, `CrawlSettings`, the context builder, `Hooks`, the DNS resolver hook, and the `urls`/`origins` tables; its `UrlResult` shape (`response` and `failure`), the Requester and `RateGate`, `crawl.scope`, Resource checks, robots.txt and the fake Fetcher; and, not merged yet, the network pause.
   - `015-add-crawl-store`: whole and partial redaction, and secret settings.
   - `017-speed-up-crawl-writer`: the writer through which `020`'s units run, and its unit contract.
   - `018-add-schema-conventions`: `public_table()` and the schema contract test.

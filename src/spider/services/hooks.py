@@ -12,7 +12,6 @@ def default_hooks() -> Hooks:
 
 
 def _response_headers(result: UrlResult) -> tuple[ResponseHeaders, ...]:
-    """The headers of the URL's response; none for a URL that got no response."""
     if result.response is None:
         return ()
     return (ResponseHeaders(url_id=result.url_id, headers=result.response.headers),)
