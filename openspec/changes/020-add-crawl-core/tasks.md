@@ -369,7 +369,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   Done when: the Requester is built with its cap, as `dispatch` computes it with `global_cap`, and the politeness tests reach the limits only through the Crawl Service with the fake Fetcher and the virtual clock, or through the pure `global_cap`; `docs/testing.md` names that seam for politeness timing.
 - [x] 12.0b Fix: `wait_turn` reserves the host's `next_start` and sleeps without holding a lock, so one host's rate waits overlap the other hosts' (design D7).
   Done when: a request waiting for its turn on one host lets another host's request start, with 21 hosts at the default cap, red by mutation of `wait_turn` moved inside the global cap; and one host's requests that the full cap held back start 1/rate apart, red by mutation of the Requester's `started` call removed. Both Risks entries on the turn's order and its serialization go.
-- [ ] 12.0c Drive "The global cap bounds requests across hosts", fake timing.
+- [x] 12.0c Drive "The global cap bounds requests across hosts", fake timing.
 - [ ] 12.1 Drive "Every stderr line is an event or a diagnostic" at seam 1.
 - [ ] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
 - [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.

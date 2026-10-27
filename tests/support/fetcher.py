@@ -28,6 +28,8 @@ class FakeFetcher:
         self._clock = clock
         self._pages = pages
         self.starts: list[tuple[str, float]] = []
+        self._in_flight = 0
+        self.most_in_flight = 0
 
     async def fetch(self, request: Request) -> FetchResult:
         path = urlsplit(request.url).path or "/"
@@ -35,8 +37,13 @@ class FakeFetcher:
         page = self._pages.get(path)
         status_code = 200 if page is not None else 404
         page = page or _NOT_FOUND
-        if page.delay:
-            await self._clock.sleep(page.delay)
+        self._in_flight += 1
+        self.most_in_flight = max(self.most_in_flight, self._in_flight)
+        try:
+            if page.delay:
+                await self._clock.sleep(page.delay)
+        finally:
+            self._in_flight -= 1
         return FetchResult(
             status_code=status_code,
             reason=HTTPStatus(status_code).phrase,
