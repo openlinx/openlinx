@@ -85,6 +85,8 @@ Seams (docs/testing.md):
 - [x] 4.13 [3+6] **Guard:** "A meta refresh is not recorded as a redirect".
 - [x] 4.14 Docs: document Redirect Chains, hop limits, loops, Seed redirects and the meta refresh boundary in `docs/crawling.md`, and that a redirect is not a Link.
 - [x] 4.15 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) for the redirect, hop-count and loop units, then refactor with the whole suite green.
+- [ ] 4.16 [3+6] Fix the group 4 review findings, red first, in one commit: Drive "A Seed chain cut by the hop limit off its site is reported" (a target skipped with `max_redirects` joins the Seed's chain, gets the final Scope's `is_internal`, and one off its site gives `seed_redirected_off_site`); **Guard:** "A Page reached through an External redirect is followed" (design D2, Resource status); the context keeps the planned Scope under a name that says so, and every read of the current Scope goes through the Seed chain's one accessor (design D3); `test_a_hop_that_a_link_reached_first_starts_the_hop_count_again` (design Risks); and the items of the group 4 verdict.
+- [ ] 4.17 Refactor with the whole suite green and no behaviour change: one frozen `Redirect` record in place of `redirect_location`, `redirect` and `max_redirects` on `FetchedUrl`; the redirect statements and walks split out of `spider.store.urls` into `spider.store.redirects`; the chain close moved into `seed_chain.py`; a frozen record for the decisions `reclassify_urls` takes.
 
 ## 5. Limits, compression and Resource sizes
 

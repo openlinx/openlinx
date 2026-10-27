@@ -171,7 +171,7 @@ The URL SHALL record the last attempt's response. This change adds this column t
 The Crawl SHALL NOT follow redirects within one request. For a 301, 302, 303, 307 or 308 response with a `Location` header:
 - **On the redirecting URL** it SHALL record the status code, the raw header in `redirect_location`, and the target in `redirect_url_id`.
 - **The target** is resolved against the redirecting URL and normalised. It SHALL be recorded as a URL with `discovered_via` = `redirect`, `found_on_url_id` pointing to the redirecting URL, and the same Crawl Depth.
-- **Requests:** each target SHALL be requested on its own, subject to the Scope, robots.txt and `--exclude`. The target of a URL that is only checked SHALL also be checked.
+- **Requests:** each target SHALL be requested on its own, subject to the Scope, robots.txt and `--exclude`. The target of a Resource's redirect SHALL also be a Resource; any other target SHALL be decided by its own Scope, whatever its source's.
 
 A 3xx response without a usable `Location`, and a 300, 304 or 305 response, SHALL have `redirect_url_id` NULL; any 3xx response SHALL keep its raw `Location` header in `redirect_location`.
 
@@ -217,6 +217,10 @@ It also adds this index to `urls`, built while the Crawl writes:
 - **WHEN** `/` holds `<img src="/logo.png">`, `/logo.png` returns 301 to `/img/logo.png`, and `spider crawl {site}/ --max-depth 0` runs
 - **THEN** `{site}/img/logo.png` has `fetch_state` = `fetched`
 
+#### Scenario: A Page reached through an External redirect is followed
+- **WHEN** `http://site.test/` links to `http://other.test/go`, which redirects with 302 to `http://site.test/promo`, which links to `/deal`, and `spider crawl http://site.test/` runs
+- **THEN** `http://site.test/promo` has `parsed` = 1 and `http://site.test/deal` has `fetch_state` = `fetched`
+
 #### Scenario: Index of redirect targets
 - **WHEN** `spider schema urls --fields indexes` runs
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"urls_redirect_url_id","columns":["redirect_url_id"],"unique":false,"where":"redirect_url_id IS NOT NULL"}`
@@ -235,6 +239,10 @@ When a Seed's Redirect Chain ends on a host with the same registrable domain as 
 #### Scenario: A Seed chain that ends off its site widens nothing
 - **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/old`, which redirects with 301 to `http://other.test/`, and `spider crawl http://www.site.test/` runs
 - **THEN** `http://site.test/old` and `http://other.test/` have `is_internal` = 0, and `crawl.scope` does not list `site.test`
+
+#### Scenario: A Seed chain cut by the hop limit off its site is reported
+- **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `spider crawl http://site.test/ --max-redirects 0` runs
+- **THEN** the result's `warnings` hold an entry with code `seed_redirected_off_site` whose `hint` contains `http://other.test/`, and `http://other.test/` has `is_internal` = 0
 
 #### Scenario: A redirect to another site is reported
 - **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `spider crawl http://site.test/` runs
