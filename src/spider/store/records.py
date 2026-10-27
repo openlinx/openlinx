@@ -160,7 +160,7 @@ class NewUrl:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ResponseHeaders:
-    """The response headers of a URL's last attempt: a row of response_headers (022 design D7)."""
+    """A row of response_headers: the headers of a URL's last attempt (022-add-fetch-policy D7)."""
 
     url_id: int
     # As received, in order and letter case, with cookie values redacted.

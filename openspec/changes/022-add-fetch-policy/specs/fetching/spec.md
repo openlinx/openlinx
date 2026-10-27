@@ -395,18 +395,18 @@ From v0.2, for every https origin it requests, the Crawl SHALL make one TLS hand
 - **THEN** the `origins` row for `{site}` has `http_version` = `http_1_1`
 
 ### Requirement: The response_headers table
-The crawl store SHALL keep the response headers of each requested URL's last attempt in a table `response_headers`, under the conventions of `018-add-schema-conventions`, with one row for each URL that received a response, and two columns:
+The crawl store SHALL keep the response headers of each requested URL's last attempt in a table `response_headers`, under the conventions of `018-add-schema-conventions`, with one row for each URL whose last attempt received a response, and two columns:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
 | `url_id` | INTEGER, primary key, references `urls.id` | no | | The URL whose response the headers are |
-| `headers` | TEXT | no | json | A JSON array of `[name, value]` pairs in the order and letter case they were received |
+| `headers` | TEXT | no | json | A JSON array of `[name, value]` pairs in the order and letter case they were received, with cookie values as `***` |
 
 The table SHALL have no secondary index: its rows are read by `url_id`, its primary key. A query that filters by a header reads `headers` with `json_each`.
 
 Cookie values SHALL never be stored. They SHALL be redacted in this exact format:
 - **`Set-Cookie`:** the cookie value, meaning the text after the first `=` and before the first `;`, SHALL be replaced by `***`. So `sid=abc123; Path=/; HttpOnly` is stored as `sid=***; Path=/; HttpOnly`. A value with no `=` before its first `;` SHALL be stored as `***` followed by its attributes.
-- **`Cookie`:** the value of each `name=value` pair, separated by `;`, SHALL be replaced by `***`. So `a=1; b=2` is stored as `a=***; b=***`.
+- **`Cookie`:** the value of each `name=value` pair, separated by `;`, SHALL be replaced by `***`. So `a=1; b=2` is stored as `a=***; b=***`. A part without `=` is a value alone, and SHALL be stored as `***`.
 
 Header names, cookie names, attributes, and the order of the headers SHALL be kept.
 

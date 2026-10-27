@@ -34,7 +34,7 @@ def joined_header(headers: Iterable[tuple[str, str]], name: str) -> str | None:
     return ", ".join(values) if values else None
 
 
-def _decoded(name: bytes, value: bytes) -> tuple[str, str]:
+def _received_header(name: bytes, value: bytes) -> tuple[str, str]:
     # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.
     text = name.decode("latin-1")
     return text, redacted_header(text, value.decode("latin-1"))
@@ -49,7 +49,8 @@ class Request:
 class FetchResult:
     status_code: int
     reason: str | None
-    # As received: in order, in their letter case, repeated names kept.
+    # As received, cookie values redacted (spider.crawl.fetch.cookies): in order, in their letter
+    # case, repeated names kept.
     headers: tuple[tuple[str, str], ...]
     body: bytes
     # When the request was sent, and how long until the whole body arrived.
@@ -113,7 +114,9 @@ class AiohttpFetcher:
         try:
             proxy = self._proxies.for_url(request.url)
             async with self._session.get(url, allow_redirects=False, proxy=proxy) as response:
-                headers = tuple(_decoded(*header) for header in response.raw_headers)
+                headers = tuple(
+                    _received_header(name, value) for name, value in response.raw_headers
+                )
                 body = await read_body(
                     response.content.iter_chunked(_CHUNK_BYTES),
                     joined_header(headers, "Content-Encoding"),

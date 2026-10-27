@@ -26,7 +26,8 @@ class UrlResponse:
     reason: str | None
     # The Content-Type header as received; None without one.
     content_type: str | None
-    # As received: in order, in their letter case, repeated names kept.
+    # As received, cookie values redacted (spider.crawl.fetch.cookies): in order, in their letter
+    # case, repeated names kept.
     headers: tuple[tuple[str, str], ...]
     fetched_at: datetime
     response_time_ms: int

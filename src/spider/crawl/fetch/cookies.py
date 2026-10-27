@@ -1,7 +1,7 @@
 """Cookie values are never kept: they are redacted where the Fetcher decodes the headers
 (022-add-fetch-policy D7)."""
 
-REDACTED = "***"
+from spider.store.redaction import REDACTED
 
 
 def redacted_header(name: str, value: str) -> str:
@@ -17,7 +17,9 @@ def redacted_header(name: str, value: str) -> str:
 def _redacted_set_cookie(value: str) -> str:
     # The cookie value is the text after the first = and before the first ;.
     cookie, separator, attributes = value.partition(";")
-    return _redacted_pair(cookie) + separator + attributes
+    name, equals, _ = cookie.partition("=")
+    # Without =, all of it is the value, an empty one included.
+    return (f"{name}={REDACTED}" if equals else REDACTED) + separator + attributes
 
 
 def _redacted_pair(pair: str) -> str:

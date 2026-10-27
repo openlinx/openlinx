@@ -8,12 +8,10 @@ from spider.store.response_headers import write_response_headers
 
 def default_hooks() -> Hooks:
     """The built-in hooks, listed explicitly: 030 and 040 add theirs here."""
-    return Hooks(
-        handlers=(handler("response_headers", response_headers_of, write_response_headers),)
-    )
+    return Hooks(handlers=(handler("response_headers", _response_headers, write_response_headers),))
 
 
-def response_headers_of(result: UrlResult) -> tuple[ResponseHeaders, ...]:
+def _response_headers(result: UrlResult) -> tuple[ResponseHeaders, ...]:
     """The headers of the URL's response; none for a URL that got no response."""
     if result.response is None:
         return ()

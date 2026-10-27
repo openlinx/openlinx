@@ -482,6 +482,6 @@ response_headers = public_table(
         comment="JSON array of [name, value] pairs in the order and letter case they were "
         "received; cookie values are ***.",
     ),
-    comment="The response headers of each requested URL's last attempt that got a response.",
+    comment="The response headers of each URL whose last attempt got a response.",
     change=22,
 )

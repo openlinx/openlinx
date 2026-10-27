@@ -14,6 +14,7 @@ def test_a_cookie_header_is_redacted_pair_by_pair() -> None:
     [
         # A value with no = before its first ; is all value: *** and its attributes.
         ("Set-Cookie", "abc123; Path=/; Secure", "***; Path=/; Secure"),
+        ("Set-Cookie", "; Path=/", "***; Path=/"),
         ("set-cookie", "sid=abc123; Path=/", "sid=***; Path=/"),
         # The value runs from the first = to the first ;, an = inside it included.
         ("Set-Cookie", "prefs=lang=en; Max-Age=3600", "prefs=***; Max-Age=3600"),

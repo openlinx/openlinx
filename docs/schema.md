@@ -171,7 +171,7 @@ One row for each origin of a URL that the Crawl recorded.
 
 ## Table `response_headers`
 
-The response headers of each requested URL's last attempt that got a response.
+The response headers of each URL whose last attempt got a response.
 
 | Column | Type | Null | Key | Format | Values | Description |
 |---|---|---|---|---|---|---|

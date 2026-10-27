@@ -125,7 +125,7 @@ Seams (docs/testing.md):
 - [x] 7.2 [3+6] Drive "A cookie value is not stored": the Fetcher redacts `Set-Cookie` values where it decodes the received headers, so `FetchResult.headers` never holds one (design D7).
 - [x] 7.3 [Pure] Drive "A Cookie header is redacted pair by pair", over the same function, with the spec's `Set-Cookie` value that has no `=` before its first `;`.
 - [x] 7.4 Docs: document `response_headers` and the cookie redaction format in `docs/crawling.md`.
-- [ ] 7.5 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [x] 7.5 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Change check (v0.1)
 

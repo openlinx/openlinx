@@ -11,9 +11,17 @@ from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
 from spider.clock import SystemClock
-from spider.crawl.fetch.fetcher import AiohttpFetcher, FetchFailure, Request, fetch_error_of
+from spider.crawl.fetch.fetcher import (
+    AiohttpFetcher,
+    FetchFailure,
+    FetchResult,
+    Request,
+    fetch_error_of,
+)
 from spider.crawl.fetch.proxy import ProxyVariables
 from spider.crawl.urls import parse_seed
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site
 
 
 class _Unencodable(AbstractResolver):
@@ -37,6 +45,29 @@ async def test_a_host_that_dns_cannot_encode_is_a_dns_error() -> None:
         result = await AiohttpFetcher(session, SystemClock(), ProxyVariables()).fetch(Request(url))
 
     assert (type(result), getattr(result, "fetch_error", None)) == (FetchFailure, "dns_error")
+
+
+async def test_the_fetcher_never_holds_a_cookie_value(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(
+                    body="<title>Your basket</title>",
+                    headers=[("Set-Cookie", "sid=abc123; Path=/; HttpOnly")],
+                )
+            }
+        )
+    )
+    url = parse_seed(server.url("/"))
+    assert isinstance(url, str)
+
+    async with aiohttp.ClientSession() as session:
+        result = await AiohttpFetcher(session, SystemClock(), ProxyVariables()).fetch(Request(url))
+
+    assert isinstance(result, FetchResult)
+    assert [value for name, value in result.headers if name == "Set-Cookie"] == [
+        "sid=***; Path=/; HttpOnly"
+    ]
 
 
 _KEY = ConnectionKey("site.test", 443, True, True, None, None, None, None)

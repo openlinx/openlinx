@@ -331,11 +331,11 @@ The Crawl keeps no cookies: a cookie that a response sets is never sent with a l
 
 ### Response headers
 
-The `response_headers` table keeps the headers of each URL's last attempt that got a response, one row per URL (see [schema.md](schema.md#table-response_headers)). `headers` is a JSON array of `[name, value]` pairs, in the order and letter case they were received, repeated names kept. A URL without a response has no row. A query that filters by a header reads `headers` with `json_each`.
+The `response_headers` table keeps the headers of each URL whose last attempt got a response, one row per URL (see [schema.md](schema.md#table-response_headers)). `headers` is a JSON array of `[name, value]` pairs, in the order and letter case they were received, repeated names kept. A URL without a response has no row. A query that filters by a header reads `headers` with `json_each`.
 
 - **Cookie values are never stored.** They are replaced by `***` as the headers are received, so no part of the Crawl holds one. Header names, cookie names, attributes and the order of the headers are kept.
 - **`Set-Cookie`:** the cookie value, the text after the first `=` and before the first `;`, becomes `***`: `sid=abc123; Path=/; HttpOnly` is stored as `sid=***; Path=/; HttpOnly`. A value with no `=` before its first `;` is stored as `***` followed by its attributes.
-- **`Cookie`:** the value of each `name=value` pair becomes `***`: `a=1; b=2` is stored as `a=***; b=***`.
+- **`Cookie`:** the value of each `name=value` pair becomes `***`: `a=1; b=2` is stored as `a=***; b=***`. A part without `=` is a value alone, and becomes `***`.
 
 ### Timeouts and retries
 
