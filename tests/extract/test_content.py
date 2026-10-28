@@ -88,3 +88,22 @@ def test_the_text_ratio_is_rounded_half_up() -> None:
 
 def test_an_empty_document_has_no_text_ratio() -> None:
     assert page_row("").text_ratio_pct is None
+
+
+def test_counts_for_fixture_a() -> None:
+    row = page_row(FIXTURE_A)
+
+    assert (row.sentence_count, row.average_words_per_sentence) == (3, 2.33)
+
+
+def test_the_average_is_rounded_half_up() -> None:
+    # 9 words in 8 sentences is 1.125 exactly; rounding the float would give 1.12.
+    row = page_row("<p>Yes. No. Maybe. Go. Stop. Wait. Run. Hi there.</p>")
+
+    assert row.average_words_per_sentence == 1.13
+
+
+def test_a_page_without_sentences_has_no_average() -> None:
+    row = page_row("<p>\N{EM DASH}</p>")
+
+    assert (row.sentence_count, row.average_words_per_sentence) == (0, None)

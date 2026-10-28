@@ -112,7 +112,7 @@ Every task of this group but 6.0 reads the URL's result. Task 6.13 is task 4.11,
 - [x] 8.6 Drive "Each ideograph and kana is a word" at seam 4. Han, Hiragana and Katakana come from a range table of Scripts.txt, compiled into the tokenizer's regular expression. The table names its Unicode version, and a test pins it to `unicodedata.unidata_version`.
 - [x] 8.7 Drive "Blocks end sentences" at seam 4, and add `sentence_count`.
 - [x] 8.8 Drive "Text ratio of a small document" at seam 4, and add `text_ratio_pct`, over `PageInput.length`. It is NULL for an empty decoded document, and rounded half up from its exact quotient.
-- [ ] 8.9 Drive "Counts for fixture A" at seam 4, and add `average_words_per_sentence`.
+- [x] 8.9 Drive "Counts for fixture A" at seam 4, and add `average_words_per_sentence`.
 - [ ] 8.10 Drive "Declared language is trimmed, not normalised" at seam 4, and add `declared_language`. A `lang` attribute without a value gives the empty string.
 - [ ] 8.11 Docs: add the Content Area settings with examples (including keeping article `<header>` elements), the word and sentence rules, Text Ratio and the declared language column to `docs/page-data.md`.
 - [ ] 8.12 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.

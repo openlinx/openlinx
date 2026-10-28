@@ -642,6 +642,12 @@ pages = public_table(
         "analysed or its Page extractor failed.",
     ),
     Column(
+        "average_words_per_sentence",
+        REAL,
+        comment="word_count divided by sentence_count, rounded half up to 2 decimals; NULL when "
+        "sentence_count is 0, or the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
         "text_ratio_pct",
         REAL,
         comment="100 times the length of the normalised text of body, without Content Area "

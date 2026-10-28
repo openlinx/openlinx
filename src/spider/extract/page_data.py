@@ -40,6 +40,7 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     h2_count: int
     word_count: int
     sentence_count: int
+    average_words_per_sentence: float | None
     text_ratio_pct: float | None
 
 
@@ -56,6 +57,7 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
     h1_1, h1_1_length, h1_2, h1_2_length = _first_two(h1s)
     h2s, h2_count = _headings(tree, "h2")
     blocks = list(content_blocks(tree, config))
+    words, sentences = word_count(blocks), sentence_count(blocks)
     h2_1, h2_1_length, h2_2, h2_2_length = _first_two(h2s)
     return PageData(
         title_1=title_1,
@@ -80,8 +82,9 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         h2_2=h2_2,
         h2_2_length=h2_2_length,
         h2_count=h2_count,
-        word_count=word_count(blocks),
-        sentence_count=sentence_count(blocks),
+        word_count=words,
+        sentence_count=sentences,
+        average_words_per_sentence=rounded(Fraction(words, sentences)) if sentences else None,
         text_ratio_pct=_text_ratio(tree, page.length),
     )
 
