@@ -423,6 +423,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 
 ## 13. Stopping with an interrupt (widening)
 
+- [ ] 13.0 Fix: a URL that finds its origin's robots.txt verdict already in starts after the URLs that waited for that verdict, so an origin's URLs reach its host's slot in dispatch order (design D1). Done when: `test_one_failure_inside_a_dead_origins_streak_does_not_exempt_its_origin`, which a later URL that overtook `blog.site.test/x` broke under load, passes every run of a parallel load run that failed it before, and a Risks entry names the class.
 - [ ] 13.1 Drive "Ctrl+C stops a Crawl on macOS and Linux" at seam 1, subprocess, POSIX in CI.
 
   Done when: the signal handlers set the `StopSignal` through `loop.call_soon_threadsafe`, no `KeyboardInterrupt` reaches `010`'s runner during a Crawl, and the `stopped` end goes through `check_transition` with `interrupt`; the test runs for SIGINT, SIGTERM and SIGHUP; the handlers are installed on `runner.get_loop()` after the `Runner` is built and before `run`, only in the main thread, put the earlier ones back in a `finally`, and only schedule the stop, never writing output (design D10); the first `StopSignal.set` writes one `stopping` event with its reason, whatever the reason, the URL limit's included; `start_crawl` takes the `StopSignal` (`stop=`), and the fake Fetcher sets it when a named URL starts (`on_start=`), so a fake-timing test pins that a stop that ends a depth reads no deeper one (the stop's `break` of task 9.19, which nothing could reach before interrupts).
