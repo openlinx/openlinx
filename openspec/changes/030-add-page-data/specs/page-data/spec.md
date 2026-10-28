@@ -67,7 +67,7 @@ For an analysed Page, following the table conventions of `015-add-crawl-store`:
 - A text column SHALL be NULL when its element or header is absent, and the empty string when the element is present but empty.
 - A length column SHALL be NULL exactly when its text column is NULL, and so SHALL a width column from v0.2.
 
-When an extractor of this change, the Page extractor or the Link extractor, raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns that extractor derives from the HTML SHALL be NULL: the title and heading, content and structured-data columns for the Page extractor, and the Link attributes this change adds for the Link extractor. The columns that come from the response, from `020-add-crawl-core`'s robots directives parser and discovered Links (the directive and canonical columns), the outlink counts and `indexability` SHALL be set as for any analysed Page.
+When an extractor of this change, the Page extractor or the Link extractor, raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns that extractor derives from the HTML SHALL be NULL: the title and heading, content and structured-data columns and `meta_refresh` for the Page extractor, and the Link attributes this change adds for the Link extractor. The columns that come from the response, from `020-add-crawl-core`'s robots directives parser and discovered Links (the other directive columns and the canonical columns), the outlink counts and `indexability` SHALL be set as for any analysed Page.
 
 The columns that a later release fills stay NULL in every Page until then (see "Columns measured by later releases stay NULL").
 
@@ -510,7 +510,7 @@ An analysed Page SHALL store the robots directives found in its HTML, and every 
 - **THEN** `x_robots_tag` is `noindex`, `x_robots_tag_noindex` is 1, `x_robots_tag_nofollow` is 0 and `meta_robots` is NULL
 
 ### Requirement: Meta refresh
-`meta_refresh` SHALL be the normalised `content` of the first `<meta>` element whose `http-equiv` is `refresh` (compared case-insensitively). It is NULL when there is none. Only that first element can redirect, as a browser acts on the first meta refresh only: when its `content` names a URL, the refresh target is the target of the first `meta_refresh` Link that `020-add-crawl-core` discovers, and otherwise there is none.
+`meta_refresh` SHALL be the normalised `content` of the first `<meta>` element whose `http-equiv` is `refresh` (compared case-insensitively). It is NULL when there is none. Only that first element can redirect: when its `content` names a URL, the refresh target is the target of the first `meta_refresh` Link that `020-add-crawl-core` discovers, and otherwise there is none.
 
 #### Scenario: Meta refresh with a quoted target
 - **WHEN** the analysed Page `https://example.test/old` contains `<meta http-equiv="Refresh" content="5; URL='/new'">`
