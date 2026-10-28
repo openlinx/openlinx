@@ -7,7 +7,8 @@ from tests.fixture_site.routes import Page, Site
 from tests.support.cli import run_cli
 from tests.support.workspace import TempWorkspace
 
-_NOT_RATES = ["0", "-1", "nan", "inf"]
+# 1e-310 is above 0, but its interval 1/rate is not finite.
+_NOT_RATES = ["0", "-1", "nan", "inf", "1e-310"]
 _RATES = ["0.5", "2"]
 
 
@@ -23,7 +24,7 @@ def test_a_rate_that_is_not_a_finite_number_above_zero_is_rejected(
     ) == (2, [("invalid_value", True)])
 
 
-@pytest.mark.parametrize("rate", _NOT_RATES)
+@pytest.mark.parametrize("rate", [*_NOT_RATES, "true"])
 def test_a_rate_that_is_not_a_finite_number_above_zero_in_the_settings_file_is_refused(
     temp_workspace: TempWorkspace, rate: str
 ) -> None:

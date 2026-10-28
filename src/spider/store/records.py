@@ -47,7 +47,7 @@ type SkipReason = Literal[
     "url_too_long",
 ]
 # The reasons a URL is recorded as skipped when it is discovered, never dispatched; a later
-# followed Link re-queues a URL skipped for one of them (020 D5).
+# followed Link re-queues a URL skipped for one of them (020-add-crawl-core D5).
 type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed"]
 type LinkType = Literal[
     "hyperlink",
@@ -70,7 +70,12 @@ type LinkType = Literal[
     "sitemap_hreflang",
     "javascript_redirect",
 ]
-type DeclaredIn = Literal["html", "http_header"]
+# Through these a URL is requested as a Resource; spider.crawl.following reads them,
+# and so does the urls upsert, which may import nothing of the crawl but urls.
+RESOURCE_LINK_TYPES: frozenset[LinkType] = frozenset(
+    {"image", "css", "javascript", "video", "audio", "media"}
+)
+type DeclaredIn = Literal["head", "body", "http_header"]
 type DiscoveredVia = (
     Literal["seed"] | LinkType | Literal["redirect", "list", "sitemap_input", "sitemap_index"]
 )
@@ -178,10 +183,20 @@ class CrawlSummary:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Provenance:
+    """How a URL was found, as its dispatch read it from the URL's queued row."""
+
+    crawl_depth: int
+    discovered_via: DiscoveredVia
+    found_on_url_id: int | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class FetchedUrl:
     """A URL whose response arrived, with the URLs discovered from it."""
 
     url_id: int
+    provenance: Provenance
     status_code: int
     # The Content-Type header as received; NULL without one.
     content_type: str | None
@@ -203,8 +218,8 @@ class SkippedUrl:
 
     url_id: int
     skip_reason: SkipReason
-    # The depth the skip was decided on: a URL lowered since then is decided again (design D5).
-    crawl_depth: int
+    # The skip was decided on it: a URL lowered or raised since then is decided again (D5).
+    provenance: Provenance
     blocked_by_robots_txt: bool | None = None
     rows: tuple[HandlerRows[Any], ...] = ()
 
@@ -214,6 +229,7 @@ class ErroredUrl:
     """A URL whose request got no HTTP response, with what the handlers returned for it."""
 
     url_id: int
+    provenance: Provenance
     fetch_error: FetchError
     fetch_error_message: str
     # None without a request of its own: its origin's robots.txt got no response.

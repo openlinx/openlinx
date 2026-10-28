@@ -36,7 +36,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 - **Link discovery:**
   - The Link type table follows Screaming Frog's defaults. It includes `prev`/`previous` for pagination, HTTP `Link` and `Refresh` headers, `video` and `audio`, and `misc` for other `<link>` elements. The types that later releases discover (`xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`) are listed from v0.1.
   - Link-level and page-level nofollow are honoured. `--follow-nofollow` overrides them, and `--check-external/--no-check-external` turns External URL checks on or off.
-  - Resources are requested for their status, even beyond `--max-depth`, and are never parsed.
+  - Resources are requested for their status, one Crawl Depth beyond `--max-depth`. Only a Resource that is in-Scope HTML is parsed.
 - **robots.txt:**
   - Obeyed per origin, with RFC 9309 status handling.
   - `--ignore-robots` still labels blocked URLs.
@@ -125,8 +125,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - `060` (the continue operation, the stop flag, the transition table, events, validation and config resolution)
   - `026` (the engine and its stop flag, the executor seam and page preparation, `parse_error`)
 - **Code:**
-  - `src/spider/crawl/`: urls, scope, robots, directives, frontier, scheduler, engine, the Crawl context, `fetcher/` (interface and minimal aiohttp implementation), page preparation and its in-process executor.
-  - `src/spider/extract/links.py` and the extractor registry.
+  - `src/spider/crawl/`: urls, scope, robots.txt and its loader, the robots directives, Link discovery, the engine, the Requester and politeness, the Crawl context, the Fetcher (interface and minimal aiohttp implementation), page preparation and its in-process executor, the hooks and the extractor registry.
   - `src/spider/store/`: `urls`, `origins`, the new `crawl` columns, the units that write them, and the transition check.
   - the Crawl Service in `src/spider/services/`, built on `015`'s `create_crawl`, and its adapter `src/spider/cli/crawl.py`.
 - **New dependencies:** `aiohttp`, `protego`, `selectolax` (1.0 or later, through its lexbor backend), `msgspec`, `publicsuffixlist` (a bundled list, never downloaded at runtime) and `idna` (UTS46 host names, as aiohttp encodes them), each added to `tests/dependency_allowlist.txt` and kept off the startup path.

@@ -139,6 +139,13 @@ crawl = public_table(
         info={"values": literal_values(StopReason)},
     ),
     Column(
+        "warnings",
+        Json,
+        nullable=False,
+        comment="The Crawl's warnings, as an array of diagnostics of level, code, message, hint "
+        "and details; [] when the Crawl is created.",
+    ),
+    Column(
         "command_argv",
         Json,
         nullable=False,
@@ -246,16 +253,15 @@ urls = public_table(
         "discovered_via",
         Text,
         nullable=False,
-        comment="How the URL was first found: seed, or the Link type; through a followed Link "
-        "once one has reached it.",
+        comment="How the URL was found: seed, or the type of the Link the Provenance rule "
+        "takes, a followed one once one has reached it, a Resource Link over another type.",
         info={"values": literal_values(DiscoveredVia)},
     ),
     Column(
         "found_on_url_id",
         Integer,
         ForeignKey("urls.id"),
-        comment="The URL whose response first revealed this one, through a followed Link once "
-        "one has reached it; NULL for Seeds.",
+        comment="The URL whose response gave that Link; NULL for Seeds.",
     ),
     Column(
         "fetch_state",

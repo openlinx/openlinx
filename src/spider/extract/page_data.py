@@ -1,11 +1,9 @@
 """The Page extractor: the columns a Page's HTML gives (030-add-page-data D1, D7)."""
 
-from collections.abc import Mapping
-
 import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
-from spider.crawl.pages import PageInput, extractor
+from spider.crawl.pages.preparation import PageInput, extractor
 from spider.extract.text import element_text, normalized, trimmed
 
 # An element inside svg or math names a picture or a formula; text inside them is left out too
@@ -76,14 +74,6 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: None) -> 
         h2_2_length=h2_2_length,
         h2_count=h2_count,
     )
-
-
-def page_data_of(outputs: Mapping[str, msgspec.Struct]) -> PageData | None:
-    """None when the Page extractor gave no output, as for a Page that is not analysed."""
-    data = outputs.get(PAGE_DATA.name)
-    if data is None or isinstance(data, PageData):
-        return data
-    raise RuntimeError(f"the output named {PAGE_DATA.name} is a {type(data).__name__}")
 
 
 def _headings(tree: LexborHTMLParser, tag: str) -> tuple[list[str], int]:

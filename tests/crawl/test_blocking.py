@@ -2,7 +2,7 @@
 
 import pytest
 
-from spider.crawl.politeness import BlockingRuns
+from spider.crawl.fetch.politeness import BlockingRuns
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawl_result
@@ -24,6 +24,7 @@ A, B = "a.test", "b.test"
         ([(A, 403)] * 9 + [(A, 404)] + [(A, 403)] * 9, []),
         # A request without an HTTP response.
         ([(A, 403)] * 9 + [(A, None)] + [(A, 403)], [A]),
+        ([(A, 403)] * 8 + [(A, None)] + [(A, 403)], []),
         ([(A, 403)] * 9 + [(B, 200)] + [(A, 403)], [A]),
         ([(A, 403)] * 5 + [(B, 403)] * 5 + [(A, 403)] * 4, []),
     ],

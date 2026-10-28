@@ -1,5 +1,6 @@
-"""Route options: headers, content_type, delay, hang, reset_after (design D9 of 000)."""
+"""Route options: headers, content_type, delay, hang, reset_after, after (design D9 of 000)."""
 
+import asyncio
 import time
 
 import aiohttp
@@ -77,3 +78,40 @@ async def test_reset_after_resets_the_connection_inside_the_body(fixture_site: S
             await response.read()
 
     assert received == (200, 100_000)
+
+
+async def test_after_holds_the_response_until_the_site_receives_the_other_path(
+    fixture_site: StartSite,
+) -> None:
+    server = fixture_site(Site(routes={"/a": Page(body="a", after="/b"), "/b": Page(body="b")}))
+
+    async with aiohttp.ClientSession() as session:
+
+        async def answered(path: str) -> float:
+            async with session.get(server.url(path)) as response:
+                await response.read()
+            return time.monotonic()
+
+        held = asyncio.create_task(answered("/a"))
+        # Time for /a to reach the site first; the order below fails if it did not.
+        await asyncio.sleep(0.2)
+        await answered("/b")
+        a_answered = await held
+
+    requests = server.requests
+    assert ([request.path for request in requests], a_answered > requests[1].received_at) == (
+        ["/a", "/b"],
+        True,
+    )
+
+
+async def test_after_fails_the_test_when_its_path_is_never_requested() -> None:
+    server = RunningServer(Site(routes={"/a": Page(body="a", after="/never")}), after_seconds=0.2)
+    try:
+        async with aiohttp.ClientSession() as session, session.get(server.handle.url("/a")) as got:
+            status = got.status
+    finally:
+        with pytest.raises(AssertionError, match=r"/a waited 0.2 s for a request for /never"):
+            server.stop()
+
+    assert status == 503

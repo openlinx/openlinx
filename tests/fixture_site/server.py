@@ -37,9 +37,14 @@ class LoggedRequest:
     received_at: float
 
 
+# How long a route with `after` waits for its path before it fails the test.
+AFTER_SECONDS = 10.0
+
+
 class RequestLog:
     def __init__(self) -> None:
         self._entries: list[LoggedRequest] = []
+        self._failures: list[str] = []
         self._lock = threading.Lock()
         self._in_flight = 0
         self._most_in_flight = 0
@@ -55,6 +60,15 @@ class RequestLog:
             self._entries.append(entry)
             self._in_flight += 1
             self._most_in_flight = max(self._most_in_flight, self._in_flight)
+
+    def fail(self, message: str) -> None:
+        with self._lock:
+            self._failures.append(message)
+
+    @property
+    def failures(self) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(self._failures)
 
     def answered(self) -> None:
         with self._lock:
@@ -121,11 +135,12 @@ def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
     match route:
         case Page():
             return _page_response(site, route, base_url)
-        case Status(code=code, body=None):
-            return web.Response(status=code)
-        case Status(code=code, body=body):
+        case Status(code=code, body=None, reason=reason):
+            return web.Response(status=code, reason=reason)
+        case Status(code=code, body=body, reason=reason):
             return web.Response(
                 status=code,
+                reason=reason,
                 body=(body or "").encode(),
                 headers={"Content-Type": CONTENT_TYPES[".html"]},
             )
@@ -171,13 +186,23 @@ def _pattern_chunks(size: int) -> Iterator[bytes]:
 
 
 def _build_app(
-    site: Site, base_url: Callable[[], str], in_flight: set[asyncio.Task[Any]], log: RequestLog
+    site: Site,
+    base_url: Callable[[], str],
+    in_flight: set[asyncio.Task[Any]],
+    log: RequestLog,
+    after_seconds: float,
 ) -> web.Application:
+    requested: dict[str, asyncio.Event] = {}
+
+    def seen(path: str) -> asyncio.Event:
+        return requested.setdefault(path, asyncio.Event())
+
     @web.middleware
     async def log_and_track(
         request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
     ) -> web.StreamResponse:
         log.add(request)
+        seen(request.path).set()
         task = asyncio.current_task()
         assert task is not None
         in_flight.add(task)
@@ -191,6 +216,16 @@ def _build_app(
         route = site.routes.get(request.path)
         if route is None:
             raise web.HTTPNotFound
+        if route.after is not None:
+            try:
+                async with asyncio.timeout(after_seconds):
+                    await seen(route.after).wait()
+            except TimeoutError:
+                log.fail(
+                    f"{request.path} waited {after_seconds} s for a request for "
+                    f"{route.after}, which never came"
+                )
+                raise web.HTTPServiceUnavailable from None
         if route.delay:
             await asyncio.sleep(route.delay)
         if route.hang:
@@ -216,13 +251,13 @@ def _build_app(
 
 
 class RunningServer:
-    def __init__(self, site: Site) -> None:
+    def __init__(self, site: Site, after_seconds: float = AFTER_SECONDS) -> None:
         self._loop = loop_factory()
         self._thread = threading.Thread(target=self._loop.run_forever, name="fixture-site")
         self._thread.start()
         self._in_flight: set[asyncio.Task[Any]] = set()
-        log = RequestLog()
-        app = _build_app(site, lambda: self.handle.base_url, self._in_flight, log)
+        self._log = log = RequestLog()
+        app = _build_app(site, lambda: self.handle.base_url, self._in_flight, log, after_seconds)
         self._runner = web.AppRunner(app)
         try:
             self._call(self._runner.setup())
@@ -252,3 +287,6 @@ class RunningServer:
             self._call(self._runner.cleanup())
         finally:
             self._stop_loop()
+        # At the test's teardown: a route that waited in vain fails the test.
+        if self._log.failures:
+            raise AssertionError("; ".join(self._log.failures))

@@ -52,6 +52,7 @@ def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
         **row,
         "command_argv": json.loads(row["command_argv"]),
         "config": json.loads(row["config"]),
+        "warnings": json.loads(row["warnings"]),
     }
     expected = {
         "crawl_mode": "spider",
@@ -63,6 +64,7 @@ def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
         "cwd": str(shop),
         "settings_file": None,
         "config": {"store": {"journal_mode": "auto"}},
+        "warnings": [],
     }
     assert {key: decoded[key] for key in expected} == expected
 

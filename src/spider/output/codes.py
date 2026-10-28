@@ -41,6 +41,9 @@ class DiagnosticCode:
     level: Level
     exit_code: ExitCode | None
     description: str
+    # The detail by which the warning log keeps one warning of the code; without one, each
+    # warning of the code is kept (design D10 of 020-add-crawl-core).
+    once_per: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -56,9 +59,14 @@ DECLARED: list[DiagnosticCode] = []
 
 
 def _declare(
-    code: str, level: Level, exit_code: ExitCode | None, description: str
+    code: str,
+    level: Level,
+    exit_code: ExitCode | None,
+    description: str,
+    *,
+    once_per: str | None = None,
 ) -> DiagnosticCode:
-    declared = DiagnosticCode(code, level, exit_code, description)
+    declared = DiagnosticCode(code, level, exit_code, description, once_per)
     DECLARED.append(declared)
     return declared
 
@@ -177,6 +185,28 @@ SEED_OUT_OF_SCOPE = _declare(
     "The Seed is outside its own Scope: it matches an --exclude pattern, or no --include "
     "pattern; details.seed holds it.",
 )
+CRAWL_WRITE_FAILED = _declare(
+    "crawl_write_failed",
+    "error",
+    ExitCode.IO,
+    "Writing the crawl file failed during a Crawl, such as on a full disk; the Crawl ended "
+    "failed, with write_failed, and details.error says what failed.",
+)
+SEED_UNREACHABLE = _declare(
+    "seed_unreachable",
+    "error",
+    ExitCode.NETWORK,
+    "The Seed's robots.txt or the Seed got no HTTP response, and its origin did not answer "
+    "within --network-wait; the Crawl ended failed, and details.network_wait says how long it "
+    "waited.",
+)
+SITE_UNREACHABLE = _declare(
+    "site_unreachable",
+    "error",
+    ExitCode.NETWORK,
+    "Internal requests in a row got no HTTP response, and the site did not answer within "
+    "--network-wait; the Crawl ended failed, and details.network_wait says how long it waited.",
+)
 MAX_URLS_REACHED = _declare(
     "max_urls_reached",
     "warning",
@@ -190,6 +220,7 @@ SEED_BASE_MISMATCH = _declare(
     None,
     "A www Seed whose Page names its apex host as the site; the hint gives the Seed on the apex "
     "host, and the Crawl went on in its Scope.",
+    once_per="seed",
 )
 SEED_BLOCKED_BY_ROBOTS_TXT = _declare(
     "seed_blocked_by_robots_txt",
@@ -197,14 +228,26 @@ SEED_BLOCKED_BY_ROBOTS_TXT = _declare(
     None,
     "robots.txt disallows the Seed for the robots user-agent token, so it was not requested; "
     "the hint names --ignore-robots, and details.seed holds the Seed.",
+    once_per="seed",
 )
 ROBOTS_UNREACHABLE = _declare(
     "robots_unreachable",
     "warning",
     None,
     "The robots.txt of an Internal origin answered with a server error or 429, so none of its "
-    "URLs was requested; the hint names --ignore-robots, and details.origin, details.host and "
+    "URLs was requested, or under --ignore-robots all were, without its rules; the hint names "
+    "--ignore-robots unless it was given, and details.origin, details.host and "
     "details.status_code say which.",
+    once_per="host",
+)
+ROBOTS_REDIRECT_FAILED = _declare(
+    "robots_redirect_failed",
+    "warning",
+    None,
+    "The robots.txt of an Internal origin redirected to a URL that got no HTTP response, so "
+    "robots.txt counts as missing and every URL of the origin is allowed; details.origin, "
+    "details.host, details.target and details.fetch_error say which.",
+    once_per="origin",
 )
 POSSIBLE_BLOCKING = _declare(
     "possible_blocking",
@@ -212,7 +255,8 @@ POSSIBLE_BLOCKING = _declare(
     None,
     "10 responses in a row from an Internal host had status 403 or 429, so it may be "
     "blocking the Crawl, which went on; the hint names --rate and --concurrency, and "
-    "details.host and details.count say which host and how many responses.",
+    "details.host says which host, and details.count is the length of the run that raises it.",
+    once_per="host",
 )
 PARSE_FAILED = _declare(
     "parse_failed",

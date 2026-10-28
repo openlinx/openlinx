@@ -21,6 +21,8 @@ class RouteOptions:
     hang: bool = False
     # Send the headers and this many bytes of the body, then reset the connection.
     reset_after: int | None = None
+    # Answer only once the site has received a request for this path, then after `delay`.
+    after: str | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,8 @@ class Status(RouteOptions):
     code: int
     # Served as text/html, as an error page is; None answers with an empty body.
     body: str | None = None
+    # The status line's reason phrase; None answers the standard one.
+    reason: str | None = None
 
 
 @dataclass(frozen=True)

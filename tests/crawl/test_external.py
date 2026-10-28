@@ -110,7 +110,7 @@ def test_each_url_points_to_its_origin(
     ]
 
 
-def test_external_checks_can_be_turned_off(
+def test_external_urls_can_be_left_unchecked(
     temp_workspace: TempWorkspace, fixture_hosts: StartHosts
 ) -> None:
     hosts = fixture_hosts(LINKS_TO_OTHER, OTHER_PAGE)
@@ -134,3 +134,17 @@ def test_an_unknown_host_is_a_dns_error(
         "SELECT fetch_state, fetch_error FROM urls WHERE url = ?",
         ["http://nowhere.test/"],
     ) == [("error", "dns_error")]
+
+
+def test_dead_external_links_do_not_fail_the_crawl(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    links = "".join(f'<a href="http://nowhere.test/{n}">Gone</a>' for n in range(1, 13))
+    hosts = fixture_hosts(Site(routes={"/": Page(body=links)}), EMPTY)
+
+    # With no network wait, a network pause that counted External URLs would fail it at once.
+    result = crawl_result(
+        "http://site.test/", resolver=hosts.resolver, concurrency=1, network_wait=0
+    )
+
+    assert result.summary.state == "completed"

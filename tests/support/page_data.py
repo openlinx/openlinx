@@ -2,9 +2,9 @@
 
 from datetime import UTC, datetime
 
-from spider.crawl.fetcher import FetchResult
-from spider.crawl.hooks import UrlResult
-from spider.crawl.pages import PageSettings, prepare_page
+from spider.crawl.engine.hooks import UrlResponse, UrlResult
+from spider.crawl.fetch.fetcher import FetchResult
+from spider.crawl.pages.preparation import PageSettings, prepare_page
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.page_handler import page_rows
@@ -19,6 +19,7 @@ def page_row(html: str | bytes, content_type: str = "text/html; charset=utf-8") 
     body = html.encode() if isinstance(html, str) else html
     response = FetchResult(
         status_code=200,
+        reason="OK",
         headers=(("Content-Type", content_type),),
         body=body,
         fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
@@ -38,12 +39,16 @@ def page_row(html: str | bytes, content_type: str = "text/html; charset=utf-8") 
         is_internal=True,
         in_scope=True,
         fetch_state="fetched",
-        status_code=response.status_code,
-        content_type=content_type,
-        response_time_ms=response.response_time_ms,
-        fetched_at=response.fetched_at,
+        response=UrlResponse(
+            status_code=response.status_code,
+            reason=response.reason,
+            content_type=content_type,
+            headers=response.headers,
+            fetched_at=response.fetched_at,
+            response_time_ms=response.response_time_ms,
+            directives=prepared.directives,
+        ),
         parsed=True,
-        headers=response.headers,
         outputs=dict(prepared.outputs),
     )
     (row,) = page_rows(result)

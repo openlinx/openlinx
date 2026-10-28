@@ -2,7 +2,8 @@
 
 from datetime import UTC, datetime
 
-from spider.crawl.hooks import UrlResult
+from spider.crawl.engine.hooks import UrlResponse, UrlResult
+from spider.crawl.pages.directives import NO_DIRECTIVES
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.page_handler import cookie_rows, page_rows
 from spider.store.page_records import CookieRow
@@ -18,11 +19,19 @@ def _result(*set_cookies: str, headers: tuple[tuple[str, str], ...] = ()) -> Url
         is_internal=True,
         in_scope=True,
         fetch_state="fetched",
-        status_code=200,
-        content_type="text/html",
-        response_time_ms=1,
-        fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
-        headers=(*headers, *(("Set-Cookie", value) for value in set_cookies)),
+        response=UrlResponse(
+            status_code=200,
+            reason="OK",
+            content_type="text/html",
+            headers=(
+                ("Content-Type", "text/html"),
+                *headers,
+                *(("Set-Cookie", value) for value in set_cookies),
+            ),
+            fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
+            response_time_ms=1,
+            directives=NO_DIRECTIVES,
+        ),
     )
 
 

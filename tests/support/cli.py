@@ -28,6 +28,10 @@ class CliResult:
     def stderr_json_lines(self) -> list[Any]:
         return [json.loads(line) for line in self.stderr.splitlines()]
 
+    def stray_stderr_lines(self) -> list[bytes]:
+        """The stderr lines that are neither an event nor a diagnostic."""
+        return [line for line in self.stderr.splitlines() if not _is_event_or_diagnostic(line)]
+
     def errors(self) -> list[Any]:
         """The stderr lines that are error diagnostics."""
         return [line for line in self.stderr_json_lines() if line.get("level") == "error"]
@@ -83,3 +87,11 @@ def start_example_process(*args: str) -> subprocess.Popen[bytes]:
     watchdog.daemon = True
     watchdog.start()
     return process
+
+
+def _is_event_or_diagnostic(line: bytes) -> bool:
+    try:
+        parsed = json.loads(line)
+    except ValueError:
+        return False
+    return isinstance(parsed, dict) and ("event" in parsed or "level" in parsed)

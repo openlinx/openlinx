@@ -1,4 +1,4 @@
-"""The frontier's invariants: one request per URL, an end, and the order (020 D1; seam 3)."""
+"""The frontier: one request per URL, an end, and the order (020-add-crawl-core D1; seam 3)."""
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site

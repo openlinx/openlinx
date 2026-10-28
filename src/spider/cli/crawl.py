@@ -1,6 +1,5 @@
 """`spider crawl` over the Crawl Service (020-add-crawl-core D10, D11)."""
 
-import re
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -10,10 +9,10 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
-from spider.crawl.politeness import is_rate
-from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN, ROBOTS_USER_AGENT_PATTERN
+from spider.crawl.setting_rules import as_rate, as_robots_token
+from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN
 from spider.output.codes import OPTION_CONFLICT
-from spider.output.diagnostics import SpiderError
+from spider.output.diagnostics import Outcome, SpiderError
 from spider.output.writer import Format
 from spider.store.records import ScopeKind
 
@@ -21,22 +20,17 @@ CRAWL = "crawl"
 
 
 def _robots_token(token: str) -> str:
-    # The settings file is checked by CrawlSettings' pattern, which gives settings_invalid.
-    if re.fullmatch(ROBOTS_USER_AGENT_PATTERN, token) is None:
-        raise typer.BadParameter(
-            f"{token!r} is not a robots user-agent token: RFC 9309 allows only letters, "
-            "'_' and '-'."
-        )
-    return token
+    try:
+        return as_robots_token(token)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{token!r}: {refusal}.") from None
 
 
 def _rate(rate: float | None) -> float | None:
-    # The settings file is checked by CrawlSettings' validator, through the same rule.
-    if rate is not None and not is_rate(rate):
-        raise typer.BadParameter(
-            f"{rate} is not a rate: give a finite number of requests per second above 0."
-        )
-    return rate
+    try:
+        return None if rate is None else as_rate(rate)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{rate}: {refusal}.") from None
 
 
 @command_meta(
@@ -112,6 +106,16 @@ def crawl(
         ),
         OptionMeta(setting="crawl.rate"),
     ] = None,
+    network_wait: Annotated[
+        int,
+        typer.Option(
+            "--network-wait",
+            min=0,
+            help="The seconds a Crawl paused by lost network access waits for its Seed to "
+            "answer before it fails; 0 fails at once.",
+        ),
+        OptionMeta(setting="crawl.network_wait"),
+    ] = 1800,
     max_urls: Annotated[
         int | None,
         typer.Option(
@@ -181,7 +185,7 @@ def crawl(
     ] = None,
     workspace_dir: WorkspaceOpt = None,
     output_format: FormatOpt = Format.JSON,
-) -> dict[str, Any]:
+) -> dict[str, Any] | Outcome:
     """Crawl a site from one Seed URL, in the foreground.
 
     Follows Links from the Seed within the Scope and records every URL in a new crawl file of
@@ -202,7 +206,10 @@ def crawl(
         flags=_with_subdomains(setting_flags(ctx)) if subdomains else setting_flags(ctx),
     )
     plan = plan_crawl(request, invocation.settings_tables)
-    return start_crawl(plan, SystemClock(), invocation.reporter, default_hooks()).to_json()
+    result = start_crawl(plan, SystemClock(), invocation.reporter, default_hooks())
+    if result.failure is not None:
+        return Outcome(result.to_json(), result.failure)
+    return result.to_json()
 
 
 def _with_subdomains(flags: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:

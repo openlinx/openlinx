@@ -171,6 +171,18 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 5.16 Drive "A concurrency of zero is rejected" at seam 1.
 - [x] 5.17 Docs: document the Fetcher Protocol, `Hooks` and how `030` and `040` add extractors, handlers, store rows and passes, in `docs/architecture.md`; and the per-URL failure outcomes and the per-host and global request limits in `docs/crawling.md`.
 - [x] 5.18 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [x] 5.19 Fix: a handler's writer takes the URL's rows as one sequence and runs one `executemany` (design D9).
+  Done when: a crawl with a handler that returns several rows per URL runs one INSERT per URL's unit, red by mutation of one writer call per row.
+- [x] 5.20 Refactor: `UrlResult.response` and `UrlResult.failure` replace the flat response and failure fields, the store records are built from them, and one header lookup serves `FetchResult` and the `X-Robots-Tag` read (design D9), behaviour unchanged.
+- [x] 5.21 Drive "A handler sees the X-Robots-Tag of a PDF" at seam 3.
+- [x] 5.22 Drive "A handler sees the Links of a Page whose extractor failed" and "A canonical in the body is placed in the body" at seam 3.
+- [x] 5.23 Drive "A nofollow Link does not request its target" at seam 3, with the follow rule in `spider.crawl.following`.
+  Done when: a seam-4 table over the Link type, the Link's nofollow, the Page's nofollow and `--follow-nofollow` pins `requests_target`, red by mutation of each.
+- [x] 5.24 Drive "A handler sees the reason phrase" at seam 3.
+- [x] 5.25 Fix: `Extractor[C, O]` knows its output type, and `output(outputs)` gives its output by type (design D9).
+  Done when: an extractor whose function returns another type than it declares is recorded as an extractor error, and one whose return annotation is not a msgspec struct cannot be built.
+- [x] 5.26 Refactor: close the review of tasks 5.19-5.25: a parsed Page's robots `<meta>` reaches the handler's directives, `spider.crawl.following` gives a Link's skip reason, which discovery records, a handler sees a custom reason phrase as received and no Links of a 404, and `UrlResponse.header` goes.
+  Done when: a seam-3 test fails when the engine reads the directives from the headers alone, and the seam-4 tables pin the skip reason of each Link type and nofollow case.
 
 ## 6. Internal and External URLs over HTTP (slice)
 
@@ -212,7 +224,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - Response-level Links never depend on the body parse (design D9): the engine derives the Links of the `Link` and `Refresh` headers from the response for every in-Scope 2xx response, and `PreparedPage` carries only the document's Links, numbered after them. A preparation that gives nothing (`worker_crashed`, `parse_timeout`, `body_too_large`) records `parsed` = 0 and keeps the header Links; `extractor_error` keeps `parsed` = 1. A failed `PreparedPage` needs no tree: its fields have defaults. Done when: an engine-seam test with an executor that returns `PreparedPage(parse_error="worker_crashed")` finds `parsed` = 0, the header canonical and Refresh target discovered and the `parse_failed` text for the kind, and a test pins that the engine's header Links and those of `PageInput` have the same ordinals.
   - RFC 8288's `anchor` parameter makes a link-value describe another resource, so such a link-value gives no Link. Done when: a case of the header Links table pins it.
   - An excluded URL that only unfollowed Links reach is recorded `nofollow`, not `excluded` (the spec's Exclude rule). Done when: a test pins it, and `docs/crawling.md` states the exception where it describes `--exclude`.
-  - The noscript ancestor walk of `<link>` and `<meta>` is measured on a deep page: it matters (2,000 of them at depth 3,000 cost 472 ms, one selector pass 16 ms, the parse 4.9 ms), and task 15.1's noscript pre-pass deletes it, since it leaves no `<noscript>` element in the tree (the rulings).
+  - The noscript ancestor walk of `<link>` and `<meta>` is measured on a deep page: it matters (2,000 of them at depth 3,000 cost 472 ms, one selector pass 16 ms, the parse 4.9 ms), and the parse with scripting on deletes it, since the content of a `<noscript>` is text (the rulings).
   - Comments and docstrings say what is true: `_FOLLOWED` in `spider.crawl.discovery`, `response_links`, and no docstring that restates its function's name.
 
 ## 8. Scope over HTTP and Section Crawls (widening)
@@ -297,6 +309,40 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - `CONTRIBUTING.md` allows a `# type: ignore[code]` for a deliberate type guard or a deliberately wrong call in a test.
   - A `robots_user_agent` in `spider.toml` that RFC 9309 refuses gives a `settings_invalid` message that names the allowed characters, from the same pattern.
   - `docs/architecture.md` says what mypy checks, and where.
+- [x] 10.23 Fix the review of the whole branch (main...7801901), each fix red first or red by mutation, each refactor with behaviour unchanged:
+  - A handler gets `blocked_by_robots_txt` in `UrlResult`, so under `--ignore-robots` it sees 1.
+  - A skip decided at dispatch reaches its handlers once, also when a late check lowers the URL's depth first; or, if that fix is out of proportion, a Risks line and a test that its rows are written once, by ruling.
+  - The warning log keys each code by its own identity: the host for `possible_blocking` and `robots_unreachable`. Where a code is kept once per code, D10 says so and a test pins it.
+  - The URL limit's refusal before robots.txt is one Requester method.
+  - `_result` takes typed keywords. `blocked_by_robots_txt` travels inside the unit, and each URL record is built once, in the outcome that decides it.
+  - Refactor:
+    - Split the engine, keeping each module under about 300 lines: the unit building, the outcomes, and the warnings next to the warning log. `BlockingRuns` and the blocking warning move with them.
+    - The Crawl Service's parameters are one record, `fetcher` included.
+    - `CONTRIBUTING.md`'s size sentence is made true, with its `store/schema.py` clause compatible with `026`'s.
+  - Standards:
+    - one-line module docstrings in `tests/crawl/test_headers.py`, `tests/crawl/test_noscript.py` and `tests/test_handler_types.py`;
+    - the tag `020-add-crawl-core Dn`;
+    - a `CONTEXT.md` term for "check" as a noun;
+    - the robots user-agent rule out of `spider.naming`, into `spider.crawl.setting_rules` with the rate's, since `spider.crawl.robots` loads Protego, which `crawl --help` must not;
+    - no task numbers in code comments;
+    - `record_unwritten` shaped like the other `record_*`;
+    - one source for each crawl setting's help and default, or a backlog proposal;
+    - one validator with one message for the robots token and for `--rate`.
+  - Tests for the spec lines of this task's plan:
+    - `robots_unreachable` under `--ignore-robots`;
+    - a final 3xx robots.txt is `missing`;
+    - the skips at dispatch;
+    - a Resource of an in-Scope HTML Resource beyond the limit;
+    - the Provenance of one Page's Links;
+    - a Page's own `<template>`.
+- [x] 10.24 Fix the review of 10.23, each fix red first or red by mutation, each refactor with behaviour unchanged:
+  - One builder per URL record in `spider.crawl.engine.units` takes the `UrlResult`, so a record and the `UrlResult` agree on every field they share; a crawl of the fixture site with a URL in each final state pins it.
+  - The Checked URL term replaces "check" for a URL and "decided" where a Checked URL is meant, in the code, the design and the docs; its definition admits the in-Scope HTML that a Resource Link reaches, which is followed.
+  - A handler's purity is a contract in design D9.
+  - Each warning code declares its warning-log key in `spider.output.codes`, and a test checks that each key names a detail of its code's warnings.
+  - The URL limit: the robots.txt loader answers whether a URL needs a new request, the mutating limit method is named for what it does, and the Requester passes no call through.
+  - The docs say who does what after the engine split, without the drift and the history of `docs/crawling.md`; full change tags; one test for "A Resource of an HTML Resource is beyond the limit"; single-name imports on one line.
+  Done when: the whole suite passes, and each new test fails under the mutation its commit names.
 
 ## 11. Politeness (widening)
 
@@ -307,47 +353,69 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared, and the run of consecutive 403 and 429 responses is kept per Internal host as the spec says.
 - [x] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
 - [x] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+- [x] 11.6 Fix the review of group 11, each fix red first or red by mutation:
+  - The robots.txt 403 of a second Internal origin of the host falls inside a run of the URLs' own 403s, so counting it once goes red.
+  - A request without a response counted as a 403 goes red.
+  - The wait guard resolves module aliases, covers `asyncio`'s submodules, `asyncio.as_completed` with a timeout and `reschedule`, and names its one exemption.
+  - A start that `RateGate.started` reserved is given back when its wait is cancelled.
+  - `--rate` and `crawl.rate` refuse a rate whose interval is not finite, and `crawl.rate` refuses a boolean.
+  - `possible_blocking`'s `details.count` is the length of the run that raises it.
 
 ## 12. Events, failures and backstops (widening)
 
-- [ ] 12.0 An auto-advancing virtual clock for the timing tests (the rulings of 2026-10-16): `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once every task is idle, as trio's `MockClock(autojump_threshold=0)` does. The watchdog and the 10-second progress tests use it. Designed at this task, which also lifts task 11.1's serialization from the Risks. A test on it pins the Requester's order, the rate wait before the global cap: a request waiting for its turn on one host lets another host's request start, with a global cap of 1 and two hosts if `RequestLimits` can be built at the Requester's seam without the settings' validation, otherwise with 21 hosts, red by mutation of `wait_turn` moved inside the global cap. Another fills the cap and pins that one host's delayed requests start 1/rate apart, red by mutation of the Requester's `started` call removed.
-- [ ] 12.1 Drive "Every stderr line is an event or a diagnostic" at seam 1.
-- [ ] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
-- [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
-- [ ] 12.4 Drive "Progress events come every 10 seconds", fake timing. Done when: the `urls` counts of `progress` come from counters that the outcomes of committed units update, seeded once by a counting query when the run starts, and no count over `urls` runs for each event (design D10).
-- [ ] 12.5 Drive "Events are UTF-8 on Windows (Windows)" at seam 1, subprocess, Windows in CI.
-- [ ] 12.6 Drive "An unreachable Seed fails the Crawl" at seam 1.
+Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, then a stop for review; 12.9a, 12.15, 12.16, 12.17, 12.18, 12.19, 12.22, 12.4, 12.20, 12.23, 12.24. A code is declared by the first task that needs it.
 
-  Done when: `--network-wait` is declared with `OptionMeta(setting="crawl.network_wait")`, default 1800, in `CrawlSettings`; until the Seed's origin has given an HTTP response, its robots.txt or Seed request without one pauses the Crawl at once, and with `--network-wait 0` no probe starts; the `failed` end goes through `check_transition` with `seed_unreachable`; and the adapter returns the result as an `Outcome` (design D16).
-- [ ] 12.7 Drive "An unreachable Seed is reported by one error" at seam 1. Done when: `seed_unreachable` is declared, with a hint about network access and sandboxed agents that says how long the Crawl waited.
-- [ ] 12.8 Drive "Post-crawl passes do not run for a failed Crawl" at seam 2.
-- [ ] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
+- [x] 12.0 Fix: `FakeClock` becomes the virtual clock of the timing tests: `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once nothing else can run, as trio's `MockClock(autojump_threshold=0)` does; `advance()` stays for tests without a loop.
+  Done when: two hosts that each wait 0.5 s under `--rate` move the clock 0.5 s, not 1 s, red first through the fake Fetcher; a sleep never wakes before its wake time; the clock does not jump while a writer unit that the loop waits for runs, red by mutation of the hold dropped from `run_async`, with the unit held by a handler's writer that blocks on a `threading.Event`; the guard names a thread hand-off in `src` outside `off_loop()`; and the Risks entry on `FakeClock` sleeps that add up goes.
+- [x] 12.0a Refactor: the Requester owns the host's slots and the global cap, and `RequestLimits` keeps the URL limit and the task bound (design D7), behaviour unchanged.
+  Done when: the Requester is built with its cap, as `dispatch` computes it with `global_cap`, and the politeness tests reach the limits only through the Crawl Service with the fake Fetcher and the virtual clock, or through the pure `global_cap`; `docs/testing.md` names that seam for politeness timing.
+- [x] 12.0b Fix: `wait_turn` reserves the host's `next_start` and sleeps without holding a lock, so one host's rate waits overlap the other hosts' (design D7).
+  Done when: a request waiting for its turn on one host lets another host's request start, with 21 hosts at the default cap, red by mutation of `wait_turn` moved inside the global cap; and one host's requests that the full cap held back start 1/rate apart, red by mutation of the Requester's `started` call removed. Both Risks entries on the turn's order and its serialization go.
+- [x] 12.0c Drive "The global cap bounds requests across hosts", fake timing.
+- [x] 12.0d Fix: an exception that escapes a URL's task ends the run as a bug, and its URL is never dispatched again (design D16).
+  Done when: through the Crawl Service, with a page executor of the test's own whose `prepare` raises `RuntimeError` for `/broken`, the Crawl raises that error, `/broken` is prepared once and the Crawl stays `running`, both when `/broken` fails before the dispatcher waits on its depth's tasks and when it is a Checked URL that fails before the sweep waits on it, each red by removing the capture; and `_cancel_all` tolerates only `CancelledError`.
+- [x] 12.0e Fix: the writer's commit deadline runs on the loop's `Clock`, real I/O stays off the virtual clock, and the hand-off guard has no way around it (design D7, D16).
+  Done when: the engine opens its writer with the loop's commit deadline, chosen explicitly and never from a running loop, so a commit lands at one second of the loop's clock while another task sleeps 10 seconds, and a fallback unit submitted after `settled()`'s flush is committed instead of waited on for ever, each red with the deadline detached; while the deadline is attached the writer thread commits only after 500 units, a flush or the close, and a writer that no loop drives keeps its own one-second commit; no test pairs `FakeClock` with the fixture site or `aiohttp_fetcher`, which a guard names, and the journal-mode and Fetcher tests use `SystemClock`; the hand-off guard names a hand-off imported by name, one in a function defined inside `off_loop()` that runs later, and `call_soon_threadsafe` and `run_coroutine_threadsafe`, each red by a planted violation in its own table; the jump waits for 100 quiet loop turns; and `tests/support/crawling.py` no longer says that `FakeClock`'s sleeps end at once.
+- [x] 12.1 **Guard:** "Every stderr line is an event or a diagnostic", at seam 1: every stderr line of a Crawl already goes through the CLI's reporter.
+- [x] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
+- [x] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
+- [ ] 12.4 Drive "Progress events come every 10 seconds", fake timing. Done when: the `urls` counts of `progress` come from counters that the outcomes of committed units update, seeded once by a counting query when the run starts, and no count over `urls` runs for each event (design D10); a unit returns a counts delta beside its bool, whose shape the task proposes when it starts; and `progress` carries `rate` over its 60-second window and `elapsed_s`.
+- [x] 12.5 Drive "Events are UTF-8 on Windows (Windows)" at seam 1, subprocess, Windows in CI.
+- [x] 12.6 Drive "An unreachable Seed fails the Crawl" and "An unreachable Seed is reported by one error" at seam 1, after 12.11.
 
-  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`.
-- [ ] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 1, with a handler and its writer registered for the test. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
+  Done when: `--network-wait` is declared with `OptionMeta(setting="crawl.network_wait")`, default 1800, `Field(ge=0)` and the option's `min=0`, in `CrawlSettings`; until the Seed's origin has given an HTTP response, its robots.txt or Seed request without one pauses the Crawl at once, and with `--network-wait 0` the pause ends at once and no probe starts; the Crawl takes the `failed` end of 12.9 with `seed_unreachable`; and `seed_unreachable` is declared, with a hint about network access and sandboxed agents that says how long the Crawl waited (design D16).
+- [x] 12.7 Merged into 12.6, which declares the code it needs.
+- [x] 12.8 **Guard:** "Post-crawl passes do not run for a failed Crawl", at seam 2, once 12.9 has built the failed end.
+- [x] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk. It owns the failed end, so it comes first among the failures.
+
+  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the `failed` end once through `check_transition` and a fresh writer, skips the post-crawl passes, writes `crawl.warnings` and builds the result after the end, which the adapter returns as an `Outcome`; and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`. The full-disk run's stderr holds only event and diagnostic lines, never asyncio's "Task exception was never retrieved". `docs/crawling.md` describes `crawl_write_failed` in place of the `internal_error` it gives today, and `docs/testing.md` lists the `max_page_count` listener as a boundary double. The listener caps the file at its page count when a connection opens plus a margin, so the fresh writer that records the end still has room.
+- [x] 12.9a Fix: a write failure outside a URL's unit takes the `failed` end of 12.9, never `internal_error` (design D16).
+
+  Done when: one store function tells a write failure of the crawl file (the writer's own errors, `crawl_busy`, and a database error not of one row) from the others, and both the URL tasks' bug path and the Crawl Service use it; a full disk on the Seed origin's robots.txt row, and in a post-crawl pass, ends the Crawl with `crawl_write_failed` (exit 7) and `failed` in the file; `pause_after` is a seam-4 table, and a run of one under each limit completes while a run at the limit fails, for the network count and for `RECORD_FAILURE_LIMIT`.
+- [x] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 2, through the Crawl Service with a handler and its writer registered for the test, since the CLI takes no test hooks; 12.9 pins exit 7 at seam 1. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
 
   Done when: the record-failure count of design D16 trips at `RECORD_FAILURE_LIMIT` (100) URL units in a row that failed on their first run, a URL unit that commits resets it, fallback units do not count, and the constant's comment says why.
-- [ ] 12.11 Drive "A network wait of zero fails at once" at seam 1, with the reset route of task 5.11.
+- [x] 12.11 Drive "A network wait of zero fails at once" and "Losing the site is reported by one error" at seam 1, with the reset route of task 5.11.
 
-  Done when: the network pause's count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without an HTTP response, counting the codes D16 lists and the URLs recorded from an Internal origin's robots.txt without a response, but never `tls_error` or an External request; any response resets it; and with `--network-wait 0` the pause ends at once with `site_unreachable`.
-- [ ] 12.12 Drive "Losing the site is reported by one error" at seam 1. Done when: `site_unreachable` is declared, with a hint that says how long the Crawl waited and names `spider resume` through `spider.naming`.
-- [ ] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 1.
-- [ ] 12.14 Drive "A stuck request is ended by the watchdog", fake timing.
+  Done when: the network pause's count of design D16 trips at `max(8, 2 × concurrency)` Internal requests in a row without an HTTP response, counting the codes D16 lists, a request that the watchdog ended among them, and the URLs recorded from an Internal origin's robots.txt without a response, but never `tls_error` or an External request; any response resets it; with `--network-wait 0` the pause ends at once, and the Crawl takes the `failed` end of 12.9 with `site_unreachable`; and `site_unreachable` is declared, with a hint that says how long the Crawl waited and names `spider resume` through `spider.naming`. The engine keeps the count from each Internal URL's outcome, and the Requester holds the gate (design D7, D16).
+- [x] 12.12 Merged into 12.11, which declares the code it needs.
+- [x] 12.13 **Guard:** "Dead External links do not fail the Crawl", at seam 2 with the fixture hosts, since only the Crawl Service takes the DNS resolver hook.
+- [x] 12.14 Drive "A stuck request is ended by the watchdog", fake timing. It runs right after 12.0c, before 12.1, since it needs only the virtual clock and the Requester.
 
-  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed from the settings by one pure function, `max(120 s, the Fetcher's total request deadline + 30 s)`, tested at seam 4; and a request it ends counts as one without an HTTP response for the network pause. The watchdog is the Requester's (design D7), around every request it makes.
-- [ ] 12.15 Drive "Probes back off to once a minute" at seam 4. Done when: one pure function gives the probe times of a network wait: 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, none later than the wait.
+  Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed by one pure function from the Fetcher's total request deadline, which it takes as an argument, `max(120 s, deadline + 30 s)`, tested at seam 4; and a robots.txt request that hangs gives its origin's URLs `fetch_error` = `watchdog` without a request of their own. The watchdog is the Requester's (design D7), around every request it makes.
+- [ ] 12.15 Drive "Probes back off to once a minute" at seam 4. Done when: one pure function gives the probe times of a network wait: 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, none later than the wait, and one exactly at the wait still starts.
 - [ ] 12.16 Drive "A dead section does not stop the Crawl", fake timing.
 
-  Done when: probes request the Seed URL through the Requester (design D7) on the context's `Clock`, are not recorded and do not count toward `--max-urls`; the first answering probe resumes the Crawl with the errors kept; and `network_paused` is declared and counted, with `details.count` and `details.total_seconds`.
+  Done when: probes request the Seed URL through the Requester's own probe path (design D7) on the context's `Clock`, are not recorded and do not count toward `--max-urls`; the first answering probe resumes the Crawl with the errors kept; and `network_paused` is declared and counted, with `details.count`, the pauses, and `details.total_seconds`, and no `first_url` (design D10). `FakePage` takes `fails`, a `fetch_error`, and `until`, a clock time, so its URL gets no response until then, and `FakeFetcher.starts` keeps the whole URL. A request waits at the pause's gate before it takes a slot, and one that took its slots as the pause began gives them back and waits again, so at `--concurrency 1` a probe starts while a URL request waits paused; red with the gate waited after the slot, when the probe never starts (design D7, D16).
 - [ ] 12.17 Drive "An outage pauses and resumes the Crawl", fake timing.
 
-  Done when: the `crawl_paused` and `crawl_resumed` events carry the data of the spec's event table; no request starts while paused, which the Requester holds (design D7); and a request that ends without an HTTP response while paused is not recorded, so its URL stays `queued` and is requested again when the Crawl resumes.
-- [ ] 12.18 Drive "URLs that failed in an outage are requested again", fake timing. Done when: a later answering probe re-queues the URLs of the count, each at most once in a run, and the engine dispatches them ahead of the frontier read.
-- [ ] 12.19 Drive "A Crawl that waits longer than the network wait fails", fake timing.
+  Done when: the `crawl_paused` and `crawl_resumed` events carry the data of the spec's event table; no request starts while paused, which the Requester holds (design D7); and a request that ends without an HTTP response while paused is not recorded, so its URL stays `queued` and is requested again when the Crawl resumes; its request gives back its count toward `--max-urls` where that is decided, so `--max-urls N` with an outage mid-crawl still fetches N distinct URLs.
+- [ ] 12.18 Drive "URLs that failed in an outage are requested again", fake timing. Done when: a later answering probe re-queues the URLs of the count, each at most once in a run, the engine dispatches them ahead of the frontier read, and an answering probe drops the failed robots.txt verdicts of Internal origins, so their URLs are requested again. A re-queued URL keeps its depth, and the URLs it finds are recorded one deeper (design D3).
+- [ ] 12.19 Drive "A Crawl that waits longer than the network wait fails", fake timing. Done when: when the wait ends, the probes in flight are cancelled and the Crawl fails then, so `--network-wait` bounds it.
 - [ ] 12.20 Drive "Progress events say when the Crawl is paused", fake timing. Done when: `progress` carries `paused`, and its events go on during a pause.
-- [ ] 12.21 Drive "A negative network wait is rejected" at seam 1.
-- [ ] 12.22 Drive "A Seed that answers late is crawled", fake timing. Done when: a probe that answers before any response from the Seed's origin re-requests its robots.txt and the Seed.
-- [ ] 12.23 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), the network pause with its probes, outcomes, events and `--network-wait`, and the backstops in `docs/crawling.md`.
+- [x] 12.21 **Guard:** "A negative network wait is rejected", at seam 1, since 12.6 declares the bound; it also pins that `network_wait = -1` in a settings file is refused with exit 3.
+- [ ] 12.22 Drive "A Seed that answers late is crawled", fake timing. Done when: a probe that answers before any response from the Seed's origin drops the failed robots.txt verdict of the Seed's origin and re-requests its robots.txt and the Seed; the test tells the probes from the Seed's own request by their start times.
+- [ ] 12.23 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), the network pause with its probes, outcomes, events and `--network-wait`, and the backstops in `docs/crawling.md`, with `watchdog` in its `fetch_error` list and exit codes 7, 8 and 130; and `docs/architecture.md` no longer says that the watchdog comes later.
 - [ ] 12.24 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
 
 ## 13. Stopping with an interrupt (widening)
@@ -356,9 +424,10 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
   Done when: the signal handlers set the `StopSignal` through `loop.call_soon_threadsafe`, no `KeyboardInterrupt` reaches `010`'s runner during a Crawl, and the `stopped` end goes through `check_transition` with `interrupt`; a test pins that an interrupt that ends a depth reads no deeper one (the stop's `break` of task 9.19, which nothing could reach before interrupts).
 - [ ] 13.2 Drive "Ctrl+Break stops a Crawl on Windows (Windows)" at seam 1, subprocess, Windows in CI.
+- [ ] 13.2a Drive "A stop ends a pause" at seam 1, subprocess, whose scenario the plan check of group 13 adds to the spec: every request after the Seed's resets, `--network-wait 1800`, and the interrupt is sent after the `crawl_paused` line. Done when: the Command exits 130 with `stop_reason` = `interrupt`, and the site gets no probe after the interrupt (design D16).
 - [ ] 13.3 Drive "An interrupt is reported by one error" at seam 1, subprocess. Done when: `010`'s `interrupted` is the one error, with exit code 130.
 - [ ] 13.4 **Guard:** "An interrupted Crawl keeps its queue", at seam 1, subprocess.
-- [ ] 13.5 Drive "A request still running after the grace period is cancelled", fake timing. Done when: after the stop flag, requests in flight get 10 seconds of clock time and are then cancelled before their submit, so no unit is written for them.
+- [ ] 13.5 Drive "A request still running after the grace period is cancelled", fake timing. Done when: after the stop flag, requests in flight get 10 seconds of clock time and are then cancelled before their submit, so no unit is written for them; and the depth's running siblings are cancelled and never recorded after the stop, red with `_crawl_depth`'s `finally` removed.
 - [ ] 13.6 Drive "A second interrupt ends the process at once" at seam 1, subprocess.
 - [ ] 13.7 Docs: document interrupts, the grace period and the second interrupt in `docs/crawling.md`.
 - [ ] 13.8 Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
@@ -379,7 +448,9 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 ## 15. Reading `<noscript>` as browsers that run scripts do
 
 - [x] 15.1 Fix: page preparation reads `<noscript>` as a browser that runs scripts does, before selectolax offers lexbor's scripting flag (the user's decision of 2026-10-14; design D5). lexbor parses with scripting off, so a head `<noscript><img>`, the common tracking pixel, ends `<head>` and every later head element (canonical, meta description, robots, hreflang) lands in `<body>`, and a head-noscript `<title>` moves out of its `<noscript>`. Before lexbor parses the decoded text, every `<noscript>` start and end tag becomes a `<template>` tag, whose start tag carries the `data-<APP_NAME>-noscript` attribute with the index of the `<noscript>`'s text; HTML allows `<template>` in `<head>`, and its content stays out of the tree. The text of each `<noscript>`, up to the next `</noscript>`, as a browser that runs scripts reads it, is fragment-parsed for its Links: a `<link>` or `<meta>` gives nothing, the other elements give theirs in document order (task 7.19), a head-noscript pixel's `src` included. A page's own `<template>` gives no Link, as before. The noscript ancestor walk goes (task 7.23). Done when: tests at seam 4 pin that a head-noscript pixel keeps the canonical, hreflang and metas in `<head>`, that a head-noscript title and robots meta are ignored, that body-noscript Links are found in document order, that HTML without a `<noscript>` tag is left as it is, that a literal `<noscript` is renamed wherever it stands, and the edges of design Risks; a never-raises property runs over text with noscript tags; and the commit shows each existing noscript test red with the renaming disabled, as the guard of the walk's removal.
-- [ ] 15.2 Waits for the first selectolax release that contains upstream commit 69eddd1, lexbor's scripting flag (rushter/selectolax#228, merged into its master on 2026-10-14 and not yet released); never a pin to a git URL, and 15.1's renaming stays until then. Page preparation then parses with scripting on and fragment-parses the text of each `<noscript>`, which replaces 15.1's renaming; 15.1's tests stay. Done when: the renaming is gone, and 15.1's tests pass.
+- [x] 15.2 Waits for the first selectolax release that contains upstream commit 69eddd1, lexbor's scripting flag (rushter/selectolax#228, released in selectolax 1.0.1); never a pin to a git URL, and 15.1's renaming stays until then. Page preparation then parses with scripting on and fragment-parses the text of each `<noscript>`, which replaces 15.1's renaming; 15.1's tests at seam 4 stay, and the renaming's own unit tests go with it. Done when: the renaming is gone, and 15.1's tests at seam 4 pass.
+- [x] 15.3 Fix: a `<noscript>` at an HTML integration point of SVG or MathML is read as HTML (design D5), and the `<link>` and `<meta>` of a foreign `<noscript>` give no Link.
+  Done when: the noscript table of `tests/crawl/test_links.py` has a row for each kind of integration point, from markup real pages carry (an inline SVG icon's `<title>` and `<desc>`, a `<foreignObject>`, a MathML formula's `<mi>`, an `annotation-xml` of `text/html`), each giving its Link once; a foreign `<noscript>`'s canonical `<link>` gives none; the `<math>` row holds an `<a>`, which stays in the `<noscript>`, not an `<img>`, which the parser moves out; the scripting guard allows `is_fragment=True` only in the fragment parse of a `<noscript>`'s text, resolves aliased imports and fails when it checks no call, each red by mutation; and every nested `st.lists` of a `@given` test has bounded sizes, so that Hypothesis's `too_slow` health check passes on a loaded machine.
 
 ## 16. Change check
 
@@ -388,3 +459,31 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 16.3 Docs: the crawl pipeline section of `docs/architecture.md` says what is built (the context, the hooks, store-only units, page preparation behind the in-process executor), and `docs/schema.md` documents `urls`, `origins` and the new `crawl` columns, with their indexes and the values listed for later changes.
 - [ ] 16.4 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
 - [ ] 16.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md` and ADR-0006, then refactor with the whole suite green.
+
+## 17. The crawl package layout
+
+Group 16 runs last, after this group.
+
+- [x] 17.1 Move `spider.crawl` into the subpackages of design D19, behaviour unchanged: a `git mv` per module, the imports rewritten by `scripts/crawl_layout_codemod.py`, `DiscoveredLink` and `resolve_reference` with its helpers split out of `links` into `references`, and in each package an `__init__.py` whose docstring lists its interface.
+  Done when: every moved top-level function and class has the AST it had, except `_base` and `_from_attribute` of `links`, `_cleaned` and `C0_OR_SPACE` of `references`, the `TYPE_CHECKING` import of `scope`, and the new `resolve_base`; a second run of the codemod changes nothing; and the ast guard `test_the_crawl_imports_run_one_way`, with its breach cases red by mutation of a forbidden import, passes and fails on a path it names that does not exist.
+
+## 18. Review of the crawl core
+
+The fixes of the review of `spider.crawl` along both axes. Group 16 runs last, after this group, and task 12.0 after this group.
+
+- [x] 18.1 Drive "An image that another Page hyperlinked first is checked beyond the depth limit" at seam 3: a Resource Link raises a still-queued URL's `discovered_via` to its Resource kind (design D5).
+- [x] 18.2 Drive "A robots.txt redirect to a host that does not resolve counts as missing" at seam 3, with the `robots_redirect_failed` warning (design D6).
+- [x] 18.3 Drive "Two handlers that fail on one URL count it once" at seam 3.
+- [x] 18.4 Fix: one host key in `spider.crawl.urls`, without a trailing dot, for the Scope, the per-host slots, the rate turn and the blocking runs.
+  Done when: two URLs that differ only by a trailing dot on the host share one rate turn, red first.
+- [x] 18.5 Refactor: the tests of `extract_links` move to `prepare_page` at seam 4, the header-first order and `first_ordinal` included, and `extract_links` goes.
+- [x] 18.6 Refactor: one constructor builds a `DiscoveredLink` for the link extractor and the header Links, and one ordered table maps `rel` tokens to a Link type for both, the headers reading only their types, behaviour unchanged.
+- [x] 18.7 Refactor: the texts of `handler_failed`, `record_failed` and `parse_failed` move into `spider.crawl.engine.crawl_warnings`, and `_robots_verdict` returns its warnings for the caller to give, behaviour unchanged.
+- [x] 18.8 Refactor: `CrawlContext.reporter` is typed `WarningLog`, the one adapter, and the `CrawlReporter` Protocol goes; `document_links` is renamed `html_links`, and CONTEXT.md notes "reference" as the raw string before it resolves to a Link.
+- [x] 18.9 Refactor: the duplicate of `test_an_unreachable_robots_txt_is_reported_under_ignore_robots` goes, with its Risks entry.
+- [x] 18.10 Fix: the fixture site's `after` route option, and the two depth tests that order their events by delays wait on it instead, each red when the lowering happens before dispatch.
+- [x] 18.11 Docs: `docs/crawling.md` lists the final 3xx of robots.txt and drops the provenance acceptance; `docs/architecture.md` lists the rate turn between the host's slot and the global cap.
+- [x] 18.12 Review: run the code-review skill on group 18's commits, then refactor with the whole suite green.
+- [x] 18.13 Refactor: close the review of group 18: a skip's handler failures count once its unit has applied, so the warning log keeps no URLs; the outcome write-backs of `record_error` and `record_unwritten` are pinned; the provenance texts say what the Provenance rule says.
+  Done when: a skip that lost to a raise or a lowering counts its handler failures only when it is decided again, red by mutation of the count made before the unit applied, and removing either write-back fails the store table.
+

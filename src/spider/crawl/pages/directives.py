@@ -1,4 +1,4 @@
-"""The robots directives parser, which 030 imports for its directive columns (020 D6)."""
+"""The robots directives parser, which 030 imports for its columns (020-add-crawl-core D6)."""
 
 import re
 from collections.abc import Iterable

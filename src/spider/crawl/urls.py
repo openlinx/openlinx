@@ -201,6 +201,12 @@ def url_host(url: NormalizedUrl) -> str:
     return authority.partition(":")[0]
 
 
+def host_key(url: NormalizedUrl) -> str:
+    """The host as the Scope and the per-host limits compare it: a trailing dot names the
+    same server (design D7)."""
+    return url_host(url).removesuffix(".")
+
+
 def url_origin(url: NormalizedUrl) -> str:
     """The scheme, host and port: a normalised URL has left out a default port already."""
     return "/".join(url.split("/", 3)[:3])

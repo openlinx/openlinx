@@ -2,10 +2,11 @@
 
 import platform
 import sqlite3
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.exc import DBAPIError
@@ -54,7 +55,7 @@ def create_crawl_file(
 def set_state(
     connection: Connection, state: CrawlState, at: datetime, stop_reason: StopReason | None = None
 ) -> None:
-    """The one writer of how a Crawl ends, checked against the state it reads (020 D12)."""
+    """The one writer of how a Crawl ends, checked against its state (020-add-crawl-core D12)."""
     current: CrawlState = connection.execute(select(crawl.c.state)).scalar_one()
     check_transition(current, state, stop_reason)
     completed_at = at if state == "completed" else None
@@ -70,6 +71,15 @@ def record_state(
 
     def unit(connection: Connection) -> None:
         set_state(connection, state, at, stop_reason)
+
+    return unit
+
+
+def record_warnings(warnings: Sequence[Mapping[str, Any]]) -> Callable[[Connection], None]:
+    """A unit that writes the Crawl's warnings, as JSON objects."""
+
+    def unit(connection: Connection) -> None:
+        connection.execute(update(crawl).values(warnings=list(warnings)))
 
     return unit
 
@@ -131,6 +141,7 @@ def _write_new_file(
                 crawl_mode=request.crawl_mode,
                 section_crawl=request.section_crawl,
                 scope=dict(request.scope),
+                warnings=[],
                 state="running",
                 started_at=started_at,
                 command_argv=list(request.command_argv),

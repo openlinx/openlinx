@@ -48,3 +48,18 @@ async def test_a_status_route_may_answer_with_an_html_body(fixture_site: StartSi
         "text/html; charset=utf-8",
         b'<a href="/x">X</a>',
     )
+
+
+def test_a_status_route_may_answer_with_its_own_reason_phrase(fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/old": Status(404, reason="Page Not Here")}))
+    address = urlsplit(server.base_url)
+    connection = http.client.HTTPConnection(address.hostname or "", address.port, timeout=10)
+    try:
+        connection.request("GET", "/old")
+        with connection.getresponse() as response:
+            response.read()
+            answered = (response.status, response.reason)
+    finally:
+        connection.close()
+
+    assert answered == (404, "Page Not Here")

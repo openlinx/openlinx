@@ -8,9 +8,9 @@ from aiohttp.abc import AbstractResolver
 
 from spider.cli.app import build_app
 from spider.clock import Clock, SystemClock
-from spider.crawl.fetcher import Fetcher
-from spider.crawl.hooks import Hooks
-from spider.crawl.pages import PageExecutor
+from spider.crawl.engine.hooks import Hooks
+from spider.crawl.fetch.fetcher import Fetcher
+from spider.crawl.pages.preparation import PageExecutor
 from spider.output.reporter import Collected, Reporter
 from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
 from spider.services.hooks import default_hooks
@@ -44,7 +44,8 @@ def crawl_result(
 
     `crawl` holds settings of the [crawl] table, as their flags would give them. Like the CLI, it
     crawls into the Workspace of the current folder, which `temp_workspace` sets, on the real
-    clock unless `clock` is given: a FakeClock is for timing scenarios, and its sleeps end at once.
+    clock unless `clock` is given: a FakeClock is for timing scenarios with a fake Fetcher, and
+    its time jumps to each sleep's wake once the loop is quiet.
     """
     request = CrawlRequest(
         seed=seed,

@@ -80,6 +80,7 @@ The Crawl's metadata, in exactly one row.
 | `started_at` | TEXT | no | | `timestamp` | | When the Crawl started. |
 | `completed_at` | TEXT | yes | | `timestamp` | | When the state became completed; NULL in every other state. |
 | `stop_reason` | TEXT | yes | | | `max_urls`, `interrupt`, `requested`, `seed_unreachable`, `site_unreachable`, `write_failed` | Why the Crawl ended early: max_urls, interrupt or requested for a stopped Crawl, seed_unreachable, site_unreachable or write_failed for a failed one; NULL while it runs and when it is completed. |
+| `warnings` | TEXT | no | | `json` | | The Crawl's warnings, as an array of diagnostics of level, code, message, hint and details; [] when the Crawl is created. |
 | `command_argv` | TEXT | no | | `json` | | The command line as an array that starts with the command name, secrets redacted. |
 | `cwd` | TEXT | no | | | | The absolute folder the Command ran in. |
 | `settings_file` | TEXT | yes | | | | The absolute path of the settings file that was read, or NULL without one. |
@@ -112,8 +113,8 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `is_internal` | INTEGER | no | | `boolean` | | 1 for an Internal URL, 0 for an External URL. |
 | `in_scope` | INTEGER | no | | `boolean` | | 1 when the URL is inside the Scope, so it may be followed. |
 | `crawl_depth` | INTEGER | no | | | | Crawl Depth; 0 for Seeds. |
-| `discovered_via` | TEXT | no | | | `seed`, `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`, `redirect`, `list`, `sitemap_input`, `sitemap_index` | How the URL was first found: seed, or the Link type; through a followed Link once one has reached it. |
-| `found_on_url_id` | INTEGER | yes | → `urls.id` | | | The URL whose response first revealed this one, through a followed Link once one has reached it; NULL for Seeds. |
+| `discovered_via` | TEXT | no | | | `seed`, `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`, `redirect`, `list`, `sitemap_input`, `sitemap_index` | How the URL was found: seed, or the type of the Link the Provenance rule takes, a followed one once one has reached it, a Resource Link over another type. |
+| `found_on_url_id` | INTEGER | yes | → `urls.id` | | | The URL whose response gave that Link; NULL for Seeds. |
 | `fetch_state` | TEXT | no | | | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested. |
 | `skip_reason` | TEXT | yes | | | `excluded`, `blocked_by_robots_txt`, `robots_unreachable`, `nofollow`, `link_type_not_followed`, `external_not_checked`, `max_depth`, `max_redirects`, `url_too_long` | Why a skipped URL was not requested. |
 | `blocked_by_robots_txt` | INTEGER | yes | | `boolean` | | 1 when robots.txt disallows the URL for the robots user-agent token (also with --ignore-robots), 0 when it allows it; NULL when not checked. |

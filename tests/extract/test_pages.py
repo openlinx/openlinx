@@ -12,6 +12,7 @@ from tests.fixture_site.routes import Page, Redirect, Site, Status
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
+from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
 
 # Long against the few milliseconds a local request takes, short for a test.
@@ -48,13 +49,11 @@ def test_error_page_keeps_response_data(
     ) == [(404, None)]
 
 
-def test_crawl_timestamp_repeats_fetched_at(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(Site(routes={"/about": Page(body="<p>About</p>")}))
+def test_crawl_timestamp_repeats_fetched_at(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock(start=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC))
+    fetcher = FakeFetcher(clock, {"/about": FakePage("<p>About</p>")})
 
-    crawl_file = crawl_result(server.url("/about"), clock=clock).crawl_file
+    crawl_file = crawl_result("http://site.test/about", clock=clock, fetcher=fetcher).crawl_file
 
     assert query(crawl_file, "SELECT crawl_timestamp FROM pages") == [("2026-01-02T03:04:05.000Z",)]
 

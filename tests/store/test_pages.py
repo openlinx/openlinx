@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 
 from spider.crawl.urls import parse_seed
 from spider.store.page_records import CookieRow, PageRow
-from spider.store.pages import write_cookie, write_page
-from spider.store.records import FetchedUrl
+from spider.store.pages import write_cookies, write_pages
+from spider.store.records import FetchedUrl, Provenance
 from spider.store.rows import HandlerRows
 from spider.store.schema import cookies, pages
 from spider.store.urls import record_fetched, record_seed
@@ -52,12 +52,13 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
         )
         fetched = FetchedUrl(
             url_id=url_id,
+            provenance=Provenance(crawl_depth=0, discovered_via="seed", found_on_url_id=None),
             status_code=200,
             content_type="text/html",
             fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
             response_time_ms=12,
             parsed=True,
-            rows=(HandlerRows(write_page, (page,)), HandlerRows(write_cookie, (cookie,))),
+            rows=(HandlerRows(write_pages, (page,)), HandlerRows(write_cookies, (cookie,))),
         )
         writer.run(record_fetched(fetched))
         replay_now(writer)

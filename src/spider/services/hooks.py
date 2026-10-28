@@ -1,10 +1,10 @@
-"""The composition root of a Crawl's hooks: the crawl core never imports them (020 D9)."""
+"""A Crawl's hooks, composed here: the crawl core never imports them (020-add-crawl-core D9)."""
 
-from spider.crawl.hooks import Hooks, handler
-from spider.crawl.pages import InProcessExecutor, PageExecutor
+from spider.crawl.engine.hooks import Hooks, handler
+from spider.crawl.pages.preparation import InProcessExecutor, PageExecutor
 from spider.extract.page_data import PAGE_DATA
 from spider.extract.page_handler import cookie_rows, page_rows
-from spider.store.pages import write_cookie, write_page
+from spider.store.pages import write_cookies, write_pages
 
 
 def default_hooks() -> Hooks:
@@ -12,8 +12,8 @@ def default_hooks() -> Hooks:
     return Hooks(
         extractors=(PAGE_DATA,),
         handlers=(
-            handler("pages", page_rows, write_page),
-            handler("cookies", cookie_rows, write_cookie),
+            handler("pages", page_rows, write_pages),
+            handler("cookies", cookie_rows, write_cookies),
         ),
     )
 

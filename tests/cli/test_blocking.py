@@ -49,8 +49,11 @@ def test_many_403_responses_raise_one_warning(
 def test_a_403_of_robots_txt_does_not_count_toward_the_warning(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
-    routes = _links_to(_blocked(range(1, 10)), **{"/robots.txt": Status(403)})
-    server = fixture_site(Site(routes=routes))
+    # A second origin of the host, whose robots.txt answers 403 after the Seed's 200: counted,
+    # it would make nine own 403s ten, in any order.
+    other = fixture_site(Site(routes={"/robots.txt": Status(403), "/blocked/9": Status(403)}))
+    paths = [*_blocked(range(1, 9)), other.url("/blocked/9")]
+    server = fixture_site(Site(routes=_links_to(paths)))
 
     assert _warning_codes(server.url("/")) == []
 

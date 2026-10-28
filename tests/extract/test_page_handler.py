@@ -3,12 +3,9 @@
 from datetime import UTC, datetime
 from typing import Any
 
-import msgspec
-import pytest
-
-from spider.crawl.hooks import UrlResult
+from spider.crawl.engine.hooks import UrlFailure, UrlResponse, UrlResult
+from spider.crawl.pages.directives import NO_DIRECTIVES
 from spider.crawl.urls import NormalizedUrl
-from spider.extract.page_data import PAGE_DATA
 from spider.extract.page_handler import page_rows
 from spider.store.page_records import PageRow
 
@@ -29,14 +26,24 @@ def _result(
     )
 
 
-def _fetched(url: str, **values: Any) -> UrlResult:
+def _fetched(
+    url: str,
+    *,
+    headers: tuple[tuple[str, str], ...] = (("Content-Type", "text/html; charset=utf-8"),),
+    **values: Any,
+) -> UrlResult:
     return _result(
         url,
         fetch_state="fetched",
-        status_code=200,
-        content_type="text/html; charset=utf-8",
-        fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
-        response_time_ms=1,
+        response=UrlResponse(
+            status_code=200,
+            reason="OK",
+            content_type="text/html; charset=utf-8",
+            headers=headers,
+            fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
+            response_time_ms=1,
+            directives=NO_DIRECTIVES,
+        ),
         **values,
     )
 
@@ -144,24 +151,6 @@ def test_an_address_keeps_what_does_not_decode() -> None:
     assert row.address == "https://bücher.xn--zz.test:8080/%FFü%2F?q=%E2%82"
 
 
-def test_a_fetched_page_without_a_status_code_fails_its_handler() -> None:
-    broken = _result("https://example.test/", fetch_state="fetched", content_type="text/html")
-
-    with pytest.raises(RuntimeError, match="status_code"):
-        page_rows(broken)
-
-
-def test_another_output_under_the_page_extractors_name_fails_its_handler() -> None:
-    broken = _fetched("https://example.test/", outputs={PAGE_DATA.name: UrlLike(url="x")})
-
-    with pytest.raises(RuntimeError, match=PAGE_DATA.name):
-        page_rows(broken)
-
-
-class UrlLike(msgspec.Struct, frozen=True):
-    url: str
-
-
 def test_url_blocked_by_robots_txt_is_not_a_page() -> None:
     blocked = _result(
         "http://site.test/private/x", fetch_state="skipped", skip_reason="blocked_by_robots_txt"
@@ -174,20 +163,11 @@ def test_url_without_a_response_is_not_a_page() -> None:
     failed = _result(
         "http://site.test/timeout",
         fetch_state="error",
-        fetch_error="timeout",
-        fetch_error_message="No response within 20 s.",
-        fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
-    )
-
-    assert tuple(page_rows(failed)) == ()
-
-
-def test_a_url_without_a_response_is_no_page_whatever_its_content_type() -> None:
-    failed = _result(
-        "http://site.test/reset",
-        fetch_state="error",
-        fetch_error="connection_error",
-        content_type="text/html",
+        failure=UrlFailure(
+            fetch_error="timeout",
+            fetch_error_message="No response within 20 s.",
+            fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        ),
     )
 
     assert tuple(page_rows(failed)) == ()
