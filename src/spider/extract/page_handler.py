@@ -37,7 +37,8 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
     address = display_address(result.url)
     url_path, url_query = path_and_query(address)
     robots = _robots_columns(result, response.directives)
-    reason = _non_indexable_reason(robots)
+    canonical = _canonical_columns(result)
+    reason = _non_indexable_reason(result, robots, canonical)
     return (
         PageRow(
             url_id=result.url_id,
@@ -58,7 +59,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             crawl_timestamp=response.fetched_at,
             **({} if data is None else msgspec.structs.asdict(data)),
             **robots,
-            **_canonical_columns(result),
+            **canonical,
             **_linked_page_columns(result),
         ),
     )
@@ -129,10 +130,16 @@ def _first_meta_refresh_names_a_url(data: PageData | None) -> bool:
     return data.meta_refresh is not None and refresh_url(data.meta_refresh) is not None
 
 
-def _non_indexable_reason(robots: _RobotsColumns) -> IndexabilityStatus | None:
+def _non_indexable_reason(
+    result: UrlResult, robots: _RobotsColumns, canonical: _CanonicalColumns
+) -> IndexabilityStatus | None:
     # The order a search engine meets them in (design D3).
     if robots.get("meta_robots_noindex") or robots["x_robots_tag_noindex"]:
         return "noindex"
+    # Both are normalised URLs, so a self-referencing canonical equals the URL.
+    canonical_url = canonical.get("canonical_url")
+    if canonical_url is not None and canonical_url != result.url:
+        return "canonicalised"
     return None
 
 

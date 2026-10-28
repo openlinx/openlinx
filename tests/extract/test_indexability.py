@@ -21,3 +21,23 @@ def test_noindex_wins_over_a_canonical() -> None:
     )
 
     assert row.indexability_status == "noindex"
+
+
+def test_self_referencing_canonical_stays_indexable() -> None:
+    row = page_row(
+        '<html><head><title>A</title><link rel="canonical" href="https://example.test/a"></head>'
+        "<body><p>Article</p></body></html>",
+        url="https://example.test/a",
+    )
+
+    assert row.indexability == "indexable"
+
+
+def test_canonical_to_another_url() -> None:
+    row = page_row(
+        '<html><head><title>A</title><link rel="canonical" href="https://example.test/b"></head>'
+        "<body><p>Article</p></body></html>",
+        url="https://example.test/a",
+    )
+
+    assert row.indexability_status == "canonicalised"
