@@ -148,3 +148,7 @@ _HELLO_WORLD = "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c
 
 def test_hash_of_a_simple_content_area() -> None:
     assert page_row("<p>Hello   world</p>").content_hash == _HELLO_WORLD
+
+
+def test_different_markup_same_text() -> None:
+    assert page_row("<div><p>Hello</p><p>world</p></div>").content_hash == _HELLO_WORLD
