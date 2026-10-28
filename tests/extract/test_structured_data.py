@@ -23,6 +23,29 @@ def test_json_ld_graph_a_broken_block_and_nested_microdata() -> None:
     ) == (2, 1, 1, ("Organization", "Product", "WebSite"))
 
 
+def test_json_ld_array_type_lists_and_an_http_type() -> None:
+    # A news theme's array, a breadcrumb plugin's single-object graph, a template that left
+    # its type empty, and an article marked up as two types.
+    row = page_row(
+        "<html><head><title>News</title>"
+        '<script type=" Application/LD+JSON ">[{"@type":["Article","NewsArticle"]},'
+        '{"@graph":[{"@type":"http://schema.org/Person"},{"@type":"Article"}]},"note"]</script>'
+        '<script type="application/ld+json">{"@context":"https://schema.org",'
+        '"@graph":{"@type":"BreadcrumbList"}}</script>'
+        '<script type="application/ld+json">{"@context":"https://schema.org","@type":""}'
+        "</script></head><body>"
+        '<article itemscope itemtype="https://schema.org/Article https://schema.org/BlogPosting">'
+        "<p>Story</p></article></body></html>"
+    )
+
+    assert (
+        row.jsonld_items,
+        row.jsonld_parse_errors,
+        row.microdata_items,
+        row.structured_data_types,
+    ) == (5, 0, 1, ("Article", "BlogPosting", "BreadcrumbList", "NewsArticle", "Person"))
+
+
 def _nested(levels: int) -> str:
     return f'<script type="application/ld+json">{"[" * levels}{"]" * levels}</script>'
 

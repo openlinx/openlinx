@@ -4,7 +4,9 @@ from collections.abc import Iterator
 from typing import Any
 
 import orjson
-from selectolax.lexbor import LexborHTMLParser
+from selectolax.lexbor import LexborHTMLParser, LexborNode
+
+from spider.extract.text import normalized, trimmed
 
 _JSON_LD = "application/ld+json"
 _SCHEMA_ORG = ("http://schema.org/", "https://schema.org/")
@@ -15,7 +17,7 @@ def structured_data(tree: LexborHTMLParser) -> tuple[int, int, int, tuple[str, .
     items: list[dict[str, Any]] = []
     errors = 0
     for script in tree.css("script"):
-        if script.attributes.get("type") != _JSON_LD:
+        if not _is_json_ld(script):
             continue
         try:
             # orjson stops at 1024 levels with a decode error, where json would raise
@@ -24,25 +26,42 @@ def structured_data(tree: LexborHTMLParser) -> tuple[int, int, int, tuple[str, .
         except orjson.JSONDecodeError:
             errors += 1
     scopes = [node for node in tree.css("[itemscope]") if "itemprop" not in node.attributes]
-    types = {
-        _without_schema_org(item["@type"]) for item in items if isinstance(item.get("@type"), str)
-    }
-    types.update(
-        _without_schema_org(node.attributes["itemtype"] or "")
+    names = [name for item in items for name in _jsonld_types(item)]
+    # itemtype is a set of tokens split at ASCII whitespace, which normalising makes one space.
+    names += [
+        name
         for node in scopes
-        if "itemtype" in node.attributes
-    )
+        for name in normalized(node.attributes.get("itemtype") or "").split(" ")
+        if name
+    ]
+    types = {_without_schema_org(name) for name in names}
     return len(items), len(scopes), errors, tuple(sorted(types))
 
 
+def _is_json_ld(script: LexborNode) -> bool:
+    # Trimmed as HTML trims a script's type; compared ASCII case-insensitively, so a Kelvin
+    # sign is no k.
+    value = trimmed(script.attributes.get("type") or "")
+    return value.isascii() and value.lower() == _JSON_LD
+
+
 def _items(value: Any) -> Iterator[dict[str, Any]]:
-    if not isinstance(value, dict):
-        return
-    graph = value.get("@graph")
-    if isinstance(graph, list):
-        yield from (item for item in graph if isinstance(item, dict))
-    else:
-        yield value
+    for node in value if isinstance(value, list) else [value]:
+        if not isinstance(node, dict):
+            continue
+        graph = node.get("@graph")
+        if isinstance(graph, list):
+            yield from (item for item in graph if isinstance(item, dict))
+        elif isinstance(graph, dict):
+            yield graph
+        else:
+            yield node
+
+
+def _jsonld_types(item: dict[str, Any]) -> list[str]:
+    value = item.get("@type")
+    values = value if isinstance(value, list) else [value]
+    return [name for name in values if isinstance(name, str) and name]
 
 
 def _without_schema_org(name: str) -> str:
