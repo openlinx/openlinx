@@ -87,7 +87,13 @@ def record_state(
 def read_recorded(path: Path) -> RecordedCrawl:
     with reading(path) as connection:
         row = connection.execute(
-            select(crawl.c.state, crawl.c.crawl_mode, crawl.c.config, crawl.c.scope)
+            select(
+                crawl.c.state,
+                crawl.c.crawl_mode,
+                crawl.c.config,
+                crawl.c.scope,
+                crawl.c.warnings,
+            )
         ).one()
         urls: list[str] = list(
             connection.execute(select(seeds.c.url).order_by(seeds.c.position)).scalars()
@@ -99,6 +105,7 @@ def read_recorded(path: Path) -> RecordedCrawl:
             config=orjson.loads(row.config),
             scope=orjson.loads(row.scope),
             seeds=tuple(urls),
+            warnings=tuple(orjson.loads(row.warnings)),
         )
 
 

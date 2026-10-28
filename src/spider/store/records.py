@@ -215,6 +215,7 @@ class RecordedCrawl:
     config: dict[str, Any]
     scope: RecordedScope
     seeds: tuple[str, ...]
+    warnings: tuple[dict[str, Any], ...]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
