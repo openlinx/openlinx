@@ -43,8 +43,8 @@ class CrawlSettings(BaseModel):
     max_urls: int | None = Field(
         None,
         ge=1,
-        description="The most URL requests the Crawl starts; robots.txt requests do not "
-        "count. No limit when unset.",
+        description="The most URL requests the Crawl starts over its whole life, a continue's "
+        "included; robots.txt requests do not count. No limit when unset.",
     )
     network_wait: int = Field(
         1800,

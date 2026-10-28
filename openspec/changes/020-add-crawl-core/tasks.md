@@ -444,7 +444,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 14.2 Drive "Continuing a stopped Crawl completes it" at seam 2.
 
   Done when: the Crawl Service's continue operation of design D20 (which `060`'s `resume` calls) accepts `stopped` and `failed` Crawls, builds its plan from the file, writes `running` through `check_transition`, its overrides into `crawl.config` and the re-queue in one unit, and counts the URL limit over the Crawl's whole life (saying so in the `max_urls` help and in `docs/crawling.md`); and a test shows that a continue of a file with no Seed row records it.
-- [ ] 14.2a Drive "The URL limit counts over the Crawl's whole life" at seam 2.
+- [x] 14.2a Drive "The URL limit counts over the Crawl's whole life" at seam 2.
 - [ ] 14.2b Drive "Warnings cover the Crawl's whole life" at seam 2, with the fixture hosts. Done when: a continuing run's warning log starts from the stored warnings, and a continue drops `max_urls_reached` (design D10).
 - [ ] 14.3 **Guard:** "Continuing does not request fetched URLs again", at seam 2.
 - [ ] 14.4 **Guard:** "Continuing clears how the Crawl ended" at seam 2, read by a handler registered for the test once the continue's unit is flushed.

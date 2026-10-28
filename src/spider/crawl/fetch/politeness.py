@@ -74,10 +74,12 @@ class RequestLimits:
     preparation may fall behind the requests before fetching waits (design D7, 026 D2).
     """
 
-    def __init__(self, cap: int, backlog: int = 0, max_urls: int | None = None) -> None:
+    def __init__(
+        self, cap: int, backlog: int = 0, max_urls: int | None = None, *, started: int = 0
+    ) -> None:
         self._tasks = asyncio.Semaphore(cap + backlog)
         self._max_urls = max_urls
-        self._started = 0
+        self._started = started
         self._refused: int | None = None
 
     def start_request(self) -> bool:

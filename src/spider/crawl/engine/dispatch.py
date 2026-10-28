@@ -31,9 +31,19 @@ STOP_GRACE_SECONDS = 10
 
 
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
+    decision = context.scope.decide(seed)
+    await context.writer.run_async(
+        record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
+    )
+    # Once a run, so a continued Crawl starts from the file's counts (design D10).
+    counts = await context.writer.run_async(url_counts())
+    counters = UrlCounters(counts)
     concurrency = context.settings.concurrency
     cap = global_cap(concurrency)
-    limits = RequestLimits(cap, context.pages.backlog, context.settings.max_urls)
+    # The URLs a continued Crawl fetched before count toward its limit (design D20).
+    limits = RequestLimits(
+        cap, context.pages.backlog, context.settings.max_urls, started=counts.fetched
+    )
     gate = RateGate(context.clock, context.settings.rate)
     requester = Requester(
         context.fetcher,
@@ -50,12 +60,6 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     task_failure = TaskFailure(context.stop)
     # The tasks that run beside the URLs' own: the network pause's probing, the progress events.
     side_tasks: set[asyncio.Task[None]] = set()
-    decision = context.scope.decide(seed)
-    await context.writer.run_async(
-        record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
-    )
-    # Once a run, so a continued Crawl starts from the file's counts (design D10).
-    counters = UrlCounters(await context.writer.run_async(url_counts()))
 
     async def resumed(end: PauseEnd, count: Sequence[CountedUrl]) -> None:
         if end != "outage":

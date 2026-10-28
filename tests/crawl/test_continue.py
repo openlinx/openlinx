@@ -45,3 +45,18 @@ def test_a_continue_records_the_settings_it_runs_with(
     (config,) = query(result.crawl_file, "SELECT config FROM crawl")
     recorded = json.loads(config[0])["crawl"]
     assert (recorded["max_urls"], recorded["rate"], recorded["concurrency"]) == (None, 50.0, 2)
+
+
+def test_the_url_limit_counts_over_the_crawls_whole_life(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+    stopped = crawl_result(server.url("/"), max_urls=3)
+
+    result = continued(stopped, CrawlOverrides(max_urls=5))
+
+    assert (
+        query(result.crawl_file, "SELECT count(*) FROM urls WHERE fetch_state = 'fetched'"),
+        result.summary.state,
+        result.summary.stop_reason,
+    ) == ([(5,)], "stopped", "max_urls")
