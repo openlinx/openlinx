@@ -15,6 +15,7 @@ from spider.crawl.urls import NormalizedUrl
 from spider.extract.content_area import ContentArea
 from spider.extract.page_data import PAGE_DATA, page_data_extractor
 from spider.extract.page_handler import page_rows
+from spider.extract.status_phrases import STATUS_PHRASES
 from spider.naming import DEFAULT_ROBOTS_TOKEN
 from spider.services.hooks import default_hooks
 from spider.store.page_records import PageRow
@@ -35,6 +36,7 @@ def page_row(
     content_area: ContentArea | None = None,
     headers: tuple[tuple[str, str], ...] = (),
     url: str = _URL,
+    status_code: int = 200,
 ) -> PageRow:
     """The Page row of an analysed Page with this body and these headers besides its
     Content-Type, through the built-in extractors, the Page extractor's config being
@@ -42,8 +44,8 @@ def page_row(
     document's."""
     body = html.encode() if isinstance(html, str) else html
     response = FetchResult(
-        status_code=200,
-        reason="OK",
+        status_code=status_code,
+        reason=STATUS_PHRASES[status_code],
         headers=(("Content-Type", content_type), *headers),
         body=body,
         fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
@@ -86,18 +88,26 @@ def page_row(
     return row
 
 
-def unprepared_page_row(headers: tuple[tuple[str, str], ...], url: str = _URL) -> PageRow:
-    """The Page row of a 200 HTML response that page preparation gave nothing for, such as one
-    whose body was too large: the crawl engine still reads its headers' directives and Links."""
+def unprepared_page_row(
+    headers: tuple[tuple[str, str], ...] = (),
+    url: str = _URL,
+    status_code: int = 200,
+    blocked_by_robots_txt: bool | None = None,
+) -> PageRow:
+    """The Page row of an HTML response that page preparation gave nothing for, built as the
+    crawl engine builds it: the directives of its headers, and its header Links only when it is
+    2xx. The engine prepares no other status, and a 2xx one gives nothing when its body was too
+    large."""
     page_url = NormalizedUrl(url)
     response = FetchResult(
-        status_code=200,
-        reason="OK",
+        status_code=status_code,
+        reason=STATUS_PHRASES.get(status_code, ""),
         headers=(("Content-Type", "text/html"), *headers),
         body=b"",
         fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
         response_time_ms=1,
     )
+    followed = 200 <= status_code < 300
     result = UrlResult(
         url_id=1,
         url=page_url,
@@ -107,9 +117,10 @@ def unprepared_page_row(headers: tuple[tuple[str, str], ...], url: str = _URL) -
         is_internal=True,
         in_scope=True,
         fetch_state="fetched",
+        blocked_by_robots_txt=blocked_by_robots_txt,
         response=UrlResponse(
-            status_code=200,
-            reason="OK",
+            status_code=status_code,
+            reason=response.reason,
             content_type="text/html",
             headers=response.headers,
             fetched_at=response.fetched_at,
@@ -117,8 +128,8 @@ def unprepared_page_row(headers: tuple[tuple[str, str], ...], url: str = _URL) -
             directives=response_directives(response, DEFAULT_ROBOTS_TOKEN),
         ),
         parsed=False,
-        parse_error="body_too_large",
-        links=response_links(page_url, response, scope_rules(page_url), None),
+        parse_error="body_too_large" if followed else None,
+        links=response_links(page_url, response, scope_rules(page_url), None) if followed else (),
     )
     (row,) = page_rows(result)
     return row

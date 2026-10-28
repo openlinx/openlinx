@@ -38,7 +38,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
     url_path, url_query = path_and_query(address)
     robots = _robots_columns(result, response.directives)
     canonical = _canonical_columns(result)
-    reason = _non_indexable_reason(result, robots, canonical)
+    reason = _non_indexable_reason(result, response.status_code, robots, canonical)
     return (
         PageRow(
             url_id=result.url_id,
@@ -131,9 +131,19 @@ def _first_meta_refresh_names_a_url(data: PageData | None) -> bool:
 
 
 def _non_indexable_reason(
-    result: UrlResult, robots: _RobotsColumns, canonical: _CanonicalColumns
+    result: UrlResult,
+    status_code: int,
+    robots: _RobotsColumns,
+    canonical: _CanonicalColumns,
 ) -> IndexabilityStatus | None:
     # The order a search engine meets them in (design D3).
+    if 300 <= status_code < 400:
+        return "redirected"
+    # A bot-block code such as 999 withholds the Page from crawlers as a 4xx does.
+    if 400 <= status_code < 500 or status_code >= 600:
+        return "client_error"
+    if 500 <= status_code < 600:
+        return "server_error"
     if robots.get("meta_robots_noindex") or robots["x_robots_tag_noindex"]:
         return "noindex"
     # Both are normalised URLs, so a self-referencing canonical equals the URL.
