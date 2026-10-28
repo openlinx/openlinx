@@ -762,7 +762,7 @@ The Crawl SHALL fill the crawl metadata of `015-add-crawl-store`:
 This change SHALL add three columns to `crawl`, under the conventions of `018-add-schema-conventions`:
 - `scope`: TEXT, `json`, not null, the resolved Scope, written with the `crawl` row when the Crawl is created
 - `stop_reason`: TEXT, nullable, why the Crawl ended early: `max_urls`, `interrupt` or `requested` for a `stopped` Crawl, and `seed_unreachable`, `site_unreachable` or `write_failed` for a `failed` one; NULL while it runs and when it is `completed`. These six values SHALL be the one value set of every column that records why a Crawl or one of its runs ended, including those of `060-add-crawl-control`.
-- `warnings`: TEXT, `json`, not null, a JSON array of diagnostics in the full shape of `010-add-workspace-and-cli-contract` (`{level, code, message, hint, details}`); `[]` when the Crawl is created
+- `warnings`: TEXT, `json`, not null, a JSON array of diagnostics in the full shape of `010-add-workspace-and-cli-contract` (`{level, code, message, hint, details}`); `[]` when the Crawl is created. It SHALL hold the warnings of the Crawl's whole life: a continued Crawl SHALL keep those of its earlier runs, write a warning kept once per host, origin, Seed or code only when it is new to the Crawl, and add a counted warning's counts to the stored ones. `max_urls_reached` describes how one run ended, so a continue SHALL drop it.
 
 The `crawl` table of `crawl.config` SHALL hold every registered crawl setting, including those added by later changes, with secrets redacted by `015`.
 
@@ -777,6 +777,10 @@ The `crawl` table of `crawl.config` SHALL hold every registered crawl setting, i
 #### Scenario: Warnings are stored as diagnostics
 - **WHEN** `/robots.txt` returns 503 on every attempt, and `spider crawl {site}/` ends
 - **THEN** `crawl.warnings` holds an object whose keys are exactly `level`, `code`, `message`, `hint` and `details`, with `"level": "warning"` and `"code": "robots_unreachable"`
+
+#### Scenario: Warnings cover the Crawl's whole life
+- **WHEN** the robots.txt of `a.{host}` returns 503 on every attempt, a Crawl of `{site}/` with `--subdomains` that requested a URL on `a.{host}` is stopped by `--max-urls`, and the Crawl Service continues it while that robots.txt still returns 503 and the continuation requests a URL on `b.{host}`, whose robots.txt returns 503 too
+- **THEN** `crawl.warnings` and the result's `warnings` hold exactly two `robots_unreachable` warnings, one for `a.{host}` and one for `b.{host}`
 
 ### Requirement: Crawl State transitions
 The Crawl SHALL change `crawl.state` (`015-add-crawl-store`) only along these transitions, each with the `stop_reason` shown, through one check that refuses every other change as a bug:
@@ -800,7 +804,7 @@ The Crawl SHALL change `crawl.state` (`015-add-crawl-store`) only along these tr
 
 #### Scenario: Continuing clears how the Crawl ended
 - **WHEN** a Crawl stopped by `--max-urls 3` is continued through the Crawl Service, and its `crawl` row is read while it runs
-- **THEN** `crawl.state` is `running`, and `crawl.stop_reason` and `crawl.completed_at` are NULL
+- **THEN** `crawl.state` is `running`, and `crawl.stop_reason` is NULL
 
 ### Requirement: Crawl settings in spider.toml
 Every crawl setting SHALL also be settable in the `[crawl]` table of `spider.toml`, which this change registers and later changes add keys to, under the naming rule of `010-add-workspace-and-cli-contract`: the flag's long name without the leading dashes, with `-` replaced by `_`. The Seed argument and `--subdomains` SHALL have no key, because `scope` covers `--subdomains`. `010`'s precedence SHALL apply: flag, then `spider.toml`, then the built-in default.
@@ -837,6 +841,14 @@ The Crawl Service SHALL be able to continue a Crawl from its store when its Craw
 #### Scenario: Continuing does not request fetched URLs again
 - **WHEN** `/` links to `/p1` to `/p9`, and a Crawl of `{site}/` stopped by `--max-urls 3` is continued through the Crawl Service without a URL limit
 - **THEN** the fixture site receives no request during the continuation for a URL that had `fetch_state` = `fetched` before it
+
+#### Scenario: The URL limit counts over the Crawl's whole life
+- **WHEN** `/` links to `/p1` to `/p9`, a Crawl of `{site}/` stopped by `--max-urls 3` is continued through the Crawl Service with a URL limit of 5, and the continuation ends
+- **THEN** the `urls` table holds 5 rows with `fetch_state` = `fetched`, and the Crawl State is `stopped` with `stop_reason` = `max_urls`
+
+#### Scenario: A continue requests the URLs an unreachable robots.txt blocked
+- **WHEN** `/` links to `http://other.test/a` and to `/p1` to `/p9`, `http://other.test/robots.txt` returns 503, a Crawl of `{site}/` stopped by `--max-urls 3` recorded `http://other.test/a` with `skip_reason` = `robots_unreachable`, and the Crawl Service continues it without a URL limit once that robots.txt returns 404
+- **THEN** `http://other.test/a` has `fetch_state` = `fetched`
 
 ### Requirement: Per-response hook
 **In short:** every registered handler's rows for a URL are written once per recorded outcome, with the URL's final state and row values.
@@ -1150,3 +1162,7 @@ URLs not completed SHALL stay `queued`, so the Crawl can be continued. A second 
 #### Scenario: A second interrupt ends the process at once
 - **WHEN** a second interrupt follows the first while `/hang` (which answers after 60 seconds) is in flight
 - **THEN** the subprocess exits within 2 seconds of the second interrupt, and `{site}/hang` has `fetch_state` = `queued`
+
+#### Scenario: A stop ends a pause
+- **WHEN** `/` links to `/down/1` to `/down/20`, each of which resets its connection, `spider crawl {site}/ --concurrency 1 --network-wait 1800` runs as a subprocess, and SIGINT (CTRL_BREAK_EVENT on Windows) is sent once stderr holds its `crawl_paused` event
+- **THEN** the Command exits with code 130, stdout holds `"state": "stopped"` and `"stop_reason": "interrupt"`, and the site gets no request for `/` after the interrupt

@@ -425,27 +425,30 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 
 - [ ] 13.1 Drive "Ctrl+C stops a Crawl on macOS and Linux" at seam 1, subprocess, POSIX in CI.
 
-  Done when: the signal handlers set the `StopSignal` through `loop.call_soon_threadsafe`, no `KeyboardInterrupt` reaches `010`'s runner during a Crawl, and the `stopped` end goes through `check_transition` with `interrupt`; a test pins that an interrupt that ends a depth reads no deeper one (the stop's `break` of task 9.19, which nothing could reach before interrupts).
+  Done when: the signal handlers set the `StopSignal` through `loop.call_soon_threadsafe`, no `KeyboardInterrupt` reaches `010`'s runner during a Crawl, and the `stopped` end goes through `check_transition` with `interrupt`; the test runs for SIGINT, SIGTERM and SIGHUP; the handlers are installed on `runner.get_loop()` after the `Runner` is built and before `run`, only in the main thread, put the earlier ones back in a `finally`, and only schedule the stop, never writing output (design D10); the first `StopSignal.set` writes one `stopping` event with its reason, whatever the reason, the URL limit's included; `start_crawl` takes the `StopSignal` (`stop=`), and the fake Fetcher sets it when a named URL starts (`on_start=`), so a fake-timing test pins that a stop that ends a depth reads no deeper one (the stop's `break` of task 9.19, which nothing could reach before interrupts).
 - [ ] 13.2 Drive "Ctrl+Break stops a Crawl on Windows (Windows)" at seam 1, subprocess, Windows in CI.
-- [ ] 13.2a Drive "A stop ends a pause" at seam 1, subprocess, whose scenario the plan check of group 13 adds to the spec: every request after the Seed's resets, `--network-wait 1800`, and the interrupt is sent after the `crawl_paused` line. Done when: the Command exits 130 with `stop_reason` = `interrupt`, and the site gets no probe after the interrupt (design D16); the pause's wait and the requests and URLs waiting at its gate race the stop flag, whatever its reason, and the run's `TaskFailure`, so on a stop the pause ends with no re-queue, its probes are cancelled, the gate opens and every task waiting at it gives back its slot, and the stopped pause's seconds count in `network_paused`.
-- [ ] 13.3 Drive "An interrupt is reported by one error" at seam 1, subprocess. Done when: `010`'s `interrupted` is the one error, with exit code 130.
+- [ ] 13.2a Drive "A stop ends a pause" at seam 1, subprocess. Done when: the pause's wait, its probes and the requests and URLs waiting at its gate race the stop flag, whatever its reason, and the run's `TaskFailure` (`StopSignal.wait()` and its like), so on a stop the pause ends with no re-queue, its probes are cancelled, the gate opens and every task waiting at it gives back its slot, a URL held at the gate stays `queued`, and the stopped pause's seconds count in `network_paused` (design D16); and a fake-timing test shows a write failure during a pause ending the Crawl as `failed` with `write_failed`, or, if no realistic run reaches it there, a Risks entry says so.
+- [ ] 13.3 Drive "An interrupt is reported by one error" at seam 1, subprocess. Done when: the one error is the Crawl's own, with `010`'s `interrupted` code and exit code 130, and its hint names `spider resume --crawl <id>` (design D10).
 - [ ] 13.4 **Guard:** "An interrupted Crawl keeps its queue", at seam 1, subprocess.
-- [ ] 13.5 Drive "A request still running after the grace period is cancelled", fake timing. Done when: after the stop flag, requests in flight get 10 seconds of clock time and are then cancelled before their submit, so no unit is written for them; and the depth's running siblings are cancelled and never recorded after the stop, red with `_crawl_depth`'s `finally` removed.
-- [ ] 13.6 Drive "A second interrupt ends the process at once" at seam 1, subprocess.
+- [ ] 13.5 Drive "A request still running after the grace period is cancelled", fake timing. Done when: after the stop flag, whatever its reason, the URL limit's included, requests in flight in the running depth and among the Checked URLs get 10 seconds of clock time and are then cancelled before their submit, so no unit is written for them (design D16); the depth's siblings still running when the grace ends are cancelled and never recorded, red with `_crawl_depth`'s `finally` removed; and no robots.txt request starts after the stop flag, so the URL waiting for that verdict stays `queued`.
+- [ ] 13.6 Drive "A second interrupt ends the process at once" at seam 1, subprocess. Done when: the process ends at once with no result and no error line, and the crawl file stays `running` (design D10).
 - [ ] 13.7 Docs: document interrupts, the grace period and the second interrupt in `docs/crawling.md`.
 - [ ] 13.8 Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
 
 ## 14. Persistent frontier and continuing (widening)
 
-- [ ] 14.1 **Guard:** "A killed Crawl leaves no half-recorded Page", at seam 1, subprocess, killed with `Popen.kill()`. Mark it `slow`.
+- [ ] 14.1 **Guard:** "A killed Crawl leaves no half-recorded Page", at seam 1, subprocess, killed with `Popen.kill()`. Mark it `slow`. Done when: the subprocess runs through `python_command`, the routes have a delay so the Crawl still runs at the kill, the kill comes once a reader sees at least 10 committed Pages with `parsed` = 1, and the test asserts at least one such Page.
 - [ ] 14.2 Drive "Continuing a stopped Crawl completes it" at seam 2.
 
-  Done when: the Crawl Service's continue operation (which `060`'s `resume` calls) accepts `stopped` and `failed` Crawls, goes back to `running` through `check_transition`, counts the URL limit over the Crawl's whole life (saying so in the `max_urls` help and in `docs/crawling.md`), and inserts the `urls` row of a Seed that has none.
+  Done when: the Crawl Service's continue operation of design D20 (which `060`'s `resume` calls) accepts `stopped` and `failed` Crawls, builds its plan from the file, writes `running` through `check_transition`, its overrides into `crawl.config` and the re-queue in one unit, and counts the URL limit over the Crawl's whole life (saying so in the `max_urls` help and in `docs/crawling.md`); and a test shows that a continue of a file with no Seed row records it.
+- [ ] 14.2a Drive "The URL limit counts over the Crawl's whole life" at seam 2.
+- [ ] 14.2b Drive "Warnings cover the Crawl's whole life" at seam 2, with the fixture hosts. Done when: a continuing run's warning log starts from the stored warnings, and a continue drops `max_urls_reached` (design D10).
 - [ ] 14.3 **Guard:** "Continuing does not request fetched URLs again", at seam 2.
-- [ ] 14.4 Drive "Continuing clears how the Crawl ended" at seam 2, read by a handler registered for the test.
-- [ ] 14.5 Drive "A failed Crawl is continued once its Seed answers" at seam 2. Done when: continuing re-queues `error` and `robots_unreachable` URLs.
-- [ ] 14.6 Drive "Post-crawl passes run again after a continue" at seam 2.
-- [ ] 14.7 Docs: document the frontier, what a killed Crawl keeps, and the continue operation for `060` in `docs/crawling.md`.
+- [ ] 14.4 **Guard:** "Continuing clears how the Crawl ended" at seam 2, read by a handler registered for the test once the continue's unit is flushed.
+- [ ] 14.5 Drive "A failed Crawl is continued once its Seed answers" at seam 2. Done when: continuing re-queues the `error` rows and the `skipped` rows with `skip_reason` = `robots_unreachable` over the whole table, clearing their outcome columns, in one unit before the counters are seeded (design D1); and the fixture site starts on a given port (`port=`, a fixture capability).
+- [ ] 14.5a Drive "A continue requests the URLs an unreachable robots.txt blocked" at seam 2.
+- [ ] 14.6 **Guard:** "Post-crawl passes run again after a continue" at seam 2.
+- [ ] 14.7 Docs: document the frontier, what a killed Crawl keeps, and the continue operation for `060` in `docs/crawling.md`, with a line that `duration_s` counts from the Crawl's start, so a continued Crawl's includes the time between runs, and that `060`'s `crawl_runs` gives each run's.
 - [ ] 14.8 Review: run the code-review skill on group 14's commits, then refactor with the whole suite green.
 
 ## 15. Reading `<noscript>` as browsers that run scripts do
