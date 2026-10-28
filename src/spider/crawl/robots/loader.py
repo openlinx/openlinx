@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
-from spider.crawl.fetch.requester import Requester
+from spider.crawl.fetch.requester import NotStarted, Requester
 from spider.crawl.references import resolve_reference
 from spider.crawl.robots.reader import OriginRobots, read_robots_txt, robots_state, robots_txt_text
 from spider.crawl.urls import NormalizedUrl, robots_txt_url, url_origin
@@ -23,15 +23,16 @@ class RobotsLoader:
         self._requester = requester
         self._writer = writer
         self._token = token
-        self._origins: dict[str, asyncio.Task[OriginRobots]] = {}
+        self._origins: dict[str, asyncio.Task[OriginRobots | NotStarted]] = {}
         # The URL that first asked for each origin's robots.txt.
         self._first_urls: dict[str, NormalizedUrl] = {}
         # The URLs still waiting for each origin's verdict, and the event of their last one.
         self._waiting: dict[str, int] = {}
         self._drained: dict[str, asyncio.Event] = {}
 
-    async def robots_of(self, url: NormalizedUrl) -> OriginRobots:
-        """The robots.txt of the URL's origin, requested by the origin's first URL."""
+    async def robots_of(self, url: NormalizedUrl) -> OriginRobots | NotStarted:
+        """The robots.txt of the URL's origin, requested by the origin's first URL, or
+        NotStarted when a stop came first."""
         origin = url_origin(url)
         task = self._origins.get(origin)
         if task is None:
@@ -66,7 +67,10 @@ class RobotsLoader:
         for origin, task in list(self._origins.items()):
             if not task.done() or task.cancelled() or task.exception() is not None:
                 continue
-            if task.result().origin_error is not None and is_internal(self._first_urls[origin]):
+            robots = task.result()
+            if isinstance(robots, NotStarted):
+                continue
+            if robots.origin_error is not None and is_internal(self._first_urls[origin]):
                 del self._origins[origin], self._first_urls[origin]
 
     async def close(self) -> None:
@@ -74,19 +78,22 @@ class RobotsLoader:
             task.cancel()
         await asyncio.gather(*self._origins.values(), return_exceptions=True)
 
-    async def _load(self, robots_url: NormalizedUrl) -> OriginRobots:
+    async def _load(self, robots_url: NormalizedUrl) -> OriginRobots | NotStarted:
         url = robots_url
         response = await self._requester.request_robots_txt(url)
         redirect: FetchResult | None = None
         # Up to five hops, as RFC 9309 asks; a longer chain ends on a 3xx, which is missing.
         for _ in range(_REDIRECT_HOPS):
-            if isinstance(response, FetchFailure):
+            if isinstance(response, (FetchFailure, NotStarted)):
                 break
             target = _redirect_target(url, response)
             if target is None:
                 break
             redirect, url = response, target
             response = await self._requester.request_robots_txt(url)
+        if isinstance(response, NotStarted):
+            # A stop: nothing is recorded, and the origin's URLs stay queued (design D16).
+            return response
         if isinstance(response, FetchFailure) and redirect is not None:
             # The origin answered; only where it sent the request failed (design D6).
             robots, text = _failed_redirect(redirect, url, response), None

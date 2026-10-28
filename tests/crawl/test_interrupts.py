@@ -206,6 +206,113 @@ def test_a_stop_that_ends_a_depth_reads_no_deeper_one(temp_workspace: TempWorksp
     )
 
 
+# An hour away: a request that hangs well past the grace, and the watchdog's 120 seconds.
+NEVER = 3600
+
+
+def test_a_request_still_running_after_the_grace_period_is_cancelled(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    stop = StopSignal()
+    # A followed URL and a Checked URL that each answer within the grace, and one of each that
+    # never answers; the stop comes as the last of the four starts.
+    pages = {
+        "/": FakePage(
+            '<a href="/hang">H</a><a href="/quick">Q</a>'
+            '<a href="http://other.test/hang">H</a><a href="http://other.test/quick">Q</a>'
+        ),
+        "/hang": FakePage("<p>H</p>", delay=NEVER),
+        "/quick": FakePage("<p>Q</p>", delay=5),
+        "http://other.test/hang": FakePage("<p>H</p>", delay=NEVER),
+        "http://other.test/quick": FakePage("<p>Q</p>", delay=5),
+    }
+    on_start = {"http://other.test/quick": lambda: stop.set("interrupt")}
+    fetcher = FakeFetcher(clock, pages, on_start=on_start)
+
+    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher, stop=stop)
+
+    assert (
+        result.summary.state,
+        dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls")),
+        clock.monotonic(),
+    ) == (
+        "stopped",
+        {
+            "http://site.test/": "fetched",
+            "http://site.test/hang": "queued",
+            "http://site.test/quick": "fetched",
+            "http://other.test/hang": "queued",
+            "http://other.test/quick": "fetched",
+        },
+        10,
+    )
+
+
+def test_the_url_limit_cancels_a_request_still_running_after_the_grace(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    reporter = Collected()
+    pages = {
+        "/": FakePage('<a href="/hang">H</a><a href="/next">N</a>'),
+        "/hang": FakePage("<p>H</p>", delay=NEVER),
+    }
+    fetcher = FakeFetcher(clock, pages)
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, reporter=reporter, max_urls=2
+    )
+
+    # The limit refuses /next at once; the stopping event comes then, before the grace.
+    assert (
+        result.summary.state,
+        result.summary.stop_reason,
+        query(result.crawl_file, "SELECT url, fetch_state FROM urls ORDER BY id"),
+        [data["reason"] for name, data in reporter.events if name == "stopping"],
+        clock.monotonic(),
+    ) == (
+        "stopped",
+        "max_urls",
+        [
+            ("http://site.test/", "fetched"),
+            ("http://site.test/hang", "queued"),
+            ("http://site.test/next", "queued"),
+        ],
+        ["max_urls"],
+        10,
+    )
+
+
+def test_no_robots_txt_request_starts_after_a_stop(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    stop = StopSignal()
+    # Two origins of one host, whose one slot the first robots.txt holds for 5 seconds: the
+    # stop comes as it starts, so the second waits for the slot through the stop.
+    pages = {
+        "/": FakePage('<a href="http://other.test/a">A</a><a href="https://other.test/b">B</a>'),
+        "http://other.test/robots.txt": FakePage("", content_type="text/plain", delay=5),
+        "https://other.test/robots.txt": FakePage("", content_type="text/plain"),
+    }
+    on_start = {"http://other.test/robots.txt": lambda: stop.set("interrupt")}
+    fetcher = FakeFetcher(clock, pages, on_start=on_start)
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, stop=stop, concurrency=1
+    )
+
+    assert (
+        [url for url, _ in fetcher.starts if url.startswith("https://other.test/")],
+        query(
+            result.crawl_file,
+            "SELECT url, fetch_state FROM urls WHERE url LIKE '%other.test%' ORDER BY id",
+        ),
+    ) == (
+        [],
+        [("http://other.test/a", "queued"), ("https://other.test/b", "queued")],
+    )
+
+
 def test_a_crawl_run_from_another_thread_keeps_the_process_handlers(
     temp_workspace: TempWorkspace,
 ) -> None:

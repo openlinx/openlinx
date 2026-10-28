@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Callable
 
+from spider.clock import Clock
 from spider.store.records import StopReason
 from spider.store.transitions import TRANSITIONS
 
@@ -45,3 +46,18 @@ class StopSignal:
 
     async def wait(self) -> None:
         await self._was_set.wait()
+
+
+class StopGrace:
+    """The grace of a stop: the requests in flight then get these seconds of clock time in all,
+    the depth's and the Checked URLs' alike, from the first wait for them (design D16)."""
+
+    def __init__(self, clock: Clock, seconds: float) -> None:
+        self._clock = clock
+        self._seconds = seconds
+        self._ends: float | None = None
+
+    def remaining(self) -> float:
+        if self._ends is None:
+            self._ends = self._clock.monotonic() + self._seconds
+        return max(0.0, self._ends - self._clock.monotonic())

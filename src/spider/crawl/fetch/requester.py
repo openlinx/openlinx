@@ -24,8 +24,8 @@ RATE_WINDOW_SECONDS = 60
 
 @dataclass(frozen=True, slots=True)
 class NotStarted:
-    """A stop or the URL limit kept a URL's request from starting, which leaves the URL
-    queued."""
+    """A stop or the URL limit kept a URL's request, or its origin's robots.txt request, from
+    starting, which leaves the URL queued."""
 
 
 class Requester:
@@ -93,9 +93,14 @@ class Requester:
         seconds = min(RATE_WINDOW_SECONDS, elapsed)
         return round(len(self._starts) / seconds, 3) if seconds > 0 else 0.0
 
-    async def request_robots_txt(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
-        """One hop of an origin's robots.txt, which the URL limit never counts (design D6)."""
+    async def request_robots_txt(
+        self, url: NormalizedUrl
+    ) -> FetchResult | FetchFailure | NotStarted:
+        """One hop of an origin's robots.txt, which the URL limit never counts (design D6).
+        After a stop, none starts (design D16)."""
         async with self._gated_slots(url):
+            if self._stopped():
+                return NotStarted()
             return await self._send(url)
 
     async def request_probe(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
