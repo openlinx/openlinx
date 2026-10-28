@@ -755,6 +755,18 @@ pages = public_table(
         "previous; NULL without one, or when the Page is not analysed.",
     ),
     Column(
+        "amphtml_link_element",
+        Text,
+        comment="The target of the first amphtml link element; NULL without one, or when the "
+        "Page is not analysed.",
+    ),
+    Column(
+        "mobile_alternate_link",
+        Text,
+        comment="The target of the first link element whose rel is alternate with a media "
+        "attribute and no hreflang; NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
         "word_count",
         Integer,
         comment="The number of words in the Content Area text; NULL when the Page is not "

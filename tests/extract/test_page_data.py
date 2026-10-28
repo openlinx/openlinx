@@ -189,6 +189,7 @@ _FULL_PAGE = (
     '<meta http-equiv="refresh" content="600"><link rel="canonical" href="/c">'
     '<link rel="canonical" href="/c">'
     '<link rel="prev" href="/p1"><link rel="next" href="/p3">'
+    '<link rel="amphtml" href="/amp"><link rel="alternate" media="handheld" href="/m">'
     "<h1>A1</h1><h1>A2</h1><h2>B1</h2><h2>B2</h2>"
 )
 # Filled by a post-crawl pass or by a later release, so NULL on a Page that was just prepared.

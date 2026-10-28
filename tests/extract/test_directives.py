@@ -224,3 +224,17 @@ def test_rel_previous_is_a_previous_page() -> None:
     )
 
     assert row.rel_prev_1 == "https://example.test/p1"
+
+
+def test_mobile_alternate_and_amp() -> None:
+    row = page_row(
+        '<html><head><title>A</title><link rel="alternate" media="only screen and '
+        '(max-width: 640px)" href="https://m.example.test/a"><link rel="amphtml" href="/a.amp">'
+        "</head><body><p>Article</p></body></html>",
+        url="https://example.test/a",
+    )
+
+    assert (row.mobile_alternate_link, row.amphtml_link_element) == (
+        "https://m.example.test/a",
+        "https://example.test/a.amp",
+    )

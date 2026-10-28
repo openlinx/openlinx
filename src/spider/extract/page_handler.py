@@ -17,6 +17,7 @@ from spider.extract.dates import internet_date
 from spider.extract.page_data import PAGE_DATA, PageData
 from spider.extract.status_phrases import STATUS_PHRASES
 from spider.store.page_records import CookieRow, PageRow, RedirectType
+from spider.store.records import LinkType
 
 # An HTTP Refresh comes before a meta refresh.
 _REFRESH_TYPES: tuple[RedirectType, ...] = ("http_refresh", "meta_refresh")
@@ -52,7 +53,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             **({} if data is None else msgspec.structs.asdict(data)),
             **_robots_columns(result, response),
             **_canonical_columns(result),
-            **_pagination_columns(result),
+            **_pagination_amp_and_mobile_columns(result),
         ),
     )
 
@@ -115,7 +116,7 @@ def _canonical_columns(result: UrlResult) -> dict[str, Any]:
     }
 
 
-def _pagination_columns(result: UrlResult) -> dict[str, Any]:
+def _pagination_amp_and_mobile_columns(result: UrlResult) -> dict[str, Any]:
     if not result.parsed:
         return {}
     pages = [link for link in result.links if link.type == "pagination"]
@@ -135,7 +136,13 @@ def _pagination_columns(result: UrlResult) -> dict[str, Any]:
         "rel_prev_1": first(False, _PREVIOUS),
         "http_rel_next_1": first(True, _NEXT),
         "http_rel_prev_1": first(True, _PREVIOUS),
+        "amphtml_link_element": _first_target(result, "amphtml"),
+        "mobile_alternate_link": _first_target(result, "mobile_alternate"),
     }
+
+
+def _first_target(result: UrlResult, link_type: LinkType) -> str | None:
+    return next((link.target for link in result.links if link.type == link_type), None)
 
 
 def _robots_columns(result: UrlResult, response: UrlResponse) -> dict[str, Any]:

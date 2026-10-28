@@ -219,6 +219,8 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `rel_prev_1` | TEXT | yes | | | | The target of the first pagination link element of the HTML whose rel names prev or previous; NULL without one, or when the Page is not analysed. |
 | `http_rel_next_1` | TEXT | yes | | | | The target of the first pagination Link header entry whose rel names next; NULL without one, or when the Page is not analysed. |
 | `http_rel_prev_1` | TEXT | yes | | | | The target of the first pagination Link header entry whose rel names prev or previous; NULL without one, or when the Page is not analysed. |
+| `amphtml_link_element` | TEXT | yes | | | | The target of the first amphtml link element; NULL without one, or when the Page is not analysed. |
+| `mobile_alternate_link` | TEXT | yes | | | | The target of the first link element whose rel is alternate with a media attribute and no hreflang; NULL without one, or when the Page is not analysed. |
 | `word_count` | INTEGER | yes | | | | The number of words in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
 | `sentence_count` | INTEGER | yes | | | | The number of sentences in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
 | `average_words_per_sentence` | REAL | yes | | | | word_count divided by sentence_count, rounded half up to 2 decimals; NULL when sentence_count is 0, or the Page is not analysed or its Page extractor failed. |
