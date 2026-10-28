@@ -79,6 +79,54 @@ def test_ctrl_break_stops_a_crawl_on_windows(
     assert _how_it_ended(process) == (130, "stopped", "interrupt", ["interrupt"])
 
 
+class _StoppingTimed(Collected):
+    def __init__(self) -> None:
+        super().__init__()
+        self.stopping_at: float | None = None
+
+    def event(self, name: str, **data: Any) -> None:
+        super().event(name, **data)
+        if name == "stopping":
+            self.stopping_at = time.monotonic()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+def test_ctrl_c_stops_an_idle_crawl_whichever_thread_takes_the_signal(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # The only request answers late, so the loop waits in select() with no timer due before it.
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/slow">S</a>'),
+                "/slow": Page(body="<p>S</p>", delay=5),
+            }
+        )
+    )
+    reporter = _StoppingTimed()
+    sent: list[float] = []
+
+    def interrupt() -> None:
+        _await_request(server, "/slow")
+        started = next(data for name, data in reporter.events if name == "crawl_started")
+        # Once the writer has committed /'s Page, its commit deadline no longer wakes the loop.
+        _await_row(Path(started["crawl_file"]), server.url("/slow"))
+        sent.append(time.monotonic())
+        # POSIX hands a process's signal to any thread that does not block it, as macOS often
+        # does: its handler then runs in the main thread only once that thread wakes. The skip's
+        # condition again, which mypy reads only from an if.
+        if sys.platform != "win32":
+            signal.pthread_kill(threading.get_ident(), signal.SIGINT)
+
+    interrupter = threading.Thread(target=interrupt)
+    interrupter.start()
+    result = crawl_result(server.url("/"), reporter=reporter)
+    interrupter.join(timeout=30)
+
+    assert reporter.stopping_at is not None
+    assert (result.summary.stop_reason, reporter.stopping_at - sent[0] < 0.5) == ("interrupt", True)
+
+
 def test_an_interrupt_is_reported_by_one_error(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:

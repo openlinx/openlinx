@@ -3,10 +3,11 @@
 import asyncio
 import os
 import signal
+import socket
 import sys
 import threading
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from types import FrameType
 
 from spider.crawl.engine.stop import StopSignal
@@ -44,8 +45,38 @@ def interrupts_stop(loop: asyncio.AbstractEventLoop, stop: StopSignal) -> Iterat
 
     previous = {signum: signal.signal(signum, handler) for signum in _signals()}
     try:
-        yield
+        with _woken(loop):
+            yield
     finally:
         for signum, earlier in previous.items():
             # None: a handler that Python did not install, which it cannot put back.
             signal.signal(signum, signal.SIG_DFL if earlier is None else earlier)
+
+
+@contextmanager
+def _woken(loop: asyncio.AbstractEventLoop) -> Iterator[None]:
+    """Python runs a handler only once the main thread runs again, so a signal that another
+    thread takes, or that lands just before select(), would wait for the loop's next timer:
+    the loop watches the wakeup fd instead. Windows' proactor loop sets its own."""
+    if sys.platform == "win32":  # pragma: win32 cover
+        yield
+    else:  # pragma: win32 no cover
+        reader, writer = socket.socketpair()
+        reader.setblocking(False)
+        writer.setblocking(False)
+        loop.add_reader(reader.fileno(), _drain, reader)
+        # The fd that was there, an embedding app's or a test runner's, comes back after.
+        earlier = signal.set_wakeup_fd(writer.fileno(), warn_on_full_buffer=False)
+        try:
+            yield
+        finally:
+            signal.set_wakeup_fd(earlier)
+            loop.remove_reader(reader.fileno())
+            reader.close()
+            writer.close()
+
+
+def _drain(reader: socket.socket) -> None:  # pragma: win32 no cover
+    with suppress(BlockingIOError):
+        while reader.recv(4096):
+            pass
