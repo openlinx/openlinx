@@ -575,8 +575,8 @@ Every Page SHALL have `indexability` set to `indexable` or `non_indexable`. When
 
 1. `blocked_by_robots_txt`: `urls.blocked_by_robots_txt` is 1. This applies to a Page fetched under `--ignore-robots`.
 2. `redirected`: the status code is 3xx.
-3. `client_error`: the status code is 4xx.
-4. `server_error`: the status code is 5xx.
+3. `client_error`: the status code is 400-499, or 600 or more. A bot-block code such as 999 means the Page is withheld from crawlers.
+4. `server_error`: the status code is 500-599.
 5. `noindex`: `meta_robots_noindex` or `x_robots_tag_noindex` is 1.
 6. `redirected`: `redirect_type` is `meta_refresh` or `http_refresh`.
 7. `canonicalised`: `canonical_url` is not NULL and differs from the Page's URL after normalisation.
