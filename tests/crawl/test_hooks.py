@@ -261,6 +261,31 @@ def _found(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
     return Found(page.url)
 
 
+class Title(msgspec.Struct, frozen=True):
+    text: str
+
+
+def _title(tree: LexborHTMLParser, page: PageInput, config: None) -> Title:
+    return Title(heading.text() if (heading := tree.css_first("title")) else "")
+
+
+def test_two_extractors_of_one_name_are_refused_when_the_hooks_are_built() -> None:
+    hooks = _with_extractors(extractor("page", _found, None))
+
+    # As when a later change registers its extractor under a name already taken: outputs are
+    # keyed by name, so the first's output would be lost and its columns left NULL.
+    with pytest.raises(ValueError, match="two extractors named page"):
+        replace(hooks, extractors=(*hooks.extractors, extractor("page", _title, None)))
+
+
+def test_two_handlers_of_one_name_are_refused_when_the_hooks_are_built() -> None:
+    hooks = default_hooks()
+    hooks = replace(hooks, handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)))
+
+    with pytest.raises(ValueError, match="two handlers named seen"):
+        replace(hooks, handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)))
+
+
 BOOM_SITE = Site(
     routes={
         "/": Page(body='<a href="/boom">Boom</a> <a href="/ok">OK</a>'),

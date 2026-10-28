@@ -418,7 +418,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 12.23 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), the network pause with its probes, outcomes, events and `--network-wait`, and the backstops in `docs/crawling.md`, with `watchdog` in its `fetch_error` list and exit codes 7, 8 and 130; and `docs/architecture.md` no longer says that the watchdog comes later.
 - [x] 12.24 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
 - [x] 12.25 Drive "A dead subdomain pauses the Crawl once", fake timing. Done when: a pause that ends as a dead section takes the origins of its count's URLs, the Seed's origin aside, out of the count for the rest of the run, so their failures neither count nor reset it, and their URLs are still requested and recorded as errors (design D16); red with the exemption removed, when the dead subdomain pauses the Crawl once per `max(8, 2 × concurrency)` failures; and the same test shows that a later outage of the Seed's host still pauses the Crawl.
-- [ ] 12.26 Fix: `Hooks` refuses two extractors, or two handlers, of one name when it is built (design D9).
+- [x] 12.26 Fix: `Hooks` refuses two extractors, or two handlers, of one name when it is built (design D9).
 
 ## 13. Stopping with an interrupt (widening)
 

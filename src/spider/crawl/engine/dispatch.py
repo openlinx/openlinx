@@ -176,7 +176,7 @@ async def _crawl_depth(run: Run, depth: int) -> None:
                 if not run.redispatch.claim(queued.id):
                     continue
                 started = await _start_again(run, running)
-                if started == "started":
+                if started == "go_on":
                     started = await _start(run, queued, running)
                 if started == "stopped":
                     return
@@ -189,7 +189,7 @@ async def _crawl_depth(run: Run, depth: int) -> None:
         await _cancel_all(running)
 
 
-type _Started = Literal["started", "stopped", "limit"]
+type _Started = Literal["go_on", "stopped", "limit"]
 
 
 async def _start_again(run: Run, running: set[asyncio.Task[None]]) -> _Started:
@@ -197,9 +197,9 @@ async def _start_again(run: Run, running: set[asyncio.Task[None]]) -> _Started:
     each at the depth it was found at (design D3)."""
     for queued in run.redispatch.take():
         started = await _start(run, queued, running)
-        if started != "started":
+        if started != "go_on":
             return started
-    return "started"
+    return "go_on"
 
 
 async def _start(run: Run, queued: QueuedUrl, running: set[asyncio.Task[None]]) -> _Started:
@@ -217,7 +217,7 @@ async def _start(run: Run, queued: QueuedUrl, running: set[asyncio.Task[None]]) 
     # finds after its depth has closed.
     tasks = run.checked_urls if _is_checked_url(queued, decision) else running
     run.task_failure.track(tasks, task)
-    return "started"
+    return "go_on"
 
 
 async def _cancel_all(tasks: set[asyncio.Task[None]]) -> None:

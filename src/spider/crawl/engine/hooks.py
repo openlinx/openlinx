@@ -113,3 +113,15 @@ class Hooks:
     handlers: tuple[Handler[Any], ...] = ()
     # One after another in this order, so a pass may read what an earlier one wrote.
     passes: tuple[Pass, ...] = ()
+
+    def __post_init__(self) -> None:
+        # Outputs are keyed by the extractor's name, so a second extractor of a name would
+        # silently replace the first's output (design D9).
+        _refuse_twice("extractors", [extractor.name for extractor in self.extractors])
+        _refuse_twice("handlers", [handler.name for handler in self.handlers])
+
+
+def _refuse_twice(kind: str, names: list[str]) -> None:
+    twice = sorted({name for name in names if names.count(name) > 1})
+    if twice:
+        raise ValueError(f"two {kind} named {', '.join(twice)}: give each its own name")
