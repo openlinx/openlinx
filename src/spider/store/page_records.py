@@ -47,6 +47,7 @@ class PageRow:
     sentence_count: int | None = None
     average_words_per_sentence: float | None = None
     text_ratio_pct: float | None = None
+    declared_language: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -183,7 +183,7 @@ def test_headings_read_the_text_of_their_first_two_elements_only() -> None:
 # Two of every element the Page extractor reads; a group that adds an HTML column adds its
 # element here.
 _FULL_PAGE = (
-    "<title>T1</title><title>T2</title>"
+    '<html lang="en"><title>T1</title><title>T2</title>'
     '<meta name="description" content="D1"><meta name="description" content="D2">'
     '<meta name="keywords" content="K1">'
     "<h1>A1</h1><h1>A2</h1><h2>B1</h2><h2>B2</h2>"

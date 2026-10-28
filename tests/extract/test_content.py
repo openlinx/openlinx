@@ -107,3 +107,13 @@ def test_a_page_without_sentences_has_no_average() -> None:
     row = page_row("<p>\N{EM DASH}</p>")
 
     assert (row.sentence_count, row.average_words_per_sentence) == (0, None)
+
+
+def test_declared_language_is_trimmed_not_normalised() -> None:
+    assert page_row('<html lang=" en-GB "><p>Colour</p></html>').declared_language == "en-GB"
+
+
+def test_a_lang_attribute_without_a_value_is_empty() -> None:
+    rows = [page_row("<html lang><p>a</p></html>"), page_row("<html><p>a</p></html>")]
+
+    assert [row.declared_language for row in rows] == ["", None]

@@ -42,6 +42,7 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     sentence_count: int
     average_words_per_sentence: float | None
     text_ratio_pct: float | None
+    declared_language: str | None
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentArea) -> PageData:
@@ -86,6 +87,7 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         sentence_count=sentences,
         average_words_per_sentence=rounded(Fraction(words, sentences)) if sentences else None,
         text_ratio_pct=_text_ratio(tree, page.length),
+        declared_language=_declared_language(tree),
     )
 
 
@@ -94,6 +96,14 @@ def _text_ratio(tree: LexborHTMLParser, length: int) -> float | None:
         return None
     text = "" if tree.body is None else normalized(element_text(tree.body))
     return rounded(Fraction(100 * len(text), length))
+
+
+def _declared_language(tree: LexborHTMLParser) -> str | None:
+    attributes = {} if tree.root is None else tree.root.attributes
+    if "lang" not in attributes:
+        return None
+    # <html lang> has the attribute with no value.
+    return trimmed(attributes["lang"] or "")
 
 
 def _headings(tree: LexborHTMLParser, tag: str) -> tuple[list[str], int]:

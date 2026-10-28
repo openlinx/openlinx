@@ -656,6 +656,13 @@ pages = public_table(
         "analysed or its Page extractor failed.",
     ),
     Column(
+        "declared_language",
+        Text,
+        comment="The lang attribute of the root html element, trimmed: the empty string when it "
+        "has no value; NULL when it is absent, or the Page is not analysed or its Page "
+        "extractor failed.",
+    ),
+    Column(
         "crawl_depth",
         Integer,
         nullable=False,
