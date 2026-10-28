@@ -1,6 +1,8 @@
 """The Content Area and the counts taken over its text (030-add-page-data D7, D8, D13)."""
 
 import re
+import sys
+import unicodedata
 from collections.abc import Iterable, Iterator
 
 import msgspec
@@ -16,7 +18,23 @@ class ContentArea(msgspec.Struct, frozen=True, kw_only=True):
     exclude: tuple[str, ...] = ("nav", "header", "footer")
 
 
-_WORD = re.compile(r"[^\W_]+")
+def _word_characters() -> str:
+    # Letters, marks and numbers (L, M, N): Python's re has no Unicode properties, and its \w
+    # takes "_" and leaves out marks.
+    points = [p for p in range(sys.maxunicode + 1) if unicodedata.category(chr(p))[0] in "LMN"]
+    ranges: list[list[int]] = []
+    for point in points:
+        if ranges and ranges[-1][1] == point - 1:
+            ranges[-1][1] = point
+        else:
+            ranges.append([point, point])
+    return "[" + "".join(f"\\U{first:08x}-\\U{last:08x}" for first, last in ranges) + "]"
+
+
+_WORD_CHARACTER = _word_characters()
+# A single apostrophe, hyphen, full stop or comma between two word characters.
+_JOINER = "['\u2019\\-\u2010.,]"
+_WORD = re.compile(f"{_WORD_CHARACTER}+(?:{_JOINER}{_WORD_CHARACTER}+)*")
 
 
 def content_blocks(tree: LexborHTMLParser, area: ContentArea) -> Iterator[str]:
