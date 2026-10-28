@@ -181,3 +181,9 @@ def test_html_and_header_canonicals_disagree() -> None:
         row.http_canonical,
         row.canonical_url,
     ) == (2, None, "https://example.test/c", None)
+
+
+def test_canonical_after_an_image_in_head_is_ignored() -> None:
+    row = page_row('<head><title>T</title><img src="x.png"><link rel="canonical" href="/b"></head>')
+
+    assert row.canonical_count == 0
