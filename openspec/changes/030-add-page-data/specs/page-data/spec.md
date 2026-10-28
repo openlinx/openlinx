@@ -316,7 +316,7 @@ The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` 
 | `ordinal` | INTEGER | no | | the header's position among the response's `Set-Cookie` headers, from 1 |
 | `name` | TEXT | no | | the text before the first `=`, trimmed; the empty string when the header's first part has no `=` |
 | `domain` | TEXT | yes | | the `Domain` attribute, lowercased with any leading dot removed; NULL when absent, empty, or neither a host name nor an IP address |
-| `path` | TEXT | yes | | the `Path` attribute, trimmed, as sent rather than the path a browser would default to; NULL when absent or when it does not start with `/`, which RFC 6265 section 5.2.4 reads as the default path |
+| `path` | TEXT | yes | | the `Path` attribute, trimmed, as sent rather than the path a browser would default to; NULL when absent, when it does not start with `/`, which RFC 6265 section 5.2.4 reads as the default path, or when it holds a comma, which only a header that a proxy folded gives it |
 | `expires` | TEXT | yes | timestamp | the `Expires` attribute as a timestamp, a two-digit year read as RFC 6265 reads it (70–99 as 19xx, 0–69 as 20xx); NULL when absent or invalid |
 | `max_age` | INTEGER | yes | | the `Max-Age` attribute, in seconds; NULL when it is not an optional `-` followed by digits; a value beyond a 64-bit INTEGER is clamped to its bound |
 | `secure` | INTEGER | no | boolean | 1 when the `Secure` attribute is present |
