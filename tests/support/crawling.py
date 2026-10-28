@@ -13,9 +13,16 @@ from spider.crawl.engine.stop import StopSignal
 from spider.crawl.fetch.fetcher import Fetcher
 from spider.crawl.pages.preparation import PageExecutor
 from spider.output.reporter import Collected, Reporter
-from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
+from spider.services.crawling import (
+    CrawlOverrides,
+    CrawlRequest,
+    CrawlResult,
+    continue_crawl,
+    plan_crawl,
+    start_crawl,
+)
 from spider.services.hooks import default_hooks
-from spider.store.records import SecretNames
+from spider.store.records import CrawlFile, SecretNames
 from tests.support.app import settings_tables
 from tests.support.cli import run_cli
 
@@ -66,6 +73,30 @@ def crawl_result(
         hooks or default_hooks(),
         resolver=resolver,
         pages=pages,
+        fetcher=fetcher,
+        stop=stop,
+    )
+
+
+def continued(
+    crawl: CrawlResult,
+    overrides: CrawlOverrides | None = None,
+    hooks: Hooks | None = None,
+    *,
+    resolver: AbstractResolver | None = None,
+    reporter: Reporter | None = None,
+    clock: Clock | None = None,
+    fetcher: Fetcher | None = None,
+    stop: StopSignal | None = None,
+) -> CrawlResult:
+    """Continues the Crawl that `crawl` ended, through the Crawl Service, as 060's resume does."""
+    return continue_crawl(
+        CrawlFile(crawl.crawl_id, crawl.crawl_file),
+        overrides or CrawlOverrides(),
+        clock or SystemClock(),
+        reporter or Collected(),
+        hooks or default_hooks(),
+        resolver=resolver,
         fetcher=fetcher,
         stop=stop,
     )
