@@ -82,6 +82,7 @@ def test_the_cookie_row_has_every_cookies_column() -> None:
 
 
 def test_the_page_row_has_every_pages_column_in_order() -> None:
-    assert [*(field.name for field in fields(PageRow)), "crawl_depth"] == [
-        column.name for column in pages.c
+    # crawl_depth is written from the URL's row, not from the Page row.
+    assert [field.name for field in fields(PageRow)] == [
+        column.name for column in pages.c if column.name != "crawl_depth"
     ]

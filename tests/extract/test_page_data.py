@@ -190,7 +190,11 @@ _FULL_PAGE = (
     '<link rel="canonical" href="/c">'
     '<link rel="prev" href="/p1"><link rel="next" href="/p3">'
     '<link rel="amphtml" href="/amp"><link rel="alternate" media="handheld" href="/m">'
+    '<script type="application/ld+json">{"@type":"WebPage"}</script>'
+    '<script type="application/ld+json">{"@type":"BreadcrumbList"}</script>'
     "<h1>A1</h1><h1>A2</h1><h2>B1</h2><h2>B2</h2>"
+    '<div itemscope itemtype="https://schema.org/Product"></div>'
+    '<div itemscope itemtype="https://schema.org/Review"></div>'
 )
 # Filled by a post-crawl pass or by a later release, so NULL on a Page that was just prepared.
 _LATER = ("Derived: ", "Filled from ")
@@ -244,6 +248,18 @@ _FRAGMENTS = st.sampled_from(
         "<p>",
         "<li>",
         "<meta name=description content=x>",
+        '<script type="application/ld+json">',
+        "</script>",
+        "{",
+        "}",
+        "[",
+        "]",
+        ",",
+        '"@graph":',
+        '"@type":',
+        '"Thing"',
+        "<div itemscope itemtype=x>",
+        "<span itemprop=p itemscope>",
         "<!--",
         "-->",
         "<",

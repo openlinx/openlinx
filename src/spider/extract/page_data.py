@@ -1,4 +1,4 @@
-"""The Page extractor: the columns a Page's HTML gives (030-add-page-data D1, D7)."""
+"""The Page extractor: the columns a Page's HTML gives (030-add-page-data D1, D7, D20)."""
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
@@ -22,6 +22,7 @@ from spider.extract.head_metadata import (
     titles,
 )
 from spider.extract.headings import headings
+from spider.extract.structured_data import structured_data
 
 
 class PageData(msgspec.Struct, frozen=True, kw_only=True):
@@ -54,6 +55,10 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     text_ratio_pct: float | None
     declared_language: str | None
     content_hash: str | None
+    jsonld_items: int
+    microdata_items: int
+    jsonld_parse_errors: int
+    structured_data_types: tuple[str, ...]
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentArea) -> PageData:
@@ -71,6 +76,7 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
     h2_1, h2_1_length, h2_2, h2_2_length = first_two(h2s)
     blocks = list(content_blocks(tree, config))
     words, sentences = word_count(blocks), sentence_count(blocks)
+    jsonld_items, microdata_items, jsonld_parse_errors, types = structured_data(tree)
     return PageData(
         title_1=title_1,
         title_1_length=title_1_length,
@@ -101,6 +107,10 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         text_ratio_pct=text_ratio_pct(tree, page.length),
         declared_language=declared_language(tree),
         content_hash=content_hash(blocks, words),
+        jsonld_items=jsonld_items,
+        microdata_items=microdata_items,
+        jsonld_parse_errors=jsonld_parse_errors,
+        structured_data_types=types,
     )
 
 

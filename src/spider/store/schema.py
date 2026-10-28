@@ -834,6 +834,33 @@ pages = public_table(
         nullable=False,
         comment="Crawl Depth, equal to urls.crawl_depth: 0 for Seeds.",
     ),
+    Column(
+        "jsonld_items",
+        Integer,
+        comment="The number of JSON-LD items in the application/ld+json scripts: their top-level "
+        "objects, or the objects of their @graph; NULL when the Page is not analysed or its "
+        "Page extractor failed.",
+    ),
+    Column(
+        "microdata_items",
+        Integer,
+        comment="The number of top-level Microdata items: elements with itemscope and no "
+        "itemprop; NULL when the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "jsonld_parse_errors",
+        Integer,
+        comment="The number of application/ld+json scripts that are not valid JSON, or nest more "
+        "than 1024 levels deep; NULL when the Page is not analysed or its Page extractor "
+        "failed.",
+    ),
+    Column(
+        "structured_data_types",
+        Json,
+        comment="JSON array of the distinct types of the counted items, from @type and itemtype "
+        "without a leading http://schema.org/ or https://schema.org/, sorted by code point: [] "
+        "when there are none; NULL when the Page is not analysed or its Page extractor failed.",
+    ),
     comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
     "an HTML document, whatever its status code.",
     change=30,

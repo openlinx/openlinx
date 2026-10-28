@@ -88,6 +88,10 @@ class PageRow:
     text_ratio_pct: float | None = None
     declared_language: str | None = None
     content_hash: str | None = None
+    jsonld_items: int | None = None
+    microdata_items: int | None = None
+    jsonld_parse_errors: int | None = None
+    structured_data_types: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

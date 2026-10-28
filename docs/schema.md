@@ -230,6 +230,10 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `declared_language` | TEXT | yes | | | | The lang attribute of the root html element, trimmed: the empty string when it has no value; NULL when it is absent, or the Page is not analysed or its Page extractor failed. |
 | `content_hash` | TEXT | yes | | | | The SHA-256, as lowercase hex, of the normalised Content Area text as UTF-8, with no Unicode normalisation: Pages with the same value are Exact Duplicates; NULL when word_count is 0, or the Page is not analysed or its Page extractor failed. |
 | `crawl_depth` | INTEGER | no | | | | Crawl Depth, equal to urls.crawl_depth: 0 for Seeds. |
+| `jsonld_items` | INTEGER | yes | | | | The number of JSON-LD items in the application/ld+json scripts: their top-level objects, or the objects of their @graph; NULL when the Page is not analysed or its Page extractor failed. |
+| `microdata_items` | INTEGER | yes | | | | The number of top-level Microdata items: elements with itemscope and no itemprop; NULL when the Page is not analysed or its Page extractor failed. |
+| `jsonld_parse_errors` | INTEGER | yes | | | | The number of application/ld+json scripts that are not valid JSON, or nest more than 1024 levels deep; NULL when the Page is not analysed or its Page extractor failed. |
+| `structured_data_types` | TEXT | yes | | `json` | | JSON array of the distinct types of the counted items, from @type and itemtype without a leading http://schema.org/ or https://schema.org/, sorted by code point: [] when there are none; NULL when the Page is not analysed or its Page extractor failed. |
 
 ### Indexes
 
