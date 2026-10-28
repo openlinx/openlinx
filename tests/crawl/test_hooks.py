@@ -64,7 +64,7 @@ def _write_seen(connection: Connection, rows: Sequence[Seen]) -> None:
     )
 
 
-def test_a_registered_handler_sees_every_url_once(
+def test_a_registered_handler_sees_each_recorded_outcome_once(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(
@@ -225,7 +225,7 @@ def test_a_full_disk_in_a_post_crawl_pass_fails_the_crawl(
     with disk_full_after(pages=24):
         result = crawl_result(server.url("/"), hooks)
 
-    assert (*_failed_with(result)[:2], crawl_row(result.crawl_file)["state"]) == (
+    assert (*_end_of(result), crawl_row(result.crawl_file)["state"]) == (
         "failed",
         "write_failed",
         "failed",
@@ -258,6 +258,31 @@ def _exploding(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
 
 def _found(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
     return Found(page.url)
+
+
+class Title(msgspec.Struct, frozen=True):
+    text: str
+
+
+def _title(tree: LexborHTMLParser, page: PageInput, config: None) -> Title:
+    return Title(heading.text() if (heading := tree.css_first("title")) else "")
+
+
+def test_two_extractors_of_one_name_are_refused_when_the_hooks_are_built() -> None:
+    hooks = _with_extractors(extractor("page", _found, None))
+
+    # As when a later change registers its extractor under a name already taken: outputs are
+    # keyed by name, so the first's output would be lost and its columns left NULL.
+    with pytest.raises(ValueError, match="two extractors named page"):
+        replace(hooks, extractors=(*hooks.extractors, extractor("page", _title, None)))
+
+
+def test_two_handlers_of_one_name_are_refused_when_the_hooks_are_built() -> None:
+    hooks = Hooks()
+    hooks = replace(hooks, handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)))
+
+    with pytest.raises(ValueError, match="two handlers named seen"):
+        replace(hooks, handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)))
 
 
 BOOM_SITE = Site(
@@ -571,12 +596,16 @@ def test_recording_that_fails_for_every_url_fails_the_crawl(
     )
 
     result = crawl_result(server.url("/"), hooks)
+    error = result.failure and result.failure.diagnostic
 
-    assert (*_failed_with(result)[:2], result.failure and result.failure.code) == (
-        "failed",
-        "write_failed",
-        "crawl_write_failed",
-    )
+    # A bug in row code, not the disk: freeing space would not help, and the record_failed
+    # warning names the first URL.
+    assert (
+        *_end_of(result),
+        error and error.code,
+        error and error.message.startswith("100 URLs in a row could not be recorded"),
+        error and "record_failed" in (error.hint or "") and "resume" in (error.hint or ""),
+    ) == ("failed", "write_failed", "crawl_write_failed", True, True)
 
 
 @pytest.mark.parametrize(("articles", "state"), [(99, "completed"), (100, "failed")])
@@ -785,10 +814,14 @@ def test_a_url_that_meets_an_ended_writer_reports_why_the_writer_ended(
     assert _failed_with(result) == ("failed", "write_failed", CrawlWriterReplayError.__name__)
 
 
+def _end_of(result: CrawlResult) -> tuple[str, str | None]:
+    return (result.summary.state, result.summary.stop_reason)
+
+
 def _failed_with(result: CrawlResult) -> tuple[str, str | None, str | None]:
     """The end, and the type of the error that ended the Crawl."""
     error = None if result.failure is None else result.failure.diagnostic.details["error"]
-    return (result.summary.state, result.summary.stop_reason, error and error.split(":")[0])
+    return (*_end_of(result), error and error.split(":")[0])
 
 
 @dataclass(frozen=True, slots=True)

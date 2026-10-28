@@ -762,7 +762,7 @@ The Crawl SHALL fill the crawl metadata of `015-add-crawl-store`:
 This change SHALL add three columns to `crawl`, under the conventions of `018-add-schema-conventions`:
 - `scope`: TEXT, `json`, not null, the resolved Scope, written with the `crawl` row when the Crawl is created
 - `stop_reason`: TEXT, nullable, why the Crawl ended early: `max_urls`, `interrupt` or `requested` for a `stopped` Crawl, and `seed_unreachable`, `site_unreachable` or `write_failed` for a `failed` one; NULL while it runs and when it is `completed`. These six values SHALL be the one value set of every column that records why a Crawl or one of its runs ended, including those of `060-add-crawl-control`.
-- `warnings`: TEXT, `json`, not null, a JSON array of diagnostics in the full shape of `010-add-workspace-and-cli-contract` (`{level, code, message, hint, details}`); `[]` when the Crawl is created
+- `warnings`: TEXT, `json`, not null, a JSON array of diagnostics in the full shape of `010-add-workspace-and-cli-contract` (`{level, code, message, hint, details}`); `[]` when the Crawl is created. It SHALL hold the warnings of the Crawl's whole life: a continued Crawl SHALL keep those of its earlier runs, write a warning kept once per host, origin, Seed or code only when it is new to the Crawl, and add a counted warning's counts to the stored ones. `max_urls_reached` describes how one run ended, so a continue SHALL drop it.
 
 The `crawl` table of `crawl.config` SHALL hold every registered crawl setting, including those added by later changes, with secrets redacted by `015`.
 
@@ -777,6 +777,10 @@ The `crawl` table of `crawl.config` SHALL hold every registered crawl setting, i
 #### Scenario: Warnings are stored as diagnostics
 - **WHEN** `/robots.txt` returns 503 on every attempt, and `spider crawl {site}/` ends
 - **THEN** `crawl.warnings` holds an object whose keys are exactly `level`, `code`, `message`, `hint` and `details`, with `"level": "warning"` and `"code": "robots_unreachable"`
+
+#### Scenario: Warnings cover the Crawl's whole life
+- **WHEN** the robots.txt of `a.{host}` returns 503 on every attempt, a Crawl of `{site}/` with `--subdomains` that requested a URL on `a.{host}` is stopped by `--max-urls`, and the Crawl Service continues it while that robots.txt still returns 503 and the continuation requests a URL on `b.{host}`, whose robots.txt returns 503 too
+- **THEN** `crawl.warnings` and the result's `warnings` hold exactly two `robots_unreachable` warnings, one for `a.{host}` and one for `b.{host}`
 
 ### Requirement: Crawl State transitions
 The Crawl SHALL change `crawl.state` (`015-add-crawl-store`) only along these transitions, each with the `stop_reason` shown, through one check that refuses every other change as a bug:
@@ -800,7 +804,7 @@ The Crawl SHALL change `crawl.state` (`015-add-crawl-store`) only along these tr
 
 #### Scenario: Continuing clears how the Crawl ended
 - **WHEN** a Crawl stopped by `--max-urls 3` is continued through the Crawl Service, and its `crawl` row is read while it runs
-- **THEN** `crawl.state` is `running`, and `crawl.stop_reason` and `crawl.completed_at` are NULL
+- **THEN** `crawl.state` is `running`, and `crawl.stop_reason` is NULL
 
 ### Requirement: Crawl settings in spider.toml
 Every crawl setting SHALL also be settable in the `[crawl]` table of `spider.toml`, which this change registers and later changes add keys to, under the naming rule of `010-add-workspace-and-cli-contract`: the flag's long name without the leading dashes, with `-` replaced by `_`. The Seed argument and `--subdomains` SHALL have no key, because `scope` covers `--subdomains`. `010`'s precedence SHALL apply: flag, then `spider.toml`, then the built-in default.
@@ -838,12 +842,20 @@ The Crawl Service SHALL be able to continue a Crawl from its store when its Craw
 - **WHEN** `/` links to `/p1` to `/p9`, and a Crawl of `{site}/` stopped by `--max-urls 3` is continued through the Crawl Service without a URL limit
 - **THEN** the fixture site receives no request during the continuation for a URL that had `fetch_state` = `fetched` before it
 
+#### Scenario: The URL limit counts over the Crawl's whole life
+- **WHEN** `/` links to `/p1` to `/p9`, a Crawl of `{site}/` stopped by `--max-urls 3` is continued through the Crawl Service with a URL limit of 5, and the continuation ends
+- **THEN** the `urls` table holds 5 rows with `fetch_state` = `fetched`, and the Crawl State is `stopped` with `stop_reason` = `max_urls`
+
+#### Scenario: A continue requests the URLs an unreachable robots.txt blocked
+- **WHEN** `/` links to `http://other.test/a` and to `/p1` to `/p9`, `http://other.test/robots.txt` returns 503, a Crawl of `{site}/` stopped by `--max-urls 3` recorded `http://other.test/a` with `skip_reason` = `robots_unreachable`, and the Crawl Service continues it without a URL limit once that robots.txt returns 404
+- **THEN** `http://other.test/a` has `fetch_state` = `fetched`
+
 ### Requirement: Per-response hook
-**In short:** every registered handler's rows for a URL are written once, with the URL's final state and row values.
+**In short:** every registered handler's rows for a URL are written once per recorded outcome, with the URL's final state and row values.
 
-For each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`) when it is dispatched, the rows of every registered per-response handler SHALL be written exactly once, with that state. A URL that only Links that are not followed reach is recorded `skipped` when it is discovered, and reaches no handler, since a later followed Link may still queue it. A URL skipped as `max_depth` reaches no handler either, since a Link found later at a smaller depth re-queues it. A handler SHALL receive the URL's row values. For a URL with a response it SHALL also receive the status code, the reason phrase, the response headers, the robots directives (the `X-Robots-Tag` for the robots user-agent token, and the robots `<meta>` when the response was parsed) and, when the response was parsed, the extractor outputs. For an in-Scope 2xx response it SHALL receive the Links the Crawl read: those of the `Link` and `Refresh` headers, whatever became of the response's preparation, then those of the document when it was prepared. Each Link SHALL say where it was declared, `head` or `body` as the parser placed the element, or `http_header`, and whether the Crawl requests its target through it, which the Link type table and nofollow decide. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
+For each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`) when it is dispatched, the rows of every registered per-response handler SHALL be written exactly once per recorded outcome, with that state. A URL that a network pause re-queues (see "Backstops"), or that `060-add-crawl-control` continues, is recorded again, and its handlers' rows are written again with its new state, so a handler that writes rows for an outcome without a response SHALL key them by `url_id` and replace them. A URL that only Links that are not followed reach is recorded `skipped` when it is discovered, and reaches no handler, since a later followed Link may still queue it. A URL skipped as `max_depth` reaches no handler either, since a Link found later at a smaller depth re-queues it. A handler SHALL receive the URL's row values. For a URL with a response it SHALL also receive the status code, the reason phrase, the response headers, the robots directives (the `X-Robots-Tag` for the robots user-agent token, and the robots `<meta>` when the response was parsed) and, when the response was parsed, the extractor outputs. For an in-Scope 2xx response it SHALL receive the Links the Crawl read: those of the `Link` and `Refresh` headers, whatever became of the response's preparation, then those of the document when it was prepared. Each Link SHALL say where it was declared, `head` or `body` as the parser placed the element, or `http_header`, and whether the Crawl requests its target through it, which the Link type table and nofollow decide. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
 
-#### Scenario: A registered handler sees every URL once
+#### Scenario: A registered handler sees each recorded outcome once
 - **WHEN** a handler registered for the test records the URLs and states it receives, `/` links to `/a`, `/missing` (which returns 404) and `/logout`, and `spider crawl {site}/ --exclude "/logout$"` runs
 - **THEN** the handler has received exactly `({site}/, fetched)`, `({site}/a, fetched)`, `({site}/missing, fetched)` and `({site}/logout, skipped)`, once each
 
@@ -965,9 +977,9 @@ The Seed parser, URL normalisation, HTML decoding, the link extractor, the robot
   - **Without an HTTP response** means the `fetch_error` `dns_error`, `connection_refused`, `connection_error`, `invalid_response` or `watchdog`, or `022-add-fetch-policy`'s `timeout`. `tls_error` SHALL NOT count: a certificate failure is an answer of sorts, and a site-wide one SHALL NOT wait `--network-wait` and then fail with a misleading `site_unreachable`. A response of any status SHALL reset the count, and requests for External URLs SHALL NOT count.
   - **While paused,** no new request SHALL start. Requests in flight SHALL finish: one that gets a response SHALL be recorded, and one that ends without a response SHALL NOT be recorded, so its URL stays `queued` and is requested again when the Crawl resumes.
   - **Probes:** while paused, the Crawl SHALL request the Seed URL at 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, through the per-host limits of "Per-host concurrency" and "Rate limit". A probe SHALL NOT be recorded as a URL and SHALL NOT count toward `--max-urls`. A probe that gets a response of any status ends the pause:
-    - **A dead section:** when the first probe answers, the failures were the site's own, and the Crawl SHALL resume and keep their errors.
-    - **An outage:** when a later probe answers, the URLs whose requests made up the count SHALL be re-queued and requested again, each at most once in a run, and the Crawl SHALL resume.
-  - **Giving up:** a probe SHALL start only within `--network-wait <seconds>` of the pause's start (setting `crawl.network_wait`, default 1800). When no probe that starts within it gets a response, the Crawl SHALL end as `failed` with `stop_reason` = `site_unreachable`, and URLs not requested SHALL stay `queued`, so the Crawl can be continued. With `--network-wait 0` no probe starts, so the Crawl fails at once. A negative value SHALL be rejected with exit code 2 and error code `invalid_value`. The Command SHALL print the result, write exactly one error diagnostic, with code `site_unreachable` and a hint that says how long the Crawl waited and names `spider resume`, and exit with code 8.
+    - **A dead section:** when the first probe answers before the second probe is due, or before the wait ends when there is no second probe, the failures were the site's own, and the Crawl SHALL resume and keep their errors. For the rest of the run, the failures of requests to an origin with at least 2 of those URLs, the Seed's origin aside, SHALL NOT count toward the pause, and their URLs SHALL still be requested and recorded as errors.
+    - **An outage:** when a probe answers later, the URLs whose requests made up the count SHALL be re-queued and requested again, each at most once in a run, and the Crawl SHALL resume.
+  - **Giving up:** a probe SHALL start only before `--network-wait <seconds>` have passed since the pause's start (setting `crawl.network_wait`, default 1800). When no probe has got a response by then, the probes in flight SHALL be cancelled, and the Crawl SHALL end as `failed` with `stop_reason` = `site_unreachable`, and URLs not requested SHALL stay `queued`, so the Crawl can be continued. With `--network-wait 0` no probe starts, so the Crawl fails at once. A negative value SHALL be rejected with exit code 2 and error code `invalid_value`. The Command SHALL print the result, write exactly one error diagnostic, with code `site_unreachable` and a hint that says how long the Crawl waited and names `spider resume`, and exit with code 8.
   - **Visibility:** the Crawl SHALL write a `crawl_paused` event when it pauses and a `crawl_resumed` event when it resumes (see "Progress events"), and one counted `network_paused` warning, with `details.count` (the number of pauses) and `details.total_seconds` (the time spent paused).
   - **A stop** (the URL limit, an interrupt or a stop request) SHALL end a pause, and the Crawl SHALL stop as it does otherwise.
 - **The watchdog:** a request that has not ended within the watchdog time after it started SHALL be cancelled. The watchdog time SHALL be the longer of 120 seconds and the Fetcher's total request deadline plus 30 seconds, so it never cuts a response that the Fetcher still allows. Its URL SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `watchdog`, and the Crawl SHALL go on. A request ended by the watchdog SHALL count as a request without an HTTP response for the network pause.
@@ -983,6 +995,10 @@ The Seed parser, URL normalisation, HTML decoding, the link extractor, the robot
 #### Scenario: A dead section does not stop the Crawl
 - **WHEN** a fake Fetcher gets no response for `{site}/down/1` to `{site}/down/20` and answers every other request, `/` links to them and then to `/p1`, and the Crawl runs with `--concurrency 1` and a fake clock
 - **THEN** the Crawl State is `completed`, every `{site}/down/<n>` has `fetch_state` = `error`, `{site}/p1` has `fetch_state` = `fetched`, and the result's `warnings` hold an entry with code `network_paused`
+
+#### Scenario: A dead subdomain pauses the Crawl once
+- **WHEN** `/` links to 300 URLs on the subdomain `dead.{host}` and then to `/p1` to `/p20`, a fake Fetcher answers 404 for the robots.txt of `dead.{host}` and gets no response for its other URLs, and none for any request to `{host}` from the one for `/p10` on until 120 seconds of clock time have passed, and the Crawl runs with `--subdomains`, `--concurrency 1` and a fake clock
+- **THEN** the events hold exactly two `crawl_resumed` events, the first with `data.outcome` = `dead_section` and the second with `data.outcome` = `outage`, every URL on `dead.{host}` has `fetch_state` = `error`, every `{site}/p<n>` has `fetch_state` = `fetched`, and the Crawl State is `completed`
 
 #### Scenario: An outage pauses and resumes the Crawl
 - **WHEN** `/` links to `/p1` to `/p20`, a fake Fetcher gets no response for any request from `/p2` on until 30 seconds of clock time have passed, and the Crawl runs with `--concurrency 1` and a fake clock
@@ -1146,3 +1162,7 @@ URLs not completed SHALL stay `queued`, so the Crawl can be continued. A second 
 #### Scenario: A second interrupt ends the process at once
 - **WHEN** a second interrupt follows the first while `/hang` (which answers after 60 seconds) is in flight
 - **THEN** the subprocess exits within 2 seconds of the second interrupt, and `{site}/hang` has `fetch_state` = `queued`
+
+#### Scenario: A stop ends a pause
+- **WHEN** `/` links to `/down/1` to `/down/20`, each of which resets its connection, `spider crawl {site}/ --concurrency 1 --network-wait 1800` runs as a subprocess, and SIGINT (CTRL_BREAK_EVENT on Windows) is sent once stderr holds its `crawl_paused` event
+- **THEN** the Command exits with code 130, stdout holds `"state": "stopped"` and `"stop_reason": "interrupt"`, and the site gets no request for `/` after the interrupt

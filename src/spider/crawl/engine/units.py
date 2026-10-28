@@ -17,7 +17,7 @@ from spider.crawl.engine.crawl_warnings import (
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
-from spider.crawl.engine.pause import NetworkPause
+from spider.crawl.engine.pause import NetworkPause, Redispatch
 from spider.crawl.engine.stop import StopSignal
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
@@ -99,6 +99,7 @@ class Run:
     checked_urls: set[asyncio.Task[None]]
     task_failure: TaskFailure
     pause: NetworkPause
+    redispatch: Redispatch
 
 
 def via_resource(queued: QueuedUrl) -> bool:
@@ -123,10 +124,15 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
             return None
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
         origin_robots = await robots.robots_of(queued.url)
+        while origin_robots.origin_error is not None and run.pause.paused:
+            # Held with its task slot, as a request at the pause's gate is, so the pause's
+            # count stays bounded; an outage drops the verdict, so it is read again then.
+            await run.pause.ended()
+            origin_robots = await robots.robots_of(queued.url)
         origin_error = origin_robots.origin_error
         if origin_error is not None:
             if decision.is_internal:
-                run.pause.failed(origin_error)
+                run.pause.failed(origin_error, queued, requested=False)
             # The origin cannot be reached: the URL gets the error without a request of
             # its own (design D6).
             message = (
@@ -161,9 +167,15 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
         return None
     host = host_key(queued.url)
     status_code = None if isinstance(response, FetchFailure) else response.status_code
+    if isinstance(response, FetchFailure) and run.pause.retries(response.fetch_error):
+        # Ended without a response while paused: not recorded, so its URL stays queued and is
+        # requested again, and counts toward the URL limit only then (design D16).
+        run.requester.give_back()
+        run.redispatch.add(queued)
+        return None
     if decision.is_internal:
         if isinstance(response, FetchFailure):
-            run.pause.failed(response.fetch_error)
+            run.pause.failed(response.fetch_error, queued, requested=True)
         else:
             run.pause.responded()
     if decision.is_internal and run.blocking.responded(host, status_code):

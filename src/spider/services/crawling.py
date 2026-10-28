@@ -16,7 +16,6 @@ from spider.clock import Clock
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.dispatch import run_crawl
 from spider.crawl.engine.hooks import Hooks, PassContext
-from spider.crawl.engine.pause import pause_after
 from spider.crawl.engine.stop import StopSignal
 from spider.crawl.engine.warning_log import WarningLog
 from spider.crawl.fetch.fetcher import Fetcher, aiohttp_fetcher
@@ -32,19 +31,16 @@ from spider.crawl.urls import (
     url_origin,
     url_path,
 )
-from spider.naming import APP_NAME
 from spider.output.codes import (
-    CRAWL_WRITE_FAILED,
     INVALID_PATTERN,
     INVALID_URL,
     SEED_OUT_OF_SCOPE,
-    SEED_UNREACHABLE,
-    SITE_UNREACHABLE,
     SUBFOLDER_IS_ROOT,
 )
 from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
+from spider.services.crawl_failures import NETWORK_FAILURES, write_failed
 from spider.services.crawls import create_crawl
 from spider.services.hooks import default_page_executor
 from spider.store.crawls import crawl_summary, record_state, record_warnings
@@ -60,7 +56,7 @@ from spider.store.records import (
 )
 from spider.store.settings import StoreSettings
 from spider.store.urls import url_counts
-from spider.store.writer import CrawlWriter, CrawlWriterClosedError
+from spider.store.writer import CrawlWriter
 from spider.workspace.discovery import resolve_workspace
 from spider.workspace.settings import Settings, load_settings
 from spider.workspace.tables import SettingsTables
@@ -249,7 +245,7 @@ def start_crawl(
     )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class _End:
     ended_at: datetime
     summary: CrawlSummary
@@ -282,7 +278,7 @@ async def _run(crawl: _Crawl) -> _End:
         if not is_write_failure(error):
             raise
         cause = error
-    return await _failed_end(crawl, _write_failed(crawl.crawl_file, cause))
+    return await _failed_end(crawl, write_failed(crawl.crawl_file, cause))
 
 
 class _WriteFailed(Exception):
@@ -300,12 +296,11 @@ async def _crawl_and_end(crawl: _Crawl) -> _End:
         stop = context.stop
         if stop.reason == "write_failed":
             raise _WriteFailed(stop.cause)
-        if stop.reason == "seed_unreachable":
+        if stop.reason is not None and stop.reason in NETWORK_FAILURES:
             ended = await _end(crawl, context.writer, "failed", stop.reason)
-            return replace(ended, failure=_seed_unreachable(crawl))
-        elif stop.reason == "site_unreachable":
-            ended = await _end(crawl, context.writer, "failed", stop.reason)
-            return replace(ended, failure=_site_unreachable(crawl))
+            failure = NETWORK_FAILURES[stop.reason]
+            plan = crawl.plan
+            return replace(ended, failure=failure(plan.seed, plan.settings, crawl.crawl_file))
         elif stop.reason not in (None, "max_urls"):
             # An interrupt has no end it records yet.
             raise stop.cause or RuntimeError(f"no end is built for {stop.reason}")
@@ -343,51 +338,7 @@ async def _end(
     await writer.run_async(record_warnings([w.to_json() for w in crawl.log.warnings]))
     await writer.run_async(record_state(state, ended_at, stop_reason))
     summary = await writer.run_async(crawl_summary())
-    return _End(ended_at, summary, await writer.run_async(url_counts()))
-
-
-def _seed_unreachable(crawl: _Crawl) -> SpiderError:
-    seed, wait = crawl.plan.seed, crawl.plan.settings.network_wait
-    return SpiderError(
-        SEED_UNREACHABLE,
-        f"The Seed {seed} got no HTTP response, and its origin did not answer within "
-        f"--network-wait {wait}, so the Crawl ended failed.",
-        hint=f"The Crawl waited {wait} seconds. Check that this machine can reach "
-        f"{url_origin(seed)}: an agent's sandbox often blocks network access, so allow it, or "
-        "run the Command outside the sandbox. Raise --network-wait for a network that is still "
-        "coming up.",
-        details={"seed": seed, "network_wait": wait},
-    )
-
-
-def _site_unreachable(crawl: _Crawl) -> SpiderError:
-    wait = crawl.plan.settings.network_wait
-    return SpiderError(
-        SITE_UNREACHABLE,
-        f"{pause_after(crawl.plan.settings.concurrency)} requests in a row to the site got no "
-        f"HTTP response, and it did not answer within --network-wait {wait}, so the Crawl "
-        "ended failed.",
-        hint=f"The Crawl waited {wait} seconds. Check the network access to the site, then "
-        f"continue it with: {APP_NAME} resume --crawl {crawl.crawl_file.id}",
-        details={"network_wait": wait},
-    )
-
-
-def _write_failed(crawl_file: CrawlFile, cause: BaseException | None) -> SpiderError:
-    # A file another connection holds is reported as the writer raised it (exit 5).
-    if isinstance(cause, SpiderError):
-        return cause
-    # An ended writer refuses with the error it ended on as the cause (017 D6).
-    if isinstance(cause, CrawlWriterClosedError) and cause.__cause__ is not None:
-        cause = cause.__cause__
-    error = f"{type(cause).__name__}: {cause}"
-    return SpiderError(
-        CRAWL_WRITE_FAILED,
-        f"Writing the crawl file failed, so the Crawl ended failed: {error.rstrip('.')}.",
-        hint="Free disk space or fix the file system, then continue it with: "
-        f"{APP_NAME} resume --crawl {crawl_file.id}",
-        details={"crawl_file": str(crawl_file.path), "error": error},
-    )
+    return _End(ended_at=ended_at, summary=summary, counts=await writer.run_async(url_counts()))
 
 
 @asynccontextmanager

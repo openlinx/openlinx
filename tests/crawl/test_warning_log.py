@@ -7,6 +7,7 @@ from pathlib import Path
 from spider.crawl.engine.crawl_warnings import handler_failure
 from spider.crawl.engine.hooks import UrlResult
 from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
+from spider.crawl.engine.progress import UrlCounters
 from spider.crawl.engine.stop import StopSignal
 from spider.crawl.engine.warning_log import WarningLog
 from spider.crawl.urls import NormalizedUrl
@@ -19,7 +20,13 @@ from spider.output.codes import (
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Collected
 from spider.store.records import FetchedUrl, LinkType, NewUrl, Provenance, QueuedUrl, SkippedUrl
-from spider.store.urls import queued_batch, record_fetched, record_seed, record_skipped
+from spider.store.urls import (
+    queued_batch,
+    record_fetched,
+    record_seed,
+    record_skipped,
+    url_counts,
+)
 from spider.store.writer import CrawlWriter
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
@@ -210,7 +217,7 @@ async def test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_deci
         # The late check's image Link raises /x while its skip is on its way.
         image = _new("http://site.test/x", "image")
         writer.run(record_fetched(_fetched(seed_id + 2, late_at, image)))
-        outcomes = Outcomes(writer, log, StopSignal())
+        outcomes = Outcomes(writer, log, StopSignal(), UrlCounters(writer.run(url_counts())))
         failure = handler_failure(dispatched.url, [("pages", ValueError("no title"))])
         await outcomes.submit(_skipped(dispatched, failure))
         await outcomes.settled()

@@ -11,6 +11,7 @@ from spider.naming import APP_NAME
 from spider.output.codes import (
     HANDLER_FAILED,
     MAX_URLS_REACHED,
+    NETWORK_PAUSED,
     PARSE_FAILED,
     POSSIBLE_BLOCKING,
     RECORD_FAILED,
@@ -130,6 +131,15 @@ def parse_failure(url: NormalizedUrl, parse_error: ParseError, message: str | No
         PARSE_FAILED,
         f"Preparing {url} gave nothing ({detail}); it was recorded unparsed, with only the "
         "Links of its headers.",
+    )
+
+
+def network_paused(seed: NormalizedUrl) -> Diagnostic:
+    return Diagnostic.of(
+        NETWORK_PAUSED,
+        "Internal requests in a row got no HTTP response, so the Crawl paused and probed its "
+        f"Seed {seed} until it answered; the URLs whose requests failed are kept as errors, or "
+        "requested again when the network itself was down.",
     )
 
 
