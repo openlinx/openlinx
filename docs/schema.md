@@ -176,6 +176,8 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `status` | TEXT | yes | | | | The reason phrase the server sent; when it sent none, the phrase that the IANA HTTP Status Code Registry gives the status code; NULL when the registry gives none. |
 | `response_time_ms` | INTEGER | no | | | | Time from sending the request to receiving the whole body, equal to urls.response_time_ms. |
 | `last_modified` | TEXT | yes | | `timestamp` | | The first Last-Modified response header as a UTC time, read as an HTTP-date or another Internet Message Format date; NULL when absent, another text or a leap second. |
+| `redirect_url` | TEXT | yes | | | | The URL the Page redirects to: the target of its 3xx response, of its HTTP Refresh header, or of its first meta refresh; NULL when it does not redirect, or when the target is its own URL. |
+| `redirect_type` | TEXT | yes | | | `http_redirect`, `http_refresh`, `meta_refresh`, `javascript_redirect` | How the Page redirects to redirect_url; NULL when it does not redirect. javascript_redirect is filled from v1.1. |
 | `set_cookie_count` | INTEGER | no | | | | The number of Set-Cookie headers of the Page's response, equal to its rows in cookies. |
 | `crawl_timestamp` | TEXT | no | | `timestamp` | | The UTC time of the Page's request, equal to urls.fetched_at. |
 | `title_1` | TEXT | yes | | | | The text of the Page's first title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from spider.crawl.engine.hooks import UrlResponse, UrlResult
 from spider.crawl.fetch.fetcher import FetchResult
-from spider.crawl.pages.preparation import PageSettings, prepare_page
+from spider.crawl.pages.preparation import PageSettings, prepare_page, response_links
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.content_area import ContentArea
@@ -28,10 +28,12 @@ def page_row(
     content_type: str = "text/html; charset=utf-8",
     content_area: ContentArea | None = None,
     headers: tuple[tuple[str, str], ...] = (),
+    url: str = _URL,
 ) -> PageRow:
     """The Page row of an analysed Page with this body and these headers besides its
     Content-Type, through the built-in extractors, the Page extractor's config being
-    `content_area` when it is given."""
+    `content_area` when it is given. Its Links are the engine's: the headers', then the
+    document's."""
     body = html.encode() if isinstance(html, str) else html
     response = FetchResult(
         status_code=200,
@@ -47,12 +49,14 @@ def page_row(
         extractors = tuple(
             page_data if built.name == PAGE_DATA.name else built for built in extractors
         )
-    settings = PageSettings(scope=scope_rules(_URL), extractors=extractors, strip_params=None)
-    prepared = prepare_page(_URL, response, settings)
+    page_url = NormalizedUrl(url)
+    scope = scope_rules(page_url)
+    settings = PageSettings(scope=scope, extractors=extractors, strip_params=None)
+    prepared = prepare_page(page_url, response, settings)
     assert prepared.parse_error is None, prepared.parse_error_message
     result = UrlResult(
         url_id=1,
-        url=_URL,
+        url=page_url,
         crawl_depth=0,
         discovered_via="seed",
         found_on_url_id=None,
@@ -69,6 +73,7 @@ def page_row(
             directives=prepared.directives,
         ),
         parsed=True,
+        links=response_links(page_url, response, scope, None) + prepared.html_links,
         outputs=dict(prepared.outputs),
     )
     (row,) = page_rows(result)

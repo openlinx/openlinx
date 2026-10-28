@@ -38,6 +38,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             status=response.reason or STATUS_PHRASES.get(response.status_code),
             response_time_ms=response.response_time_ms,
             last_modified=_last_modified(response.headers),
+            **_redirect(result),
             set_cookie_count=len(header_values(response.headers, "Set-Cookie")),
             crawl_timestamp=response.fetched_at,
             **({} if data is None else msgspec.structs.asdict(data)),
@@ -55,6 +56,15 @@ def cookie_rows(result: UrlResult) -> Iterable[CookieRow]:
         cookie_row(result.url_id, ordinal, value)
         for ordinal, value in enumerate(header_values(response.headers, "Set-Cookie"), 1)
     )
+
+
+def _redirect(result: UrlResult) -> dict[str, Any]:
+    # 020 reads the Refresh header of a 2xx response only; a refresh of the Page itself, as
+    # a live page reloads, is no redirect.
+    refresh = next((link for link in result.links if link.type == "http_refresh"), None)
+    if refresh is not None and refresh.target != result.url:
+        return {"redirect_url": refresh.target, "redirect_type": "http_refresh"}
+    return {"redirect_url": None, "redirect_type": None}
 
 
 def _robots_columns(result: UrlResult, response: UrlResponse) -> dict[str, Any]:

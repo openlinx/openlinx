@@ -16,7 +16,7 @@ from sqlalchemy import (
     or_,
 )
 
-from spider.store.page_records import SameSite
+from spider.store.page_records import RedirectType, SameSite
 from spider.store.records import (
     CrawlMode,
     CrawlState,
@@ -486,6 +486,20 @@ pages = public_table(
         Timestamp,
         comment="The first Last-Modified response header as a UTC time, read as an HTTP-date or "
         "another Internet Message Format date; NULL when absent, another text or a leap second.",
+    ),
+    Column(
+        "redirect_url",
+        Text,
+        comment="The URL the Page redirects to: the target of its 3xx response, of its HTTP "
+        "Refresh header, or of its first meta refresh; NULL when it does not redirect, or "
+        "when the target is its own URL.",
+    ),
+    Column(
+        "redirect_type",
+        Text,
+        comment="How the Page redirects to redirect_url; NULL when it does not redirect. "
+        "javascript_redirect is filled from v1.1.",
+        info={"values": literal_values(RedirectType)},
     ),
     Column(
         "set_cookie_count",

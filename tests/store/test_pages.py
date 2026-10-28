@@ -35,6 +35,8 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
             status="OK",
             response_time_ms=12,
             last_modified=None,
+            redirect_url=None,
+            redirect_type=None,
             set_cookie_count=1,
             crawl_timestamp=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
         )

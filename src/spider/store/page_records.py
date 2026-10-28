@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Literal
 
 type SameSite = Literal["strict", "lax", "none"]
+# javascript_redirect is filled from v1.1, by JavaScript rendering.
+type RedirectType = Literal["http_redirect", "http_refresh", "meta_refresh", "javascript_redirect"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -19,6 +21,8 @@ class PageRow:
     status: str | None
     response_time_ms: int
     last_modified: datetime | None
+    redirect_url: str | None
+    redirect_type: RedirectType | None
     set_cookie_count: int
     crawl_timestamp: datetime
     # From the HTML: NULL for a Page that is not analysed or whose Page extractor failed (D2).

@@ -81,3 +81,24 @@ def test_x_robots_tag_is_kept_when_page_preparation_fails() -> None:
         row.meta_robots_noindex,
         row.meta_robots_nofollow,
     ) == ("noindex", True, None, None, None)
+
+
+def test_http_refresh_header_is_a_redirect() -> None:
+    row = page_row(
+        "<html><head><title>Moved</title></head><body><p>This page has moved.</p></body></html>",
+        headers=(("Refresh", "0; url=/new"),),
+        url="https://example.test/old",
+    )
+
+    assert (row.redirect_type, row.redirect_url) == ("http_refresh", "https://example.test/new")
+
+
+def test_a_refresh_of_the_page_itself_is_no_redirect() -> None:
+    # A live blog that reloads itself every five minutes.
+    row = page_row(
+        "<html><head><title>Live</title></head><body><p>Updates</p></body></html>",
+        headers=(("Refresh", "300; url=https://example.test/live"),),
+        url="https://example.test/live",
+    )
+
+    assert (row.redirect_type, row.redirect_url) == (None, None)
