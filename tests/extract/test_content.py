@@ -141,3 +141,10 @@ def test_each_include_selector_is_read_on_its_own() -> None:
     area = ContentArea(include=("main /*", "p"))
 
     assert page_row("<main>Intro</main><p>Read this</p>", content_area=area).word_count == 3
+
+
+_HELLO_WORLD = "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c"
+
+
+def test_hash_of_a_simple_content_area() -> None:
+    assert page_row("<p>Hello   world</p>").content_hash == _HELLO_WORLD

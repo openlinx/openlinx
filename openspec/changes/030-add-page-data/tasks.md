@@ -123,7 +123,7 @@ Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code,
 
 ## 9. Exact Duplicate hash and structured data
 
-- [ ] 9.1 Drive "Hash of a simple Content Area" at seam 4, and add `content_hash` in `spider.extract.content`, from the blocks the counts read, between `declared_language` and `crawl_depth`.
+- [x] 9.1 Drive "Hash of a simple Content Area" at seam 4, and add `content_hash` in `spider.extract.content`, from the blocks the counts read, between `declared_language` and `crawl_depth`.
 - [ ] 9.2 Pin "Different markup, same text" at seam 4, a `test:` guard, red by mutation: the blocks joined without a space.
 - [ ] 9.3 Pin "Composed and decomposed accents hash differently" at seam 4, a `test:` guard, red by mutation: the text NFC-normalised before hashing. Run `tests/extract` under `uv run --isolated --python 3.12` and `--python 3.13` once and quote the counts.
 - [ ] 9.4 Drive "Empty Content Area has no hash" at seam 4.

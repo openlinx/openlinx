@@ -7,6 +7,7 @@ from spider.crawl.pages.preparation import Extractor, PageInput, extractor
 from spider.extract.content import (
     average_words_per_sentence,
     content_blocks,
+    content_hash,
     sentence_count,
     text_ratio_pct,
     word_count,
@@ -52,6 +53,7 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     average_words_per_sentence: float | None
     text_ratio_pct: float | None
     declared_language: str | None
+    content_hash: str
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentArea) -> PageData:
@@ -98,6 +100,7 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         average_words_per_sentence=average_words_per_sentence(words, sentences),
         text_ratio_pct=text_ratio_pct(tree, page.length),
         declared_language=declared_language(tree),
+        content_hash=content_hash(blocks),
     )
 
 

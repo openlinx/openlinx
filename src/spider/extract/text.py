@@ -1,7 +1,7 @@
 """Text of the HTML, as one model for every column (030-add-page-data D7)."""
 
 import re
-from collections.abc import Collection, Iterator
+from collections.abc import Collection, Iterable, Iterator
 
 from selectolax.lexbor import LexborNode
 
@@ -79,7 +79,11 @@ def trimmed(text: str) -> str:
 
 
 def element_text(element: LexborNode) -> str:
-    return _BREAK.join(text_blocks(element))
+    return joined(text_blocks(element))
+
+
+def joined(blocks: Iterable[str]) -> str:
+    return _BREAK.join(blocks)
 
 
 def text_blocks(

@@ -1,5 +1,7 @@
-"""The Content Area, the counts over its text, and Text Ratio (030-add-page-data D7, D8, D13)."""
+"""The Content Area, the counts and the hash of its text, and Text Ratio (030-add-page-data D7,
+D8, D10, D13)."""
 
+import hashlib
 import math
 import re
 from collections.abc import Iterable, Iterator
@@ -8,7 +10,7 @@ from fractions import Fraction
 from selectolax.lexbor import LexborHTMLParser
 
 from spider.extract.content_area import ContentArea
-from spider.extract.text import element_text, normalized, text_blocks
+from spider.extract.text import element_text, joined, normalized, text_blocks
 from spider.extract.unicode_scripts import HAN_AND_KANA, MARKS, WORD_CHARACTERS
 
 
@@ -66,6 +68,11 @@ def word_count(blocks: Iterable[str]) -> int:
 
 def average_words_per_sentence(words: int, sentences: int) -> float | None:
     return _rounded(Fraction(words, sentences)) if sentences else None
+
+
+def content_hash(blocks: Iterable[str]) -> str:
+    # No Unicode normalisation: its tables differ between interpreters (D10).
+    return hashlib.sha256(normalized(joined(blocks)).encode()).hexdigest()
 
 
 def text_ratio_pct(tree: LexborHTMLParser, length: int) -> float | None:
