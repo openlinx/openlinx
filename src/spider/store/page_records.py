@@ -47,6 +47,10 @@ class PageRow:
     meta_robots: str | None = None
     meta_robots_noindex: bool | None = None
     meta_robots_nofollow: bool | None = None
+    # From the response's headers, for every Page.
+    x_robots_tag: str | None = None
+    x_robots_tag_noindex: bool | None = None
+    x_robots_tag_nofollow: bool | None = None
     word_count: int | None = None
     sentence_count: int | None = None
     average_words_per_sentence: float | None = None

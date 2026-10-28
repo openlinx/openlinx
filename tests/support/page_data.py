@@ -27,14 +27,16 @@ def page_row(
     html: str | bytes,
     content_type: str = "text/html; charset=utf-8",
     content_area: ContentArea | None = None,
+    headers: tuple[tuple[str, str], ...] = (),
 ) -> PageRow:
-    """The Page row of an analysed Page with this body, through the built-in extractors, the
-    Page extractor's config being `content_area` when it is given."""
+    """The Page row of an analysed Page with this body and these headers besides its
+    Content-Type, through the built-in extractors, the Page extractor's config being
+    `content_area` when it is given."""
     body = html.encode() if isinstance(html, str) else html
     response = FetchResult(
         status_code=200,
         reason="OK",
-        headers=(("Content-Type", content_type),),
+        headers=(("Content-Type", content_type), *headers),
         body=body,
         fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
         response_time_ms=1,

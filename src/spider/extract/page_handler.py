@@ -64,7 +64,7 @@ def _robots_columns(result: UrlResult, response: UrlResponse) -> dict[str, Any]:
     return {
         name: value
         for name, value in directives.items()
-        if name.startswith("meta_robots") and result.parsed
+        if result.parsed or name.startswith("x_robots_tag")
     }
 
 

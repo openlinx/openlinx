@@ -193,7 +193,7 @@ _LATER = ("Derived: ", "Filled from ")
 
 
 def test_a_full_page_fills_every_html_column() -> None:
-    row = page_row(_FULL_PAGE)
+    row = page_row(_FULL_PAGE, headers=(("X-Robots-Tag", "noarchive"),))
     later = {column.name for column in pages.c if (column.comment or "").startswith(_LATER)}
 
     assert [

@@ -655,6 +655,24 @@ pages = public_table(
         "the Page is not analysed.",
     ),
     Column(
+        "x_robots_tag",
+        Text,
+        comment="The values of every X-Robots-Tag response header, in the order received, as the "
+        "robots directives parser normalises and joins them; NULL without one.",
+    ),
+    Column(
+        "x_robots_tag_noindex",
+        Flag,
+        comment="1 when the robots directives parser reads noindex in x_robots_tag for the "
+        "robots user-agent token.",
+    ),
+    Column(
+        "x_robots_tag_nofollow",
+        Flag,
+        comment="1 when the robots directives parser reads nofollow in x_robots_tag for the "
+        "robots user-agent token.",
+    ),
+    Column(
         "word_count",
         Integer,
         comment="The number of words in the Content Area text; NULL when the Page is not "

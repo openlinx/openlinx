@@ -203,6 +203,9 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `meta_robots` | TEXT | yes | | | | The content of every meta element named robots, in document order, as the robots directives parser normalises and joins them; NULL without one, or when the Page is not analysed. |
 | `meta_robots_noindex` | INTEGER | yes | | `boolean` | | 1 when the robots directives parser reads noindex in meta_robots; NULL when the Page is not analysed. |
 | `meta_robots_nofollow` | INTEGER | yes | | `boolean` | | 1 when the robots directives parser reads nofollow in meta_robots; NULL when the Page is not analysed. |
+| `x_robots_tag` | TEXT | yes | | | | The values of every X-Robots-Tag response header, in the order received, as the robots directives parser normalises and joins them; NULL without one. |
+| `x_robots_tag_noindex` | INTEGER | yes | | `boolean` | | 1 when the robots directives parser reads noindex in x_robots_tag for the robots user-agent token. |
+| `x_robots_tag_nofollow` | INTEGER | yes | | `boolean` | | 1 when the robots directives parser reads nofollow in x_robots_tag for the robots user-agent token. |
 | `word_count` | INTEGER | yes | | | | The number of words in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
 | `sentence_count` | INTEGER | yes | | | | The number of sentences in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
 | `average_words_per_sentence` | REAL | yes | | | | word_count divided by sentence_count, rounded half up to 2 decimals; NULL when sentence_count is 0, or the Page is not analysed or its Page extractor failed. |
