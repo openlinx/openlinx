@@ -842,7 +842,7 @@ This change stores each discovered Link together with the attributes that analys
 | `alt_text` | TEXT | yes | | for `image` Links from an `<img>` element, the normalised `alt` attribute: NULL when absent, the empty string when empty. NULL otherwise. |
 | `rel` | TEXT | yes | | the Link's `rel` tokens as `020-add-crawl-core`'s Link discovery reads them (ASCII lower-cased), joined with single spaces, or NULL |
 | `rel_nofollow`, `rel_ugc`, `rel_sponsored` | INTEGER | no | boolean | 1 when `rel` contains that token, otherwise 0 |
-| `followed` | INTEGER | no | boolean | 1 when the Crawl requests the Link's target through it, by `020-add-crawl-core`'s rule (its type, and the Link's and the Page's nofollow), otherwise 0 |
+| `followed` | INTEGER | no | boolean | 1 when the Crawl requests the target through this Link, by `020-add-crawl-core`'s rule (its type, and the Link's and the Page's nofollow), otherwise 0; a Resource such as an `<img>` target is requested but not crawled further |
 | `hreflang` | TEXT | yes | | the trimmed `hreflang` value for `hreflang` Links, otherwise NULL |
 | `media` | TEXT | yes | | the trimmed `media` value for `mobile_alternate` Links, otherwise NULL |
 | `link_position` | TEXT | yes | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | where on the Page the Link is (see below) |
