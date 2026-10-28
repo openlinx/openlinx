@@ -251,7 +251,7 @@ def _build_app(
 
 
 class RunningServer:
-    def __init__(self, site: Site, after_seconds: float = AFTER_SECONDS) -> None:
+    def __init__(self, site: Site, after_seconds: float = AFTER_SECONDS, *, port: int = 0) -> None:
         self._loop = loop_factory()
         self._thread = threading.Thread(target=self._loop.run_forever, name="fixture-site")
         self._thread.start()
@@ -261,7 +261,7 @@ class RunningServer:
         self._runner = web.AppRunner(app)
         try:
             self._call(self._runner.setup())
-            self._call(web.TCPSite(self._runner, "127.0.0.1", 0).start())
+            self._call(web.TCPSite(self._runner, "127.0.0.1", port).start())
         except BaseException:
             self._stop_loop()
             raise

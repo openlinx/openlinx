@@ -29,6 +29,7 @@ from spider.store.records import (
 )
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
 from spider.store.transitions import check_transition
+from spider.store.urls import requeue_for_a_continue
 from spider.workspace.creation import as_workspace_not_writable, create_data_folder
 
 _SUMMARY = select(
@@ -110,12 +111,14 @@ def read_recorded(path: Path) -> RecordedCrawl:
 
 
 def record_continue(config: Mapping[str, Any], at: datetime) -> Callable[[Connection], None]:
-    """A unit that runs the Crawl again, with the settings it now runs with in crawl.config
-    (020-add-crawl-core D20)."""
+    """A unit that runs the Crawl again, with the settings it now runs with in crawl.config,
+    and queues again the URLs whose outcome is usually transient (020-add-crawl-core D1,
+    D20)."""
 
     def unit(connection: Connection) -> None:
         set_state(connection, "running", at)
         connection.execute(update(crawl).values(config=dict(config)))
+        requeue_for_a_continue(connection)
 
     return unit
 

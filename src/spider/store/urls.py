@@ -147,6 +147,20 @@ _REQUEUED = (
         blocked_by_robots_txt=null(),
     )
 )
+# What a continue requests again, over the whole table: outcomes that are usually transient,
+# which is what makes a failed Crawl resumable (design D1).
+_CONTINUE_REQUEUED = (
+    update(urls)
+    .where(urls.c.fetch_state == literal_column("'error'"))
+    .values(
+        fetch_state="queued",
+        skip_reason=null(),
+        fetch_error=null(),
+        fetch_error_message=null(),
+        fetched_at=null(),
+        blocked_by_robots_txt=null(),
+    )
+)
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
 _IS_QUEUED = urls.c.fetch_state == literal_column("'queued'")
@@ -240,6 +254,11 @@ def requeue(url_ids: Sequence[int]) -> Callable[[Connection], UrlTally]:
         return UrlTally(errors=-count, queued=count)
 
     return unit
+
+
+def requeue_for_a_continue(connection: Connection) -> None:
+    """Inside the continue's unit, before its counts are read."""
+    connection.execute(_CONTINUE_REQUEUED)
 
 
 def next_depth(depth: int) -> Callable[[Connection], int | None]:

@@ -1,6 +1,7 @@
 """Continuing a stopped or failed Crawl (020-add-crawl-core D20; seam 2)."""
 
 import json
+import socket
 from collections.abc import Sequence
 from dataclasses import replace
 
@@ -184,3 +185,28 @@ def test_continuing_clears_how_the_crawl_ended(
         stopped.summary.state,
         query(result.crawl_file, "SELECT DISTINCT state, stop_reason FROM test_crawl_row"),
     ) == ("stopped", [("running", None)])
+
+
+def _free_port() -> int:
+    """A port nothing listens on, until the test starts a site there."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port: int = probe.getsockname()[1]
+        return port
+
+
+def test_a_failed_crawl_is_continued_once_its_seed_answers(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    port = _free_port()
+    seed = f"http://127.0.0.1:{port}/"
+    failed = crawl_result(seed, network_wait=0)
+    fixture_site(NINE_PAGES, port=port)
+
+    result = continued(failed)
+
+    assert (
+        failed.summary.stop_reason,
+        result.summary.state,
+        query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url = ?", [seed]),
+    ) == ("seed_unreachable", "completed", [("fetched",)])
