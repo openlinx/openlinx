@@ -128,3 +128,12 @@ def test_only_the_first_meta_refresh_redirects() -> None:
     )
 
     assert (row.meta_refresh, row.redirect_type, row.redirect_url) == ("300", None, None)
+
+
+def test_meta_refresh_without_a_target_is_not_a_redirect() -> None:
+    row = page_row(
+        '<html><head><meta http-equiv="refresh" content="30"><title>Scores</title></head>'
+        "<body><p>Live scores</p></body></html>"
+    )
+
+    assert (row.meta_refresh, row.redirect_type) == ("30", None)
