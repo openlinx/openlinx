@@ -14,16 +14,16 @@ class RateGate:
         self._next_starts: dict[str, float] = {}
         self._last_starts: dict[str, float] = {}
 
-    async def wait_turn(self, host: str) -> None:
+    def reserve_turn(self, host: str) -> float:
+        """The seconds until the host's next turn, which is the caller's from now on."""
         if self._interval is None:
-            return
+            return 0.0
         now = self._clock.monotonic()
         start = max(now, self._next_starts.get(host, now))
         # Reserved before the wait, so the host's waiters take turns in order, and hold no
         # lock that would make one host's wait another's.
         self._next_starts[host] = start + self._interval
-        if start > now:
-            await self._clock.sleep(start - now)
+        return start - now
 
     async def started(self, host: str) -> None:
         """With the global permit held: waits out what is left of the interval since the

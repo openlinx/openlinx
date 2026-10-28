@@ -288,42 +288,19 @@ def _how_it_ended(process: subprocess.Popen[bytes]) -> tuple[int, str, str, list
     return process.returncode, result["state"], result["stop_reason"], stopping
 
 
-def test_a_stop_that_ends_a_depth_reads_no_deeper_one(temp_workspace: TempWorkspace) -> None:
+def test_a_crawl_puts_the_process_handlers_back(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
-    stop = StopSignal()
-    reporter = Collected()
-    before = signal.getsignal(signal.SIGINT)
-    pages = {
-        "/": FakePage('<a href="http://other.test/slow">S</a><a href="/a">A</a>'),
-        "http://other.test/slow": FakePage("<p>S</p>", delay=60),
-        "/a": FakePage('<a href="/b">B</a>'),
-    }
-    fetcher = FakeFetcher(clock, pages, on_start={"/a": lambda: stop.set("interrupt")})
+    before = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)}
 
-    result = crawl_result(
-        "http://site.test/", clock=clock, fetcher=fetcher, stop=stop, reporter=reporter
+    crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, {"/": FakePage("<p>/</p>")}),
     )
 
-    # The Checked URL still in flight at the stop is cancelled with the run, not waited for by a
-    # sweep of the frontier from the top.
-    assert (
-        result.summary.state,
-        result.summary.stop_reason,
-        query(result.crawl_file, "SELECT url, fetch_state FROM urls ORDER BY id"),
-        [data["reason"] for name, data in reporter.events if name == "stopping"],
-        signal.getsignal(signal.SIGINT) is before,
-    ) == (
-        "stopped",
-        "interrupt",
-        [
-            ("http://site.test/", "fetched"),
-            ("http://other.test/slow", "queued"),
-            ("http://site.test/a", "fetched"),
-            ("http://site.test/b", "queued"),
-        ],
-        ["interrupt"],
-        True,
-    )
+    # A later Ctrl+C in the same process, an embedding app's or a test runner's, reaches its own
+    # handler again, not a finished Crawl's stop flag.
+    assert {signum: signal.getsignal(signum) for signum in before} == before
 
 
 # An hour away: a request that hangs well past the grace, and the watchdog's 120 seconds.
@@ -403,14 +380,52 @@ def test_a_stop_during_the_post_crawl_passes_completes_the_crawl(
     hooks = default_hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("stop", stop_request_arrives)))
     fetcher = FakeFetcher(clock, {"/": FakePage("<p>/</p>")})
+    reporter = Collected()
 
-    result = crawl_result("http://site.test/", hooks, clock=clock, fetcher=fetcher, stop=stop)
+    result = crawl_result(
+        "http://site.test/", hooks, clock=clock, fetcher=fetcher, stop=stop, reporter=reporter
+    )
 
-    # Nothing was left queued when it came, so the Crawl has nothing to continue.
-    assert (result.summary.state, result.summary.stop_reason, result.failure) == (
-        "completed",
-        None,
-        None,
+    # Nothing was left queued when it came, so the Crawl has nothing to continue, and the stream
+    # says nothing of a stop the result does not report.
+    assert (
+        result.summary.state,
+        result.summary.stop_reason,
+        result.failure,
+        [data for name, data in reporter.events if name == "stopping"],
+    ) == ("completed", None, None, [])
+
+
+def test_a_stop_ends_the_waits_for_turns_under_rate(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    stop = StopSignal()
+    # At --rate 0.5 the host's turns come 2 seconds apart, robots.txt's and /'s first: as /p1
+    # starts at 4, /p2 to /p4 hold the host's other slots while they wait for theirs, and the rest
+    # wait for a slot.
+    paths = [f"/p{n}" for n in range(1, 9)]
+    pages = {
+        "/": FakePage("".join(f'<a href="{path}">P</a>' for path in paths)),
+        **{path: FakePage("<p>P</p>") for path in paths},
+    }
+    fetcher = FakeFetcher(clock, pages, on_start={"/p1": lambda: stop.set("interrupt")})
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, stop=stop, rate=0.5, concurrency=4
+    )
+
+    # It ends as /p1 answers, with nothing else started, not after the turns already reserved.
+    assert (
+        result.summary.stop_reason,
+        query(result.crawl_file, "SELECT url, fetch_state FROM urls ORDER BY id"),
+        clock.monotonic(),
+    ) == (
+        "interrupt",
+        [
+            ("http://site.test/", "fetched"),
+            ("http://site.test/p1", "fetched"),
+            *[(f"http://site.test{path}", "queued") for path in paths[1:]],
+        ],
+        4,
     )
 
 

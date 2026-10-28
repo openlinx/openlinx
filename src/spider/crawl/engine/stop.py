@@ -17,6 +17,7 @@ class StopSignal:
         self._cause: BaseException | None = None
         self._on_first_set: list[Callable[[StopReason], object]] = []
         self._was_set = asyncio.Event()
+        self._closed = False
 
     @property
     def is_set(self) -> bool:
@@ -38,6 +39,8 @@ class StopSignal:
     def set(self, reason: StopReason, cause: BaseException | None = None) -> None:
         """The first stop counts, but a failure outranks a stop: a Crawl that stopped at its
         URL limit and then lost its file has failed (design D10)."""
+        if self._closed:
+            return
         first = self._reason is None
         if first or (reason in _FAILURES and self._reason not in _FAILURES):
             self._reason, self._cause = reason, cause
@@ -46,6 +49,13 @@ class StopSignal:
         if first:
             for callback in self._on_first_set:
                 callback(reason)
+
+    def close(self) -> StopReason | None:
+        """The end's one read of the reason: a stop set after it, during the passes or the
+        end's writes, changes nothing and writes no stopping event, since the Crawl ends as
+        its empty frontier says (design D10)."""
+        self._closed = True
+        return self._reason
 
     async def wait(self) -> None:
         await self._was_set.wait()

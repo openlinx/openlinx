@@ -2,9 +2,10 @@
 
 import asyncio
 from collections import deque
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import Protocol
 
 from spider.clock import Clock
 from spider.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
@@ -28,6 +29,15 @@ class NotStarted:
     starting, which leaves the URL queued."""
 
 
+class Stop(Protocol):
+    """The Crawl's stop flag, as the Requester reads it."""
+
+    @property
+    def is_set(self) -> bool: ...
+
+    async def wait(self) -> None: ...
+
+
 class Requester:
     """The host's slot, its turn under --rate, the global cap and the URL limit for every
     request; the watchdog, the network pause and 022's retries belong here, not in its callers."""
@@ -42,7 +52,7 @@ class Requester:
         cap: int,
         clock: Clock,
         watchdog_seconds: float,
-        stopped: Callable[[], bool],
+        stop: Stop,
     ) -> None:
         self._fetcher = fetcher
         self._limits = limits
@@ -50,7 +60,7 @@ class Requester:
         self._concurrency = concurrency
         self._clock = clock
         self._watchdog_seconds = watchdog_seconds
-        self._stopped = stopped
+        self._stop = stop
         self._starts: deque[float] = deque()
         self._hosts: dict[str, asyncio.Semaphore] = {}
         self._requests = asyncio.Semaphore(cap)
@@ -73,7 +83,7 @@ class Requester:
         async with self._gated_slots(url):
             # Refused with its turn under --rate already taken, and never given back: after a
             # stop or at the limit, no request starts again.
-            if self._stopped() or not self._limits.start_request():
+            if self._stop.is_set or not self._limits.start_request():
                 return NotStarted()
             self._starts.append(self._clock.monotonic())
             return await self._send(url)
@@ -99,14 +109,14 @@ class Requester:
         """One hop of an origin's robots.txt, which the URL limit never counts (design D6).
         After a stop, none starts (design D16)."""
         async with self._gated_slots(url):
-            if self._stopped():
+            if self._stop.is_set:
                 return NotStarted()
             return await self._send(url)
 
     async def request_probe(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
         """A probe of the network pause: through the host's slot, its turn and the global cap,
         but never the pause's gate or the URL limit (design D16)."""
-        async with self._slots(url):
+        async with self._slots(url, stops=False):
             return await self._send(url)
 
     @asynccontextmanager
@@ -115,7 +125,7 @@ class Requester:
         # that took them as the pause began gives them back and its turn goes unused.
         while True:
             await self._past_gate()
-            async with self._slots(url):
+            async with self._slots(url, stops=True):
                 if self._open.is_set():
                     yield
                     return
@@ -139,15 +149,39 @@ class Requester:
                 self._gate_drained.set()
 
     @asynccontextmanager
-    async def _slots(self, url: NormalizedUrl) -> AsyncIterator[None]:
+    async def _slots(self, url: NormalizedUrl, *, stops: bool) -> AsyncIterator[None]:
         # The host's slot, then its turn under --rate, then the global cap: a request waiting
         # for a busy host, or for its turn, holds no global permit.
         host = host_key(url)
         async with self._host(host):
-            await self._gate.wait_turn(host)
+            wait = self._gate.reserve_turn(host)
+            if stops:
+                if not await self._turn_before_stop(wait):
+                    # Its caller sees the stop and starts nothing.
+                    yield
+                    return
+            elif wait > 0:
+                await self._clock.sleep(wait)
             async with self._requests:
                 await self._gate.started(host)
                 yield
+
+    async def _turn_before_stop(self, wait: float) -> bool:
+        """Whether the turn came before the stop flag: a request that has not started does not
+        sleep out its turn after a stop (design D16)."""
+        if self._stop.is_set:
+            return False
+        if wait <= 0:
+            return True
+        turn = asyncio.ensure_future(self._clock.sleep(wait))
+        stopped = asyncio.ensure_future(self._stop.wait())
+        try:
+            await asyncio.wait({turn, stopped}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            turn.cancel()
+            stopped.cancel()
+            await asyncio.wait({turn, stopped})
+        return not turn.cancelled()
 
     def _host(self, host: str) -> asyncio.Semaphore:
         semaphore = self._hosts.get(host)

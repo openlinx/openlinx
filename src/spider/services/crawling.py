@@ -303,9 +303,7 @@ async def _crawl_and_end(crawl: _Crawl) -> _End:
     async with _crawl_context(crawl) as context:
         await run_crawl(context, crawl.plan.seed)
         stop = context.stop
-        # Read once: a stop that comes during the passes or the end's writes finds the frontier
-        # empty, and must not change the end that is being written.
-        reason = stop.reason
+        reason = stop.close()
         if reason == "write_failed":
             raise _WriteFailed(stop.cause)
         if reason is not None and reason in NETWORK_FAILURES:

@@ -43,7 +43,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         cap=cap,
         clock=context.clock,
         watchdog_seconds=watchdog_seconds(REQUEST_DEADLINE_SECONDS),
-        stopped=lambda: context.stop.is_set,
+        stop=context.stop,
     )
     redispatch = Redispatch()
     robots = RobotsLoader(requester, context.writer, context.settings.robots_user_agent)

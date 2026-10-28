@@ -436,7 +436,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 13.7 Docs: document interrupts, the grace period and the second interrupt in `docs/crawling.md`.
 - [x] 13.8 Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
 - [x] 13.9 Fix: on POSIX, an interrupt that another thread takes, or that lands just before `select()`, stops the Crawl at once (design D10). Done when: a seam-2 test, POSIX in CI, sends SIGINT to a thread other than the main one while the loop waits on a request that answers late, with no timer due, and the `stopping` event comes within half a second of the signal.
-- [ ] 13.10 Fix the manager's review of group 13. Done when: a stop during the post-crawl passes writes no `stopping` event, since the end closes the stop flag where it reads the reason (design D10), red on the passes test; a request waiting for its `--rate` turn stops waiting at the stop flag (design D16), red by a fake-timing test that ends at the stop instead of after the turns; and the test that claimed to pin the break after a stopped depth, which no breakage of it fails, is dropped for a Risks entry.
+- [x] 13.10 Fix the manager's review of group 13. Done when: a stop during the post-crawl passes writes no `stopping` event, since the end closes the stop flag where it reads the reason (design D10), red on the passes test; a request waiting for its `--rate` turn stops waiting at the stop flag (design D16), red by a fake-timing test that ends at the stop instead of after the turns; and the test that claimed to pin the break after a stopped depth, which no breakage of it fails, is dropped for a Risks entry.
 
 ## 14. Persistent frontier and continuing (widening)
 
