@@ -136,7 +136,10 @@ def _non_indexable_reason(
     robots: _RobotsColumns,
     canonical: _CanonicalColumns,
 ) -> IndexabilityStatus | None:
-    # The order a search engine meets them in (design D3).
+    # The order a search engine meets them in (design D3). robots.txt can disallow a Page
+    # that was fetched anyway, under --ignore-robots.
+    if result.blocked_by_robots_txt:
+        return "blocked_by_robots_txt"
     if 300 <= status_code < 400:
         return "redirected"
     # A bot-block code such as 999 withholds the Page from crawlers as a 4xx does.

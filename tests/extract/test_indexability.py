@@ -67,3 +67,10 @@ def test_each_status_class_has_its_reason() -> None:
         999: "client_error",
         599: "server_error",
     }
+
+
+def test_robots_txt_beats_the_status_code() -> None:
+    # Fetched under --ignore-robots, so the response exists while robots.txt disallows it.
+    row = unprepared_page_row(status_code=404, blocked_by_robots_txt=True)
+
+    assert row.indexability_status == "blocked_by_robots_txt"

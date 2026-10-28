@@ -99,7 +99,7 @@ Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code,
 - [x] 7.2 Drive "Noindex wins over a canonical" at seam 4.
 - [x] 7.3 Drive "Self-referencing canonical stays indexable" and "Canonical to another URL" at seam 4. This is a trivial pair: the same comparison of `canonical_url` with the URL's result's normalised URL, with the same URL and with a different one.
 - [x] 7.4 Drive "Server error" at seam 4, through `unprepared_page_row` with a `status_code` keyword, built as the crawl engine builds a non-2xx result: no preparation, the header directives, no Links. Pin with a test named after no scenario: a 301 with an HTML body is `redirected`, a 410 `client_error`, a 203 `indexable`, a 999 `client_error` and a 599 `server_error`.
-- [ ] 7.5 Drive "Robots.txt beats the status code" at seam 4, through `unprepared_page_row` with a `blocked_by_robots_txt` keyword.
+- [x] 7.5 Drive "Robots.txt beats the status code" at seam 4, through `unprepared_page_row` with a `blocked_by_robots_txt` keyword.
 - [ ] 7.6 Drive "Meta refresh redirect is not indexable" at seam 4.
 - [ ] 7.7 Drive "HTTP Refresh redirect is not indexable" at seam 4, with 7.6 as a trivial pair in one commit.
 - [ ] 7.8 Docs: add the Indexability order and its search-engine rationale to `docs/page-data.md`.
