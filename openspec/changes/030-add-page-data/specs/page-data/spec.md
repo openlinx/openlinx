@@ -243,7 +243,7 @@ Each Page row SHALL store these columns. All of them come from the Page's own re
 |---|---|
 | `content_type` | `urls.content_type` |
 | `status_code` | `urls.status_code` |
-| `status` | the reason phrase the server sent; when it sent none, the standard reason phrase for the status code from RFC 9110; NULL when neither exists |
+| `status` | the reason phrase the server sent; when it sent none or an empty one, the phrase that the IANA HTTP Status Code Registry gives the status code; NULL when the registry gives none, as for 418, which it lists as unused |
 | `response_time_ms` | `urls.response_time_ms` |
 | `last_modified` | the first `Last-Modified` header, parsed as an HTTP-date or as another Internet Message Format date, as RFC 9110 allows, with its offset converted to UTC, as a `timestamp` (`YYYY-MM-DDTHH:MM:SS.sssZ`); NULL when absent, another text or a leap second |
 | `http_version` | `origins.http_version` for the Page's origin (`http_1_1` or `http_2`); filled from v0.2, as the origin's column is, and NULL until then |
@@ -292,8 +292,8 @@ Each Page row SHALL store these size columns, repeating the values that `022-add
 A Page SHALL have `redirect_url` and `redirect_type` set in these cases:
 
 - **HTTP redirect.** A Page with a 3xx status code has `redirect_type` `http_redirect`. Its `redirect_url` is the URL that `urls.redirect_url_id` (`022-add-fetch-policy`) points to, or NULL when that is null.
-- **HTTP Refresh.** A Page with a 2xx status code whose `Refresh` header names a URL different from its own `address`, the target of the `http_refresh` Link that `020-add-crawl-core` discovers, has `redirect_type` `http_refresh` and `redirect_url` set to that URL.
-- **Meta refresh.** An analysed Page without an HTTP Refresh redirect, whose meta refresh names a URL different from its own `address`, has `redirect_type` `meta_refresh` and `redirect_url` set to that URL (see "Meta refresh").
+- **HTTP Refresh.** A Page with a 2xx status code whose `Refresh` header names a URL different from its own URL, the target of the `http_refresh` Link that `020-add-crawl-core` discovers, has `redirect_type` `http_refresh` and `redirect_url` set to that URL.
+- **Meta refresh.** An analysed Page without an HTTP Refresh redirect, whose meta refresh names a URL different from its own URL, has `redirect_type` `meta_refresh` and `redirect_url` set to that URL (see "Meta refresh").
 
 In every other case both columns SHALL be NULL. `redirect_type` also lists `javascript_redirect`, which JavaScript rendering fills from v1.1.
 
@@ -493,8 +493,8 @@ The result SHALL NOT depend on the fonts installed on the machine.
 
 An analysed Page SHALL store the robots directives found in its HTML, and every Page those found in its headers:
 
-- **`meta_robots`**: the normalised `content` values of all `<meta>` elements whose `name` is `robots` (compared case-insensitively), joined with `, ` in document order. It is NULL when there are none.
-- **`x_robots_tag`**: the normalised values of all `X-Robots-Tag` response headers, joined with `, ` in the order received. It is NULL when there are none.
+- **`meta_robots`**: the `content` values of all `<meta>` elements whose `name` is `robots` (compared case-insensitively), in document order, normalised and joined as the robots directives parser of `020-add-crawl-core` gives them. It is NULL when there are none.
+- **`x_robots_tag`**: the values of all `X-Robots-Tag` response headers, in the order received, normalised and joined by the same parser. It is NULL when there are none.
 - **`meta_robots_noindex`, `meta_robots_nofollow`, `x_robots_tag_noindex` and `x_robots_tag_nofollow`**: the noindex and nofollow verdicts, as 0 or 1, that the robots directives parser of `020-add-crawl-core` gives for each source. That parser defines which tokens count (such as `none`) and which header values apply only to a named crawler.
 
 #### Scenario: Meta robots keeps case but reads directives
@@ -510,7 +510,7 @@ An analysed Page SHALL store the robots directives found in its HTML, and every 
 - **THEN** `x_robots_tag` is `noindex`, `x_robots_tag_noindex` is 1, `x_robots_tag_nofollow` is 0 and `meta_robots` is NULL
 
 ### Requirement: Meta refresh
-`meta_refresh` SHALL be the normalised `content` of the first `<meta>` element whose `http-equiv` is `refresh` (compared case-insensitively). It is NULL when there is none. The refresh target is the target of the `meta_refresh` Link that `020-add-crawl-core` discovers.
+`meta_refresh` SHALL be the normalised `content` of the first `<meta>` element whose `http-equiv` is `refresh` (compared case-insensitively). It is NULL when there is none. Only that first element can redirect, as a browser acts on the first meta refresh only: when its `content` names a URL, the refresh target is the target of the first `meta_refresh` Link that `020-add-crawl-core` discovers, and otherwise there is none.
 
 #### Scenario: Meta refresh with a quoted target
 - **WHEN** the analysed Page `https://example.test/old` contains `<meta http-equiv="Refresh" content="5; URL='/new'">`
@@ -520,11 +520,17 @@ An analysed Page SHALL store the robots directives found in its HTML, and every 
 - **WHEN** an analysed Page contains `<meta http-equiv="refresh" content="30">`
 - **THEN** `meta_refresh` is `30` and `redirect_type` is NULL
 
-### Requirement: Canonicals
-The canonical columns of an analysed Page SHALL be computed from its *canonical declarations*. A canonical declaration is either of these:
+#### Scenario: Only the first meta refresh redirects
+- **WHEN** an analysed Page's head contains `<meta http-equiv="refresh" content="300">` and then `<meta http-equiv="refresh" content="0; url=/new">`
+- **THEN** `meta_refresh` is `300`, and `redirect_type` and `redirect_url` are NULL
 
-- a `<link>` element that the HTML parser places inside `<head>`, whose `rel` tokens include `canonical` (compared case-insensitively), and which has an `href`
-- a `Link` response header entry with `rel="canonical"`
+### Requirement: Canonicals
+The canonical columns of an analysed Page SHALL be computed from its *canonical declarations*. A canonical declaration is a `canonical` Link that `020-add-crawl-core` discovers in the Page's response and that is declared in one of two places:
+
+- *HTML*: a `<link>` element whose `rel` tokens include `canonical` (compared case-insensitively) and that the HTML parser places inside `<head>`
+- *header*: a `Link` response header entry with `rel="canonical"`
+
+An `href` that resolves to no URL gives no Link, and so no declaration.
 
 The canonical columns SHALL be:
 
@@ -532,7 +538,7 @@ The canonical columns SHALL be:
 - `http_canonical`: the resolved URL of the first header declaration.
 - `canonical_count`: the number of declarations.
 - `canonical_url`: the URL that all declarations resolve to, when they resolve to exactly one distinct URL. It is NULL when there are no declarations or when they disagree.
-- `canonical_relative`: 1 when the `href` of any HTML declaration does not start with `http:` or `https:`, compared case-insensitively.
+- `canonical_relative`: 1 when the `href` of any HTML declaration does not start with `http:` or `https:`, compared case-insensitively after the leading C0 controls and spaces that the URL parser removes.
 
 A `canonical` Link that `020-add-crawl-core` discovers outside `<head>` is still stored as a Link, but SHALL NOT be a canonical declaration.
 
