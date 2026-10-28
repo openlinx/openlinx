@@ -102,7 +102,7 @@ Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code,
 - [x] 7.5 Drive "Robots.txt beats the status code" at seam 4, through `unprepared_page_row` with a `blocked_by_robots_txt` keyword.
 - [x] 7.6 Drive "Meta refresh redirect is not indexable" at seam 4.
 - [x] 7.7 Drive "HTTP Refresh redirect is not indexable" at seam 4, with 7.6 as a trivial pair in one commit.
-- [ ] 7.8 Docs: add the Indexability order and its search-engine rationale to `docs/page-data.md`.
+- [x] 7.8 Docs: add the Indexability order and its search-engine rationale to `docs/page-data.md`.
 - [ ] 7.9 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Content Area, counts and declared language

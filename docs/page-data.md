@@ -130,6 +130,19 @@ These columns hold the targets of Links that Link discovery finds, by the Link t
 - `amphtml_link_element`: the first `<link rel="amphtml">`.
 - `mobile_alternate_link`: the first `<link rel="alternate" media="...">` without `hreflang`, such as a separate mobile site's.
 
+## Indexability
+
+`indexability` says whether a search engine may index the Page, and `indexability_status` gives the first reason it may not, in the order a search engine meets them:
+1. `blocked_by_robots_txt`: robots.txt disallows the URL, which a Crawl fetches anyway only under `--ignore-robots`.
+2. `redirected`: a 3xx response.
+3. `client_error`: a 4xx response, or a status of 600 or more, such as the 999 some sites send to bots.
+4. `server_error`: a 5xx response.
+5. `noindex`: the robots `<meta>` or the `X-Robots-Tag` says noindex.
+6. `redirected`: a meta refresh or HTTP Refresh redirect (see [Redirects](#redirects)).
+7. `canonicalised`: the canonical URL is another URL.
+
+A search engine first has to be allowed to fetch the URL, then needs a usable response, and only then reads the directives. Every 2xx can be indexed, not only 200. A self-referencing canonical keeps a Page indexable, and so do canonicals that disagree, since they leave `canonical_url` NULL.
+
 ## Cookies
 
 A Page's cookies are the `Set-Cookie` headers of its response, one `cookies` row each. They come from the response, not the HTML, so a Page that is not analysed, such as a redirect, has its cookies too.
