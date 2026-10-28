@@ -109,7 +109,7 @@ Every task of this group but 6.0 reads the URL's result. Task 6.13 is task 4.11,
 - [x] 8.3 Drive "Include selector limits the Content Area" at seam 4.
 - [x] 8.4 Drive "Invalid selector stops the Crawl" at seam 1: `settings_invalid` with the key `content_area.exclude`, and 0 requests to the fixture site. Record `content_area` in the Crawl's config. Assert at seam 1 that a Crawl with its own `[content_area]` records it under `content_area`, and that fixture A crawled with `exclude = []` in `spider.toml` stores `word_count` 13.
 - [x] 8.5 Drive "Words with apostrophes, hyphens and dots" at seam 4. Pin with tests named after no scenario, on real page text: a Devanagari word with its marks is one word, `snake_case` is two, and `カード` is three. Measure the word count on a real 1 MB Japanese page and a real 1 MB English page; each stays under about 50 ms.
-- [ ] 8.6 Drive "Each ideograph and kana is a word" at seam 4. Han, Hiragana and Katakana come from a range table of Scripts.txt, compiled into the tokenizer's regular expression. The table names its Unicode version, and a test pins it to `unicodedata.unidata_version`.
+- [x] 8.6 Drive "Each ideograph and kana is a word" at seam 4. Han, Hiragana and Katakana come from a range table of Scripts.txt, compiled into the tokenizer's regular expression. The table names its Unicode version, and a test pins it to `unicodedata.unidata_version`.
 - [ ] 8.7 Drive "Blocks end sentences" at seam 4, and add `sentence_count`.
 - [ ] 8.8 Drive "Text ratio of a small document" at seam 4, and add `text_ratio_pct`, over `PageInput.length`. It is NULL for an empty decoded document, and rounded half up from its exact quotient.
 - [ ] 8.9 Drive "Counts for fixture A" at seam 4, and add `average_words_per_sentence`.

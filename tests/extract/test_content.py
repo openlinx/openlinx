@@ -1,6 +1,9 @@
 """The Content Area and its counts (030-add-page-data, page-data; seam 4)."""
 
+import unicodedata
+
 from spider.extract.content import ContentArea
+from spider.extract.unicode_scripts import UNICODE_VERSION
 from tests.support.page_data import FIXTURE_A, page_row
 
 
@@ -43,3 +46,16 @@ def test_a_devanagari_word_with_its_marks_is_one_word() -> None:
 def test_an_underscore_separates_words() -> None:
     # A Python name in a tutorial's prose.
     assert page_row("<p>Call snake_case() on the name.</p>").word_count == 6
+
+
+def test_each_ideograph_and_kana_is_a_word() -> None:
+    assert page_row("<p>\u65e5\u672c\u8a9e\u306e\u30c6\u30ad\u30b9\u30c8</p>").word_count == 8
+
+
+def test_the_prolonged_sound_mark_is_a_word_of_its_own() -> None:
+    # "Card", in katakana: the mark is Common in Scripts.txt and a letter (Lm).
+    assert page_row("<p>\u30ab\u30fc\u30c9</p>").word_count == 3
+
+
+def test_the_script_table_is_of_the_unicode_version_python_has() -> None:
+    assert unicodedata.unidata_version == UNICODE_VERSION

@@ -9,6 +9,7 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.extract.text import text_blocks
+from spider.extract.unicode_scripts import IDEOGRAPHS
 
 
 class ContentArea(msgspec.Struct, frozen=True, kw_only=True):
@@ -18,10 +19,7 @@ class ContentArea(msgspec.Struct, frozen=True, kw_only=True):
     exclude: tuple[str, ...] = ("nav", "header", "footer")
 
 
-def _word_characters() -> str:
-    # Letters, marks and numbers (L, M, N): Python's re has no Unicode properties, and its \w
-    # takes "_" and leaves out marks.
-    points = [p for p in range(sys.maxunicode + 1) if unicodedata.category(chr(p))[0] in "LMN"]
+def _class(points: Iterable[int]) -> str:
     ranges: list[list[int]] = []
     for point in points:
         if ranges and ranges[-1][1] == point - 1:
@@ -31,10 +29,20 @@ def _word_characters() -> str:
     return "[" + "".join(f"\\U{first:08x}-\\U{last:08x}" for first, last in ranges) + "]"
 
 
-_WORD_CHARACTER = _word_characters()
+_IDEOGRAPHS = frozenset(point for first, last in IDEOGRAPHS for point in range(first, last + 1))
+# Letters, marks and numbers (L, M, N) but the ideographs: Python's re has no Unicode
+# properties, and its \w takes "_" and leaves out marks.
+_WORD_CHARACTER = _class(
+    point
+    for point in range(sys.maxunicode + 1)
+    if unicodedata.category(chr(point))[0] in "LMN" and point not in _IDEOGRAPHS
+)
 # A single apostrophe, hyphen, full stop or comma between two word characters.
 _JOINER = "['\u2019\\-\u2010.,]"
-_WORD = re.compile(f"{_WORD_CHARACTER}+(?:{_JOINER}{_WORD_CHARACTER}+)*")
+# Each ideograph is a word of its own.
+_WORD = re.compile(
+    f"{_class(sorted(_IDEOGRAPHS))}|{_WORD_CHARACTER}+(?:{_JOINER}{_WORD_CHARACTER}+)*"
+)
 
 
 def content_blocks(tree: LexborHTMLParser, area: ContentArea) -> Iterator[str]:
