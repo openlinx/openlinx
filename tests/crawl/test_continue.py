@@ -1,11 +1,14 @@
 """Continuing a stopped or failed Crawl (020-add-crawl-core D20; seam 2)."""
 
 import json
+from collections.abc import Sequence
 from dataclasses import replace
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
+from sqlalchemy import Connection, text
 
+from spider.crawl.engine.hooks import UrlResult, handler
 from spider.crawl.pages.preparation import PageInput, extractor
 from spider.services.crawling import CrawlOverrides
 from spider.services.hooks import default_hooks
@@ -149,3 +152,35 @@ def test_continuing_does_not_request_fetched_urls_again(
 
     again = [r.path for r in server.requests[before:] if server.url(r.path) in fetched]
     assert (len(fetched), again) == (3, [])
+
+
+def _url_of(result: UrlResult) -> tuple[str, ...]:
+    return (result.url,)
+
+
+def _write_crawl_row(connection: Connection, urls: Sequence[str]) -> None:
+    # Read inside the unit of each URL the continue records, after its own unit was flushed.
+    state, stop_reason = connection.execute(text("SELECT state, stop_reason FROM crawl")).one()
+    connection.execute(text("CREATE TABLE IF NOT EXISTS test_crawl_row (state, stop_reason)"))
+    connection.execute(
+        text("INSERT INTO test_crawl_row VALUES (:state, :stop_reason)"),
+        {"state": state, "stop_reason": stop_reason},
+    )
+
+
+def test_continuing_clears_how_the_crawl_ended(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+    hooks = default_hooks()
+    hooks = replace(
+        hooks, handlers=(*hooks.handlers, handler("crawl_row", _url_of, _write_crawl_row))
+    )
+    stopped = crawl_result(server.url("/"), max_urls=3)
+
+    result = continued(stopped, CrawlOverrides(max_urls=None), hooks)
+
+    assert (
+        stopped.summary.state,
+        query(result.crawl_file, "SELECT DISTINCT state, stop_reason FROM test_crawl_row"),
+    ) == ("stopped", [("running", None)])
