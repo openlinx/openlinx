@@ -835,14 +835,14 @@ This change stores each discovered Link together with the attributes that analys
 | `ordinal` | INTEGER | no | | the Link's position in that response, from 1: header Links first in the order received, then HTML Links in document order; the `ordinal` that `020-add-crawl-core`'s Link discovery gives it, never renumbered |
 | `target_url_id` | INTEGER, references `urls.id` | no | | the URL of the Link's normalised target |
 | `type` | TEXT | no | the Link types of `020-add-crawl-core` | the Link type |
-| `declared_in` | TEXT | no | `html`, `http_header` | where the Link was declared |
+| `declared_in` | TEXT | no | `head`, `body`, `http_header` | where the Link was declared: in the document's `<head>` or `<body>` as the parser builds them, or in a response header |
 | `element` | TEXT | yes | `a`, `area`, `link`, `iframe`, `frame`, `meta`, `img`, `source`, `video`, `audio`, `track`, `embed`, `object`, `script` | the HTML element the Link came from; NULL for header Links |
 | `attribute` | TEXT | yes | `href`, `src`, `srcset`, `poster`, `data`, `content` | the attribute the Link came from (for example `img` and `srcset`); NULL for header Links |
 | `anchor_text` | TEXT | yes | | for `hyperlink`, the element text. When that is empty, the `alt` texts of the `<img>` elements inside, joined with a space. For `<area>`, its `alt`. NULL for other types. |
 | `alt_text` | TEXT | yes | | for `image` Links from an `<img>` element, the normalised `alt` attribute: NULL when absent, the empty string when empty. NULL otherwise. |
 | `rel` | TEXT | yes | | the Link's `rel` tokens as `020-add-crawl-core`'s Link discovery reads them (ASCII lower-cased), joined with single spaces, or NULL |
 | `rel_nofollow`, `rel_ugc`, `rel_sponsored` | INTEGER | no | boolean | 1 when `rel` contains that token, otherwise 0 |
-| `followed` | INTEGER | no | boolean | 1 when the Crawl follows the Link by `020-add-crawl-core`'s follow rule (the Link's and the Page's nofollow, its type and the Scope), otherwise 0 |
+| `followed` | INTEGER | no | boolean | 1 when the Crawl requests the Link's target through it, by `020-add-crawl-core`'s rule (its type, and the Link's and the Page's nofollow), otherwise 0 |
 | `hreflang` | TEXT | yes | | the trimmed `hreflang` value for `hreflang` Links, otherwise NULL |
 | `media` | TEXT | yes | | the trimmed `media` value for `mobile_alternate` Links, otherwise NULL |
 | `link_position` | TEXT | yes | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | where on the Page the Link is (see below) |
@@ -854,7 +854,7 @@ This change stores each discovered Link together with the attributes that analys
 
 #### Scenario: Hyperlink with rel flags
 - **WHEN** the analysed Page `https://example.test/a` contains `<main><a href="/b" rel="nofollow UGC">Read  more</a></main>`
-- **THEN** one `links` row has `type` `hyperlink`, `anchor_text` `Read more`, `rel` `nofollow ugc`, `rel_nofollow` 1, `rel_ugc` 1, `rel_sponsored` 0, `declared_in` `html` and `link_position` `content`
+- **THEN** one `links` row has `type` `hyperlink`, `anchor_text` `Read more`, `rel` `nofollow ugc`, `rel_nofollow` 1, `rel_ugc` 1, `rel_sponsored` 0, `declared_in` `body` and `link_position` `content`
 
 #### Scenario: Image alt attribute absent or empty
 - **WHEN** an analysed Page contains `<img src="/a.png">` and `<img src="/b.png" alt="">`
@@ -932,7 +932,7 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 ### Requirement: Crawl Depth and Folder Depth
 **In short:** `crawl_depth` is the shortest path of followed Links from a Seed once the post-crawl passes have run; `folder_depth` counts the path's segments.
 
-`crawl_depth` SHALL equal `urls.crawl_depth` for the Page. Once the post-crawl passes have run, both SHALL be the number of Links on the shortest path of followed Links (`links.followed` = 1) from a Seed, for every URL that such a path reaches; a URL that no such path reaches keeps the depth the crawl engine recorded. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, and a trailing slash does not add a segment.
+`crawl_depth` SHALL equal `urls.crawl_depth` for the Page. Once the post-crawl passes have run, both SHALL be the number of Links on the shortest path of followed Links (`links.followed` = 1) from a Seed, for every URL that such a path reaches, where a redirect (`urls.redirect_url_id`) is a step that adds no Link; a URL that no such path reaches keeps the depth the crawl engine recorded. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, and a trailing slash does not add a segment.
 
 #### Scenario: Folder depth
 - **WHEN** Pages have the paths `/`, `/blog/`, `/blog/post.html` and `/a//b/`
@@ -941,6 +941,10 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 #### Scenario: Crawl Depth is the shortest path over followed Links
 - **WHEN** the post-crawl passes run on a Crawl whose `urls` row for `{site}/p` has `crawl_depth` 3, while a path of 2 followed Links leads from the Seed to it
 - **THEN** `{site}/p` has `crawl_depth` 2 in `pages` and in `urls`
+
+#### Scenario: A redirect adds no Crawl Depth
+- **WHEN** the post-crawl passes run on a Crawl whose `urls` row for `{site}/p` has `crawl_depth` 3, while the Seed links to `{site}/old`, which redirects to `{site}/p`
+- **THEN** `{site}/p` has `crawl_depth` 1 in `pages` and in `urls`
 
 #### Scenario: Crawl Depth is copied from the crawl engine
 - **WHEN** the Seed `{site}/` links to `{site}/l1`, which links to `{site}/l2`

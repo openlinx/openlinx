@@ -6,11 +6,9 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules (including the Page
 
 There are no schema-first slices. A table or column is added in the slice whose scenario first needs it, through `018`'s `public_table()` (`STRICT`, and CHECKs from the declared values and flags), with its description and its `docs/schema.md` entry in the same commit, so the contract test (`015`'s, extended by `018`) is never red between commits. A seam-4 slice that adds an extractor field also adds its column.
 
-**The thin slice** (ROADMAP, Build order) is groups 1–3: the Page rows, titles, meta descriptions and headings that `040`-min's first Rules read (`title-missing` and `h1-missing`; its response-code Rules read only `urls`). None of them reads Indexability. The groups after it run in the order 4, 6, 7, 5, 8, 9, 10, 11, 12, 4b, so Indexability, which `040`'s `indexable_pages` reads, comes as early as its inputs allow. Group 4b copies `022`-min's size and redirect columns and waits for it.
+**The thin slice** (ROADMAP, Build order) is groups 1–3: the Page rows, titles, meta descriptions and headings that `040`-min's first Rules read (`title-missing` and `h1-missing`; its response-code Rules read only `urls`). None of them reads Indexability. The groups after it run in the order 4, 5, 8, 6, 7, 9, 10, 11, 12, 4b, with task 4.3 before group 6 and reviewed with it, so Indexability, which `040`'s `indexable_pages` reads, comes as early as its inputs allow. Group 4b copies `022`-min's size and redirect columns and waits for it.
 
-Tasks marked *(after the 020 merge)* need `020`'s per-URL result to carry the robots directives, the reason phrase, `blocked_by_robots_txt` and the discovered Links, each with its head or body placement and its follow flag.
-
-Rows and units follow `020` D9 and D14: one handler per table (`pages`, `links` and `cookies`), each a pure function of the URL's result that returns frozen row values declared in `spider.store.page_records`, which loads no sqlalchemy, all or none, and names the store function that writes them. The tables are declared in `spider.store.schema`, and `spider.store.pages` and `spider.store.links` hold the writers, with statements built once (`017` D9). The Page extractor (`spider.extract.page_data`, which imports only `spider.crawl.pages` and the pure text helpers of `spider.extract`, so `026`'s workers never load sqlalchemy), the three handlers, the depth pass and the inlink pass are listed in `spider.services.hooks.default_hooks()`, `020`'s composition root. Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
+Rows and units follow `020` D9 and D14: one handler per table (`pages`, `links` and `cookies`), each a pure function of the URL's result that returns frozen row values declared in `spider.store.page_records`, which loads no sqlalchemy, all or none, and names the store function that writes them. The tables are declared in `spider.store.schema`, and `spider.store.pages` and `spider.store.links` hold the writers, with statements built once (`017` D9). The Page extractor (`spider.extract.page_data`, which imports only `spider.crawl.pages.preparation` and the pure text helpers of `spider.extract`, so `026`'s workers never load sqlalchemy), the three handlers, the depth pass and the inlink pass are listed in `spider.services.hooks.default_hooks()`, `020`'s composition root. Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
 
 A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML as bytes, with the Page extractor in its `PageSettings`, then the Page handler over the resulting `UrlResult`, and asserts the Page row: one pure test covers the decoding, the extractor and the handler's mapping to the column.
 
@@ -27,7 +25,7 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 
 ## 2. Decoding, text and titles (slice)
 
-- [x] 2.1 Drive "Charset declared in a meta element" at seam 4. Create the Page extractor in `spider.extract.page_data`, listed in `spider.services.hooks.default_hooks()`: a pure, module-level function of page preparation's tree and `PageInput` to a frozen msgspec Struct, which the Page handler reads under the extractor's name. It reads the tree that page preparation built with `020`'s `decode_html` (`spider.crawl.decoding`) and decodes nothing itself. Add `title_1`.
+- [x] 2.1 Drive "Charset declared in a meta element" at seam 4. Create the Page extractor in `spider.extract.page_data`, listed in `spider.services.hooks.default_hooks()`: a pure, module-level function of page preparation's tree and `PageInput` to a frozen msgspec Struct, which the Page handler reads under the extractor's name. It reads the tree that page preparation built with `020`'s `decode_html` (`spider.crawl.pages.decoding`) and decodes nothing itself. Add `title_1`.
 - [x] 2.2 Drive "Whitespace is collapsed before measuring" at seam 4. Add whitespace normalisation (ASCII whitespace only) and `title_1_length`.
 - [x] 2.3 Drive "Title in SVG is ignored" at seam 4, and add `title_count` and `title_2`.
 - [x] 2.4 Drive "Second title element" at seam 4, and add `title_2_length`.
@@ -49,9 +47,9 @@ A seam-4 slice of the Page extractor runs `020`'s `prepare_page` over the HTML a
 
 ## 4. Identity and response
 
-Task 4.0 is task 12.4, moved here; 4.3, 4.6, 4.7 and 4.10 moved to group 4b, and 4.11 to group 6 as task 6.13.
+Task 4.0 is task 12.4, moved here; 4.6, 4.7 and 4.10 moved to group 4b, and 4.11 to group 6 as task 6.13.
 
-- [x] 4.0 Drive "Title in head noscript is ignored" at seam 4, a `test:` guard over the tree page preparation gives: red by mutating its noscript pre-pass off. It must stay green when page preparation parses with scripting on.
+- [x] 4.0 Drive "Title in head noscript is ignored" at seam 4, a `test:` guard over the tree page preparation gives: red by page preparation parsing with scripting off.
 - [x] 4.1 Drive "Path and query of the address" at seam 4, and add `url_path` and `url_query`.
 - [x] 4.2 Drive "Last-Modified is normalised to a timestamp" and "Invalid Last-Modified is NULL" at seam 4. This is a trivial pair: valid and invalid input. Add `last_modified`.
 - [x] 4.4 Drive "Error Page keeps response data" at seam 3+6, and add `status_code`. The handler already builds a Page that is not analysed with NULL HTML columns.
@@ -61,6 +59,7 @@ Task 4.0 is task 12.4, moved here; 4.3, 4.6, 4.7 and 4.10 moved to group 4b, and
 - [x] 4.12 Docs: add the identity and response concepts to `docs/page-data.md` (the address forms with their path and query, the timestamps, the values that repeat `urls`), as cross-column concepts only, since each column's description is its one definition; trim the per-column bullets of groups 1–3 to the same rule.
 - [x] 4.13 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 - [x] 4.16 Fix the findings of the review of group 4: read `pages.crawl_depth` from `urls` in the Page's unit, pin that the first `Last-Modified` header wins and a heading count above 2, and settle the date edge cases, the address without a path, and the docs' history and repeated facts.
+- [ ] 4.3 Drive "Reason phrase falls back to the standard phrase" at seam 4, and add `status`, from the reason phrase of the URL's response.
 
 ## 5. Cookies
 
@@ -70,11 +69,11 @@ Task 4.0 is task 12.4, moved here; 4.3, 4.6, 4.7 and 4.10 moved to group 4b, and
 - [x] 5.4 Drive "Cookies of a redirect are stored" at seam 3+6 (a 302 Page with `Set-Cookie`).
 - [x] 5.5 Docs: add the cookie concepts and the rule that this change's tables store no cookie value to `docs/page-data.md`.
 - [x] 5.6 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
-- [ ] 5.7 Fix the findings of the review of group 5, before group 8's first slice: a `Domain` that is no host name or IP address, and a `Path` that does not start with `/`, are NULL, so a folded header stores no value; a Max-Age beyond 64 bits is clamped; real repeated attributes and a lowercase name from an HTTP/1.1 proxy in the tests; the cookie column test compares sets; and the in-flight depth test is sequenced on a request, not on delays.
+- [ ] 5.7 Fix the findings of the review of group 5, before group 8's first slice: a `Domain` that is no host name or IP address, and a `Path` that does not start with `/`, are NULL, so a folded header stores no value; a Max-Age beyond 64 bits is clamped; real repeated attributes and a lowercase name from an HTTP/1.1 proxy in the tests; the cookie column test compares sets; and the in-flight depth test is sequenced on a request with the fixture site's `after`, not on delays.
 
 ## 6. Directives and canonicals
 
-Every task of this group but 6.0 reads the URL's result *(after the 020 merge)*. Task 6.13 is task 4.11, moved here, and comes before 6.3.
+Every task of this group but 6.0 reads the URL's result. Task 6.13 is task 4.11, moved here, and comes before 6.3.
 
 - [ ] 6.0 Add `tests/support/headers.py`: real `Set-Cookie` and `Last-Modified` headers, each with the stack that sends it (PHP, Django, Rails, Express, nginx and a CDN). The seam-4 cookie and Last-Modified tests and one hypothesis property draw from it. Pin that `SameSite=Lax; SameSite=Foo` gives `same_site` NULL, as an unknown SameSite is not ignored.
 - [ ] 6.1 Drive "Meta robots keeps case but reads directives" at seam 4, from the robots directives of the URL's result, which `020-add-crawl-core`'s parser gives. Add `meta_robots`, `meta_robots_noindex` and `meta_robots_nofollow`.
@@ -88,7 +87,7 @@ Every task of this group but 6.0 reads the URL's result *(after the 020 merge)*.
 - [ ] 6.8 Drive "Base element changes resolution" at seam 4.
 - [ ] 6.9 Drive "Pagination from HTML and header" at seam 4 from `020`'s `pagination` Links, and add `rel_next_1`, `rel_prev_1`, `http_rel_next_1` and `http_rel_prev_1`.
 - [ ] 6.10 Drive "Mobile alternate and AMP" at seam 4, and add `amphtml_link_element` and `mobile_alternate_link`.
-- [ ] 6.11 Docs: add the directive, canonical and pagination columns, and their use of `020`'s parser and Link types, to `docs/page-data.md`.
+- [ ] 6.11 Docs: add the reason phrase, the directive, canonical and pagination columns, and their use of `020`'s parser and Link types, to `docs/page-data.md`.
 - [ ] 6.12 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Indexability
@@ -97,7 +96,7 @@ Every task of this group but 6.0 reads the URL's result *(after the 020 merge)*.
 - [ ] 7.2 Drive "Noindex wins over a canonical" at seam 4.
 - [ ] 7.3 Drive "Self-referencing canonical stays indexable" and "Canonical to another URL" at seam 4. This is a trivial pair: the same comparison, with the same URL and with a different one.
 - [ ] 7.4 Drive "Server error" at seam 4, with a `status_code` keyword of `page_row`.
-- [ ] 7.5 Drive "Robots.txt beats the status code" at seam 4 *(after the 020 merge)*, with a `blocked_by_robots_txt` keyword of `page_row`.
+- [ ] 7.5 Drive "Robots.txt beats the status code" at seam 4, with a `blocked_by_robots_txt` keyword of `page_row`.
 - [ ] 7.6 Drive "Meta refresh redirect is not indexable" at seam 4.
 - [ ] 7.7 Drive "HTTP Refresh redirect is not indexable" at seam 4.
 - [ ] 7.8 Docs: add the Indexability order and its search-engine rationale to `docs/page-data.md`.
@@ -105,14 +104,14 @@ Every task of this group but 6.0 reads the URL's result *(after the 020 merge)*.
 
 ## 8. Content Area, counts and declared language
 
-- [ ] 8.1 Drive "Default Content Area leaves out navigation" at seam 4. Add the `[content_area]` settings (`include`, `exclude`), the Page extractor's config, which `default_hooks(settings)` resolves from the Crawl's settings; fixture A as test data; and `word_count`. The Content Area, words and sentences live in `spider.extract.content`, over one text walk in `spider.extract.text` that yields blocks. The `[content_area]` table is registered beside `[crawl]`, and `CrawlPlan.loaded` brings the loaded settings to `default_hooks`. The new columns follow `h2_count`, in the spec's order.
+- [ ] 8.1 Drive "Default Content Area leaves out navigation" at seam 4. Add the `[content_area]` settings (`include`, `exclude`), the Page extractor's config, which `default_hooks(settings)` resolves from the Crawl's settings; fixture A as test data; and `word_count`. The Content Area, words and sentences live in `spider.extract.content`, over one text walk in `spider.extract.text` that yields blocks. The `[content_area]` table is registered beside `[crawl]`, its selectors validated by compiling them with the parser, and `CrawlPlan.loaded` brings the loaded settings to `default_hooks`, which `spider.cli.crawl` passes; without settings, `default_hooks()` gives the default Content Area. The new columns follow `h2_count`, in the spec's order.
 - [ ] 8.2 Drive "Empty exclude list counts everything" at seam 4.
 - [ ] 8.3 Drive "Include selector limits the Content Area" at seam 4.
-- [ ] 8.4 Drive "Invalid selector stops the Crawl" at seam 1: `settings_invalid` with the key `content_area.exclude`, and 0 requests to the fixture site. Record `content_area` in the Crawl's config. Assert at seam 1 that a Crawl with its own `[content_area]` records it under `content_area`.
+- [ ] 8.4 Drive "Invalid selector stops the Crawl" at seam 1: `settings_invalid` with the key `content_area.exclude`, and 0 requests to the fixture site. Record `content_area` in the Crawl's config. Assert at seam 1 that a Crawl with its own `[content_area]` records it under `content_area`, and that fixture A crawled with `exclude = []` in `spider.toml` stores `word_count` 13.
 - [ ] 8.5 Drive "Words with apostrophes, hyphens and dots" at seam 4. Pin with tests named after no scenario, on real page text: a Devanagari word with its marks is one word, `snake_case` is two, and `カード` is three. Measure the word count on a real 1 MB Japanese page and a real 1 MB English page; each stays under about 50 ms.
-- [ ] 8.6 Drive "Each ideograph and kana is a word" at seam 4. Han, Hiragana and Katakana come from a range table of Scripts.txt, compiled into the tokenizer's regular expression.
+- [ ] 8.6 Drive "Each ideograph and kana is a word" at seam 4. Han, Hiragana and Katakana come from a range table of Scripts.txt, compiled into the tokenizer's regular expression. The table names its Unicode version, and a test pins it to `unicodedata.unidata_version`.
 - [ ] 8.7 Drive "Blocks end sentences" at seam 4, and add `sentence_count`.
-- [ ] 8.8 Drive "Text ratio of a small document" at seam 4, and add `text_ratio_pct`. It is NULL for an empty decoded document, and rounded half up from its exact quotient.
+- [ ] 8.8 Drive "Text ratio of a small document" at seam 4, and add `text_ratio_pct`, over `PageInput.length`. It is NULL for an empty decoded document, and rounded half up from its exact quotient.
 - [ ] 8.9 Drive "Counts for fixture A" at seam 4, and add `average_words_per_sentence`.
 - [ ] 8.10 Drive "Declared language is trimmed, not normalised" at seam 4, and add `declared_language`. A `lang` attribute without a value gives the empty string.
 - [ ] 8.11 Docs: add the Content Area settings with examples (including keeping article `<header>` elements), the word and sentence rules, Text Ratio and the declared language column to `docs/page-data.md`.
@@ -152,7 +151,7 @@ Every task of this group but 6.0 reads the URL's result *(after the 020 merge)*.
 - [ ] 11.2 Drive "Repeated inlinks from one source" at seam 3+6.
 - [ ] 11.3 Drive "Inlinks are NULL while the Crawl runs" at seam 3+6.
 - [ ] 11.4 Drive "Folder depth" at seam 4, and add `folder_depth`.
-- [ ] 11.7 Drive "Crawl Depth is the shortest path over followed Links" at seam 2, and add `links.followed`, `020`'s follow flag. The depth pass, a store function in `spider.store.links` that `default_hooks()` lists before the inlink pass, is set-based (design D18): it updates `urls.crawl_depth` and `pages.crawl_depth` in units, writes the same rows when run twice (`replay_now`), and runs again after `resume`. It settles the description of `pages.crawl_depth`, which says the column equals `urls.crawl_depth`, and whether ADR-0005 rule 12 (`Derived: `) applies to it.
+- [ ] 11.7 Drive "Crawl Depth is the shortest path over followed Links" at seam 2, and add `links.followed`, `020`'s `DiscoveredLink.requests_target`. The depth pass, a store function in `spider.store.links` that `default_hooks()` lists before the inlink pass, is set-based (design D18): it updates `urls.crawl_depth` and `pages.crawl_depth` in units, writes the same rows when run twice (`replay_now`), and runs again after `resume`. It settles the description of `pages.crawl_depth`, which says the column equals `urls.crawl_depth`, and whether ADR-0005 rule 12 (`Derived: `) applies to it.
 - [ ] 11.5 Docs: add the link count definitions, the self-link rule, % of Total (`linking_pages_pct`), the depth pass, that a URL skipped at `--max-depth` has `links` rows but no `pages` row, and when the post-crawl passes run to `docs/page-data.md`.
 - [ ] 11.6 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
 
@@ -166,13 +165,13 @@ Task 12.4 moved to group 4 as task 4.0.
 - [ ] 12.5 Docs: add the later columns and the empty `page_sources` table to `docs/page-data.md`, update the Page data table in `docs/architecture.md` with the stored column names, and check that the column descriptions read well as the Skill's column reference that `080` generates.
 - [ ] 12.6 Review: run the code-review skill on group 12's commits and then on the whole change, and refactor with the whole suite green. Before the change is archived, give D5 to D12 and D15 an `**In short:**` opener, and reduce each Risks entry of tests named after no scenario to the test's name and the failure class it guards.
 
-## 4b. Sizes, HTTP redirects and the reason phrase (after 022-min)
+## 4b. Sizes and HTTP redirects (after 022-min)
 
-- [ ] 4.3 Drive "Reason phrase falls back to the standard phrase" at seam 4, and add `status`, from the reason phrase of the URL's result *(after the 020 merge)*. It moves back into group 4 if that merge lands first.
 - [ ] 4.6 Drive "Compressed Page sizes" at seam 3+6, using `022-add-fetch-policy`'s gzip fixture support with a stored 46-byte blob. Add `size_bytes`, `transferred_bytes` and `content_encoding`, and extend the test of "Repeated values equal the urls row" to them.
 - [ ] 4.7 Drive "Uncompressed Page sizes" at seam 3+6.
 - [ ] 4.10 Drive "HTTP redirect with an HTML body" at seam 3+6: `redirect_type` `http_redirect`, and `redirect_url` from `022`'s `urls.redirect_url_id`.
-- [ ] 4.14 Docs: add the size and HTTP redirect concepts, and the reason phrase, to `docs/page-data.md`.
+- [ ] 4.17 Drive "A redirect adds no Crawl Depth" at seam 2: the depth pass walks `urls.redirect_url_id` as an edge of weight 0.
+- [ ] 4.14 Docs: add the size and HTTP redirect concepts, and the redirect's weight in the depth pass to `docs/page-data.md`.
 - [ ] 4.15 Review: run the code-review skill on group 4b's commits, then refactor with the whole suite green.
 
 ## 13. (v0.2) SERP pixel widths
