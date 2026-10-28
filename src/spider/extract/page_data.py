@@ -40,6 +40,7 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     h2_2: str | None
     h2_2_length: int | None
     h2_count: int
+    meta_refresh: str | None
     word_count: int
     sentence_count: int
     average_words_per_sentence: float | None
@@ -85,6 +86,7 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         h2_2=h2_2,
         h2_2_length=h2_2_length,
         h2_count=h2_count,
+        meta_refresh=_meta_refresh(metas),
         word_count=words,
         sentence_count=sentences,
         average_words_per_sentence=rounded(Fraction(words, sentences)) if sentences else None,
@@ -130,6 +132,14 @@ def _meta_contents(metas: list[LexborNode], name: str) -> list[str]:
     return [
         normalized(node.attributes.get("content") or "") for node in metas if _is_named(node, name)
     ]
+
+
+def _meta_refresh(metas: list[LexborNode]) -> str | None:
+    # The element 020 reads its refresh Link from: http-equiv lowercased, not trimmed.
+    for node in metas:
+        if (node.attributes.get("http-equiv") or "").lower() == "refresh":
+            return normalized(node.attributes.get("content") or "")
+    return None
 
 
 def _is_named(node: LexborNode, name: str) -> bool:

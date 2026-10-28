@@ -14,7 +14,10 @@ from spider.extract.cookies import cookie_row
 from spider.extract.dates import internet_date
 from spider.extract.page_data import PAGE_DATA
 from spider.extract.status_phrases import STATUS_PHRASES
-from spider.store.page_records import CookieRow, PageRow
+from spider.store.page_records import CookieRow, PageRow, RedirectType
+
+# An HTTP Refresh comes before a meta refresh.
+_REFRESH_TYPES: tuple[RedirectType, ...] = ("http_refresh", "meta_refresh")
 
 
 def page_rows(result: UrlResult) -> Iterable[PageRow]:
@@ -59,11 +62,12 @@ def cookie_rows(result: UrlResult) -> Iterable[CookieRow]:
 
 
 def _redirect(result: UrlResult) -> dict[str, Any]:
-    # 020 reads the Refresh header of a 2xx response only; a refresh of the Page itself, as
-    # a live page reloads, is no redirect.
-    refresh = next((link for link in result.links if link.type == "http_refresh"), None)
-    if refresh is not None and refresh.target != result.url:
-        return {"redirect_url": refresh.target, "redirect_type": "http_refresh"}
+    # 020 reads the Refresh header of a 2xx response and the meta refresh of a prepared one;
+    # a refresh of the Page itself, as a live page reloads, is no redirect.
+    for link_type in _REFRESH_TYPES:
+        refresh = next((link for link in result.links if link.type == link_type), None)
+        if refresh is not None and refresh.target != result.url:
+            return {"redirect_url": refresh.target, "redirect_type": link_type}
     return {"redirect_url": None, "redirect_type": None}
 
 

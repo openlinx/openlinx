@@ -102,3 +102,17 @@ def test_a_refresh_of_the_page_itself_is_no_redirect() -> None:
     )
 
     assert (row.redirect_type, row.redirect_url) == (None, None)
+
+
+def test_meta_refresh_with_a_quoted_target() -> None:
+    row = page_row(
+        '<html><head><meta http-equiv="Refresh" content="5; URL=\'/new\'"><title>Old</title>'
+        "</head><body><p>You will be taken to the new page.</p></body></html>",
+        url="https://example.test/old",
+    )
+
+    assert (row.meta_refresh, row.redirect_type, row.redirect_url) == (
+        "5; URL='/new'",
+        "meta_refresh",
+        "https://example.test/new",
+    )
