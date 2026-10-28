@@ -46,6 +46,15 @@ def test_json_ld_array_type_lists_and_an_http_type() -> None:
     ) == (5, 0, 1, ("Article", "BlogPosting", "BreadcrumbList", "NewsArticle", "Person"))
 
 
+def test_page_without_structured_data() -> None:
+    row = page_row(
+        "<html><head><title>About</title><script>var page = {};</script></head>"
+        "<body><h1>About us</h1><p>We make kettles.</p></body></html>"
+    )
+
+    assert (row.jsonld_items, row.microdata_items, row.structured_data_types) == (0, 0, ())
+
+
 def _nested(levels: int) -> str:
     return f'<script type="application/ld+json">{"[" * levels}{"]" * levels}</script>'
 
