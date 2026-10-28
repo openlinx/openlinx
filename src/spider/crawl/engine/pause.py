@@ -12,7 +12,7 @@ from spider.crawl.engine.stop import StopSignal
 from spider.crawl.engine.warning_log import WarningLog
 from spider.crawl.fetch.fetcher import FetchFailure
 from spider.crawl.fetch.requester import Requester
-from spider.crawl.urls import NormalizedUrl
+from spider.crawl.urls import NormalizedUrl, url_origin
 from spider.store.records import FetchError, QueuedUrl
 
 # tls_error is not among them: a certificate failure is an answer of sorts, and a site-wide one
@@ -134,6 +134,8 @@ class NetworkPause:
         self._in_a_row: list[CountedUrl] = []
         # The Seed is requested first, so the first Internal answer is its origin's.
         self._seed_answered = False
+        # The origins that a dead section showed dead, which count no more (design D16).
+        self._dead_origins: set[str] = set()
         self._probing: asyncio.Task[None] | None = None
 
     @property
@@ -153,7 +155,7 @@ class NetworkPause:
         return self.paused and fetch_error in _NO_RESPONSE
 
     def failed(self, fetch_error: FetchError, queued: QueuedUrl, *, requested: bool) -> None:
-        if fetch_error not in _NO_RESPONSE:
+        if fetch_error not in _NO_RESPONSE or url_origin(queued.url) in self._dead_origins:
             return
         self._in_a_row.append(CountedUrl(queued, requested))
         # Until the Seed's origin answers, one failure pauses: a network may be coming up or
@@ -197,6 +199,8 @@ class NetworkPause:
                 # The Seed is no section of the site: its first answer is the network's, so its
                 # robots.txt and the Seed are requested again (design D16).
                 end = "outage"
+            if end == "dead_section":
+                self._count_no_more(self._in_a_row)
             seconds = self._clock.monotonic() - began
             self._log.pause_ended(seconds)
             if end is None:
@@ -215,6 +219,13 @@ class NetworkPause:
             # Open after giving up or failing too: the stop or the run's end then refuses the
             # requests that waited, where a closed gate would hold them for good.
             self._requester.open_gate()
+
+    def _count_no_more(self, count: Sequence[CountedUrl]) -> None:
+        """The probes request the Seed, so its answer never shows the Seed's origin dead, and
+        an outage of a site on one host must still pause (design D16)."""
+        seed_origin = url_origin(self._seed)
+        origins = {url_origin(counted.queued.url) for counted in count}
+        self._dead_origins.update(origins - {seed_origin})
 
     async def _wait_for_answer(self, began: float) -> PauseEnd | None:
         """How the pause ended: a probe answered before the wait ended, or none did, and every

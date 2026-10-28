@@ -202,6 +202,64 @@ def _posts(numbers: range) -> str:
     return "".join(f'<a href="http://blog.site.test/{n}">Post</a>' for n in numbers)
 
 
+def test_a_dead_subdomain_pauses_the_crawl_once(temp_workspace: TempWorkspace) -> None:
+    clock, reporter = FakeClock(), Collected()
+    dead = range(1, 301)
+    links = "".join(f'<a href="http://dead.site.test/{n}">Old</a>' for n in dead)
+    pages = {
+        "/": FakePage(links + "".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY)),
+        # Its robots.txt answers 404, as a front server's does when the application behind it is
+        # down, so each of its URLs is requested.
+        **{f"http://dead.site.test/{n}": FakePage("", fails="connection_error") for n in dead},
+        # /p9 answers a second late, and the network goes down as it does.
+        "/p9": FakePage("<p>P9</p>", delay=1),
+    }
+    # The first pause ends at 5 seconds as a dead section; the outage of the Seed's host begins
+    # at 6, with /p10, and ends at 120.
+    fetcher = FakeFetcher(clock, pages, outages=[(6, 120)])
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=1,
+        scope="subdomains",
+    )
+    states = dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls"))
+
+    # Without the exemption, the dead subdomain pauses the Crawl once per eight failures.
+    assert (
+        [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"],
+        {states[f"http://dead.site.test/{n}"] for n in dead},
+        {states[f"http://site.test/p{n}"] for n in _TWENTY},
+        result.summary.state,
+    ) == (["dead_section", "outage"], {"error"}, {"fetched"}, "completed")
+
+
+def test_a_dead_section_on_the_seeds_host_keeps_counting(temp_workspace: TempWorkspace) -> None:
+    clock, reporter = FakeClock(), Collected()
+    links = "".join(f'<a href="/down/{n}">Down</a>' for n in range(1, 9))
+    pages = {
+        "/": FakePage(links + "".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY)),
+        **{f"/down/{n}": FakePage("", fails="connection_error") for n in range(1, 9)},
+        "/p9": FakePage("<p>P9</p>", delay=1),
+    }
+    # The probes request the Seed, so its answer never shows the Seed's origin dead: the outage
+    # that begins at 6 seconds must still pause the Crawl.
+    fetcher = FakeFetcher(clock, pages, outages=[(6, 120)])
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, reporter=reporter, concurrency=1
+    )
+    states = dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls"))
+
+    assert (
+        [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"],
+        {states[f"http://site.test/p{n}"] for n in _TWENTY},
+    ) == (["dead_section", "outage"], {"fetched"})
+
+
 def test_probes_do_not_count_toward_the_url_limit(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
 
