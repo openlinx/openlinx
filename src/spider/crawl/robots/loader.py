@@ -26,6 +26,9 @@ class RobotsLoader:
         self._origins: dict[str, asyncio.Task[OriginRobots]] = {}
         # The URL that first asked for each origin's robots.txt.
         self._first_urls: dict[str, NormalizedUrl] = {}
+        # The URLs still waiting for each origin's verdict, and the event of their last one.
+        self._waiting: dict[str, int] = {}
+        self._drained: dict[str, asyncio.Event] = {}
 
     async def robots_of(self, url: NormalizedUrl) -> OriginRobots:
         """The robots.txt of the URL's origin, requested by the origin's first URL."""
@@ -34,8 +37,23 @@ class RobotsLoader:
         if task is None:
             task = self._origins[origin] = asyncio.create_task(self._load(robots_txt_url(url)))
             self._first_urls[origin] = url
-        # A URL whose task is cancelled while it waits leaves the request to the others.
-        return await asyncio.shield(task)
+        if task.done():
+            # Those that waited for the verdict wake one loop turn or more after it came: a URL
+            # dispatched since then goes behind them, so an origin's URLs reach its host's slot
+            # in the order they were dispatched (design D1).
+            while self._waiting.get(origin):
+                await self._drained[origin].wait()
+            return task.result()
+        if not self._waiting.get(origin):
+            self._drained[origin] = asyncio.Event()
+        self._waiting[origin] = self._waiting.get(origin, 0) + 1
+        try:
+            # A URL whose task is cancelled while it waits leaves the request to the others.
+            return await asyncio.shield(task)
+        finally:
+            self._waiting[origin] -= 1
+            if not self._waiting[origin]:
+                self._drained[origin].set()
 
     def requested(self, url: NormalizedUrl) -> bool:
         """Whether the robots.txt of the URL's origin needs no new request."""
