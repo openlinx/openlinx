@@ -7,7 +7,12 @@ from spider.crawl.engine.pause import pause_after
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import NormalizedUrl, url_origin
 from spider.naming import APP_NAME
-from spider.output.codes import CRAWL_WRITE_FAILED, SEED_UNREACHABLE, SITE_UNREACHABLE
+from spider.output.codes import (
+    CRAWL_WRITE_FAILED,
+    INTERRUPTED,
+    SEED_UNREACHABLE,
+    SITE_UNREACHABLE,
+)
 from spider.output.diagnostics import SpiderError
 from spider.store.records import CrawlFile, StopReason
 from spider.store.writer import CrawlWriterClosedError
@@ -79,6 +84,10 @@ def write_failed(crawl_file: CrawlFile, cause: BaseException | None) -> SpiderEr
         f"{_resume(crawl_file)}",
         details=details,
     )
+
+
+def interrupted(_crawl_file: CrawlFile) -> SpiderError:
+    return SpiderError(INTERRUPTED, "The Crawl stopped on an interrupt; what it recorded is kept.")
 
 
 def _resume(crawl_file: CrawlFile) -> str:

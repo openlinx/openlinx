@@ -16,12 +16,18 @@ def test_the_crawl_stops_at_the_limit(
     result = run_cli("crawl", server.url("/"), "--max-urls", "3")
 
     document = result.json()
+    stopping = [
+        event["data"]["reason"]
+        for event in result.stderr_json_lines()
+        if event.get("event") == "stopping"
+    ]
     assert (
         result.exit_code,
         document["state"],
         document["stop_reason"],
         document["urls"]["fetched"],
-    ) == (0, "stopped", "max_urls", 3)
+        stopping,
+    ) == (0, "stopped", "max_urls", 3, ["max_urls"])
 
 
 def test_the_limit_warning_says_how_to_continue(

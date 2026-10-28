@@ -973,6 +973,11 @@ HANDOFFS = {
 # A submitted unit's Future resolves at its commit, which comes at the loop's commit deadline
 # and so waits for clock time: a hold would stop the time it waits for. This one call only.
 WAITS_FOR_CLOCK_TIME = {("spider/store/writer.py", "submit_async", "asyncio.wrap_future(done)")}
+# A signal handler schedules the stop from the loop's own thread, between two bytecodes; the
+# loop waits for nothing it hands over, so no hold is needed. This one call only.
+FROM_A_SIGNAL_HANDLER = {
+    ("spider/services/interrupts.py", "handler", "loop.call_soon_threadsafe(stop.set, 'interrupt')")
+}
 
 
 class _HandOffs(ast.NodeVisitor):
@@ -1027,7 +1032,8 @@ class _HandOffs(ast.NodeVisitor):
             name = self._names.get(node.func.id)
         else:
             name = None
-        exempt = (self._module, self._function, ast.unparse(node)) in WAITS_FOR_CLOCK_TIME
+        call = (self._module, self._function, ast.unparse(node))
+        exempt = call in WAITS_FOR_CLOCK_TIME or call in FROM_A_SIGNAL_HANDLER
         if name in HANDOFFS and not self._held and not exempt:
             self.found.append(
                 f"{self._module}:{node.lineno} hands off outside clock.off_loop(): "

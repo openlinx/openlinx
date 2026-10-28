@@ -499,6 +499,8 @@ Boundary doubles used, all from the approved list:
 - [Progress counts that drift from the file, or a rate or `elapsed_s` off its clock] → In `tests/crawl/test_progress.py`, `test_progress_counts_are_those_of_the_crawl_file_when_written`, whose reporter counts the file at each event, and `test_progress_says_how_long_the_crawl_has_run_and_its_rate`.
 - [Post-crawl passes take only the writer, `Pass.run(writer)`, and `040` needs a clock in them] → Task 10.19 gives `Pass.run` one frozen `PassContext(writer, clock)`; `040` adapts its pass when it rebases.
 - [A URL that finds its origin's robots.txt verdict ready taking its host's slot ahead of the URLs that waited for that verdict, so an origin's URLs start out of dispatch order] → No deterministic test: the window depends on when the writer thread records the verdict. `test_one_failure_inside_a_dead_origins_streak_does_not_exempt_its_origin` in `tests/crawl/test_network_pause.py` failed in about 1 run of 10 under parallel load before the fix. The pause's gate opens for its waiters the same way, but across a pause the start order is D16's, with the re-queued URLs first.
+- [A stop that ends a depth followed by a sweep of the frontier from the top, which waits for the Checked URLs in flight and reads the stopped depth's deeper URLs again and again] → In `tests/crawl/test_interrupts.py`, `test_a_stop_that_ends_a_depth_reads_no_deeper_one`.
+- [Signal handlers installed from a thread other than the main one, where `signal.signal` raises, so a Crawl run from a thread fails before it starts] → In `tests/crawl/test_interrupts.py`, `test_a_crawl_run_from_another_thread_keeps_the_process_handlers`.
 
 ## Migration Plan
 
