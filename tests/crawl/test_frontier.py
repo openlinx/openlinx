@@ -78,13 +78,16 @@ KILL_LINKS = {
     "/": [f"/p{n}" for n in _KILL_PAGES],
     **{f"/p{n}": [f"/p{n}/a", f"/p{n}/b"] for n in _KILL_PAGES},
 }
+# /p1 to /p10 answer after 0.2 s and the rest never do, so depth 1 cannot end and the Crawl
+# still runs when the test kills it, however late a reader sees the first ten committed.
+_ANSWERED = {"/", *(f"/p{n}" for n in range(1, 11))}
 KILLED_SITE = Site(
     routes={
-        # Each /pN answers slowly, so the Crawl still runs when the test kills it.
         **{
             path: Page(
                 body="".join(f'<a href="{link}">L</a>' for link in links),
                 delay=0 if path == "/" else 0.2,
+                hang=path not in _ANSWERED,
             )
             for path, links in KILL_LINKS.items()
         },
