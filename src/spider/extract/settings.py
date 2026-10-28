@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from selectolax.lexbor import SelectolaxError
 
 from spider.crawl.pages.links import parse_html
-from spider.extract.content import ContentArea
+from spider.extract.content_area import ContentArea
 
 
 class ContentAreaSettings(BaseModel):

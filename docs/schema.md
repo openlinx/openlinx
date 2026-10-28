@@ -221,10 +221,10 @@ One row for each Set-Cookie header of a Page's response, with the cookie's name 
 | `url_id` | INTEGER | no | PK, → `urls.id` | | | The Page whose response set the cookie. |
 | `ordinal` | INTEGER | no | PK | | | The header's position among the response's Set-Cookie headers, from 1. |
 | `name` | TEXT | no | | | | The text before the header's first =, trimmed; the empty string when its first part has no =. |
-| `domain` | TEXT | yes | | | | The Domain attribute, lowercased, without a leading dot; NULL when absent or empty. |
-| `path` | TEXT | yes | | | | The Path attribute, trimmed, as sent; NULL when absent. |
+| `domain` | TEXT | yes | | | | The Domain attribute, lowercased, without a leading dot; NULL when absent, empty, or neither a host name nor an IP address. |
+| `path` | TEXT | yes | | | | The Path attribute, trimmed, as sent; NULL when absent, when it does not start with /, which RFC 6265 reads as the default path, or when it holds a comma, which only a header that a proxy folded gives it. |
 | `expires` | TEXT | yes | | `timestamp` | | The Expires attribute as a UTC time, a two-digit year read as RFC 6265 reads it; NULL when absent or invalid. |
-| `max_age` | INTEGER | yes | | | | The Max-Age attribute, in seconds; NULL when absent, not an optional - followed by digits, or beyond a 64-bit INTEGER. |
+| `max_age` | INTEGER | yes | | | | The Max-Age attribute, in seconds; NULL when absent or not an optional - followed by digits; a value beyond a 64-bit INTEGER is clamped to its bound. |
 | `secure` | INTEGER | no | | `boolean` | | 1 when the Secure attribute is present. |
 | `http_only` | INTEGER | no | | `boolean` | | 1 when the HttpOnly attribute is present. |
 | `partitioned` | INTEGER | no | | `boolean` | | 1 when the Partitioned attribute is present. |

@@ -2,7 +2,7 @@
 
 import unicodedata
 
-from spider.extract.content import ContentArea
+from spider.extract.content_area import ContentArea
 from spider.extract.unicode_scripts import UNICODE_VERSION
 from tests.support.page_data import FIXTURE_A, page_row
 
@@ -117,3 +117,11 @@ def test_a_lang_attribute_without_a_value_is_empty() -> None:
     rows = [page_row("<html lang><p>a</p></html>"), page_row("<html><p>a</p></html>")]
 
     assert [row.declared_language for row in rows] == ["", None]
+
+
+def test_each_include_selector_is_read_on_its_own() -> None:
+    # A selector pasted with a comment left open: it compiles alone, and in one list with the
+    # others it would swallow them.
+    area = ContentArea(include=("main /*", "p"))
+
+    assert page_row("<main>Intro</main><p>Read this</p>", content_area=area).word_count == 3

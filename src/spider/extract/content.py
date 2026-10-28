@@ -5,18 +5,11 @@ import sys
 import unicodedata
 from collections.abc import Iterable, Iterator
 
-import msgspec
-from selectolax.lexbor import LexborHTMLParser, LexborNode
+from selectolax.lexbor import LexborHTMLParser
 
+from spider.extract.content_area import ContentArea
 from spider.extract.text import text_blocks
-from spider.extract.unicode_scripts import IDEOGRAPHS
-
-
-class ContentArea(msgspec.Struct, frozen=True, kw_only=True):
-    """The Page extractor's config: the [content_area] selectors, compiled by each parser."""
-
-    include: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ("nav", "header", "footer")
+from spider.extract.unicode_scripts import HAN_AND_KANA
 
 
 def _class(points: Iterable[int]) -> str:
@@ -29,20 +22,19 @@ def _class(points: Iterable[int]) -> str:
     return "[" + "".join(f"\\U{first:08x}-\\U{last:08x}" for first, last in ranges) + "]"
 
 
-_IDEOGRAPHS = frozenset(point for first, last in IDEOGRAPHS for point in range(first, last + 1))
-# Letters, marks and numbers (L, M, N) but the ideographs: Python's re has no Unicode
+_HAN_AND_KANA = frozenset(point for first, last in HAN_AND_KANA for point in range(first, last + 1))
+# Letters, marks and numbers (L, M, N) but Han and kana: Python's re has no Unicode
 # properties, and its \w takes "_" and leaves out marks.
 _WORD_CHARACTER = _class(
     point
     for point in range(sys.maxunicode + 1)
-    if unicodedata.category(chr(point))[0] in "LMN" and point not in _IDEOGRAPHS
+    if unicodedata.category(chr(point))[0] in "LMN" and point not in _HAN_AND_KANA
 )
+# Each Han or kana character is a word of its own.
+_ONE_CHARACTER_WORD = "[" + "".join(f"\\U{a:08x}-\\U{b:08x}" for a, b in HAN_AND_KANA) + "]"
 # A single apostrophe, hyphen, full stop or comma between two word characters.
 _JOINER = "['\u2019\\-\u2010.,]"
-# Each ideograph is a word of its own.
-_WORD = re.compile(
-    f"{_class(sorted(_IDEOGRAPHS))}|{_WORD_CHARACTER}+(?:{_JOINER}{_WORD_CHARACTER}+)*"
-)
+_WORD = re.compile(f"{_ONE_CHARACTER_WORD}|{_WORD_CHARACTER}+(?:{_JOINER}{_WORD_CHARACTER}+)*")
 
 _TERMINATORS = ".!?\u2026\u3002\uff01\uff1f"
 # A run of terminators ends a sentence before whitespace or the block's end, or wherever it
@@ -54,30 +46,19 @@ _SENTENCE_END = re.compile(
 
 def content_blocks(tree: LexborHTMLParser, area: ContentArea) -> Iterator[str]:
     """The Content Area text, block by block, in document order."""
+    body = tree.body
+    if body is None:
+        return
+    # Each selector on its own: one selector list would let a selector that leaves a comment
+    # or a string open swallow the ones after it.
     excluded = {node.mem_id for selector in area.exclude for node in tree.css(selector)}
-    for root in _roots(tree, area):
-        if not any(node.mem_id in excluded for node in _with_ancestors(root)):
-            yield from text_blocks(root, excluded)
-
-
-def _roots(tree: LexborHTMLParser, area: ContentArea) -> list[LexborNode]:
-    if not area.include:
-        return [] if tree.body is None else [tree.body]
-    # One selector list gives the matches in document order, a node that two selectors
-    # match twice.
-    matches = list({node.mem_id: node for node in tree.css(", ".join(area.include))}.values())
-    matched = {node.mem_id for node in matches}
-    return [
-        node
-        for node in matches
-        if not any(above.mem_id in matched for above in _with_ancestors(node.parent))
-    ]
-
-
-def _with_ancestors(node: LexborNode | None) -> Iterator[LexborNode]:
-    while node is not None:
-        yield node
-        node = node.parent
+    roots = {node.mem_id for selector in area.include for node in tree.css(selector)}
+    # The walk starts inside <body>, so <body> and <html> are looked at here.
+    outer = [node.mem_id for node in (body, body.parent) if node is not None]
+    if any(mem_id in excluded for mem_id in outer):
+        return
+    every = not area.include or any(mem_id in roots for mem_id in outer)
+    yield from text_blocks(body, excluded, None if every else roots)
 
 
 def sentence_count(blocks: Iterable[str]) -> int:

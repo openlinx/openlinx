@@ -1,9 +1,7 @@
 """Text of the HTML, as one model for every column (030-add-page-data D7)."""
 
-import math
 import re
 from collections.abc import Collection, Iterator
-from fractions import Fraction
 
 from selectolax.lexbor import LexborNode
 
@@ -63,17 +61,17 @@ _BLOCKS = frozenset(
 )
 # Whitespace, which normalising makes one space.
 _BREAK = " "
-# On the walk's stack: the end of a block element's content.
-_BLOCK_END = object()
+
+
+class _BlockEnd:
+    """On the walk's stack: the end of a block element's content, or of a root's."""
+
+
+_BLOCK_END = _BlockEnd()
 
 
 def normalized(text: str) -> str:
     return trimmed(_WHITESPACE_RUN.sub(" ", text))
-
-
-def rounded(value: Fraction) -> float:
-    """To 2 decimals, half up, from the exact value: a float would round 3.125 down."""
-    return math.floor(value * 100 + Fraction(1, 2)) / 100
 
 
 def trimmed(text: str) -> str:
@@ -84,31 +82,42 @@ def element_text(element: LexborNode) -> str:
     return _BREAK.join(text_blocks(element))
 
 
-def text_blocks(element: LexborNode, excluded: Collection[int] = ()) -> Iterator[str]:
+def text_blocks(
+    element: LexborNode, excluded: Collection[int] = (), roots: Collection[int] | None = None
+) -> Iterator[str]:
     """The text of the element's content, as the blocks that `br` and block elements break,
-    leaving out the elements whose mem_id is in `excluded`."""
-    # An explicit stack, so a deep tree needs no recursion.
+    leaving out the elements whose mem_id is in `excluded`. With `roots`, only the text inside
+    an element whose mem_id is in it counts, and each such root is a block of its own."""
+    # An explicit stack, so a deep tree needs no recursion. Each entry carries whether it is
+    # inside a root, so no node looks at its ancestors.
     parts: list[str] = []
-    pending: list[LexborNode | object | None] = [element.first_child]
+    pending: list[tuple[LexborNode | None, bool] | _BlockEnd] = [
+        (element.first_child, roots is None)
+    ]
     while pending:
-        node = pending.pop()
+        entry = pending.pop()
+        if isinstance(entry, _BlockEnd):
+            if parts:
+                yield "".join(parts)
+                parts.clear()
+            continue
+        node, inside = entry
         if node is None:
             continue
-        if not isinstance(node, LexborNode):
-            if parts:
-                yield "".join(parts)
-                parts.clear()
-            continue
-        pending.append(node.next)
+        pending.append((node.next, inside))
         if node.is_text_node:
-            parts.append(node.text_content or "")
-        elif node.tag == "br" or node.tag in _BLOCKS:
-            if parts:
-                yield "".join(parts)
-                parts.clear()
-            if node.tag in _BLOCKS and node.mem_id not in excluded:
-                pending.extend((_BLOCK_END, node.first_child))
-        elif node.tag not in _SKIPPED and node.mem_id not in excluded:
-            pending.append(node.first_child)
+            if inside:
+                parts.append(node.text_content or "")
+            continue
+        starts_root = not inside and roots is not None and node.mem_id in roots
+        breaks = node.tag in _BLOCKS or starts_root
+        if (breaks or node.tag == "br") and parts:
+            yield "".join(parts)
+            parts.clear()
+        if node.tag == "br" or node.tag in _SKIPPED or node.mem_id in excluded:
+            continue
+        if breaks:
+            pending.append(_BLOCK_END)
+        pending.append((node.first_child, inside or starts_root))
     if parts:
         yield "".join(parts)

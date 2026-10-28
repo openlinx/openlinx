@@ -2,7 +2,7 @@
 
 from spider.crawl.engine.hooks import Hooks, handler
 from spider.crawl.pages.preparation import InProcessExecutor, PageExecutor
-from spider.extract.content import ContentArea
+from spider.extract.content_area import ContentArea
 from spider.extract.page_data import page_data_extractor
 from spider.extract.page_handler import cookie_rows, page_rows
 from spider.extract.settings import ContentAreaSettings

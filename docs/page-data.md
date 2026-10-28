@@ -50,7 +50,7 @@ Titles, meta descriptions, meta keywords and headings follow one pattern:
 
 ## Content Area
 
-The *Content Area* is the part of a Page that its own content fills, without the site's navigation and template. `word_count`, `sentence_count` and `average_words_per_sentence` are counted over it. The `[content_area]` table of `spider.toml` sets it with two lists of CSS selectors:
+`word_count`, `sentence_count` and `average_words_per_sentence` are counted over the Page's Content Area (see [CONTEXT.md](../CONTEXT.md)). The `[content_area]` table of `spider.toml` sets it with two lists of CSS selectors:
 
 ```toml
 [content_area]
@@ -58,7 +58,7 @@ include = []                          # the default: the root is <body>
 exclude = ["nav", "header", "footer"] # the default
 ```
 
-- **Roots.** With `include` empty, `<body>` is the only root. Otherwise the roots are the elements that an `include` selector matches and that no other match encloses, so an `<article>` inside a matched `<main>` is read once.
+- **Roots.** With `include` empty, `<body>` is the only root. Otherwise the roots are the elements that an `include` selector matches and that no other match encloses, so an `<article>` inside a matched `<main>` is read once. Each root's text is a block of its own.
 - **Exclusions.** Everything inside a root is in the Content Area, except an element that an `exclude` selector matches and everything inside it.
 - **A list replaces the default.** Setting `exclude` in `spider.toml` replaces the whole default list, and `exclude = []` counts the whole `<body>`.
 - **Invalid selectors** stop the Crawl before any request, with `settings_invalid` and the key `content_area.include` or `content_area.exclude`.

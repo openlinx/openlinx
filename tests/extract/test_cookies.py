@@ -132,11 +132,16 @@ def test_a_domain_is_a_host_name_or_an_ip_address() -> None:
     rows = _cookies(
         "a=1; Domain=.Shop.Example.test",
         "b=1; Domain=192.0.2.10",
-        "c=1; Domain=2001:db8::1",
+        "c=1; Domain=my_app.example.test",
         "d=1; Domain=example.test/path",
     )
 
-    assert [row.domain for row in rows] == ["shop.example.test", "192.0.2.10", "2001:db8::1", None]
+    assert [row.domain for row in rows] == [
+        "shop.example.test",
+        "192.0.2.10",
+        "my_app.example.test",
+        None,
+    ]
 
 
 def test_expires_reads_two_digit_years_as_rfc_6265_does() -> None:

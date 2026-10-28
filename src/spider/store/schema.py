@@ -709,10 +709,16 @@ cookies = public_table(
     Column(
         "domain",
         Text,
-        comment="The Domain attribute, lowercased, without a leading dot; NULL when absent or "
-        "empty.",
+        comment="The Domain attribute, lowercased, without a leading dot; NULL when absent, "
+        "empty, or neither a host name nor an IP address.",
     ),
-    Column("path", Text, comment="The Path attribute, trimmed, as sent; NULL when absent."),
+    Column(
+        "path",
+        Text,
+        comment="The Path attribute, trimmed, as sent; NULL when absent, when it does not "
+        "start with /, which RFC 6265 reads as the default path, or when it holds a comma, "
+        "which only a header that a proxy folded gives it.",
+    ),
     Column(
         "expires",
         Timestamp,
@@ -722,8 +728,8 @@ cookies = public_table(
     Column(
         "max_age",
         Integer,
-        comment="The Max-Age attribute, in seconds; NULL when absent, not an optional - followed "
-        "by digits, or beyond a 64-bit INTEGER.",
+        comment="The Max-Age attribute, in seconds; NULL when absent or not an optional - "
+        "followed by digits; a value beyond a 64-bit INTEGER is clamped to its bound.",
     ),
     Column("secure", Flag, nullable=False, comment="1 when the Secure attribute is present."),
     Column("http_only", Flag, nullable=False, comment="1 when the HttpOnly attribute is present."),

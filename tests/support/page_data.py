@@ -7,7 +7,7 @@ from spider.crawl.fetch.fetcher import FetchResult
 from spider.crawl.pages.preparation import PageSettings, prepare_page
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
-from spider.extract.content import ContentArea
+from spider.extract.content_area import ContentArea
 from spider.extract.page_data import PAGE_DATA, page_data_extractor
 from spider.extract.page_handler import page_rows
 from spider.services.hooks import default_hooks
@@ -42,7 +42,9 @@ def page_row(
     extractors = default_hooks().extractors
     if content_area is not None:
         page_data = page_data_extractor(content_area)
-        extractors = tuple(page_data if e.name == PAGE_DATA.name else e for e in extractors)
+        extractors = tuple(
+            page_data if built.name == PAGE_DATA.name else built for built in extractors
+        )
     settings = PageSettings(scope=scope_rules(_URL), extractors=extractors, strip_params=None)
     prepared = prepare_page(_URL, response, settings)
     assert prepared.parse_error is None, prepared.parse_error_message

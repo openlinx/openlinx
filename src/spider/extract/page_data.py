@@ -1,13 +1,15 @@
 """The Page extractor: the columns a Page's HTML gives (030-add-page-data D1, D7)."""
 
+import math
 from fractions import Fraction
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.pages.preparation import Extractor, PageInput, extractor
-from spider.extract.content import ContentArea, content_blocks, sentence_count, word_count
-from spider.extract.text import element_text, normalized, rounded, trimmed
+from spider.extract.content import content_blocks, sentence_count, word_count
+from spider.extract.content_area import ContentArea
+from spider.extract.text import element_text, normalized, trimmed
 
 # An element inside svg or math names a picture or a formula; text inside them is left out too
 # (text._SKIPPED). Page preparation parses with scripting on, as a browser that runs scripts
@@ -57,9 +59,9 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
     h1s, h1_count = _headings(tree, "h1")
     h1_1, h1_1_length, h1_2, h1_2_length = _first_two(h1s)
     h2s, h2_count = _headings(tree, "h2")
+    h2_1, h2_1_length, h2_2, h2_2_length = _first_two(h2s)
     blocks = list(content_blocks(tree, config))
     words, sentences = word_count(blocks), sentence_count(blocks)
-    h2_1, h2_1_length, h2_2, h2_2_length = _first_two(h2s)
     return PageData(
         title_1=title_1,
         title_1_length=title_1_length,
@@ -89,6 +91,11 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         text_ratio_pct=_text_ratio(tree, page.length),
         declared_language=_declared_language(tree),
     )
+
+
+def rounded(value: Fraction) -> float:
+    """To 2 decimals, half up, from the exact value: a float would round 3.125 down."""
+    return math.floor(value * 100 + Fraction(1, 2)) / 100
 
 
 def _text_ratio(tree: LexborHTMLParser, length: int) -> float | None:

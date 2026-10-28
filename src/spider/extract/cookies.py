@@ -1,6 +1,5 @@
 """A Page's cookies from its Set-Cookie headers, without their values (030-add-page-data D14)."""
 
-import ipaddress
 import re
 from collections.abc import Callable, Sequence
 from datetime import datetime
@@ -11,7 +10,9 @@ from spider.store.page_records import CookieRow, SameSite
 
 _SAME_SITE: dict[str, SameSite] = {value: value for value in get_args(SameSite.__value__)}
 _MAX_AGE = re.compile(r"-?[0-9]+")
-_HOST_NAME = re.compile(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*")
+# Labels of letters, digits, "-" and "_", which host names in use carry; an IPv4 address
+# matches too.
+_HOST_NAME = re.compile(r"[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?(\.[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?)*")
 
 
 def cookie_row(url_id: int, ordinal: int, header: str) -> CookieRow:
@@ -54,15 +55,7 @@ def _domain(value: str) -> str | None:
     # that is no host name or IP address matches no host (RFC 6265 5.1.3), such as the rest of
     # a header that a proxy folded, which holds the next cookie's value.
     domain = value.lower().removeprefix(".")
-    return domain if _HOST_NAME.fullmatch(domain) or _is_ip_address(domain) else None
-
-
-def _is_ip_address(value: str) -> bool:
-    try:
-        ipaddress.ip_address(value)
-    except ValueError:
-        return False
-    return True
+    return domain if _HOST_NAME.fullmatch(domain) else None
 
 
 def _path(value: str | None) -> str | None:
