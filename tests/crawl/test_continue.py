@@ -130,3 +130,22 @@ def test_a_counted_warning_adds_up_over_the_crawls_whole_life(
     assert [(w.code, w.details["count"], w.details["first_url"]) for w in result.warnings] == [
         ("parse_failed", 9, server.url("/p1"))
     ]
+
+
+def test_continuing_does_not_request_fetched_urls_again(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+    stopped = crawl_result(server.url("/"), max_urls=3)
+    fetched = {
+        url
+        for (url,) in query(
+            stopped.crawl_file, "SELECT url FROM urls WHERE fetch_state = 'fetched'"
+        )
+    }
+    before = len(server.requests)
+
+    continued(stopped, CrawlOverrides(max_urls=None))
+
+    again = [r.path for r in server.requests[before:] if server.url(r.path) in fetched]
+    assert (len(fetched), again) == (3, [])
