@@ -634,6 +634,45 @@ def test_a_crawl_that_waits_longer_than_the_network_wait_fails(
     )
 
 
+def _paused_with_a_subdomain(robots_txt: FakePage) -> dict[str, FakePage]:
+    """/down/1 to /down/8 get no response, which pauses the Crawl at --concurrency 1; the
+    robots.txt of sub.site.test, requested beside them, ends a second into the pause."""
+    down = range(1, 9)
+    links = "".join(f'<a href="/down/{n}">D</a>' for n in down)
+    return {
+        "/": FakePage(links + '<a href="http://sub.site.test/x">X</a>'),
+        **{f"/down/{n}": FakePage("", fails="connection_error") for n in down},
+        "http://sub.site.test/robots.txt": robots_txt,
+        "http://sub.site.test/x": FakePage("<p>X</p>"),
+    }
+
+
+def test_a_url_held_at_the_pause_stays_queued_when_the_crawl_stops(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    # The robots.txt of sub.site.test gets no response either, so its URL waits at the pause's
+    # gate; no probe is due within the 3-second wait, so the Crawl gives up then.
+    robots_txt = FakePage("", fails="connection_error", delay=1)
+    fetcher = FakeFetcher(clock, _paused_with_a_subdomain(robots_txt))
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        concurrency=1,
+        scope="subdomains",
+        network_wait=3,
+    )
+
+    assert (
+        result.summary.stop_reason,
+        query(
+            result.crawl_file, "SELECT fetch_state FROM urls WHERE url = 'http://sub.site.test/x'"
+        ),
+    ) == ("site_unreachable", [("queued",)])
+
+
 def _seed_starts(fetcher: FakeFetcher) -> list[float]:
     return [at for url, at in fetcher.starts if url == "http://site.test/"]
 

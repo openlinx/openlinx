@@ -74,6 +74,58 @@ def test_ctrl_break_stops_a_crawl_on_windows(
     assert _how_it_ended(process) == (130, "stopped", "interrupt", ["interrupt"])
 
 
+_DOWN = range(1, 21)
+# / links to /down/1 to /down/20, each of which sends its headers and then resets the
+# connection: the Crawl pauses after the eighth at --concurrency 1.
+LOST_SECTION = Site(
+    routes={
+        "/": Page(body="".join(f'<a href="/down/{n}">Down {n}</a>' for n in _DOWN)),
+        **{f"/down/{n}": Page(body="<p>Down</p>", reset_after=0) for n in _DOWN},
+    }
+)
+
+
+def test_a_stop_ends_a_pause(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(LOST_SECTION)
+    process = start_cli_process(
+        "crawl", server.url("/"), "--concurrency", "1", "--network-wait", "1800"
+    )
+    _await_event(process, "crawl_paused")
+
+    interrupted_at = time.monotonic()
+    _interrupt(process)
+    stdout, stderr = process.communicate(timeout=30)
+
+    result = json.loads(stdout)
+    events = [json.loads(line).get("event") for line in stderr.splitlines()]
+    # The probes request the Seed; the first is due 5 seconds into the pause.
+    probes = [r for r in server.requests if r.path == "/" and r.received_at > interrupted_at]
+    assert (
+        process.returncode,
+        result["state"],
+        result["stop_reason"],
+        events.count("stopping"),
+        events.count("crawl_resumed"),
+        probes,
+    ) == (130, "stopped", "interrupt", 1, 0, [])
+
+
+def _await_event(process: subprocess.Popen[bytes], name: str) -> None:
+    assert process.stderr is not None
+    for line in process.stderr:
+        if json.loads(line).get("event") == name:
+            return
+    raise AssertionError(f"the Command ended without a {name} event")
+
+
+def _interrupt(process: subprocess.Popen[bytes]) -> None:
+    """Ctrl+C, or on Windows Ctrl+Break, which a process group alone gets."""
+    if sys.platform == "win32":
+        process.send_signal(signal.CTRL_BREAK_EVENT)
+    else:
+        process.send_signal(signal.SIGINT)
+
+
 def _how_it_ended(process: subprocess.Popen[bytes]) -> tuple[int, str, str, list[str]]:
     stdout, stderr = process.communicate(timeout=30)
     result = json.loads(stdout)

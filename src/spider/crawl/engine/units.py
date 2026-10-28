@@ -128,6 +128,9 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
             # Held with its task slot, as a request at the pause's gate is, so the pause's
             # count stays bounded; an outage drops the verdict, so it is read again then.
             await run.pause.ended()
+            if context.stop.is_set:
+                # A stop ended the pause: the URL was never requested, so it stays queued.
+                return None
             origin_robots = await robots.robots_of(queued.url)
         origin_error = origin_robots.origin_error
         if origin_error is not None:

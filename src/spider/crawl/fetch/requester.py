@@ -57,6 +57,9 @@ class Requester:
         # The network pause's gate: set while requests may start (design D16).
         self._open = asyncio.Event()
         self._open.set()
+        # The requests still waiting at the gate, and the event of their last one.
+        self._at_gate = 0
+        self._gate_drained = asyncio.Event()
 
     def close_gate(self) -> None:
         self._open.clear()
@@ -106,11 +109,29 @@ class Requester:
         # Waited before any slot, so a paused request leaves the host's slots to the probes; one
         # that took them as the pause began gives them back and its turn goes unused.
         while True:
-            await self._open.wait()
+            await self._past_gate()
             async with self._slots(url):
                 if self._open.is_set():
                     yield
                     return
+
+    async def _past_gate(self) -> None:
+        """Those that waited at the gate wake a loop turn or more after it opens: a request
+        that comes since then goes behind them, so requests reach the host's slot in the order
+        they were dispatched (design D1)."""
+        while self._at_gate:
+            await self._gate_drained.wait()
+        if self._open.is_set():
+            return
+        if not self._at_gate:
+            self._gate_drained = asyncio.Event()
+        self._at_gate += 1
+        try:
+            await self._open.wait()
+        finally:
+            self._at_gate -= 1
+            if not self._at_gate:
+                self._gate_drained.set()
 
     @asynccontextmanager
     async def _slots(self, url: NormalizedUrl) -> AsyncIterator[None]:

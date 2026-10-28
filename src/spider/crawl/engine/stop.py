@@ -1,5 +1,6 @@
 """The stop flag of a Crawl: set once, with its stop_reason (020-add-crawl-core D10)."""
 
+import asyncio
 from collections.abc import Callable
 
 from spider.store.records import StopReason
@@ -13,6 +14,7 @@ class StopSignal:
         self._reason: StopReason | None = None
         self._cause: BaseException | None = None
         self._on_first_set: Callable[[StopReason], object] | None = None
+        self._was_set = asyncio.Event()
 
     @property
     def is_set(self) -> bool:
@@ -39,3 +41,7 @@ class StopSignal:
             self._reason, self._cause = reason, cause
         if first and self._on_first_set is not None:
             self._on_first_set(reason)
+        self._was_set.set()
+
+    async def wait(self) -> None:
+        await self._was_set.wait()
