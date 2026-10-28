@@ -17,7 +17,11 @@ class UrlCounters:
 
     def __init__(self, counts: UrlCounts) -> None:
         self._tally = UrlTally(
-            counts.discovered, counts.fetched, counts.errors, counts.skipped, counts.queued
+            discovered=counts.discovered,
+            fetched=counts.fetched,
+            errors=counts.errors,
+            skipped=counts.skipped,
+            queued=counts.queued,
         )
 
     def add(self, tally: UrlTally) -> None:

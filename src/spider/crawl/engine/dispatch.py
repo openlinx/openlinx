@@ -7,7 +7,7 @@ from typing import Literal
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import url_limit_reached
 from spider.crawl.engine.outcomes import Outcomes
-from spider.crawl.engine.pause import Again, NetworkPause, Outcome
+from spider.crawl.engine.pause import CountedUrl, NetworkPause, PauseEnd, Redispatch
 from spider.crawl.engine.progress import UrlCounters, report_progress
 from spider.crawl.engine.units import Run, TaskFailure, unit_of, via_resource
 from spider.crawl.fetch.fetcher import REQUEST_DEADLINE_SECONDS
@@ -42,7 +42,11 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         watchdog_seconds=watchdog_seconds(REQUEST_DEADLINE_SECONDS),
         stopped=lambda: context.stop.is_set,
     )
-    again = Again()
+    redispatch = Redispatch()
+    robots = RobotsLoader(requester, context.writer, context.settings.robots_user_agent)
+    task_failure = TaskFailure(context.stop)
+    # The tasks that run beside the URLs' own: the network pause's probing, the progress events.
+    side_tasks: set[asyncio.Task[None]] = set()
     decision = context.scope.decide(seed)
     await context.writer.run_async(
         record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
@@ -50,37 +54,42 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     # Once a run, so a continued Crawl starts from the file's counts (design D10).
     counters = UrlCounters(await context.writer.run_async(url_counts()))
 
-    async def resumed(outcome: Outcome, count: Sequence[QueuedUrl]) -> None:
-        # The site may answer now: robots.txt is asked again (design D16).
-        run.robots.forget_unanswered(lambda url: context.scope.decide(url).is_internal)
-        if outcome == "outage":
-            requeued = again.requeue(count)
-            # Each was counted toward the URL limit once already, as it counts each URL once.
-            for _ in requeued:
+    async def resumed(end: PauseEnd, count: Sequence[CountedUrl]) -> None:
+        if end != "outage":
+            return
+        # The network was down, not the site: robots.txt is asked again (design D16).
+        robots.forget_unanswered(lambda url: context.scope.decide(url).is_internal)
+        requeued = redispatch.requeue(count)
+        # Each whose own request counted toward the URL limit counts again when it is requested.
+        for counted in requeued:
+            if counted.requested:
                 requester.give_back()
-            counters.add(await context.writer.run_async(requeue(requeued)))
+        ids = [counted.queued.id for counted in requeued]
+        counters.add(await context.writer.run_async(requeue(ids)))
 
+    pause = NetworkPause(
+        concurrency=concurrency,
+        network_wait=context.settings.network_wait,
+        seed=seed,
+        crawl_id=context.crawl_file.id,
+        stop=context.stop,
+        requester=requester,
+        clock=context.clock,
+        log=context.reporter,
+        resumed=resumed,
+        track=lambda task: task_failure.track(side_tasks, task),
+    )
     run = Run(
         context=context,
         outcomes=Outcomes(context.writer, context.reporter, context.stop, counters),
         limits=limits,
         requester=requester,
-        robots=RobotsLoader(requester, context.writer, context.settings.robots_user_agent),
+        robots=robots,
         blocking=BlockingRuns(),
         checked_urls=set(),
-        task_failure=TaskFailure(context.stop),
-        pause=NetworkPause(
-            concurrency=concurrency,
-            network_wait=context.settings.network_wait,
-            seed=seed,
-            crawl_id=context.crawl_file.id,
-            stop=context.stop,
-            requester=requester,
-            clock=context.clock,
-            log=context.reporter,
-            resumed=resumed,
-        ),
-        again=again,
+        task_failure=task_failure,
+        pause=pause,
+        redispatch=redispatch,
     )
     # Once, with the final Scope: 022 moves this to the end of the Seed's Redirect Chain.
     await context.pages.start(
@@ -99,9 +108,10 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             crawl_id=context.crawl_file.id,
             counters=counters,
             rate=requester.rate,
-            paused=lambda: run.pause.paused,
+            paused=lambda: pause.paused,
         )
     )
+    task_failure.track(side_tasks, progress)
     depth: int | None = 0
     try:
         while depth is not None:
@@ -136,7 +146,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     finally:
         await _cancel_all(run.checked_urls)
         await run.pause.close()
-        await _cancel_all({progress})
+        await _cancel_all(side_tasks)
         await run.robots.close()
     # Once every task has ended, including those that the cancellation above ended.
     run.task_failure.raise_first()
@@ -163,7 +173,7 @@ async def _crawl_depth(run: Run, depth: int) -> None:
             if started == "limit" or not batch:
                 break
             for queued in batch:
-                if not run.again.claim(queued.id):
+                if not run.redispatch.claim(queued.id):
                     continue
                 started = await _start_again(run, running)
                 if started == "started":
@@ -185,7 +195,7 @@ type _Started = Literal["started", "stopped", "limit"]
 async def _start_again(run: Run, running: set[asyncio.Task[None]]) -> _Started:
     """Dispatches what a network pause re-queued or left queued, ahead of the frontier read,
     each at the depth it was found at (design D3)."""
-    for queued in run.again.take():
+    for queued in run.redispatch.take():
         started = await _start(run, queued, running)
         if started != "started":
             return started

@@ -3,6 +3,7 @@ D16)."""
 
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 from typing import Literal
 
 from spider.clock import Clock
@@ -16,7 +17,7 @@ from spider.store.records import FetchError, QueuedUrl
 
 # tls_error is not among them: a certificate failure is an answer of sorts, and a site-wide one
 # must not wait --network-wait and then fail as site_unreachable.
-NO_RESPONSE: frozenset[FetchError] = frozenset(
+_NO_RESPONSE: frozenset[FetchError] = frozenset(
     {
         "dns_error",
         "connection_refused",
@@ -38,18 +39,28 @@ _PROBE_INTERVAL = 60
 
 
 def probe_times(network_wait: int) -> tuple[int, ...]:
-    """When the probes of a pause start; one exactly at the wait still starts (design D16)."""
-    times = [t for t in _FIRST_PROBES if t <= network_wait]
+    """When the probes of a pause start, each before the wait ends: one at the wait would hold
+    the Crawl past it (design D16)."""
+    times = [t for t in _FIRST_PROBES if t < network_wait]
     later = _FIRST_PROBES[-1] + _PROBE_INTERVAL
-    times += range(later, network_wait + 1, _PROBE_INTERVAL)
+    times += range(later, network_wait, _PROBE_INTERVAL)
     return tuple(times)
 
 
 type _Reason = Literal["seed_unreachable", "site_unreachable"]
-type Outcome = Literal["dead_section", "outage"]
+type PauseEnd = Literal["dead_section", "outage"]
 
 
-class Again:
+@dataclass(frozen=True, slots=True)
+class CountedUrl:
+    """A URL of the count, and whether its own request counted toward the URL limit: one
+    recorded from its origin's failed robots.txt was never requested."""
+
+    queued: QueuedUrl
+    requested: bool
+
+
+class Redispatch:
     """The URLs to dispatch ahead of the frontier read, since its cursor has passed them: those
     an outage re-queues, each at most once a run, and those a pause left queued (design D3,
     D16)."""
@@ -64,15 +75,15 @@ class Again:
     def add(self, queued: QueuedUrl) -> None:
         self._urls[queued.id] = queued
 
-    def requeue(self, count: Sequence[QueuedUrl]) -> list[int]:
-        """The ids of the count's URLs to put back in the queue: those not re-queued before."""
-        ids = []
-        for queued in count:
-            if queued.id not in self._requeued:
-                self._requeued.add(queued.id)
-                self.add(queued)
-                ids.append(queued.id)
-        return ids
+    def requeue(self, count: Sequence[CountedUrl]) -> list[CountedUrl]:
+        """The count's URLs to put back in the queue: those not re-queued before."""
+        requeued = []
+        for counted in count:
+            if counted.queued.id not in self._requeued:
+                self._requeued.add(counted.queued.id)
+                self.add(counted.queued)
+                requeued.append(counted)
+        return requeued
 
     def claim(self, url_id: int) -> bool:
         """Whether the frontier, which read the URL itself, may dispatch it: not one this list
@@ -104,8 +115,11 @@ class NetworkPause:
         requester: Requester,
         clock: Clock,
         log: WarningLog,
-        resumed: Callable[[Outcome, Sequence[QueuedUrl]], Awaitable[None]],
+        resumed: Callable[[PauseEnd, Sequence[CountedUrl]], Awaitable[None]],
+        track: Callable[[asyncio.Task[None]], None],
     ) -> None:
+        """`track` hands the probing task to the run's TaskFailure, which ends the run on its
+        error."""
         self._limit = pause_after(concurrency)
         self._network_wait = network_wait
         self._seed = seed
@@ -115,8 +129,9 @@ class NetworkPause:
         self._clock = clock
         self._log = log
         self._resumed = resumed
+        self._track = track
         # The URLs of the requests in a row without a response, which make up the count.
-        self._in_a_row: list[QueuedUrl] = []
+        self._in_a_row: list[CountedUrl] = []
         # The Seed is requested first, so the first Internal answer is its origin's.
         self._seed_answered = False
         self._probing: asyncio.Task[None] | None = None
@@ -132,10 +147,15 @@ class NetworkPause:
     def robots_txt_answered(self) -> None:
         self._seed_answered = True
 
-    def failed(self, fetch_error: FetchError, queued: QueuedUrl) -> None:
-        if fetch_error not in NO_RESPONSE:
+    def retries(self, fetch_error: FetchError) -> bool:
+        """Whether a request that ended with `fetch_error` is made again: one without a response
+        while paused is not recorded, so its URL stays queued (design D16)."""
+        return self.paused and fetch_error in _NO_RESPONSE
+
+    def failed(self, fetch_error: FetchError, queued: QueuedUrl, *, requested: bool) -> None:
+        if fetch_error not in _NO_RESPONSE:
             return
-        self._in_a_row.append(queued)
+        self._in_a_row.append(CountedUrl(queued, requested))
         # Until the Seed's origin answers, one failure pauses: a network may be coming up or
         # switching just as the Crawl starts (design D16).
         if not self._seed_answered:
@@ -144,8 +164,9 @@ class NetworkPause:
             self._pause("site_unreachable", fetch_error)
 
     async def ended(self) -> None:
+        # Its error, if any, is the TaskFailure's.
         if self._probing is not None:
-            await asyncio.shield(self._probing)
+            await asyncio.wait({self._probing})
 
     async def close(self) -> None:
         if self._probing is not None:
@@ -161,52 +182,52 @@ class NetworkPause:
                 "crawl_paused",
                 crawl_id=self._crawl_id,
                 reason=fetch_error,
-                urls=[queued.url for queued in self._in_a_row],
+                urls=[counted.queued.url for counted in self._in_a_row],
             )
+            # As the pause begins, so a reader of stderr learns of it then.
+            self._log.pause_began(network_paused(self._seed))
             self._probing = asyncio.create_task(self._probe(reason))
+            self._track(self._probing)
 
     async def _probe(self, reason: _Reason) -> None:
         began = self._clock.monotonic()
-        outcome = await self._answered(began)
-        if outcome == "dead_section" and reason == "seed_unreachable":
-            # The Seed is no section of the site: its first answer is the network's, so its
-            # robots.txt and the Seed are requested again (design D16).
-            outcome = "outage"
-        seconds = self._clock.monotonic() - began
-        self._log.count_pause(network_paused(self._seed), seconds)
-        if outcome is None:
-            self._stop.set(reason)
-        else:
-            await self._resumed(outcome, tuple(self._in_a_row))
-            self._log.event(
-                "crawl_resumed",
-                crawl_id=self._crawl_id,
-                duration_s=round(seconds, 3),
-                outcome=outcome,
-            )
-        self._in_a_row.clear()
-        self._probing = None
-        # Open after giving up too: the stop then refuses the requests that waited.
-        self._requester.open_gate()
+        try:
+            end = await self._wait_for_answer(began)
+            if end == "dead_section" and reason == "seed_unreachable":
+                # The Seed is no section of the site: its first answer is the network's, so its
+                # robots.txt and the Seed are requested again (design D16).
+                end = "outage"
+            seconds = self._clock.monotonic() - began
+            self._log.pause_ended(seconds)
+            if end is None:
+                self._stop.set(reason)
+            else:
+                await self._resumed(end, tuple(self._in_a_row))
+                self._log.event(
+                    "crawl_resumed",
+                    crawl_id=self._crawl_id,
+                    duration_s=round(seconds, 3),
+                    outcome=end,
+                )
+        finally:
+            self._in_a_row.clear()
+            self._probing = None
+            # Open after giving up or failing too: the stop or the run's end then refuses the
+            # requests that waited, where a closed gate would hold them for good.
+            self._requester.open_gate()
 
-    async def _answered(self, began: float) -> Outcome | None:
-        """How a probe answered before the wait ended, when the probes still in flight are
-        cancelled; one that started exactly at the wait is awaited. The first probe's answer
-        means a dead section, a later one's an outage."""
+    async def _wait_for_answer(self, began: float) -> PauseEnd | None:
+        """How the pause ended: a probe answered before the wait ended, or none did, and every
+        probe still in flight is cancelled then. The first probe's answer means a dead section,
+        a later one's an outage."""
         probes: list[asyncio.Task[bool]] = []
-        at_the_wait: asyncio.Task[bool] | None = None
         try:
             for at in probe_times(self._network_wait):
                 if await self._answer_before(probes, began + at):
-                    return _outcome(probes)
-                probe = asyncio.create_task(self._probe_once())
-                probes.append(probe)
-                if at == self._network_wait:
-                    at_the_wait = probe
-            if await self._answer_before(probes, began + self._network_wait) or (
-                at_the_wait is not None and await at_the_wait
-            ):
-                return _outcome(probes)
+                    return _end(probes)
+                probes.append(asyncio.create_task(self._probe_once()))
+            if await self._answer_before(probes, began + self._network_wait):
+                return _end(probes)
             return None
         finally:
             for probe in probes:
@@ -236,5 +257,5 @@ def _answered(probe: asyncio.Task[bool]) -> bool:
     return probe.done() and not probe.cancelled() and probe.result()
 
 
-def _outcome(probes: list[asyncio.Task[bool]]) -> Outcome:
+def _end(probes: list[asyncio.Task[bool]]) -> PauseEnd:
     return "dead_section" if _answered(probes[0]) else "outage"

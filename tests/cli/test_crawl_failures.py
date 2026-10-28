@@ -1,6 +1,7 @@
 """How `spider crawl` fails (020-add-crawl-core D16, crawling; seam 1)."""
 
 from pathlib import Path
+from typing import Any
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Route, Site
@@ -84,8 +85,8 @@ def test_losing_the_site_is_reported_by_one_error(
         result.exit_code,
         [error["code"] for error in errors],
         errors[-1:] == result.stderr_json_lines()[-1:],
-        all("spider resume" in (error["hint"] or "") for error in errors),
-    ) == (8, ["site_unreachable"], True, True)
+        [_hint_says(error, "waited 0 seconds", "spider resume --crawl") for error in errors],
+    ) == (8, ["site_unreachable"], True, [True])
 
 
 def test_an_unreachable_seed_fails_the_crawl(temp_workspace: TempWorkspace) -> None:
@@ -102,11 +103,19 @@ def test_an_unreachable_seed_is_reported_by_one_error(temp_workspace: TempWorksp
     result = run_cli("crawl", f"http://127.0.0.1:{closed_port()}/", "--network-wait", "0")
     errors = result.errors()
 
+    # An agent's sandbox is the likeliest cause, so the hint names it, and how to go on.
     assert (
         [error["code"] for error in errors],
         errors[-1:] == result.stderr_json_lines()[-1:],
-        all("waited 0 seconds" in (error["hint"] or "") for error in errors),
-    ) == (["seed_unreachable"], True, True)
+        [
+            _hint_says(error, "waited 0 seconds", "sandbox", "spider resume --crawl")
+            for error in errors
+        ],
+    ) == (["seed_unreachable"], True, [True])
+
+
+def _hint_says(error: dict[str, Any], *parts: str) -> bool:
+    return all(part in (error["hint"] or "") for part in parts)
 
 
 def test_a_full_disk_on_the_robots_txt_row_fails_the_crawl(

@@ -1,7 +1,7 @@
 """The warning log: each warning kept once per what its code names (020-add-crawl-core D10)."""
 
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from spider.crawl.urls import NormalizedUrl
@@ -15,6 +15,15 @@ _ONCE_PER: Mapping[str, str] = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class _Pauses:
+    """Where network_paused is kept, how many pauses and how many seconds in all (D10)."""
+
+    index: int
+    count: int
+    seconds: float
+
+
 class WarningLog:
     """The Crawl's Reporter: passes everything on, and keeps the warnings for the result."""
 
@@ -24,8 +33,7 @@ class WarningLog:
         self._written: dict[tuple[str, object], int] = {}
         # By code: where a counted warning is kept, and how many URLs it affected so far.
         self._counted: dict[str, tuple[int, int]] = {}
-        # Where network_paused is kept, how many pauses and how many seconds in all (D10).
-        self._pauses: tuple[int, int, float] | None = None
+        self._pauses: _Pauses | None = None
 
     @property
     def warnings(self) -> tuple[Diagnostic, ...]:
@@ -33,11 +41,14 @@ class WarningLog:
         for index, count in self._counted.values():
             kept = warnings[index]
             warnings[index] = replace(kept, details={**kept.details, "count": count})
-        if self._pauses is not None:
-            index, count, seconds = self._pauses
-            kept = warnings[index]
-            details = {**kept.details, "count": count, "total_seconds": round(seconds, 3)}
-            warnings[index] = replace(kept, details=details)
+        if (pauses := self._pauses) is not None:
+            kept = warnings[pauses.index]
+            details = {
+                **kept.details,
+                "count": pauses.count,
+                "total_seconds": round(pauses.seconds, 3),
+            }
+            warnings[pauses.index] = replace(kept, details=details)
         return tuple(warnings)
 
     def warn(self, diagnostic: Diagnostic) -> None:
@@ -53,18 +64,20 @@ class WarningLog:
         first = replace(diagnostic, details={**diagnostic.details, "count": 1, "first_url": url})
         self._counted[diagnostic.code] = (self._keep(first), 1)
 
-    def count_pause(self, diagnostic: Diagnostic, seconds: float) -> None:
-        """Counts one more pause of `seconds` for network_paused, which counts pauses, not
-        URLs; only the first is written to stderr."""
+    def pause_began(self, diagnostic: Diagnostic) -> None:
+        """Counts one more pause for network_paused, which counts pauses, not URLs; only the
+        first is written to stderr, as it begins."""
         if self._pauses is not None:
-            index, count, total = self._pauses
-            self._pauses = (index, count + 1, total + seconds)
+            self._pauses = replace(self._pauses, count=self._pauses.count + 1)
             return
-        first = replace(
-            diagnostic,
-            details={**diagnostic.details, "count": 1, "total_seconds": round(seconds, 3)},
-        )
-        self._pauses = (self._keep(first), 1, seconds)
+        details = {**diagnostic.details, "count": 1, "total_seconds": 0.0}
+        first = replace(diagnostic, details=details)
+        self._pauses = _Pauses(self._keep(first), 1, 0.0)
+
+    def pause_ended(self, seconds: float) -> None:
+        if self._pauses is None:
+            raise RuntimeError("a network pause ended that never began")
+        self._pauses = replace(self._pauses, seconds=self._pauses.seconds + seconds)
 
     def _write(self, diagnostic: Diagnostic) -> int:
         """Where the warning is kept: one already written for the detail its code names is

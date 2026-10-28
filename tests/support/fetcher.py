@@ -57,24 +57,22 @@ class FakeFetcher:
         self.starts.append((request.url, started))
         page = self._pages.get(request.url) or self._pages.get(path)
         fails = self._fails(page, started)
-        if fails is not None:
-            # A failure takes the page's delay too, as a connection that times out does.
-            if page is not None and page.delay:
-                await self._clock.sleep(page.delay)
-            return FetchFailure(
-                fetch_error=fails,
-                message="No HTTP response, as the test asks",
-                fetched_at=self._clock.now(),
-            )
         status_code = 200 if page is not None else 404
         page = page or _NOT_FOUND
         self._in_flight += 1
         self.most_in_flight = max(self.most_in_flight, self._in_flight)
         try:
+            # A failure takes the page's delay too, as a connection that times out does.
             if page.delay:
                 await self._clock.sleep(page.delay)
         finally:
             self._in_flight -= 1
+        if fails is not None:
+            return FetchFailure(
+                fetch_error=fails,
+                message="No HTTP response, as the test asks",
+                fetched_at=self._clock.now(),
+            )
         return FetchResult(
             status_code=status_code,
             reason=HTTPStatus(status_code).phrase,

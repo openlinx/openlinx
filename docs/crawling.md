@@ -153,7 +153,7 @@ A Crawl that cannot go on ends with the Crawl State `failed`. It prints the resu
 | `seed_unreachable` | the Seed's robots.txt or the Seed got no HTTP response, and no probe answered within `--network-wait` | `seed_unreachable` (8) |
 | `site_unreachable` | the network pause gave up: no probe answered within `--network-wait` | `site_unreachable` (8) |
 
-What was recorded so far is kept, URLs not requested stay `queued`, and the post-crawl passes do not run, so the result is a partial one. `details.error` of `crawl_write_failed` says what failed; the hints of `seed_unreachable` and `site_unreachable` say how long the Crawl waited and how to continue it with `spider resume`, and the first that an agent's sandbox often blocks network access. The end of a write failure is written through a new connection; when that fails too, the crawl file is left `running`.
+What was recorded so far is kept, URLs not requested stay `queued`, and the post-crawl passes do not run, so the result is a partial one. `details.error` of `crawl_write_failed` says what failed; the hints of `seed_unreachable` and `site_unreachable` say how long the Crawl waited and how to continue it with `spider resume`, and the first that an agent's sandbox often blocks network access. When 100 URLs in a row could not be recorded, `crawl_write_failed` says so, and its hint points to the `record_failed` warning instead of the disk. The end of a write failure is written through a new connection; when that fails too, the crawl file is left `running`.
 
 ### The network pause
 
@@ -162,11 +162,11 @@ When requests stop getting answers, the Crawl pauses instead of recording the re
 - **The count:** Internal URLs in a row whose request got no HTTP response, `max(8, 2 × --concurrency)` of them, pause the Crawl. These count: the `fetch_error` codes `dns_error`, `connection_refused`, `connection_error`, `invalid_response` and `watchdog`, and the URLs left unrequested because their origin's robots.txt got no response. `tls_error` and External URLs never count, and any response resets the count.
 - **While paused,** no request starts. A request in flight that gets a response is recorded; one that ends without a response is not, so its URL stays `queued` and is requested again later, and counts toward `--max-urls` only then.
 - **Probes:** the Crawl requests its Seed 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, through the host's limits. A probe is not recorded and does not count toward `--max-urls`.
-- **Outcomes:** when the first probe answers, the failures were the site's own (`dead_section`): their errors are kept and the Crawl goes on. When a later probe answers, the network was down (`outage`): the URLs of the count are queued again, each at most once a Crawl. Either way, the Internal origins whose robots.txt got no response ask for it again.
-- **Giving up:** a probe starts only within `--network-wait` seconds of the pause's start (default 1800). When none answers, the probes still in flight are cancelled and the Crawl fails with `site_unreachable`. With `--network-wait 0` no probe starts, so the Crawl fails at once.
+- **Outcomes:** when the first probe answers, the failures were the site's own (`dead_section`): their errors are kept and the Crawl goes on. When a later probe answers, the network was down (`outage`): the URLs of the count are queued again, each at most once a run, and the Internal origins whose robots.txt got no response ask for it again.
+- **Giving up:** a probe starts only before `--network-wait` seconds have passed since the pause's start (default 1800). When none has answered by then, the probes still in flight are cancelled and the Crawl fails with `site_unreachable`. With `--network-wait 0` nothing pauses: no probe starts, no pause event or `network_paused` is written, and the Crawl fails at once.
 - **The Seed:** until the Seed's origin has answered, one request of its robots.txt or of the Seed without a response pauses the Crawl at once, since a network may come up or switch just as a Crawl starts. A probe that answers then requests robots.txt and the Seed again; when none does, the Crawl fails with `seed_unreachable`.
 
-The events `crawl_paused` and `crawl_resumed` mark a pause, `progress` events go on during it with `paused` = true, and the counted `network_paused` warning says how often and how long the Crawl paused.
+The events `crawl_paused` and `crawl_resumed` mark a pause, `progress` events go on during it with `paused` = true, and the counted `network_paused` warning says how often and how long the Crawl paused. It is written to stderr when the first pause begins, and the result counts every pause.
 
 ### Backstops
 

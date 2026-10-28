@@ -89,9 +89,13 @@ class RequestLimits:
         return True
 
     def give_back(self) -> None:
-        """Uncounts a request that ended without a response during a network pause and was
-        not recorded: its URL is requested again, and counts then (design D16)."""
+        """Uncounts a request whose URL is requested again and counts then: one that ended
+        without a response during a network pause and was not recorded, or one that an outage
+        re-queues. Room it frees takes back a refusal, so a URL refused at the limit is
+        requested after all (design D16)."""
         self._started -= 1
+        if self._refused is not None and self._started < self._refused:
+            self._refused = None
 
     def refuse_if_full(self) -> bool:
         """Refuses a new request at the URL limit, which marks the limit reached and leaves

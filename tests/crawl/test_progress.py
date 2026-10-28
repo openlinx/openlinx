@@ -17,15 +17,15 @@ class CountingReporter(Collected):
 
     def __init__(self) -> None:
         super().__init__()
-        self._crawl_file: Path | None = None
+        self.crawl_file: Path | None = None
         self.counted: list[tuple[dict[str, int], dict[str, int]]] = []
 
     def event(self, name: str, **data: Any) -> None:
         super().event(name, **data)
         if name == "crawl_started":
-            self._crawl_file = Path(data["crawl_file"])
-        elif name == "progress" and self._crawl_file is not None:
-            self.counted.append((data["urls"], self._counts(self._crawl_file)))
+            self.crawl_file = Path(data["crawl_file"])
+        elif name == "progress" and self.crawl_file is not None:
+            self.counted.append((data["urls"], self._counts(self.crawl_file)))
 
     @staticmethod
     def _counts(crawl_file: Path) -> dict[str, int]:
@@ -74,7 +74,7 @@ def test_progress_counts_are_those_of_the_crawl_file_when_written(
         "http://site.test/", clock=clock, fetcher=FakeFetcher(clock, pages), reporter=reporter
     )
     lowered = query(
-        reporter._crawl_file or Path(), "SELECT crawl_depth FROM urls WHERE url LIKE '%/c'"
+        reporter.crawl_file or Path(), "SELECT crawl_depth FROM urls WHERE url LIKE '%/c'"
     )
 
     assert (

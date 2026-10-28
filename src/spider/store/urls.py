@@ -259,16 +259,16 @@ _READ_CHUNK = 500
 
 def _tally_of(state: FetchState) -> UrlTally:
     return UrlTally(
-        fetched=state == "fetched",
-        errors=state == "error",
-        skipped=state == "skipped",
-        queued=state == "queued",
+        fetched=int(state == "fetched"),
+        errors=int(state == "error"),
+        skipped=int(state == "skipped"),
+        queued=int(state == "queued"),
     )
 
 
 _RECORDED_AS = {state: _tally_of(state) for state in ("fetched", "error", "skipped", "queued")}
 _FROM_QUEUED = {
-    state: _RECORDED_AS[state] + UrlTally(queued=-1) for state in ("fetched", "error", "skipped")
+    state: _RECORDED_AS[state] - _RECORDED_AS["queued"] for state in ("fetched", "error", "skipped")
 }
 
 
@@ -282,12 +282,7 @@ def _discovered_tally(
         if old is None:
             tally += _RECORDED_AS[state] + UrlTally(discovered=1)
         elif old != state:
-            tally += _RECORDED_AS[state] + UrlTally(
-                fetched=-(old == "fetched"),
-                errors=-(old == "error"),
-                skipped=-(old == "skipped"),
-                queued=-(old == "queued"),
-            )
+            tally += _RECORDED_AS[state] - _RECORDED_AS[old]
     return tally
 
 

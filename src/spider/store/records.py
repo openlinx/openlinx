@@ -152,7 +152,7 @@ class NewUrl:
     skip_reason: DiscoverySkipReason | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class UrlTally:
     """How a unit changed the urls counts of progress events (020-add-crawl-core D10)."""
 
@@ -164,11 +164,20 @@ class UrlTally:
 
     def __add__(self, other: "UrlTally") -> "UrlTally":
         return UrlTally(
-            self.discovered + other.discovered,
-            self.fetched + other.fetched,
-            self.errors + other.errors,
-            self.skipped + other.skipped,
-            self.queued + other.queued,
+            discovered=self.discovered + other.discovered,
+            fetched=self.fetched + other.fetched,
+            errors=self.errors + other.errors,
+            skipped=self.skipped + other.skipped,
+            queued=self.queued + other.queued,
+        )
+
+    def __sub__(self, other: "UrlTally") -> "UrlTally":
+        return UrlTally(
+            discovered=self.discovered - other.discovered,
+            fetched=self.fetched - other.fetched,
+            errors=self.errors - other.errors,
+            skipped=self.skipped - other.skipped,
+            queued=self.queued - other.queued,
         )
 
 

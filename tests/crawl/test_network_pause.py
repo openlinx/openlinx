@@ -1,11 +1,15 @@
 """The network pause's count (020-add-crawl-core D16; seams 2, 3 and 4)."""
 
+import io
+import json
+from collections import Counter
 from typing import Any
 
 import pytest
 
 from spider.crawl.engine.pause import pause_after, probe_times
-from spider.output.reporter import Collected
+from spider.output.reporter import CliReporter, Collected
+from spider.output.writer import Output
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
@@ -15,20 +19,20 @@ from tests.support.crawls import query
 from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
 
-_PAIRS = range(1, 21)
+_TWENTY = range(1, 21)
 
 
 def test_a_response_resets_the_count(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     # Twenty requests without a response, but a response between any two.
-    links = "".join(f'<a href="/down/{n}">Down</a><a href="/up/{n}">Up</a>' for n in _PAIRS)
+    links = "".join(f'<a href="/down/{n}">Down</a><a href="/up/{n}">Up</a>' for n in _TWENTY)
     server = fixture_site(
         Site(
             routes={
                 "/": Page(body=links),
-                **{f"/down/{n}": Page(body="<p>Down</p>", reset_after=0) for n in _PAIRS},
-                **{f"/up/{n}": Page(body="<p>Up</p>") for n in _PAIRS},
+                **{f"/down/{n}": Page(body="<p>Down</p>", reset_after=0) for n in _TWENTY},
+                **{f"/up/{n}": Page(body="<p>Up</p>") for n in _TWENTY},
             }
         )
     )
@@ -42,7 +46,7 @@ def test_the_urls_of_an_internal_origin_whose_robots_txt_gets_no_response_count(
     temp_workspace: TempWorkspace, fixture_hosts: StartHosts
 ) -> None:
     # blog.site.test does not resolve, so its robots.txt gets no response and its URLs none.
-    links = "".join(f'<a href="http://blog.site.test/{n}">Post</a>' for n in _PAIRS)
+    links = "".join(f'<a href="http://blog.site.test/{n}">Post</a>' for n in _TWENTY)
     hosts = fixture_hosts(Site(routes={"/": Page(body=links)}), Site(routes={}))
 
     result = crawl_result(
@@ -94,9 +98,10 @@ def test_the_count_trips_at_eight_requests_in_a_row_at_concurrency_one(
     [
         (200, (5, 10, 20, 40, 100, 160)),
         (30, (5, 10, 20)),
-        # A probe exactly at the wait still starts.
-        (40, (5, 10, 20, 40)),
-        (100, (5, 10, 20, 40, 100)),
+        # None at the wait: it would hold the Crawl past it.
+        (40, (5, 10, 20)),
+        (100, (5, 10, 20, 40)),
+        (101, (5, 10, 20, 40, 100)),
         (4, ()),
         (0, ()),
         (1800, (5, 10, 20, 40, *range(100, 1781, 60))),
@@ -108,10 +113,10 @@ def test_probes_back_off_to_once_a_minute(network_wait: int, times: tuple[int, .
 
 def _dead_section() -> dict[str, FakePage]:
     """/ links to /down/1 to /down/20, which never answer, and then to /p1."""
-    links = "".join(f'<a href="/down/{n}">Down {n}</a>' for n in _PAIRS) + '<a href="/p1">P1</a>'
+    links = "".join(f'<a href="/down/{n}">Down {n}</a>' for n in _TWENTY) + '<a href="/p1">P1</a>'
     return {
         "/": FakePage(links),
-        **{f"/down/{n}": FakePage("", fails="connection_error") for n in _PAIRS},
+        **{f"/down/{n}": FakePage("", fails="connection_error") for n in _TWENTY},
         "/p1": FakePage("<p>P1</p>"),
     }
 
@@ -126,7 +131,7 @@ def test_a_dead_section_does_not_stop_the_crawl(temp_workspace: TempWorkspace) -
 
     assert (
         result.summary.state,
-        {states[f"http://site.test/down/{n}"] for n in _PAIRS},
+        {states[f"http://site.test/down/{n}"] for n in _TWENTY},
         states["http://site.test/p1"],
         [warning.code for warning in result.warnings],
     ) == ("completed", {"error"}, "fetched", ["network_paused"])
@@ -145,6 +150,58 @@ def test_network_paused_counts_the_pauses_and_their_seconds(temp_workspace: Temp
     ]
 
 
+def test_network_paused_is_written_when_the_first_pause_begins(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, stderr = FakeClock(), io.BytesIO()
+    reporter = CliReporter(Output(io.BytesIO(), stderr), clock)
+
+    # Paused from one second to 41, with progress events at 10, 20, 30 and 40 seconds.
+    crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, _outage_site(), outages=[(1, 30)]),
+        reporter=reporter,
+        concurrency=1,
+    )
+    lines = [json.loads(line) for line in stderr.getvalue().splitlines()]
+    names = [line.get("event") or line.get("code") for line in lines]
+
+    # An agent reading stderr learns of the pause as it begins, not 40 seconds later.
+    assert names[names.index("crawl_paused") :][:3] == [
+        "crawl_paused",
+        "network_paused",
+        "progress",
+    ]
+
+
+def test_a_dead_section_keeps_the_failed_robots_txt_verdict_of_its_origin(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    first, later = range(1, 9), range(9, 17)
+    # blog.site.test never answers. Its first eight posts pause the Crawl; the Seed answers the
+    # first probe, at 5 seconds, and /p1 answers at 6 with eight more posts.
+    pages = {
+        "/": FakePage(_posts(first) + '<a href="/p1">P1</a>'),
+        "/p1": FakePage(_posts(later), delay=6),
+        "http://blog.site.test/robots.txt": FakePage("", fails="connection_error"),
+    }
+    fetcher = FakeFetcher(clock, pages)
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, scope="subdomains"
+    )
+    blog = [url for url, _ in fetcher.starts if url.startswith("http://blog.")]
+
+    # Asked again after the dead section, its robots.txt would fail into a second pause.
+    assert (blog, result.summary.state) == (["http://blog.site.test/robots.txt"], "completed")
+
+
+def _posts(numbers: range) -> str:
+    return "".join(f'<a href="http://blog.site.test/{n}">Post</a>' for n in numbers)
+
+
 def test_probes_do_not_count_toward_the_url_limit(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
 
@@ -160,9 +217,6 @@ def test_probes_do_not_count_toward_the_url_limit(temp_workspace: TempWorkspace)
     assert query(
         result.crawl_file, "SELECT fetch_state FROM urls WHERE url = ?", ["http://site.test/p1"]
     ) == [("fetched",)]
-
-
-_TWENTY = range(1, 21)
 
 
 def _outage_site() -> dict[str, FakePage]:
@@ -245,6 +299,32 @@ def test_requests_that_fail_while_paused_are_requested_again_within_the_url_limi
     assert requested == [("fetched", 25)]
 
 
+def test_a_url_refused_at_the_limit_before_a_pause_is_requested_once_the_count_comes_back(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    pages = {
+        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 31))),
+        **{f"/p{n}": FakePage(f"<p>P{n}</p>", delay=0.5 + n / 100) for n in range(1, 31)},
+    }
+
+    # The limit refuses a request just before the eighth failure pauses the Crawl; the requests
+    # still in flight then fail while paused and give their counts back, and the outage gives
+    # back those of its eight, so the refused URL is requested after all.
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages, outages=[(1, 30)]),
+        concurrency=4,
+        max_urls=19,
+    )
+
+    assert query(
+        result.crawl_file,
+        "SELECT fetch_state, count(*) FROM urls WHERE fetch_state != 'queued' GROUP BY 1",
+    ) == [("fetched", 19)]
+
+
 def test_urls_that_failed_in_an_outage_are_requested_again(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
     fetcher = FakeFetcher(clock, _outage_site(), outages=[(1, 30)])
@@ -270,11 +350,30 @@ def test_an_outage_requeues_a_url_once_a_run(temp_workspace: TempWorkspace) -> N
 
     result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher, concurrency=1)
     states = dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls"))
+    starts = Counter(path for path, _ in fetcher.path_starts)
 
+    # Each requested twice: at one second, and once more when the first outage ends.
     assert (
         {states[f"http://site.test/p{n}"] for n in range(2, 10)},
         {states[f"http://site.test/p{n}"] for n in range(10, 21)},
-    ) == ({"error"}, {"fetched"})
+        {starts[f"/p{n}"] for n in range(2, 10)},
+    ) == ({"error"}, {"fetched"}, {2})
+
+
+def test_no_request_starts_while_paused(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    fetcher = FakeFetcher(clock, _outage_site(), outages=[(1, 30)])
+
+    crawl_result("http://site.test/", clock=clock, fetcher=fetcher, concurrency=1)
+
+    # /p2 to /p9 fail at one second and pause the Crawl; until the probe at 41 answers, only
+    # the probes of / start.
+    assert [(path, at) for path, at in fetcher.path_starts if 1 <= at < 41] == [
+        *((f"/p{n}", 1) for n in range(2, 10)),
+        ("/", 6),
+        ("/", 11),
+        ("/", 21),
+    ]
 
 
 def test_an_outage_drops_the_failed_robots_txt_verdict_of_an_internal_origin(
@@ -305,20 +404,24 @@ def test_a_crawl_that_waits_longer_than_the_network_wait_fails(
     temp_workspace: TempWorkspace,
 ) -> None:
     clock = FakeClock()
-    # / answers at one second, and from then on nothing does: the pause begins at one second.
+    # / answers at 12 seconds, and from then on nothing does: the pause begins then. Each probe
+    # of / hangs for 12 seconds, as a connection that times out does, and holds the host's one
+    # slot, so the probes due at 22 and 32 start as the one before ends.
     pages = {
-        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY), delay=1),
+        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY), delay=12),
         **{f"/p{n}": FakePage(f"<p>P{n}</p>") for n in _TWENTY},
     }
-    fetcher = FakeFetcher(clock, pages, outages=[(1, float("inf"))])
+    fetcher = FakeFetcher(clock, pages, outages=[(12, float("inf"))])
 
     result = crawl_result(
         "http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, network_wait=30
     )
     probes = [at for url, at in fetcher.starts if url == "http://site.test/" and at > 0]
 
-    assert (probes, result.summary.state, result.summary.stop_reason) == (
-        [6, 11, 21],
+    # The probe that started at 41 still hangs when the wait ends at 42, so it is cancelled then.
+    assert (probes, clock.monotonic(), result.summary.state, result.summary.stop_reason) == (
+        [17, 29, 41],
+        42,
         "failed",
         "site_unreachable",
     )
@@ -351,6 +454,23 @@ def test_a_seed_that_answers_the_first_probe_is_crawled(temp_workspace: TempWork
     result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher)
 
     assert query(result.crawl_file, "SELECT fetch_state FROM urls WHERE id = 1") == [("fetched",)]
+
+
+def test_a_seed_that_answers_late_is_crawled_within_the_url_limit(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    pages = {"/": FakePage('<a href="/a">A</a>'), "/a": FakePage("<p>A</p>")}
+    fetcher = FakeFetcher(clock, pages, outages=[(0, 12)])
+
+    # The Seed was first recorded from its failed robots.txt, without a request of its own, so
+    # re-queuing it gives back no count toward the limit.
+    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher, max_urls=1)
+
+    assert dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls")) == {
+        "http://site.test/": "fetched",
+        "http://site.test/a": "queued",
+    }
 
 
 def test_progress_events_say_when_the_crawl_is_paused(temp_workspace: TempWorkspace) -> None:

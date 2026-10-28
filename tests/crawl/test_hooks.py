@@ -226,7 +226,7 @@ def test_a_full_disk_in_a_post_crawl_pass_fails_the_crawl(
     with disk_full_after(pages=24):
         result = crawl_result(server.url("/"), hooks)
 
-    assert (*_failed_with(result)[:2], crawl_row(result.crawl_file)["state"]) == (
+    assert (*_end_of(result), crawl_row(result.crawl_file)["state"]) == (
         "failed",
         "write_failed",
         "failed",
@@ -572,12 +572,16 @@ def test_recording_that_fails_for_every_url_fails_the_crawl(
     )
 
     result = crawl_result(server.url("/"), hooks)
+    error = result.failure and result.failure.diagnostic
 
-    assert (*_failed_with(result)[:2], result.failure and result.failure.code) == (
-        "failed",
-        "write_failed",
-        "crawl_write_failed",
-    )
+    # A bug in row code, not the disk: freeing space would not help, and the record_failed
+    # warning names the first URL.
+    assert (
+        *_end_of(result),
+        error and error.code,
+        error and error.message.startswith("100 URLs in a row could not be recorded"),
+        error and "record_failed" in (error.hint or "") and "resume" in (error.hint or ""),
+    ) == ("failed", "write_failed", "crawl_write_failed", True, True)
 
 
 @pytest.mark.parametrize(("articles", "state"), [(99, "completed"), (100, "failed")])
@@ -786,10 +790,14 @@ def test_a_url_that_meets_an_ended_writer_reports_why_the_writer_ended(
     assert _failed_with(result) == ("failed", "write_failed", CrawlWriterReplayError.__name__)
 
 
+def _end_of(result: CrawlResult) -> tuple[str, str | None]:
+    return (result.summary.state, result.summary.stop_reason)
+
+
 def _failed_with(result: CrawlResult) -> tuple[str, str | None, str | None]:
     """The end, and the type of the error that ended the Crawl."""
     error = None if result.failure is None else result.failure.diagnostic.details["error"]
-    return (result.summary.state, result.summary.stop_reason, error and error.split(":")[0])
+    return (*_end_of(result), error and error.split(":")[0])
 
 
 @dataclass(frozen=True, slots=True)
