@@ -314,7 +314,7 @@ The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` 
 |---|---|---|---|---|
 | `url_id` | INTEGER, references `urls.id` | no | | the Page |
 | `ordinal` | INTEGER | no | | the header's position among the response's `Set-Cookie` headers, from 1 |
-| `name` | TEXT | no | | the text before the first `=`, trimmed; the empty string when the header's first part has no `=` |
+| `name` | TEXT | no | | the text before the first `=`, trimmed; the empty string when the header's first part has no `=`, or when that text holds a comma, which only a header that a proxy folded gives it |
 | `domain` | TEXT | yes | | the `Domain` attribute, lowercased with any leading dot removed; NULL when absent, empty, or neither a host name nor an IP address |
 | `path` | TEXT | yes | | the `Path` attribute, trimmed, as sent rather than the path a browser would default to; NULL when absent, when it does not start with `/`, which RFC 6265 section 5.2.4 reads as the default path, or when it holds a comma, which only a header that a proxy folded gives it |
 | `expires` | TEXT | yes | timestamp | the `Expires` attribute as a timestamp, a two-digit year read as RFC 6265 reads it (70–99 as 19xx, 0–69 as 20xx); NULL when absent or invalid |
@@ -620,7 +620,7 @@ A value set in `spider.toml` replaces the default list.
 - **Roots.** When `include` is empty, the only root is `<body>`. Otherwise the roots are the elements that match an `include` selector and have no ancestor that also matches one.
 - **Membership.** A node is in the Content Area when it is a root or inside a root, and neither the node nor any of its ancestors matches an `exclude` selector.
 
-The *Content Area text* is the text of the nodes in the Content Area, in document order, with block breaks kept.
+The *Content Area text* is the text of the nodes in the Content Area, in document order, with block breaks kept. Each root's text is a block of its own.
 
 An invalid selector SHALL make `spider crawl` fail before any URL is requested, with the error code `settings_invalid` of `010-add-workspace-and-cli-contract`. The effective settings SHALL be recorded in the Crawl's recorded config under `content_area`.
 
@@ -654,12 +654,12 @@ Fixture A below is referred to by later scenarios:
 ### Requirement: Word, sentence and syllable counts
 These counts SHALL be taken over the Content Area text.
 
-**Words.** A word is a maximal sequence of letters, marks and digits (Unicode categories L, M and N). A single apostrophe (`'` or `’`), hyphen (`-` or U+2010), full stop or comma between two such characters does not end the sequence. There is one exception: each Han, Hiragana or Katakana character is a word on its own, and so is the prolonged sound mark `ー` (U+30FC), so `カード` is 3 words. `word_count` is the number of words.
+**Words.** A word is a maximal sequence of letters, marks and digits (Unicode categories L, M and N). A single apostrophe (`'` or `’`), hyphen (`-` or U+2010), full stop or comma between two such characters does not end the sequence. There is one exception: each Han, Hiragana or Katakana character, with the marks that follow it, is a word on its own, and so is the prolonged sound mark `ー` (U+30FC), so `カード` is 3 words. `word_count` is the number of words.
 
 **Sentences.** A sentence is a part of a text block that contains at least one word and ends in one of two ways:
 
 - at the end of the block
-- after a run of the terminators `.`, `!`, `?`, `…`, `。`, `！` or `？`, when the run is followed by whitespace or the end of the block, or when it contains `。`, `！` or `？`
+- after a run of the terminators `.`, `!`, `?`, `…`, `。`, `！` or `？`, when the run is followed by Unicode whitespace, such as a space, a no-break space or U+3000, or by the end of the block, or when it contains `。`, `！` or `？`
 
 `sentence_count` is the number of sentences.
 
