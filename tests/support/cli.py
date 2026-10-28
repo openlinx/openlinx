@@ -92,10 +92,19 @@ def start_example_process(*args: str) -> subprocess.Popen[bytes]:
 
 
 def start_cli_process(*args: str) -> subprocess.Popen[bytes]:
-    """A real `spider` process in the current folder, which a test can signal or kill."""
+    """A real `spider` process in the current folder, which a test can signal or kill. On
+    Windows it has its own process group, so a Ctrl+Break event reaches it alone."""
     command = python_command("-m", "spider", *args)
+    if sys.platform == "win32":
+        group = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        group = 0
     process = subprocess.Popen(
-        command.argv, env=command.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        command.argv,
+        env=command.env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        creationflags=group,
     )
     # A Command that never ends would hang the test's read; killing it ends the read.
     watchdog = threading.Timer(CRAWL_PROCESS_TIMEOUT, process.kill)

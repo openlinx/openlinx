@@ -2,6 +2,7 @@
 
 import json
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -53,17 +54,32 @@ def test_ctrl_c_stops_a_crawl_on_macos_and_linux(
     _await_fetched(server, 3)
 
     process.send_signal(getattr(signal, signum))
-    stdout, stderr = process.communicate(timeout=30)
 
+    assert _how_it_ended(process) == (130, "stopped", "interrupt", ["interrupt"])
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Ctrl+Break is a Windows console event")
+def test_ctrl_break_stops_a_crawl_on_windows(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(THIRTY_PAGES)
+    # Started in its own process group, which alone gets the event.
+    process = start_cli_process("crawl", server.url("/"))
+    _await_fetched(server, 3)
+
+    # The skip's condition again, which mypy reads only from an if.
+    if sys.platform == "win32":
+        process.send_signal(signal.CTRL_BREAK_EVENT)
+
+    assert _how_it_ended(process) == (130, "stopped", "interrupt", ["interrupt"])
+
+
+def _how_it_ended(process: subprocess.Popen[bytes]) -> tuple[int, str, str, list[str]]:
+    stdout, stderr = process.communicate(timeout=30)
     result = json.loads(stdout)
     events = [json.loads(line) for line in stderr.splitlines()]
     stopping = [e["data"]["reason"] for e in events if e.get("event") == "stopping"]
-    assert (process.returncode, result["state"], result["stop_reason"], stopping) == (
-        130,
-        "stopped",
-        "interrupt",
-        ["interrupt"],
-    )
+    return process.returncode, result["state"], result["stop_reason"], stopping
 
 
 def test_a_stop_that_ends_a_depth_reads_no_deeper_one(temp_workspace: TempWorkspace) -> None:

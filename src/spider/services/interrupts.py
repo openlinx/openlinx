@@ -13,7 +13,7 @@ from spider.crawl.engine.stop import StopSignal
 
 def _signals() -> tuple[signal.Signals, ...]:
     if sys.platform == "win32":  # pragma: win32 cover
-        return (signal.SIGINT,)
+        return (signal.SIGINT, signal.SIGBREAK)
     else:  # pragma: win32 no cover
         return (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 
