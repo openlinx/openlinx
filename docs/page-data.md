@@ -48,6 +48,55 @@ Titles, meta descriptions, meta keywords and headings follow one pattern:
 - **Columns.** A `_count` column counts the elements, and is 0 when there are none. The `_1` and `_2` columns hold the normalised texts of the first two, in document order, NULL when there is no such element; meta keywords keep only the first, with no count. Each `_length` column is NULL exactly when its text is.
 - **Headings** take the text of the whole element, nested elements such as `<span>` included (see [Text](#text)).
 
+## Content Area
+
+The *Content Area* is the part of a Page that its own content fills, without the site's navigation and template. `word_count`, `sentence_count` and `average_words_per_sentence` are counted over it. The `[content_area]` table of `spider.toml` sets it with two lists of CSS selectors:
+
+```toml
+[content_area]
+include = []                          # the default: the root is <body>
+exclude = ["nav", "header", "footer"] # the default
+```
+
+- **Roots.** With `include` empty, `<body>` is the only root. Otherwise the roots are the elements that an `include` selector matches and that no other match encloses, so an `<article>` inside a matched `<main>` is read once.
+- **Exclusions.** Everything inside a root is in the Content Area, except an element that an `exclude` selector matches and everything inside it.
+- **A list replaces the default.** Setting `exclude` in `spider.toml` replaces the whole default list, and `exclude = []` counts the whole `<body>`.
+- **Invalid selectors** stop the Crawl before any request, with `settings_invalid` and the key `content_area.include` or `content_area.exclude`.
+- **Recorded.** The Crawl records the values it used under `content_area` in its config. They apply to the Crawls started after a change, never to Pages already stored.
+
+The default leaves out every `<header>`, also the header of an article, such as a post's title and byline. To keep those, leave out only the headers outside articles:
+
+```toml
+[content_area]
+exclude = ["nav", "header:not(article header)", "footer"]
+```
+
+On a site whose template marks its parts with classes rather than elements, name them:
+
+```toml
+[content_area]
+include = ["main"]
+exclude = [".cookie-banner", ".share-buttons"]
+```
+
+## Words and sentences
+
+The Content Area text is read as [Text](#text) is, block by block.
+
+- **Words** are runs of letters, marks and digits (Unicode categories L, M and N), so a word in Devanagari keeps its vowel signs. One apostrophe, hyphen, full stop or comma between two such characters joins them, so `don't`, `state-of-the-art` and `v2.0` are one word each, while `_` separates words.
+- **Ideographs.** Each Han, Hiragana or Katakana character is a word of its own, and so is the prolonged sound mark `ー`, so `カード` is three words. The ranges come from Unicode's Scripts.txt of the Python's own Unicode version (`scripts/unicode_scripts.py` writes them).
+- **Limitation.** Scripts written without spaces between words, such as Thai, Lao, Khmer and Myanmar, are undercounted: a run of them is one word.
+- **Sentences** end at the end of a block, so a heading is a sentence of its own, and after a run of `.`, `!`, `?` or `…` followed by whitespace. The full-width `。`, `！` and `？` end a sentence with no space after them. A part of a block without a word is no sentence.
+- **Rounding.** `average_words_per_sentence` and `text_ratio_pct` are rounded half up to 2 decimals from the exact quotient, so 1.125 is 1.13.
+
+## Text Ratio
+
+`text_ratio_pct` compares the text of the whole `<body>`, without Content Area exclusions, with the length of the decoded HTML document in characters, so a Page heavy in markup and scripts has a low ratio.
+
+## Declared language
+
+`declared_language` is the `lang` attribute of the root `<html>` element as the Page declares it, only trimmed: `en-GB` stays `en-GB`, and an invalid tag is kept as written. It is the empty string for `<html lang>` and NULL without the attribute. A `lang` on any other element is not read.
+
 ## Values of the response and of `urls`
 
 - **Copies of `urls`.** `content_type`, `status_code`, `response_time_ms` and `crawl_depth` repeat the URL's row, and `crawl_timestamp` repeats its `fetched_at`. They are written in the URL's own unit, so they always agree.
