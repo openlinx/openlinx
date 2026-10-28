@@ -4,7 +4,7 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.pages.preparation import Extractor, PageInput, extractor
-from spider.extract.content import ContentArea, content_blocks, word_count
+from spider.extract.content import ContentArea, content_blocks, sentence_count, word_count
 from spider.extract.text import element_text, normalized, trimmed
 
 # An element inside svg or math names a picture or a formula; text inside them is left out too
@@ -37,6 +37,7 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     h2_2_length: int | None
     h2_count: int
     word_count: int
+    sentence_count: int
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentArea) -> PageData:
@@ -51,6 +52,7 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
     h1s, h1_count = _headings(tree, "h1")
     h1_1, h1_1_length, h1_2, h1_2_length = _first_two(h1s)
     h2s, h2_count = _headings(tree, "h2")
+    blocks = list(content_blocks(tree, config))
     h2_1, h2_1_length, h2_2, h2_2_length = _first_two(h2s)
     return PageData(
         title_1=title_1,
@@ -75,7 +77,8 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         h2_2=h2_2,
         h2_2_length=h2_2_length,
         h2_count=h2_count,
-        word_count=word_count(content_blocks(tree, config)),
+        word_count=word_count(blocks),
+        sentence_count=sentence_count(blocks),
     )
 
 

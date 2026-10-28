@@ -635,6 +635,12 @@ pages = public_table(
         "analysed or its Page extractor failed.",
     ),
     Column(
+        "sentence_count",
+        Integer,
+        comment="The number of sentences in the Content Area text; NULL when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
         "crawl_depth",
         Integer,
         nullable=False,

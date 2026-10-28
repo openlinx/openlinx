@@ -59,3 +59,17 @@ def test_the_prolonged_sound_mark_is_a_word_of_its_own() -> None:
 
 def test_the_script_table_is_of_the_unicode_version_python_has() -> None:
     assert unicodedata.unidata_version == UNICODE_VERSION
+
+
+def test_blocks_end_sentences() -> None:
+    row = page_row("<body><h1>Welcome</h1><p>This is it. Really! Yes</p></body>")
+
+    assert row.sentence_count == 4
+
+
+def test_a_terminator_inside_a_word_ends_no_sentence() -> None:
+    # As release notes write them: a version and a decimal end no sentence, and an ellipsis
+    # before a space ends one.
+    row = page_row("<p>Version 2.0 is out\u2026 and 3.5 follows! See the notes.</p>")
+
+    assert row.sentence_count == 3

@@ -44,6 +44,13 @@ _WORD = re.compile(
     f"{_class(sorted(_IDEOGRAPHS))}|{_WORD_CHARACTER}+(?:{_JOINER}{_WORD_CHARACTER}+)*"
 )
 
+_TERMINATORS = ".!?\u2026\u3002\uff01\uff1f"
+# A run of terminators ends a sentence before whitespace or the block's end, or wherever it
+# holds a full-width one, which needs no space after it.
+_SENTENCE_END = re.compile(
+    f"[{_TERMINATORS}]*[\u3002\uff01\uff1f][{_TERMINATORS}]*|[{_TERMINATORS}]+(?=\\s|$)"
+)
+
 
 def content_blocks(tree: LexborHTMLParser, area: ContentArea) -> Iterator[str]:
     """The Content Area text, block by block, in document order."""
@@ -71,6 +78,15 @@ def _with_ancestors(node: LexborNode | None) -> Iterator[LexborNode]:
     while node is not None:
         yield node
         node = node.parent
+
+
+def sentence_count(blocks: Iterable[str]) -> int:
+    return sum(
+        1
+        for block in blocks
+        for part in _SENTENCE_END.split(block)
+        if _WORD.search(part) is not None
+    )
 
 
 def word_count(blocks: Iterable[str]) -> int:
