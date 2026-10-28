@@ -9,7 +9,7 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, text
 
-from spider.crawl.engine.hooks import UrlResult, handler
+from spider.crawl.engine.hooks import Pass, PassContext, UrlResult, handler
 from spider.crawl.pages.preparation import PageInput, extractor
 from spider.services.crawling import CrawlOverrides
 from spider.services.hooks import default_hooks
@@ -242,3 +242,22 @@ def test_a_continue_requests_the_urls_an_unreachable_robots_txt_blocked(
         blocked,
         query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url = 'http://other.test/a'"),
     ) == ([("robots_unreachable",)], [("fetched",)])
+
+
+def test_post_crawl_passes_run_again_after_a_continue(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+    runs: list[int] = []
+
+    async def count_runs(context: PassContext) -> None:
+        runs.append(len(runs) + 1)
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("count_runs", count_runs)))
+    stopped = crawl_result(server.url("/"), hooks, max_urls=3)
+
+    result = continued(stopped, CrawlOverrides(max_urls=None), hooks)
+
+    # Once as the first run stopped, and once more as the continue completed.
+    assert (stopped.summary.state, result.summary.state, runs) == ("stopped", "completed", [1, 2])
