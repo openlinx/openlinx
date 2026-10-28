@@ -435,6 +435,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 13.6 Drive "A second interrupt ends the process at once" at seam 1, subprocess. Done when: the process ends at once with no result and no error line, and the crawl file stays `running` (design D10).
 - [x] 13.7 Docs: document interrupts, the grace period and the second interrupt in `docs/crawling.md`.
 - [x] 13.8 Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
+- [ ] 13.9 Fix: on POSIX, an interrupt that another thread takes, or that lands just before `select()`, stops the Crawl at once (design D10). Done when: a seam-2 test, POSIX in CI, sends SIGINT to a thread other than the main one while the loop waits on a request that answers late, with no timer due, and the `stopping` event comes within half a second of the signal.
 
 ## 14. Persistent frontier and continuing (widening)
 
