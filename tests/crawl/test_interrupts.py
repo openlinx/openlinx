@@ -74,6 +74,28 @@ def test_ctrl_break_stops_a_crawl_on_windows(
     assert _how_it_ended(process) == (130, "stopped", "interrupt", ["interrupt"])
 
 
+def test_an_interrupt_is_reported_by_one_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(THIRTY_PAGES)
+    process = start_cli_process("crawl", server.url("/"))
+    _await_fetched(server, 3)
+
+    _interrupt(process)
+    stdout, stderr = process.communicate(timeout=30)
+
+    lines = [json.loads(line) for line in stderr.splitlines()]
+    errors = [line for line in lines if line.get("level") == "error"]
+    resume = f"spider resume --crawl {json.loads(stdout)['crawl_id']}"
+    # An agent is told how to go on, as every other early end of a Crawl tells it.
+    assert (
+        process.returncode,
+        [error["code"] for error in errors],
+        errors[-1:] == lines[-1:],
+        [resume in (error["hint"] or "") for error in errors],
+    ) == (130, ["interrupted"], True, [True])
+
+
 _DOWN = range(1, 21)
 # / links to /down/1 to /down/20, each of which sends its headers and then resets the
 # connection: the Crawl pauses after the eighth at --concurrency 1.

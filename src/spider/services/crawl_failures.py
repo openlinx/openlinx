@@ -86,8 +86,14 @@ def write_failed(crawl_file: CrawlFile, cause: BaseException | None) -> SpiderEr
     )
 
 
-def interrupted(_crawl_file: CrawlFile) -> SpiderError:
-    return SpiderError(INTERRUPTED, "The Crawl stopped on an interrupt; what it recorded is kept.")
+def interrupted(crawl_file: CrawlFile) -> SpiderError:
+    # 010's own text names Ctrl+C, which is wrong for Ctrl+Break and SIGTERM, and no way on.
+    return SpiderError(
+        INTERRUPTED,
+        "The Crawl stopped on an interrupt; what it recorded is kept.",
+        hint=f"Continue it with: {_resume(crawl_file)}",
+        details={"crawl_file": str(crawl_file.path)},
+    )
 
 
 def _resume(crawl_file: CrawlFile) -> str:
