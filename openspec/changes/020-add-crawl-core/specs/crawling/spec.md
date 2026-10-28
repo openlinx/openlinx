@@ -613,6 +613,7 @@ The Crawl SHALL have no URL limit by default. With `--max-urls <n>`, the Crawl S
 
 A value below 1 SHALL be rejected with exit code 2 and error code `invalid_value`. The limit is reached when it refuses a request: a Crawl that requests n URLs and has none left SHALL end `completed`, since `stopped` would promise a resume with nothing to do. When the limit is reached:
 - no new request SHALL start
+- requests in flight SHALL get the grace of "Stopping with an interrupt", and a request still running after it SHALL be cancelled, leaving its URL `queued`
 - the Crawl SHALL end with the Crawl State `stopped` and `crawl.stop_reason` = `max_urls`, and SHALL be resumable
 - URLs not yet requested SHALL stay `queued`
 - the result SHALL hold a `max_urls_reached` warning whose hint is `spider resume --crawl <crawl id> --max-urls <higher>`
@@ -1041,7 +1042,7 @@ While a foreground Crawl runs, the Command SHALL write progress events to stderr
 | `progress` | every 10 seconds, during a network pause too | `crawl_id`, `elapsed_s`, `urls` (`discovered`, `fetched`, `errors`, `skipped`, `queued`), `rate` (URLs requested per second over the last 60 seconds), `paused` (true while the Crawl is paused) |
 | `crawl_paused` | when the Crawl pauses (see "Backstops") | `crawl_id`, `reason` (the `fetch_error` of the request that paused it), `urls` (the URLs whose requests made up the count) |
 | `crawl_resumed` | when a probe answers | `crawl_id`, `duration_s` (the time paused), `outcome` (`outage` or `dead_section`) |
-| `stopping` | when the Crawl starts to stop before its frontier is empty | `crawl_id`, `reason` (the `stop_reason` it will end with) |
+| `stopping` | when the Crawl starts to stop before its frontier is empty: at the URL limit, on an interrupt or a stop request, or as it fails | `crawl_id`, `reason` (the `stop_reason` it starts to stop with, which a later failure can outrank) |
 
 The `urls` counts of a `progress` event SHALL be those of the URLs that committed units recorded, kept as counters while the Crawl runs.
 
