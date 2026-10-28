@@ -707,6 +707,18 @@ pages = public_table(
         "one, or when the Page is not analysed.",
     ),
     Column(
+        "canonical_link_element_2",
+        Text,
+        comment="The resolved URL of the second canonical link element in head; NULL without "
+        "one, or when the Page is not analysed.",
+    ),
+    Column(
+        "http_canonical",
+        Text,
+        comment="The resolved URL of the first canonical Link header entry; NULL without one, or "
+        "when the Page is not analysed.",
+    ),
+    Column(
         "canonical_count",
         Integer,
         comment="The number of canonical declarations: canonical link elements in head and "

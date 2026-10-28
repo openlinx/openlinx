@@ -187,6 +187,7 @@ _FULL_PAGE = (
     '<meta name="description" content="D1"><meta name="description" content="D2">'
     '<meta name="keywords" content="K1"><meta name="robots" content="index, follow">'
     '<meta http-equiv="refresh" content="600"><link rel="canonical" href="/c">'
+    '<link rel="canonical" href="/c">'
     "<h1>A1</h1><h1>A2</h1><h2>B1</h2><h2>B2</h2>"
 )
 # Filled by a post-crawl pass or by a later release, so NULL on a Page that was just prepared.
@@ -194,7 +195,10 @@ _LATER = ("Derived: ", "Filled from ")
 
 
 def test_a_full_page_fills_every_html_column() -> None:
-    row = page_row(_FULL_PAGE, headers=(("X-Robots-Tag", "noarchive"),))
+    row = page_row(
+        _FULL_PAGE,
+        headers=(("X-Robots-Tag", "noarchive"), ("Link", '</c>; rel="canonical"')),
+    )
     later = {column.name for column in pages.c if (column.comment or "").startswith(_LATER)}
 
     assert [

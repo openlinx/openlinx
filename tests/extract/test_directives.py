@@ -165,3 +165,19 @@ def test_an_absolute_canonical_after_a_leading_space_is_not_relative() -> None:
         "https://example.test/b",
         False,
     )
+
+
+def test_html_and_header_canonicals_disagree() -> None:
+    row = page_row(
+        '<html><head><title>A</title><link rel="canonical" href="https://example.test/b">'
+        "</head><body><p>Article</p></body></html>",
+        headers=(("Link", '<https://example.test/c>; rel="canonical"'),),
+        url="https://example.test/a",
+    )
+
+    assert (
+        row.canonical_count,
+        row.canonical_link_element_2,
+        row.http_canonical,
+        row.canonical_url,
+    ) == (2, None, "https://example.test/c", None)

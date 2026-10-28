@@ -58,6 +58,8 @@ class PageRow:
     meta_refresh: str | None = None
     canonical_url: str | None = None
     canonical_link_element_1: str | None = None
+    canonical_link_element_2: str | None = None
+    http_canonical: str | None = None
     canonical_count: int | None = None
     canonical_relative: bool | None = None
     word_count: int | None = None

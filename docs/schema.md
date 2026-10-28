@@ -211,6 +211,8 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `meta_refresh` | TEXT | yes | | | | The content of the first meta element whose http-equiv is refresh, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `canonical_url` | TEXT | yes | |  | | The URL that every canonical declaration resolves to, when they resolve to one URL; NULL without a declaration, when they disagree, or when the Page is not analysed. |
 | `canonical_link_element_1` | TEXT | yes | |  | | The resolved URL of the first canonical link element in head; NULL without one, or when the Page is not analysed. |
+| `canonical_link_element_2` | TEXT | yes | | | | The resolved URL of the second canonical link element in head; NULL without one, or when the Page is not analysed. |
+| `http_canonical` | TEXT | yes | | | | The resolved URL of the first canonical Link header entry; NULL without one, or when the Page is not analysed. |
 | `canonical_count` | INTEGER | yes | |  | | The number of canonical declarations: canonical link elements in head and canonical Link header entries; NULL when the Page is not analysed. |
 | `canonical_relative` | INTEGER | yes | | `boolean` | | 1 when the href of a canonical link element in head does not start with http: or https:; NULL when the Page is not analysed. |
 | `word_count` | INTEGER | yes | | | | The number of words in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |

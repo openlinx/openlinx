@@ -95,10 +95,13 @@ def _canonical_columns(result: UrlResult) -> dict[str, Any]:
         if link.type == "canonical" and link.declared_in in ("head", "http_header")
     ]
     html = [link for link in declared if link.declared_in == "head"]
+    header = [link for link in declared if link.declared_in == "http_header"]
     targets = {link.target for link in declared}
     return {
         "canonical_url": next(iter(targets)) if len(targets) == 1 else None,
         "canonical_link_element_1": html[0].target if html else None,
+        "canonical_link_element_2": html[1].target if len(html) > 1 else None,
+        "http_canonical": header[0].target if header else None,
         "canonical_count": len(declared),
         # The URL parser removes leading C0 controls and spaces before it reads a scheme.
         "canonical_relative": any(
