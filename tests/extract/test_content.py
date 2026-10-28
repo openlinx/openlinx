@@ -57,6 +57,14 @@ def test_the_prolonged_sound_mark_is_a_word_of_its_own() -> None:
     assert page_row("<p>\u30ab\u30fc\u30c9</p>").word_count == 3
 
 
+def test_a_mark_stays_with_the_han_or_kana_character_before_it() -> None:
+    # "Guide" decomposed (NFD), as a Mac file name sends it, and Katsushika with the variation
+    # selector that picks the glyph of its first ideograph.
+    row = page_row("<p>ガイド 葛\U000e0100飾区</p>")
+
+    assert row.word_count == 6
+
+
 def test_the_script_table_is_of_the_unicode_version_python_has() -> None:
     assert unicodedata.unidata_version == UNICODE_VERSION
 
@@ -71,6 +79,13 @@ def test_a_terminator_inside_a_word_ends_no_sentence() -> None:
     # As release notes write them: a version and a decimal end no sentence, and an ellipsis
     # before a space ends one.
     row = page_row("<p>Version 2.0 is out\u2026 and 3.5 follows! See the notes.</p>")
+
+    assert row.sentence_count == 3
+
+
+def test_a_terminator_before_a_unicode_space_ends_a_sentence() -> None:
+    # Templates put &nbsp; after a full stop, and Japanese pages an ideographic space.
+    row = page_row("<p>Free shipping.&nbsp;Order today!　Read the terms.</p>")
 
     assert row.sentence_count == 3
 

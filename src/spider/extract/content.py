@@ -23,15 +23,29 @@ def _class(points: Iterable[int]) -> str:
 
 
 _HAN_AND_KANA = frozenset(point for first, last in HAN_AND_KANA for point in range(first, last + 1))
+
+
+def _word_and_mark_classes() -> tuple[str, str]:
+    # One pass over the code points, which costs most of this module's import time.
+    word: list[int] = []
+    mark: list[int] = []
+    for point in range(sys.maxunicode + 1):
+        group = unicodedata.category(chr(point))[0]
+        if group in "LMN" and point not in _HAN_AND_KANA:
+            word.append(point)
+        if group == "M":
+            mark.append(point)
+    return _class(word), _class(mark)
+
+
 # Letters, marks and numbers (L, M, N) but Han and kana: Python's re has no Unicode
 # properties, and its \w takes "_" and leaves out marks.
-_WORD_CHARACTER = _class(
-    point
-    for point in range(sys.maxunicode + 1)
-    if unicodedata.category(chr(point))[0] in "LMN" and point not in _HAN_AND_KANA
+_WORD_CHARACTER, _MARK = _word_and_mark_classes()
+# Each Han or kana character is a word of its own, with the marks after it, such as a
+# decomposed voiced sound mark or a variation selector.
+_ONE_CHARACTER_WORD = (
+    "[" + "".join(f"\\U{a:08x}-\\U{b:08x}" for a, b in HAN_AND_KANA) + f"]{_MARK}*"
 )
-# Each Han or kana character is a word of its own.
-_ONE_CHARACTER_WORD = "[" + "".join(f"\\U{a:08x}-\\U{b:08x}" for a, b in HAN_AND_KANA) + "]"
 # A single apostrophe, hyphen, full stop or comma between two word characters.
 _JOINER = "['\u2019\\-\u2010.,]"
 _WORD = re.compile(f"{_ONE_CHARACTER_WORD}|{_WORD_CHARACTER}+(?:{_JOINER}{_WORD_CHARACTER}+)*")

@@ -128,6 +128,13 @@ def test_a_folded_header_stores_no_value_in_domain_or_path() -> None:
     assert [(row.domain, row.path) for row in rows] == [(None, None), (None, None)]
 
 
+def test_a_folded_nameless_cookie_stores_no_value_in_its_name() -> None:
+    # An API gateway joins a nameless cookie and the next one into one header with ", ".
+    (row,) = _cookies("abc123, sid=SECRET; Path=/")
+
+    assert row.name == ""
+
+
 def test_a_domain_is_a_host_name_or_an_ip_address() -> None:
     rows = _cookies(
         "a=1; Domain=.Shop.Example.test",

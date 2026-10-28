@@ -27,8 +27,9 @@ def cookie_row(url_id: int, ordinal: int, header: str) -> CookieRow:
     return CookieRow(
         url_id=url_id,
         ordinal=ordinal,
-        # Without "=" the whole pair is the value (RFC 6265bis), which is never stored.
-        name=name.strip() if mark else "",
+        # Without "=" the whole pair is the value (RFC 6265bis), which is never stored; a token
+        # holds no comma, so a name with one is a folded header's value too.
+        name=name.strip() if mark and "," not in name else "",
         domain=_last(attributes.get("domain", []), _domain),
         path=_path(last.get("path")),
         expires=_last(attributes.get("expires", []), _expires),
