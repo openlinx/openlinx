@@ -1,5 +1,6 @@
 """A Page's cookies from its Set-Cookie headers, without their values (030-add-page-data D14)."""
 
+import ipaddress
 import re
 from collections.abc import Callable, Sequence
 from datetime import datetime
@@ -9,9 +10,8 @@ from spider.extract.dates import internet_date
 from spider.store.page_records import CookieRow, SameSite
 
 _SAME_SITE: dict[str, SameSite] = {value: value for value in get_args(SameSite.__value__)}
-# ASCII digits only (RFC 6265 5.2.2): \d would take any script's digits.
 _MAX_AGE = re.compile(r"-?[0-9]+")
-_INTEGER_RANGE = range(-(2**63), 2**63)
+_HOST_NAME = re.compile(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*")
 
 
 def cookie_row(url_id: int, ordinal: int, header: str) -> CookieRow:
@@ -29,7 +29,7 @@ def cookie_row(url_id: int, ordinal: int, header: str) -> CookieRow:
         # Without "=" the whole pair is the value (RFC 6265bis), which is never stored.
         name=name.strip() if mark else "",
         domain=_last(attributes.get("domain", []), _domain),
-        path=last.get("path"),
+        path=_path(last.get("path")),
         expires=_last(attributes.get("expires", []), _expires),
         max_age=_last(attributes.get("max-age", []), _max_age),
         secure="secure" in attributes,
@@ -50,8 +50,27 @@ def _last[T](values: Sequence[str | None], read: Callable[[str], T | None]) -> T
 
 
 def _domain(value: str) -> str | None:
-    # RFC 6265 ignores an empty Domain, also one that is only the leading dot.
-    return value.lower().removeprefix(".") or None
+    # RFC 6265 ignores an empty Domain, also one that is only the leading dot. Any other value
+    # that is no host name or IP address matches no host (RFC 6265 5.1.3), such as the rest of
+    # a header that a proxy folded, which holds the next cookie's value.
+    domain = value.lower().removeprefix(".")
+    return domain if _HOST_NAME.fullmatch(domain) or _is_ip_address(domain) else None
+
+
+def _is_ip_address(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _path(value: str | None) -> str | None:
+    # RFC 6265 5.2.4 reads a Path that does not start with "/" as the default path. A comma
+    # comes from a header that a proxy folded, and what follows it is the next cookie's value.
+    if value is None or not value.startswith("/") or "," in value:
+        return None
+    return value
 
 
 def _expires(value: str) -> datetime | None:
@@ -61,6 +80,5 @@ def _expires(value: str) -> datetime | None:
 def _max_age(value: str) -> int | None:
     if _MAX_AGE.fullmatch(value) is None:
         return None
-    seconds = int(value)
-    # Beyond SQLite's INTEGER, the Page's unit would fail to be written.
-    return seconds if seconds in _INTEGER_RANGE else None
+    # RFC 6265 reads a Max-Age of any size; SQLite's INTEGER holds 64 bits.
+    return min(max(int(value), -(2**63)), 2**63 - 1)

@@ -72,8 +72,8 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
     )
 
 
-def test_the_cookie_row_has_every_cookies_column_in_order() -> None:
-    assert [field.name for field in fields(CookieRow)] == [column.name for column in cookies.c]
+def test_the_cookie_row_has_every_cookies_column() -> None:
+    assert {field.name for field in fields(CookieRow)} == {column.name for column in cookies.c}
 
 
 def test_the_page_row_has_every_pages_column_in_order() -> None:

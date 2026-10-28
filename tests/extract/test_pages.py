@@ -107,7 +107,8 @@ def test_a_page_lowered_in_flight_has_the_depth_of_its_url(
         Site(
             routes={
                 "/": Page(body='<img src="/late.html"><a href="/a">A</a>'),
-                "/late.html": Page(body='<a href="/x">X</a>', delay=SLOW / 2),
+                # Answers only once /x is requested, so it can lower /x only in flight.
+                "/late.html": Page(body='<a href="/x">X</a>', after="/x"),
                 "/a": Page(body='<a href="/b">B</a>'),
                 "/b": Page(body='<a href="/x">X</a>'),
                 # In flight at depth 3 when the late check lowers it to 2.

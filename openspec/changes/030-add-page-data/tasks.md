@@ -69,7 +69,7 @@ Task 4.0 is task 12.4, moved here; 4.6, 4.7 and 4.10 moved to group 4b, and 4.11
 - [x] 5.4 Drive "Cookies of a redirect are stored" at seam 3+6 (a 302 Page with `Set-Cookie`).
 - [x] 5.5 Docs: add the cookie concepts and the rule that this change's tables store no cookie value to `docs/page-data.md`.
 - [x] 5.6 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
-- [ ] 5.7 Fix the findings of the review of group 5, before group 8's first slice: a `Domain` that is no host name or IP address, and a `Path` that does not start with `/`, are NULL, so a folded header stores no value; a Max-Age beyond 64 bits is clamped; real repeated attributes and a lowercase name from an HTTP/1.1 proxy in the tests; the cookie column test compares sets; and the in-flight depth test is sequenced on a request with the fixture site's `after`, not on delays.
+- [x] 5.7 Fix the findings of the review of group 5, before group 8's first slice: a `Domain` that is no host name or IP address, and a `Path` that does not start with `/`, are NULL, so a folded header stores no value; a Max-Age beyond 64 bits is clamped; real repeated attributes and a lowercase name from an HTTP/1.1 proxy in the tests; the cookie column test compares sets; and the in-flight depth test is sequenced on a request with the fixture site's `after`, not on delays.
 
 ## 6. Directives and canonicals
 

@@ -59,16 +59,24 @@ def test_a_cookie_without_an_equals_sign_has_an_empty_name() -> None:
 
 
 def test_a_repeated_attribute_takes_the_last_in_any_letter_case() -> None:
-    (row,) = _cookies("a=1; Path=/x; secure; PATH=/y; samesite=STRICT")
+    # The second header as a proxy that appends its own SameSite sends it.
+    rows = _cookies(
+        "a=1; Path=/x; secure; PATH=/y; samesite=STRICT",
+        "sid=1; Path=/; SameSite=Lax; Secure; SameSite=None",
+    )
 
-    assert (row.path, row.secure, row.same_site) == ("/y", True, "strict")
+    assert [(row.path, row.secure, row.same_site) for row in rows] == [
+        ("/y", True, "strict"),
+        ("/", True, "none"),
+    ]
 
 
 def test_a_repeated_attribute_that_does_not_parse_keeps_the_valid_one() -> None:
+    # The empty values a template leaves when its variable is unset.
     rows = _cookies(
-        "sid=1; Max-Age=3600; Max-Age=x",
+        "sid=1; Max-Age=3600; Max-Age=",
         "sid=1; Domain=example.test; Domain=",
-        "sid=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT; Expires=never",
+        "sid=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT; Expires=",
     )
 
     assert [(row.max_age, row.domain, row.expires) for row in rows] == [
@@ -79,7 +87,7 @@ def test_a_repeated_attribute_that_does_not_parse_keeps_the_valid_one() -> None:
 
 
 def test_cookie_count_matches_the_headers() -> None:
-    # An HTTP/2 server sends every header name in lowercase.
+    # HTTP/1.1 servers and proxies such as Node and Envoy send header names in lowercase.
     result = _result(
         headers=(("Set-Cookie", "a=1; Max-Age=3600"), ("set-cookie", "b=2; Domain=.Example.test"))
     )
@@ -89,21 +97,46 @@ def test_cookie_count_matches_the_headers() -> None:
     assert (page.set_cookie_count, first.max_age, second.domain) == (2, 3600, "example.test")
 
 
-def test_a_max_age_that_is_no_64_bit_integer_is_null() -> None:
+def test_a_max_age_beyond_64_bits_is_clamped_and_a_malformed_one_is_null() -> None:
     rows = _cookies(
         "a=1; Max-Age=-1",
         "b=1; Max-Age=1.5",
-        "c=1; Max-Age=99999999999999999999",
-        "d=1; Max-Age=\N{ARABIC-INDIC DIGIT ONE}",
+        "c=1; Max-Age=+3600",
+        "d=1; Max-Age=99999999999999999999",
+        "e=1; Max-Age=-99999999999999999999",
     )
 
-    assert [row.max_age for row in rows] == [-1, None, None, None]
+    assert [row.max_age for row in rows] == [-1, None, None, 2**63 - 1, -(2**63)]
 
 
 def test_an_empty_domain_is_null() -> None:
     (row,) = _cookies("a=1; Domain=")
 
     assert row.domain is None
+
+
+def test_a_path_without_a_value_is_null() -> None:
+    rows = _cookies("a=1; Path", "b=1; Path=", "c=1; Path=docs")
+
+    assert [row.path for row in rows] == [None, None, None]
+
+
+def test_a_folded_header_stores_no_value_in_domain_or_path() -> None:
+    # An API gateway joins two Set-Cookie headers into one with ", ".
+    rows = _cookies("lang=en; Domain=example.com, sid=SECRET", "lang=en; Path=/, sid=SECRET")
+
+    assert [(row.domain, row.path) for row in rows] == [(None, None), (None, None)]
+
+
+def test_a_domain_is_a_host_name_or_an_ip_address() -> None:
+    rows = _cookies(
+        "a=1; Domain=.Shop.Example.test",
+        "b=1; Domain=192.0.2.10",
+        "c=1; Domain=2001:db8::1",
+        "d=1; Domain=example.test/path",
+    )
+
+    assert [row.domain for row in rows] == ["shop.example.test", "192.0.2.10", "2001:db8::1", None]
 
 
 def test_expires_reads_two_digit_years_as_rfc_6265_does() -> None:
