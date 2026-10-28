@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -94,6 +95,20 @@ def test_an_interrupt_is_reported_by_one_error(
         errors[-1:] == lines[-1:],
         [resume in (error["hint"] or "") for error in errors],
     ) == (130, ["interrupted"], True, [True])
+
+
+def test_an_interrupted_crawl_keeps_its_queue(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(THIRTY_PAGES)
+    process = start_cli_process("crawl", server.url("/"))
+    _await_fetched(server, 3)
+
+    _interrupt(process)
+    stdout, _ = process.communicate(timeout=30)
+
+    crawl_file = Path(json.loads(stdout)["crawl_file"])
+    assert query(crawl_file, "SELECT count(*) > 0 FROM urls WHERE fetch_state = 'queued'") == [(1,)]
 
 
 _DOWN = range(1, 21)
