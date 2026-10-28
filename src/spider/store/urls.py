@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterable, Sequence
 from sqlalchemy import (
     ColumnElement,
     Connection,
+    and_,
     bindparam,
     case,
     func,
@@ -151,7 +152,15 @@ _REQUEUED = (
 # which is what makes a failed Crawl resumable (design D1).
 _CONTINUE_REQUEUED = (
     update(urls)
-    .where(urls.c.fetch_state == literal_column("'error'"))
+    .where(
+        or_(
+            urls.c.fetch_state == literal_column("'error'"),
+            and_(
+                urls.c.fetch_state == literal_column("'skipped'"),
+                urls.c.skip_reason == literal_column("'robots_unreachable'"),
+            ),
+        )
+    )
     .values(
         fetch_state="queued",
         skip_reason=null(),

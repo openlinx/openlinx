@@ -210,3 +210,35 @@ def test_a_failed_crawl_is_continued_once_its_seed_answers(
         result.summary.state,
         query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url = ?", [seed]),
     ) == ("seed_unreachable", "completed", [("fetched",)])
+
+
+def test_a_continue_requests_the_urls_an_unreachable_robots_txt_blocked(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    links = '<a href="http://other.test/a">A</a>' + "".join(
+        f'<a href="/p{n}">P{n}</a>' for n in _PAGES
+    )
+    pages = {f"/p{n}": Page(body=f"<p>{n}</p>") for n in _PAGES}
+    seed = fixture_site(Site(routes={"/": Page(body=links), **pages}))
+    # other.test answers robots.txt with 503 in the first run, and has none by the continue.
+    down = fixture_site(Site(routes={"/robots.txt": Status(503)}))
+    up = fixture_site(Site(routes={"/a": Page(body="<p>A</p>")}))
+    stopped = crawl_result(
+        "http://site.test/",
+        resolver=FixtureResolver({"site.test": seed, "other.test": down}),
+        max_urls=3,
+    )
+    blocked = query(
+        stopped.crawl_file, "SELECT skip_reason FROM urls WHERE url = 'http://other.test/a'"
+    )
+
+    result = continued(
+        stopped,
+        CrawlOverrides(max_urls=None),
+        resolver=FixtureResolver({"site.test": seed, "other.test": up}),
+    )
+
+    assert (
+        blocked,
+        query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url = 'http://other.test/a'"),
+    ) == ([("robots_unreachable",)], [("fetched",)])
