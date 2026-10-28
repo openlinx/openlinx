@@ -174,6 +174,8 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `content_type` | TEXT | no | | | | The Content-Type response header as received, equal to urls.content_type. |
 | `status_code` | INTEGER | no | | | | The HTTP status code of the Page's own response, equal to urls.status_code. |
 | `status` | TEXT | yes | | | | The reason phrase the server sent; when it sent none, the phrase that the IANA HTTP Status Code Registry gives the status code; NULL when the registry gives none. |
+| `indexability` | TEXT | no | | | `indexable`, `non_indexable` | Whether a search engine may index the Page, by the first reason in the Indexability order that applies. |
+| `indexability_status` | TEXT | yes | | | `blocked_by_robots_txt`, `redirected`, `client_error`, `server_error`, `noindex`, `canonicalised` | The first reason in the Indexability order that makes the Page non_indexable: robots.txt, then the status class, then noindex, then a refresh redirect, then a canonical to another URL; NULL when the Page is indexable. |
 | `response_time_ms` | INTEGER | no | | | | Time from sending the request to receiving the whole body, equal to urls.response_time_ms. |
 | `last_modified` | TEXT | yes | | `timestamp` | | The first Last-Modified response header as a UTC time, read as an HTTP-date or another Internet Message Format date; NULL when absent, another text or a leap second. |
 | `redirect_url` | TEXT | yes | | | | The URL the Page redirects to: the target of its 3xx response, of its HTTP Refresh header, or of its first meta refresh; NULL when it does not redirect, or when the target is its own URL. |

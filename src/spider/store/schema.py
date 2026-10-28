@@ -16,7 +16,12 @@ from sqlalchemy import (
     or_,
 )
 
-from spider.store.page_records import RedirectType, SameSite
+from spider.store.page_records import (
+    Indexability,
+    IndexabilityStatus,
+    RedirectType,
+    SameSite,
+)
 from spider.store.records import (
     CrawlMode,
     CrawlState,
@@ -473,6 +478,22 @@ pages = public_table(
         Text,
         comment="The reason phrase the server sent; when it sent none, the phrase that the IANA "
         "HTTP Status Code Registry gives the status code; NULL when the registry gives none.",
+    ),
+    Column(
+        "indexability",
+        Text,
+        nullable=False,
+        comment="Whether a search engine may index the Page, by the first reason in the "
+        "Indexability order that applies.",
+        info={"values": literal_values(Indexability)},
+    ),
+    Column(
+        "indexability_status",
+        Text,
+        comment="The first reason in the Indexability order that makes the Page non_indexable: "
+        "robots.txt, then the status class, then noindex, then a refresh redirect, then a "
+        "canonical to another URL; NULL when the Page is indexable.",
+        info={"values": literal_values(IndexabilityStatus)},
     ),
     Column(
         "response_time_ms",

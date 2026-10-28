@@ -33,6 +33,8 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
             content_type="text/html",
             status_code=200,
             status="OK",
+            indexability="indexable",
+            indexability_status=None,
             response_time_ms=12,
             last_modified=None,
             redirect_url=None,

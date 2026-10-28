@@ -47,6 +47,8 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             status_code=response.status_code,
             # The fetcher records "" for a status line without a phrase.
             status=response.reason or STATUS_PHRASES.get(response.status_code),
+            indexability="indexable",
+            indexability_status=None,
             response_time_ms=response.response_time_ms,
             last_modified=_last_modified(response.headers),
             **_redirect(result, data),

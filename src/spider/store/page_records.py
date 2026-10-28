@@ -5,6 +5,15 @@ from datetime import datetime
 from typing import Literal
 
 type SameSite = Literal["strict", "lax", "none"]
+type Indexability = Literal["indexable", "non_indexable"]
+type IndexabilityStatus = Literal[
+    "blocked_by_robots_txt",
+    "redirected",
+    "client_error",
+    "server_error",
+    "noindex",
+    "canonicalised",
+]
 # javascript_redirect is filled from v1.1, by JavaScript rendering.
 type RedirectType = Literal["http_redirect", "http_refresh", "meta_refresh", "javascript_redirect"]
 
@@ -19,6 +28,8 @@ class PageRow:
     content_type: str
     status_code: int
     status: str | None
+    indexability: Indexability
+    indexability_status: IndexabilityStatus | None
     response_time_ms: int
     last_modified: datetime | None
     redirect_url: str | None

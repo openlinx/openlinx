@@ -95,7 +95,7 @@ Every task of this group but 6.0 reads the URL's result. Task 6.13 is task 4.11,
 
 Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code, and a 3xx Page's `http_redirect`, which 4.10 adds, comes after it.
 
-- [ ] 7.1 Drive "Plain 200 Page is indexable" at seam 4, and add `indexability`, a required field of the Page row, and `indexability_status`, both after `status`, with their values from Literal types.
+- [x] 7.1 Drive "Plain 200 Page is indexable" at seam 4, and add `indexability`, a required field of the Page row, and `indexability_status`, both after `status`, with their values from Literal types.
 - [ ] 7.2 Drive "Noindex wins over a canonical" at seam 4.
 - [ ] 7.3 Drive "Self-referencing canonical stays indexable" and "Canonical to another URL" at seam 4. This is a trivial pair: the same comparison of `canonical_url` with the URL's result's normalised URL, with the same URL and with a different one.
 - [ ] 7.4 Drive "Server error" at seam 4, through `unprepared_page_row` with a `status_code` keyword, built as the crawl engine builds a non-2xx result: no preparation, the header directives, no Links. Pin with a test named after no scenario: a 301 with an HTML body is `redirected`, a 410 `client_error`, a 203 `indexable`, a 999 `client_error` and a 599 `server_error`.
