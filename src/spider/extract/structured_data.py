@@ -1,28 +1,37 @@
 """The structured-data counts and types of a Page's HTML (030-add-page-data D20)."""
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Any
 
 import orjson
-from selectolax.lexbor import LexborHTMLParser, LexborNode
+from selectolax.lexbor import LexborHTMLParser
 
-from spider.extract.text import normalized, trimmed
+from spider.extract.text import is_keyword, normalized
 
 _JSON_LD = "application/ld+json"
 _SCHEMA_ORG = ("http://schema.org/", "https://schema.org/")
 
 
-def structured_data(tree: LexborHTMLParser) -> tuple[int, int, int, tuple[str, ...]]:
-    """jsonld_items, microdata_items, jsonld_parse_errors and structured_data_types."""
+@dataclass(frozen=True, slots=True, kw_only=True)
+class StructuredData:
+    jsonld_items: int
+    microdata_items: int
+    jsonld_parse_errors: int
+    structured_data_types: tuple[str, ...]
+
+
+def structured_data(tree: LexborHTMLParser) -> StructuredData:
     items: list[dict[str, Any]] = []
     errors = 0
     for script in tree.css("script"):
-        if not _is_json_ld(script):
+        # Trimmed as HTML trims a script's type.
+        if not is_keyword(script.attributes.get("type") or "", _JSON_LD):
             continue
         try:
             # orjson stops at 1024 levels with a decode error, where json would raise
             # RecursionError and fail the whole Page extractor.
-            items.extend(_items(orjson.loads(script.text())))
+            items.extend(_jsonld_items(orjson.loads(script.text())))
         except orjson.JSONDecodeError:
             errors += 1
     scopes = [node for node in tree.css("[itemscope]") if "itemprop" not in node.attributes]
@@ -32,36 +41,35 @@ def structured_data(tree: LexborHTMLParser) -> tuple[int, int, int, tuple[str, .
         name
         for node in scopes
         for name in normalized(node.attributes.get("itemtype") or "").split(" ")
-        if name
     ]
-    types = {_without_schema_org(name) for name in names}
-    return len(items), len(scopes), errors, tuple(sorted(types))
+    # Empty once the prefix is gone too: a template that had no type to put after it.
+    types = {name for name in map(_without_schema_org, names) if name}
+    return StructuredData(
+        jsonld_items=len(items),
+        microdata_items=len(scopes),
+        jsonld_parse_errors=errors,
+        structured_data_types=tuple(sorted(types)),
+    )
 
 
-def _is_json_ld(script: LexborNode) -> bool:
-    # Trimmed as HTML trims a script's type; compared ASCII case-insensitively, so a Kelvin
-    # sign is no k.
-    value = trimmed(script.attributes.get("type") or "")
-    return value.isascii() and value.lower() == _JSON_LD
-
-
-def _items(value: Any) -> Iterator[dict[str, Any]]:
-    for node in value if isinstance(value, list) else [value]:
-        if not isinstance(node, dict):
+def _jsonld_items(value: Any) -> Iterator[dict[str, Any]]:
+    for entry in value if isinstance(value, list) else [value]:
+        if not isinstance(entry, dict):
             continue
-        graph = node.get("@graph")
+        graph = entry.get("@graph")
         if isinstance(graph, list):
             yield from (item for item in graph if isinstance(item, dict))
         elif isinstance(graph, dict):
             yield graph
         else:
-            yield node
+            yield entry
 
 
 def _jsonld_types(item: dict[str, Any]) -> list[str]:
     value = item.get("@type")
-    values = value if isinstance(value, list) else [value]
-    return [name for name in values if isinstance(name, str) and name]
+    return [
+        name for name in (value if isinstance(value, list) else [value]) if isinstance(name, str)
+    ]
 
 
 def _without_schema_org(name: str) -> str:

@@ -2,7 +2,7 @@
 
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
-from spider.extract.text import normalized, trimmed
+from spider.extract.text import is_keyword, normalized, trimmed
 
 # An element inside svg or math names a picture or a formula; text inside them is left out too
 # (text._SKIPPED). Page preparation parses with scripting on, as a browser that runs scripts
@@ -49,9 +49,7 @@ def first_two(texts: list[str]) -> tuple[str | None, int | None, str | None, int
 
 
 def _is_named(node: LexborNode, name: str) -> bool:
-    value = trimmed(node.attributes.get("name") or "")
-    # HTML compares attribute values ASCII case-insensitively, so a Kelvin sign is no k.
-    return value.isascii() and value.lower() == name
+    return is_keyword(node.attributes.get("name") or "", name)
 
 
 def _length(text: str | None) -> int | None:

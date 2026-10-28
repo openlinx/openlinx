@@ -1,5 +1,4 @@
-"""The Content Area, the counts and the hash of its text, and Text Ratio (030-add-page-data D7,
-D8, D10, D13)."""
+"""Content Area text: its counts, its hash and Text Ratio (030-add-page-data D7, D8, D10, D13)."""
 
 import hashlib
 import math

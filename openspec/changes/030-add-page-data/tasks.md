@@ -131,7 +131,7 @@ Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code,
 - [x] 9.5b Drive "JSON-LD array, type lists and an http type" at seam 4.
 - [x] 9.6 Pin "Page without structured data" at seam 4, a `test:` guard, red by mutation: the types NULL when there are none.
 - [x] 9.7 Docs: add the hash definition, with no Unicode normalisation, and the counting rules for JSON-LD and Microdata items and types to `docs/page-data.md`.
-- [ ] 9.8 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [x] 9.8 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
 
 ## 10. Link attributes
 

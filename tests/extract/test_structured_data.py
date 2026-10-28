@@ -55,6 +55,16 @@ def test_page_without_structured_data() -> None:
     assert (row.jsonld_items, row.microdata_items, row.structured_data_types) == (0, 0, ())
 
 
+def test_a_type_that_is_only_the_schema_org_prefix_is_skipped() -> None:
+    # Templates that render the type into a schema.org URL and had no type to render.
+    row = page_row(
+        '<script type="application/ld+json">{"@type":"http://schema.org/"}</script>'
+        '<div itemscope itemtype="https://schema.org/"><p>Item</p></div>'
+    )
+
+    assert (row.jsonld_items, row.microdata_items, row.structured_data_types) == (1, 1, ())
+
+
 def _nested(levels: int) -> str:
     return f'<script type="application/ld+json">{"[" * levels}{"]" * levels}</script>'
 

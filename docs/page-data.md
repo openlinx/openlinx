@@ -102,17 +102,17 @@ The Content Area text is read as [Text](#text) is, block by block.
 
 `content_hash` is the SHA-256, in lowercase hex, of the Content Area text as UTF-8, after the whitespace normalisation of every text column, so `<p>Hello   world</p>` and `<div><p>Hello</p><p>world</p></div>` hash the same. Two Pages with the same `content_hash` are Exact Duplicates.
 
-- **No Unicode normalisation.** The text is hashed as the Page spells it, and letter case is kept. A precomposed `é` (U+00E9) and an `e` followed by a combining acute accent (U+0301) hash differently. Pages of one site come from one CMS and template, which spell a text one way, and the hash is the same whichever Python ran the Crawl.
-- **No words, no hash.** `content_hash` is NULL when `word_count` is 0, so pages whose Content Area holds only navigation, or the empty shell of a client-rendered page, do not form one big duplicate group.
+- **No Unicode normalisation.** The text is hashed as the Page spells it, and letter case is kept. A precomposed `é` (U+00E9) and an `e` followed by a combining acute accent (U+0301) hash differently, and the hash is the same whichever Python ran the Crawl.
+- **No words, no hash.** `content_hash` is NULL when `word_count` is 0, so Pages whose Content Area holds only navigation, or the empty shell of a client-rendered page, do not form one big duplicate group.
 
 ## Structured data
 
-The structured-data columns count the items a Page declares in JSON-LD and Microdata. Only top-level items count: an Offer inside a Product is a property of the Product, so it adds neither a count nor a type. The validation columns, `structured_data_errors` and `structured_data_warnings`, are filled from v0.3.
+The structured-data columns count the items a Page declares in JSON-LD and Microdata. Only top-level items count: an Offer inside a Product is a property of the Product, so it adds neither a count nor a type.
 
 - **JSON-LD scripts.** A `<script>` is JSON-LD when its `type`, trimmed of ASCII whitespace, is `application/ld+json` in any letter case. `jsonld_parse_errors` counts the scripts that are not valid JSON (RFC 8259), such as a block a template cut short or one that holds `NaN`, and the scripts nested more than 1024 levels deep. Such a script adds no items.
-- **JSON-LD items.** A top-level object is one item, unless it has an `@graph`: then the objects of its `@graph` are the items, whether `@graph` is an array or one object. A top-level array contributes what each of its objects does. Strings, numbers and nested arrays add nothing.
+- **JSON-LD items.** A top-level object is one item, unless its `@graph` is an array or an object: then the objects of its `@graph` are the items. A top-level array contributes what each of its objects does. Strings, numbers and nested arrays add nothing.
 - **Microdata items.** `microdata_items` counts the elements with `itemscope` and no `itemprop`.
-- **Types.** `structured_data_types` is a JSON array of the distinct types of the counted items, sorted by code point, and `[]` when there are none. A type comes from `@type`, a string or an array of strings, where an empty string or a value of another kind is skipped, and from `itemtype`, which can name several types separated by spaces. A leading `http://schema.org/` or `https://schema.org/` is removed, so `https://schema.org/Product` is `Product`.
+- **Types.** `structured_data_types` is a JSON array of the distinct types of the counted items, sorted by code point, and `[]` when there are none. A type comes from `@type`, a string or an array of strings, where an empty string or a value of another kind is skipped, and from `itemtype`, which can name several types separated by whitespace. A leading `http://schema.org/` or `https://schema.org/` is removed, so `https://schema.org/Product` is `Product`, and a type that is only that prefix, as a template without a type to fill in leaves it, is skipped.
 
 ## Values of the response and of `urls`
 

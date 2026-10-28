@@ -78,6 +78,13 @@ def trimmed(text: str) -> str:
     return text.strip(_ASCII_WHITESPACE)
 
 
+def is_keyword(value: str, keyword: str) -> bool:
+    """Whether an attribute value, trimmed, is the lowercase `keyword` in any letter case."""
+    value = trimmed(value)
+    # HTML compares such values ASCII case-insensitively, so a Kelvin sign is no k.
+    return value.isascii() and value.lower() == keyword
+
+
 def element_text(element: LexborNode) -> str:
     return joined(text_blocks(element))
 

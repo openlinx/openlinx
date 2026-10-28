@@ -837,9 +837,10 @@ pages = public_table(
     Column(
         "jsonld_items",
         Integer,
-        comment="The number of JSON-LD items in the application/ld+json scripts: their top-level "
-        "objects, or the objects of their @graph; NULL when the Page is not analysed or its "
-        "Page extractor failed.",
+        comment="The number of JSON-LD items in the application/ld+json scripts: each top-level "
+        "object, of a script or of a top-level array, or instead the content of its @graph, an "
+        "array of objects or one object; NULL when the Page is not analysed or its Page "
+        "extractor failed.",
     ),
     Column(
         "microdata_items",
