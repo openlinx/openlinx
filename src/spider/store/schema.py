@@ -826,7 +826,7 @@ pages = public_table(
         Text,
         comment="The SHA-256, as lowercase hex, of the normalised Content Area text as UTF-8, "
         "with no Unicode normalisation: Pages with the same value are Exact Duplicates; NULL "
-        "when the Page is not analysed or its Page extractor failed.",
+        "when word_count is 0, or the Page is not analysed or its Page extractor failed.",
     ),
     Column(
         "crawl_depth",

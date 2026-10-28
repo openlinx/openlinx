@@ -70,8 +70,11 @@ def average_words_per_sentence(words: int, sentences: int) -> float | None:
     return _rounded(Fraction(words, sentences)) if sentences else None
 
 
-def content_hash(blocks: Iterable[str]) -> str:
-    # No Unicode normalisation: its tables differ between interpreters (D10).
+def content_hash(blocks: Iterable[str], words: int) -> str | None:
+    # Without words, empty shells would all be Exact Duplicates of each other. No Unicode
+    # normalisation: its tables differ between interpreters (D10).
+    if words == 0:
+        return None
     return hashlib.sha256(normalized(joined(blocks)).encode()).hexdigest()
 
 

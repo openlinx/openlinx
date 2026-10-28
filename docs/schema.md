@@ -228,7 +228,7 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `average_words_per_sentence` | REAL | yes | | | | word_count divided by sentence_count, rounded half up to 2 decimals; NULL when sentence_count is 0, or the Page is not analysed or its Page extractor failed. |
 | `text_ratio_pct` | REAL | yes | | | | 100 times the length of the normalised text of body, without Content Area exclusions, divided by the decoded HTML document's length in characters, rounded half up to 2 decimals; NULL when the document is empty, or the Page is not analysed or its Page extractor failed. |
 | `declared_language` | TEXT | yes | | | | The lang attribute of the root html element, trimmed: the empty string when it has no value; NULL when it is absent, or the Page is not analysed or its Page extractor failed. |
-| `content_hash` | TEXT | yes | | | | The SHA-256, as lowercase hex, of the normalised Content Area text as UTF-8, with no Unicode normalisation: Pages with the same value are Exact Duplicates; NULL when the Page is not analysed or its Page extractor failed. |
+| `content_hash` | TEXT | yes | | | | The SHA-256, as lowercase hex, of the normalised Content Area text as UTF-8, with no Unicode normalisation: Pages with the same value are Exact Duplicates; NULL when word_count is 0, or the Page is not analysed or its Page extractor failed. |
 | `crawl_depth` | INTEGER | no | | | | Crawl Depth, equal to urls.crawl_depth: 0 for Seeds. |
 
 ### Indexes

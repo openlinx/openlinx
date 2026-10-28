@@ -161,3 +161,7 @@ def test_composed_and_decomposed_accents_hash_differently() -> None:
         "73473dcc12b763085904a5279d048c4d5b3b008c46f1f32443b99de04aa83a14",
         "c42cc7a1ca08364b6fd859fa50d2454730a8236290a423373cc630da77c6d711",
     ]
+
+
+def test_empty_content_area_has_no_hash() -> None:
+    assert page_row('<body><nav><a href="/">Home</a></nav></body>').content_hash is None
