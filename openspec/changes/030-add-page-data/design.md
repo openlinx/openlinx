@@ -212,6 +212,7 @@ The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is 
 - [A cookie `Domain` with a trailing dot, such as `example.com.`, is stored as NULL] → Under RFC 6265 sections 5.1.3 and 5.3 it domain-matches no host a Crawl requests without the dot, so the cookie is ignored there; NULL keeps the column to host names and IP addresses.
 - [A canonical `href` that resolves to no URL, such as `http://[bad`, is no canonical declaration, so `canonical_count` leaves it out] → `020` stores no Link for it either, and a search engine can use no such canonical; the canonical columns describe the Links a search engine can follow.
 - [A first refresh `<meta>` whose `content` does not parse, such as `content="soon"`, blocks the redirect of a later one, which a browser would follow] → `020`'s refresh reader gives no URL both for a content without one and for one that does not parse; a broken first refresh beside a working second one is rare.
+- [Which meta refresh may redirect is read from the `meta_refresh` column, so on a Page whose Page extractor failed the first `meta_refresh` Link redirects, even after a first refresh `<meta>` without a URL] → The Links stay exact and the column is the only part lost; a failed Page extractor is rare and recorded in `parse_error`.
 - [The depth pass reads every followed Link of the Crawl (D18)] → One indexed scan of `links` per level and one write per URL whose depth gets smaller; `026`'s 500k run measures it.
 
 ## Migration Plan

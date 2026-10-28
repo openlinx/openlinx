@@ -9,10 +9,11 @@ import msgspec
 from spider.crawl.engine.hooks import UrlResponse, UrlResult
 from spider.crawl.fetch.fetcher import header_values
 from spider.crawl.pages.preparation import is_html_type
+from spider.crawl.pages.refresh import refresh_url
 from spider.extract.addresses import display_address, path_and_query
 from spider.extract.cookies import cookie_row
 from spider.extract.dates import internet_date
-from spider.extract.page_data import PAGE_DATA
+from spider.extract.page_data import PAGE_DATA, PageData
 from spider.extract.status_phrases import STATUS_PHRASES
 from spider.store.page_records import CookieRow, PageRow, RedirectType
 
@@ -41,7 +42,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             status=response.reason or STATUS_PHRASES.get(response.status_code),
             response_time_ms=response.response_time_ms,
             last_modified=_last_modified(response.headers),
-            **_redirect(result),
+            **_redirect(result, data),
             set_cookie_count=len(header_values(response.headers, "Set-Cookie")),
             crawl_timestamp=response.fetched_at,
             **({} if data is None else msgspec.structs.asdict(data)),
@@ -61,14 +62,24 @@ def cookie_rows(result: UrlResult) -> Iterable[CookieRow]:
     )
 
 
-def _redirect(result: UrlResult) -> dict[str, Any]:
+def _redirect(result: UrlResult, data: PageData | None) -> dict[str, Any]:
     # 020 reads the Refresh header of a 2xx response and the meta refresh of a prepared one;
     # a refresh of the Page itself, as a live page reloads, is no redirect.
     for link_type in _REFRESH_TYPES:
         refresh = next((link for link in result.links if link.type == link_type), None)
+        if link_type == "meta_refresh" and not _first_meta_refresh_names_a_url(data):
+            continue
         if refresh is not None and refresh.target != result.url:
             return {"redirect_url": refresh.target, "redirect_type": link_type}
     return {"redirect_url": None, "redirect_type": None}
+
+
+def _first_meta_refresh_names_a_url(data: PageData | None) -> bool:
+    # A browser acts on the first meta refresh only, so one without a URL, such as a reload,
+    # stops a later one. Without the Page extractor's output, the first Link has to do.
+    if data is None:
+        return True
+    return data.meta_refresh is not None and refresh_url(data.meta_refresh) is not None
 
 
 def _robots_columns(result: UrlResult, response: UrlResponse) -> dict[str, Any]:
