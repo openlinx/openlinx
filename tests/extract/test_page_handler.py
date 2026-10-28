@@ -8,6 +8,7 @@ from spider.crawl.pages.directives import NO_DIRECTIVES
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.page_handler import page_rows
 from spider.store.page_records import PageRow
+from tests.support.headers import LAST_MODIFIEDS
 
 
 def _result(
@@ -105,6 +106,12 @@ def test_invalid_last_modified_is_null() -> None:
     row = _page(_fetched("https://example.test/", headers=(("Last-Modified", "yesterday"),)))
 
     assert row.last_modified is None
+
+
+def test_real_last_modified_headers_give_their_times() -> None:
+    assert {entry.stack: _last_modified(entry.header) for entry in LAST_MODIFIEDS} == {
+        entry.stack: entry.time for entry in LAST_MODIFIEDS
+    }
 
 
 def test_reason_phrase_falls_back_to_the_standard_phrase() -> None:

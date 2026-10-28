@@ -7,6 +7,7 @@ from spider.crawl.pages.directives import NO_DIRECTIVES
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.page_handler import cookie_rows, page_rows
 from spider.store.page_records import CookieRow
+from tests.support.headers import SET_COOKIES
 
 
 def _result(*set_cookies: str, headers: tuple[tuple[str, str], ...] = ()) -> UrlResult:
@@ -171,3 +172,37 @@ def test_partitioned_is_a_flag() -> None:
     rows = _cookies("a=1; Partitioned", "b=1")
 
     assert [row.partitioned for row in rows] == [True, False]
+
+
+def test_real_set_cookie_headers_give_their_rows() -> None:
+    rows = _cookies(*(cookie.header for cookie in SET_COOKIES))
+
+    assert {
+        cookie.stack: (
+            row.name,
+            row.domain,
+            row.path,
+            row.expires,
+            row.max_age,
+            row.secure,
+            row.http_only,
+            row.partitioned,
+            row.same_site,
+        )
+        for cookie, row in zip(SET_COOKIES, rows, strict=True)
+    } == {cookie.stack: cookie.row for cookie in SET_COOKIES}
+
+
+def test_two_real_headers_folded_into_one_store_neither_value() -> None:
+    # Every pair, as a gateway that joins Set-Cookie headers with ", " would send it.
+    leaks = []
+    for first in SET_COOKIES:
+        for second in SET_COOKIES:
+            (row,) = _cookies(f"{first.header}, {second.header}")
+            stored = " ".join(
+                text for text in (row.name, row.domain, row.path, row.same_site) if text
+            )
+            if first.value in stored or second.value in stored:
+                leaks.append(f"{first.stack} + {second.stack}: {stored}")
+
+    assert leaks == []
