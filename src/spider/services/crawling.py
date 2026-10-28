@@ -303,24 +303,27 @@ async def _crawl_and_end(crawl: _Crawl) -> _End:
     async with _crawl_context(crawl) as context:
         await run_crawl(context, crawl.plan.seed)
         stop = context.stop
-        if stop.reason == "write_failed":
+        # Read once: a stop that comes during the passes or the end's writes finds the frontier
+        # empty, and must not change the end that is being written.
+        reason = stop.reason
+        if reason == "write_failed":
             raise _WriteFailed(stop.cause)
-        if stop.reason is not None and stop.reason in NETWORK_FAILURES:
-            ended = await _end(crawl, context.writer, "failed", stop.reason)
-            failure = NETWORK_FAILURES[stop.reason]
+        if reason is not None and reason in NETWORK_FAILURES:
+            ended = await _end(crawl, context.writer, "failed", reason)
+            failure = NETWORK_FAILURES[reason]
             plan = crawl.plan
             return replace(ended, failure=failure(plan.seed, plan.settings, crawl.crawl_file))
-        elif stop.reason not in (None, "max_urls", "interrupt"):
+        elif reason not in (None, "max_urls", "interrupt"):
             # 060's stop request has no end it records yet.
-            raise stop.cause or RuntimeError(f"no end is built for {stop.reason}")
+            raise stop.cause or RuntimeError(f"no end is built for {reason}")
         else:
             # Before the end is written, for completed and stopped alike: 040 reads either
             # state as "its Issues are materialised".
             for crawl_pass in crawl.hooks.passes:
                 await crawl_pass.run(PassContext(context.writer, crawl.clock))
-            state: CrawlState = "completed" if stop.reason is None else "stopped"
-            ended = await _end(crawl, context.writer, state, stop.reason)
-            if stop.reason == "interrupt":
+            state: CrawlState = "completed" if reason is None else "stopped"
+            ended = await _end(crawl, context.writer, state, reason)
+            if reason == "interrupt":
                 return replace(ended, failure=interrupted(crawl.crawl_file))
             return ended
 

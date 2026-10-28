@@ -95,6 +95,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         redispatch=redispatch,
         grace=StopGrace(context.clock, STOP_GRACE_SECONDS),
     )
+    context.stop.on_first_set(lambda _reason: run.grace.start())
     # Once, with the final Scope: 022 moves this to the end of the Seed's Redirect Chain.
     await context.pages.start(
         PageSettings(
@@ -236,7 +237,8 @@ async def _start_again(run: Run, running: set[asyncio.Task[None]]) -> _Started:
 
 async def _start(run: Run, queued: QueuedUrl, running: set[asyncio.Task[None]]) -> _Started:
     context, limits = run.context, run.limits
-    await limits.reserve_task()
+    if not await _reserve_task(run):
+        return "stopped"
     if context.stop.is_set or run.task_failure.is_set:
         limits.task_ended()
         return "stopped"
@@ -250,6 +252,21 @@ async def _start(run: Run, queued: QueuedUrl, running: set[asyncio.Task[None]]) 
     tasks = run.checked_urls if _is_checked_url(queued, decision) else running
     run.task_failure.track(tasks, task)
     return "go_on"
+
+
+async def _reserve_task(run: Run) -> bool:
+    """Room for a URL's task, or False once the Crawl stops: the tasks that fill the bound may
+    wait for a host's slot that a hanging request holds, and the grace must not wait for it
+    (design D16)."""
+    reserved = asyncio.ensure_future(run.limits.reserve_task())
+    stopped = asyncio.ensure_future(run.context.stop.wait())
+    try:
+        await asyncio.wait({reserved, stopped}, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        stopped.cancel()
+        reserved.cancel()
+        await asyncio.wait({reserved, stopped})
+    return not reserved.cancelled()
 
 
 async def _cancel_all(tasks: set[asyncio.Task[None]]) -> None:

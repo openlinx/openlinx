@@ -6,14 +6,17 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from spider.crawl.engine.hooks import Pass, PassContext
 from spider.crawl.engine.stop import StopSignal
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlResult
+from spider.services.hooks import default_hooks
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.server import ServerHandle
@@ -133,7 +136,7 @@ def test_a_second_interrupt_ends_the_process_at_once(
 
     second_at = time.monotonic()
     _interrupt(process)
-    stdout, stderr = process.communicate(timeout=30)
+    stdout, stderr = _rest(process)
     took = time.monotonic() - second_at
 
     # Nothing is written after it: the file stays running, which 060 reports as interrupted.
@@ -153,6 +156,18 @@ def _await_request(server: ServerHandle, path: str) -> None:
     while all(request.path != path for request in server.requests):
         assert time.monotonic() < deadline, f"the Crawl never requested {path}"
         time.sleep(0.05)
+
+
+def _rest(process: subprocess.Popen[bytes]) -> tuple[bytes, bytes]:
+    """What the Command writes until it ends, read through the buffered pipes a handshake
+    has read lines from, so nothing they read ahead is lost."""
+    assert process.stdout is not None
+    assert process.stderr is not None
+    with process.stdout, process.stderr:
+        stderr = process.stderr.read()
+        stdout = process.stdout.read()
+    process.wait(timeout=30)
+    return stdout, stderr
 
 
 def _await_row(crawl_file: Path, url: str) -> None:
@@ -182,7 +197,7 @@ def test_a_stop_ends_a_pause(temp_workspace: TempWorkspace, fixture_site: StartS
 
     interrupted_at = time.monotonic()
     _interrupt(process)
-    stdout, stderr = process.communicate(timeout=30)
+    stdout, stderr = _rest(process)
 
     result = json.loads(stdout)
     events = [json.loads(line).get("event") for line in stderr.splitlines()]
@@ -218,7 +233,7 @@ def _interrupt(process: subprocess.Popen[bytes]) -> None:
 
 
 def _how_it_ended(process: subprocess.Popen[bytes]) -> tuple[int, str, str, list[str]]:
-    stdout, stderr = process.communicate(timeout=30)
+    stdout, stderr = _rest(process)
     result = json.loads(stdout)
     events = [json.loads(line) for line in stderr.splitlines()]
     stopping = [e["data"]["reason"] for e in events if e.get("event") == "stopping"]
@@ -229,6 +244,7 @@ def test_a_stop_that_ends_a_depth_reads_no_deeper_one(temp_workspace: TempWorksp
     clock = FakeClock()
     stop = StopSignal()
     reporter = Collected()
+    before = signal.getsignal(signal.SIGINT)
     pages = {
         "/": FakePage('<a href="http://other.test/slow">S</a><a href="/a">A</a>'),
         "http://other.test/slow": FakePage("<p>S</p>", delay=60),
@@ -247,6 +263,7 @@ def test_a_stop_that_ends_a_depth_reads_no_deeper_one(temp_workspace: TempWorksp
         result.summary.stop_reason,
         query(result.crawl_file, "SELECT url, fetch_state FROM urls ORDER BY id"),
         [data["reason"] for name, data in reporter.events if name == "stopping"],
+        signal.getsignal(signal.SIGINT) is before,
     ) == (
         "stopped",
         "interrupt",
@@ -257,6 +274,7 @@ def test_a_stop_that_ends_a_depth_reads_no_deeper_one(temp_workspace: TempWorksp
             ("http://site.test/b", "queued"),
         ],
         ["interrupt"],
+        True,
     )
 
 
@@ -300,6 +318,51 @@ def test_a_request_still_running_after_the_grace_period_is_cancelled(
             "http://other.test/quick": "fetched",
         },
         10,
+    )
+
+
+def test_a_stop_while_dispatch_waits_for_room_ends_after_the_grace(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    stop = StopSignal()
+    # One host's slot, held by /hang: the tasks of /p1 to /p30 fill the task bound while they
+    # wait for it, so dispatch waits for room when the stop comes.
+    links = '<a href="/hang">H</a>' + "".join(f'<a href="/p{n}">P</a>' for n in range(1, 31))
+    pages = {"/": FakePage(links), "/hang": FakePage("<p>H</p>", delay=NEVER)}
+    fetcher = FakeFetcher(clock, pages, on_start={"/hang": lambda: stop.set("interrupt")})
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, stop=stop, concurrency=1
+    )
+
+    assert (
+        result.summary.state,
+        query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url LIKE '%/hang'"),
+        clock.monotonic(),
+    ) == ("stopped", [("queued",)], 10)
+
+
+def test_a_stop_during_the_post_crawl_passes_completes_the_crawl(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    stop = StopSignal()
+
+    async def stop_request_arrives(context: PassContext) -> None:
+        stop.set("interrupt")
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("stop", stop_request_arrives)))
+    fetcher = FakeFetcher(clock, {"/": FakePage("<p>/</p>")})
+
+    result = crawl_result("http://site.test/", hooks, clock=clock, fetcher=fetcher, stop=stop)
+
+    # Nothing was left queued when it came, so the Crawl has nothing to continue.
+    assert (result.summary.state, result.summary.stop_reason, result.failure) == (
+        "completed",
+        None,
+        None,
     )
 
 

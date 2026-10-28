@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from spider.crawl.engine.pause import pause_after, probe_times
+from spider.crawl.engine.stop import StopSignal
 from spider.output.reporter import CliReporter, Collected
 from spider.output.writer import Output
 from tests.fixture_site.hosts import StartHosts
@@ -671,6 +672,34 @@ def test_a_url_held_at_the_pause_stays_queued_when_the_crawl_stops(
             result.crawl_file, "SELECT fetch_state FROM urls WHERE url = 'http://sub.site.test/x'"
         ),
     ) == ("site_unreachable", [("queued",)])
+
+
+def test_a_stop_cancels_the_probe_in_flight(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    stop = StopSignal()
+    # / answers 30 seconds after it starts, its probes too: the pause begins at 30, and the
+    # stop comes as the first probe starts at 35.
+    down = range(1, 9)
+    pages = {
+        "/": FakePage("".join(f'<a href="/down/{n}">D</a>' for n in down), delay=30),
+        **{f"/down/{n}": FakePage("", fails="connection_error") for n in down},
+    }
+
+    def stop_at_the_first_probe() -> None:
+        if clock.monotonic() >= 35:
+            stop.set("interrupt")
+
+    fetcher = FakeFetcher(clock, pages, on_start={"/": stop_at_the_first_probe})
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, stop=stop, concurrency=1
+    )
+
+    assert (
+        result.summary.stop_reason,
+        clock.monotonic(),
+        [w.details["total_seconds"] for w in result.warnings if w.code == "network_paused"],
+    ) == ("interrupt", 35, [5])
 
 
 def _seed_starts(fetcher: FakeFetcher) -> list[float]:

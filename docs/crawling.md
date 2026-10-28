@@ -165,9 +165,9 @@ An interrupt stops a foreground Crawl gracefully: Ctrl+C, and on Windows also Ct
 3. The post-crawl passes run, and the Crawl ends `stopped` with `stop_reason` = `interrupt`.
 4. The Command prints the result, then one error, `interrupted`, whose hint is the command that continues the Crawl, such as `spider resume --crawl 20261014-101500-k3f9`, and exits with code 130.
 
-Every stop takes the same grace, the URL limit's and a failure's too, so no request holds the end for longer than 10 seconds.
+Every stop takes the same grace, the URL limit's and a failure's too.
 
-A second interrupt ends the process at once, with no result and no error. The crawl file keeps every unit committed before it, which is at most a second of work behind, and stays `running`; it can be continued like a stopped Crawl.
+A second interrupt ends the process at once, with no result and no error. The crawl file keeps every unit committed before it, which is about a second of work behind, and stays `running`; it can be continued like a stopped Crawl.
 
 ### The network pause
 

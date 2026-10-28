@@ -229,7 +229,7 @@ class NetworkPause:
                 self._count_no_more(paused.count)
             seconds = self._clock.monotonic() - paused.began
             if end is None:
-                # A stop ended the wait: the Crawl ends with that stop's reason.
+                # A stop that ended the wait keeps its reason; giving up sets the pause's.
                 if not self._stop.is_set:
                     self._stop.set(paused.reason)
             else:
