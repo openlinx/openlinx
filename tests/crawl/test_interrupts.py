@@ -20,7 +20,7 @@ from spider.services.hooks import default_hooks
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.server import ServerHandle
-from tests.support.cli import start_cli_process
+from tests.support.cli import await_event, start_cli_process
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
@@ -175,12 +175,12 @@ def test_a_second_interrupt_ends_the_process_at_once(
         )
     )
     process = start_cli_process("crawl", server.url("/"))
-    crawl_file = Path(_await_event(process, "crawl_started")["crawl_file"])
+    crawl_file = Path(await_event(process, "crawl_started")["crawl_file"])
     _await_request(server, "/hang")
     # The writer commits each second: the row that the kill must leave queued is in the file.
     _await_row(crawl_file, server.url("/hang"))
     _interrupt(process)
-    _await_event(process, "stopping")
+    await_event(process, "stopping")
 
     second_at = time.monotonic()
     _interrupt(process)
@@ -241,7 +241,7 @@ def test_a_stop_ends_a_pause(temp_workspace: TempWorkspace, fixture_site: StartS
     process = start_cli_process(
         "crawl", server.url("/"), "--concurrency", "1", "--network-wait", "1800"
     )
-    _await_event(process, "crawl_paused")
+    await_event(process, "crawl_paused")
 
     interrupted_at = time.monotonic()
     _interrupt(process)
@@ -259,17 +259,6 @@ def test_a_stop_ends_a_pause(temp_workspace: TempWorkspace, fixture_site: StartS
         events.count("crawl_resumed"),
         probes,
     ) == (130, "stopped", "interrupt", 1, 0, [])
-
-
-def _await_event(process: subprocess.Popen[bytes], name: str) -> dict[str, Any]:
-    """The event's data, once stderr holds it."""
-    assert process.stderr is not None
-    for line in process.stderr:
-        event = json.loads(line)
-        if event.get("event") == name:
-            data: dict[str, Any] = event["data"]
-            return data
-    raise AssertionError(f"the Command ended without a {name} event")
 
 
 def _interrupt(process: subprocess.Popen[bytes]) -> None:

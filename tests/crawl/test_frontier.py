@@ -1,9 +1,15 @@
 """The frontier: one request per URL, an end, and the order (020-add-crawl-core D1; seam 3)."""
 
+import time
+from pathlib import Path
+
+import pytest
+
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.support.cli import await_event, start_cli_process
 from tests.support.crawling import crawled
-from tests.support.crawls import crawl_row
+from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
 
 
@@ -62,3 +68,63 @@ def test_followed_urls_start_in_discovery_order(
         "/a",
         "/b",
     ]
+
+
+# What each Page links to: every /pN to two URLs that no other Page links to, so a Page
+# committed without the URLs it found shows as missing rows.
+_KILL_PAGES = range(1, 31)
+KILL_LINKS = {
+    "/": [f"/p{n}" for n in _KILL_PAGES],
+    **{f"/p{n}": [f"/p{n}/a", f"/p{n}/b"] for n in _KILL_PAGES},
+}
+KILLED_SITE = Site(
+    routes={
+        # Each /pN answers slowly, so the Crawl still runs when the test kills it.
+        **{
+            path: Page(
+                body="".join(f'<a href="{link}">L</a>' for link in links),
+                delay=0 if path == "/" else 0.2,
+            )
+            for path, links in KILL_LINKS.items()
+        },
+        **{f"/p{n}/{leaf}": Page(body="<p>L</p>") for n in _KILL_PAGES for leaf in "ab"},
+    }
+)
+
+
+@pytest.mark.slow
+def test_a_killed_crawl_leaves_no_half_recorded_page(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(KILLED_SITE)
+    process = start_cli_process("crawl", server.url("/"))
+    crawl_file = Path(await_event(process, "crawl_started")["crawl_file"])
+    _await_parsed_pages(crawl_file, 10)
+
+    process.kill()
+    assert process.stdout is not None
+    assert process.stderr is not None
+    with process.stdout, process.stderr:
+        process.wait(timeout=30)
+
+    parsed = {url for (url,) in query(crawl_file, "SELECT url FROM urls WHERE parsed = 1")}
+    recorded = {url for (url,) in query(crawl_file, "SELECT url FROM urls")}
+    found = {
+        path: [link for link in links if server.url(link) not in recorded]
+        for path, links in KILL_LINKS.items()
+        if server.url(path) in parsed
+    }
+    # At least one parsed /pN, whose URLs only its own unit records.
+    assert (crawl_row(crawl_file)["state"], set(found) - {"/"} != set(), found) == (
+        "running",
+        True,
+        {path: [] for path in found},
+    )
+
+
+def _await_parsed_pages(crawl_file: Path, count: int) -> None:
+    """Once a reader sees `count` committed Pages that were parsed."""
+    deadline = time.monotonic() + 30
+    while query(crawl_file, "SELECT count(*) FROM urls WHERE parsed = 1")[0][0] < count:
+        assert time.monotonic() < deadline, f"fewer than {count} parsed Pages were committed"
+        time.sleep(0.05)

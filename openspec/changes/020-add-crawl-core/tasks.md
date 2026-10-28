@@ -440,7 +440,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 
 ## 14. Persistent frontier and continuing (widening)
 
-- [ ] 14.1 **Guard:** "A killed Crawl leaves no half-recorded Page", at seam 1, subprocess, killed with `Popen.kill()`. Mark it `slow`. Done when: the subprocess runs through `python_command`, the routes have a delay so the Crawl still runs at the kill, the kill comes once a reader sees at least 10 committed Pages with `parsed` = 1, and the test asserts at least one such Page.
+- [x] 14.1 **Guard:** "A killed Crawl leaves no half-recorded Page", at seam 1, subprocess, killed with `Popen.kill()`. Mark it `slow`. Done when: the subprocess runs through `python_command`, the routes have a delay so the Crawl still runs at the kill, the kill comes once a reader sees at least 10 committed Pages with `parsed` = 1, and the test asserts at least one such Page.
 - [ ] 14.2 Drive "Continuing a stopped Crawl completes it" at seam 2.
 
   Done when: the Crawl Service's continue operation of design D20 (which `060`'s `resume` calls) accepts `stopped` and `failed` Crawls, builds its plan from the file, writes `running` through `check_transition`, its overrides into `crawl.config` and the re-queue in one unit, and counts the URL limit over the Crawl's whole life (saying so in the `max_urls` help and in `docs/crawling.md`); and a test shows that a continue of a file with no Seed row records it.
