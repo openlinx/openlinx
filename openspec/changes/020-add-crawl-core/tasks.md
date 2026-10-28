@@ -451,7 +451,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 14.5 Drive "A failed Crawl is continued once its Seed answers" at seam 2. Done when: continuing re-queues the `error` rows and the `skipped` rows with `skip_reason` = `robots_unreachable` over the whole table, clearing their outcome columns, in one unit before the counters are seeded (design D1); and the fixture site starts on a given port (`port=`, a fixture capability).
 - [x] 14.5a Drive "A continue requests the URLs an unreachable robots.txt blocked" at seam 2.
 - [x] 14.6 **Guard:** "Post-crawl passes run again after a continue" at seam 2.
-- [ ] 14.7 Docs: document the frontier, what a killed Crawl keeps, and the continue operation for `060` in `docs/crawling.md`, with a line that `duration_s` counts from the Crawl's start, so a continued Crawl's includes the time between runs, and that `060`'s `crawl_runs` gives each run's.
+- [x] 14.7 Docs: document the frontier, what a killed Crawl keeps, and the continue operation for `060` in `docs/crawling.md`, with a line that `duration_s` counts from the Crawl's start, so a continued Crawl's includes the time between runs, and that `060`'s `crawl_runs` gives each run's.
 - [ ] 14.8 Review: run the code-review skill on group 14's commits, then refactor with the whole suite green.
 
 ## 15. Reading `<noscript>` as browsers that run scripts do

@@ -95,7 +95,7 @@ While it runs, the Command writes events to stderr, one JSON object per line, as
 
 ### Warnings
 
-A warning is written to stderr as a diagnostic when it first occurs, and kept for the result's `warnings` and for `crawl.warnings` in the crawl file, which holds them as a JSON array once the Crawl ends (`[]` while it runs). A warning about a host, such as `robots_unreachable`, is written once per host; a warning about the tool's own code is counted (see [When one URL fails](#when-one-url-fails)), and so is `network_paused`, which counts pauses instead of URLs:
+A warning is written to stderr as a diagnostic when it first occurs, and kept for the result's `warnings` and for `crawl.warnings` in the crawl file, which holds them as a JSON array once the Crawl ends (`[]` while it runs). Both hold the warnings of the Crawl's whole life: a continue keeps those of the earlier runs, writes a warning kept once per host no second time, adds to a counted one, and drops `max_urls_reached`, which says how one run ended. A warning about a host, such as `robots_unreachable`, is written once per host; a warning about the tool's own code is counted (see [When one URL fails](#when-one-url-fails)), and so is `network_paused`, which counts pauses instead of URLs:
 
 | Code | Counts | `details` |
 |---|---|---|
@@ -115,7 +115,7 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 | `seed_count` | The number of Seeds. |
 | `section_crawl` | Whether the Scope is one part of a site. |
 | `started_at`, `ended_at` | UTC timestamps, `YYYY-MM-DDTHH:MM:SS.sssZ`. |
-| `duration_s` | Seconds from `started_at` to `ended_at`. |
+| `duration_s` | Seconds from `started_at` to `ended_at`. A continued Crawl counts from its first start, so the time between its runs is included; `060`'s `crawl_runs` gives each run's. |
 | `urls` | The counts of `urls` rows: `discovered` (all of them), and by `fetch_state`: `fetched`, `errors`, `skipped`, `queued`. |
 | `pages` | URLs whose response was parsed (`parsed` = 1). |
 | `status_classes` | URLs by the class of their status code: `2xx`, `3xx`, `4xx`, `5xx`, `other`. |
@@ -188,6 +188,24 @@ The events `crawl_paused` and `crawl_resumed` mark a pause, `progress` events go
 
 - **The watchdog:** a request that has not ended 120 seconds after it started, or the Fetcher's whole request deadline plus 30 seconds when that is longer, is cancelled and recorded with `fetch_error` = `watchdog`. It counts as a request without a response for the network pause.
 - **Recording that keeps failing:** 100 URLs in a row whose rows could not be recorded end the Crawl with `write_failed`; a URL recorded in between starts the count again.
+
+### What a killed Crawl keeps
+
+The `urls` table is the queue, and nothing else is: a URL leaves `queued` only in the writer unit that records its response together with the URLs it found, and the writer commits about once a second. A Crawl killed at any moment, by SIGKILL, a power cut or a second interrupt, keeps every unit committed before it:
+
+- no Page is half-recorded: every URL that a Page with `parsed` = 1 links to has its row
+- every URL that was in flight, or not yet requested, is still `queued`
+- the crawl file stays `running`, which `060` reports as `interrupted`
+
+### Continuing a Crawl
+
+The Crawl Service continues a `stopped` or `failed` Crawl from its crawl file alone; `060`'s `spider resume` calls it, and adds `interrupted` Crawls. A continue:
+
+1. builds the Crawl from the file: the `[crawl]` settings from `crawl.config`, the Scope from `crawl.scope` and the Seed from `seeds`, none of them decided again
+2. in one unit, sets `crawl.state` back to `running` with `stop_reason` NULL, writes the settings it runs with into `crawl.config`, and queues again every `error` URL and every URL skipped as `robots_unreachable`, since those outcomes are usually transient
+3. runs as a new Crawl would: it requests only `queued` URLs, so no URL fetched before is requested again, and it runs the post-crawl passes again when it ends
+
+What a continue may change are `060`'s resume options: a higher URL limit or none, `--concurrency` and `--rate`. The URL limit counts over the Crawl's whole life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see [Warnings](#warnings)). A Seed still down when a failed Crawl is continued fails it as `seed_unreachable` again.
 
 ### When one URL fails
 
