@@ -1,11 +1,13 @@
 """The Page extractor: the columns a Page's HTML gives (030-add-page-data D1, D7)."""
 
+from fractions import Fraction
+
 import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.pages.preparation import Extractor, PageInput, extractor
 from spider.extract.content import ContentArea, content_blocks, sentence_count, word_count
-from spider.extract.text import element_text, normalized, trimmed
+from spider.extract.text import element_text, normalized, rounded, trimmed
 
 # An element inside svg or math names a picture or a formula; text inside them is left out too
 # (text._SKIPPED). Page preparation parses with scripting on, as a browser that runs scripts
@@ -38,6 +40,7 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     h2_count: int
     word_count: int
     sentence_count: int
+    text_ratio_pct: float | None
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentArea) -> PageData:
@@ -79,7 +82,15 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         h2_count=h2_count,
         word_count=word_count(blocks),
         sentence_count=sentence_count(blocks),
+        text_ratio_pct=_text_ratio(tree, page.length),
     )
+
+
+def _text_ratio(tree: LexborHTMLParser, length: int) -> float | None:
+    if length == 0:
+        return None
+    text = "" if tree.body is None else normalized(element_text(tree.body))
+    return rounded(Fraction(100 * len(text), length))
 
 
 def _headings(tree: LexborHTMLParser, tag: str) -> tuple[list[str], int]:

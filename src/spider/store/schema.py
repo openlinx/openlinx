@@ -3,6 +3,7 @@
 from typing import Any, Literal, get_args, get_origin
 
 from sqlalchemy import (
+    REAL,
     CheckConstraint,
     Column,
     ColumnElement,
@@ -638,6 +639,14 @@ pages = public_table(
         "sentence_count",
         Integer,
         comment="The number of sentences in the Content Area text; NULL when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "text_ratio_pct",
+        REAL,
+        comment="100 times the length of the normalised text of body, without Content Area "
+        "exclusions, divided by the decoded HTML document's length in characters, rounded "
+        "half up to 2 decimals; NULL when the document is empty, or the Page is not "
         "analysed or its Page extractor failed.",
     ),
     Column(

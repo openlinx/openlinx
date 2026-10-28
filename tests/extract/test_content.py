@@ -73,3 +73,18 @@ def test_a_terminator_inside_a_word_ends_no_sentence() -> None:
     row = page_row("<p>Version 2.0 is out\u2026 and 3.5 follows! See the notes.</p>")
 
     assert row.sentence_count == 3
+
+
+def test_text_ratio_of_a_small_document() -> None:
+    row = page_row("<html><body><p>Hello world</p></body></html>")
+
+    assert row.text_ratio_pct == 25.0
+
+
+def test_the_text_ratio_is_rounded_half_up() -> None:
+    # 100 x 1 / 32 is 3.125 exactly; rounding the float would give 3.12.
+    assert page_row("<!doctype html><title></title>a\n").text_ratio_pct == 3.13
+
+
+def test_an_empty_document_has_no_text_ratio() -> None:
+    assert page_row("").text_ratio_pct is None

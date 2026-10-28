@@ -45,6 +45,7 @@ class PageRow:
     h2_count: int | None = None
     word_count: int | None = None
     sentence_count: int | None = None
+    text_ratio_pct: float | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

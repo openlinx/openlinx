@@ -1,7 +1,9 @@
 """Text of the HTML, as one model for every column (030-add-page-data D7)."""
 
+import math
 import re
 from collections.abc import Collection, Iterator
+from fractions import Fraction
 
 from selectolax.lexbor import LexborNode
 
@@ -67,6 +69,11 @@ _BLOCK_END = object()
 
 def normalized(text: str) -> str:
     return trimmed(_WHITESPACE_RUN.sub(" ", text))
+
+
+def rounded(value: Fraction) -> float:
+    """To 2 decimals, half up, from the exact value: a float would round 3.125 down."""
+    return math.floor(value * 100 + Fraction(1, 2)) / 100
 
 
 def trimmed(text: str) -> str:
