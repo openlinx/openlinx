@@ -731,6 +731,30 @@ pages = public_table(
         "or https:; NULL when the Page is not analysed.",
     ),
     Column(
+        "rel_next_1",
+        Text,
+        comment="The target of the first pagination link element of the HTML whose rel names "
+        "next; NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "rel_prev_1",
+        Text,
+        comment="The target of the first pagination link element of the HTML whose rel names "
+        "prev or previous; NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "http_rel_next_1",
+        Text,
+        comment="The target of the first pagination Link header entry whose rel names next; "
+        "NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "http_rel_prev_1",
+        Text,
+        comment="The target of the first pagination Link header entry whose rel names prev or "
+        "previous; NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
         "word_count",
         Integer,
         comment="The number of words in the Content Area text; NULL when the Page is not "

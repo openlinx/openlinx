@@ -20,6 +20,9 @@ from spider.store.page_records import CookieRow, PageRow, RedirectType
 
 # An HTTP Refresh comes before a meta refresh.
 _REFRESH_TYPES: tuple[RedirectType, ...] = ("http_refresh", "meta_refresh")
+# The rel tokens of a pagination Link, as 020 lowercases them.
+_NEXT = frozenset({"next"})
+_PREVIOUS = frozenset({"prev", "previous"})
 
 
 def page_rows(result: UrlResult) -> Iterable[PageRow]:
@@ -49,6 +52,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             **({} if data is None else msgspec.structs.asdict(data)),
             **_robots_columns(result, response),
             **_canonical_columns(result),
+            **_pagination_columns(result),
         ),
     )
 
@@ -108,6 +112,29 @@ def _canonical_columns(result: UrlResult) -> dict[str, Any]:
             not link.raw.lstrip(C0_OR_SPACE).lower().startswith(("http:", "https:"))
             for link in html
         ),
+    }
+
+
+def _pagination_columns(result: UrlResult) -> dict[str, Any]:
+    if not result.parsed:
+        return {}
+    pages = [link for link in result.links if link.type == "pagination"]
+
+    def first(header: bool, rels: frozenset[str]) -> str | None:
+        return next(
+            (
+                link.target
+                for link in pages
+                if (link.declared_in == "http_header") == header and not rels.isdisjoint(link.rel)
+            ),
+            None,
+        )
+
+    return {
+        "rel_next_1": first(False, _NEXT),
+        "rel_prev_1": first(False, _PREVIOUS),
+        "http_rel_next_1": first(True, _NEXT),
+        "http_rel_prev_1": first(True, _PREVIOUS),
     }
 
 

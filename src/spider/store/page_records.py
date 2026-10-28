@@ -62,6 +62,10 @@ class PageRow:
     http_canonical: str | None = None
     canonical_count: int | None = None
     canonical_relative: bool | None = None
+    rel_next_1: str | None = None
+    rel_prev_1: str | None = None
+    http_rel_next_1: str | None = None
+    http_rel_prev_1: str | None = None
     word_count: int | None = None
     sentence_count: int | None = None
     average_words_per_sentence: float | None = None

@@ -197,3 +197,30 @@ def test_base_element_changes_resolution() -> None:
     )
 
     assert row.canonical_link_element_1 == "https://example.test/docs/page"
+
+
+def test_pagination_from_html_and_header() -> None:
+    row = page_row(
+        '<html><head><title>Page 2</title><link rel="prev" href="/p1"></head>'
+        "<body><p>Results 11-20</p></body></html>",
+        headers=(("Link", '</p3>; rel="next"'),),
+        url="https://example.test/p2",
+    )
+
+    assert (row.rel_prev_1, row.http_rel_next_1, row.rel_next_1, row.http_rel_prev_1) == (
+        "https://example.test/p1",
+        "https://example.test/p3",
+        None,
+        None,
+    )
+
+
+def test_rel_previous_is_a_previous_page() -> None:
+    # The longer spelling that some paginating plugins write.
+    row = page_row(
+        '<html><head><title>Page 2</title><link rel="previous" href="/p1"></head>'
+        "<body><p>Older posts</p></body></html>",
+        url="https://example.test/p2",
+    )
+
+    assert row.rel_prev_1 == "https://example.test/p1"
