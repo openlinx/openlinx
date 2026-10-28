@@ -260,6 +260,95 @@ def test_a_dead_section_on_the_seeds_host_keeps_counting(temp_workspace: TempWor
     ) == (["dead_section", "outage"], {"fetched"})
 
 
+def test_an_answer_while_paused_leaves_the_outage_its_count(temp_workspace: TempWorkspace) -> None:
+    clock, reporter = FakeClock(), Collected()
+    # /p1 is slow: it started before the network went down at one second, and answers at 31,
+    # after the network came back and before the probe at 41 answers.
+    pages = {
+        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 31))),
+        "/p1": FakePage("<p>P1</p>", delay=31),
+        **{f"/p{n}": FakePage(f"<p>P{n}</p>", delay=1) for n in range(2, 31)},
+    }
+    fetcher = FakeFetcher(clock, pages, outages=[(1, 30)])
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, reporter=reporter, concurrency=4
+    )
+
+    assert (
+        [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"],
+        set(query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url LIKE '%/p%'")),
+    ) == (["outage"], {("fetched",)})
+
+
+def test_an_answer_while_paused_leaves_the_dead_section_its_origins(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    posts = range(1, 41)
+    # blog.site.test answers its robots.txt with 404 and nothing else; site.test's pages are in
+    # flight when its posts pause the Crawl, and answer half a second into the pause.
+    links = "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 5)) + _posts(posts)
+    pages = {
+        "/": FakePage(links),
+        **{f"/p{n}": FakePage(f"<p>P{n}</p>", delay=0.5) for n in range(1, 5)},
+        **{f"http://blog.site.test/{n}": FakePage("", fails="connection_error") for n in posts},
+    }
+    fetcher = FakeFetcher(clock, pages)
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=4,
+        scope="subdomains",
+    )
+
+    assert (
+        [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"],
+        result.summary.state,
+    ) == (["dead_section"], "completed")
+
+
+def test_one_failure_inside_a_dead_origins_streak_does_not_exempt_its_origin(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    shop = range(1, 8)
+    blog = range(1, 21)
+    # shop.site.test is dead; one blog.site.test page times out once inside its streak. When
+    # the network goes down at 11 seconds, blog's failures must still pause the Crawl.
+    links = (
+        "".join(f'<a href="http://shop.site.test/{n}">Shop</a>' for n in shop)
+        + '<a href="http://blog.site.test/x">Blip</a>'
+        + _posts(blog)
+    )
+    pages = {
+        "/": FakePage(links),
+        **{f"http://shop.site.test/{n}": FakePage("", fails="connection_error") for n in shop},
+        "http://blog.site.test/x": FakePage("<p>X</p>", fails="timeout", until=1),
+        # Requested beside the shop's streak, it answers at 12, once the network is down.
+        "http://blog.site.test/1": FakePage("<p>1</p>", delay=12),
+    }
+    fetcher = FakeFetcher(clock, pages, outages=[(11, 40)])
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=1,
+        scope="subdomains",
+    )
+    states = dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls"))
+
+    assert (
+        [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"],
+        {states[f"http://blog.site.test/{n}"] for n in blog},
+    ) == (["dead_section", "outage"], {"fetched"})
+
+
 def test_probes_do_not_count_toward_the_url_limit(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
 
