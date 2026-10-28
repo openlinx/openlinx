@@ -1,6 +1,7 @@
 """Text of the HTML, as one model for every column (030-add-page-data D7)."""
 
 import re
+from collections.abc import Collection, Iterator
 
 from selectolax.lexbor import LexborNode
 
@@ -60,6 +61,8 @@ _BLOCKS = frozenset(
 )
 # Whitespace, which normalising makes one space.
 _BREAK = " "
+# On the walk's stack: the end of a block element's content.
+_BLOCK_END = object()
 
 
 def normalized(text: str) -> str:
@@ -71,24 +74,34 @@ def trimmed(text: str) -> str:
 
 
 def element_text(element: LexborNode) -> str:
+    return _BREAK.join(text_blocks(element))
+
+
+def text_blocks(element: LexborNode, excluded: Collection[int] = ()) -> Iterator[str]:
+    """The text of the element's content, as the blocks that `br` and block elements break,
+    leaving out the elements whose mem_id is in `excluded`."""
     # An explicit stack, so a deep tree needs no recursion.
     parts: list[str] = []
-    pending: list[LexborNode | str | None] = [element.first_child]
+    pending: list[LexborNode | object | None] = [element.first_child]
     while pending:
         node = pending.pop()
         if node is None:
             continue
-        if isinstance(node, str):
-            parts.append(node)
+        if not isinstance(node, LexborNode):
+            if parts:
+                yield "".join(parts)
+                parts.clear()
             continue
         pending.append(node.next)
         if node.is_text_node:
             parts.append(node.text_content or "")
-        elif node.tag == "br":
-            parts.append(_BREAK)
-        elif node.tag in _BLOCKS:
-            parts.append(_BREAK)
-            pending.extend((_BREAK, node.first_child))
-        elif node.tag not in _SKIPPED:
+        elif node.tag == "br" or node.tag in _BLOCKS:
+            if parts:
+                yield "".join(parts)
+                parts.clear()
+            if node.tag in _BLOCKS and node.mem_id not in excluded:
+                pending.extend((_BLOCK_END, node.first_child))
+        elif node.tag not in _SKIPPED and node.mem_id not in excluded:
             pending.append(node.first_child)
-    return "".join(parts)
+    if parts:
+        yield "".join(parts)

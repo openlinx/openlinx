@@ -4,11 +4,12 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from spider.crawl.pages.preparation import PageInput, extractor
+from spider.extract.content import ContentArea, content_blocks, word_count
 from spider.extract.text import element_text, normalized, trimmed
 
 # An element inside svg or math names a picture or a formula; text inside them is left out too
-# (text._SKIPPED). Page preparation has already turned each noscript into a template, whose
-# content is out of the tree, as a browser that runs scripts reads it.
+# (text._SKIPPED). Page preparation parses with scripting on, as a browser that runs scripts
+# does, so a noscript holds text and no element.
 _PAGE_ELEMENT = ":not(svg *, math *)"
 
 
@@ -35,9 +36,10 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     h2_2: str | None
     h2_2_length: int | None
     h2_count: int
+    word_count: int
 
 
-def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: None) -> PageData:
+def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentArea) -> PageData:
     titles = [normalized(node.text()) for node in _page_nodes(tree, "title")]
     title_1, title_1_length, title_2, title_2_length = _first_two(titles)
     metas = _page_nodes(tree, "meta")
@@ -73,6 +75,7 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: None) -> 
         h2_2=h2_2,
         h2_2_length=h2_2_length,
         h2_count=h2_count,
+        word_count=word_count(content_blocks(tree, config)),
     )
 
 
@@ -111,4 +114,4 @@ def _length(text: str | None) -> int | None:
     return None if text is None else len(text)
 
 
-PAGE_DATA = extractor("page_data", extract_page_data, None)
+PAGE_DATA = extractor("page_data", extract_page_data, ContentArea())

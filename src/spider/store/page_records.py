@@ -43,6 +43,7 @@ class PageRow:
     h2_2: str | None = None
     h2_2_length: int | None = None
     h2_count: int | None = None
+    word_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -629,6 +629,12 @@ pages = public_table(
         "the Page is not analysed or its Page extractor failed.",
     ),
     Column(
+        "word_count",
+        Integer,
+        comment="The number of words in the Content Area text; NULL when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
         "crawl_depth",
         Integer,
         nullable=False,
