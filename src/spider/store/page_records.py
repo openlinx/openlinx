@@ -25,7 +25,9 @@ class PageRow:
     redirect_type: RedirectType | None
     set_cookie_count: int
     crawl_timestamp: datetime
-    # From the HTML: NULL for a Page that is not analysed or whose Page extractor failed (D2).
+    # The fields default to NULL, in column order. From the Page extractor: NULL for a Page that
+    # is not analysed or whose Page extractor failed (D2): the titles, meta elements, headings,
+    # meta_refresh, and the counts from word_count on.
     title_1: str | None = None
     title_1_length: int | None = None
     title_2: str | None = None
@@ -48,10 +50,11 @@ class PageRow:
     h2_2: str | None = None
     h2_2_length: int | None = None
     h2_count: int | None = None
+    # From the URL's result, but meta_refresh: NULL only for a Page that is not analysed, and
+    # the X-Robots-Tag fields are set for every Page.
     meta_robots: str | None = None
     meta_robots_noindex: bool | None = None
     meta_robots_nofollow: bool | None = None
-    # From the response's headers, for every Page.
     x_robots_tag: str | None = None
     x_robots_tag_noindex: bool | None = None
     x_robots_tag_nofollow: bool | None = None

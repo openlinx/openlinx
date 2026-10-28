@@ -4,12 +4,18 @@ from datetime import UTC, datetime
 
 from spider.crawl.engine.hooks import UrlResponse, UrlResult
 from spider.crawl.fetch.fetcher import FetchResult
-from spider.crawl.pages.preparation import PageSettings, prepare_page, response_links
+from spider.crawl.pages.preparation import (
+    PageSettings,
+    prepare_page,
+    response_directives,
+    response_links,
+)
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.content_area import ContentArea
 from spider.extract.page_data import PAGE_DATA, page_data_extractor
 from spider.extract.page_handler import page_rows
+from spider.naming import DEFAULT_ROBOTS_TOKEN
 from spider.services.hooks import default_hooks
 from spider.store.page_records import PageRow
 
@@ -75,6 +81,44 @@ def page_row(
         parsed=True,
         links=response_links(page_url, response, scope, None) + prepared.html_links,
         outputs=dict(prepared.outputs),
+    )
+    (row,) = page_rows(result)
+    return row
+
+
+def unprepared_page_row(headers: tuple[tuple[str, str], ...], url: str = _URL) -> PageRow:
+    """The Page row of a 200 HTML response that page preparation gave nothing for, such as one
+    whose body was too large: the crawl engine still reads its headers' directives and Links."""
+    page_url = NormalizedUrl(url)
+    response = FetchResult(
+        status_code=200,
+        reason="OK",
+        headers=(("Content-Type", "text/html"), *headers),
+        body=b"",
+        fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
+        response_time_ms=1,
+    )
+    result = UrlResult(
+        url_id=1,
+        url=page_url,
+        crawl_depth=0,
+        discovered_via="seed",
+        found_on_url_id=None,
+        is_internal=True,
+        in_scope=True,
+        fetch_state="fetched",
+        response=UrlResponse(
+            status_code=200,
+            reason="OK",
+            content_type="text/html",
+            headers=response.headers,
+            fetched_at=response.fetched_at,
+            response_time_ms=1,
+            directives=response_directives(response, DEFAULT_ROBOTS_TOKEN),
+        ),
+        parsed=False,
+        parse_error="body_too_large",
+        links=response_links(page_url, response, scope_rules(page_url), None),
     )
     (row,) = page_rows(result)
     return row

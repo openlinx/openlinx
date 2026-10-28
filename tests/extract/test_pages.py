@@ -231,3 +231,47 @@ def test_external_html_response_is_not_a_page(
         query(crawl_file, "SELECT fetch_state, is_internal FROM urls WHERE url = ?", [other]),
         query(crawl_file, "SELECT url_id FROM pages WHERE address = ?", [other]),
     ) == ([("fetched", 0)], [])
+
+
+def test_a_crawled_page_stores_its_directives_canonicals_and_pagination(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # The page_row helper of the seam-4 tests copies how the crawl engine assembles a URL's
+    # result; this reads the same columns from a real Crawl.
+    server = fixture_site(
+        Site(
+            routes={
+                "/list/2": Page(
+                    body='<html><head><title>Page 2</title><link rel="canonical" href="/list">'
+                    '<link rel="prev" href="/list/1"><meta name="robots" content="noindex">'
+                    "</head><body><p>Items 11-20</p></body></html>",
+                    headers=(
+                        ("Link", '</list>; rel="canonical", </list/3>; rel="next"'),
+                        ("Refresh", "0; url=/list"),
+                    ),
+                ),
+                "/list": Page(body="<p>All items</p>"),
+                "/list/1": Page(body="<p>Items 1-10</p>"),
+                "/list/3": Page(body="<p>Items 21-30</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/list/2")).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT redirect_type, redirect_url, meta_robots_noindex, canonical_url, canonical_count,"
+        " rel_prev_1, http_rel_next_1 FROM pages WHERE address = ?",
+        [server.url("/list/2")],
+    ) == [
+        (
+            "http_refresh",
+            server.url("/list"),
+            1,
+            server.url("/list"),
+            2,
+            server.url("/list/1"),
+            server.url("/list/3"),
+        )
+    ]

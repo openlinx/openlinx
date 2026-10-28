@@ -1,20 +1,26 @@
 """The Page extractor: the columns a Page's HTML gives (030-add-page-data D1, D7)."""
 
-import math
-from fractions import Fraction
-
 import msgspec
-from selectolax.lexbor import LexborHTMLParser, LexborNode
+from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.pages.preparation import Extractor, PageInput, extractor
-from spider.extract.content import content_blocks, sentence_count, word_count
+from spider.extract.content import (
+    average_words_per_sentence,
+    content_blocks,
+    sentence_count,
+    text_ratio_pct,
+    word_count,
+)
 from spider.extract.content_area import ContentArea
-from spider.extract.text import element_text, normalized, trimmed
-
-# An element inside svg or math names a picture or a formula; text inside them is left out too
-# (text._SKIPPED). Page preparation parses with scripting on, as a browser that runs scripts
-# does, so a noscript holds text and no element.
-_PAGE_ELEMENT = ":not(svg *, math *)"
+from spider.extract.head_metadata import (
+    declared_language,
+    first_two,
+    meta_contents,
+    meta_refresh,
+    page_nodes,
+    titles,
+)
+from spider.extract.headings import headings
 
 
 class PageData(msgspec.Struct, frozen=True, kw_only=True):
@@ -49,18 +55,18 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
 
 
 def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentArea) -> PageData:
-    titles = [normalized(node.text()) for node in _page_nodes(tree, "title")]
-    title_1, title_1_length, title_2, title_2_length = _first_two(titles)
-    metas = _page_nodes(tree, "meta")
-    descriptions = _meta_contents(metas, "description")
-    description_1, description_1_length, description_2, description_2_length = _first_two(
+    title_texts = titles(tree)
+    title_1, title_1_length, title_2, title_2_length = first_two(title_texts)
+    metas = page_nodes(tree, "meta")
+    descriptions = meta_contents(metas, "description")
+    description_1, description_1_length, description_2, description_2_length = first_two(
         descriptions
     )
-    keywords_1, keywords_1_length, _, _ = _first_two(_meta_contents(metas, "keywords"))
-    h1s, h1_count = _headings(tree, "h1")
-    h1_1, h1_1_length, h1_2, h1_2_length = _first_two(h1s)
-    h2s, h2_count = _headings(tree, "h2")
-    h2_1, h2_1_length, h2_2, h2_2_length = _first_two(h2s)
+    keywords_1, keywords_1_length, _, _ = first_two(meta_contents(metas, "keywords"))
+    h1s, h1_count = headings(tree, "h1")
+    h1_1, h1_1_length, h1_2, h1_2_length = first_two(h1s)
+    h2s, h2_count = headings(tree, "h2")
+    h2_1, h2_1_length, h2_2, h2_2_length = first_two(h2s)
     blocks = list(content_blocks(tree, config))
     words, sentences = word_count(blocks), sentence_count(blocks)
     return PageData(
@@ -68,7 +74,7 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         title_1_length=title_1_length,
         title_2=title_2,
         title_2_length=title_2_length,
-        title_count=len(titles),
+        title_count=len(title_texts),
         meta_description_1=description_1,
         meta_description_1_length=description_1_length,
         meta_description_2=description_2,
@@ -86,76 +92,13 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         h2_2=h2_2,
         h2_2_length=h2_2_length,
         h2_count=h2_count,
-        meta_refresh=_meta_refresh(metas),
+        meta_refresh=meta_refresh(metas),
         word_count=words,
         sentence_count=sentences,
-        average_words_per_sentence=rounded(Fraction(words, sentences)) if sentences else None,
-        text_ratio_pct=_text_ratio(tree, page.length),
-        declared_language=_declared_language(tree),
+        average_words_per_sentence=average_words_per_sentence(words, sentences),
+        text_ratio_pct=text_ratio_pct(tree, page.length),
+        declared_language=declared_language(tree),
     )
-
-
-def rounded(value: Fraction) -> float:
-    """To 2 decimals, half up, from the exact value: a float would round 3.125 down."""
-    return math.floor(value * 100 + Fraction(1, 2)) / 100
-
-
-def _text_ratio(tree: LexborHTMLParser, length: int) -> float | None:
-    if length == 0:
-        return None
-    text = "" if tree.body is None else normalized(element_text(tree.body))
-    return rounded(Fraction(100 * len(text), length))
-
-
-def _declared_language(tree: LexborHTMLParser) -> str | None:
-    attributes = {} if tree.root is None else tree.root.attributes
-    if "lang" not in attributes:
-        return None
-    # <html lang> has the attribute with no value.
-    return trimmed(attributes["lang"] or "")
-
-
-def _headings(tree: LexborHTMLParser, tag: str) -> tuple[list[str], int]:
-    # Only the first two texts are stored, and the parser nests an h1 inside a div inside an
-    # h1, so each heading may hold every later one: reading them all cost their count squared.
-    nodes = _page_nodes(tree, tag)
-    return [normalized(element_text(node)) for node in nodes[:2]], len(nodes)
-
-
-def _page_nodes(tree: LexborHTMLParser, tag: str) -> list[LexborNode]:
-    # The selector engine tests the ancestors: walking up from each node in Python cost the
-    # node count times the depth, seconds per Page on a crafted deep document.
-    return tree.css(tag + _PAGE_ELEMENT)
-
-
-def _meta_contents(metas: list[LexborNode], name: str) -> list[str]:
-    return [
-        normalized(node.attributes.get("content") or "") for node in metas if _is_named(node, name)
-    ]
-
-
-def _meta_refresh(metas: list[LexborNode]) -> str | None:
-    # The element 020 reads its refresh Link from: http-equiv lowercased, not trimmed.
-    for node in metas:
-        if (node.attributes.get("http-equiv") or "").lower() == "refresh":
-            return normalized(node.attributes.get("content") or "")
-    return None
-
-
-def _is_named(node: LexborNode, name: str) -> bool:
-    value = trimmed(node.attributes.get("name") or "")
-    # HTML compares attribute values ASCII case-insensitively, so a Kelvin sign is no k.
-    return value.isascii() and value.lower() == name
-
-
-def _first_two(texts: list[str]) -> tuple[str | None, int | None, str | None, int | None]:
-    first = texts[0] if texts else None
-    second = texts[1] if len(texts) > 1 else None
-    return first, _length(first), second, _length(second)
-
-
-def _length(text: str | None) -> int | None:
-    return None if text is None else len(text)
 
 
 def page_data_extractor(area: ContentArea) -> Extractor[ContentArea, PageData]:

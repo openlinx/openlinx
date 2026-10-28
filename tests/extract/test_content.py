@@ -63,7 +63,7 @@ def test_a_mark_stays_with_the_han_or_kana_character_before_it() -> None:
 
 
 def test_a_word_of_a_script_new_in_unicode_16_counts_on_every_python() -> None:
-    # A heading naming the Kirat Rai script, then a word in it (Unicode 16.0, which Python 3.12
+    # A line naming the Kirat Rai script, then a word in it (Unicode 16.0, which Python 3.12
     # and 3.13 do not have yet).
     row = page_row("<p>Kirat Rai: \U00016d44\U00016d64\U00016d5d\U00016d52</p>")
 

@@ -727,8 +727,9 @@ pages = public_table(
     Column(
         "canonical_relative",
         Flag,
-        comment="1 when the href of a canonical link element in head does not start with http: "
-        "or https:; NULL when the Page is not analysed.",
+        comment="1 when the href of a canonical link element in head, after the leading control "
+        "characters and spaces that the URL parser removes, does not start with http: or "
+        "https:, compared case-insensitively; NULL when the Page is not analysed.",
     ),
     Column(
         "rel_next_1",

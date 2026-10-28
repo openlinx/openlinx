@@ -1,14 +1,6 @@
 """The directive, refresh and canonical columns of a Page (030-add-page-data, page-data; seam 4)."""
 
-from datetime import UTC, datetime
-
-from spider.crawl.engine.hooks import UrlResponse, UrlResult
-from spider.crawl.fetch.fetcher import FetchResult
-from spider.crawl.pages.preparation import response_directives
-from spider.crawl.urls import NormalizedUrl
-from spider.extract.page_handler import page_rows
-from spider.naming import DEFAULT_ROBOTS_TOKEN
-from tests.support.page_data import page_row
+from tests.support.page_data import page_row, unprepared_page_row
 
 
 def test_meta_robots_keeps_case_but_reads_directives() -> None:
@@ -41,38 +33,7 @@ def test_x_robots_tag_is_stored_with_the_parsers_verdict() -> None:
 
 
 def test_x_robots_tag_is_kept_when_page_preparation_fails() -> None:
-    # As the crawl engine records a 200 HTML response whose body was too large to prepare: its
-    # directives come from its headers alone.
-    response = FetchResult(
-        status_code=200,
-        reason="OK",
-        headers=(("Content-Type", "text/html"), ("X-Robots-Tag", "noindex")),
-        body=b"<html><head><title>Big</title></head><body>" + b"<p>Row</p>" * 1000,
-        fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
-        response_time_ms=1,
-    )
-    result = UrlResult(
-        url_id=1,
-        url=NormalizedUrl("https://site.test/report"),
-        crawl_depth=0,
-        discovered_via="seed",
-        found_on_url_id=None,
-        is_internal=True,
-        in_scope=True,
-        fetch_state="fetched",
-        response=UrlResponse(
-            status_code=200,
-            reason="OK",
-            content_type="text/html",
-            headers=response.headers,
-            fetched_at=response.fetched_at,
-            response_time_ms=1,
-            directives=response_directives(response, DEFAULT_ROBOTS_TOKEN),
-        ),
-        parsed=False,
-        parse_error="body_too_large",
-    )
-    (row,) = page_rows(result)
+    row = unprepared_page_row((("X-Robots-Tag", "noindex"),))
 
     assert (
         row.x_robots_tag,
@@ -81,6 +42,30 @@ def test_x_robots_tag_is_kept_when_page_preparation_fails() -> None:
         row.meta_robots_noindex,
         row.meta_robots_nofollow,
     ) == ("noindex", True, None, None, None)
+
+
+def test_a_page_that_was_not_parsed_has_no_html_directive_columns() -> None:
+    # Its header Links still count: the Refresh redirects, while the header canonical and
+    # pagination, directive columns of an analysed Page, stay NULL.
+    row = unprepared_page_row(
+        (
+            ("Link", '</c>; rel="canonical", </p3>; rel="next"'),
+            ("Refresh", "0; url=/new"),
+        ),
+        url="https://example.test/report",
+    )
+
+    assert (row.redirect_type, row.redirect_url) == ("http_refresh", "https://example.test/new")
+    assert [
+        row.meta_refresh,
+        row.canonical_url,
+        row.http_canonical,
+        row.canonical_count,
+        row.canonical_relative,
+        row.http_rel_next_1,
+        row.amphtml_link_element,
+        row.mobile_alternate_link,
+    ] == [None] * 8
 
 
 def test_http_refresh_header_is_a_redirect() -> None:

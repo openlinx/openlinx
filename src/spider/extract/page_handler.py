@@ -2,25 +2,27 @@
 
 from collections.abc import Iterable
 from datetime import datetime
-from typing import Any
+from typing import Literal, TypedDict
 
 import msgspec
 
 from spider.crawl.engine.hooks import UrlResponse, UrlResult
 from spider.crawl.fetch.fetcher import header_values
+from spider.crawl.pages.directives import RobotsDirectives
 from spider.crawl.pages.preparation import is_html_type
 from spider.crawl.pages.refresh import refresh_url
-from spider.crawl.references import C0_OR_SPACE
+from spider.crawl.references import C0_OR_SPACE, DiscoveredLink
 from spider.extract.addresses import display_address, path_and_query
 from spider.extract.cookies import cookie_row
 from spider.extract.dates import internet_date
 from spider.extract.page_data import PAGE_DATA, PageData
 from spider.extract.status_phrases import STATUS_PHRASES
 from spider.store.page_records import CookieRow, PageRow, RedirectType
-from spider.store.records import LinkType
+from spider.store.records import DeclaredIn, LinkType
 
-# An HTTP Refresh comes before a meta refresh.
-_REFRESH_TYPES: tuple[RedirectType, ...] = ("http_refresh", "meta_refresh")
+# Both a Link type and a redirect type. An HTTP Refresh comes before a meta refresh.
+type _Refresh = Literal["http_refresh", "meta_refresh"]
+_REFRESH_TYPES: tuple[_Refresh, ...] = ("http_refresh", "meta_refresh")
 # The rel tokens of a pagination Link, as 020 lowercases them.
 _NEXT = frozenset({"next"})
 _PREVIOUS = frozenset({"prev", "previous"})
@@ -51,9 +53,9 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             set_cookie_count=len(header_values(response.headers, "Set-Cookie")),
             crawl_timestamp=response.fetched_at,
             **({} if data is None else msgspec.structs.asdict(data)),
-            **_robots_columns(result, response),
+            **_robots_columns(result, response.directives),
             **_canonical_columns(result),
-            **_pagination_amp_and_mobile_columns(result),
+            **_linked_page_columns(result),
         ),
     )
 
@@ -69,13 +71,47 @@ def cookie_rows(result: UrlResult) -> Iterable[CookieRow]:
     )
 
 
-def _redirect(result: UrlResult, data: PageData | None) -> dict[str, Any]:
+class _RedirectColumns(TypedDict):
+    redirect_url: str | None
+    redirect_type: RedirectType | None
+
+
+# Each of the next three families is NULL for a Page that was not analysed (design D2), so
+# its keys are absent then.
+class _RobotsColumns(TypedDict, total=False):
+    meta_robots: str | None
+    meta_robots_noindex: bool
+    meta_robots_nofollow: bool
+    x_robots_tag: str | None
+    x_robots_tag_noindex: bool
+    x_robots_tag_nofollow: bool
+
+
+class _CanonicalColumns(TypedDict, total=False):
+    canonical_url: str | None
+    canonical_link_element_1: str | None
+    canonical_link_element_2: str | None
+    http_canonical: str | None
+    canonical_count: int
+    canonical_relative: bool
+
+
+class _LinkedPageColumns(TypedDict, total=False):
+    rel_next_1: str | None
+    rel_prev_1: str | None
+    http_rel_next_1: str | None
+    http_rel_prev_1: str | None
+    amphtml_link_element: str | None
+    mobile_alternate_link: str | None
+
+
+def _redirect(result: UrlResult, data: PageData | None) -> _RedirectColumns:
     # 020 reads the Refresh header of a 2xx response and the meta refresh of a prepared one;
     # a refresh of the Page itself, as a live page reloads, is no redirect.
     for link_type in _REFRESH_TYPES:
-        refresh = next((link for link in result.links if link.type == link_type), None)
         if link_type == "meta_refresh" and not _first_meta_refresh_names_a_url(data):
             continue
+        refresh = _first_link(result.links, link_type)
         if refresh is not None and refresh.target != result.url:
             return {"redirect_url": refresh.target, "redirect_type": link_type}
     return {"redirect_url": None, "redirect_type": None}
@@ -89,25 +125,34 @@ def _first_meta_refresh_names_a_url(data: PageData | None) -> bool:
     return data.meta_refresh is not None and refresh_url(data.meta_refresh) is not None
 
 
-def _canonical_columns(result: UrlResult) -> dict[str, Any]:
+def _robots_columns(result: UrlResult, directives: RobotsDirectives) -> _RobotsColumns:
+    columns: _RobotsColumns = {
+        "x_robots_tag": directives.x_robots_tag,
+        "x_robots_tag_noindex": directives.x_robots_tag_noindex,
+        "x_robots_tag_nofollow": directives.x_robots_tag_nofollow,
+    }
+    # A Page that was not parsed has the directives of its headers alone.
+    if result.parsed:
+        columns["meta_robots"] = directives.meta_robots
+        columns["meta_robots_noindex"] = directives.meta_robots_noindex
+        columns["meta_robots_nofollow"] = directives.meta_robots_nofollow
+    return columns
+
+
+def _canonical_columns(result: UrlResult) -> _CanonicalColumns:
     if not result.parsed:
         return {}
     # A canonical <link> that the parser moved out of <head>, such as after an <img>, is no
     # declaration (design D4).
-    declared = [
-        link
-        for link in result.links
-        if link.type == "canonical" and link.declared_in in ("head", "http_header")
-    ]
-    html = [link for link in declared if link.declared_in == "head"]
-    header = [link for link in declared if link.declared_in == "http_header"]
-    targets = {link.target for link in declared}
+    html = _links(result.links, "canonical", "head")
+    header = _links(result.links, "canonical", "http_header")
+    targets = {link.target for link in (*html, *header)}
     return {
         "canonical_url": next(iter(targets)) if len(targets) == 1 else None,
         "canonical_link_element_1": html[0].target if html else None,
         "canonical_link_element_2": html[1].target if len(html) > 1 else None,
         "http_canonical": header[0].target if header else None,
-        "canonical_count": len(declared),
+        "canonical_count": len(html) + len(header),
         # The URL parser removes leading C0 controls and spaces before it reads a scheme.
         "canonical_relative": any(
             not link.raw.lstrip(C0_OR_SPACE).lower().startswith(("http:", "https:"))
@@ -116,44 +161,36 @@ def _canonical_columns(result: UrlResult) -> dict[str, Any]:
     }
 
 
-def _pagination_amp_and_mobile_columns(result: UrlResult) -> dict[str, Any]:
+def _linked_page_columns(result: UrlResult) -> _LinkedPageColumns:
     if not result.parsed:
         return {}
     pages = [link for link in result.links if link.type == "pagination"]
-
-    def first(header: bool, rels: frozenset[str]) -> str | None:
-        return next(
-            (
-                link.target
-                for link in pages
-                if (link.declared_in == "http_header") == header and not rels.isdisjoint(link.rel)
-            ),
-            None,
-        )
-
+    html = [link for link in pages if link.declared_in != "http_header"]
+    header = [link for link in pages if link.declared_in == "http_header"]
+    amphtml = _first_link(result.links, "amphtml")
+    mobile = _first_link(result.links, "mobile_alternate")
     return {
-        "rel_next_1": first(False, _NEXT),
-        "rel_prev_1": first(False, _PREVIOUS),
-        "http_rel_next_1": first(True, _NEXT),
-        "http_rel_prev_1": first(True, _PREVIOUS),
-        "amphtml_link_element": _first_target(result, "amphtml"),
-        "mobile_alternate_link": _first_target(result, "mobile_alternate"),
+        "rel_next_1": _first_target(html, _NEXT),
+        "rel_prev_1": _first_target(html, _PREVIOUS),
+        "http_rel_next_1": _first_target(header, _NEXT),
+        "http_rel_prev_1": _first_target(header, _PREVIOUS),
+        "amphtml_link_element": None if amphtml is None else amphtml.target,
+        "mobile_alternate_link": None if mobile is None else mobile.target,
     }
 
 
-def _first_target(result: UrlResult, link_type: LinkType) -> str | None:
-    return next((link.target for link in result.links if link.type == link_type), None)
+def _first_link(links: Iterable[DiscoveredLink], link_type: LinkType) -> DiscoveredLink | None:
+    return next((link for link in links if link.type == link_type), None)
 
 
-def _robots_columns(result: UrlResult, response: UrlResponse) -> dict[str, Any]:
-    # The parser's struct is named as the columns. A Page that was not parsed has the
-    # directives of its headers alone, so its meta columns stay NULL (design D2).
-    directives = msgspec.structs.asdict(response.directives)
-    return {
-        name: value
-        for name, value in directives.items()
-        if result.parsed or name.startswith("x_robots_tag")
-    }
+def _links(
+    links: Iterable[DiscoveredLink], link_type: LinkType, declared_in: DeclaredIn
+) -> list[DiscoveredLink]:
+    return [link for link in links if link.type == link_type and link.declared_in == declared_in]
+
+
+def _first_target(links: list[DiscoveredLink], rels: frozenset[str]) -> str | None:
+    return next((link.target for link in links if not rels.isdisjoint(link.rel)), None)
 
 
 def _last_modified(headers: tuple[tuple[str, str], ...]) -> datetime | None:

@@ -2,6 +2,9 @@
 address display (030-add-page-data D8), from one Unicode version's Scripts.txt and
 DerivedGeneralCategory.txt, so no column depends on the interpreter's own Unicode version.
 
+The inputs are https://www.unicode.org/Public/<X.Y.Z>/ucd/Scripts.txt and
+https://www.unicode.org/Public/<X.Y.Z>/ucd/extracted/DerivedGeneralCategory.txt.
+
 Usage: uv run python scripts/unicode_scripts.py <Scripts-X.Y.Z.txt> \
     <DerivedGeneralCategory-X.Y.Z.txt>
 """

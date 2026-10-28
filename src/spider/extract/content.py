@@ -1,12 +1,14 @@
-"""The Content Area and the counts taken over its text (030-add-page-data D7, D8, D13)."""
+"""The Content Area, the counts over its text, and Text Ratio (030-add-page-data D7, D8, D13)."""
 
+import math
 import re
 from collections.abc import Iterable, Iterator
+from fractions import Fraction
 
 from selectolax.lexbor import LexborHTMLParser
 
 from spider.extract.content_area import ContentArea
-from spider.extract.text import text_blocks
+from spider.extract.text import element_text, normalized, text_blocks
 from spider.extract.unicode_scripts import HAN_AND_KANA, MARKS, WORD_CHARACTERS
 
 
@@ -60,3 +62,19 @@ def sentence_count(blocks: Iterable[str]) -> int:
 
 def word_count(blocks: Iterable[str]) -> int:
     return sum(len(_WORD.findall(block)) for block in blocks)
+
+
+def average_words_per_sentence(words: int, sentences: int) -> float | None:
+    return _rounded(Fraction(words, sentences)) if sentences else None
+
+
+def text_ratio_pct(tree: LexborHTMLParser, length: int) -> float | None:
+    if length == 0:
+        return None
+    text = "" if tree.body is None else normalized(element_text(tree.body))
+    return _rounded(Fraction(100 * len(text), length))
+
+
+def _rounded(value: Fraction) -> float:
+    """To 2 decimals, half up, from the exact value: a float would round 3.125 down."""
+    return math.floor(value * 100 + Fraction(1, 2)) / 100
