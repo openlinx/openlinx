@@ -1,6 +1,7 @@
 """Interrupts stop a foreground Crawl through its stop flag (020-add-crawl-core D10)."""
 
 import asyncio
+import os
 import signal
 import sys
 import threading
@@ -9,6 +10,7 @@ from contextlib import contextmanager
 from types import FrameType
 
 from spider.crawl.engine.stop import StopSignal
+from spider.output.codes import ExitCode
 
 
 def _signals() -> tuple[signal.Signals, ...]:
@@ -27,7 +29,15 @@ def interrupts_stop(loop: asyncio.AbstractEventLoop, stop: StopSignal) -> Iterat
         yield
         return
 
+    interrupts = 0
+
     def handler(_signum: int, _frame: FrameType | None) -> None:
+        nonlocal interrupts
+        interrupts += 1
+        if interrupts > 1:
+            # The second ends the process at once and writes nothing; the last committed unit
+            # keeps the file consistent, and it stays running (design D10).
+            os._exit(ExitCode.INTERRUPTED)
         # It runs between two bytecodes of the main thread, which may hold the stderr lock, so
         # it only schedules the stop, which writes the stopping event on the loop.
         loop.call_soon_threadsafe(stop.set, "interrupt")

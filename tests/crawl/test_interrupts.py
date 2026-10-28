@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -19,7 +20,7 @@ from tests.fixture_site.server import ServerHandle
 from tests.support.cli import start_cli_process
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
-from tests.support.crawls import query
+from tests.support.crawls import crawl_row, query
 from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
 
@@ -111,6 +112,56 @@ def test_an_interrupted_crawl_keeps_its_queue(
     assert query(crawl_file, "SELECT count(*) > 0 FROM urls WHERE fetch_state = 'queued'") == [(1,)]
 
 
+def test_a_second_interrupt_ends_the_process_at_once(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/hang">H</a>'),
+                "/hang": Page(body="<p>H</p>", delay=60),
+            }
+        )
+    )
+    process = start_cli_process("crawl", server.url("/"))
+    crawl_file = Path(_await_event(process, "crawl_started")["crawl_file"])
+    _await_request(server, "/hang")
+    # The writer commits each second: the row that the kill must leave queued is in the file.
+    _await_row(crawl_file, server.url("/hang"))
+    _interrupt(process)
+    _await_event(process, "stopping")
+
+    second_at = time.monotonic()
+    _interrupt(process)
+    stdout, stderr = process.communicate(timeout=30)
+    took = time.monotonic() - second_at
+
+    # Nothing is written after it: the file stays running, which 060 reports as interrupted.
+    errors = [line for line in stderr.splitlines() if json.loads(line).get("level") == "error"]
+    assert (
+        process.returncode,
+        took < 2,
+        stdout,
+        errors,
+        crawl_row(crawl_file)["state"],
+        query(crawl_file, "SELECT fetch_state FROM urls WHERE url LIKE '%/hang'"),
+    ) == (130, True, b"", [], "running", [("queued",)])
+
+
+def _await_request(server: ServerHandle, path: str) -> None:
+    deadline = time.monotonic() + 20
+    while all(request.path != path for request in server.requests):
+        assert time.monotonic() < deadline, f"the Crawl never requested {path}"
+        time.sleep(0.05)
+
+
+def _await_row(crawl_file: Path, url: str) -> None:
+    deadline = time.monotonic() + 20
+    while not query(crawl_file, "SELECT 1 FROM urls WHERE url = ?", [url]):
+        assert time.monotonic() < deadline, f"no committed row for {url}"
+        time.sleep(0.05)
+
+
 _DOWN = range(1, 21)
 # / links to /down/1 to /down/20, each of which sends its headers and then resets the
 # connection: the Crawl pauses after the eighth at --concurrency 1.
@@ -147,11 +198,14 @@ def test_a_stop_ends_a_pause(temp_workspace: TempWorkspace, fixture_site: StartS
     ) == (130, "stopped", "interrupt", 1, 0, [])
 
 
-def _await_event(process: subprocess.Popen[bytes], name: str) -> None:
+def _await_event(process: subprocess.Popen[bytes], name: str) -> dict[str, Any]:
+    """The event's data, once stderr holds it."""
     assert process.stderr is not None
     for line in process.stderr:
-        if json.loads(line).get("event") == name:
-            return
+        event = json.loads(line)
+        if event.get("event") == name:
+            data: dict[str, Any] = event["data"]
+            return data
     raise AssertionError(f"the Command ended without a {name} event")
 
 

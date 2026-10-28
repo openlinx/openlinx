@@ -432,7 +432,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 13.3 Drive "An interrupt is reported by one error" at seam 1, subprocess. Done when: the one error is the Crawl's own, with `010`'s `interrupted` code and exit code 130, and its hint names `spider resume --crawl <id>` (design D10).
 - [x] 13.4 **Guard:** "An interrupted Crawl keeps its queue", at seam 1, subprocess.
 - [x] 13.5 Drive "A request still running after the grace period is cancelled", fake timing. Done when: after the stop flag, whatever its reason, the URL limit's included, requests in flight in the running depth and among the Checked URLs get 10 seconds of clock time and are then cancelled before their submit, so no unit is written for them (design D16); the depth's siblings still running when the grace ends are cancelled and never recorded, red with `_crawl_depth`'s `finally` removed; and no robots.txt request starts after the stop flag, so the URL waiting for that verdict stays `queued`.
-- [ ] 13.6 Drive "A second interrupt ends the process at once" at seam 1, subprocess. Done when: the process ends at once with no result and no error line, and the crawl file stays `running` (design D10).
+- [x] 13.6 Drive "A second interrupt ends the process at once" at seam 1, subprocess. Done when: the process ends at once with no result and no error line, and the crawl file stays `running` (design D10).
 - [ ] 13.7 Docs: document interrupts, the grace period and the second interrupt in `docs/crawling.md`.
 - [ ] 13.8 Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
 
