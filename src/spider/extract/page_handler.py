@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable
 from datetime import datetime
+from typing import Any
 
 import msgspec
 
@@ -40,6 +41,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             set_cookie_count=len(header_values(response.headers, "Set-Cookie")),
             crawl_timestamp=response.fetched_at,
             **({} if data is None else msgspec.structs.asdict(data)),
+            **_robots_columns(result, response),
         ),
     )
 
@@ -53,6 +55,17 @@ def cookie_rows(result: UrlResult) -> Iterable[CookieRow]:
         cookie_row(result.url_id, ordinal, value)
         for ordinal, value in enumerate(header_values(response.headers, "Set-Cookie"), 1)
     )
+
+
+def _robots_columns(result: UrlResult, response: UrlResponse) -> dict[str, Any]:
+    # The parser's struct is named as the columns. A Page that was not parsed has the
+    # directives of its headers alone, so its meta columns stay NULL (design D2).
+    directives = msgspec.structs.asdict(response.directives)
+    return {
+        name: value
+        for name, value in directives.items()
+        if name.startswith("meta_robots") and result.parsed
+    }
 
 
 def _last_modified(headers: tuple[tuple[str, str], ...]) -> datetime | None:

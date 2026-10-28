@@ -44,6 +44,9 @@ class PageRow:
     h2_2: str | None = None
     h2_2_length: int | None = None
     h2_count: int | None = None
+    meta_robots: str | None = None
+    meta_robots_noindex: bool | None = None
+    meta_robots_nofollow: bool | None = None
     word_count: int | None = None
     sentence_count: int | None = None
     average_words_per_sentence: float | None = None

@@ -636,6 +636,25 @@ pages = public_table(
         "the Page is not analysed or its Page extractor failed.",
     ),
     Column(
+        "meta_robots",
+        Text,
+        comment="The content of every meta element named robots, in document order, as the "
+        "robots directives parser normalises and joins them; NULL without one, or when the Page "
+        "is not analysed.",
+    ),
+    Column(
+        "meta_robots_noindex",
+        Flag,
+        comment="1 when the robots directives parser reads noindex in meta_robots; NULL when "
+        "the Page is not analysed.",
+    ),
+    Column(
+        "meta_robots_nofollow",
+        Flag,
+        comment="1 when the robots directives parser reads nofollow in meta_robots; NULL when "
+        "the Page is not analysed.",
+    ),
+    Column(
         "word_count",
         Integer,
         comment="The number of words in the Content Area text; NULL when the Page is not "
