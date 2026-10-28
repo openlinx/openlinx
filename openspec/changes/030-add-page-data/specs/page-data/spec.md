@@ -187,9 +187,9 @@ A value *rounded to 2 decimals* SHALL be its exact quotient rounded half up, so 
 | Links | `unique_js_outlinks` | INTEGER | yes | N11 |  |
 | Links | `external_outlinks` | INTEGER | yes | W |  |
 | Links | `unique_external_outlinks` | INTEGER | yes | W |  |
-| Structured data | `jsonld_items` | INTEGER | yes |  |  |
-| Structured data | `microdata_items` | INTEGER | yes |  |  |
-| Structured data | `jsonld_parse_errors` | INTEGER | yes |  |  |
+| Structured data | `jsonld_item_count` | INTEGER | yes |  |  |
+| Structured data | `microdata_item_count` | INTEGER | yes |  |  |
+| Structured data | `jsonld_parse_error_count` | INTEGER | yes |  |  |
 | Structured data | `structured_data_types` | TEXT | yes |  | json |
 | Structured data | `structured_data_errors` | INTEGER | yes | N3 |  |
 | Structured data | `structured_data_warnings` | INTEGER | yes | N3 |  |
@@ -805,28 +805,28 @@ The two languages SHALL be stored separately:
 
 For an analysed Page, the structured-data columns SHALL be:
 
-- **`jsonld_items`**: the number of JSON-LD items. Each `<script>` whose `type`, without leading and trailing ASCII whitespace, is `application/ld+json` (compared ASCII case-insensitively) is parsed as JSON:
+- **`jsonld_item_count`**: the number of JSON-LD items. Each `<script>` whose `type`, without leading and trailing ASCII whitespace, is `application/ld+json` (compared ASCII case-insensitively) is parsed as JSON:
   - An object whose `@graph` is an array contributes the objects in that array, and one whose `@graph` is an object contributes that object.
   - Any other object is one item.
   - A top-level array contributes what each of its objects contributes.
   - Any other value, at the top level or in a top-level array, contributes nothing.
-- **`jsonld_parse_errors`**: the number of such scripts that are not valid JSON (RFC 8259), or that nest arrays and objects more than 1024 levels deep.
-- **`microdata_items`**: the number of elements that have `itemscope` and no `itemprop`.
-- **`structured_data_types`**: a JSON array of the distinct types of all counted items, sorted by code point. Types come from `@type`, a string or an array of them, and from `itemtype`, split at ASCII whitespace. A value of `@type` that is not a string, or is empty, is skipped. A leading `http://schema.org/` or `https://schema.org/` is removed from each type. The array is `[]` when there are none.
+- **`jsonld_parse_error_count`**: the number of such scripts that are not valid JSON (RFC 8259), or that nest arrays and objects more than 1024 levels deep. Within the limits that RFC 8259 section 9 allows a parser, a number beyond the range of a double, such as `1e400`, and an unpaired surrogate escape, such as `"\ud800"`, make a script invalid.
+- **`microdata_item_count`**: the number of elements that have `itemscope` and no `itemprop`.
+- **`structured_data_types`**: a JSON array of the distinct types of all counted items, sorted by code point. Types come from `@type`, a string or an array of them, and from `itemtype`, split at ASCII whitespace. A value of `@type` that is not a string, or is empty, is skipped. A leading `http://schema.org/` or `https://schema.org/` is removed from each type, and a type that is empty once it is removed is skipped. The array is `[]` when there are none.
 
 `structured_data_errors` and `structured_data_warnings` SHALL be NULL, because validation is measured from v0.3.
 
 #### Scenario: JSON-LD graph, a broken block and nested Microdata
 - **WHEN** an analysed Page contains the script `{"@context":"https://schema.org","@graph":[{"@type":"Organization"},{"@type":"WebSite"}]}`, the script `{bad json`, and `<div itemscope itemtype="https://schema.org/Product"><span itemprop="offers" itemscope itemtype="https://schema.org/Offer"></span></div>`
-- **THEN** `jsonld_items` is 2, `jsonld_parse_errors` is 1, `microdata_items` is 1 and `structured_data_types` is `["Organization","Product","WebSite"]`
+- **THEN** `jsonld_item_count` is 2, `jsonld_parse_error_count` is 1, `microdata_item_count` is 1 and `structured_data_types` is `["Organization","Product","WebSite"]`
 
 #### Scenario: JSON-LD array, type lists and an http type
 - **WHEN** an analysed Page contains a script whose `type` is ` Application/LD+JSON ` holding `[{"@type":["Article","NewsArticle"]},{"@graph":[{"@type":"http://schema.org/Person"},{"@type":"Article"}]},"note"]`, the script `{"@context":"https://schema.org","@graph":{"@type":"BreadcrumbList"}}`, the script `{"@context":"https://schema.org","@type":""}`, and `<article itemscope itemtype="https://schema.org/Article https://schema.org/BlogPosting"></article>`
-- **THEN** `jsonld_items` is 5, `jsonld_parse_errors` is 0, `microdata_items` is 1 and `structured_data_types` is `["Article","BlogPosting","BreadcrumbList","NewsArticle","Person"]`
+- **THEN** `jsonld_item_count` is 5, `jsonld_parse_error_count` is 0, `microdata_item_count` is 1 and `structured_data_types` is `["Article","BlogPosting","BreadcrumbList","NewsArticle","Person"]`
 
 #### Scenario: Page without structured data
 - **WHEN** an analysed Page contains no JSON-LD script and no `itemscope` element
-- **THEN** `jsonld_items` is 0, `microdata_items` is 0 and `structured_data_types` is `[]`
+- **THEN** `jsonld_item_count` is 0, `microdata_item_count` is 0 and `structured_data_types` is `[]`
 
 ### Requirement: Link attributes
 **In short:** one `links` row per Link that `020-add-crawl-core` discovers, with the attributes analysis needs.

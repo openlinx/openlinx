@@ -31,7 +31,7 @@
   - `canonical_url`, the URL that all canonical declarations agree on, and `canonical_relative`
   - per-source noindex/nofollow flags
   - `syllable_count`
-  - `jsonld_parse_errors`
+  - `jsonld_parse_error_count`
 - **New `crawl` flags and their `spider.toml` equivalents under `[crawl]`, both from v0.2:**
   - `--store-html` / `--no-store-html` (`store_html = true | false`). HTML is not stored unless storage is turned on. The decision is made when the Crawl starts, recorded, and kept on resume.
   - `--detect-language` (`detect_language = false`) also stores the language detected from the Content Area text.
