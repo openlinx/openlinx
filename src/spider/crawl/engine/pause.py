@@ -109,6 +109,14 @@ class Redispatch:
         self._owned.update(queued.id for queued in urls)
         return urls
 
+    def put_back(self, urls: Sequence[QueuedUrl]) -> None:
+        """URLs this list took that are still queued: not started, or ended without a record,
+        such as one refused at the URL limit. Only this list may dispatch them, so they wait
+        here for its next take (design D16)."""
+        for queued in urls:
+            if queued.id in self._owned:
+                self._urls[queued.id] = queued
+
 
 class NetworkPause:
     """Kept by the engine from each Internal URL's outcome, since only it knows which URLs are
@@ -253,13 +261,17 @@ class NetworkPause:
         probe still in flight is cancelled then. The first probe's answer means a dead section,
         a later one's an outage."""
         probes: list[asyncio.Task[bool]] = []
+        times = probe_times(self._network_wait)
+        # A first probe that hangs in its connection may answer only after the network came
+        # back, so its answer means a dead section only before the second probe is due.
+        dead_before = began + (times[1] if len(times) > 1 else self._network_wait)
         try:
-            for at in probe_times(self._network_wait):
+            for at in times:
                 if await self._answer_before(probes, began + at):
-                    return _end(probes)
+                    return self._end(probes, dead_before)
                 probes.append(asyncio.create_task(self._probe_once()))
             if await self._answer_before(probes, began + self._network_wait):
-                return _end(probes)
+                return self._end(probes, dead_before)
             return None
         finally:
             for probe in probes:
@@ -280,6 +292,11 @@ class NetworkPause:
                 await asyncio.wait({sleep})
         return True
 
+    def _end(self, probes: list[asyncio.Task[bool]], dead_before: float) -> PauseEnd:
+        if _answered(probes[0]) and self._clock.monotonic() < dead_before:
+            return "dead_section"
+        return "outage"
+
     async def _probe_once(self) -> bool:
         response = await self._requester.request_probe(self._seed)
         return not isinstance(response, FetchFailure)
@@ -287,7 +304,3 @@ class NetworkPause:
 
 def _answered(probe: asyncio.Task[bool]) -> bool:
     return probe.done() and not probe.cancelled() and probe.result()
-
-
-def _end(probes: list[asyncio.Task[bool]]) -> PauseEnd:
-    return "dead_section" if _answered(probes[0]) else "outage"

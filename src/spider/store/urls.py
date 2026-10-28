@@ -232,9 +232,11 @@ def requeue(url_ids: Sequence[int]) -> Callable[[Connection], UrlTally]:
     """A unit that puts error URLs back in the queue, so they are requested again."""
 
     def unit(connection: Connection) -> UrlTally:
-        if not url_ids:
-            return UrlTally()
-        count = connection.execute(_REQUEUED, {"url_ids": list(url_ids)}).rowcount
+        count = 0
+        # In chunks, since one IN of every id would pass SQLite's limit on bound parameters.
+        for start in range(0, len(url_ids), _READ_CHUNK):
+            chunk = list(url_ids[start : start + _READ_CHUNK])
+            count += connection.execute(_REQUEUED, {"url_ids": chunk}).rowcount
         return UrlTally(errors=-count, queued=count)
 
     return unit

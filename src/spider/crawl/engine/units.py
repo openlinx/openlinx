@@ -124,6 +124,11 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
             return None
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
         origin_robots = await robots.robots_of(queued.url)
+        while origin_robots.origin_error is not None and run.pause.paused:
+            # Held with its task slot, as a request at the pause's gate is, so the pause's
+            # count stays bounded; an outage drops the verdict, so it is read again then.
+            await run.pause.ended()
+            origin_robots = await robots.robots_of(queued.url)
         origin_error = origin_robots.origin_error
         if origin_error is not None:
             if decision.is_internal:

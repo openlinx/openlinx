@@ -195,9 +195,11 @@ type _Started = Literal["go_on", "stopped", "limit"]
 async def _start_again(run: Run, running: set[asyncio.Task[None]]) -> _Started:
     """Dispatches what a network pause re-queued or left queued, ahead of the frontier read,
     each at the depth it was found at (design D3)."""
-    for queued in run.redispatch.take():
+    urls = run.redispatch.take()
+    for index, queued in enumerate(urls):
         started = await _start(run, queued, running)
         if started != "go_on":
+            run.redispatch.put_back(urls[index:])
             return started
     return "go_on"
 
@@ -238,5 +240,9 @@ async def _crawl_url(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> No
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
         if recorded is not None:
             await run.outcomes.submit(recorded)
+        else:
+            # Still queued: one the re-dispatch list owns waits there, since no frontier read
+            # dispatches it again (design D16).
+            run.redispatch.put_back([queued])
     finally:
         run.limits.task_ended()

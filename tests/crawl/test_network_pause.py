@@ -349,6 +349,66 @@ def test_one_failure_inside_a_dead_origins_streak_does_not_exempt_its_origin(
     ) == (["dead_section", "outage"], {"fetched"})
 
 
+def test_a_first_probe_that_answers_after_the_second_is_due_means_an_outage(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    # The Seed answers after 12 seconds, as a slow server does, and the network is down from 12
+    # to 16: the pause begins at 12, and its first probe, at 17, answers at 29, after the second
+    # was due at 22.
+    pages = {
+        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY), delay=12),
+        **{f"/p{n}": FakePage(f"<p>P{n}</p>") for n in _TWENTY},
+    }
+    fetcher = FakeFetcher(clock, pages, outages=[(12, 16)])
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, reporter=reporter, concurrency=1
+    )
+
+    assert (
+        [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"],
+        set(query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url LIKE '%/p%'")),
+    ) == (["outage"], {("fetched",)})
+
+
+def test_urls_whose_robots_txt_failed_wait_out_the_pause(temp_workspace: TempWorkspace) -> None:
+    clock, reporter = FakeClock(), Collected()
+    posts = range(1, 31)
+    # /p1 answers at one second with the blog's posts, as the network goes down: the blog's
+    # robots.txt gets no response, and its first eight posts, recorded from that verdict,
+    # pause the Crawl.
+    pages = {
+        "/": FakePage('<a href="/p1">P1</a>'),
+        "/p1": FakePage(_posts(posts), delay=1),
+        **{f"http://blog.site.test/{n}": FakePage(f"<p>Post {n}</p>") for n in posts},
+    }
+    fetcher = FakeFetcher(clock, pages, outages=[(1, 30)])
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=1,
+        scope="subdomains",
+    )
+    errors_while_paused = {
+        data["urls"]["errors"]
+        for name, data in reporter.events
+        if name == "progress" and data["paused"]
+    }
+
+    # The other posts wait for the pause to end, instead of being written as errors that the
+    # outage then re-queues.
+    assert (
+        errors_while_paused,
+        set(
+            query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url LIKE 'http://blog.%'")
+        ),
+    ) == ({8}, {("fetched",)})
+
+
 def test_probes_do_not_count_toward_the_url_limit(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
 
