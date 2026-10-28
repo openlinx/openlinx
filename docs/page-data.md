@@ -101,6 +101,34 @@ The Content Area text is read as [Text](#text) is, block by block.
 ## Values of the response and of `urls`
 
 - **Copies of `urls`.** `content_type`, `status_code`, `response_time_ms` and `crawl_depth` repeat the URL's row, and `crawl_timestamp` repeats its `fetched_at`. They are written in the URL's own unit, so they always agree.
+- **Reason phrase.** `status` is the reason phrase the server sent, such as `Nicht Gefunden`. A status line without one, such as `HTTP/1.1 429`, gets the phrase that the IANA HTTP Status Code Registry gives the code, here `Too Many Requests`, from a copy of the registry kept with the code, so it does not change with the Python that ran the Crawl. A code the registry leaves unassigned or lists as unused, such as 299 or 418, gives NULL.
+
+## Robots directives
+
+`meta_robots` and `x_robots_tag` hold the directives as the Page sent them, normalised and joined by the robots directives parser that the Crawl itself uses to decide what to follow. Their `_noindex` and `_nofollow` flags are that parser's verdicts, so a column never disagrees with what the Crawl did. The parser decides which tokens count, so `none` counts as both, and which `X-Robots-Tag` values name another crawler, so `otherbot: noindex` does not count.
+
+The `X-Robots-Tag` columns are set for every Page, since every response can carry the header; the meta columns only for an analysed Page.
+
+## Redirects
+
+`redirect_type` says how a Page sends its visitors elsewhere, and `redirect_url` where, resolved as Link discovery resolves the target:
+- **`http_refresh`**: a 2xx Page whose `Refresh` header names a URL, such as `Refresh: 0; url=/new`.
+- **`meta_refresh`**: an analysed Page without one, whose first refresh `<meta>` names a URL. Only the first counts, as a browser acts on the first only, so a page that reloads itself every five minutes (`content="300"`) does not redirect even when a later `<meta>` names a URL. `meta_refresh` holds that first `<meta>`'s `content`, with or without a URL.
+- A refresh that names the Page's own URL, as a live page reloads, is no redirect.
+- `javascript_redirect` is filled from v1.1, by JavaScript rendering.
+
+## Canonicals
+
+A Page declares its canonical URL in two ways: a `<link rel="canonical" href="...">` that the HTML parser puts in `<head>`, and a `Link: <...>; rel="canonical"` response header. A `<link>` after an element that ends `<head>` for the parser, such as an `<img>` or stray text, lands in `<body>`: it is still stored as a Link but declares nothing, a common mistake that the canonical columns show.
+
+`canonical_url` is set only when every declaration names one URL, so a Page whose HTML and header disagree has none. `canonical_relative` reads the `href` as written, after the spaces the URL parser ignores, so `/b` is relative and ` https://example.test/b` is not. An `href` that resolves to no URL makes no declaration.
+
+## Pagination, AMP and mobile alternate
+
+These columns hold the targets of Links that Link discovery finds, by the Link type of their `rel`:
+- `rel_next_1` and `rel_prev_1`: the first `<link rel="next">` and `<link rel="prev">` (or `rel="previous"`) of the HTML; `http_rel_next_1` and `http_rel_prev_1` the same in `Link` headers.
+- `amphtml_link_element`: the first `<link rel="amphtml">`.
+- `mobile_alternate_link`: the first `<link rel="alternate" media="...">` without `hreflang`, such as a separate mobile site's.
 
 ## Cookies
 

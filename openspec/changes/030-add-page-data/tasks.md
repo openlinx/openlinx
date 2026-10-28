@@ -88,7 +88,7 @@ Every task of this group but 6.0 reads the URL's result. Task 6.13 is task 4.11,
 - [x] 6.8 Pin "Base element changes resolution" at seam 4, a `test:` guard, red by mutation: the document's Links resolved against the response URL instead of its base.
 - [x] 6.9 Drive "Pagination from HTML and header" at seam 4 from `020`'s `pagination` Links, and add `rel_next_1`, `rel_prev_1`, `http_rel_next_1` and `http_rel_prev_1`.
 - [x] 6.10 Drive "Mobile alternate and AMP" at seam 4, and add `amphtml_link_element` and `mobile_alternate_link`.
-- [ ] 6.11 Docs: add the reason phrase, the directive, canonical and pagination columns, and their use of `020`'s parser and Link types, to `docs/page-data.md`.
+- [x] 6.11 Docs: add the reason phrase, the directive, canonical and pagination columns, and their use of `020`'s parser and Link types, to `docs/page-data.md`.
 - [ ] 6.12 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green. The refactor splits `spider/extract/page_data.py` by column family, and its Risks line goes.
 
 ## 7. Indexability
