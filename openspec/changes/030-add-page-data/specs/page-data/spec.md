@@ -780,12 +780,9 @@ The two languages SHALL be stored separately:
 - **THEN** that Page's `detected_language` is `ru`
 
 ### Requirement: Exact Duplicate hash
-`content_hash` SHALL be the lowercase hexadecimal SHA-256 of the UTF-8 encoding of the Content Area text after these steps:
+**In short:** `content_hash` is the SHA-256 of the normalised Content Area text, so two Pages are Exact Duplicates when that text is the same.
 
-1. whitespace normalisation, with block breaks turned into spaces
-2. Unicode NFC normalisation
-
-Letter case SHALL be kept. `content_hash` SHALL be NULL when `word_count` is 0. Two Pages are Exact Duplicates exactly when both have the same non-NULL `content_hash`.
+`content_hash` SHALL be the lowercase hexadecimal SHA-256 of the UTF-8 encoding of the Content Area text, normalised by the Text normalisation rule of "Decoding, text and URL resolution". No Unicode normalisation SHALL be applied, and letter case SHALL be kept. `content_hash` SHALL be NULL when `word_count` is 0. Two Pages are Exact Duplicates exactly when both have the same non-NULL `content_hash`.
 
 #### Scenario: Hash of a simple Content Area
 - **WHEN** an analysed Page's Content Area is `<p>Hello   world</p>`
@@ -795,30 +792,37 @@ Letter case SHALL be kept. `content_hash` SHALL be NULL when `word_count` is 0. 
 - **WHEN** an analysed Page's Content Area is `<div><p>Hello</p><p>world</p></div>`
 - **THEN** `content_hash` is `64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c`
 
-#### Scenario: Composed and decomposed accents hash the same
+#### Scenario: Composed and decomposed accents hash differently
 - **WHEN** one Page's Content Area is `<p>Caf&#233;</p>` and another's is `<p>Cafe&#769;</p>`
-- **THEN** both have `content_hash` `73473dcc12b763085904a5279d048c4d5b3b008c46f1f32443b99de04aa83a14`
+- **THEN** the first has `content_hash` `73473dcc12b763085904a5279d048c4d5b3b008c46f1f32443b99de04aa83a14` and the second `c42cc7a1ca08364b6fd859fa50d2454730a8236290a423373cc630da77c6d711`
 
 #### Scenario: Empty Content Area has no hash
 - **WHEN** an analysed Page's body is `<body><nav><a href="/">Home</a></nav></body>`, with the default settings
 - **THEN** `content_hash` is NULL
 
 ### Requirement: Structured-data counts and types
+**In short:** an analysed Page counts its top-level JSON-LD and Microdata items and the JSON-LD blocks that do not parse, and lists the distinct types of the counted items.
+
 For an analysed Page, the structured-data columns SHALL be:
 
-- **`jsonld_items`**: the number of JSON-LD items. Each `<script>` whose `type` is `application/ld+json` (compared case-insensitively) is parsed as JSON:
-  - A top-level array contributes each of its object elements.
-  - An object with an `@graph` array contributes the objects in `@graph`.
+- **`jsonld_items`**: the number of JSON-LD items. Each `<script>` whose `type`, without leading and trailing ASCII whitespace, is `application/ld+json` (compared ASCII case-insensitively) is parsed as JSON:
+  - An object whose `@graph` is an array contributes the objects in that array, and one whose `@graph` is an object contributes that object.
   - Any other object is one item.
-- **`jsonld_parse_errors`**: the number of such scripts that are not valid JSON.
+  - A top-level array contributes what each of its objects contributes.
+  - Any other value, at the top level or in a top-level array, contributes nothing.
+- **`jsonld_parse_errors`**: the number of such scripts that are not valid JSON (RFC 8259), or that nest arrays and objects more than 1024 levels deep.
 - **`microdata_items`**: the number of elements that have `itemscope` and no `itemprop`.
-- **`structured_data_types`**: a JSON array of the distinct types of all counted items, sorted by code point. Types come from `@type` or `itemtype`, which can hold several values. A leading `http://schema.org/` or `https://schema.org/` is removed from each type. The array is `[]` when there are none.
+- **`structured_data_types`**: a JSON array of the distinct types of all counted items, sorted by code point. Types come from `@type`, a string or an array of them, and from `itemtype`, split at ASCII whitespace. A value of `@type` that is not a string, or is empty, is skipped. A leading `http://schema.org/` or `https://schema.org/` is removed from each type. The array is `[]` when there are none.
 
 `structured_data_errors` and `structured_data_warnings` SHALL be NULL, because validation is measured from v0.3.
 
 #### Scenario: JSON-LD graph, a broken block and nested Microdata
 - **WHEN** an analysed Page contains the script `{"@context":"https://schema.org","@graph":[{"@type":"Organization"},{"@type":"WebSite"}]}`, the script `{bad json`, and `<div itemscope itemtype="https://schema.org/Product"><span itemprop="offers" itemscope itemtype="https://schema.org/Offer"></span></div>`
 - **THEN** `jsonld_items` is 2, `jsonld_parse_errors` is 1, `microdata_items` is 1 and `structured_data_types` is `["Organization","Product","WebSite"]`
+
+#### Scenario: JSON-LD array, type lists and an http type
+- **WHEN** an analysed Page contains a script whose `type` is ` Application/LD+JSON ` holding `[{"@type":["Article","NewsArticle"]},{"@graph":[{"@type":"http://schema.org/Person"},{"@type":"Article"}]},"note"]`, the script `{"@context":"https://schema.org","@graph":{"@type":"BreadcrumbList"}}`, the script `{"@context":"https://schema.org","@type":""}`, and `<article itemscope itemtype="https://schema.org/Article https://schema.org/BlogPosting"></article>`
+- **THEN** `jsonld_items` is 5, `jsonld_parse_errors` is 0, `microdata_items` is 1 and `structured_data_types` is `["Article","BlogPosting","BreadcrumbList","NewsArticle","Person"]`
 
 #### Scenario: Page without structured data
 - **WHEN** an analysed Page contains no JSON-LD script and no `itemscope` element

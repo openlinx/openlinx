@@ -123,13 +123,14 @@ Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code,
 
 ## 9. Exact Duplicate hash and structured data
 
-- [ ] 9.1 Drive "Hash of a simple Content Area" at seam 4, and add `content_hash`.
-- [ ] 9.2 Drive "Different markup, same text" at seam 4.
-- [ ] 9.3 Drive "Composed and decomposed accents hash the same" at seam 4.
+- [ ] 9.1 Drive "Hash of a simple Content Area" at seam 4, and add `content_hash` in `spider.extract.content`, from the blocks the counts read, between `declared_language` and `crawl_depth`.
+- [ ] 9.2 Pin "Different markup, same text" at seam 4, a `test:` guard, red by mutation: the blocks joined without a space.
+- [ ] 9.3 Pin "Composed and decomposed accents hash differently" at seam 4, a `test:` guard, red by mutation: the text NFC-normalised before hashing. Run `tests/extract` under `uv run --isolated --python 3.12` and `--python 3.13` once and quote the counts.
 - [ ] 9.4 Drive "Empty Content Area has no hash" at seam 4.
-- [ ] 9.5 Drive "JSON-LD graph, a broken block and nested Microdata" at seam 4, and add `jsonld_items`, `jsonld_parse_errors`, `microdata_items` and `structured_data_types`.
-- [ ] 9.6 Drive "Page without structured data" at seam 4.
-- [ ] 9.7 Docs: add the hash definition and the counting rules for JSON-LD and Microdata items and types to `docs/page-data.md`.
+- [ ] 9.5 Drive "JSON-LD graph, a broken block and nested Microdata" at seam 4, in a new module `spider.extract.structured_data` that parses with orjson (D20), and add `jsonld_items`, `microdata_items`, `jsonld_parse_errors` and `structured_data_types` at the end of `pages`, in that order. Add a JSON-LD script and an `itemscope` element to `_FULL_PAGE`, and JSON-LD and `itemscope` fragments to the never-raises property. Add a test that a block nested more than 1024 levels deep is a parse error, red by mutation: parsing with `json`.
+- [ ] 9.5b Drive "JSON-LD array, type lists and an http type" at seam 4.
+- [ ] 9.6 Pin "Page without structured data" at seam 4, a `test:` guard, red by mutation: the types NULL when there are none.
+- [ ] 9.7 Docs: add the hash definition, with no Unicode normalisation, and the counting rules for JSON-LD and Microdata items and types to `docs/page-data.md`.
 - [ ] 9.8 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
 
 ## 10. Link attributes

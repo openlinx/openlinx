@@ -116,7 +116,11 @@ Indexability is stored only for Pages. `040`'s `canonical-to-non-indexable` Rule
 - *Alternative: measure text with a font engine (Pillow/FreeType).* Rejected. It adds a native dependency and makes results depend on the fonts installed.
 
 ### D10. Exact Duplicate hash
-SHA-256 over the NFC-normalised Content Area text, stored as hex. It is in the standard library, stable across versions and collision-safe. The hash is NULL for Pages without words, so empty shells, such as client-rendered pages before v1.1, are not reported as one big duplicate group.
+**In short:** `content_hash` is the SHA-256 of the normalised Content Area text as UTF-8, with no Unicode normalisation, and NULL for a Page without words.
+
+- **Outcome.** SHA-256 over the Content Area text after whitespace normalisation (D7), stored as lowercase hex. The hash is NULL for Pages without words, so empty shells, such as client-rendered pages before v1.1, are not reported as one big duplicate group.
+- **Why.** Exact Duplicates are Pages of one site, usually of one CMS and one template, so canonically equivalent but differently encoded copies of one text almost never occur among them. Without Unicode normalisation the hash needs no table and is the same on every supported Python. SHA-256 is in the standard library and collision-safe.
+- *Alternatives:* NFD or NFC from frozen tables of the pinned Unicode version (D8), which cost a generated table and its algorithm for almost no gain; and NFC from `unicodedata`, which changes with the interpreter, since Python 3.12 and 3.13 do not compose the characters that Unicode 16.0 added. All rejected.
 
 ### D11. Raw HTML storage is opt-in, decided when the Crawl starts (v0.2)
 - **The decision.** It is made once, at start. `--store-html` and `--no-store-html`, then `[crawl] store_html`, decide; when none is set, HTML is not stored, since in the store benchmark HTML was about 70% of the crawl file.
@@ -180,6 +184,13 @@ There are no schema-first slices. Each column and table is added in the TDD slic
 - **Why.** `http.HTTPStatus` changes its phrases with the interpreter (3.13 took RFC 9110's wording, such as `Content Too Large` for 413), so a stored column would change with the Python that ran the Crawl. RFC 9110 alone lacks codes that servers send without a phrase, such as 429, and an HTTP/2 response never carries one.
 - *Alternatives:* `http.HTTPStatus`, and a table of RFC 9110's codes only. Both rejected.
 
+### D20. Structured data counts top-level items, parsed by orjson
+**In short:** JSON-LD blocks are parsed with orjson, and only top-level JSON-LD and Microdata items are counted, with their types.
+
+- **Parser.** `spider.extract.structured_data` parses each JSON-LD block with orjson, already a runtime dependency. It is strict RFC 8259 and stops at 1024 levels of nesting with a parse error, so no block can make the Page extractor raise.
+- **Top-level items.** A JSON-LD item is a top-level object, or an object of a top-level `@graph`. A Microdata item is an element with `itemscope` and no `itemprop`, which HTML calls a top-level microdata item. Nested items, such as a Product's Offer, are properties of their item, so they add neither a count nor a type, and the count follows the markup a Page declares rather than the size of its catalogue.
+- *Alternatives:* `json` and `msgspec`, which raise `RecursionError` on a deeply nested block, so one block would fail the Page extractor and leave every HTML column of the Page NULL; `json` also accepts `NaN`, which is not JSON. Counting nested items too, which makes one Product with its offers and reviews many items. All rejected.
+
 ## Test seams
 
 The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is introduced:
@@ -217,6 +228,7 @@ The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is 
 - [A first refresh `<meta>` whose `content` does not parse, such as `content="soon"`, blocks the redirect of a later one, which a browser would follow] → `020`'s refresh reader gives no URL both for a content without one and for one that does not parse; a broken first refresh beside a working second one is rare.
 - [A first refresh `<meta>` whose URL resolves to nothing, such as `url=javascript:void(0)`, gives no Link, so the `meta_refresh` Link of a later one redirects] → Matching a Link to its element would need the raw `content` of each refresh `<meta>`; a first refresh to an unresolvable URL beside a working second one is rare.
 - [Which meta refresh may redirect is read from the `meta_refresh` column, so on a Page whose Page extractor failed the first `meta_refresh` Link redirects, even after a first refresh `<meta>` without a URL, and the Page's Indexability follows it as `redirected`] → The Links stay exact and the column is the only part lost; a failed Page extractor is rare and recorded in `parse_error`.
+- [Precomposed and decomposed spellings of one text, such as `é` as U+00E9 or as `e` + U+0301, hash differently, so such Pages are no Exact Duplicates (D10)] → Pages of one site come from one CMS and template, which spell a text one way; "Composed and decomposed accents hash differently" pins the behaviour.
 - [The depth pass reads every followed Link of the Crawl (D18)] → One indexed scan of `links` per level and one write per URL whose depth gets smaller; `026`'s 500k run measures it.
 
 ## Migration Plan
