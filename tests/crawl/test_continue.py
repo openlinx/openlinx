@@ -61,7 +61,7 @@ def test_a_continue_records_the_settings_it_runs_with(
     assert (recorded["max_urls"], recorded["rate"], recorded["concurrency"]) == (None, 50.0, 2)
 
 
-def test_the_url_limit_counts_over_the_crawls_whole_life(
+def test_the_url_limit_counts_over_the_crawl_s_whole_life(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(NINE_PAGES)
@@ -76,7 +76,7 @@ def test_the_url_limit_counts_over_the_crawls_whole_life(
     ) == ([(5,)], "stopped", "max_urls")
 
 
-def test_warnings_cover_the_crawls_whole_life(
+def test_warnings_cover_the_crawl_s_whole_life(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     # a.site.test and b.site.test share an instance whose robots.txt answers 503. / links to

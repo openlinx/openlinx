@@ -61,7 +61,9 @@ def test_no_carriage_returns_on_windows() -> None:
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the Windows console code page")
-def test_events_are_utf8_on_windows(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+def test_events_are_utf_8_on_windows(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
     server = fixture_site(Site(routes={"/": Page(body="<p>/</p>")}))
     workspace = temp_workspace.root / "Ünits"
     run_cli("init", "--workspace", str(workspace))

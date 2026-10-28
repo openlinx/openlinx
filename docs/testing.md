@@ -11,6 +11,7 @@ Terms follow [CONTEXT.md](../CONTEXT.md). Test names use them too ("section craw
 3. **Green:** write only enough code to pass it. Don't anticipate the next test.
 4. **Run the full suite and commit.** Each green slice is one commit, and its message names the scenario. Then pick the next scenario.
 5. **Review:** at the end of every task group, run the `code-review` skill on the group's commits, then refactor with the suite green. Refactoring is not part of the red → green loop.
+6. **Check the scenarios:** before a change is done, `uv run python scripts/scenario_coverage.py openspec/changes/<id>/specs/<capability>/spec.md` lists each scenario as covered, waiting (a later version's) or missing, and any with more than one test named after it. A test is named `test_` and its scenario's title in snake case, every run of other characters one `_`, without one trailing platform tag, `(Windows)`, `(POSIX)` or `(macOS)`. It is run by hand, not by the gate.
 
 Work in **vertical slices**, one scenario at a time from test to code. Never write all the tests first and all the code afterwards.
 

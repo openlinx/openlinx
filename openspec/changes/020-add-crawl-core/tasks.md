@@ -465,7 +465,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 
 - [x] 16.0 Fix: "A killed Crawl leaves no half-recorded Page" kills a Crawl that still runs. /p11 to /p30 of its site never answer, so depth 1 cannot end however late a reader sees ten committed Pages.
   Done when: the Crawl the test kills cannot have ended, whatever the machine's load, and the test passes in the gate.
-- [ ] 16.1 Verify that every `#### Scenario:` in `specs/crawling/spec.md` has exactly one test named after it, with `scripts/scenario_coverage.py` and the step of `docs/testing.md` that names it, both as `022` has them. The script drops one trailing platform tag, `(Windows)`, `(POSIX)` or `(macOS)`, from a title before it names the test, since the title already says where it runs, and the step says so.
+- [x] 16.1 Verify that every `#### Scenario:` in `specs/crawling/spec.md` has exactly one test named after it, with `scripts/scenario_coverage.py` and the step of `docs/testing.md` that names it, both as `022` has them. The script drops one trailing platform tag, `(Windows)`, `(POSIX)` or `(macOS)`, from a title before it names the test, since the title already says where it runs, and the step says so.
   Done when: the script exits 0 over `specs/crawling/spec.md`, after it exited 1 with each test whose name breaks the rule listed as close.
 - [ ] 16.2 **Guard:** every code this change declares is listed by `spider commands` with its level and exit code, at seam 1.
   Done when: the test holds a table of each code's level and exit code written from the spec, not read from the declarations, and goes red when one exit code changes and when one declaration goes.
