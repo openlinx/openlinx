@@ -38,7 +38,8 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
     url_path, url_query = path_and_query(address)
     robots = _robots_columns(result, response.directives)
     canonical = _canonical_columns(result)
-    reason = _non_indexable_reason(result, response.status_code, robots, canonical)
+    redirect = _redirect(result, data)
+    reason = _non_indexable_reason(result, response.status_code, robots, redirect, canonical)
     return (
         PageRow(
             url_id=result.url_id,
@@ -54,7 +55,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             indexability_status=reason,
             response_time_ms=response.response_time_ms,
             last_modified=_last_modified(response.headers),
-            **_redirect(result, data),
+            **redirect,
             set_cookie_count=len(header_values(response.headers, "Set-Cookie")),
             crawl_timestamp=response.fetched_at,
             **({} if data is None else msgspec.structs.asdict(data)),
@@ -134,6 +135,7 @@ def _non_indexable_reason(
     result: UrlResult,
     status_code: int,
     robots: _RobotsColumns,
+    redirect: _RedirectColumns,
     canonical: _CanonicalColumns,
 ) -> IndexabilityStatus | None:
     # The order a search engine meets them in (design D3). robots.txt can disallow a Page
@@ -149,6 +151,8 @@ def _non_indexable_reason(
         return "server_error"
     if robots.get("meta_robots_noindex") or robots["x_robots_tag_noindex"]:
         return "noindex"
+    if redirect["redirect_type"] in _REFRESH_TYPES:
+        return "redirected"
     # Both are normalised URLs, so a self-referencing canonical equals the URL.
     canonical_url = canonical.get("canonical_url")
     if canonical_url is not None and canonical_url != result.url:

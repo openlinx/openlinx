@@ -74,3 +74,23 @@ def test_robots_txt_beats_the_status_code() -> None:
     row = unprepared_page_row(status_code=404, blocked_by_robots_txt=True)
 
     assert row.indexability_status == "blocked_by_robots_txt"
+
+
+def test_meta_refresh_redirect_is_not_indexable() -> None:
+    row = page_row(
+        '<html><head><meta http-equiv="refresh" content="0; url=/new"><title>Old</title></head>'
+        "<body><p>Moved</p></body></html>",
+        url="https://example.test/old",
+    )
+
+    assert (row.redirect_type, row.indexability_status) == ("meta_refresh", "redirected")
+
+
+def test_http_refresh_redirect_is_not_indexable() -> None:
+    row = page_row(
+        "<html><head><title>Old</title></head><body><p>Moved</p></body></html>",
+        headers=(("Refresh", "0; url=/new"),),
+        url="https://example.test/old",
+    )
+
+    assert (row.redirect_type, row.indexability_status) == ("http_refresh", "redirected")
