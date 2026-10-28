@@ -463,11 +463,15 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 
 ## 16. Change check
 
-- [ ] 16.1 Verify that every `#### Scenario:` in `specs/crawling/spec.md` has exactly one test named after it, with a small script over the test ids.
+- [ ] 16.1 Verify that every `#### Scenario:` in `specs/crawling/spec.md` has exactly one test named after it, with `scripts/scenario_coverage.py` and the step of `docs/testing.md` that names it, both as `022` has them. The script drops one trailing platform tag, `(Windows)`, `(POSIX)` or `(macOS)`, from a title before it names the test, since the title already says where it runs, and the step says so.
+  Done when: the script exits 0 over `specs/crawling/spec.md`, after it exited 1 with each test whose name breaks the rule listed as close.
 - [ ] 16.2 **Guard:** every code this change declares is listed by `spider commands` with its level and exit code, at seam 1.
-- [ ] 16.3 Docs: the crawl pipeline section of `docs/architecture.md` says what is built (the context, the hooks, store-only units, page preparation behind the in-process executor), and `docs/schema.md` documents `urls`, `origins` and the new `crawl` columns, with their indexes and the values listed for later changes.
+  Done when: the test holds a table of each code's level and exit code written from the spec, not read from the declarations, and goes red when one exit code changes and when one declaration goes.
+- [ ] 16.3 Docs: the crawl pipeline section of `docs/architecture.md` says what is built: the context, the hooks, store-only units, page preparation behind the in-process executor, the network pause, the progress events, the stop flag with the interrupts, and the continue operation; and that a post-crawl pass submits units that store functions build, so a pass that needs more than the store lives above it. `docs/schema.md` needs nothing: it documents `urls`, `origins` and the new `crawl` columns, and a contract test pins it to the declaration.
 - [ ] 16.4 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
-- [ ] 16.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md` and ADR-0006, then refactor with the whole suite green.
+  Waits for the public repository, which waits for the product name; it is ticked in the pull request that runs CI. Until then the gate, the whole suite under Python 3.12 and 3.13, and one run on Linux in WSL stand in; macOS has none.
+- [ ] 16.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md` and ADR-0006, then refactor with the whole suite green. It is the change's milestone review.
+  Done when: four read-only agents have reviewed it, two on Standards by code area, each with the codebase-design lens and a pass over the tests' realism with a mutation sample of about ten tests, and two on the Spec, each with half of the spec and the design; every finding is checked against the code, the triage is ruled before the one review commit, and the design carries no task numbers.
 
 ## 17. The crawl package layout
 
