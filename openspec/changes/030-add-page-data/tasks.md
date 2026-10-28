@@ -85,7 +85,7 @@ Every task of this group but 6.0 reads the URL's result. Task 6.13 is task 4.11,
 - [x] 6.5 Drive "Relative canonical to another URL" at seam 4, from the `canonical` Links of the URL's result declared in `head` or `http_header`, and add `canonical_url`, `canonical_link_element_1`, `canonical_count` and `canonical_relative`. Pin with a test named after no scenario that an absolute `href` after a leading space, as templates write it, is not relative.
 - [x] 6.6 Drive "HTML and header canonicals disagree" at seam 4, and add `canonical_link_element_2` and `http_canonical`.
 - [x] 6.7 Pin "Canonical after an image in head is ignored" at seam 4, a `test:` guard, red by mutation: the canonical Links taken whatever their `declared_in`.
-- [ ] 6.8 Pin "Base element changes resolution" at seam 4, a `test:` guard, red by mutation: the document's Links resolved against the response URL instead of its base.
+- [x] 6.8 Pin "Base element changes resolution" at seam 4, a `test:` guard, red by mutation: the document's Links resolved against the response URL instead of its base.
 - [ ] 6.9 Drive "Pagination from HTML and header" at seam 4 from `020`'s `pagination` Links, and add `rel_next_1`, `rel_prev_1`, `http_rel_next_1` and `http_rel_prev_1`.
 - [ ] 6.10 Drive "Mobile alternate and AMP" at seam 4, and add `amphtml_link_element` and `mobile_alternate_link`.
 - [ ] 6.11 Docs: add the reason phrase, the directive, canonical and pagination columns, and their use of `020`'s parser and Link types, to `docs/page-data.md`.

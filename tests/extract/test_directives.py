@@ -187,3 +187,13 @@ def test_canonical_after_an_image_in_head_is_ignored() -> None:
     row = page_row('<head><title>T</title><img src="x.png"><link rel="canonical" href="/b"></head>')
 
     assert row.canonical_count == 0
+
+
+def test_base_element_changes_resolution() -> None:
+    row = page_row(
+        '<html><head><base href="https://example.test/docs/"><title>B</title>'
+        '<link rel="canonical" href="page"></head><body><p>Docs</p></body></html>',
+        url="https://example.test/a/b",
+    )
+
+    assert row.canonical_link_element_1 == "https://example.test/docs/page"
