@@ -2,19 +2,21 @@
 columns)."""
 
 import re
-import unicodedata
 from contextlib import suppress
 
 import idna
 
 from spider.crawl.urls import NormalizedUrl
+from spider.extract.unicode_scripts import KEPT_ENCODED
 
 _ESCAPES = re.compile(r"(?:%[0-9A-Fa-f]{2})+")
 # Where surrogateescape puts the bytes that are no UTF-8.
 _LOW_SURROGATES = range(0xDC80, 0xDD00)
 # Controls, format characters such as bidi overrides, and spaces and separators: shown raw,
 # they hide or spoof what the address says, so they stay encoded.
-_KEPT_ENCODED = frozenset({"Cc", "Cf", "Zs", "Zl", "Zp"})
+_KEPT_ENCODED = frozenset(
+    chr(point) for first, last in KEPT_ENCODED for point in range(first, last + 1)
+)
 
 
 def display_address(url: NormalizedUrl) -> str:
@@ -49,7 +51,7 @@ def _decoded(match: re.Match[str]) -> str:
     for character in text:
         size = 1 if ord(character) in _LOW_SURROGATES else len(character.encode())
         # ASCII and bytes that are no UTF-8 stay escaped, as they were requested.
-        if size == 1 or unicodedata.category(character) in _KEPT_ENCODED:
+        if size == 1 or character in _KEPT_ENCODED:
             parts.append("".join(escapes[position : position + size]))
         else:
             parts.append(character)

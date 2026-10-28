@@ -1,9 +1,6 @@
 """The Content Area and its counts (030-add-page-data, page-data; seam 4)."""
 
-import unicodedata
-
 from spider.extract.content_area import ContentArea
-from spider.extract.unicode_scripts import UNICODE_VERSION
 from tests.support.page_data import FIXTURE_A, page_row
 
 
@@ -65,8 +62,12 @@ def test_a_mark_stays_with_the_han_or_kana_character_before_it() -> None:
     assert row.word_count == 6
 
 
-def test_the_script_table_is_of_the_unicode_version_python_has() -> None:
-    assert unicodedata.unidata_version == UNICODE_VERSION
+def test_a_word_of_a_script_new_in_unicode_16_counts_on_every_python() -> None:
+    # A heading naming the Kirat Rai script, then a word in it (Unicode 16.0, which Python 3.12
+    # and 3.13 do not have yet).
+    row = page_row("<p>Kirat Rai: \U00016d44\U00016d64\U00016d5d\U00016d52</p>")
+
+    assert row.word_count == 3
 
 
 def test_blocks_end_sentences() -> None:

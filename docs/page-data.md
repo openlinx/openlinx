@@ -84,7 +84,8 @@ exclude = [".cookie-banner", ".share-buttons"]
 The Content Area text is read as [Text](#text) is, block by block.
 
 - **Words** are runs of letters, marks and digits (Unicode categories L, M and N), so a word in Devanagari keeps its vowel signs. One apostrophe, hyphen, full stop or comma between two such characters joins them, so `don't`, `state-of-the-art` and `v2.0` are one word each, while `_` separates words.
-- **Ideographs.** Each Han, Hiragana or Katakana character is a word of its own, and so is the prolonged sound mark `ー`, so `カード` is three words. The ranges come from Unicode's Scripts.txt of the Python's own Unicode version (`scripts/unicode_scripts.py` writes them).
+- **Ideographs.** Each Han, Hiragana or Katakana character, with the marks after it, is a word of its own, and so is the prolonged sound mark `ー`, so `カード` is three words.
+- **Unicode version.** The letter, mark and ideograph classes come from Unicode 16.0.0's Scripts.txt and DerivedGeneralCategory.txt (`scripts/unicode_scripts.py` writes them), so a count is the same whichever Python ran the Crawl.
 - **Limitation.** Scripts written without spaces between words, such as Thai, Lao, Khmer and Myanmar, are undercounted: a run of them is one word.
 - **Sentences** end at the end of a block, so a heading is a sentence of its own, and after a run of `.`, `!`, `?` or `…` followed by whitespace. The full-width `。`, `！` and `？` end a sentence with no space after them. A part of a block without a word is no sentence.
 - **Rounding.** `average_words_per_sentence` and `text_ratio_pct` are rounded half up to 2 decimals from the exact quotient, so 1.125 is 1.13.
