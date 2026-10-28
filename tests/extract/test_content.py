@@ -152,3 +152,12 @@ def test_hash_of_a_simple_content_area() -> None:
 
 def test_different_markup_same_text() -> None:
     assert page_row("<div><p>Hello</p><p>world</p></div>").content_hash == _HELLO_WORLD
+
+
+def test_composed_and_decomposed_accents_hash_differently() -> None:
+    rows = [page_row("<p>Caf&#233;</p>"), page_row("<p>Cafe&#769;</p>")]
+
+    assert [row.content_hash for row in rows] == [
+        "73473dcc12b763085904a5279d048c4d5b3b008c46f1f32443b99de04aa83a14",
+        "c42cc7a1ca08364b6fd859fa50d2454730a8236290a423373cc630da77c6d711",
+    ]
