@@ -133,6 +133,7 @@ Seams (docs/testing.md):
 - [ ] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate, when CI minutes return (workflow_dispatch). Until then the gate runs Python 3.14 on Windows, and one full-suite run on Python 3.12 in WSL Linux proves the minimum version.
 - [x] 8.3 **Guard:** every code this change declares (design D11) is listed by `spider commands` with its level and exit code [CLI]; the `commands.json` snapshot holds only the `commands` Command's own entry, so it does not change.
 - [x] 8.4 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.
+- [ ] 8.5 After `020` group 12 is merged: the network pause skips a `tls_error` and counts a retried request as one without a response, the pause sentences of the TLS and retry requirements, done at that merge.
 
 ## 9. (v0.2) Custom headers and credentials
 
