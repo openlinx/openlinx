@@ -363,7 +363,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 12. Events, failures and backstops (widening)
 
-Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, then a stop for review; 12.9a, 12.15, 12.16, 12.17, 12.18, 12.19, 12.22, 12.4, 12.20, 12.23, 12.24. A code is declared by the first task that needs it.
+Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, then a stop for review; 12.9a, 12.15, 12.16, 12.17, 12.18, 12.19, 12.22, 12.4, 12.20, 12.23, 12.24, 12.25. A code is declared by the first task that needs it.
 
 - [x] 12.0 Fix: `FakeClock` becomes the virtual clock of the timing tests: `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once nothing else can run, as trio's `MockClock(autojump_threshold=0)` does; `advance()` stays for tests without a loop.
   Done when: two hosts that each wait 0.5 s under `--rate` move the clock 0.5 s, not 1 s, red first through the fake Fetcher; a sleep never wakes before its wake time; the clock does not jump while a writer unit that the loop waits for runs, red by mutation of the hold dropped from `run_async`, with the unit held by a handler's writer that blocks on a `threading.Event`; the guard names a thread hand-off in `src` outside `off_loop()`; and the Risks entry on `FakeClock` sleeps that add up goes.
@@ -403,7 +403,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 12.14 Drive "A stuck request is ended by the watchdog", fake timing. It runs right after 12.0c, before 12.1, since it needs only the virtual clock and the Requester.
 
   Done when: `watchdog` is a `fetch_error` value; the watchdog waits on the context's `Clock` for a time computed by one pure function from the Fetcher's total request deadline, which it takes as an argument, `max(120 s, deadline + 30 s)`, tested at seam 4; and a robots.txt request that hangs gives its origin's URLs `fetch_error` = `watchdog` without a request of their own. The watchdog is the Requester's (design D7), around every request it makes.
-- [x] 12.15 Drive "Probes back off to once a minute" at seam 4. Done when: one pure function gives the probe times of a network wait: 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, none later than the wait, and one exactly at the wait still starts.
+- [x] 12.15 Drive "Probes back off to once a minute" at seam 4. Done when: one pure function gives the probe times of a network wait: 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, each before the wait ends (design D16).
 - [x] 12.16 Drive "A dead section does not stop the Crawl", fake timing.
 
   Done when: probes request the Seed URL through the Requester's own probe path (design D7) on the context's `Clock`, are not recorded and do not count toward `--max-urls`; the first answering probe resumes the Crawl with the errors kept; and `network_paused` is declared and counted, with `details.count`, the pauses, and `details.total_seconds`, and no `first_url` (design D10). `FakePage` takes `fails`, a `fetch_error`, and `until`, a clock time, so its URL gets no response until then, and `FakeFetcher.starts` keeps the whole URL. A request waits at the pause's gate before it takes a slot, and one that took its slots as the pause began gives them back and waits again, so at `--concurrency 1` a probe starts while a URL request waits paused; red with the gate waited after the slot, when the probe never starts (design D7, D16).
@@ -417,6 +417,7 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
 - [x] 12.22 Drive "A Seed that answers late is crawled", fake timing. Done when: a probe that answers before any response from the Seed's origin drops the failed robots.txt verdict of the Seed's origin and re-requests its robots.txt and the Seed; the test tells the probes from the Seed's own request by their start times.
 - [x] 12.23 Docs: document warnings, the counted warnings, how a Crawl fails (stop reasons, exit codes, partial results), the network pause with its probes, outcomes, events and `--network-wait`, and the backstops in `docs/crawling.md`, with `watchdog` in its `fetch_error` list and exit codes 7, 8 and 130; and `docs/architecture.md` no longer says that the watchdog comes later.
 - [ ] 12.24 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
+- [ ] 12.25 Drive "A dead subdomain pauses the Crawl once", fake timing. Done when: a pause that ends as a dead section takes the origins of its count's URLs, the Seed's origin aside, out of the count for the rest of the run, so their failures neither count nor reset it, and their URLs are still requested and recorded as errors (design D16); red with the exemption removed, when the dead subdomain pauses the Crawl once per `max(8, 2 × concurrency)` failures; and the same test shows that a later outage of the Seed's host still pauses the Crawl.
 
 ## 13. Stopping with an interrupt (widening)
 
