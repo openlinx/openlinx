@@ -17,7 +17,7 @@ from spider.extract.cookies import cookie_row
 from spider.extract.dates import internet_date
 from spider.extract.page_data import PAGE_DATA, PageData
 from spider.extract.status_phrases import STATUS_PHRASES
-from spider.store.page_records import CookieRow, PageRow, RedirectType
+from spider.store.page_records import CookieRow, IndexabilityStatus, PageRow, RedirectType
 from spider.store.records import DeclaredIn, LinkType
 
 # Both a Link type and a redirect type. An HTTP Refresh comes before a meta refresh.
@@ -36,6 +36,8 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
     data = PAGE_DATA.output(result.outputs)
     address = display_address(result.url)
     url_path, url_query = path_and_query(address)
+    robots = _robots_columns(result, response.directives)
+    reason = _non_indexable_reason(robots)
     return (
         PageRow(
             url_id=result.url_id,
@@ -47,15 +49,15 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             status_code=response.status_code,
             # The fetcher records "" for a status line without a phrase.
             status=response.reason or STATUS_PHRASES.get(response.status_code),
-            indexability="indexable",
-            indexability_status=None,
+            indexability="indexable" if reason is None else "non_indexable",
+            indexability_status=reason,
             response_time_ms=response.response_time_ms,
             last_modified=_last_modified(response.headers),
             **_redirect(result, data),
             set_cookie_count=len(header_values(response.headers, "Set-Cookie")),
             crawl_timestamp=response.fetched_at,
             **({} if data is None else msgspec.structs.asdict(data)),
-            **_robots_columns(result, response.directives),
+            **robots,
             **_canonical_columns(result),
             **_linked_page_columns(result),
         ),
@@ -125,6 +127,13 @@ def _first_meta_refresh_names_a_url(data: PageData | None) -> bool:
     if data is None:
         return True
     return data.meta_refresh is not None and refresh_url(data.meta_refresh) is not None
+
+
+def _non_indexable_reason(robots: _RobotsColumns) -> IndexabilityStatus | None:
+    # The order a search engine meets them in (design D3).
+    if robots.get("meta_robots_noindex") or robots["x_robots_tag_noindex"]:
+        return "noindex"
+    return None
 
 
 def _robots_columns(result: UrlResult, directives: RobotsDirectives) -> _RobotsColumns:
