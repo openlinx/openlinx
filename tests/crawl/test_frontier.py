@@ -1,4 +1,5 @@
-"""The frontier: one request per URL, an end, and the order (020-add-crawl-core D1; seam 3)."""
+"""The frontier: one request per URL, an end, the order, and what a kill keeps
+(020-add-crawl-core D1; seam 3, and seam 1 for the kill)."""
 
 import time
 from pathlib import Path

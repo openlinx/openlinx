@@ -309,7 +309,7 @@ def continue_crawl(
         crawl_file=crawl_file,
         continuing=config,
         clock=clock,
-        log=WarningLog(reporter, [_diagnostic(w) for w in recorded.warnings]),
+        log=WarningLog(reporter, [Diagnostic.from_json(w) for w in recorded.warnings]),
         hooks=hooks,
         resolver=resolver,
         pages=pages or default_page_executor,
@@ -317,13 +317,6 @@ def continue_crawl(
         stop=stop or StopSignal(),
     )
     return _crawled(crawl)
-
-
-def _diagnostic(stored: Mapping[str, Any]) -> Diagnostic:
-    """A warning as crawl.warnings holds it, in the full diagnostic shape (design D10)."""
-    return Diagnostic(
-        stored["level"], stored["code"], stored["message"], stored["hint"], stored["details"]
-    )
 
 
 def _crawled(crawl: "_Crawl") -> CrawlResult:

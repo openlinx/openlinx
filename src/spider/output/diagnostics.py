@@ -25,6 +25,13 @@ class Diagnostic:
     ) -> "Diagnostic":
         return cls(code.level, code.code, message, hint, dict(details or {}))
 
+    @classmethod
+    def from_json(cls, stored: Mapping[str, Any]) -> "Diagnostic":
+        """A diagnostic as to_json gave it, such as a warning that crawl.warnings stored."""
+        return cls(
+            stored["level"], stored["code"], stored["message"], stored["hint"], stored["details"]
+        )
+
     def to_json(self) -> dict[str, Any]:
         return {
             "level": self.level,

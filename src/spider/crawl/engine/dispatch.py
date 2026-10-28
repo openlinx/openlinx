@@ -19,7 +19,14 @@ from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import QueuedUrl
-from spider.store.urls import next_depth, queued_batch, record_seed, requeue, url_counts
+from spider.store.urls import (
+    next_depth,
+    queued_batch,
+    record_seed,
+    requeue,
+    seed_answered,
+    url_counts,
+)
 from spider.store.writer import CrawlWriterClosedError
 
 # Queued URLs read from the frontier at once.
@@ -79,6 +86,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         network_wait=context.settings.network_wait,
         seed=seed,
         crawl_id=context.crawl_file.id,
+        seed_answered=await context.writer.run_async(seed_answered(seed)),
         stop=context.stop,
         requester=requester,
         clock=context.clock,

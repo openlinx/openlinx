@@ -6,13 +6,16 @@ from collections.abc import Sequence
 from dataclasses import replace
 
 import msgspec
+import pytest
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, text
 
 from spider.crawl.engine.hooks import Pass, PassContext, UrlResult, handler
 from spider.crawl.pages.preparation import PageInput, extractor
+from spider.output.reporter import Collected
 from spider.services.crawling import CrawlOverrides
 from spider.services.hooks import default_hooks
+from spider.store.transitions import CrawlStateError
 from tests.fixture_site.hosts import FixtureResolver
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
@@ -261,3 +264,67 @@ def test_post_crawl_passes_run_again_after_a_continue(
 
     # Once as the first run stopped, and once more as the continue completed.
     assert (stopped.summary.state, result.summary.state, runs) == ("stopped", "completed", [1, 2])
+
+
+def test_a_continue_whose_seed_answered_before_pauses_for_no_other_origin(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # old.site.test resolves to nothing, so its robots.txt gets no response and /x an error
+    # without a request of its own. The continue queues /x again, alone at depth 1, so it is
+    # the continue's first Internal request.
+    seed = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="http://old.site.test/x">X</a><a href="/a">A</a>'),
+                "/a": Page(body='<a href="/b">B</a><a href="/c">C</a>'),
+                "/b": Page(body="<p>B</p>"),
+                "/c": Page(body="<p>C</p>"),
+            }
+        )
+    )
+    resolver = FixtureResolver({"site.test": seed})
+    stopped = crawl_result(
+        "http://site.test/", resolver=resolver, scope="subdomains", network_wait=0, max_urls=2
+    )
+
+    result = continued(stopped, CrawlOverrides(max_urls=None), resolver=resolver)
+
+    assert (stopped.summary.stop_reason, result.summary.state, result.summary.stop_reason) == (
+        "max_urls",
+        "completed",
+        None,
+    )
+
+
+def test_a_seed_still_down_fails_a_continue_as_seed_unreachable_again(
+    temp_workspace: TempWorkspace,
+) -> None:
+    seed = f"http://127.0.0.1:{_free_port()}/"
+    failed = crawl_result(seed, network_wait=0)
+
+    again = continued(failed)
+
+    assert (failed.summary.stop_reason, again.summary.state, again.summary.stop_reason) == (
+        "seed_unreachable",
+        "failed",
+        "seed_unreachable",
+    )
+
+
+def test_a_completed_crawl_is_not_continued(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+    completed = crawl_result(server.url("/"))
+    before = query(completed.crawl_file, "SELECT state, config, warnings FROM crawl")
+
+    reporter = Collected()
+
+    with pytest.raises(CrawlStateError, match="from completed to running"):
+        continued(completed, reporter=reporter)
+
+    # Refused before anything starts: no event says a run began, and the file is as it was.
+    assert (
+        reporter.events,
+        query(completed.crawl_file, "SELECT state, config, warnings FROM crawl"),
+    ) == ([], before)
