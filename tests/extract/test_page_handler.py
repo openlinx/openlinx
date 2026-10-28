@@ -30,14 +30,16 @@ def _fetched(
     url: str,
     *,
     headers: tuple[tuple[str, str], ...] = (("Content-Type", "text/html; charset=utf-8"),),
+    status_code: int = 200,
+    reason: str = "OK",
     **values: Any,
 ) -> UrlResult:
     return _result(
         url,
         fetch_state="fetched",
         response=UrlResponse(
-            status_code=200,
-            reason="OK",
+            status_code=status_code,
+            reason=reason,
             content_type="text/html; charset=utf-8",
             headers=headers,
             fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
@@ -103,6 +105,29 @@ def test_invalid_last_modified_is_null() -> None:
     row = _page(_fetched("https://example.test/", headers=(("Last-Modified", "yesterday"),)))
 
     assert row.last_modified is None
+
+
+def test_reason_phrase_falls_back_to_the_standard_phrase() -> None:
+    # The fetcher records an empty reason for the status line `HTTP/1.1 404`.
+    row = _page(_fetched("https://example.test/missing", status_code=404, reason=""))
+
+    assert row.status == "Not Found"
+
+
+def test_a_sent_reason_phrase_is_kept_and_a_missing_one_comes_from_the_registry() -> None:
+    def status(status_code: int, reason: str) -> str | None:
+        result = _fetched("https://example.test/", status_code=status_code, reason=reason)
+        return _page(result).status
+
+    # A server's own phrase, as a localised one sends it; a rate limiter's and a body-size
+    # limit's bare status lines; a code the registry leaves unassigned, and one it lists unused.
+    assert [
+        status(404, "Nicht Gefunden"),
+        status(429, ""),
+        status(413, ""),
+        status(299, ""),
+        status(418, ""),
+    ] == ["Nicht Gefunden", "Too Many Requests", "Content Too Large", None, None]
 
 
 def _last_modified(value: str, name: str = "Last-Modified") -> datetime | None:

@@ -12,6 +12,7 @@ from spider.extract.addresses import display_address, path_and_query
 from spider.extract.cookies import cookie_row
 from spider.extract.dates import internet_date
 from spider.extract.page_data import PAGE_DATA
+from spider.extract.status_phrases import STATUS_PHRASES
 from spider.store.page_records import CookieRow, PageRow
 
 
@@ -32,6 +33,8 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             url_query=url_query,
             content_type=content_type,
             status_code=response.status_code,
+            # The fetcher records "" for a status line without a phrase.
+            status=response.reason or STATUS_PHRASES.get(response.status_code),
             response_time_ms=response.response_time_ms,
             last_modified=_last_modified(response.headers),
             set_cookie_count=len(header_values(response.headers, "Set-Cookie")),

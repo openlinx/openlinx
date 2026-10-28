@@ -469,6 +469,12 @@ pages = public_table(
         comment="The HTTP status code of the Page's own response, equal to urls.status_code.",
     ),
     Column(
+        "status",
+        Text,
+        comment="The reason phrase the server sent; when it sent none, the phrase that the IANA "
+        "HTTP Status Code Registry gives the status code; NULL when the registry gives none.",
+    ),
+    Column(
         "response_time_ms",
         Integer,
         nullable=False,

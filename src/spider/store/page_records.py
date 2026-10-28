@@ -16,6 +16,7 @@ class PageRow:
     url_query: str | None
     content_type: str
     status_code: int
+    status: str | None
     response_time_ms: int
     last_modified: datetime | None
     set_cookie_count: int

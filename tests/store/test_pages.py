@@ -32,6 +32,7 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
             url_query=None,
             content_type="text/html",
             status_code=200,
+            status="OK",
             response_time_ms=12,
             last_modified=None,
             set_cookie_count=1,

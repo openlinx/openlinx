@@ -173,6 +173,7 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `url_query` | TEXT | yes | | | | The query of address: the text after the first ?; NULL when address has no ?, and the empty string when nothing follows it. |
 | `content_type` | TEXT | no | | | | The Content-Type response header as received, equal to urls.content_type. |
 | `status_code` | INTEGER | no | | | | The HTTP status code of the Page's own response, equal to urls.status_code. |
+| `status` | TEXT | yes | | | | The reason phrase the server sent; when it sent none, the phrase that the IANA HTTP Status Code Registry gives the status code; NULL when the registry gives none. |
 | `response_time_ms` | INTEGER | no | | | | Time from sending the request to receiving the whole body, equal to urls.response_time_ms. |
 | `last_modified` | TEXT | yes | | `timestamp` | | The first Last-Modified response header as a UTC time, read as an HTTP-date or another Internet Message Format date; NULL when absent, another text or a leap second. |
 | `set_cookie_count` | INTEGER | no | | | | The number of Set-Cookie headers of the Page's response, equal to its rows in cookies. |
