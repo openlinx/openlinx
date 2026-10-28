@@ -3,7 +3,7 @@
 import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
-from spider.crawl.pages.preparation import PageInput, extractor
+from spider.crawl.pages.preparation import Extractor, PageInput, extractor
 from spider.extract.content import ContentArea, content_blocks, word_count
 from spider.extract.text import element_text, normalized, trimmed
 
@@ -114,4 +114,8 @@ def _length(text: str | None) -> int | None:
     return None if text is None else len(text)
 
 
-PAGE_DATA = extractor("page_data", extract_page_data, ContentArea())
+def page_data_extractor(area: ContentArea) -> Extractor[ContentArea, PageData]:
+    return extractor("page_data", extract_page_data, area)
+
+
+PAGE_DATA = page_data_extractor(ContentArea())

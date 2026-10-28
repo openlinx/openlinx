@@ -62,7 +62,7 @@ from spider.store.settings import StoreSettings
 from spider.store.urls import url_counts
 from spider.store.writer import CrawlWriter, CrawlWriterClosedError
 from spider.workspace.discovery import resolve_workspace
-from spider.workspace.settings import load_settings
+from spider.workspace.settings import Settings, load_settings
 from spider.workspace.tables import SettingsTables
 
 _SEED_PROBLEMS: Mapping[InvalidUrlReason, str] = {
@@ -92,6 +92,8 @@ class CrawlPlan:
     scope: ScopeRules
     strip_params: re.Pattern[str] | None
     new_crawl: NewCrawl
+    # Every table as loaded, from which default_hooks takes the configs of 030's hooks.
+    loaded: Settings
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -183,6 +185,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         scope=scope,
         strip_params=strip_params,
         new_crawl=new_crawl,
+        loaded=settings,
     )
 
 

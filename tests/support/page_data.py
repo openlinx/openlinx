@@ -4,16 +4,23 @@ from datetime import UTC, datetime
 
 from spider.crawl.engine.hooks import UrlResponse, UrlResult
 from spider.crawl.fetch.fetcher import FetchResult
-from spider.crawl.pages.preparation import PageSettings, extractor, prepare_page
+from spider.crawl.pages.preparation import PageSettings, prepare_page
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.content import ContentArea
-from spider.extract.page_data import PAGE_DATA, extract_page_data
+from spider.extract.page_data import PAGE_DATA, page_data_extractor
 from spider.extract.page_handler import page_rows
 from spider.services.hooks import default_hooks
 from spider.store.page_records import PageRow
 
 _URL = NormalizedUrl("https://site.test/")
+# The spec's fixture A, which later scenarios refer to.
+FIXTURE_A = """<html lang="en"><head><title>Hello</title></head><body>
+<header><p>Site header text</p></header>
+<nav><a href="/">Home</a></nav>
+<main><h1>Welcome</h1><p>Reading is fun. Water is wet.</p></main>
+<footer><p>Footer text</p></footer>
+</body></html>"""
 
 
 def page_row(
@@ -34,7 +41,7 @@ def page_row(
     )
     extractors = default_hooks().extractors
     if content_area is not None:
-        page_data = extractor(PAGE_DATA.name, extract_page_data, content_area)
+        page_data = page_data_extractor(content_area)
         extractors = tuple(page_data if e.name == PAGE_DATA.name else e for e in extractors)
     settings = PageSettings(scope=scope_rules(_URL), extractors=extractors, strip_params=None)
     prepared = prepare_page(_URL, response, settings)
