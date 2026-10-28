@@ -985,7 +985,7 @@ The Seed parser, URL normalisation, HTML decoding, the link extractor, the robot
 - **THEN** the Crawl State is `completed`, every `{site}/down/<n>` has `fetch_state` = `error`, `{site}/p1` has `fetch_state` = `fetched`, and the result's `warnings` hold an entry with code `network_paused`
 
 #### Scenario: A dead subdomain pauses the Crawl once
-- **WHEN** `/` links to 300 URLs on the subdomain `dead.{host}` and then to `/p1` to `/p20`, a fake Fetcher gets no response for any request to `dead.{host}`, and none for any request to `{host}` from the one for `/p10` on until 120 seconds of clock time have passed, and the Crawl runs with `--subdomains`, `--concurrency 1` and a fake clock
+- **WHEN** `/` links to 300 URLs on the subdomain `dead.{host}` and then to `/p1` to `/p20`, a fake Fetcher answers 404 for the robots.txt of `dead.{host}` and gets no response for its other URLs, and none for any request to `{host}` from the one for `/p10` on until 120 seconds of clock time have passed, and the Crawl runs with `--subdomains`, `--concurrency 1` and a fake clock
 - **THEN** the events hold exactly two `crawl_resumed` events, the first with `data.outcome` = `dead_section` and the second with `data.outcome` = `outage`, every URL on `dead.{host}` has `fetch_state` = `error`, every `{site}/p<n>` has `fetch_state` = `fetched`, and the Crawl State is `completed`
 
 #### Scenario: An outage pauses and resumes the Crawl
