@@ -50,7 +50,7 @@ def test_server_error() -> None:
 
 
 def test_each_status_class_has_its_reason() -> None:
-    # A redirect with an HTML body, a page removed for good, a transforming proxy's 2xx, a bot
+    # A redirect served as HTML, a page removed for good, a transforming proxy's 2xx, a bot
     # block such as LinkedIn's 999, and the last server error code.
     statuses = {
         301: unprepared_page_row(status_code=301).indexability_status,
@@ -94,3 +94,32 @@ def test_http_refresh_redirect_is_not_indexable() -> None:
     )
 
     assert (row.redirect_type, row.indexability_status) == ("http_refresh", "redirected")
+
+
+def test_the_order_decides_between_two_reasons() -> None:
+    # Pages that give two reasons each: the earlier step of the order must win.
+    reasons = {
+        "header noindex, body too large": unprepared_page_row(
+            headers=(("X-Robots-Tag", "noindex"),)
+        ).indexability_status,
+        "404 with a header noindex": unprepared_page_row(
+            status_code=404, headers=(("X-Robots-Tag", "noindex"),)
+        ).indexability_status,
+        "noindex and a meta refresh": page_row(
+            '<head><meta name="robots" content="noindex">'
+            '<meta http-equiv="refresh" content="0; url=/new"></head>',
+            url="https://example.test/old",
+        ).indexability_status,
+        "a meta refresh and a canonical elsewhere": page_row(
+            '<head><meta http-equiv="refresh" content="0; url=/new">'
+            '<link rel="canonical" href="/other"></head>',
+            url="https://example.test/old",
+        ).indexability_status,
+    }
+
+    assert reasons == {
+        "header noindex, body too large": "noindex",
+        "404 with a header noindex": "client_error",
+        "noindex and a meta refresh": "noindex",
+        "a meta refresh and a canonical elsewhere": "redirected",
+    }

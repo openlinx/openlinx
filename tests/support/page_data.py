@@ -42,6 +42,8 @@ def page_row(
     Content-Type, through the built-in extractors, the Page extractor's config being
     `content_area` when it is given. Its Links are the engine's: the headers', then the
     document's."""
+    # The crawl engine prepares only a 2xx response; another status is unprepared_page_row's.
+    assert 200 <= status_code < 300, status_code
     body = html.encode() if isinstance(html, str) else html
     response = FetchResult(
         status_code=status_code,
@@ -71,6 +73,7 @@ def page_row(
         is_internal=True,
         in_scope=True,
         fetch_state="fetched",
+        blocked_by_robots_txt=False,
         response=UrlResponse(
             status_code=response.status_code,
             reason=response.reason,
@@ -92,7 +95,7 @@ def unprepared_page_row(
     headers: tuple[tuple[str, str], ...] = (),
     url: str = _URL,
     status_code: int = 200,
-    blocked_by_robots_txt: bool | None = None,
+    blocked_by_robots_txt: bool | None = False,
 ) -> PageRow:
     """The Page row of an HTML response that page preparation gave nothing for, built as the
     crawl engine builds it: the directives of its headers, and its header Links only when it is
