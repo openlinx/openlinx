@@ -56,6 +56,10 @@ class PageRow:
     x_robots_tag_noindex: bool | None = None
     x_robots_tag_nofollow: bool | None = None
     meta_refresh: str | None = None
+    canonical_url: str | None = None
+    canonical_link_element_1: str | None = None
+    canonical_count: int | None = None
+    canonical_relative: bool | None = None
     word_count: int | None = None
     sentence_count: int | None = None
     average_words_per_sentence: float | None = None

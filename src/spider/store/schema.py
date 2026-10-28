@@ -694,6 +694,31 @@ pages = public_table(
         "extractor failed.",
     ),
     Column(
+        "canonical_url",
+        Text,
+        comment="The URL that every canonical declaration resolves to, when they resolve to one "
+        "URL; NULL without a declaration, when they disagree, or when the Page is not "
+        "analysed.",
+    ),
+    Column(
+        "canonical_link_element_1",
+        Text,
+        comment="The resolved URL of the first canonical link element in head; NULL without "
+        "one, or when the Page is not analysed.",
+    ),
+    Column(
+        "canonical_count",
+        Integer,
+        comment="The number of canonical declarations: canonical link elements in head and "
+        "canonical Link header entries; NULL when the Page is not analysed.",
+    ),
+    Column(
+        "canonical_relative",
+        Flag,
+        comment="1 when the href of a canonical link element in head does not start with http: "
+        "or https:; NULL when the Page is not analysed.",
+    ),
+    Column(
         "word_count",
         Integer,
         comment="The number of words in the Content Area text; NULL when the Page is not "

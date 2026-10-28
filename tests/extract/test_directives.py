@@ -137,3 +137,31 @@ def test_meta_refresh_without_a_target_is_not_a_redirect() -> None:
     )
 
     assert (row.meta_refresh, row.redirect_type) == ("30", None)
+
+
+def test_relative_canonical_to_another_url() -> None:
+    row = page_row(
+        '<html><head><title>A</title><link rel="canonical" href="/b"></head>'
+        "<body><p>Article</p></body></html>",
+        url="https://example.test/a",
+    )
+
+    assert (row.canonical_url, row.canonical_count, row.canonical_relative) == (
+        "https://example.test/b",
+        1,
+        True,
+    )
+
+
+def test_an_absolute_canonical_after_a_leading_space_is_not_relative() -> None:
+    # As a template writes href="{{ ' ' }}{{ url }}": the URL parser removes the space.
+    row = page_row(
+        '<html><head><title>A</title><link rel="canonical" href=" https://example.test/b">'
+        "</head><body><p>Article</p></body></html>",
+        url="https://example.test/a",
+    )
+
+    assert (row.canonical_link_element_1, row.canonical_relative) == (
+        "https://example.test/b",
+        False,
+    )

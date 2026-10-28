@@ -10,6 +10,7 @@ from spider.crawl.engine.hooks import UrlResponse, UrlResult
 from spider.crawl.fetch.fetcher import header_values
 from spider.crawl.pages.preparation import is_html_type
 from spider.crawl.pages.refresh import refresh_url
+from spider.crawl.references import C0_OR_SPACE
 from spider.extract.addresses import display_address, path_and_query
 from spider.extract.cookies import cookie_row
 from spider.extract.dates import internet_date
@@ -47,6 +48,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             crawl_timestamp=response.fetched_at,
             **({} if data is None else msgspec.structs.asdict(data)),
             **_robots_columns(result, response),
+            **_canonical_columns(result),
         ),
     )
 
@@ -80,6 +82,30 @@ def _first_meta_refresh_names_a_url(data: PageData | None) -> bool:
     if data is None:
         return True
     return data.meta_refresh is not None and refresh_url(data.meta_refresh) is not None
+
+
+def _canonical_columns(result: UrlResult) -> dict[str, Any]:
+    if not result.parsed:
+        return {}
+    # A canonical <link> that the parser moved out of <head>, such as after an <img>, is no
+    # declaration (design D4).
+    declared = [
+        link
+        for link in result.links
+        if link.type == "canonical" and link.declared_in in ("head", "http_header")
+    ]
+    html = [link for link in declared if link.declared_in == "head"]
+    targets = {link.target for link in declared}
+    return {
+        "canonical_url": next(iter(targets)) if len(targets) == 1 else None,
+        "canonical_link_element_1": html[0].target if html else None,
+        "canonical_count": len(declared),
+        # The URL parser removes leading C0 controls and spaces before it reads a scheme.
+        "canonical_relative": any(
+            not link.raw.lstrip(C0_OR_SPACE).lower().startswith(("http:", "https:"))
+            for link in html
+        ),
+    }
 
 
 def _robots_columns(result: UrlResult, response: UrlResponse) -> dict[str, Any]:
