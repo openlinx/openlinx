@@ -1,6 +1,6 @@
 # Page data
 
-What a Crawl stores about each Page: the flat Page record in `pages`, one row per Page, read without joins. The spec is [openspec/changes/030-add-page-data/specs/page-data/spec.md](../openspec/changes/030-add-page-data/specs/page-data/spec.md), and each column's one definition is its description in [schema.md](schema.md#table-pages); this page explains what several columns share. Terms follow [CONTEXT.md](../CONTEXT.md).
+What a Crawl stores about each Page: the flat Page record in `pages`, one row per Page, read without joins, and one `links` row for each Link the Crawl discovered. The spec is [openspec/changes/030-add-page-data/specs/page-data/spec.md](../openspec/changes/030-add-page-data/specs/page-data/spec.md), and each column's one definition is its description in [schema.md](schema.md#table-pages) and [its `links` section](schema.md#table-links); this page explains what several columns share. Terms follow [CONTEXT.md](../CONTEXT.md).
 
 ## What a Page is
 
@@ -15,7 +15,7 @@ Every Page has exactly one `pages` row, keyed by `url_id`, which is `urls.id`. I
 
 ## Analysed and non-analysed Pages
 
-A Page is *analysed* when the Crawl parsed it (`urls.parsed` = 1): its status is 2xx and its body was read in full. Only an analysed Page has values in the columns that come from its HTML, such as its titles and headings. A Page that is not analysed, such as a 404 or a redirect, has NULL in them; the columns that come from the URL and its response are set for every Page. When the Page extractor fails on an analysed Page (`urls.parse_error` = `extractor_error`), only the columns it derives from the HTML are NULL.
+A Page is *analysed* when the Crawl parsed it (`urls.parsed` = 1): its status is 2xx and its body was read in full. Only an analysed Page has values in the columns that come from its HTML, such as its titles and headings. A Page that is not analysed, such as a 404 or a redirect, has NULL in them; the columns that come from the URL and its response are set for every Page. When the Page extractor or the Link extractor fails on an analysed Page (`urls.parse_error` = `extractor_error`, with `parse_error_message` naming it), only the columns that extractor derives from the HTML are NULL, and the Page still has its `pages` row and its `links` rows. For the Link extractor, those are the `anchor_text`, `alt_text` and `link_position` of every Link, and the `hreflang` and `media` of the Links in the HTML; what a Link takes from Link discovery stays set.
 
 ## NULL, empty and zero
 
@@ -158,6 +158,15 @@ These columns hold the targets of Links that Link discovery finds, by the Link t
 7. `canonicalised`: the canonical URL is another URL.
 
 A search engine first has to be allowed to fetch the URL, then needs a usable response, and only then reads the directives. Every 2xx can be indexed, not only 200. A self-referencing canonical keeps a Page indexable, and so do canonicals that disagree, since they leave `canonical_url` NULL.
+
+## Links
+
+`links` has one row for each Link that the Crawl's Link discovery found in a response, keyed by the URL of that response (`source_url_id`) and the Link's `ordinal` there, from 1: the `Link` and `Refresh` header Links first, in the order received, then the document's in document order. The target is a URL id; join `urls` on `target_url_id` for its text and whether it is Internal. See [schema.md](schema.md#table-links) for each column.
+
+- **What Link discovery decides.** Which references are Links, their type, their target, where they were declared (`declared_in`: `head` or `body` as the parser builds them, or `http_header`), the element and attribute they came from, their `rel` tokens, and which targets the Crawl requests. Every discovered Link gets a row, whether or not the Crawl requests its target: a `nofollow` hyperlink is stored, and its target has a `urls` row. A malformed or non-http(s) reference is no Link and has no row.
+- **What Page data adds.** The `anchor_text` of a hyperlink, the `alt_text` of an `<img>`, the `hreflang` and `media` of alternate Links, and the `link_position`, all read from the same parse of the Page, so the HTML is never parsed twice. These are NULL for a header Link, which has no element, except the `hreflang` of a header Link, which is its `hreflang` parameter.
+- **Which responses have Links.** An analysed Page has its header Links and its document's. Any other in-Scope 2xx response, such as a PDF or a Page too large to analyse, has its header Links only, so a PDF's `Link: <...>; rel="canonical"` is stored. Other responses, such as a redirect or a 404, have no Links in `links`.
+- **Link position.** `link_position` reads elements only, so a site that marks its menu with a class rather than `nav` gets `content` for it, and the `[content_area]` settings do not change it.
 
 ## Cookies
 

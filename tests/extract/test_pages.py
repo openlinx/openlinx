@@ -1,10 +1,17 @@
 """Page rows (030-add-page-data, page-data; seam 3+6)."""
 
+from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
+from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import select
 
+from openlinx.crawl.pages.preparation import Extractor, PageInput, extractor
+from openlinx.extract.page_data import PAGE_DATA, PageData
+from openlinx.extract.page_links import PAGE_LINKS, PageLinks
+from openlinx.services.hooks import default_hooks
 from openlinx.store.schema import public_tables
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
@@ -275,3 +282,52 @@ def test_a_crawled_page_stores_its_directives_canonicals_and_pagination(
             server.url("/list/3"),
         )
     ]
+
+
+def _failing_page_data(tree: LexborHTMLParser, page: PageInput, config: None) -> PageData:
+    raise RuntimeError("Page extractor bug")
+
+
+def _failing_page_links(tree: LexborHTMLParser, page: PageInput, config: None) -> PageLinks:
+    raise RuntimeError("Link extractor bug")
+
+
+def test_a_page_whose_page_extractor_failed_keeps_its_response_data_and_links(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/broken": Page(
+                    body='<title>T</title><meta name="robots" content="noindex"><a href="/a">A</a>'
+                ),
+                "/a": Page(body="<p>A</p>"),
+            }
+        )
+    )
+    broken = server.url("/broken")
+    failing: dict[str, Extractor[Any, Any]] = {
+        PAGE_DATA.name: extractor(PAGE_DATA.name, _failing_page_data, None),
+        PAGE_LINKS.name: extractor(PAGE_LINKS.name, _failing_page_links, None),
+    }
+    defaults = default_hooks()
+    hooks = replace(
+        defaults,
+        extractors=tuple(failing.get(built.name, built) for built in defaults.extractors),
+    )
+
+    crawl_file = crawl_result(broken, hooks).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT urls.parsed, urls.parse_error, pages.status_code, title_1, meta_robots_noindex,"
+        " indexability FROM pages JOIN urls ON urls.id = pages.url_id WHERE address = ?",
+        [broken],
+    ) == [(1, "extractor_error", 200, None, 1, "non_indexable")]
+    assert query(
+        crawl_file,
+        "SELECT target.url, links.type, links.anchor_text FROM links"
+        " JOIN urls AS source ON source.id = links.source_url_id"
+        " JOIN urls AS target ON target.id = links.target_url_id WHERE source.url = ?",
+        [broken],
+    ) == [(server.url("/a"), "hyperlink", None)]

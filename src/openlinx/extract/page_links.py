@@ -10,6 +10,7 @@ from openlinx.crawl.pages.preparation import PageInput, extractor
 from openlinx.crawl.references import DiscoveredLink
 from openlinx.extract.text import element_text, normalized, trimmed
 from openlinx.store.page_records import LinkPosition
+from openlinx.store.records import LinkType
 
 _SECTIONS: Mapping[str, LinkPosition] = {
     "nav": "navigation",
@@ -69,7 +70,9 @@ def _alt_text(link: DiscoveredLink, element: LexborNode) -> str | None:
     return normalized(element.attributes["alt"] or "")
 
 
-def _attribute(link: DiscoveredLink, element: LexborNode, link_type: str, name: str) -> str | None:
+def _attribute(
+    link: DiscoveredLink, element: LexborNode, link_type: LinkType, name: str
+) -> str | None:
     if link.type != link_type:
         return None
     return trimmed(element.attributes.get(name) or "")

@@ -34,3 +34,41 @@ def test_discovered_urls_are_the_stored_link_targets(
         "SELECT target.url FROM links JOIN urls AS target ON target.id = links.target_url_id"
         " ORDER BY links.ordinal",
     ) == [(target,) for target in targets]
+
+
+def test_a_pdf_stores_the_links_of_its_headers(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/guide.pdf": Page(
+                    body="%PDF-1.7",
+                    content_type="application/pdf",
+                    headers=(
+                        (
+                            "Link",
+                            '</guide>; rel="canonical", </de/guide.pdf>; rel="alternate"; '
+                            'hreflang="de"',
+                        ),
+                    ),
+                ),
+                "/guide": Page(body="<p>Guide</p>"),
+                "/de/guide.pdf": Page(body="%PDF-1.7", content_type="application/pdf"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/guide.pdf")).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT target.url, links.type, links.declared_in, links.hreflang FROM links"
+        " JOIN urls AS source ON source.id = links.source_url_id"
+        " JOIN urls AS target ON target.id = links.target_url_id WHERE source.url = ?"
+        " ORDER BY links.ordinal",
+        [server.url("/guide.pdf")],
+    ) == [
+        (server.url("/guide"), "canonical", "http_header", None),
+        (server.url("/de/guide.pdf"), "hreflang", "http_header", "de"),
+    ]
