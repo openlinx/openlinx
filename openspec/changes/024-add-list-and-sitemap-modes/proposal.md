@@ -9,12 +9,12 @@ Screaming Frog serves these with its List mode and its sitemap upload. `020-add-
 
 ## What Changes
 
-- **List mode:** `spider crawl --list <file|->`.
+- **List mode:** `linx crawl --list <file|->`.
   - The input is one URL per line, from a file or from standard input (`-`).
   - Whitespace is trimmed, blank lines and `#` comments are ignored, and URLs that are equal after normalisation become one Seed.
   - UTF-8 with or without a BOM is read, and so is UTF-16 with a BOM, as Windows PowerShell 5.1 writes it.
   - Invalid lines produce one `list_invalid_lines` warning. A list without URLs is rejected with `empty_list`.
-- **Sitemap mode:** `spider crawl --sitemap <url>`, repeatable.
+- **Sitemap mode:** `linx crawl --sitemap <url>`, repeatable.
   - It reads XML sitemaps, sitemap index files, gzip-compressed sitemaps and plain-text sitemaps.
   - Index files are followed with loop protection, down to 3 nested levels.
   - A 100 MiB cap guards against decompression bombs (`sitemap_too_large`), and a sitemap that fails produces `sitemap_failed`.
@@ -55,6 +55,6 @@ Screaming Frog serves these with its List mode and its sitemap upload. `020-add-
 - **Used by:**
   - `060-add-crawl-control`: the estimate and the detached List mode.
   - `090-add-mcp-server`: `crawl_start` with a list of URLs, from v0.2 together with this change.
-- **Code:** `src/spider/crawl/listfile.py`, `src/spider/crawl/sitemaps.py`, and the mode handling in the Crawl Service and `src/spider/cli/crawl.py`.
+- **Code:** `src/openlinx/crawl/listfile.py`, `src/openlinx/crawl/sitemaps.py`, and the mode handling in the Crawl Service and `src/openlinx/cli/crawl.py`.
 - **New dependencies:** none. XML is read with the standard library's pull parser, with no entity expansion.
 - **Docs:** the List and Sitemap modes part of `docs/crawling.md`.

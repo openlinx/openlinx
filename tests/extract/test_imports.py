@@ -8,7 +8,9 @@ import pytest
 
 from tests.support.cli import PROCESS_TIMEOUT, REPO_ROOT
 
-_LIST_MODULES = "import sys, spider.extract.page_data; sys.stderr.write(chr(10).join(sys.modules))"
+_LIST_MODULES = (
+    "import sys, openlinx.extract.page_data; sys.stderr.write(chr(10).join(sys.modules))"
+)
 
 
 @pytest.mark.slow

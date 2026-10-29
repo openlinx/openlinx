@@ -12,7 +12,7 @@ from typing import Any
 import typer
 from typer.testing import CliRunner
 
-from spider.cli.app import build_app
+from openlinx.cli.app import build_app
 from tests.support.processes import python_command
 
 
@@ -46,7 +46,7 @@ def run_cli(
 
 def run_cli_process(*args: str, env: Mapping[str, str] | None = None) -> CliResult:
     completed = subprocess.run(
-        [sys.executable, "-m", "spider", *args], capture_output=True, env=env, check=False
+        [sys.executable, "-m", "openlinx", *args], capture_output=True, env=env, check=False
     )
     return CliResult(completed.returncode, completed.stdout, completed.stderr)
 
@@ -92,9 +92,9 @@ def start_example_process(*args: str) -> subprocess.Popen[bytes]:
 
 
 def start_cli_process(*args: str) -> subprocess.Popen[bytes]:
-    """A real `spider` process in the current folder, which a test can signal or kill. On
+    """A real `linx` process in the current folder, which a test can signal or kill. On
     Windows it has its own process group, so a Ctrl+Break event reaches it alone."""
-    command = python_command("-m", "spider", *args)
+    command = python_command("-m", "openlinx", *args)
     if sys.platform == "win32":
         group = subprocess.CREATE_NEW_PROCESS_GROUP
     else:

@@ -9,7 +9,7 @@
 | `build` | `uv build` (wheel and sdist), `scripts/build_mcpb.py` from `090-add-mcp-server`, and a `SHA256SUMS` file |
 | `smoke` | the installer smoke tests with the built wheel |
 | `publish` | PyPI trusted publishing, in the `pypi` environment with `id-token: write` and no stored API token |
-| `release` | a GitHub release with the wheel, the sdist, `spider-<version>.mcpb`, `install.sh`, `install.ps1` and `SHA256SUMS`, marked as a pre-release when `release_check.py` reports `prerelease: true` |
+| `release` | a GitHub release with the wheel, the sdist, `openlinx-<version>.mcpb`, `install.sh`, `install.ps1` and `SHA256SUMS`, marked as a pre-release when `release_check.py` reports `prerelease: true` |
 
 A failure before `publish` SHALL leave nothing published.
 
@@ -31,7 +31,7 @@ A failure before `publish` SHALL leave nothing published.
 
 #### Scenario: Bundle is a release asset
 - **WHEN** the workflow is parsed
-- **THEN** the `release` job uploads `spider-<version>.mcpb` together with the wheel, the sdist, both scripts and `SHA256SUMS`
+- **THEN** the `release` job uploads `openlinx-<version>.mcpb` together with the wheel, the sdist, both scripts and `SHA256SUMS`
 
 ### Requirement: Supported Python range
 The package SHALL declare `requires-python = ">=3.12,<3.15"` and classifiers for Python 3.12, 3.13 and 3.14. Both install scripts SHALL declare the Python version they pass to `--python` as `3.14`. That version SHALL satisfy `requires-python`, and SHALL equal the `.python-version` of the `090-add-mcp-server` bundle. `docs/installation.md` SHALL explain two reasons for the pin:

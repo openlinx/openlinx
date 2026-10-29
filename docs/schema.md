@@ -32,7 +32,7 @@ Tables are listed in the order of the change that added them, and within a chang
 
 ## Conventions
 
-Every public table, column and index follows the conventions of [ADR-0005](adr/0005-crawl-file-schema-conventions.md), which gives all the naming rules and their reasons. The file enforces the ones it can, tests over `spider schema` and the declaration check some others, and review checks the rest:
+Every public table, column and index follows the conventions of [ADR-0005](adr/0005-crawl-file-schema-conventions.md), which gives all the naming rules and their reasons. The file enforces the ones it can, tests over `linx schema` and the declaration check some others, and review checks the rest:
 - **STRICT tables:** every table is `STRICT`, so a column's type is `INTEGER`, `REAL`, `TEXT` or `BLOB`, and the file refuses a value of another type. Reading a crawl file needs SQLite 3.37 or later.
 - **Names:** lowercase snake_case. Table names are plural nouns, except the one-row `crawl`.
 - **Descriptions:** every table, column and index has one. Two prefixes mark a column that stays NULL for a while:
@@ -55,16 +55,16 @@ Every public table, column and index follows the conventions of [ADR-0005](adr/0
 ## How to add a table
 
 A change that stores new data adds its tables and columns in the slice whose scenario first needs them:
-1. **Declare it** with `public_table(name, *columns, comment=..., change=<n>)` in `spider.store.schema`, the only definition of the schema, with the change's number as `change`. It makes the table `STRICT` and adds the CHECKs of its enumerations and flags, so no CHECK is written by hand.
+1. **Declare it** with `public_table(name, *columns, comment=..., change=<n>)` in `openlinx.store.schema`, the only definition of the schema, with the change's number as `change`. It makes the table `STRICT` and adds the CHECKs of its enumerations and flags, so no CHECK is written by hand.
    - Give every column a `comment`, and use the shared column types for timestamps (`Timestamp`), JSON (`Json`) and booleans (`Flag`).
    - Declare a real number with `sqlalchemy.REAL`: `Float` and `Double` declare `FLOAT` and `DOUBLE`, which STRICT refuses.
    - Read an enumeration's `values` from the `Literal` the code uses.
    - Declare each index with `info={"description": ...}`, naming the query it serves. Declare a unique rule as an index with `unique=True`, never as a `UNIQUE` constraint, whose index SQLite makes and nothing lists.
-2. **Document it here, in the same commit:** a ``## Table `<name>` `` section, placed in change order, with the same description, one row per column, and an Indexes table when it has secondary indexes. The contract test compares this page with `spider schema --limit 1000`, so it is never red between commits.
-3. **Follow the [conventions](#conventions).** Tests over `spider schema` and the declaration check names, descriptions, types, booleans, enumeration values, references, index names, unique rules declared as indexes, and that derived and later columns may hold NULL, for every table, including new ones.
+2. **Document it here, in the same commit:** a ``## Table `<name>` `` section, placed in change order, with the same description, one row per column, and an Indexes table when it has secondary indexes. The contract test compares this page with `linx schema --limit 1000`, so it is never red between commits.
+3. **Follow the [conventions](#conventions).** Tests over `linx schema` and the declaration check names, descriptions, types, booleans, enumeration values, references, index names, unique rules declared as indexes, and that derived and later columns may hold NULL, for every table, including new ones.
 4. **No migration before v0.1.** Until the first release the schema is not yet public: a change edits the declared tables directly, and `schema_version` stays `1`. From v0.1 on, a schema change adds 1 to `schema_version` and brings a migration, with a test from every published schema version.
 
-A table whose name starts with `_` is internal: it is left out of `spider schema` and of this page.
+A table whose name starts with `_` is internal: it is left out of `linx schema` and of this page.
 
 ## Table `crawl`
 

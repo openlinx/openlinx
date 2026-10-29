@@ -3,7 +3,7 @@
 import sys
 import unicodedata
 
-from spider.extract.unicode_scripts import (
+from openlinx.extract.unicode_scripts import (
     HAN_AND_KANA,
     KEPT_ENCODED,
     MARKS,

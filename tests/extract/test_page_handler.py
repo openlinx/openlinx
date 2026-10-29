@@ -3,11 +3,11 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from spider.crawl.engine.hooks import UrlFailure, UrlResponse, UrlResult
-from spider.crawl.pages.directives import NO_DIRECTIVES
-from spider.crawl.urls import NormalizedUrl
-from spider.extract.page_handler import page_rows
-from spider.store.page_records import PageRow
+from openlinx.crawl.engine.hooks import UrlFailure, UrlResponse, UrlResult
+from openlinx.crawl.pages.directives import NO_DIRECTIVES
+from openlinx.crawl.urls import NormalizedUrl
+from openlinx.extract.page_handler import page_rows
+from openlinx.store.page_records import PageRow
 from tests.support.headers import LAST_MODIFIEDS
 
 

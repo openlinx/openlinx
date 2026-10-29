@@ -2,11 +2,11 @@
 
 from datetime import UTC, datetime
 
-from spider.crawl.engine.hooks import UrlResponse, UrlResult
-from spider.crawl.pages.directives import NO_DIRECTIVES
-from spider.crawl.urls import NormalizedUrl
-from spider.extract.page_handler import cookie_rows, page_rows
-from spider.store.page_records import CookieRow
+from openlinx.crawl.engine.hooks import UrlResponse, UrlResult
+from openlinx.crawl.pages.directives import NO_DIRECTIVES
+from openlinx.crawl.urls import NormalizedUrl
+from openlinx.extract.page_handler import cookie_rows, page_rows
+from openlinx.store.page_records import CookieRow
 from tests.support.headers import SET_COOKIES
 
 

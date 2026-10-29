@@ -2,7 +2,7 @@
 
 import pytest
 
-from spider.crawl.pages.preparation import is_html_type
+from openlinx.crawl.pages.preparation import is_html_type
 
 
 @pytest.mark.parametrize(

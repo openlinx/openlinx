@@ -1,4 +1,4 @@
-"""The pages table in spider schema (030-add-page-data, page-data; seam 6)."""
+"""The pages table in linx schema (030-add-page-data, page-data; seam 6)."""
 
 from tests.support.cli import run_cli
 

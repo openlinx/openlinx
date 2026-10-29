@@ -8,12 +8,12 @@ from typing import Any
 
 from sqlalchemy import CheckConstraint
 
-from spider.output.reporter import Collected
-from spider.services.crawls import create_crawl
-from spider.services.schema import describe_schema
-from spider.services.schema_doc import parse_tables
-from spider.store.schema import metadata
-from spider.workspace.discovery import resolve_workspace
+from openlinx.output.reporter import Collected
+from openlinx.services.crawls import create_crawl
+from openlinx.services.schema import describe_schema
+from openlinx.services.schema_doc import parse_tables
+from openlinx.store.schema import metadata
+from openlinx.workspace.discovery import resolve_workspace
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, new_crawl
@@ -105,7 +105,7 @@ def _file_indexes(connection: sqlite3.Connection, table: str) -> list[tuple[Any,
 
 
 def declared_schema() -> dict[str, dict[str, Any]]:
-    """The public tables of `spider schema`, with what only the declaration knows.
+    """The public tables of `linx schema`, with what only the declaration knows.
 
     create_all makes CHECKs and WITHOUT ROWID from this declaration, so for those two the
     comparison guards against a file made another way, such as by a future migration.
@@ -141,7 +141,7 @@ def declared_schema() -> dict[str, dict[str, Any]]:
 
 def test_a_new_file_matches_the_declaration(temp_workspace: TempWorkspace) -> None:
     shop = temp_workspace.root / "shop"
-    (shop / ".spider" / "crawls").mkdir(parents=True)
+    (shop / ".openlinx" / "crawls").mkdir(parents=True)
     workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
     file = create_crawl(new_crawl(workspace), FakeClock(), Collected()).path
 

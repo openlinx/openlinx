@@ -1,4 +1,4 @@
-"""Writes src/spider/extract/status_phrases.py: the reason phrase of each status code in the IANA
+"""Writes src/openlinx/extract/status_phrases.py: the reason phrase of each status code in the IANA
 HTTP Status Code Registry (030-add-page-data D19), from scripts/http-status-codes-1.csv.
 
 To refresh: save https://www.iana.org/assignments/http-status-codes/http-status-codes-1.csv over
@@ -14,7 +14,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
 _SNAPSHOT = _ROOT / "scripts" / "http-status-codes-1.csv"
-_OUT = _ROOT / "src" / "spider" / "extract" / "status_phrases.py"
+_OUT = _ROOT / "src" / "openlinx" / "extract" / "status_phrases.py"
 # What the registry adds to a phrase, such as "(OBSOLETED)" or a temporary registration's terms.
 _ANNOTATION = re.compile(r"\s*\(.*\)$")
 _NO_PHRASE = frozenset({"Unassigned", "(Unused)"})

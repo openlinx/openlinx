@@ -1,16 +1,16 @@
-"""The row writer of spider.store.links (030-add-page-data D4; seam 2)."""
+"""The row writer of openlinx.store.links (030-add-page-data D4; seam 2)."""
 
 from dataclasses import fields
 from datetime import UTC, datetime
 
-from spider.crawl.urls import NormalizedUrl, parse_seed
-from spider.store.links import write_links
-from spider.store.page_records import LinkRow
-from spider.store.records import FetchedUrl, NewUrl, Provenance
-from spider.store.rows import HandlerRows
-from spider.store.schema import links
-from spider.store.urls import record_fetched, record_seed
-from spider.store.writer import CrawlWriter
+from openlinx.crawl.urls import NormalizedUrl, parse_seed
+from openlinx.store.links import write_links
+from openlinx.store.page_records import LinkRow
+from openlinx.store.records import FetchedUrl, NewUrl, Provenance
+from openlinx.store.rows import HandlerRows
+from openlinx.store.schema import links
+from openlinx.store.urls import record_fetched, record_seed
+from openlinx.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, query
 from tests.support.workspace import TempWorkspace

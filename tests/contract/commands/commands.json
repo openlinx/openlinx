@@ -23,6 +23,6 @@
   ],
   "fields": null,
   "examples": [
-    {"command": "spider commands", "description": "Describe every Command."}
+    {"command": "linx commands", "description": "Describe every Command."}
   ]
 }

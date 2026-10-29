@@ -6,7 +6,7 @@ Core still gives us one schema definition that drives:
 - batched inserts from a single writer
 - safe `--where` → SQL translation that allows only known columns
 - Alembic migrations
-- the generated SQL reference used by `spider schema` and the Skill
+- the generated SQL reference used by `linx schema` and the Skill
 
 ## Considered Options
 

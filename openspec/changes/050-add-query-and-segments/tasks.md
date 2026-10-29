@@ -14,7 +14,7 @@ Every group ends with a docs task and a review task.
 
 ## 1. `issues` and `issues <rule-id>` for the thin slice (slice; seams 2: Services, 1: CLI, 3+6)
 
-- [ ] 1.1 Drive `Issue list › Order` (Services), after `040`'s group 3. Start the `crawl_store` factory with the documented `crawl`, `seeds`, `urls`, `pages`, `rules` and `affected_urls` tables, each written by its owner's store code (design, Test seams), a `completed` Crawl carrying its `affected_urls` rows, and add the `issues` entry point of the Query Service in `spider.services.query`, using `015`'s `resolve_crawl` and `reading`, and reading Issues only through `040`'s Issues reader in `spider.store.issues` (design D14). The `issues` Command is declared with `@command_meta(output="list")` and returns a `Page`. Verify: red → green; one commit.
+- [ ] 1.1 Drive `Issue list › Order` (Services), after `040`'s group 3. Start the `crawl_store` factory with the documented `crawl`, `seeds`, `urls`, `pages`, `rules` and `affected_urls` tables, each written by its owner's store code (design, Test seams), a `completed` Crawl carrying its `affected_urls` rows, and add the `issues` entry point of the Query Service in `openlinx.services.query`, using `015`'s `resolve_crawl` and `reading`, and reading Issues only through `040`'s Issues reader in `openlinx.store.issues` (design D14). The `issues` Command is declared with `@command_meta(output="list")` and returns a `Page`. Verify: red → green; one commit.
 - [ ] 1.2 Drive `Issue list › Item fields` (Services). Verify: red → green; one commit.
 - [ ] 1.3 Drive `Issue list › Issues of a running Crawl are computed live` (Services): a `running` Crawl from the factory, with no `affected_urls` rows, read through the reader's live path (`040` task 3.14). Verify: red → green; one commit.
 - [ ] 1.4 Drive `Issue list › Filters combine` (CLI): comma-separated, repeatable, case-insensitive values. Verify: red → green; one commit.
@@ -26,8 +26,8 @@ Every group ends with a docs task and a review task.
 - [ ] 1.10 Drive `Issue detail › The reproducing query of the Rule` (Services): `reproduce_sql` in `rule`. Verify: red → green; one commit.
 - [ ] 1.11 Drive `Issue detail › Detail of an Affected URL` (Services). Verify: red → green; one commit.
 - [ ] 1.12 Drive `Issue detail › Unknown rule id` (CLI): 040's `rule_not_found`, checked against the Crawl's `rules` table, with `details.suggestions` from it (design D14). Verify: red → green; one commit.
-- [ ] 1.13 Drive `Issue list › Issues of a fixture Crawl on every OS` (CLI and 3, real subprocesses on the Windows, macOS and Linux CI jobs, through `run_cli_process`), after `040`'s group 4 (`internal-4xx` and `title-missing` with their queries) and `030`'s group 2 (the title columns): add the `/e2e/` fixture pages, with `/e2e/gone` a `Status(404)` route; `spider crawl` then `spider issues`. This is the thin slice's end-to-end test. Verify: red → green on all three OSes; one commit.
-- [ ] 1.14 Docs: in `docs/querying.md`, document `spider issues` and `spider issues <rule-id>`: the order, the filters, `affected_count`, `detail`, `reproduce_sql`, and that a `running`, `failed` or `interrupted` Crawl's Issues are computed live on every call. Until group 6, Affected URLs come in `url` order. Verify: every flag is documented.
+- [ ] 1.13 Drive `Issue list › Issues of a fixture Crawl on every OS` (CLI and 3, real subprocesses on the Windows, macOS and Linux CI jobs, through `run_cli_process`), after `040`'s group 4 (`internal-4xx` and `title-missing` with their queries) and `030`'s group 2 (the title columns): add the `/e2e/` fixture pages, with `/e2e/gone` a `Status(404)` route; `linx crawl` then `linx issues`. This is the thin slice's end-to-end test. Verify: red → green on all three OSes; one commit.
+- [ ] 1.14 Docs: in `docs/querying.md`, document `linx issues` and `linx issues <rule-id>`: the order, the filters, `affected_count`, `detail`, `reproduce_sql`, and that a `running`, `failed` or `interrupted` Crawl's Issues are computed live on every call. Until group 6, Affected URLs come in `url` order. Verify: every flag is documented.
 - [ ] 1.15 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 2. The basic `--where` language (seam 4: Pure-logic)
@@ -35,7 +35,7 @@ Every group ends with a docs task and a review task.
 - [ ] 2.1 Drive `Where filter language › Comparison`: a tokenizer, a recursive-descent parser and a Core compiler for `column compare literal`, evaluated on an in-memory SQLite table defined by the test. Verify: red → green; one commit.
 - [ ] 2.2 Drive `Where filter language › and requires both`. Verify: red → green; one commit.
 - [ ] 2.3 Drive `Where filter language › Column names are case-insensitive`. Verify: red → green; one commit.
-- [ ] 2.4 Drive `Where filter language › contains ignores case in any script`: the `spider_contains` casefold function. Verify: red → green; one commit.
+- [ ] 2.4 Drive `Where filter language › contains ignores case in any script`: the `openlinx_contains` casefold function. Verify: red → green; one commit.
 - [ ] 2.5 Drive `Where filter language › is null and is not null`. Verify: red → green; one commit.
 - [ ] 2.6 Drive the pair `Where filter language › Doubled quotes inside a string` and `› Double-quoted string`. Verify: red → green; one commit.
 - [ ] 2.7 Drive `Where filter language › Boolean literal`. Verify: red → green; one commit.
@@ -49,8 +49,8 @@ Every group ends with a docs task and a review task.
 
 - [ ] 3.1 Drive `Query Commands read the selected Crawl without changing it › A specific Crawl is selected` (Services). Add the Query Service `pages` entry point, using 015's `--crawl` resolution and returning `total`. Verify: red → green; one commit.
 - [ ] 3.2 Drive `Page listing › Default fields` (Services): the six default fields in 010's envelope. Verify: red → green; one commit.
-- [ ] 3.3 Drive the pair `Page listing › Selected fields` and `› All fields` (Services): the available fields are the `pages` columns in `spider schema` order. Verify: red → green; one commit.
-- [ ] 3.4 Drive `Unknown names in --where, --sort and --fields › Unknown field in --fields` (CLI): the `spider pages` Typer command, raising 010's `unknown_field`. Verify: red → green; one commit.
+- [ ] 3.3 Drive the pair `Page listing › Selected fields` and `› All fields` (Services): the available fields are the `pages` columns in `linx schema` order. Verify: red → green; one commit.
+- [ ] 3.4 Drive `Unknown names in --where, --sort and --fields › Unknown field in --fields` (CLI): the `linx pages` Typer command, raising 010's `unknown_field`. Verify: red → green; one commit.
 - [ ] 3.5 Drive `Page listing › Filtered listing` (CLI): wire `--where` into `pages`. Verify: red → green; one commit.
 - [ ] 3.6 Drive `Query error codes › Error shape` (CLI). Verify: red → green; one commit.
 - [ ] 3.7 Drive `Unknown names in --where, --sort and --fields › Unknown column in --where` (CLI): `unknown_column` with `details.suggestions` from `difflib`. Verify: red → green; one commit.
@@ -70,7 +70,7 @@ Every group ends with a docs task and a review task.
 - [ ] 3.21 Drive `Cursors are bound to the query › A cursor is reused with another filter` (CLI): pass the Crawl, `--where` and `--sort` to 010's cursor binding. Verify: red → green; one commit.
 - [ ] 3.22 Drive `Page listing › Non-ASCII titles on the Windows console` (CLI, real subprocess, Windows-only). Verify: red → green on the Windows CI job; one commit.
 - [ ] 3.23 Drive `Where filter language › Non-ASCII literal passed on the Windows command line` (CLI, real subprocess, Windows-only). Verify: red → green on the Windows CI job; one commit.
-- [ ] 3.24 Docs: in `docs/querying.md`, document `spider pages`: the default fields, `--fields all`, the `--sort` syntax (with `--sort=-col` for shells that read a leading `-` as a flag), and paging, with what is served by `pages_address` and what scans (design D15). Verify: every flag of `pages` is documented.
+- [ ] 3.24 Docs: in `docs/querying.md`, document `linx pages`: the default fields, `--fields all`, the `--sort` syntax (with `--sort=-col` for shells that read a leading `-` as a flag), and paging, with what is served by `pages_address` and what scans (design D15). Verify: every flag of `pages` is documented.
 - [ ] 3.25 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 4. `page <url>` (seams 2: Services, 1: CLI, 3+6)
@@ -85,7 +85,7 @@ Every group ends with a docs task and a review task.
 - [ ] 4.8 Drive `Response headers of a URL › No headers member by default` (Services). Verify: red → green; one commit.
 - [ ] 4.9 Drive `Response headers of a URL › Headers not recorded` (CLI). Verify: red → green; one commit.
 - [ ] 4.10 Drive `Response headers of a URL › Cookie values are not shown` (3+6: crawl the fixture page `/cookie`, then run `page --headers`). Verify: red → green; one commit.
-- [ ] 4.11 Docs: in `docs/querying.md`, document `spider page`: its members, `--headers` with redacted cookies, and `headers_not_stored`. Verify: every member of the `page` output is documented.
+- [ ] 4.11 Docs: in `docs/querying.md`, document `linx page`: its members, `--headers` with redacted cookies, and `headers_not_stored`. Verify: every member of the `page` output is documented.
 - [ ] 4.12 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 5. `summary` (seams 2: Services, 1: CLI, 3+6)
@@ -141,7 +141,7 @@ Every group ends with a docs task and a review task.
 - [ ] 7.12 Drive `SQL errors, timeout and query files › Timeout` (CLI): the progress-handler timeout. Verify: red → green; one commit.
 - [ ] 7.13 Drive `SQL errors, timeout and query files › Query given twice` (CLI). Verify: red → green; one commit.
 - [ ] 7.14 Drive `SQL errors, timeout and query files › Query file with a byte-order mark on Windows` (CLI, real subprocess, Windows-only). Verify: red → green on the Windows CI job; one commit.
-- [ ] 7.15 Docs: in `docs/querying.md`, document `spider sql`: what is refused and why, the result shape, `--limit`, `--timeout`, `--file`, and a pointer to `spider schema`. Verify: every refused statement class is listed.
+- [ ] 7.15 Docs: in `docs/querying.md`, document `linx sql`: what is refused and why, the result shape, `--limit`, `--timeout`, `--file`, and a pointer to `linx schema`. Verify: every refused statement class is listed.
 - [ ] 7.16 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 8. Cross-cutting checks (seam 1: CLI)
@@ -159,7 +159,7 @@ Every group ends with a docs task and a review task.
 - [ ] 9.2 (v0.2) Drive `Where filter language › Parentheses override precedence`. Verify: red → green; one commit.
 - [ ] 9.3 (v0.2) Drive `Where filter language › not`. Verify: red → green; one commit.
 - [ ] 9.4 (v0.2) Drive `Where filter language › Keywords are case-insensitive`. Verify: red → green; one commit.
-- [ ] 9.5 (v0.2) Drive `Where filter language › Regular expression`: the `spider_regexp` SQLite function with a pattern cache. Verify: red → green; one commit.
+- [ ] 9.5 (v0.2) Drive `Where filter language › Regular expression`: the `openlinx_regexp` SQLite function with a pattern cache. Verify: red → green; one commit.
 - [ ] 9.6 (v0.2) Drive the pair `Where filter language › Regular expressions are case-sensitive by default` and `› Case-insensitive regular expression`. Verify: red → green; one commit.
 - [ ] 9.7 (v0.2) Drive `Where filter language › Negated regular expression`. Verify: red → green; one commit.
 - [ ] 9.8 (v0.2) Drive `Where filter language › Backslashes reach the regular expression unchanged`. Verify: red → green; one commit.
@@ -179,10 +179,10 @@ Every group ends with a docs task and a review task.
 - [ ] 10.3 (v0.2) Drive `CSV policy › Formula-like text is neutralised` (CLI). Verify: red → green; one commit.
 - [ ] 10.4 (v0.2) Drive `CSV policy › Numbers are unchanged` (CLI). Verify: red → green; one commit.
 - [ ] 10.5 (v0.2) Drive `CSV policy › Nested value and null` (CLI). Verify: red → green; one commit.
-- [ ] 10.6 (v0.2) Drive `CSV policy › A document is one CSV row` (CLI): `csv` for document Commands, and for `spider init`. Verify: red → green; one commit.
+- [ ] 10.6 (v0.2) Drive `CSV policy › A document is one CSV row` (CLI): `csv` for document Commands, and for `linx init`. Verify: red → green; one commit.
 - [ ] 10.7 (v0.2) Drive `CSV format › Rows as CSV` (CLI): `csv` for rows Commands, written and flushed row by row. Verify: red → green; one commit.
 - [ ] 10.8 (v0.2) Drive `CSV format › More items notice in CSV` (CLI): the info line `more_items` for `csv` too. Verify: red → green; one commit.
-- [ ] 10.9 (v0.2) Pin `CSV format › spider commands refuses CSV` (CLI). The test passes on its first run, because `spider commands` keeps `json` and `table`, and it is kept to pin the contract. Verify: green; one commit.
+- [ ] 10.9 (v0.2) Pin `CSV format › linx commands refuses CSV` (CLI). The test passes on its first run, because `linx commands` keeps `json` and `table`, and it is kept to pin the contract. Verify: green; one commit.
 - [ ] 10.10 (v0.2) Drive `Writing output to a file with -o › Output goes to the file` (CLI): `OutputOpt`, written to a temporary file in the target folder and then moved into place with `os.replace`. Verify: red → green; one commit.
 - [ ] 10.11 (v0.2) Drive `Writing output to a file with -o › Nothing on stdout with -o` (CLI). Verify: red → green; one commit.
 - [ ] 10.12 (v0.2) Drive `Writing output to a file with -o › The written file is reported` (CLI): the info line `output_written`. Verify: red → green; one commit.
@@ -191,10 +191,10 @@ Every group ends with a docs task and a review task.
 - [ ] 10.15 (v0.2) Drive `Writing output to a file with -o › Target held open on Windows` (CLI, real subprocess, Windows-only): a Windows-only helper process holds the file open without sharing. Green: `output_not_writable` with exit code 7, after up to 1 s of retries. Verify: red → green on the Windows CI job; one commit.
 - [ ] 10.16 (v0.2) Drive the pair `Global flags --no-bom and -o › -o after the Command name` and `› -o before the Command name` (CLI): add `--no-bom` and `--output` to 010's `argv` check for global flags. Verify: red → green; one commit.
 - [ ] 10.17 (v0.2) Drive `Global flags --no-bom and -o › Global output flags of init` (CLI): `global` in the option metadata of `NoBomOpt` and `OutputOpt`. Verify: red → green; one commit.
-- [ ] 10.18 (v0.2) Drive `Global flags --no-bom and -o › Output-file flags have no settings key` (CLI): `"setting":null` for `--no-bom` and `--output`, and no `spider.toml` key for them in 010's settings registry. Verify: red → green; one commit.
+- [ ] 10.18 (v0.2) Drive `Global flags --no-bom and -o › Output-file flags have no settings key` (CLI): `"setting":null` for `--no-bom` and `--output`, and no `openlinx.toml` key for them in 010's settings registry. Verify: red → green; one commit.
 - [ ] 10.19 (v0.2) Drive the pair `CSV format › Formats of a document Command` and `› Formats of a list Command` (CLI). Verify: red → green; one commit.
 - [ ] 10.20 (v0.2) Drive the pair `Diagnostic codes of output files › Error code of output files` and `› Info line of output files` (CLI): register `output_not_writable` (exit code 7) and `output_written`. Verify: red → green; one commit.
-- [ ] 10.21 (v0.2) Update the `init` entry of 010's hand-written contract JSON in `tests/contract/commands/`: `"formats":["json","table","csv"]`, and the options `--no-bom` and `--output` with `"global":true` and `"setting":null`. Edit it by hand, never by regenerating it. Verify: 010's `Self-description with spider commands › Same description on every OS` is green on Windows, macOS and Linux; one commit.
+- [ ] 10.21 (v0.2) Update the `init` entry of 010's hand-written contract JSON in `tests/contract/commands/`: `"formats":["json","table","csv"]`, and the options `--no-bom` and `--output` with `"global":true` and `"setting":null`. Edit it by hand, never by regenerating it. Verify: 010's `Self-description with linx commands › Same description on every OS` is green on Windows, macOS and Linux; one commit.
 - [ ] 10.22 (v0.2) Docs: in `docs/cli.md`, add `csv` to the formats, the CSV policy with a `--no-bom` example, and `-o` with a PowerShell example. Verify: every rule of the requirements `CSV format`, `CSV policy` and `Writing output to a file with -o` is documented.
 - [ ] 10.23 (v0.2) Review: run the code-review skill on group 10's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
@@ -211,7 +211,7 @@ Every group ends with a docs task and a review task.
 
 ## 12. (v0.2) Segments (seams 2: Services, 1: CLI)
 
-- [ ] 12.1 (v0.2) Drive `Segment definitions in spider.toml › Membership follows the expressions` (Services): read `[segments]` in document order, compile it to one CASE expression, and offer the `segment` field. Verify: red → green; one commit.
+- [ ] 12.1 (v0.2) Drive `Segment definitions in openlinx.toml › Membership follows the expressions` (Services): read `[segments]` in document order, compile it to one CASE expression, and offer the `segment` field. Verify: red → green; one commit.
 - [ ] 12.2 (v0.2) Drive `First match wins › Overlapping Segments` (Services, through `page`). Verify: red → green; one commit.
 - [ ] 12.3 (v0.2) Drive `First match wins › Reordering changes membership` (Services). Verify: red → green; one commit.
 - [ ] 12.4 (v0.2) Drive `First match wins › A Page in no Segment` (Services). Verify: red → green; one commit.
@@ -229,11 +229,11 @@ Every group ends with a docs task and a review task.
 - [ ] 12.16 (v0.2) Drive `The segment field › Sorting by Segment` (Services). Verify: red → green; one commit.
 - [ ] 12.17 (v0.2) Drive `The segment field › segment in --where` (CLI). Verify: red → green; one commit.
 - [ ] 12.18 (v0.2) Drive `Cursors are bound to the query › A cursor is reused with another Segment` (CLI). Verify: red → green; one commit.
-- [ ] 12.19 (v0.2) Drive `Segments are applied at query time › Editing a definition changes the next result` (CLI, with `spider.toml` edited between runs). Verify: red → green; one commit.
+- [ ] 12.19 (v0.2) Drive `Segments are applied at query time › Editing a definition changes the next result` (CLI, with `openlinx.toml` edited between runs). Verify: red → green; one commit.
 - [ ] 12.20 (v0.2) Drive `Segments are applied at query time › Segment changes do not touch the store` (CLI). Verify: red → green; one commit.
 - [ ] 12.21 (v0.2) Drive `Segments are applied at query time › Older Crawls use the current definitions` (CLI). Verify: red → green; one commit.
 - [ ] 12.22 (v0.2) Drive `Per-Segment breakdown in summary › Entries add up to all Pages` (Services): TEMP-table membership, built once per call. Verify: red → green; one commit.
-- [ ] 12.23 (v0.2) Drive `Segment definitions in spider.toml › Segments in file order` (Services). Verify: red → green; one commit.
+- [ ] 12.23 (v0.2) Drive `Segment definitions in openlinx.toml › Segments in file order` (Services). Verify: red → green; one commit.
 - [ ] 12.24 (v0.2) Drive `Per-Segment breakdown in summary › Entry members` (Services). Verify: red → green; one commit.
 - [ ] 12.25 (v0.2) Drive `Per-Segment breakdown in summary › Summary without any Segments defined` (Services). Verify: red → green; one commit.
 - [ ] 12.26 (v0.2) Drive `Per-Segment breakdown in summary › Issues per Segment` (Services). Verify: red → green; one commit.
@@ -266,5 +266,5 @@ Every group ends with a docs task and a review task.
 - [ ] 13.14 (v0.2) Drive `Export views › Unknown view` (CLI). Verify: red → green; one commit.
 - [ ] 13.15 (v0.2) Drive `Export streams its rows › No doubled carriage returns on the Windows console` (CLI, real subprocess, Windows-only). Verify: red → green on the Windows CI job; one commit.
 - [ ] 13.16 (v0.2) Drive `Export streams its rows › Export leaves the store unchanged` (CLI): a SQL dump before and after. Verify: red → green; one commit.
-- [ ] 13.17 (v0.2) Docs: in `docs/querying.md`, document `spider export`: the views and their columns, the Resource definition, the formats with a pointer to the CSV policy in `docs/cli.md`, and opening a CSV in Excel on Windows. Verify: every view and flag is documented.
+- [ ] 13.17 (v0.2) Docs: in `docs/querying.md`, document `linx export`: the views and their columns, the Resource definition, the formats with a pointer to the CSV policy in `docs/cli.md`, and opening a CSV in Excel on Windows. Verify: every view and flag is documented.
 - [ ] 13.18 (v0.2) Review: run the code-review skill on group 13's commits and on the change as a whole against its three specs, then refactor with the whole suite green. Verify: suite green on Windows, macOS and Linux; one commit.

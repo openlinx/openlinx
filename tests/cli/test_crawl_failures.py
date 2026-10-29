@@ -1,4 +1,4 @@
-"""How `spider crawl` fails (020-add-crawl-core D16, crawling; seam 1)."""
+"""How `linx crawl` fails (020-add-crawl-core D16, crawling; seam 1)."""
 
 from pathlib import Path
 from typing import Any
@@ -86,7 +86,7 @@ def test_losing_the_site_is_reported_by_one_error(
         result.exit_code,
         [error["code"] for error in errors],
         errors[-1:] == result.stderr_json_lines()[-1:],
-        [_hint_says(error, "waited 0 seconds", "spider resume --crawl") for error in errors],
+        [_hint_says(error, "waited 0 seconds", "linx resume --crawl") for error in errors],
     ) == (8, ["site_unreachable"], True, [True])
 
 
@@ -109,7 +109,7 @@ def test_an_unreachable_seed_is_reported_by_one_error(temp_workspace: TempWorksp
         [error["code"] for error in errors],
         errors[-1:] == result.stderr_json_lines()[-1:],
         [
-            _hint_says(error, "waited 0 seconds", "sandbox", "spider resume --crawl")
+            _hint_says(error, "waited 0 seconds", "sandbox", "linx resume --crawl")
             for error in errors
         ],
     ) == (["seed_unreachable"], True, [True])

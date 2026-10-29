@@ -3,11 +3,11 @@ executor that holds Pages beyond the requests in flight, as 026's pool does."""
 
 from datetime import UTC, datetime
 
-from spider.crawl.fetch.fetcher import FetchResult
-from spider.crawl.pages.preparation import PageSettings, PreparedPage, prepare_page
-from spider.crawl.references import DiscoveredLink
-from spider.crawl.scope import scope_rules
-from spider.crawl.urls import NormalizedUrl
+from openlinx.crawl.fetch.fetcher import FetchResult
+from openlinx.crawl.pages.preparation import PageSettings, PreparedPage, prepare_page
+from openlinx.crawl.references import DiscoveredLink
+from openlinx.crawl.scope import scope_rules
+from openlinx.crawl.urls import NormalizedUrl
 
 
 def page_links(

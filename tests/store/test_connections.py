@@ -4,14 +4,14 @@ from pathlib import PurePath, PurePosixPath, PureWindowsPath
 
 import pytest
 
-from spider.store.connections import file_uri
+from openlinx.store.connections import file_uri
 
 
 @pytest.mark.parametrize(
     ("path", "uri"),
     [
         (PurePosixPath("/home/ann/site/c.sqlite"), "file:///home/ann/site/c.sqlite"),
-        (PureWindowsPath(r"C:\site\.spider\c.sqlite"), "file:///C:/site/.spider/c.sqlite"),
+        (PureWindowsPath(r"C:\site\.openlinx\c.sqlite"), "file:///C:/site/.openlinx/c.sqlite"),
         (
             PureWindowsPath(r"\\fileserver\share\site\c.sqlite"),
             "file:////fileserver/share/site/c.sqlite",

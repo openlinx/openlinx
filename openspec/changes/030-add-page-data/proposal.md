@@ -6,14 +6,14 @@
 
 > **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the minimum. **Deferred to v0.2:** Flesch Reading Ease, the Readability band and the syllable count; `--detect-language` and py3langid; SERP pixel widths; and raw HTML storage (`page_sources`, zstd, `--store-html/--no-store-html`). Their columns and the `page_sources` table exist in v0.1 and stay empty, so v0.2 fills them without a migration (ADR-0005). HTML storage is opt-in when it arrives (decided 2026-10-11: in the store benchmark, HTML was about 70% of the crawl file).
 
-- **New crawl-store tables.** Each follows the schema conventions of `018-add-schema-conventions` (ADR-0005: a `STRICT` table, with CHECKs on its enumerations and flags), is described column by column in `spider schema` and is documented in `docs/schema.md`. Every table and column is added in the TDD slice whose scenario first needs it.
+- **New crawl-store tables.** Each follows the schema conventions of `018-add-schema-conventions` (ADR-0005: a `STRICT` table, with CHECKs on its enumerations and flags), is described column by column in `linx schema` and is documented in `docs/schema.md`. Every table and column is added in the TDD slice whose scenario first needs it.
   - `pages`: one row per Page, keyed by `url_id`, with one unique index on `address`. This is the flat Page record of 96 columns, the Internal-tab columns and the small additions below: identity and response, titles and headings, directives, size, content, links and structured data.
   - `links`: one row per Link that `020-add-crawl-core` discovers, enriched with what analysis needs: the element and attribute, anchor or alt text, `rel` flags, where the Link was declared, its position on the Page (navigation, header, footer, sidebar or content) and, from v1.1, whether it came from the raw or the rendered HTML. The Link types are `020`'s `LinkType` list. A target's Internal flag is read from `urls`.
   - `cookies`: one row per `Set-Cookie` header on a Page's response, whatever its status, with the name and attributes. The value is never stored.
   - `page_sources`: the HTML of Pages, stored as zstd frames when HTML storage is turned on (v0.2). The table exists and is empty in v0.1.
 - **Indexability and Indexability Status** for every Page, using fixed status codes: `blocked_by_robots_txt`, `redirected`, `client_error`, `server_error`, `noindex` and `canonicalised`.
 - **Robots directives.** The directive columns store the raw text plus the noindex/nofollow verdicts of `020-add-crawl-core`'s robots directives parser. This change adds no parsing rules of its own.
-- **Content Area.** By default it excludes `nav`, `header` and `footer`. It can be configured in a new `[content_area]` table in `spider.toml`, with `include` and `exclude` lists of CSS selectors.
+- **Content Area.** By default it excludes `nav`, `header` and `footer`. It can be configured in a new `[content_area]` table in `openlinx.toml`, with `include` and `exclude` lists of CSS selectors.
 - **Content metrics over the Content Area:**
   - Word Count, Sentence Count and Average Words per Sentence; **(v0.2)** the syllable count
   - **(v0.2)** Flesch Reading Ease and a Readability band, for Pages that declare one of seven languages (en, de, es, fr, nl, pt, ru)
@@ -32,7 +32,7 @@
   - per-source noindex/nofollow flags
   - `syllable_count`
   - `jsonld_parse_error_count`
-- **New `crawl` flags and their `spider.toml` equivalents under `[crawl]`, both from v0.2:**
+- **New `crawl` flags and their `openlinx.toml` equivalents under `[crawl]`, both from v0.2:**
   - `--store-html` / `--no-store-html` (`store_html = true | false`). HTML is not stored unless storage is turned on. The decision is made when the Crawl starts, recorded, and kept on resume.
   - `--detect-language` (`detect_language = false`) also stores the language detected from the Content Area text.
 - **Columns measured by later releases** exist now and stay NULL:
@@ -40,7 +40,7 @@
   - `closest_similarity_pct` and `near_duplicate_count` (v0.3)
   - `structured_data_errors` and `structured_data_warnings` (v0.3)
   - `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count` (v1.1)
-- No new Commands or MCP tools. The new tables appear in `spider schema` and can be read with `spider sql`, `pages`, `page` and `export` (`050`).
+- No new Commands or MCP tools. The new tables appear in `linx schema` and can be read with `linx sql`, `pages`, `page` and `export` (`050`).
 
 ## Capabilities
 
@@ -63,17 +63,17 @@ _None._ This change builds on requirements of `010`, `015`, `017`, `018`, `020` 
 
 ## Impact
 
-- **Depends on `010-add-workspace-and-cli-contract`** for `spider.toml` loading and flag > file > default precedence, `settings_invalid` errors, and the flag-mirroring rule for settings keys.
+- **Depends on `010-add-workspace-and-cli-contract`** for `openlinx.toml` loading and flag > file > default precedence, `settings_invalid` errors, and the flag-mirroring rule for settings keys.
 - **Depends on `015-add-crawl-store`** for:
   - the table conventions (names, units, timestamps, booleans, JSON, enumerations, NULL)
-  - `docs/schema.md` and its contract test, `spider schema` and the transactional writer
+  - `docs/schema.md` and its contract test, `linx schema` and the transactional writer
   - the Crawl's recorded config
 - **Depends on `017-speed-up-crawl-writer`** for `submit_async()` and its unit rules: deterministic units that return values only, and statements built once.
-- **Depends on `018-add-schema-conventions`** (ADR-0005) for `public_table()` (`STRICT` tables, CHECKs from listed values and flags), references and indexes in `spider schema`, and the `Derived: ` and `Filled from v<major>.<minor>. ` description prefixes.
+- **Depends on `018-add-schema-conventions`** (ADR-0005) for `public_table()` (`STRICT` tables, CHECKs from listed values and flags), references and indexes in `linx schema`, and the `Derived: ` and `Filled from v<major>.<minor>. ` description prefixes.
 - **Depends on `020-add-crawl-core`** for:
   - the `urls` table: `is_internal`, `in_scope`, `fetch_state`, `content_type`, `parsed`, `blocked_by_robots_txt`, `crawl_depth` and `fetched_at`
   - Link discovery, `DiscoveredLink` and the `LinkType` list, the robots directives parser and page preparation with its extractors
-  - the hooks: pure per-response handlers that return store rows, post-crawl passes that are store functions, and `default_hooks()` in `spider.services.hooks`, the composition root (its design D9 and D14)
+  - the hooks: pure per-response handlers that return store rows, post-crawl passes that are store functions, and `default_hooks()` in `openlinx.services.hooks`, the composition root (its design D9 and D14)
   - the injectable clock
 - **Depends on `022-add-fetch-policy`** for:
   - `redirect_url_id`, `size_bytes`, `transferred_bytes` and `content_encoding` on `urls`
@@ -87,7 +87,7 @@ _None._ This change builds on requirements of `010`, `015`, `017`, `018`, `020` 
   - `060` records the new settings in the equivalent command, or warns when they cannot be written as flags.
   - `070` builds the Report.
   - `080` generates the Skill's column reference from the column descriptions.
-- **Code:** `src/spider/extract/` (the Page extractor and the Page handler, content, readability, pixel widths, structured data, Link attributes), `src/spider/store/` (the tables in `spider.store.schema`, their row values in `spider.store.page_records`, and their writers and the inlink pass in `spider.store.pages` and `spider.store.links`), `spider.services.hooks` (`default_hooks()` lists them) and `docs/schema.md`.
+- **Code:** `src/openlinx/extract/` (the Page extractor and the Page handler, content, readability, pixel widths, structured data, Link attributes), `src/openlinx/store/` (the tables in `openlinx.store.schema`, their row values in `openlinx.store.page_records`, and their writers and the inlink pass in `openlinx.store.pages` and `openlinx.store.links`), `openlinx.services.hooks` (`default_hooks()` lists them) and `docs/schema.md`.
 - **Dependencies:**
   - `zstandard` (v0.2), shared with `022-add-fetch-policy`
   - `py3langid` (v0.2), imported only when `--detect-language` is set

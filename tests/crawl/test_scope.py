@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 
-from spider.crawl.references import DiscoveredLink
-from spider.crawl.scope import ScopeDecision, ScopeRules, apex_seed_named_by_page, scope_rules
-from spider.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url, parse_seed
-from spider.store.records import LinkType
+from openlinx.crawl.references import DiscoveredLink
+from openlinx.crawl.scope import ScopeDecision, ScopeRules, apex_seed_named_by_page, scope_rules
+from openlinx.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url, parse_seed
+from openlinx.store.records import LinkType
 
 
 def test_the_other_scheme_of_the_seed_host_is_internal() -> None:

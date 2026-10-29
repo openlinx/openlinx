@@ -15,7 +15,7 @@ def test_invalid_selector_stops_the_crawl(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(Site(routes={"/": Page(body=FIXTURE_A)}))
-    (temp_workspace.root / "spider.toml").write_bytes(b'[content_area]\nexclude = ["nav["]\n')
+    (temp_workspace.root / "openlinx.toml").write_bytes(b'[content_area]\nexclude = ["nav["]\n')
 
     result = run_cli("crawl", server.url("/"))
 
@@ -34,7 +34,7 @@ def test_a_crawl_records_its_content_area(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(Site(routes={"/": Page(body=FIXTURE_A)}))
-    (temp_workspace.root / "spider.toml").write_bytes(
+    (temp_workspace.root / "openlinx.toml").write_bytes(
         b'[content_area]\ninclude = ["main", "article"]\nexclude = []\n'
     )
 
@@ -43,11 +43,11 @@ def test_a_crawl_records_its_content_area(
     assert config["content_area"] == {"include": ["main", "article"], "exclude": []}
 
 
-def test_the_content_area_of_spider_toml_reaches_the_page_extractor(
+def test_the_content_area_of_openlinx_toml_reaches_the_page_extractor(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(Site(routes={"/": Page(body=FIXTURE_A)}))
-    (temp_workspace.root / "spider.toml").write_bytes(b"[content_area]\nexclude = []\n")
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[content_area]\nexclude = []\n")
 
     crawl_file = crawled(server.url("/"))
 

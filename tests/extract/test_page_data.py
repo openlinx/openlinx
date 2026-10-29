@@ -7,9 +7,9 @@ from types import FrameType
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.extract.text import element_text
-from spider.store.page_records import PageRow
-from spider.store.schema import pages
+from openlinx.extract.text import element_text
+from openlinx.store.page_records import PageRow
+from openlinx.store.schema import pages
 from tests.support.page_data import page_row
 
 

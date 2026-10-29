@@ -2,24 +2,24 @@
 
 from datetime import UTC, datetime
 
-from spider.crawl.engine.hooks import UrlResponse, UrlResult
-from spider.crawl.fetch.fetcher import FetchResult
-from spider.crawl.pages.preparation import (
+from openlinx.crawl.engine.hooks import UrlResponse, UrlResult
+from openlinx.crawl.fetch.fetcher import FetchResult
+from openlinx.crawl.pages.preparation import (
     PageSettings,
     prepare_page,
     response_directives,
     response_links,
 )
-from spider.crawl.scope import scope_rules
-from spider.crawl.urls import NormalizedUrl
-from spider.extract.content_area import ContentArea
-from spider.extract.link_handler import link_rows
-from spider.extract.page_data import PAGE_DATA, page_data_extractor
-from spider.extract.page_handler import page_rows
-from spider.extract.status_phrases import STATUS_PHRASES
-from spider.naming import DEFAULT_ROBOTS_TOKEN
-from spider.services.hooks import default_hooks
-from spider.store.page_records import LinkRow, PageRow
+from openlinx.crawl.scope import scope_rules
+from openlinx.crawl.urls import NormalizedUrl
+from openlinx.extract.content_area import ContentArea
+from openlinx.extract.link_handler import link_rows
+from openlinx.extract.page_data import PAGE_DATA, page_data_extractor
+from openlinx.extract.page_handler import page_rows
+from openlinx.extract.status_phrases import STATUS_PHRASES
+from openlinx.naming import DEFAULT_ROBOTS_TOKEN
+from openlinx.services.hooks import default_hooks
+from openlinx.store.page_records import LinkRow, PageRow
 
 _URL = NormalizedUrl("https://site.test/")
 # The spec's fixture A, which later scenarios refer to.

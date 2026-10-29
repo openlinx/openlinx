@@ -1,4 +1,4 @@
-"""Writes src/spider/extract/unicode_scripts.py: the character classes of the word rule and of the
+"""Writes src/openlinx/extract/unicode_scripts.py: the character classes of the word rule and of the
 address display (030-add-page-data D8), from one Unicode version's Scripts.txt and
 DerivedGeneralCategory.txt, so no column depends on the interpreter's own Unicode version.
 
@@ -14,7 +14,9 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-_OUT = Path(__file__).resolve().parent.parent / "src" / "spider" / "extract" / "unicode_scripts.py"
+_OUT = (
+    Path(__file__).resolve().parent.parent / "src" / "openlinx" / "extract" / "unicode_scripts.py"
+)
 _SCRIPTS = frozenset({"Han", "Hiragana", "Katakana"})
 # The prolonged sound mark is Common in Scripts.txt; the spec counts it as a kana.
 _PROLONGED_SOUND_MARK = 0x30FC

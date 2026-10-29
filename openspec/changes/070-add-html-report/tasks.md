@@ -12,9 +12,9 @@ Every group ends with a docs task and a review task.
 
 ## 1. Report Section registry and `report brief --list` (seams 1: CLI, 2: Services)
 
-- [ ] 1.1 Drive `Choosing a Report Section › Listed ids` (CLI): the Report Section registry (kebab-case id, title, order) and `spider report brief --list`. Verify: red → green; one commit.
+- [ ] 1.1 Drive `Choosing a Report Section › Listed ids` (CLI): the Report Section registry (kebab-case id, title, order) and `linx report brief --list`. Verify: red → green; one commit.
 - [ ] 1.2 Drive `Fixed Report Sections › The category mapping` (CLI): the registry's snake_case 040 category ids. Verify: red → green; one commit.
-- [ ] 1.3 Drive `Fixed Report Sections › Every Rule category has a Report Section` (CLI, against 040's `spider rules list`). Verify: red → green; one commit.
+- [ ] 1.3 Drive `Fixed Report Sections › Every Rule category has a Report Section` (CLI, against 040's `linx rules list`). Verify: red → green; one commit.
 - [ ] 1.4 Drive `Choosing a Report Section › Applicability without Segments` (Services), using 050's Segment resolution. Verify: red → green; one commit.
 - [ ] 1.5 Drive `Choosing a Report Section › Issue counts per Report Section` (Services): `issues` and `affected_count` per entry. Verify: red → green; one commit.
 - [ ] 1.6 Drive `Choosing a Report Section › Accepted values for agents` (CLI): the `--section` Choice subclass. Verify: red → green; one commit.
@@ -44,7 +44,7 @@ Every group ends with a docs task and a review task.
 
 ## 3. The HTML file: destination, receipt and safety (seams 1: CLI, 7: Report)
 
-- [ ] 3.1 Drive `Report files › Default location` (CLI): the Report Service, a minimal Jinja2 template with autoescaping, and the default destination `.spider/reports/<crawl id>/`. Verify: red → green; one commit.
+- [ ] 3.1 Drive `Report files › Default location` (CLI): the Report Service, a minimal Jinja2 template with autoescaping, and the default destination `.openlinx/reports/<crawl id>/`. Verify: red → green; one commit.
 - [ ] 3.2 Drive `Report files › Default CSV folder` (CLI). Verify: red → green; one commit.
 - [ ] 3.3 Drive `Report receipt › Receipt without notes` (CLI). Verify: red → green; one commit.
 - [ ] 3.4 Drive `Report receipt › -o redirects the receipt` (CLI), relying on 050's `-o`. Verify: red → green; one commit.

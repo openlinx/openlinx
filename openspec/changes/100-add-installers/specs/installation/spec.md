@@ -1,6 +1,6 @@
 ## Purpose
 
-Installs, upgrades and checks spider with one command per operating system, and publishes each release to PyPI and GitHub with the artifacts that people and agents install from.
+Installs, upgrades and checks OpenLinx with one command per operating system, and publishes each release to PyPI and GitHub with the artifacts that people and agents install from.
 
 ## ADDED Requirements
 
@@ -24,7 +24,7 @@ Both scripts SHALL accept the same options:
 | `--dry-run` | `-DryRun` |
 | `--help` | `-Help` |
 
-Options SHALL be passable to piped scripts: `curl … | sh -s -- <options>`, and `& ([scriptblock]::Create((irm <url>))) <options>` in PowerShell. `OWNER/REPO` and the package and command name `spider` are placeholders until the product name is chosen.
+Options SHALL be passable to piped scripts: `curl … | sh -s -- <options>`, and `& ([scriptblock]::Create((irm <url>))) <options>` in PowerShell. `OWNER/REPO` and the package and command name `linx` are placeholders until the product name is chosen.
 
 #### Scenario: Unknown option in sh
 - **WHEN** `sh scripts/install.sh --bogus` runs
@@ -42,11 +42,11 @@ The scripts SHALL decide their actions in this order:
 4. verification
 5. the Skill
 
-With `--dry-run`, they SHALL print each action on its own line, as `would run: <exact command>` or `would ask: <question>`, and exit 0. Commands of the installed tool SHALL appear by name (`spider …`), not by path. A dry run SHALL NOT download, install or change anything. It may only ask uv for its version, its installed tools and its bin folder.
+With `--dry-run`, they SHALL print each action on its own line, as `would run: <exact command>` or `would ask: <question>`, and exit 0. Commands of the installed tool SHALL appear by name (`linx …`), not by path. A dry run SHALL NOT download, install or change anything. It may only ask uv for its version, its installed tools and its bin folder.
 
 #### Scenario: First install plan
 - **WHEN** `sh scripts/install.sh --dry-run` runs with uv 0.12 on PATH, no tool installed, and an empty home folder
-- **THEN** stdout contains the line `would run: uv tool install --python 3.14 spider`
+- **THEN** stdout contains the line `would run: uv tool install --python 3.14 openlinx`
 
 #### Scenario: Dry run changes nothing
 - **WHEN** `sh scripts/install.sh --dry-run --yes` runs with uv 0.12 on PATH and a home folder that holds only a `.claude` folder
@@ -77,7 +77,7 @@ When no uv is found, the scripts SHALL install it with Astral's official install
 - **THEN** `<home>/.local/bin/uv` exists after the run
 
 ### Requirement: Install with a pinned Python
-On first install the scripts SHALL run `uv tool install --python 3.14 spider`. With `--package <spec>` they SHALL run `uv tool install --python 3.14 --reinstall <spec>` instead. The tool therefore always runs on Python 3.14, whichever Python versions are present, and uv downloads Python 3.14 when it is missing.
+On first install the scripts SHALL run `uv tool install --python 3.14 openlinx`. With `--package <spec>` they SHALL run `uv tool install --python 3.14 --reinstall <spec>` instead. The tool therefore always runs on Python 3.14, whichever Python versions are present, and uv downloads Python 3.14 when it is missing.
 
 #### Scenario: Package spec
 - **WHEN** `sh scripts/install.sh --dry-run --package <wheel>` runs with uv 0.12 on PATH, where `<wheel>` is the path of the locally built wheel
@@ -85,34 +85,34 @@ On first install the scripts SHALL run `uv tool install --python 3.14 spider`. W
 
 #### Scenario: Successful install
 - **WHEN** `sh scripts/install.sh --no-skill --package <wheel>` runs on a CI runner with a new temporary home folder
-- **THEN** the exit code is 0, and `spider --version`, run from uv's tool bin folder, prints the version of `<wheel>`
+- **THEN** the exit code is 0, and `linx --version`, run from uv's tool bin folder, prints the version of `<wheel>`
 
 ### Requirement: Re-running upgrades
-When uv lists spider as an installed tool and `--package` is not given, the scripts SHALL run `uv tool upgrade spider`. With `--package` they SHALL reinstall from that spec. Either way, they SHALL print `spider <old> -> <new>` when the version changed, and `spider is already up to date` when it did not. Running the scripts again SHALL be safe at any time.
+When uv lists OpenLinx as an installed tool and `--package` is not given, the scripts SHALL run `uv tool upgrade openlinx`. With `--package` they SHALL reinstall from that spec. Either way, they SHALL print `linx <old> -> <new>` when the version changed, and `linx is already up to date` when it did not. Running the scripts again SHALL be safe at any time.
 
 #### Scenario: Upgrade plan
 - **WHEN** `sh scripts/install.sh --dry-run` runs after `<wheel>` was installed as a uv tool
-- **THEN** stdout contains the line `would run: uv tool upgrade spider`
+- **THEN** stdout contains the line `would run: uv tool upgrade openlinx`
 
 #### Scenario: Upgrade reported
 - **WHEN** a wheel built from the same source with the version set to `0.0.1` is installed first, and `sh scripts/install.sh --no-skill --package <wheel>` then runs
-- **THEN** stdout contains `spider 0.0.1 -> <version>`, where `<version>` is the version of `<wheel>`
+- **THEN** stdout contains `linx 0.0.1 -> <version>`, where `<version>` is the version of `<wheel>`
 
 #### Scenario: Already up to date
 - **WHEN** `sh scripts/install.sh --no-skill --package <wheel>` runs twice on the same runner
-- **THEN** the second run exits with code 0, and its stdout contains `spider is already up to date`
+- **THEN** the second run exits with code 0, and its stdout contains `linx is already up to date`
 
 ### Requirement: Verification after install
-After installing or upgrading, the scripts SHALL run `spider --version` and `spider doctor --format table`, using the absolute path in uv's tool bin folder, and SHALL show their output.
-- When `spider --version` fails, the scripts SHALL exit with code 1.
-- When `spider doctor` exits non-zero, the scripts SHALL finish the remaining steps and exit with code 10.
+After installing or upgrading, the scripts SHALL run `linx --version` and `linx doctor --format table`, using the absolute path in uv's tool bin folder, and SHALL show their output.
+- When `linx --version` fails, the scripts SHALL exit with code 1.
+- When `linx doctor` exits non-zero, the scripts SHALL finish the remaining steps and exit with code 10.
 
 #### Scenario: Verification commands
 - **WHEN** `sh scripts/install.sh --dry-run` runs with uv 0.12 on PATH
-- **THEN** stdout contains the lines `would run: spider --version` and `would run: spider doctor --format table`
+- **THEN** stdout contains the lines `would run: linx --version` and `would run: linx doctor --format table`
 
 #### Scenario: Doctor reports a failure
-- **WHEN** `sh scripts/install.sh --no-skill --package <wheel>` runs in a folder whose `spider.toml` contains `[store` and nothing else, so `spider doctor` fails its `workspace` check
+- **WHEN** `sh scripts/install.sh --no-skill --package <wheel>` runs in a folder whose `openlinx.toml` contains `[store` and nothing else, so `linx doctor` fails its `workspace` check
 - **THEN** the exit code is 10
 
 #### Scenario: Install fails
@@ -124,37 +124,37 @@ Unless `--no-skill` is given, the scripts SHALL detect two agents:
 - Claude Code: a `~/.claude` folder, or a `claude` command on PATH
 - Codex: a `~/.codex` folder, or a `codex` command on PATH
 
-For each detected agent, they SHALL ask `Install the spider Skill for <Claude Code|Codex>? [Y/n]`, where Enter means yes, and run `spider skill install --target claude` or `--target codex` for each yes. They SHALL read the answer from the terminal (`/dev/tty` in `install.sh`), not from the piped script.
+For each detected agent, they SHALL ask `Install the OpenLinx Skill for <Claude Code|Codex>? [Y/n]`, where Enter means yes, and run `linx skill install --target claude` or `--target codex` for each yes. They SHALL read the answer from the terminal (`/dev/tty` in `install.sh`), not from the piped script.
 
-With `--yes`, they SHALL install for every detected agent without asking. When no terminal is available and `--yes` is not given, or when no agent is detected, they SHALL print the `spider skill install` command to run later and not ask.
+With `--yes`, they SHALL install for every detected agent without asking. When no terminal is available and `--yes` is not given, or when no agent is detected, they SHALL print the `linx skill install` command to run later and not ask.
 
 #### Scenario: Claude Code detected with --yes
 - **WHEN** `sh scripts/install.sh --dry-run --yes` runs with a home folder that holds a `.claude` folder and no `.codex` folder, and with no `claude` or `codex` command on PATH
-- **THEN** stdout contains the line `would run: spider skill install --target claude` and no line containing `--target codex`
+- **THEN** stdout contains the line `would run: linx skill install --target claude` and no line containing `--target codex`
 
 #### Scenario: Codex detected by its folder
 - **WHEN** `sh scripts/install.sh --dry-run` runs with a home folder that holds only a `.codex` folder
-- **THEN** stdout contains the line `would ask: Install the spider Skill for Codex? [Y/n]`
+- **THEN** stdout contains the line `would ask: Install the OpenLinx Skill for Codex? [Y/n]`
 
 #### Scenario: --no-skill
 - **WHEN** `sh scripts/install.sh --dry-run --yes --no-skill` runs with a home folder that holds a `.claude` folder
-- **THEN** stdout contains no line containing `spider skill install`
+- **THEN** stdout contains no line containing `linx skill install`
 
 #### Scenario: No terminal to ask
 - **WHEN** `sh scripts/install.sh --package <wheel>` runs without `--yes`, in a new session without a controlling terminal, with a home folder that holds a `.claude` folder
-- **THEN** `<home>/.claude/skills/spider` does not exist after the run, and stdout contains `spider skill install --target claude`
+- **THEN** `<home>/.claude/skills/openlinx` does not exist after the run, and stdout contains `linx skill install --target claude`
 
 #### Scenario: Answer read from the terminal when piped
 - **WHEN** on a Linux runner `cat scripts/install.sh | sh -s -- --package <wheel>` runs under a pseudo-terminal that answers `n`, with a home folder that holds a `.claude` folder
-- **THEN** `<home>/.claude/skills/spider` does not exist after the run
+- **THEN** `<home>/.claude/skills/openlinx` does not exist after the run
 
 #### Scenario: Skill installed on a real runner
 - **WHEN** `sh scripts/install.sh --yes --package <wheel>` runs with a home folder that holds a `.claude` folder
-- **THEN** `<home>/.claude/skills/spider/SKILL.md` exists after the run
+- **THEN** `<home>/.claude/skills/openlinx/SKILL.md` exists after the run
 
 ### Requirement: PATH setup
 When uv's tool bin folder is not on PATH, the scripts SHALL:
-- run `uv tool update-shell`, unless `--no-modify-path` is given, so that new terminals find `spider`
+- run `uv tool update-shell`, unless `--no-modify-path` is given, so that new terminals find `linx`
 - print the one-line command that adds the folder to PATH in the current terminal: `export PATH="<dir>:$PATH"` for POSIX shells, or `$env:Path = "<dir>;$env:Path"` for PowerShell
 
 #### Scenario: PATH update planned
@@ -174,7 +174,7 @@ The scripts SHALL never request elevation, so they SHALL contain no `sudo`, no `
 - folders under the user's home folder: uv, its Python builds and tools, the Skill folders, and shell startup files
 - on Windows, the user-level `Path` variable
 
-When `install.sh` runs as root, it SHALL warn on stderr: `warning: running as root; spider will be installed for the root user only`.
+When `install.sh` runs as root, it SHALL warn on stderr: `warning: running as root; OpenLinx will be installed for the root user only`.
 
 #### Scenario: No elevation in the scripts
 - **WHEN** the text of `scripts/install.sh` and `scripts/install.ps1` is searched
@@ -182,7 +182,7 @@ When `install.sh` runs as root, it SHALL warn on stderr: `warning: running as ro
 
 #### Scenario: Root warning
 - **WHEN** `sudo -E sh scripts/install.sh --dry-run` runs on a Linux CI runner
-- **THEN** stderr contains `warning: running as root; spider will be installed for the root user only`
+- **THEN** stderr contains `warning: running as root; OpenLinx will be installed for the root user only`
 
 ### Requirement: Output and exit codes
 Output SHALL follow these rules:
@@ -191,10 +191,10 @@ Output SHALL follow these rules:
 - Colour SHALL be used only when stdout is a terminal and `NO_COLOR` is not set.
 
 The installers SHALL use their own exit codes, not the CLI's table:
-- 0: installed, and `spider doctor` reported no failed check
-- 1: failed (uv, the package, or `spider --version`)
+- 0: installed, and `linx doctor` reported no failed check
+- 1: failed (uv, the package, or `linx --version`)
 - 2: invalid options
-- 10: installed, but `spider doctor` reported a failed check
+- 10: installed, but `linx doctor` reported a failed check
 
 When a download or install step fails and Codex's `CODEX_SANDBOX_NETWORK_DISABLED` variable is `1`, the hint SHALL explain the fix: approve network access in Codex, or set `network_access = true`. Reading that variable is detection, not a setting.
 
@@ -223,33 +223,33 @@ When `install.ps1` runs inside an existing PowerShell session, through `irm … 
 
 #### Scenario: Profile path with a space
 - **WHEN** `scripts/install.ps1 -DryRun -Yes` runs on Windows with `USERPROFILE` set to `<tmp>\Test User`, which holds a `.claude` folder, and uv 0.12 on PATH
-- **THEN** the exit code is 0, and stdout contains the line `would run: spider skill install --target claude`
+- **THEN** the exit code is 0, and stdout contains the line `would run: linx skill install --target claude`
 
 ### Requirement: Uninstall instructions
 `--help` / `-Help` and `docs/installation.md` SHALL explain how to uninstall:
-- run `uv tool uninstall spider`
-- delete the Skill folders `~/.claude/skills/spider` and `~/.agents/skills/spider`, and any project copies. On Windows these are `%USERPROFILE%\.claude\skills\spider` and `%USERPROFILE%\.agents\skills\spider`.
-- Crawl data in `~/.spider/` and in project `.spider/` folders is kept until the user deletes it.
+- run `uv tool uninstall openlinx`
+- delete the Skill folders `~/.claude/skills/openlinx` and `~/.agents/skills/openlinx`, and any project copies. On Windows these are `%USERPROFILE%\.claude\skills\openlinx` and `%USERPROFILE%\.agents\skills\openlinx`.
+- Crawl data in `~/.openlinx/` and in project `.openlinx/` folders is kept until the user deletes it.
 - a link to uv's own uninstall instructions
 
 #### Scenario: sh help
 - **WHEN** `sh scripts/install.sh --help` runs
-- **THEN** the exit code is 0, and stdout contains `uv tool uninstall spider`, `~/.claude/skills/spider` and `~/.agents/skills/spider`
+- **THEN** the exit code is 0, and stdout contains `uv tool uninstall openlinx`, `~/.claude/skills/openlinx` and `~/.agents/skills/openlinx`
 
 #### Scenario: PowerShell help
 - **WHEN** `scripts/install.ps1 -Help` runs on Windows
-- **THEN** stdout contains `uv tool uninstall spider` and `%USERPROFILE%\.claude\skills\spider`
+- **THEN** stdout contains `uv tool uninstall openlinx` and `%USERPROFILE%\.claude\skills\openlinx`
 
 ### Requirement: Developer install
 `docs/installation.md` SHALL document installing without the scripts. Both forms SHALL pin Python 3.14:
-- `uv tool install --python 3.14 spider`
+- `uv tool install --python 3.14 openlinx`
 - pipx:
-  - `pipx install --python python3.14 spider` on macOS and Linux
-  - `pipx install --python 3.14 spider` on Windows, through the `py` launcher
+  - `pipx install --python python3.14 openlinx` on macOS and Linux
+  - `pipx install --python 3.14 openlinx` on Windows, through the `py` launcher
 
 #### Scenario: Developer install documented
 - **WHEN** `docs/installation.md` is read
-- **THEN** it contains `uv tool install --python 3.14 spider`, `pipx install --python python3.14 spider` and `pipx install --python 3.14 spider`
+- **THEN** it contains `uv tool install --python 3.14 openlinx`, `pipx install --python python3.14 openlinx` and `pipx install --python 3.14 openlinx`
 
 ### Requirement: Hosting
 Each GitHub release SHALL carry `install.sh` and `install.ps1` as assets, taken from the tagged commit's `scripts/` folder. As a result:
@@ -269,7 +269,7 @@ The documented one-liners SHALL use the `latest/download` URLs. The scripts SHAL
 ### Requirement: Release gates
 `python scripts/release_check.py <tag>` SHALL exit 0 only when all of these hold:
 - the tag is `v` followed by the package version
-- `scripts/generate_skill.py`, run into a temporary folder, produces files byte-identical to `skills/spider/`, with no extra or missing files
+- `scripts/generate_skill.py`, run into a temporary folder, produces files byte-identical to `skills/openlinx/`, with no extra or missing files
 - the `version` in `.claude-plugin/plugin.json` equals the package version
 
 Otherwise it SHALL exit 1 and name each failed gate. When it passes, it SHALL print a JSON object `{"version": <package version>, "prerelease": <true when the version has a PEP 440 pre-release or dev segment>}` on stdout.
@@ -279,8 +279,8 @@ Otherwise it SHALL exit 1 and name each failed gate. When it passes, it SHALL pr
 - **THEN** the exit code is 1, and stderr contains `tag v0.1.0 does not match package version 0.1.1`
 
 #### Scenario: Stale Skill copy blocks the release
-- **WHEN** `skills/spider/SKILL.md` has one byte changed and `python scripts/release_check.py v<version>` runs
-- **THEN** the exit code is 1, and stderr contains `skills/spider/SKILL.md`
+- **WHEN** `skills/openlinx/SKILL.md` has one byte changed and `python scripts/release_check.py v<version>` runs
+- **THEN** the exit code is 1, and stderr contains `skills/openlinx/SKILL.md`
 
 #### Scenario: Plugin version must match
 - **WHEN** `.claude-plugin/plugin.json` has `version` `0.0.9`, the package version is `0.1.0`, and `python scripts/release_check.py v0.1.0` runs
@@ -321,23 +321,23 @@ The `smoke` job SHALL run each install script with `--yes --package <built wheel
 - `macos-latest` (`sh`)
 - `windows-latest`, once under Windows PowerShell 5.1 and once under PowerShell 7
 
-On each runner, uv SHALL be absent from PATH, and the home folder SHALL be a new temporary folder that holds a `.claude` folder. On Windows, that folder's path contains a space, and uv's tool, bin, Python and cache folders are set inside it. Each run SHALL check that the script exits with code 0 and that `spider --version` prints the tag's version.
+On each runner, uv SHALL be absent from PATH, and the home folder SHALL be a new temporary folder that holds a `.claude` folder. On Windows, that folder's path contains a space, and uv's tool, bin, Python and cache folders are set inside it. Each run SHALL check that the script exits with code 0 and that `linx --version` prints the tag's version.
 
 #### Scenario: Fresh Linux
 - **WHEN** the smoke job runs `sh scripts/install.sh --yes --package <wheel>` on `ubuntu-latest`
-- **THEN** the exit code is 0, and `<home>/.local/bin/spider --version` prints the tag's version
+- **THEN** the exit code is 0, and `<home>/.local/bin/linx --version` prints the tag's version
 
 #### Scenario: Fresh macOS
 - **WHEN** the smoke job runs `sh scripts/install.sh --yes --package <wheel>` on `macos-latest`
-- **THEN** the exit code is 0, and `<home>/.local/bin/spider --version` prints the tag's version
+- **THEN** the exit code is 0, and `<home>/.local/bin/linx --version` prints the tag's version
 
 #### Scenario: Fresh Windows PowerShell 5.1
 - **WHEN** the smoke job runs `powershell -ExecutionPolicy ByPass -File scripts\install.ps1 -Yes -Package <wheel>` on `windows-latest`, with the home folder `<tmp>\Test User`
-- **THEN** the exit code is 0, and `<tmp>\Test User\.local\bin\spider.exe --version` prints the tag's version
+- **THEN** the exit code is 0, and `<tmp>\Test User\.local\bin\linx.exe --version` prints the tag's version
 
 #### Scenario: Fresh Windows PowerShell 7
 - **WHEN** the smoke job runs `pwsh -File scripts\install.ps1 -Yes -Package <wheel>` on `windows-latest`, with the home folder `<tmp>\Test User`
-- **THEN** the exit code is 0, and `<tmp>\Test User\.local\bin\spider.exe --version` prints the tag's version
+- **THEN** the exit code is 0, and `<tmp>\Test User\.local\bin\linx.exe --version` prints the tag's version
 
 ### Requirement: Supported Python range
 The package SHALL declare `requires-python = ">=3.12,<3.15"` and classifiers for Python 3.12, 3.13 and 3.14. Both install scripts SHALL declare the Python version they pass to `--python` as `3.14`. That version SHALL satisfy `requires-python`. `docs/installation.md` SHALL explain two reasons for the pin:

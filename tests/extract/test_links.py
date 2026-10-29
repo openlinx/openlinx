@@ -1,7 +1,7 @@
 """Link attributes (030-add-page-data, page-data; seam 4)."""
 
-from spider.store.page_records import LinkAttribute, LinkElement
-from spider.store.schema import literal_values
+from openlinx.store.page_records import LinkAttribute, LinkElement
+from openlinx.store.schema import literal_values
 from tests.support.page_data import page_link_rows, response_link_rows
 
 

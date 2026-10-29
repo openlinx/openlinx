@@ -1,0 +1,1065 @@
+"""The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2, D3)."""
+
+from collections.abc import Iterable
+from typing import Any, Literal, get_args, get_origin
+
+from sqlalchemy import (
+    REAL,
+    CheckConstraint,
+    Column,
+    ColumnElement,
+    ForeignKey,
+    Index,
+    Integer,
+    MetaData,
+    Table,
+    Text,
+    literal_column,
+    or_,
+)
+
+from openlinx.store.page_records import (
+    Indexability,
+    IndexabilityStatus,
+    LinkAttribute,
+    LinkElement,
+    LinkPosition,
+    RedirectType,
+    SameSite,
+)
+from openlinx.store.records import (
+    CrawlMode,
+    CrawlState,
+    DeclaredIn,
+    DiscoveredVia,
+    FetchError,
+    FetchState,
+    JournalMode,
+    LinkType,
+    ParseError,
+    RobotsState,
+    SkipReason,
+    StopReason,
+)
+from openlinx.store.types import Flag, Json, Timestamp
+
+
+def literal_values(alias: Any) -> list[str]:
+    """The values of a Literal alias in order, through unions of Literals and other aliases."""
+    value = getattr(alias, "__value__", alias)
+    if get_origin(value) is Literal:
+        return list(get_args(value))
+    return [item for member in get_args(value) for item in literal_values(member)]
+
+
+# Stays 1 until the first schema change after v0.1, which brings migrations (design D5).
+SCHEMA_VERSION = 1
+CRAWL_MODES = literal_values(CrawlMode)
+CRAWL_STATES = literal_values(CrawlState)
+JOURNAL_MODES = literal_values(JournalMode)
+
+metadata = MetaData()
+
+
+def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckConstraint]:
+    checks = []
+    for column in columns:
+        if "values" in column.info:
+            checks.append(
+                CheckConstraint(
+                    one_of(column, column.info["values"]),
+                    name=f"{table_name}_{column.name}_values",
+                )
+            )
+        if isinstance(column.type, Flag):
+            checks.append(
+                CheckConstraint(column.in_([0, 1]), name=f"{table_name}_{column.name}_flag")
+            )
+    return checks
+
+
+def one_of(column: ColumnElement[Any], values: Iterable[str]) -> ColumnElement[bool]:
+    """An OR chain of statement literals, never IN: SQLite builds an ephemeral index for an IN
+    list of more than two values again on every row of an executemany (ADR-0005)."""
+    return or_(*(column == literal_column(f"'{value}'") for value in values))
+
+
+def public_tables() -> list[Table]:
+    """The declared tables but the internal ones, whose names start with an underscore."""
+    return [table for table in metadata.tables.values() if not table.name.startswith("_")]
+
+
+def public_table(
+    name: str, *columns: Column[Any], comment: str, change: int, without_rowid: bool = False
+) -> Table:
+    """The one way to declare a public table: STRICT, with the CHECKs its columns' values call for.
+
+    STRICT refuses the FLOAT and DOUBLE that `Float` and `Double` declare: a real number is `REAL`.
+    """
+    return Table(
+        name,
+        metadata,
+        *columns,
+        *_checks(name, columns),
+        comment=comment,
+        info={"change": change},
+        sqlite_strict=True,
+        sqlite_with_rowid=not without_rowid,
+    )
+
+
+crawl = public_table(
+    "crawl",
+    Column("id", Text, primary_key=True, comment="The crawl id."),
+    Column(
+        "crawl_mode",
+        Text,
+        nullable=False,
+        comment="How the Crawl finds URLs.",
+        info={"values": CRAWL_MODES},
+    ),
+    Column(
+        "section_crawl",
+        Flag,
+        nullable=False,
+        comment="1 for a Section Crawl, whose Scope is one part of a site, otherwise 0.",
+    ),
+    Column(
+        "scope",
+        Json,
+        nullable=False,
+        comment="The resolved Scope, as an object of mode, hosts, folder, include and exclude.",
+    ),
+    Column(
+        "state",
+        Text,
+        nullable=False,
+        comment="The Crawl State.",
+        info={"values": CRAWL_STATES},
+    ),
+    Column("started_at", Timestamp, nullable=False, comment="When the Crawl started."),
+    Column(
+        "completed_at",
+        Timestamp,
+        comment="When the state became completed; NULL in every other state.",
+    ),
+    Column(
+        "stop_reason",
+        Text,
+        comment="Why the Crawl ended early: max_urls, interrupt or requested for a stopped Crawl, "
+        "seed_unreachable, site_unreachable or write_failed for a failed one; NULL while it "
+        "runs and when it is completed.",
+        info={"values": literal_values(StopReason)},
+    ),
+    Column(
+        "warnings",
+        Json,
+        nullable=False,
+        comment="The Crawl's warnings, as an array of diagnostics of level, code, message, hint "
+        "and details; [] when the Crawl is created.",
+    ),
+    Column(
+        "command_argv",
+        Json,
+        nullable=False,
+        comment="The command line as an array that starts with the command name, secrets redacted.",
+    ),
+    Column("cwd", Text, nullable=False, comment="The absolute folder the Command ran in."),
+    Column(
+        "settings_file",
+        Text,
+        comment="The absolute path of the settings file that was read, or NULL without one.",
+    ),
+    Column(
+        "config",
+        Json,
+        nullable=False,
+        comment="The resolved settings as an object of tables and keys, secrets redacted.",
+    ),
+    Column(
+        "tool_version",
+        Text,
+        nullable=False,
+        comment="The version of the tool that created the Crawl.",
+    ),
+    Column(
+        "schema_version",
+        Integer,
+        nullable=False,
+        comment="The schema version of this file, also stored as SQLite's user_version.",
+    ),
+    Column(
+        "journal_mode",
+        Text,
+        nullable=False,
+        comment="The SQLite journal mode the file was created with.",
+        info={"values": JOURNAL_MODES},
+    ),
+    Column(
+        "python_version",
+        Text,
+        nullable=False,
+        comment="The Python version that created the Crawl.",
+    ),
+    Column(
+        "platform",
+        Text,
+        nullable=False,
+        comment="The operating system that created the Crawl, as Python describes it.",
+    ),
+    comment="The Crawl's metadata, in exactly one row.",
+    change=15,
+)
+
+seeds = public_table(
+    "seeds",
+    Column(
+        "position",
+        Integer,
+        primary_key=True,
+        autoincrement=False,
+        comment="The 1-based order in which the Seed was given.",
+    ),
+    Column("url", Text, nullable=False, comment="The Seed URL as given."),
+    comment="The Seeds the Crawl started from, in the order they were given.",
+    change=15,
+)
+
+urls = public_table(
+    "urls",
+    Column(
+        "id",
+        Integer,
+        primary_key=True,
+        comment="Row id, stable for the life of the crawl file; it grows in the order URLs are "
+        "first recorded, and is the dispatch order within a Crawl Depth.",
+    ),
+    Column("url", Text, nullable=False, comment="The normalised URL, unique."),
+    Column(
+        "host",
+        Text,
+        nullable=False,
+        comment="The URL's host in lower-case ASCII (IDNA) form; the key of the per-host "
+        "politeness limits.",
+    ),
+    Column(
+        "origin_id",
+        Integer,
+        ForeignKey("origins.id"),
+        nullable=False,
+        comment="The URL's origin: its scheme, host and port.",
+    ),
+    Column(
+        "is_internal",
+        Flag,
+        nullable=False,
+        comment="1 for an Internal URL, 0 for an External URL.",
+    ),
+    Column(
+        "in_scope",
+        Flag,
+        nullable=False,
+        comment="1 when the URL is inside the Scope, so it may be followed.",
+    ),
+    Column("crawl_depth", Integer, nullable=False, comment="Crawl Depth; 0 for Seeds."),
+    Column(
+        "discovered_via",
+        Text,
+        nullable=False,
+        comment="How the URL was found: seed, or the type of the Link the Provenance rule "
+        "takes, a followed one once one has reached it, a Resource Link over another type.",
+        info={"values": literal_values(DiscoveredVia)},
+    ),
+    Column(
+        "found_on_url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        comment="The URL whose response gave that Link; NULL for Seeds.",
+    ),
+    Column(
+        "fetch_state",
+        Text,
+        nullable=False,
+        comment="Frontier state: waiting, a response was recorded, no response, or not requested.",
+        info={"values": literal_values(FetchState)},
+    ),
+    Column(
+        "skip_reason",
+        Text,
+        comment="Why a skipped URL was not requested.",
+        info={"values": literal_values(SkipReason)},
+    ),
+    Column(
+        "blocked_by_robots_txt",
+        Flag,
+        comment="1 when robots.txt disallows the URL for the robots user-agent token (also "
+        "with --ignore-robots), 0 when it allows it; NULL when not checked.",
+    ),
+    Column(
+        "status_code",
+        Integer,
+        comment="HTTP status code of the URL's own response; NULL without a response.",
+    ),
+    Column(
+        "fetch_error",
+        Text,
+        comment="Why no response is recorded for the URL.",
+        info={"values": literal_values(FetchError)},
+    ),
+    Column("fetch_error_message", Text, comment="Human-readable detail of fetch_error."),
+    Column(
+        "content_type",
+        Text,
+        comment="The Content-Type response header as received; NULL without a response or "
+        "without the header.",
+    ),
+    Column(
+        "response_time_ms",
+        Integer,
+        comment="Time from sending the request to receiving the whole body.",
+    ),
+    Column("fetched_at", Timestamp, comment="UTC time of the request."),
+    Column(
+        "parsed",
+        Flag,
+        nullable=False,
+        comment="1 when the response was parsed and its Links were found.",
+    ),
+    Column(
+        "parse_error",
+        Text,
+        comment="Why parsing failed in whole or in part: a registered extractor failed (parsed "
+        "stays 1), or nothing came out of page preparation (parsed = 0).",
+        info={"values": literal_values(ParseError)},
+    ),
+    Column("parse_error_message", Text, comment="Human-readable detail of parse_error."),
+    comment="One row for each distinct normalised URL of the Crawl; the frontier is its "
+    "queued rows.",
+    change=20,
+)
+Index(
+    "urls_url",
+    urls.c.url,
+    unique=True,
+    info={
+        "description": "Recording a discovered URL once (ON CONFLICT (url)), and finding one "
+        "URL's row."
+    },
+)
+Index(
+    "urls_crawl_depth_id",
+    urls.c.crawl_depth,
+    urls.c.id,
+    sqlite_where=urls.c.fetch_state == "queued",
+    info={
+        "description": "The frontier: the next queued URLs of the open Crawl Depth, in id order."
+    },
+)
+
+origins = public_table(
+    "origins",
+    Column("id", Integer, primary_key=True, comment="Row id."),
+    Column(
+        "origin",
+        Text,
+        nullable=False,
+        comment="Scheme, host and port, for example https://site.test, with a default port left "
+        "out; unique.",
+    ),
+    Column(
+        "host",
+        Text,
+        nullable=False,
+        comment="The origin's host in lower-case ASCII (IDNA) form.",
+    ),
+    Column(
+        "is_internal",
+        Flag,
+        nullable=False,
+        comment="1 when the origin's URLs are Internal URLs.",
+    ),
+    Column(
+        "robots_state",
+        Text,
+        comment="Rules applied, everything allowed, or everything disallowed or unanswered; NULL "
+        "while robots.txt has not been fetched, which happens before the first URL of the "
+        "origin that the Scope does not skip and the URL limit does not refuse.",
+        info={"values": literal_values(RobotsState)},
+    ),
+    Column(
+        "robots_status_code",
+        Integer,
+        comment="Status code of the final robots.txt response; NULL without a response.",
+    ),
+    Column(
+        "robots_fetch_error",
+        Text,
+        comment="Why the robots.txt request got no HTTP response; NULL when it got one, or "
+        "while robots.txt has not been fetched.",
+        info={"values": literal_values(FetchError)},
+    ),
+    Column(
+        "robots_fetch_error_message",
+        Text,
+        comment="Human-readable detail of robots_fetch_error.",
+    ),
+    Column("robots_fetched_at", Timestamp, comment="UTC time robots.txt was last fetched."),
+    Column("robots_txt", Text, comment="The robots.txt body as parsed, up to 512,000 bytes."),
+    Column(
+        "robots_crawl_delay_ms",
+        Integer,
+        comment="The Crawl-delay for the robots user-agent token; recorded, not applied.",
+    ),
+    Column(
+        "robots_sitemaps",
+        Json,
+        comment="JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not "
+        "been fetched.",
+    ),
+    comment="One row for each origin of a URL that the Crawl recorded.",
+    change=20,
+)
+Index(
+    "origins_origin",
+    origins.c.origin,
+    unique=True,
+    info={
+        "description": "Recording an origin once (ON CONFLICT (origin)), and finding an "
+        "origin's row."
+    },
+)
+
+pages = public_table(
+    "pages",
+    Column(
+        "url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        autoincrement=False,
+        comment="The Page's URL.",
+    ),
+    Column(
+        "address",
+        Text,
+        nullable=False,
+        comment="The Page's URL for display: url_encoded_address with the host in Unicode and "
+        "every percent-encoded UTF-8 sequence of a non-ASCII character decoded; percent-encoded "
+        "ASCII characters stay encoded, and so do characters of the Unicode categories Cc, Cf, "
+        "Zs, Zl and Zp.",
+    ),
+    Column(
+        "url_encoded_address",
+        Text,
+        nullable=False,
+        comment="The Page's URL as the Crawl requested it, equal to urls.url: the host in IDNA "
+        "(punycode) form and every non-ASCII character percent-encoded as UTF-8.",
+    ),
+    Column(
+        "url_path",
+        Text,
+        nullable=False,
+        comment="The path of address: from the first / after the host up to the first ?, or to "
+        "the end.",
+    ),
+    Column(
+        "url_query",
+        Text,
+        comment="The query of address: the text after the first ?; NULL when address has no ?, "
+        "and the empty string when nothing follows it.",
+    ),
+    Column(
+        "content_type",
+        Text,
+        nullable=False,
+        comment="The Content-Type response header as received, equal to urls.content_type.",
+    ),
+    Column(
+        "status_code",
+        Integer,
+        nullable=False,
+        comment="The HTTP status code of the Page's own response, equal to urls.status_code.",
+    ),
+    Column(
+        "status",
+        Text,
+        comment="The reason phrase the server sent; when it sent none, the phrase that the IANA "
+        "HTTP Status Code Registry gives the status code; NULL when the registry gives none.",
+    ),
+    Column(
+        "indexability",
+        Text,
+        nullable=False,
+        comment="Whether a search engine may index the Page, by the first reason in the "
+        "Indexability order that applies.",
+        info={"values": literal_values(Indexability)},
+    ),
+    Column(
+        "indexability_status",
+        Text,
+        comment="The first reason in the Indexability order that makes the Page non_indexable: "
+        "robots.txt, then the status class, then noindex, then a refresh redirect, then a "
+        "canonical to another URL; NULL when the Page is indexable.",
+        info={"values": literal_values(IndexabilityStatus)},
+    ),
+    Column(
+        "response_time_ms",
+        Integer,
+        nullable=False,
+        comment="Time from sending the request to receiving the whole body, equal to "
+        "urls.response_time_ms.",
+    ),
+    Column(
+        "last_modified",
+        Timestamp,
+        comment="The first Last-Modified response header as a UTC time, read as an HTTP-date or "
+        "another Internet Message Format date; NULL when absent, another text or a leap second.",
+    ),
+    Column(
+        "redirect_url",
+        Text,
+        comment="The URL the Page redirects to: the target of its 3xx response, of its HTTP "
+        "Refresh header, or of its first meta refresh; NULL when it does not redirect, or "
+        "when the target is its own URL.",
+    ),
+    Column(
+        "redirect_type",
+        Text,
+        comment="How the Page redirects to redirect_url; NULL when it does not redirect. "
+        "javascript_redirect is filled from v1.1.",
+        info={"values": literal_values(RedirectType)},
+    ),
+    Column(
+        "set_cookie_count",
+        Integer,
+        nullable=False,
+        comment="The number of Set-Cookie headers of the Page's response, equal to its rows in "
+        "cookies.",
+    ),
+    Column(
+        "crawl_timestamp",
+        Timestamp,
+        nullable=False,
+        comment="The UTC time of the Page's request, equal to urls.fetched_at.",
+    ),
+    Column(
+        "title_1",
+        Text,
+        comment="The text of the Page's first title element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed "
+        "or its Page extractor failed.",
+    ),
+    Column(
+        "title_1_length",
+        Integer,
+        comment="The length of title_1 in Unicode code points; NULL exactly when title_1 is.",
+    ),
+    Column(
+        "title_2",
+        Text,
+        comment="The text of the Page's second title element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed "
+        "or its Page extractor failed.",
+    ),
+    Column(
+        "title_2_length",
+        Integer,
+        comment="The length of title_2 in Unicode code points; NULL exactly when title_2 is.",
+    ),
+    Column(
+        "title_count",
+        Integer,
+        comment="The number of title elements without an svg, math or noscript ancestor; NULL "
+        "when the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "meta_description_1",
+        Text,
+        comment="The content of the Page's first meta description, whitespace-normalised, the "
+        "empty string for one without content; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "meta_description_1_length",
+        Integer,
+        comment="The length of meta_description_1 in Unicode code points; NULL exactly when "
+        "meta_description_1 is.",
+    ),
+    Column(
+        "meta_description_2",
+        Text,
+        comment="The content of the Page's second meta description, whitespace-normalised, the "
+        "empty string for one without content; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "meta_description_2_length",
+        Integer,
+        comment="The length of meta_description_2 in Unicode code points; NULL exactly when "
+        "meta_description_2 is.",
+    ),
+    Column(
+        "meta_description_count",
+        Integer,
+        comment="The number of meta elements named description without an svg, math or "
+        "noscript ancestor; NULL when the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "meta_keywords_1",
+        Text,
+        comment="The content of the Page's first meta keywords element, whitespace-normalised, "
+        "the empty string for one without content; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "meta_keywords_1_length",
+        Integer,
+        comment="The length of meta_keywords_1 in Unicode code points; NULL exactly when "
+        "meta_keywords_1 is.",
+    ),
+    Column(
+        "h1_1",
+        Text,
+        comment="The text of the Page's first h1 element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "h1_1_length",
+        Integer,
+        comment="The length of h1_1 in Unicode code points; NULL exactly when h1_1 is.",
+    ),
+    Column(
+        "h1_2",
+        Text,
+        comment="The text of the Page's second h1 element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "h1_2_length",
+        Integer,
+        comment="The length of h1_2 in Unicode code points; NULL exactly when h1_2 is.",
+    ),
+    Column(
+        "h1_count",
+        Integer,
+        comment="The number of h1 elements without an svg, math or noscript ancestor; NULL when "
+        "the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "h2_1",
+        Text,
+        comment="The text of the Page's first h2 element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "h2_1_length",
+        Integer,
+        comment="The length of h2_1 in Unicode code points; NULL exactly when h2_1 is.",
+    ),
+    Column(
+        "h2_2",
+        Text,
+        comment="The text of the Page's second h2 element without an svg, math or noscript "
+        "ancestor, whitespace-normalised; NULL without one, or when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "h2_2_length",
+        Integer,
+        comment="The length of h2_2 in Unicode code points; NULL exactly when h2_2 is.",
+    ),
+    Column(
+        "h2_count",
+        Integer,
+        comment="The number of h2 elements without an svg, math or noscript ancestor; NULL when "
+        "the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "meta_robots",
+        Text,
+        comment="The content of every meta element named robots, in document order, as the "
+        "robots directives parser normalises and joins them; NULL without one, or when the Page "
+        "is not analysed.",
+    ),
+    Column(
+        "meta_robots_noindex",
+        Flag,
+        comment="1 when the robots directives parser reads noindex in meta_robots; NULL when "
+        "the Page is not analysed.",
+    ),
+    Column(
+        "meta_robots_nofollow",
+        Flag,
+        comment="1 when the robots directives parser reads nofollow in meta_robots; NULL when "
+        "the Page is not analysed.",
+    ),
+    Column(
+        "x_robots_tag",
+        Text,
+        comment="The values of every X-Robots-Tag response header, in the order received, as the "
+        "robots directives parser normalises and joins them; NULL without one.",
+    ),
+    Column(
+        "x_robots_tag_noindex",
+        Flag,
+        comment="1 when the robots directives parser reads noindex in x_robots_tag for the "
+        "robots user-agent token.",
+    ),
+    Column(
+        "x_robots_tag_nofollow",
+        Flag,
+        comment="1 when the robots directives parser reads nofollow in x_robots_tag for the "
+        "robots user-agent token.",
+    ),
+    Column(
+        "meta_refresh",
+        Text,
+        comment="The content of the first meta element whose http-equiv is refresh, "
+        "whitespace-normalised; NULL without one, or when the Page is not analysed or its Page "
+        "extractor failed.",
+    ),
+    Column(
+        "canonical_url",
+        Text,
+        comment="The URL that every canonical declaration resolves to, when they resolve to one "
+        "URL; NULL without a declaration, when they disagree, or when the Page is not "
+        "analysed.",
+    ),
+    Column(
+        "canonical_link_element_1",
+        Text,
+        comment="The resolved URL of the first canonical link element in head; NULL without "
+        "one, or when the Page is not analysed.",
+    ),
+    Column(
+        "canonical_link_element_2",
+        Text,
+        comment="The resolved URL of the second canonical link element in head; NULL without "
+        "one, or when the Page is not analysed.",
+    ),
+    Column(
+        "http_canonical",
+        Text,
+        comment="The resolved URL of the first canonical Link header entry; NULL without one, or "
+        "when the Page is not analysed.",
+    ),
+    Column(
+        "canonical_count",
+        Integer,
+        comment="The number of canonical declarations: canonical link elements in head and "
+        "canonical Link header entries; NULL when the Page is not analysed.",
+    ),
+    Column(
+        "canonical_relative",
+        Flag,
+        comment="1 when the href of a canonical link element in head, after the leading control "
+        "characters and spaces that the URL parser removes, does not start with http: or "
+        "https:, compared case-insensitively; NULL when the Page is not analysed.",
+    ),
+    Column(
+        "rel_next_1",
+        Text,
+        comment="The target of the first pagination link element of the HTML whose rel names "
+        "next; NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "rel_prev_1",
+        Text,
+        comment="The target of the first pagination link element of the HTML whose rel names "
+        "prev or previous; NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "http_rel_next_1",
+        Text,
+        comment="The target of the first pagination Link header entry whose rel names next; "
+        "NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "http_rel_prev_1",
+        Text,
+        comment="The target of the first pagination Link header entry whose rel names prev or "
+        "previous; NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "amphtml_link_element",
+        Text,
+        comment="The target of the first amphtml link element; NULL without one, or when the "
+        "Page is not analysed.",
+    ),
+    Column(
+        "mobile_alternate_link",
+        Text,
+        comment="The target of the first link element whose rel is alternate with a media "
+        "attribute and no hreflang; NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "word_count",
+        Integer,
+        comment="The number of words in the Content Area text; NULL when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "sentence_count",
+        Integer,
+        comment="The number of sentences in the Content Area text; NULL when the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "average_words_per_sentence",
+        REAL,
+        comment="word_count divided by sentence_count, rounded half up to 2 decimals; NULL when "
+        "sentence_count is 0, or the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "text_ratio_pct",
+        REAL,
+        comment="100 times the length of the normalised text of body, without Content Area "
+        "exclusions, divided by the decoded HTML document's length in characters, rounded "
+        "half up to 2 decimals; NULL when the document is empty, or the Page is not "
+        "analysed or its Page extractor failed.",
+    ),
+    Column(
+        "declared_language",
+        Text,
+        comment="The lang attribute of the root html element, trimmed: the empty string when it "
+        "has no value; NULL when it is absent, or the Page is not analysed or its Page "
+        "extractor failed.",
+    ),
+    Column(
+        "content_hash",
+        Text,
+        comment="The SHA-256, as lowercase hex, of the normalised Content Area text as UTF-8, "
+        "with no Unicode normalisation: Pages with the same value are Exact Duplicates; NULL "
+        "when word_count is 0, or the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "crawl_depth",
+        Integer,
+        nullable=False,
+        comment="Crawl Depth, equal to urls.crawl_depth: 0 for Seeds.",
+    ),
+    Column(
+        "jsonld_item_count",
+        Integer,
+        comment="The number of JSON-LD items in the application/ld+json scripts: each top-level "
+        "object, of a script or of a top-level array, or instead the content of its @graph, an "
+        "array of objects or one object; NULL when the Page is not analysed or its Page "
+        "extractor failed.",
+    ),
+    Column(
+        "microdata_item_count",
+        Integer,
+        comment="The number of top-level Microdata items: elements with itemscope and no "
+        "itemprop; NULL when the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "jsonld_parse_error_count",
+        Integer,
+        comment="The number of application/ld+json scripts that are not valid JSON, or nest more "
+        "than 1024 levels deep; NULL when the Page is not analysed or its Page extractor "
+        "failed.",
+    ),
+    Column(
+        "structured_data_types",
+        Json,
+        comment="JSON array of the distinct types of the counted items, from @type and itemtype "
+        "without a leading http://schema.org/ or https://schema.org/, sorted by code point: [] "
+        "when there are none; NULL when the Page is not analysed or its Page extractor failed.",
+    ),
+    comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
+    "an HTML document, whatever its status code.",
+    change=30,
+)
+Index(
+    "pages_address",
+    pages.c.address,
+    unique=True,
+    info={
+        "description": "Finding a Page by its display address, and the tie-breaker of keyset "
+        "paging over Pages."
+    },
+)
+
+cookies = public_table(
+    "cookies",
+    Column(
+        "url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        autoincrement=False,
+        comment="The Page whose response set the cookie.",
+    ),
+    Column(
+        "ordinal",
+        Integer,
+        primary_key=True,
+        autoincrement=False,
+        comment="The header's position among the response's Set-Cookie headers, from 1.",
+    ),
+    Column(
+        "name",
+        Text,
+        nullable=False,
+        comment="The text before the header's first =, trimmed; the empty string when its first "
+        "part has no =.",
+    ),
+    Column(
+        "domain",
+        Text,
+        comment="The Domain attribute, lowercased, without a leading dot; NULL when absent, "
+        "empty, or neither a host name nor an IP address.",
+    ),
+    Column(
+        "path",
+        Text,
+        comment="The Path attribute, trimmed, as sent; NULL when absent, when it does not "
+        "start with /, which RFC 6265 reads as the default path, or when it holds a comma, "
+        "which only a header that a proxy folded gives it.",
+    ),
+    Column(
+        "expires",
+        Timestamp,
+        comment="The Expires attribute as a UTC time, a two-digit year read as RFC 6265 reads "
+        "it; NULL when absent or invalid.",
+    ),
+    Column(
+        "max_age",
+        Integer,
+        comment="The Max-Age attribute, in seconds; NULL when absent or not an optional - "
+        "followed by digits; a value beyond a 64-bit INTEGER is clamped to its bound.",
+    ),
+    Column("secure", Flag, nullable=False, comment="1 when the Secure attribute is present."),
+    Column("http_only", Flag, nullable=False, comment="1 when the HttpOnly attribute is present."),
+    Column(
+        "partitioned", Flag, nullable=False, comment="1 when the Partitioned attribute is present."
+    ),
+    Column(
+        "same_site",
+        Text,
+        comment="The SameSite attribute, lowercased; NULL when absent or another value.",
+        info={"values": literal_values(SameSite)},
+    ),
+    comment="One row for each Set-Cookie header of a Page's response, with the cookie's name and "
+    "attributes, never its value.",
+    change=30,
+    without_rowid=True,
+)
+
+links = public_table(
+    "links",
+    Column(
+        "source_url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        autoincrement=False,
+        comment="The URL whose response contains the Link.",
+    ),
+    Column(
+        "ordinal",
+        Integer,
+        primary_key=True,
+        autoincrement=False,
+        comment="The Link's position in that response, from 1: header Links first in the order "
+        "received, then the document's in document order, as the Crawl's Link discovery "
+        "numbers them.",
+    ),
+    Column(
+        "target_url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        nullable=False,
+        comment="The URL of the Link's normalised target.",
+    ),
+    Column(
+        "type",
+        Text,
+        nullable=False,
+        comment="The Link type.",
+        info={"values": literal_values(LinkType)},
+    ),
+    Column(
+        "declared_in",
+        Text,
+        nullable=False,
+        comment="Where the Link was declared: in the document's head or body as the parser "
+        "builds them, or in a response header.",
+        info={"values": literal_values(DeclaredIn)},
+    ),
+    Column(
+        "element",
+        Text,
+        comment="The HTML element the Link came from; NULL for a header Link.",
+        info={"values": literal_values(LinkElement)},
+    ),
+    Column(
+        "attribute",
+        Text,
+        comment="The attribute the Link came from, such as src or srcset of an img; NULL for "
+        "a header Link.",
+        info={"values": literal_values(LinkAttribute)},
+    ),
+    Column(
+        "anchor_text",
+        Text,
+        comment="For a hyperlink, the normalised text of its element, or when that is empty the "
+        "alt texts of the img elements inside it, joined with a space; for an area, its alt; "
+        "NULL for other types, or when the Page's Link extractor failed.",
+    ),
+    Column(
+        "alt_text",
+        Text,
+        comment="For an image Link from an img element, its alt attribute, normalised: the "
+        "empty string when it has no value; NULL when it is absent, for other Links, or when "
+        "the Page's Link extractor failed.",
+    ),
+    Column(
+        "rel",
+        Text,
+        comment="The Link's rel tokens, lowercased, joined with single spaces; NULL without any.",
+    ),
+    Column("rel_nofollow", Flag, nullable=False, comment="1 when rel holds nofollow."),
+    Column("rel_ugc", Flag, nullable=False, comment="1 when rel holds ugc."),
+    Column("rel_sponsored", Flag, nullable=False, comment="1 when rel holds sponsored."),
+    Column(
+        "hreflang",
+        Text,
+        comment="For a hreflang Link, the trimmed hreflang of its element, or the hreflang "
+        "parameter of its Link header; NULL for other Links, and for a Link of the HTML when the "
+        "Page's Link extractor failed.",
+    ),
+    Column(
+        "media",
+        Text,
+        comment="For a mobile_alternate Link, the trimmed media of its element; NULL for other "
+        "Links, or when the Page's Link extractor failed.",
+    ),
+    Column(
+        "link_position",
+        Text,
+        comment="Where on the Page the Link is: head for a Link the parser places in head; "
+        "otherwise from the nearest enclosing nav (navigation), header, footer or aside "
+        "(sidebar), and content without one, a Link from a noscript's content taking the "
+        "noscript's place; NULL for a header Link, or when the Page's Link extractor failed.",
+        info={"values": literal_values(LinkPosition)},
+    ),
+    comment="One row for each Link the Crawl discovered in a response: in an analysed Page's "
+    "HTML, or in the Link and Refresh headers of an in-Scope 2xx response.",
+    change=30,
+)
+# The layout and these indexes are provisional until the links benchmark chooses (design D4).
+Index(
+    "links_target",
+    links.c.target_url_id,
+    info={"description": "The inlinks of a URL: every Link that points at it."},
+)
+Index(
+    "links_type_target",
+    links.c.type,
+    links.c.target_url_id,
+    info={"description": "The inlinks of a URL of one Link type, such as its hyperlink inlinks."},
+)

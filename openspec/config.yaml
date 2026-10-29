@@ -2,7 +2,7 @@ schema: spec-driven
 
 context: |
   Project: open-source, agent-first SEO crawler with no GUI: each Crawl is a SQLite file with a public, versioned schema, queried with read-only SQL, and every Issue is reproducible by a query. Local, with no telemetry.
-  Product name OpenLinx; working name "spider" (CLI command, Python package, spider.toml, .spider/ workspace folder) until the rename change.
+  Product name OpenLinx: CLI command linx, Python package openlinx, openlinx.toml, .openlinx/ workspace folder.
   Primary users: AI agents (Claude Code, Codex; Claude Desktop through MCP) and the people who read the Reports they produce.
   Stack: Python >=3.12,<3.15; asyncio + aiohttp; selectolax (lxml only for XPath); SQLAlchemy 2 Core + Alembic on SQLite, one file per Crawl;
   Typer; pydantic-settings; msgspec/orjson; MCP Python SDK 2.x; pytest with a local fixture site. Must work on Windows, macOS and Linux.

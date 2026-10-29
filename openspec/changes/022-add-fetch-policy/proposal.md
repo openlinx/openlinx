@@ -17,14 +17,14 @@ The response headers must also be stored, without cookie values, because `page -
 
 > **Blueprint edits (2026-10-11):** the schema parts follow ADR-0005, `018-add-schema-conventions` and the rulings on the schema blueprint (design D10).
 
-> **Re-grounded (2026-10-14)** against `020-add-crawl-core`'s code through its group 6, its first pull request: the `Fetcher` Protocol in `spider.crawl.fetcher` with `FetchResult | FetchFailure`, `CrawlSettings`, the context builder, `Hooks` and the `fetch_error` codes. The parts of `020` that land later (robots.txt, `--rate`, the network pause, the watchdog and the fake Fetcher) are named in tasks.md where a task waits for them, and the v0.2 parts are marked there and in the design.
+> **Re-grounded (2026-10-14)** against `020-add-crawl-core`'s code through its group 6, its first pull request: the `Fetcher` Protocol in `openlinx.crawl.fetcher` with `FetchResult | FetchFailure`, `CrawlSettings`, the context builder, `Hooks` and the `fetch_error` codes. The parts of `020` that land later (robots.txt, `--rate`, the network pause, the watchdog and the fake Fetcher) are named in tasks.md where a task waits for them, and the v0.2 parts are marked there and in the design.
 
 - **Request identity:**
-  - `--user-agent <string>`. The default is `spider/<version> (+<project URL>)`.
+  - `--user-agent <string>`. The default is `OpenLinx/<version> (+<project URL>)`.
   - **(v0.2)** `--header "Name: Value"`, repeatable, setting `crawl.header`.
   - **(v0.2)** `--auth <user:password>`, a secret.
   - **(v0.2)** Custom headers and credentials go only to Internal URLs.
-  - **(v0.2)** `Authorization`, `Proxy-Authorization` and `Cookie` header values, and proxy passwords, are marked partly secret for `015`'s redaction. Credentials may also be kept in `spider.toml`.
+  - **(v0.2)** `Authorization`, `Proxy-Authorization` and `Cookie` header values, and proxy passwords, are marked partly secret for `015`'s redaction. Credentials may also be kept in `openlinx.toml`.
 - **Proxy:**
   - **(v0.2)** `--proxy <url>` and `[crawl] proxy`.
   - Without them, the standard `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` variables are honoured, in any case, as curl, pip and uv do. This is `010`'s one exception to its no-environment-variables rule.
@@ -88,12 +88,12 @@ The response headers must also be stored, without cookie values, because `page -
   - `060` (`--auth` on resume)
   - `080` (`doctor`'s TLS check reuses this TLS setup)
 - **Code:**
-  - `spider.crawl.fetcher` (`020`'s module): the policy Fetcher, its decoding and its proxy choice
-  - `spider.crawl.tls`: the TLS setup that `080`'s `doctor` reuses, and from v0.2 the ALPN check
-  - `spider.crawl.engine`: the retry loop and redirects
-  - `spider.crawl.scope`: the URL length limit in `ScopeRules.decide`
-  - `spider.crawl.settings` and `spider.cli.crawl`: the new keys and options
-  - `spider.store.schema` and `spider.store.urls`: the new columns, the index and the redirect units
-  - `spider.store.response_headers`: the `response_headers` table's row writer
+  - `openlinx.crawl.fetcher` (`020`'s module): the policy Fetcher, its decoding and its proxy choice
+  - `openlinx.crawl.tls`: the TLS setup that `080`'s `doctor` reuses, and from v0.2 the ALPN check
+  - `openlinx.crawl.engine`: the retry loop and redirects
+  - `openlinx.crawl.scope`: the URL length limit in `ScopeRules.decide`
+  - `openlinx.crawl.settings` and `openlinx.cli.crawl`: the new keys and options
+  - `openlinx.store.schema` and `openlinx.store.urls`: the new columns, the index and the redirect units
+  - `openlinx.store.response_headers`: the `response_headers` table's row writer
 - **New dependencies:** `truststore`, `certifi` and `brotli`. **(v0.2)** `zstandard`, shared with `030`, and `compression.zstd` on Python 3.14. `trustme` is a test dependency.
 - **Docs:** the fetching part of `docs/crawling.md` (identity, credentials, proxy, retries, redirects, limits, compression, TLS, HTTP version).

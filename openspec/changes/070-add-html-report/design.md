@@ -9,9 +9,9 @@ See proposal.md (Why) for motivation. Everything the Report shows comes from the
 
 CSV files are written with the CSV serialiser of `050-add-query-and-segments`, which applies its CSV policy. Rule texts, categories and thresholds come from the Crawl's `rules` table (`040-add-rules`), and the Crawl State and the Section Crawl flag from the crawl metadata (`015-add-crawl-store`, `020-add-crawl-core`).
 
-The **Report Service** (`src/spider/services/report.py`) builds a ReportModel once per invocation. The HTML renderer and the Section Brief builder both read that model, so the Report and its briefs cannot disagree.
+The **Report Service** (`src/openlinx/services/report.py`) builds a ReportModel once per invocation. The HTML renderer and the Section Brief builder both read that model, so the Report and its briefs cannot disagree.
 
-`080-add-agent-skill`'s Full audit workflow (deferred to v0.2) is drafted against three things: `report brief --section <id>` with its accepted values listed by `spider commands`, one subagent per Report Section, and `report --notes <dir>`. `090-add-mcp-server`'s `report` tool (v0.2, together with this change) stores inline notes under the Crawl's reports folder, and `060-add-crawl-control`'s `crawls rm` deletes that folder.
+`080-add-agent-skill`'s Full audit workflow (deferred to v0.2) is drafted against three things: `report brief --section <id>` with its accepted values listed by `linx commands`, one subagent per Report Section, and `report --notes <dir>`. `090-add-mcp-server`'s `report` tool (v0.2, together with this change) stores inline notes under the Crawl's reports folder, and `060-add-crawl-control`'s `crawls rm` deletes that folder.
 
 ## Goals / Non-Goals
 
@@ -64,7 +64,7 @@ Only whitelisted fields go in: the summary's `crawl` member, and the Rule texts 
 - *Alternative:* the templates query the store directly. That scatters queries around, breaks snapshot consistency, and makes leaks possible.
 
 ### D3. Jinja2 with autoescaping everywhere
-Templates live in `src/spider/report/templates/` and use an `Environment(autoescape=True, undefined=StrictUndefined)`. Only two producers may insert markup (`Markup`), and both escape their own inputs and are tested at the Report seam:
+Templates live in `src/openlinx/report/templates/` and use an `Environment(autoescape=True, undefined=StrictUndefined)`. Only two producers may insert markup (`Markup`), and both escape their own inputs and are tested at the Report seam:
 - the notes renderer (D4)
 - the SVG chart builder (D5)
 
@@ -103,10 +103,10 @@ Rules:
 The Report has one `<style>` and one `<script>`, both inline. The `<meta http-equiv="Content-Security-Policy">` value is `default-src 'none'; style-src 'sha256-<css>'; script-src 'sha256-<js>'; base-uri 'none'; form-action 'none'`, with both hashes computed at render time. Browsers apply a meta CSP to `file://` documents. Escaping remains the primary defence, and the CSP ensures that even an escaping bug cannot load or run anything.
 
 ### D7. The table script is small, vanilla and testable in Node
-`src/spider/report/templates/table.js` is about 3 KB of ES2017. It holds the pure functions `compareCells`, `sortRows` and `filterRows`, plus a little DOM glue that runs on `DOMContentLoaded`. When `module` exists, it exports the pure functions, so the seam 9 tests under `node --test` load the same file that is embedded in the Report. Tables work without the script (progressive enhancement).
+`src/openlinx/report/templates/table.js` is about 3 KB of ES2017. It holds the pure functions `compareCells`, `sortRows` and `filterRows`, plus a little DOM glue that runs on `DOMContentLoaded`. When `module` exists, it exports the pure functions, so the seam 9 tests under `node --test` load the same file that is embedded in the Report. Tables work without the script (progressive enhancement).
 
 ### D8. The destination folder, the receipt, and how files are replaced
-- **Destination:** `--dest <dir>`, by default `<Workspace's .spider directory>/reports/<crawl id>/`. The folder holds `report[-<segment>].html` and `report[-<segment>]-csv/`. The Report stays next to the Crawl it describes, `crawls rm` (060) deletes the folder with the Crawl, and 090 stores inline notes inside it.
+- **Destination:** `--dest <dir>`, by default `<Workspace's .openlinx directory>/reports/<crawl id>/`. The folder holds `report[-<segment>].html` and `report[-<segment>]-csv/`. The Report stays next to the Crawl it describes, `crawls rm` (060) deletes the folder with the Crawl, and 090 stores inline notes inside it.
 - **Receipt:** a JSON document on stdout with the absolute paths. `-o` redirects it, as 050 defines for every Command, so `-o` never names the HTML file.
 - **Replacement:** everything is built in a sibling temporary folder. Then the old CSV folder is renamed aside, the new one is renamed into place, the old one is deleted, and finally the HTML is moved into place with `os.replace`. The HTML goes last, so an old HTML file never points to a missing CSV folder.
 - **Failure:** earlier steps are rolled back, the temporary folder is removed, and the command fails with 050's `output_not_writable`, naming the path. On Windows, an open file makes the folder rename fail with a sharing violation.
@@ -127,17 +127,17 @@ Nothing is awaited. A missing opener or an `OSError` becomes the warning `open_f
 The builder serialises with orjson, compares the byte length with `max_bytes`, and applies the four spec steps in order until the brief fits. Step 1 lowers all samples together (5 → 4 → … → 1). Steps 3 and 4 work from the last Issue backwards. The minimum budget of 8,192 bytes always leaves room for the skeleton: at most 10 Seeds of 300 characters each, the counts, the rule ids and `omitted_issues`.
 
 ### D11. `--section` is a Choice that raises our own errors
-A Click `Choice` subclass exposes the thirteen ids to `spider commands --format json`, which 080's "Report Section ids are listed" scenario reads. Its `convert` raises `unknown_section`, with `details.suggestions` and `details.accepted`, instead of Click's usage text. A missing `--section`/`--list`, or both of them, raises 010's `usage_error` with `details.accepted`.
+A Click `Choice` subclass exposes the thirteen ids to `linx commands --format json`, which 080's "Report Section ids are listed" scenario reads. Its `convert` raises `unknown_section`, with `details.suggestions` and `details.accepted`, instead of Click's usage text. A missing `--section`/`--list`, or both of them, raises 010's `usage_error` with `details.accepted`.
 
 ### D12. Deterministic output
 Every ordering is explicit, numbers are formatted in fixed ways, and ids come from the registry. The only varying value is the generation time, which comes from the injectable clock (a boundary double).
 
 ### D13. The end-to-end CI test
 One pytest test, marked `e2e`, runs on the Windows, macOS and Linux CI jobs. It starts the local fixture site, then runs these as real subprocesses of the installed CLI:
-1. `spider crawl <site>/ --detach` (060)
-2. `spider status`, polled every second for up to 120 seconds until it reports `completed`
-3. `spider issues`
-4. `spider report`
+1. `linx crawl <site>/ --detach` (060)
+2. `linx status`, polled every second for up to 120 seconds until it reports `completed`
+3. `linx issues`
+4. `linx report`
 
 It then parses the HTML named by the receipt. No doubles are used.
 - *Alternative:* in-process `CliRunner` calls. They would not exercise the detached process, the control rows or the Windows process flags, which are exactly what this test protects.

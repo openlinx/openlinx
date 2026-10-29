@@ -11,13 +11,13 @@ from typing import Any
 
 from sqlalchemy import Connection, delete, insert
 
-from spider.output.reporter import Collected
-from spider.services.crawls import create_crawl
-from spider.store.connections import connect
-from spider.store.records import CrawlFile, NewCrawl, SecretNames
-from spider.store.schema import seeds
-from spider.store.writer import CrawlWriter
-from spider.workspace.discovery import Workspace, resolve_workspace
+from openlinx.output.reporter import Collected
+from openlinx.services.crawls import create_crawl
+from openlinx.store.connections import connect
+from openlinx.store.records import CrawlFile, NewCrawl, SecretNames
+from openlinx.store.schema import seeds
+from openlinx.store.writer import CrawlWriter
+from openlinx.workspace.discovery import Workspace, resolve_workspace
 from tests.support.clock import FakeClock
 from tests.support.randomness import scripted_choice
 from tests.support.workspace import TempWorkspace
@@ -37,7 +37,7 @@ def new_crawl(workspace: Workspace) -> NewCrawl:
         workspace=workspace,
         crawl_mode="spider",
         seeds=["https://example.com/"],
-        command_argv=["spider", "crawl", "https://example.com/"],
+        command_argv=["linx", "crawl", "https://example.com/"],
         cwd=workspace.root,
         config={},
         scope={

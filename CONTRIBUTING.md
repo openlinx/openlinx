@@ -29,7 +29,7 @@ Features and fixes are built as OpenSpec changes under `openspec/changes/<id>/`.
 - Claude Code finds OpenSpec's agent skills in `.claude/skills/`. Codex uses the same agent skills from `.agents/skills/`.
 - The exception: fixes to the planning documents of a change that is not in progress go straight to `main`.
 - OpenSpec is a Node tool. Install Node (current LTS), then the version CI uses: `npm install -g @fission-ai/openspec@1.13.0`.
-- `spider` sends no telemetry, so turn OpenSpec's off before running it:
+- `linx` sends no telemetry, so turn OpenSpec's off before running it:
   - bash: `export OPENSPEC_TELEMETRY=0`
   - PowerShell: `$env:OPENSPEC_TELEMETRY = "0"`
 
@@ -110,7 +110,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 4. `ruff check .`, then `ruff format --check .`.
 5. `mypy` (strict).
 6. `pytest`, with the 90% coverage gate and the hypothesis `ci` profile.
-7. The wheel smoke test: `uv build`, then `spider --version` from the built wheel in an isolated environment.
+7. The wheel smoke test: `uv build`, then `linx --version` from the built wheel in an isolated environment.
 8. Install Node (current LTS) and OpenSpec 1.13.0.
 9. `openspec validate --all --strict`, with telemetry off.
 10. `node --test "tests/js/**/*.test.mjs"`.
@@ -126,7 +126,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 ## Changing the crawl store schema
 
 The schema of a crawl file is a public contract ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)): agents query it with SQL. It changes only this way:
-- **In one slice:** add the table or column to the declared schema (`spider.store.schema`) and to [docs/schema.md](docs/schema.md) in the same commit, in the slice whose scenario first needs it. The store contract test compares the two, so neither may lead. [How to add a table](docs/schema.md#how-to-add-a-table) has the details.
+- **In one slice:** add the table or column to the declared schema (`openlinx.store.schema`) and to [docs/schema.md](docs/schema.md) in the same commit, in the slice whose scenario first needs it. The store contract test compares the two, so neither may lead. [How to add a table](docs/schema.md#how-to-add-a-table) has the details.
 - **Declared in full:** a new table through `public_table(..., change=<n>)`, a comment on every table and column, a description on every index, the shared column types for timestamps, JSON and booleans, and the conventions of [ADR-0005](docs/adr/0005-crawl-file-schema-conventions.md), summed up in `docs/schema.md`. Tests check them on every declared table.
 - **Before v0.1:** no migration. Edit the declared tables directly; `schema_version` stays `1`, and crawl files from earlier development builds are not supported.
 - **From v0.1 on:** every schema change adds 1 to `schema_version`, and brings a migration and a test that upgrades a crawl file from every published schema version.
@@ -137,48 +137,48 @@ Each recipe lists the files to touch in order, the seam to test at, and what che
 
 ### A diagnostic code
 
-1. Declare it once, next to related codes, in `spider/output/codes.py`: `NAME = _declare("name", level, ExitCode.X or None, "One sentence.")`. An input error named `invalid_*` or `unknown_*` exits 2, and `*_not_found` exits 4 (`tests/cli/test_commands.py::test_naming_rule_for_input_errors`).
-2. Use it: `raise SpiderError(NAME, message, hint=..., details=...)` for an error, `reporter.warn(Diagnostic.of(NAME, ...))` for a warning.
+1. Declare it once, next to related codes, in `openlinx/output/codes.py`: `NAME = _declare("name", level, ExitCode.X or None, "One sentence.")`. An input error named `invalid_*` or `unknown_*` exits 2, and `*_not_found` exits 4 (`tests/cli/test_commands.py::test_naming_rule_for_input_errors`).
+2. Use it: `raise OpenLinxError(NAME, message, hint=..., details=...)` for an error, `reporter.warn(Diagnostic.of(NAME, ...))` for a warning.
 3. Test it at seam 1 or 2: the code, the exit code and the `details` an agent needs.
-4. *Review:* document it where its area is documented: the CLI contract in [docs/cli.md](docs/cli.md), the store in [docs/crawl-store.md](docs/crawl-store.md), `spider crawl` in [docs/crawling.md](docs/crawling.md). `spider commands` lists it by itself.
+4. *Review:* document it where its area is documented: the CLI contract in [docs/cli.md](docs/cli.md), the store in [docs/crawl-store.md](docs/crawl-store.md), `linx crawl` in [docs/crawling.md](docs/crawling.md). `linx commands` lists it by itself.
 
 ### A setting in an existing table
 
-1. Add the field to the table's pydantic model, such as `CrawlSettings` in `spider/crawl/settings.py`, with a one-line `description` and a default TOML can write, or `None` for a setting that is unset. `tests/workspace/test_tables.py` checks every registered table against the [table rules](docs/architecture.md#settings). `spider init`'s commented template and the error hints come from the model.
+1. Add the field to the table's pydantic model, such as `CrawlSettings` in `openlinx/crawl/settings.py`, with a one-line `description` and a default TOML can write, or `None` for a setting that is unset. `tests/workspace/test_tables.py` checks every registered table against the [table rules](docs/architecture.md#settings). `linx init`'s commented template and the error hints come from the model.
 2. A secret is declared on the field, `json_schema_extra={"secret": True}`, and is redacted before a Crawl records it.
 3. If a flag mirrors it, see the next recipe.
 4. *Review:* document it with its table, such as `[crawl]` in docs/crawling.md "Options and `[crawl]` settings".
 
-A table has one owning change, and a new table is registered in `build_app` (`spider/cli/app.py`) by its `"module:Class"` reference, so `--help` never imports it.
+A table has one owning change, and a new table is registered in `build_app` (`openlinx/cli/app.py`) by its `"module:Class"` reference, so `--help` never imports it.
 
 ### An option that mirrors a setting
 
-1. Declare it on the Command as `--concurrency` is in `spider/cli/crawl.py`: `Annotated[int, typer.Option("--flag", ...), OptionMeta(setting="table.field")] = <default>`. The long name is the field's name with `-` for `_`. `tests/workspace/test_tables.py` checks that the setting exists.
+1. Declare it on the Command as `--concurrency` is in `openlinx/cli/crawl.py`: `Annotated[int, typer.Option("--flag", ...), OptionMeta(setting="table.field")] = <default>`. The long name is the field's name with `-` for `_`. `tests/workspace/test_tables.py` checks that the setting exists.
 2. The adapter passes `setting_flags(ctx)` to the settings loader, so only a flag given on the command line beats the settings file.
 3. *Review:* the option's default, `min`/`max` and help match the field's.
 4. A secret option inherits `secret` from its setting and takes only a long name; `check_command` refuses a short one.
 
 ### A Command
 
-1. **The service first:** plain Python in `spider/services/<area>.py`, taking a frozen request record and the `Reporter` and returning a result, with no Typer, Click or `Output`. Test it at seam 2. The MCP server (`090`) will call the same service, so any logic a second caller would need belongs here, not in the adapter.
-2. **The adapter:** `spider/cli/<command>.py`, a function under `@command_meta(output=..., formats=[...], fields=..., examples=[...])` that builds the request, calls the service and returns its result, as `spider/cli/init.py` does. A `list` Command declares `output_format`, `limit`, `cursor` and `fields` (`spider.cli.options`), and `check_command` refuses a Command that breaks its kind's rules when the app is built. Import sqlalchemy, pydantic and the crawler inside the function body; `tests/cli/test_startup.py` checks what `--help` loads.
-3. Register it in the list in `build_app` (`spider/cli/app.py`).
+1. **The service first:** plain Python in `openlinx/services/<area>.py`, taking a frozen request record and the `Reporter` and returning a result, with no Typer, Click or `Output`. Test it at seam 2. The MCP server (`090`) will call the same service, so any logic a second caller would need belongs here, not in the adapter.
+2. **The adapter:** `openlinx/cli/<command>.py`, a function under `@command_meta(output=..., formats=[...], fields=..., examples=[...])` that builds the request, calls the service and returns its result, as `openlinx/cli/init.py` does. A `list` Command declares `output_format`, `limit`, `cursor` and `fields` (`openlinx.cli.options`), and `check_command` refuses a Command that breaks its kind's rules when the app is built. Import sqlalchemy, pydantic and the crawler inside the function body; `tests/cli/test_startup.py` checks what `--help` loads.
+3. Register it in the list in `build_app` (`openlinx/cli/app.py`).
 4. Test it at seam 1 with `run_cli` (`tests/support/cli.py`): the JSON on stdout, the exit code, the diagnostics on stderr.
 5. *Review:* document it, and its codes as above.
 
 ### A table or column of the crawl store
 
-See [Changing the crawl store schema](#changing-the-crawl-store-schema) and [How to add a table](docs/schema.md#how-to-add-a-table). A new column goes into `spider.store.schema` and its `docs/schema.md` row in the same commit, at the same position in both. *Review:* a unit that runs once per URL or Page executes a statement built once at import ([architecture](docs/architecture.md#crawl-store)).
+See [Changing the crawl store schema](#changing-the-crawl-store-schema) and [How to add a table](docs/schema.md#how-to-add-a-table). A new column goes into `openlinx.store.schema` and its `docs/schema.md` row in the same commit, at the same position in both. *Review:* a unit that runs once per URL or Page executes a statement built once at import ([architecture](docs/architecture.md#crawl-store)).
 
 ### An extractor, handler or post-crawl pass
 
-Plug it into `default_hooks()` in `spider/services/hooks.py`, as [How 030 and 040 plug in](docs/architecture.md#crawl-pipeline) describes; the engine is never edited. 020 reworks these hooks before it is archived: a handler will name the store function that writes its rows (no separate `row_writers`), a pass will take a `PassContext`, an extractor will carry its own settings, and every request will go through one Requester. Read the architecture section as it stands on your branch before copying an example.
+Plug it into `default_hooks()` in `openlinx/services/hooks.py`, as [How 030 and 040 plug in](docs/architecture.md#crawl-pipeline) describes; the engine is never edited. 020 reworks these hooks before it is archived: a handler will name the store function that writes its rows (no separate `row_writers`), a pass will take a `PassContext`, an extractor will carry its own settings, and every request will go through one Requester. Read the architecture section as it stands on your branch before copying an example.
 
 ## Conventions
 
 - **Terms:** use the terms of [CONTEXT.md](CONTEXT.md) exactly, capitalised as defined there, such as Workspace, Crawl, Page, Issue and Command. This applies in code, tests, docs and commit messages. Test names use them too.
 - **Decisions:** a settled architectural decision is an ADR in [docs/adr/](docs/adr/). Don't reopen a decision that has one. Write a new ADR instead of quietly working around it.
-- **Placeholder name:** `spider` is a working name. It appears in `pyproject.toml` (the distribution and the console script), as the import package `spider`, and in the module `spider.naming` for anything users see: `APP_NAME`, the settings file name, the data folder and the global Workspace folder. Use those constants rather than typing a name in `src/`, and say "the settings file" or "the data folder" in comments, so a rename stays mechanical. `tests/test_naming.py` fails on the literals `spider.toml` and `.spider` anywhere else in `src/`; tests keep the literals.
+- **Names:** the module `openlinx.naming` holds every name users see: `COMMAND_NAME` (`linx`), `PACKAGE_NAME` (`openlinx`), the settings file name, the data folder and the global Workspace folder. Use those constants rather than typing a name in `src/`, and say "the settings file" or "the data folder" in comments. `tests/test_naming.py` fails on the literals `openlinx.toml` and `.openlinx` anywhere else in `src/`; tests keep the literals.
 
 ## Code style
 
@@ -188,16 +188,16 @@ Plug it into `default_hooks()` in `spider/services/hooks.py`, as [How 030 and 04
 - **The paradigm** is [ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md): logic in pure functions, data in frozen dataclasses (frozen `msgspec.Struct`s for page preparation's per-response records, which cross the parse pool, and for records that define a JSON document), dependencies as parameters typed by a Protocol, state only where it is inherent, no class hierarchies of our own, and pydantic only at the boundary.
 - **A memo** of a pure function, `functools.lru_cache(maxsize=N)` on a function whose result depends only on its arguments, is allowed and is not module-level state (ADR-0006). It always has a bound, never `maxsize=None` or `functools.cache`, and a one-line comment at the decorator says why it pays.
 - **Errors:**
-  - An error that a user or an agent sees is a `SpiderError` with a `DiagnosticCode` from the registry in `spider.output.codes`. A warning is a `Diagnostic` made with `Diagnostic.of(code, ...)` and given to the `Reporter`. Never report a bare message without a code.
+  - An error that a user or an agent sees is a `OpenLinxError` with a `DiagnosticCode` from the registry in `openlinx.output.codes`. A warning is a `Diagnostic` made with `Diagnostic.of(code, ...)` and given to the `Reporter`. Never report a bare message without a code.
   - A broken contract inside our own code, such as a settings table registered twice, raises a built-in `TypeError` or `RuntimeError`. It is a bug, not a diagnostic.
   - An error class of the store, such as `CrawlWriterClosedError`, is turned into a code by the service that catches it.
 - **`# type: ignore[code]` and `# noqa: CODE`** always name the code, and are used only when the fault is not ours: a third-party API or stub, or the one place that one of our banned-API rules (`TID251`) leads to. In a test, a deliberate type guard or a deliberately wrong call takes one too, with its reason. Prefer fixing the type. A short reason goes on the line, or in the comment right above it when the line would grow too long. That comment must not start with `noqa`, which ruff would read as a blanket directive and flag (`RUF100`).
 - **Private names** start with `_`. A module's public names are the ones without it, and only those are imported from other modules.
-- **Size, a guide and not a gate:** a module past about 300 non-blank lines, or a class past about 10 methods, is a question for review. Today `spider/store/writer.py` (407 lines) and its `CrawlWriter` (29 methods) are past both, and ADR-0006 says how to split them. `spider/store/schema.py` (393 lines) is past the line guide too, but nearly all of it is the declared tables' columns, one to a line, beside a few small helpers: it grows with the schema, not with its logic, so it stays one module. `spider/output/codes.py` (320 lines) is the same kind of list: one declaration per code. `spider/services/crawling.py` (505 lines), which plans, runs and continues a Crawl, is past it too: its next split would take the plan, from the settings to the Scope and the Seed's checks, into a module of its own. So is `spider/store/urls.py` (400 lines), the units of the `urls` table with their statements built at import: it would split by kind of unit, recording, the frontier and the counts. Complexity rules in ruff stay in the ROADMAP Backlog ("Code quality checks").
+- **Size, a guide and not a gate:** a module past about 300 non-blank lines, or a class past about 10 methods, is a question for review. Today `openlinx/store/writer.py` (407 lines) and its `CrawlWriter` (29 methods) are past both, and ADR-0006 says how to split them. `openlinx/store/schema.py` (393 lines) is past the line guide too, but nearly all of it is the declared tables' columns, one to a line, beside a few small helpers: it grows with the schema, not with its logic, so it stays one module. `openlinx/output/codes.py` (320 lines) is the same kind of list: one declaration per code. `openlinx/services/crawling.py` (505 lines), which plans, runs and continues a Crawl, is past it too: its next split would take the plan, from the settings to the Scope and the Seed's checks, into a module of its own. So is `openlinx/store/urls.py` (400 lines), the units of the `urls` table with their statements built at import: it would split by kind of unit, recording, the frontier and the counts. Complexity rules in ruff stay in the ROADMAP Backlog ("Code quality checks").
 - **Imports:**
-  - Our own code is imported by name, as in `from spider.output.codes import USAGE_ERROR`, never as a module.
+  - Our own code is imported by name, as in `from openlinx.output.codes import USAGE_ERROR`, never as a module.
   - A standard-library or third-party module is imported either way: whole where its functions are called through it (`asyncio`, `sqlite3`, `re`, `time`, `orjson`, `typer`), and by name otherwise (`from pathlib import Path`).
-  - An import inside a function only keeps a heavy module off the startup path, such as `rich` in `spider.output.table`. `tests/cli/test_startup.py` checks what a startup loads.
+  - An import inside a function only keeps a heavy module off the startup path, such as `rich` in `openlinx.output.table`. `tests/cli/test_startup.py` checks what a startup loads.
 - **Formatting** is `ruff format`'s: double quotes, and lines of at most 100 characters.
 
 ## Windows notes

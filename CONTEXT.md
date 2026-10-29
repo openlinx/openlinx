@@ -1,4 +1,4 @@
-# SEO Spider
+# OpenLinx
 
 An agent-first website crawler that audits sites for technical SEO problems. AI agents drive it and turn its data into Reports for people.
 
@@ -11,7 +11,7 @@ The place where one project's Crawls and settings live, usually one per client o
 _Avoid_: project, folder
 
 **Crawl**:
-One run of the spider over a site or a URL list, together with everything it recorded.
+One run of the crawler over a site or a URL list, together with everything it recorded.
 _Avoid_: scan, audit, job
 
 **Crawl Mode**:
@@ -67,7 +67,7 @@ _Avoid_: check
 **Link**:
 A reference from a Page to a URL (anchor, image, canonical, hreflang, …), with its attributes. Seen from the target it is an **Inlink**; seen from the source it is an **Outlink**.
 _Avoid_: href, reference
-In code, a _reference_ is only the raw string of an attribute or a header before it resolves to a Link, as the URL Standard names it (`spider.crawl.references`).
+In code, a _reference_ is only the raw string of an attribute or a header before it resolves to a Link, as the URL Standard names it (`openlinx.crawl.references`).
 
 **Redirect Chain**:
 The hops from a URL to its final destination, each with its own status.

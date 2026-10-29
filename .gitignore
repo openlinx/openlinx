@@ -16,8 +16,8 @@ venv/
 coverage.xml
 htmlcov/
 
-# Spider workspaces (crawl data)
-.spider/
+# OpenLinx Workspaces (crawl data)
+.openlinx/
 
 # Local agent settings
 .claude/settings.local.json

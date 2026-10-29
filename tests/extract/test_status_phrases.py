@@ -4,7 +4,7 @@ import csv
 import re
 from pathlib import Path
 
-from spider.extract.status_phrases import STATUS_PHRASES
+from openlinx.extract.status_phrases import STATUS_PHRASES
 
 _SNAPSHOT = Path(__file__).resolve().parents[2] / "scripts" / "http-status-codes-1.csv"
 

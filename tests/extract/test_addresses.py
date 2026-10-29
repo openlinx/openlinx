@@ -4,8 +4,8 @@ seam 4)."""
 from hypothesis import given, reject
 from hypothesis import strategies as st
 
-from spider.crawl.urls import normalize_url
-from spider.extract.addresses import display_address
+from openlinx.crawl.urls import normalize_url
+from openlinx.extract.addresses import display_address
 
 # Escapes and characters whose display forms could meet: escaped ASCII, both letter cases,
 # raw and escaped non-ASCII, the characters that stay encoded, and bytes that are no UTF-8.

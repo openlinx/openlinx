@@ -50,7 +50,7 @@ Titles, meta descriptions, meta keywords and headings follow one pattern:
 
 ## Content Area
 
-`word_count`, `sentence_count` and `average_words_per_sentence` are counted over the Page's Content Area (see [CONTEXT.md](../CONTEXT.md)). The `[content_area]` table of `spider.toml` sets it with two lists of CSS selectors:
+`word_count`, `sentence_count` and `average_words_per_sentence` are counted over the Page's Content Area (see [CONTEXT.md](../CONTEXT.md)). The `[content_area]` table of `openlinx.toml` sets it with two lists of CSS selectors:
 
 ```toml
 [content_area]
@@ -60,7 +60,7 @@ exclude = ["nav", "header", "footer"] # the default
 
 - **Roots.** With `include` empty, `<body>` is the only root. Otherwise the roots are the elements that an `include` selector matches and that no other match encloses, so an `<article>` inside a matched `<main>` is read once. Each root's text is a block of its own.
 - **Exclusions.** Everything inside a root is in the Content Area, except an element that an `exclude` selector matches and everything inside it.
-- **A list replaces the default.** Setting `exclude` in `spider.toml` replaces the whole default list, and `exclude = []` counts the whole `<body>`.
+- **A list replaces the default.** Setting `exclude` in `openlinx.toml` replaces the whole default list, and `exclude = []` counts the whole `<body>`.
 - **Invalid selectors** stop the Crawl before any request, with `settings_invalid` and the key `content_area.include` or `content_area.exclude`.
 - **Recorded.** The Crawl records the values it used under `content_area` in its config. They apply to the Crawls started after a change, never to Pages already stored.
 

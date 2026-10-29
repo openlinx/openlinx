@@ -1,4 +1,4 @@
-"""The links table in spider schema (030-add-page-data, page-data; seam 6)."""
+"""The links table in linx schema (030-add-page-data, page-data; seam 6)."""
 
 from typing import Any
 
