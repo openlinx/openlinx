@@ -9,7 +9,7 @@ from hypothesis import strategies as st
 from selectolax.lexbor import LexborHTMLParser
 
 from spider.crawl.fetch.fetcher import FetchResult
-from spider.crawl.pages.headers import header_links
+from spider.crawl.pages.headers import header_links, header_links_with_parameters
 from spider.crawl.pages.preparation import (
     PageInput,
     PageSettings,
@@ -131,6 +131,34 @@ _PAGE_WITH_A_CANONICAL_HEADER = FetchResult(
 _SEEING = PageSettings(
     scope=scope_rules(SITE), extractors=(extractor("seen", _links_seen, None),), strip_params=None
 )
+
+
+def test_each_header_link_comes_with_its_parameters() -> None:
+    # A PDF's language versions, declared the only way a PDF can declare them, and a header
+    # that repeats a parameter, where RFC 8288 takes the first.
+    headers = (
+        (
+            "Link",
+            '<http://site.test/de/guide.pdf>; rel="alternate"; hreflang="de", '
+            '<http://site.test/guide.pdf>; rel="canonical"',
+        ),
+        ("link", "</en/guide.pdf>; rel=alternate; HrefLang=en-GB; hreflang=en"),
+    )
+    found = list(
+        header_links_with_parameters(headers, SITE, is_internal=_on_site, strip_params=None)
+    )
+
+    assert [
+        (link.ordinal, link.type, parameters.get("hreflang")) for link, parameters in found
+    ] == [
+        (1, "hreflang", "de"),
+        (2, "canonical", None),
+        (3, "hreflang", "en-GB"),
+    ]
+    # The Links are the ones discovery gives, so the two walks cannot drift apart.
+    assert [link for link, _ in found] == header_links(
+        headers, SITE, is_internal=_on_site, strip_params=None
+    )
 
 
 def test_header_links_come_before_the_links_of_the_document() -> None:
