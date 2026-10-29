@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/bogzak/seo_spider/actions/workflows/ci.yml/badge.svg)](https://github.com/bogzak/seo_spider/actions/workflows/ci.yml)
 
-OpenLinx is an open-source, agent-first SEO crawler. It runs locally and stores each Crawl as a SQLite file with a public, versioned schema, so an agent can query it with arbitrary read-only SQL, and every Issue it reports can be reproduced by a query. It has no GUI, no account and no telemetry. If you know desktop SEO crawlers such as Screaming Frog, the column names will be familiar.
+OpenLinx is an open-source, agent-first SEO crawler. It runs locally and stores each Crawl as a SQLite file with a public, versioned schema, so an agent can query it with arbitrary read-only SQL (`sql`, coming in v0.1), and every Issue it reports can be reproduced by a query. It has no GUI, no account and no telemetry. If you know desktop SEO crawlers such as Screaming Frog, the column names will be familiar.
 
 `spider` is the working name of the command and the Python package until a rename change moves them to OpenLinx.
 
