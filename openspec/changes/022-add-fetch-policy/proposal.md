@@ -20,7 +20,7 @@ The response headers must also be stored, without cookie values, because `page -
 > **Built on `020-add-crawl-core`'s code** with its `UrlResult` shape: the `Fetcher` Protocol and the Requester in `openlinx.crawl.fetch`, `CrawlSettings`, the context builder, `Hooks` with `handler(...)`, and the `fetch_error` codes. The parts of `020` not merged yet are named in tasks.md where a task waits for them, and the v0.2 parts are marked there and in the design.
 
 - **Request identity:**
-  - `--user-agent <string>`. The default is `OpenLinx/<version> (+<project URL>)`.
+  - `--user-agent <string>`. The default is `OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)`, the page for site owners.
   - **(v0.2)** `--header "Name: Value"`, repeatable, setting `crawl.header`.
   - **(v0.2)** `--auth <user:password>`, a secret.
   - **(v0.2)** Custom headers and credentials go only to Internal URLs.

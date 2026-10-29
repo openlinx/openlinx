@@ -14,9 +14,9 @@ An option and its setting are declared by the task that applies them (`020` D11,
 
 A value that a handler or the store needs from a response goes on `020`'s `UrlResponse` (`UrlResult.response`), and a request that got none keeps its `UrlFailure` (`UrlResult.failure`); the store record is built from them (`020` task 5.20).
 
-**v0.1 and v0.2:** groups 1–8 are 022-min, in v0.1 (ROADMAP). Groups 9–12 are marked (v0.2) and wait for v0.2.
+**v0.1 and v0.2:** groups 1–8 are 022-min, in v0.1 (ROADMAP). Groups 9 and 10 join it with `020`'s network pause and close it. Groups 11–14 are marked (v0.2) and wait for v0.2.
 
-**Order against `020`:** this change builds on `020`'s accepted code with its `UrlResult` shape (`020` tasks 5.19–5.25), merged in at the manager's SHA. A task that needs a part of `020` that is not merged yet says "after `020` task N". `020`'s network pause (its group 12) is still open; this change's TLS and retry rules leave their pause sentences to it.
+**Order against `020`:** this change builds on `020`'s accepted code with its `UrlResult` shape (`020` tasks 5.19–5.25), merged in at the manager's SHA. A task that needs a part of `020` that is not merged yet says "after `020` task N". `020`'s network pause (its group 12) is merged in; group 9 joins it with this change's retries.
 
 Seams (docs/testing.md):
 - **[Pure]**: seam 4, pure-logic modules
@@ -76,7 +76,7 @@ Seams (docs/testing.md):
 - [x] 4.5 [3+6] **Guard:** "A redirect to an excluded URL is not followed".
 - [x] 4.6 [3+6] Drive "A redirect to an External URL is checked", on `020`'s `fixture_hosts`. The target is recorded for any 3xx, whatever the source's Scope, outside the branch that follows Links.
 - [x] 4.7 [Fixture] Let `fixture_hosts` take a site per name (design D9), test-first in `tests/fixture_site/test_hosts.py`.
-- [x] 4.8 [3+6] Drive "A redirect to the apex host stays inside the Scope", and "A Seed chain that ends off its site widens nothing", a pair (design D3). `Run` holds the Seed chain's state, open with its provisional Scope, which admits only the hosts of the Seed's registrable domain and only for a target of the chain. The final URL's unit closes it once: it writes `is_internal` and `in_scope` of every URL of the chain against the final Scope, and, when the chain ends on the Seed's registrable domain with a response, appends the host to `crawl.scope`; then the context is replaced and `pages.start` runs. Done when: every hop of a two-hop chain is checked, not only the last.
+- [x] 4.8 [3+6] Drive "A www Seed that redirects to its apex keeps the apex inside the Scope", and "A Seed chain that ends off its site widens nothing", a pair (design D3). `Run` holds the Seed chain's state, open with its provisional Scope, which admits only the hosts of the Seed's registrable domain and only for a target of the chain. The final URL's unit closes it once: it writes `is_internal` and `in_scope` of every URL of the chain against the final Scope, and, when the chain ends on the Seed's registrable domain with a response, appends the host to `crawl.scope`; then the context is replaced and `pages.start` runs. Done when: every hop of a two-hop chain is checked, not only the last.
 - [x] 4.8a [3+6] Drive "A www Seed that redirects on its host is checked on its final Page": `020`'s `seed_base_mismatch` reads the final Page of the Seed's Redirect Chain (design D3).
 - [x] 4.8b [3+6] Drive "A redirected image beyond the depth limit is checked": a redirect target is found the way its chain was first found (`chain_via`, the first `discovered_via` of the chain that is no `redirect`), so the depth limit and the depth barrier treat a redirected image as a Resource (design D2).
 - [x] 4.9 [CLI] Drive "A redirect to another site is reported". Done when: `seed_redirected_out_of_scope` is declared.
@@ -114,7 +114,7 @@ Seams (docs/testing.md):
 - [x] 6.1 [Fixture] Add HTTPS listeners with a `trustme` CA to the fixture site, which the DNS resolver hook maps from port 443 of a name, so `FixtureResolver` is keyed by name and port: one for `site.test`, one with a certificate for `other.test` served as `badcert.test`, and one with a certificate from an untrusted CA. The crawler's TLS setup takes extra trust anchors for the test CA through the Fetcher factory of 1.0 (design D5). `trustme` is a dev dependency.
 - [x] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback in `openlinx.crawl.fetch.tls`, both runtime dependencies with their allowlist lines, imported only from `openlinx.crawl.fetch`. `aiohttp.ClientSSLError` → `tls_error` is `020`'s already. A [Pure] test covers the fallback branch.
 - [x] 6.3 [3+6] Drive "A certificate from an unknown CA is a TLS error", and `test_a_robots_txt_with_a_bad_certificate_gives_its_urls_tls_error_without_a_request` [3+6] over the `badcert.test` listener, since the TLS requirement's robots.txt sentence has no scenario of its own.
-- [ ] 6.4 Speed test: `scripts/tls_handshake_speed.py`, a one-off measurement against public hosts that is never a test and never runs in the gate, measures TLS handshake time with truststore and with certifi on Windows, macOS and Linux (WSL). Record the results in `docs/benchmarks.md`, and change the default path only if truststore is measurably slower (design D5). macOS is measured when CI minutes return (workflow_dispatch).
+- [ ] 6.4 Speed test: `scripts/tls_handshake_speed.py`, a one-off measurement against public hosts that is never a test and never runs in the gate, measures TLS handshake time with truststore and with certifi on Windows, macOS and Linux. Windows and WSL are measured by hand; all three run on a throwaway branch whose one-job workflow runs the script on each OS, in a draft PR that is closed unmerged. Record the results in `docs/benchmarks.md`, and change the default path only if truststore is measurably slower (design D5).
 - [x] 6.5 [CLI] Drive "The HTTP version is a later column" (v0.1): `origins.http_version` declared NULL in every row, with its values from a `Literal` in `openlinx.store.records` and a description that starts with `Filled from v0.2. `. It is the first later column, so `018`'s guard over derived and later columns gains the assertion that it saw one.
 - [x] 6.6 Docs: document TLS trust, the speed-test result and `http_version` (NULL in v0.1) in `docs/crawling.md`.
 - [x] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
@@ -130,41 +130,61 @@ Seams (docs/testing.md):
 ## 8. Change check (v0.1)
 
 - [x] 8.1 Verify that every `#### Scenario:` in `specs/fetching/spec.md` that groups 1–7 drive has exactly one test named after it, with `scripts/scenario_coverage.py <spec.md>`, written here as the one shared check (`020` task 16.1 reuses it): it reports missing scenarios, scenarios with more than one test and tests named close to a scenario that no longer exists, and a v0.2 scenario as waiting. It is a check that is run, not a test.
-- [ ] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate, when CI minutes return (workflow_dispatch). Until then the gate runs Python 3.14 on Windows, and one full-suite run on Python 3.12 in WSL Linux proves the minimum version.
+- [ ] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate: the 9 cells of main's CI on this change's first PR.
 - [x] 8.3 **Guard:** every code this change declares (design D11) is listed by `linx commands` with its level and exit code [CLI]; the `commands.json` snapshot holds only the `commands` Command's own entry, so it does not change.
 - [x] 8.4 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.
-- [ ] 8.5 After `020` group 12 is merged: the network pause skips a `tls_error` and counts a retried request as one without a response, the pause sentences of the TLS and retry requirements, done at that merge.
 
-## 9. (v0.2) Custom headers and credentials
+## 9. The network pause meets retries (v0.1)
 
-- [ ] 9.1 [HTTP] Drive "A custom header is sent to Internal URLs": `--header` with the `crawl.header` setting, and `Request` carries its dispatch decision's `is_internal` (design D1).
-- [ ] 9.2 [HTTP] Drive "A custom header never goes to External URLs", on `020`'s two fixture instances.
-- [ ] 9.3 [CLI] Drive "A malformed header is rejected".
-- [ ] 9.4 [3+6] Drive "A cookie header keeps its name and hides its value": declare `--header` and `crawl.header` a header secret, the header form of `015`'s redaction.
-- [ ] 9.5 [HTTP] Drive "Credentials are sent to Internal URLs": `--auth`, marked secret.
-- [ ] 9.6 [HTTP] Drive "Credentials never go to External URLs".
-- [ ] 9.7 [3+6] Drive "The recorded command hides the password".
-- [ ] 9.8 [HTTP] Drive "Credentials in openlinx.toml are used".
-- [ ] 9.9 Docs: document custom headers, basic auth and secrets in `docs/crawling.md`.
-- [ ] 9.10 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [ ] 9.1 [Fake timing] Drive "A request that fails during a network pause is not retried": after its backoff, a closed gate ends a URL's retries in the Requester, which returns the last failure, and the pause re-queues it (design D4).
+- [ ] 9.2 [Fake timing] Drive "A network that goes down pauses the Crawl before the retries": the Requester reports a URL's first attempt without a response to the network pause through a hook the engine gives it, and its later attempts never count (design D4). Done when: the tests of `020`'s pause that pass `--retries 0` for its count run with the default retries again.
+- [ ] 9.3 Refactor, behaviour unchanged: the network pause owns its bookkeeping, `outcome(...)` for a URL's request and `verdict(...)` for robots.txt, and its `retries` is `requeues` (design D4). Red by a mutation that drops the URL-limit give-back inside `outcome`.
+- [ ] 9.4 Refactor, behaviour unchanged: the `CrawlContext` carries the `FetchPolicy`, and the watchdog reads `timeout_seconds` from it (design D1). **Guard:** `test_a_raised_timeout_raises_the_watchdog_with_it`, red by a mutation that gives the watchdog the default timeout.
+- [ ] 9.5 [Fake timing] **Guard:** "TLS errors never pause the Crawl", red by a mutation that counts `tls_error` (`020` keeps it out of the count already).
+- [ ] 9.6 Review: run the code-review skill on group 9's commits, with the findings of the review of the merges of `020` and main, then refactor with the whole suite green.
 
-## 10. (v0.2) The proxy flag
+## 10. Closing the change (v0.1)
 
-- [ ] 10.1 [HTTP] Drive "Requests go through the proxy": `--proxy` and `crawl.proxy`.
-- [ ] 10.2 [HTTP] Drive "The proxy flag overrides the proxy variables".
-- [ ] 10.3 [3+6] Drive "A proxy password is redacted": mark `--proxy` a URL secret.
-- [ ] 10.4 Docs: document `--proxy` and `[crawl] proxy` in `docs/crawling.md`.
-- [ ] 10.5 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+Tasks 6.4 and 8.2 close in this group too.
 
-## 11. (v0.2) HTTP version
+- [ ] 10.1 [CLI] With `023`'s group 1 on main, whose task 1.4 drops the proxy variables from `linx commands`: bring back the `environment` entry with this change's wording and the proxy sentence of `docs/workspace.md`, with this change's cli-contract delta of `023`'s requirement, the proxy variables as the only environment the tool honours. A test reads `environment` from `linx commands` and checks each name against `ProxyVariables`' keys, so the list and the reader cannot drift.
+- [ ] 10.2 Refactor, behaviour unchanged: `BlockingRuns` and `BLOCKING_RUN` move to `openlinx.crawl.engine.blocking`, since only the engine uses them, and both package docstrings follow.
+- [ ] 10.3 [3+6] Drive "A redirect to another subdomain stays inside the Scope", on `fixture_named_hosts` with `en.site.test` (design D3).
+- [ ] 10.4 [Fixture] A self-signed listener served as `selfsigned.test`, test-first in `tests/fixture_site/`; then `test_a_self_signed_certificate_is_a_tls_error` [3+6], which CI runs on Windows, macOS and Linux, since each verifies through its own platform API (design D5, Risks).
+- [ ] 10.5 Docs: `docs/crawler.md` for site owners, every claim checked against the code: a URL is requested once per Crawl plus its retries, robots.txt's 5xx or 429 keeps the URLs of its origin unrequested after robots.txt's own retries, and the 10-second wait is a 429's only. `README.md` gains the line "Crawl only sites you own or have permission to crawl; the defaults are polite, see docs/crawler.md". The docs-link guard covers the page.
+- [ ] 10.6 Docs: `docs/crawling.md` ("Continuing a Crawl") says a continue uses its own process's proxy variables (design D1).
+- [ ] 10.7 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
 
-- [ ] 11.1 [Fixture] Add two HTTPS listeners: one that selects `h2`, and one that offers only `http/1.1`.
-- [ ] 11.2 [3+6] Drive "A plain http origin": filling `origins.http_version`.
-- [ ] 11.3 [3+6] Drive "An origin that selects HTTP/2": the ALPN handshake (design D6).
-- [ ] 11.4 [3+6] Drive "An origin that offers only HTTP/1.1".
-- [ ] 11.5 Docs: document `http_version` and the ALPN check in `docs/crawling.md`.
-- [ ] 11.6 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+## 11. (v0.2) Custom headers and credentials
 
-## 12. (v0.2) zstd
+- [ ] 11.1 [HTTP] Drive "A custom header is sent to Internal URLs": `--header` with the `crawl.header` setting, and `Request` carries its dispatch decision's `is_internal` (design D1).
+- [ ] 11.2 [HTTP] Drive "A custom header never goes to External URLs", on `020`'s two fixture instances.
+- [ ] 11.3 [CLI] Drive "A malformed header is rejected".
+- [ ] 11.4 [3+6] Drive "A cookie header keeps its name and hides its value": declare `--header` and `crawl.header` a header secret, the header form of `015`'s redaction.
+- [ ] 11.5 [HTTP] Drive "Credentials are sent to Internal URLs": `--auth`, marked secret.
+- [ ] 11.6 [HTTP] Drive "Credentials never go to External URLs".
+- [ ] 11.7 [3+6] Drive "The recorded command hides the password".
+- [ ] 11.8 [HTTP] Drive "Credentials in openlinx.toml are used".
+- [ ] 11.9 Docs: document custom headers, basic auth and secrets in `docs/crawling.md`.
+- [ ] 11.10 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
 
-- [ ] 12.1 [3+6] Add zstd decoding (`zstandard`, or `compression.zstd` on 3.14) and the `zstd` token of `Accept-Encoding` (design D1), with a test of a zstd Resource's two sizes, then run the code-review skill on it.
+## 12. (v0.2) The proxy flag
+
+- [ ] 12.1 [HTTP] Drive "Requests go through the proxy": `--proxy` and `crawl.proxy`.
+- [ ] 12.2 [HTTP] Drive "The proxy flag overrides the proxy variables".
+- [ ] 12.3 [3+6] Drive "A proxy password is redacted": mark `--proxy` a URL secret.
+- [ ] 12.4 Docs: document `--proxy` and `[crawl] proxy` in `docs/crawling.md`.
+- [ ] 12.5 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
+
+## 13. (v0.2) HTTP version
+
+- [ ] 13.1 [Fixture] Add two HTTPS listeners: one that selects `h2`, and one that offers only `http/1.1`.
+- [ ] 13.2 [3+6] Drive "A plain http origin": filling `origins.http_version`.
+- [ ] 13.3 [3+6] Drive "An origin that selects HTTP/2": the ALPN handshake (design D6).
+- [ ] 13.4 [3+6] Drive "An origin that offers only HTTP/1.1".
+- [ ] 13.5 Docs: document `http_version` and the ALPN check in `docs/crawling.md`.
+- [ ] 13.6 Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
+
+## 14. (v0.2) zstd
+
+- [ ] 14.1 [3+6] Add zstd decoding (`zstandard`, or `compression.zstd` on 3.14) and the `zstd` token of `Accept-Encoding` (design D1), with a test of a zstd Resource's two sizes, then run the code-review skill on it.

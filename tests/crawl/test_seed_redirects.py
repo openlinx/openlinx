@@ -51,7 +51,7 @@ def test_a_seed_chain_that_ends_without_a_response_widens_nothing(
     ) == ([("error",)], False)
 
 
-def test_a_redirect_to_the_apex_host_stays_inside_the_scope(
+def test_a_www_seed_that_redirects_to_its_apex_keeps_the_apex_inside_the_scope(
     temp_workspace: TempWorkspace, fixture_named_hosts: StartNamedHosts
 ) -> None:
     # The site moved from www to its apex; the old address still gets the links.

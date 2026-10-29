@@ -16,11 +16,11 @@ Scenario conventions:
 ## ADDED Requirements
 
 ### Requirement: User agent
-Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLinx/<version> (+<project URL>)` by default, where `<version>` is the tool's version. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request. A value that is empty or only spaces, or holds a character other than visible ASCII, space and tab (RFC 9110's VCHAR, SP and HTAB), SHALL be rejected with exit code 2 and error code `invalid_value`.
+Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)` by default, where `<version>` is the tool's version and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request. A value that is empty or only spaces, or holds a character other than visible ASCII, space and tab (RFC 9110's VCHAR, SP and HTAB), SHALL be rejected with exit code 2 and error code `invalid_value`.
 
 #### Scenario: The default user agent identifies the tool
 - **WHEN** `linx crawl {site}/` runs
-- **THEN** every request the fixture site receives has a `User-Agent` that matches `^OpenLinx/\d+\.\d+\.\d+\S* \(\+https://\S+\)$`
+- **THEN** every request the fixture site receives has a `User-Agent` that matches `^OpenLinx/\d+\.\d+\.\d+\S* \(\+https://github\.com/openlinx/openlinx/blob/main/docs/crawler\.md\)$`
 
 #### Scenario: A custom user agent is used on every request
 - **WHEN** `linx crawl {site}/ --user-agent "AuditBot/1.0"` runs
@@ -135,7 +135,7 @@ The Crawl SHALL retry a request attempt, robots.txt included, that ends with the
 - **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start. A 429 or a `Retry-After` SHALL pause the host even when the URL is not retried, with `--retries 0` or on its last attempt.
 - **Other 4xx statuses** SHALL NOT be retried.
 - **URL limit:** a retry is the same URL, so only a URL's first attempt SHALL count towards `--max-urls`.
-- **Network pause:** while the Crawl is paused waiting for the network (`020-add-crawl-core`), a request attempt that fails SHALL be neither retried nor recorded; its URL stays `queued` and is requested after the pause.
+- **Network pause:** a URL SHALL count once towards the network pause of `020-add-crawl-core`, at its first attempt that gets no HTTP response; its later attempts SHALL NOT count again. While the Crawl is paused waiting for the network, a request attempt that fails SHALL be neither retried nor recorded, and a URL whose retry is due SHALL make no further attempt; its URL stays `queued` and is requested after the pause.
 
 The URL SHALL record the last attempt's response. This change adds this column to `urls`, under the conventions of `018-add-schema-conventions`:
 
@@ -170,6 +170,14 @@ The URL SHALL record the last attempt's response. This change adds this column t
 #### Scenario: An unresolvable External host is requested once
 - **WHEN** `http://site.test/` links to `http://gone.test/`, a host name that does not resolve
 - **THEN** `http://gone.test/` has `fetch_error` = `dns_error`, and the name `gone.test` is resolved once
+
+#### Scenario: A request that fails during a network pause is not retried
+- **WHEN** `http://site.test/` links to `/p1` to `/p20`, a fake Fetcher answers `/` and gets no response for any later request, and the Crawl runs with `--concurrency 1`, `--network-wait 30` and a fake clock
+- **THEN** no request for a `/pN` URL starts after the pause began, and every `/pN` URL is `queued` when the Crawl ends
+
+#### Scenario: A network that goes down pauses the Crawl before the retries
+- **WHEN** `http://site.test/` links to `/p1` to `/p20`, a fake Fetcher answers `/` and refuses every later connection at once, and the Crawl runs with `--concurrency 1`, the default `--retries` and a fake clock
+- **THEN** the `crawl_paused` event comes before any retry starts
 
 ### Requirement: Redirects are followed hop by hop
 The Crawl SHALL NOT follow redirects within one request. For a 301, 302, 303, 307 or 308 response with a `Location` header:
@@ -232,9 +240,13 @@ It also adds this index to `urls`, built while the Crawl writes:
 ### Requirement: A Seed that redirects within its site extends the Scope
 When a Seed's Redirect Chain ends with a response inside the Seed's section on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. The `seed_base_mismatch` and `seed_blocked_by_robots_txt` checks of `020-add-crawl-core` SHALL read the URL that the Seed's Redirect Chain ends on. When the chain ends outside the Crawl's Scope, on another registrable domain or, under `--scope subfolder`, outside the Seed's folder, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_out_of_scope` warning whose hint contains the final URL of the chain. A chain whose last target is never requested, skipped with `max_redirects` or refused by `--max-urls`, SHALL end on that target.
 
-#### Scenario: A redirect to the apex host stays inside the Scope
+#### Scenario: A www Seed that redirects to its apex keeps the apex inside the Scope
 - **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `linx crawl http://www.site.test/` runs
 - **THEN** `http://site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1
+
+#### Scenario: A redirect to another subdomain stays inside the Scope
+- **WHEN** `http://site.test/` redirects with 301 to `http://en.site.test/`, which links to `/a`, and `linx crawl http://site.test/` runs
+- **THEN** `http://en.site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1, and `crawl.scope` lists `en.site.test` among its hosts
 
 #### Scenario: A www Seed that redirects on its host is checked on its final Page
 - **WHEN** `http://www.site.test/` redirects with 301 to `http://www.site.test/home`, which holds `<link rel="canonical" href="http://site.test/">`, and `linx crawl http://www.site.test/` runs
@@ -368,6 +380,10 @@ HTTPS requests SHALL verify the server certificate and its host name against the
 #### Scenario: A certificate from an unknown CA is a TLS error
 - **WHEN** `http://site.test/` links to `https://other.test:{untrusted_port}/`, whose certificate comes from a CA that is not trusted
 - **THEN** that URL has `fetch_error` = `tls_error`
+
+#### Scenario: TLS errors never pause the Crawl
+- **WHEN** `https://site.test/` links to `https://a1.site.test/` to `https://a12.site.test/`, whose certificates do not verify, a fake Fetcher gives each of them `tls_error`, and `linx crawl https://site.test/ --scope subdomains --network-wait 0` runs with a fake clock
+- **THEN** the Crawl completes, and no `crawl_paused` event is written
 
 ### Requirement: HTTP version per origin
 This change adds this column to `origins` in v0.1. Its description SHALL start with `Filled from v0.2. `, and it SHALL be NULL in every row until then.
