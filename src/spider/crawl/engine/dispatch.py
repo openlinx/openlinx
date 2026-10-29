@@ -5,9 +5,10 @@ import asyncio
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import url_limit_reached
 from spider.crawl.engine.outcomes import Outcomes
-from spider.crawl.engine.units import Run, unit_of, via_resource
-from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits
-from spider.crawl.fetch.requester import Requester
+from spider.crawl.engine.units import Run, TaskFailure, unit_of, via_resource
+from spider.crawl.fetch.fetcher import REQUEST_DEADLINE_SECONDS
+from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
+from spider.crawl.fetch.requester import Requester, watchdog_seconds
 from spider.crawl.pages.preparation import PageSettings
 from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.scope import ScopeDecision
@@ -23,18 +24,28 @@ _ABOVE_NO_DEPTH = -1
 
 
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
-    limits = RequestLimits(
-        context.settings.concurrency, context.pages.backlog, context.settings.max_urls
+    concurrency = context.settings.concurrency
+    cap = global_cap(concurrency)
+    limits = RequestLimits(cap, context.pages.backlog, context.settings.max_urls)
+    gate = RateGate(context.clock, context.settings.rate)
+    requester = Requester(
+        context.fetcher,
+        limits,
+        gate,
+        concurrency=concurrency,
+        cap=cap,
+        clock=context.clock,
+        watchdog_seconds=watchdog_seconds(REQUEST_DEADLINE_SECONDS),
     )
-    requester = Requester(context.fetcher, limits, RateGate(context.clock, context.settings.rate))
     run = Run(
         context=context,
-        outcomes=Outcomes(context),
+        outcomes=Outcomes(context.writer, context.reporter, context.stop),
         limits=limits,
         requester=requester,
         robots=RobotsLoader(requester, context.writer, context.settings.robots_user_agent),
         blocking=BlockingRuns(),
         checked_urls=set(),
+        task_failure=TaskFailure(context.stop),
     )
     decision = context.scope.decide(seed)
     await context.writer.run_async(
@@ -54,8 +65,9 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     try:
         while depth is not None:
             await _crawl_depth(run, depth)
-            # A stop cancels the checked URLs in flight: the sweep below would wait for them.
-            if context.stop.is_set:
+            # A stop or a bug cancels the checked URLs in flight: the sweep below would wait for
+            # them.
+            if context.stop.is_set or run.task_failure.is_set:
                 break
             if limits.limit_reached() is not None:
                 # The URL limit: what has started ends and is recorded, and nothing more starts.
@@ -78,6 +90,8 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     finally:
         await _cancel_all(run.checked_urls)
         await run.robots.close()
+    # Once every task has ended, including those that the cancellation above ended.
+    run.task_failure.raise_first()
     await run.outcomes.settled()
     limit = limits.limit_reached()
     # Only once every outcome is in: a failure among them outranks the stop.
@@ -98,7 +112,7 @@ async def _crawl_depth(run: Run, depth: int) -> None:
         ):
             for queued in batch:
                 await limits.reserve_task()
-                if context.stop.is_set:
+                if context.stop.is_set or run.task_failure.is_set:
                     limits.task_ended()
                     return
                 if limits.limit_reached() is not None:
@@ -109,8 +123,7 @@ async def _crawl_depth(run: Run, depth: int) -> None:
                 # A checked URL never holds the barrier (design D3); the sweep in run_crawl reads
                 # what one finds after its depth has closed.
                 tasks = run.checked_urls if _is_checked_url(queued, decision) else running
-                tasks.add(task)
-                task.add_done_callback(tasks.discard)
+                run.task_failure.track(tasks, task)
             after = batch[-1].id
         if running:
             await asyncio.gather(*running)
@@ -121,7 +134,8 @@ async def _crawl_depth(run: Run, depth: int) -> None:
 async def _cancel_all(tasks: set[asyncio.Task[None]]) -> None:
     for task in tasks:
         task.cancel()
-    # Retrieved, so that no "Task exception was never retrieved" reaches stderr.
+    # Only cancellation is swallowed here: any other exception has reached the run's
+    # TaskFailure through its task's done callback.
     await asyncio.gather(*tasks, return_exceptions=True)
 
 
@@ -134,6 +148,6 @@ async def _crawl_url(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> No
         recorded = await unit_of(run, queued, decision)
         # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
         if recorded is not None:
-            await run.outcomes.submit(*recorded)
+            await run.outcomes.submit(recorded)
     finally:
         run.limits.task_ended()

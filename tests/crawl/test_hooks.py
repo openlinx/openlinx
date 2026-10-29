@@ -39,6 +39,7 @@ from tests.fixture_site.routes import Page, Robots, Site, Status
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
+from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.sites import LATE_SHORTER_PATH, NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
@@ -156,11 +157,9 @@ def test_post_crawl_passes_run_in_the_order_the_hooks_declare(
     assert ran == ["first", "second"]
 
 
-def test_a_post_crawl_pass_gets_the_clock_of_the_crawl(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
+def test_a_post_crawl_pass_gets_the_clock_of_the_crawl(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
+    fetcher = FakeFetcher(clock, {"/": FakePage("<p>Home</p>")})
     clocks: list[Clock] = []
 
     async def record_the_clock(context: PassContext) -> None:
@@ -169,7 +168,7 @@ def test_a_post_crawl_pass_gets_the_clock_of_the_crawl(
     hooks = default_hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("clock", record_the_clock)))
 
-    crawl_result(server.url("/"), hooks, clock=clock)
+    crawl_result("http://site.test/", hooks, clock=clock, fetcher=fetcher)
 
     assert clocks == [clock]
 
@@ -488,6 +487,27 @@ def test_a_url_whose_rows_cannot_be_written_is_recorded_as_an_error(
     )
 
 
+def test_a_checked_url_whose_rows_cannot_be_written_is_recorded_when_it_ends_last(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    # The image ends last, so its unit fails behind the final flush and its fallback unit
+    # comes after that flush.
+    pages = {"/": FakePage('<img src="/boom">'), "/boom": FakePage("<p>B</p>", delay=1)}
+
+    result = crawl_result(
+        "http://site.test/",
+        _with_row_writer(_refuse),
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages),
+    )
+
+    assert (
+        query(result.crawl_file, "SELECT fetch_state, fetch_error FROM urls WHERE id = 2"),
+        result.summary.state,
+    ) == ([("error", "record_failed")], "completed")
+
+
 def test_a_unit_that_fails_with_the_file_is_never_completed(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
@@ -600,6 +620,27 @@ def test_a_writer_that_ends_reports_why_it_ended(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
+    hooks = default_hooks()
+    hooks = replace(
+        hooks,
+        handlers=(
+            *hooks.handlers,
+            handler("flaky", _flaky, _write_flaky([])),
+            handler("unwritable", _unwritable, _refuse),
+        ),
+    )
+
+    with pytest.raises(CrawlWriterReplayError):
+        crawl_result(server.url("/"), hooks)
+
+
+def test_a_url_that_meets_an_ended_writer_reports_why_the_writer_ended(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # /ok answers after the writer has ended on /boom's replay, so its own unit is refused.
+    server = fixture_site(
+        Site(routes={**BOOM_SITE.routes, "/ok": Page(body="<p>OK</p>", delay=0.3)})
+    )
     hooks = default_hooks()
     hooks = replace(
         hooks,

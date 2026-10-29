@@ -264,7 +264,7 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 - **Link types that are not requested:** a URL reached only through them SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`.
 - **One row per URL of a Page:** a Page SHALL record each URL it links to once. The URL SHALL be followed when any of its Links on the Page is. Its `discovered_via` SHALL be the type of its first Resource Link on the Page, else of its first followed Link, else of its first Link. A URL that none of them follows SHALL have the `skip_reason` of its first Link.
 - **Templates:** the content of a Page's own `<template>` element SHALL give no Link.
-- **Provenance:** a URL's `discovered_via` SHALL be how it was first found: `seed`, or the Link type. `found_on_url_id` SHALL point to the URL whose response revealed it. For a URL reached through a Link that is not followed and later through one that is, its `discovered_via`, `found_on_url_id` and `crawl_depth` SHALL come from the first Page that follows it. A Resource Link SHALL raise a URL that a Link of another type reached first, while the URL is `queued` or skipped as `max_depth`, when it reaches it at the same or a shorter depth: the URL's `discovered_via`, `found_on_url_id` and `crawl_depth` then come from the Resource Link, and a skipped one is queued again. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
+- **Provenance:** a URL's `discovered_via` SHALL say how it was found, `seed` or a Link type, and `found_on_url_id` SHALL point to the URL whose response gave that Link: the first Link that reached it, except as the rules below say. For a URL reached through a Link that is not followed and later through one that is, its `discovered_via`, `found_on_url_id` and `crawl_depth` SHALL come from the first Page that follows it. A Resource Link SHALL raise a URL that a Link of another type reached first, while the URL is `queued` or skipped as `max_depth`, when it reaches it at the same or a shorter depth: the URL's `discovered_via`, `found_on_url_id` and `crawl_depth` then come from the Resource Link, and a skipped one is queued again. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
 
 #### Scenario: A relative link is resolved against the base href
 - **WHEN** the Links of `http://site.test/` are extracted from `<base href="http://site.test/docs/"><a href="guide">Guide</a>`
@@ -528,6 +528,10 @@ The Crawl SHALL never have more than `--concurrency` requests in flight to one h
 - **WHEN** `/` links to `/slow/1` to `/slow/20`, each answering after 500 ms, and `spider crawl {site}/ --concurrency 2` runs
 - **THEN** the highest number of simultaneous requests the fixture site records is 2
 
+#### Scenario: The global cap bounds requests across hosts
+- **WHEN** `/` links to one Page on each of 30 External hosts, each answering after 1 second, and `spider crawl {site}/` runs with the default `--concurrency` 5
+- **THEN** no more than 20 requests are in flight at once, and the 30 Pages are requested
+
 #### Scenario: A concurrency of zero is rejected
 - **WHEN** `spider crawl {site}/ --concurrency 0` runs
 - **THEN** the Command exits with code 2 and its only stderr error has `code` = `invalid_value`
@@ -669,7 +673,7 @@ The crawl store SHALL hold one row for each distinct normalised URL of the Crawl
 | `is_internal` | INTEGER | no | boolean | 1 for an Internal URL, 0 for an External URL |
 | `in_scope` | INTEGER | no | boolean | 1 when the URL is inside the Scope, so it may be followed |
 | `crawl_depth` | INTEGER | no | | Crawl Depth; 0 for Seeds |
-| `discovered_via` | TEXT | no | listed below | How the URL was first found (see "Link discovery") |
+| `discovered_via` | TEXT | no | listed below | How the URL was found (see "Link discovery", Provenance) |
 | `found_on_url_id` | INTEGER, references `urls.id` | yes | | The URL whose response revealed this one (see "Link discovery"); NULL for Seeds |
 | `fetch_state` | TEXT | no | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested |
 | `skip_reason` | TEXT | yes | listed below | Why a skipped URL was not requested |

@@ -31,7 +31,9 @@ from spider.store.records import (
 from spider.store.rows import write_rows
 from spider.store.schema import literal_values, urls
 
-type UrlUnit = Callable[[Connection], None]
+# True once it recorded the URL's outcome; a skip that a lowering or a raise overtook
+# records nothing, and the URL is decided again (design D5).
+type UrlUnit = Callable[[Connection], bool]
 
 
 def _literal_one_of(column: ColumnElement[str], values: Iterable[str]) -> ColumnElement[bool]:
@@ -249,7 +251,7 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
     ]
     origins = origin_rows(new_rows)
 
-    def unit(connection: Connection) -> None:
+    def unit(connection: Connection) -> bool:
         connection.execute(_FETCHED, values)
         record_origins(connection, origins)
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
@@ -260,6 +262,7 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
             rows = [{**row, "crawl_depth": depth} for row in new_rows]
             connection.execute(_INSERT_DISCOVERED, rows)
         write_rows(connection, fetched.rows)
+        return True
 
     return unit
 
@@ -274,9 +277,11 @@ def record_skipped(skipped: SkippedUrl) -> UrlUnit:
         **_provenance_values(skipped.provenance),
     }
 
-    def unit(connection: Connection) -> None:
-        if connection.execute(_SKIPPED, values).rowcount:
-            write_rows(connection, skipped.rows)
+    def unit(connection: Connection) -> bool:
+        if not connection.execute(_SKIPPED, values).rowcount:
+            return False
+        write_rows(connection, skipped.rows)
+        return True
 
     return unit
 
@@ -292,9 +297,10 @@ def record_error(errored: ErroredUrl) -> UrlUnit:
         **_provenance_values(errored.provenance),
     }
 
-    def unit(connection: Connection) -> None:
+    def unit(connection: Connection) -> bool:
         connection.execute(_ERRORED, values)
         write_rows(connection, errored.rows)
+        return True
 
     return unit
 
@@ -311,8 +317,9 @@ def record_unwritten(
         **_provenance_values(provenance),
     }
 
-    def unit(connection: Connection) -> None:
+    def unit(connection: Connection) -> bool:
         connection.execute(_UNWRITTEN, values)
+        return True
 
     return unit
 
