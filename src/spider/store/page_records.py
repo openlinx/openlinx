@@ -18,6 +18,7 @@ type IndexabilityStatus = Literal[
 ]
 # javascript_redirect is filled from v1.1, by JavaScript rendering.
 type RedirectType = Literal["http_redirect", "http_refresh", "meta_refresh", "javascript_redirect"]
+type LinkPosition = Literal["head", "navigation", "header", "footer", "sidebar", "content"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -127,3 +128,4 @@ class LinkRow:
     rel_nofollow: bool
     rel_ugc: bool
     rel_sponsored: bool
+    link_position: LinkPosition | None

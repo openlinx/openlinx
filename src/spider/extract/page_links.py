@@ -1,5 +1,7 @@
 """The Link extractor: what the element of each HTML Link says (030-add-page-data D4)."""
 
+from collections.abc import Mapping
+
 import msgspec
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
@@ -7,12 +9,21 @@ from spider.crawl.pages.links import locate_links
 from spider.crawl.pages.preparation import PageInput, extractor
 from spider.crawl.references import DiscoveredLink
 from spider.extract.text import element_text, normalized
+from spider.store.page_records import LinkPosition
+
+_SECTIONS: Mapping[str, LinkPosition] = {
+    "nav": "navigation",
+    "header": "header",
+    "footer": "footer",
+    "aside": "sidebar",
+}
 
 
 class LinkAttributes(msgspec.Struct, frozen=True, kw_only=True):
     ordinal: int
     anchor_text: str | None
     alt_text: str | None
+    link_position: LinkPosition
 
 
 class PageLinks(msgspec.Struct, frozen=True, kw_only=True):
@@ -20,14 +31,17 @@ class PageLinks(msgspec.Struct, frozen=True, kw_only=True):
 
 
 def extract_page_links(tree: LexborHTMLParser, page: PageInput, config: None) -> PageLinks:
+    # Many Links share their ancestors, so each element's position is found once.
+    positions: dict[int, LinkPosition] = {}
     return PageLinks(
         links=tuple(
             LinkAttributes(
                 ordinal=link.ordinal,
                 anchor_text=_anchor_text(link, element),
                 alt_text=_alt_text(link, element),
+                link_position=_position(link, placing, positions),
             )
-            for link, element, _ in locate_links(tree, page.links)
+            for link, element, placing in locate_links(tree, page.links)
         )
     )
 
@@ -49,6 +63,28 @@ def _alt_text(link: DiscoveredLink, element: LexborNode) -> str | None:
     if link.type != "image" or element.tag != "img" or "alt" not in element.attributes:
         return None
     return normalized(element.attributes["alt"] or "")
+
+
+def _position(
+    link: DiscoveredLink, placing: LexborNode, positions: dict[int, LinkPosition]
+) -> LinkPosition:
+    if link.declared_in == "head":
+        return "head"
+    below: list[int] = []
+    position: LinkPosition = "content"
+    node = placing.parent
+    while node is not None and node.tag not in ("body", "html"):
+        if node.mem_id in positions:
+            position = positions[node.mem_id]
+            break
+        section = _SECTIONS.get(node.tag or "")
+        if section is not None:
+            position = section
+            break
+        below.append(node.mem_id)
+        node = node.parent
+    positions.update(dict.fromkeys(below, position))
+    return position
 
 
 PAGE_LINKS = extractor("page_links", extract_page_links, None)

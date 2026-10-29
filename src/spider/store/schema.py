@@ -19,6 +19,7 @@ from sqlalchemy import (
 from spider.store.page_records import (
     Indexability,
     IndexabilityStatus,
+    LinkPosition,
     RedirectType,
     SameSite,
 )
@@ -1018,6 +1019,15 @@ links = public_table(
     Column("rel_nofollow", Flag, nullable=False, comment="1 when rel holds nofollow."),
     Column("rel_ugc", Flag, nullable=False, comment="1 when rel holds ugc."),
     Column("rel_sponsored", Flag, nullable=False, comment="1 when rel holds sponsored."),
+    Column(
+        "link_position",
+        Text,
+        comment="Where on the Page the Link is: head for a Link the parser places in head; "
+        "otherwise from the nearest enclosing nav (navigation), header, footer or aside "
+        "(sidebar), and content without one, a Link from a noscript's content taking the "
+        "noscript's place; NULL for a header Link, or when the Page's Link extractor failed.",
+        info={"values": literal_values(LinkPosition)},
+    ),
     comment="One row for each Link the Crawl discovered in a response: in an analysed Page's "
     "HTML, or in the Link and Refresh headers of an in-Scope 2xx response.",
     change=30,

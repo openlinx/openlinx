@@ -278,6 +278,7 @@ One row for each Link the Crawl discovered in a response: in an analysed Page's 
 | `rel_nofollow` | INTEGER | no | | `boolean` | | 1 when rel holds nofollow. |
 | `rel_ugc` | INTEGER | no | | `boolean` | | 1 when rel holds ugc. |
 | `rel_sponsored` | INTEGER | no | | `boolean` | | 1 when rel holds sponsored. |
+| `link_position` | TEXT | yes | | | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | Where on the Page the Link is: head for a Link the parser places in head; otherwise from the nearest enclosing nav (navigation), header, footer or aside (sidebar), and content without one, a Link from a noscript's content taking the noscript's place; NULL for a header Link, or when the Page's Link extractor failed. |
 
 ### Indexes
 

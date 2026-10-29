@@ -144,7 +144,7 @@ Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code,
 - [x] 10.3 Drive "Image alt attribute absent or empty" at seam 4, and add `element` and `attribute`, which the Link gives, and `alt_text`.
 - [x] 10.4 Drive "Image-only anchor takes the alt text" at seam 4.
 - [x] 10.5 Drive "Every occurrence is stored" at seam 4.
-- [ ] 10.6 Drive "Link positions come from the enclosing element" at seam 4, and add `link_position`, from the element that places the Link, a `noscript` for a Link from its content.
+- [x] 10.6 Drive "Link positions come from the enclosing element" at seam 4, and add `link_position`, from the element that places the Link, a `noscript` for a Link from its content.
 - [ ] 10.7 Drive "Hreflang and mobile alternate Links" at seam 4, and add `hreflang` and `media`.
 - [ ] 10.8 Drive "Links declared in a header" at seam 4.
 - [ ] 10.8b Drive "Hreflang from a Link header" at seam 4, over the `UrlResult` of an in-Scope 200 PDF, which no extractor reads: the `links` handler takes `hreflang` from the header walk.

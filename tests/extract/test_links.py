@@ -17,6 +17,7 @@ def test_hyperlink_with_rel_flags() -> None:
         row.rel_ugc,
         row.rel_sponsored,
         row.declared_in,
+        row.link_position,
     ) == (
         "hyperlink",
         "https://example.test/b",
@@ -26,6 +27,7 @@ def test_hyperlink_with_rel_flags() -> None:
         True,
         False,
         "body",
+        "content",
     )
 
 
@@ -63,4 +65,23 @@ def test_every_occurrence_is_stored() -> None:
     assert [(row.type, row.target, row.anchor_text) for row in rows] == [
         ("hyperlink", "https://site.test/b", "1"),
         ("hyperlink", "https://site.test/b", "2"),
+    ]
+
+
+def test_link_positions_come_from_the_enclosing_element() -> None:
+    rows = page_link_rows(
+        '<head><link rel="canonical" href="/x"></head><body><header><a href="/h">H</a></header>'
+        '<nav><a href="/n">N</a></nav><main><a href="/c">C</a></main><aside><a href="/s">S</a>'
+        '</aside><footer><nav><a href="/f">F</a></nav><noscript><img src="/pixel.gif">'
+        "</noscript></footer></body>"
+    )
+
+    assert [(row.type, row.target, row.link_position) for row in rows] == [
+        ("canonical", "https://site.test/x", "head"),
+        ("hyperlink", "https://site.test/h", "header"),
+        ("hyperlink", "https://site.test/n", "navigation"),
+        ("hyperlink", "https://site.test/c", "content"),
+        ("hyperlink", "https://site.test/s", "sidebar"),
+        ("hyperlink", "https://site.test/f", "navigation"),
+        ("image", "https://site.test/pixel.gif", "footer"),
     ]
