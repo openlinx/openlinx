@@ -3,6 +3,7 @@
 # mypy checks this module with the rest of the suite: strict mode reports an unused ignore, so
 # an ignore below fails the checks the day its mismatch is no longer caught.
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import msgspec
@@ -27,8 +28,8 @@ def _page_rows(result: UrlResult) -> tuple[PageRow, ...]:
     return (PageRow(result.url_id),)
 
 
-def _write_cookie(connection: Connection, row: CookieRow) -> None:
-    del connection, row
+def _write_cookie(connection: Connection, rows: Sequence[CookieRow]) -> None:
+    del connection, rows
 
 
 def test_a_handler_and_a_writer_of_different_row_types_fail_mypy() -> None:

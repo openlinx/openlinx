@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from http import HTTPStatus
 from urllib.parse import urlsplit
 
 from spider.clock import Clock
@@ -34,6 +35,7 @@ class FakeFetcher:
         page = page or _NOT_FOUND
         return FetchResult(
             status_code=status_code,
+            reason=HTTPStatus(status_code).phrase,
             headers=(("Content-Type", page.content_type),),
             body=page.body.encode(),
             fetched_at=self._clock.now(),

@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 import msgspec
 
 from spider.crawl.urls import NormalizedUrl, normalize_url
-from spider.store.records import DeclaredIn, LinkType
+from spider.store.records import DeclaredIn, DiscoverySkipReason, LinkType
 
 # The URL Standard strips these around a reference and removes tabs and newlines inside it;
 # urlsplit strips only the leading ones.
@@ -27,9 +27,15 @@ class DiscoveredLink(msgspec.Struct, frozen=True, kw_only=True):
     attribute: str | None
     rel: tuple[str, ...]
     nofollow: bool
+    # Why the Crawl does not request the target through this Link (spider.crawl.following).
+    skip_reason: DiscoverySkipReason | None
     declared_in: DeclaredIn
     ordinal: int
     is_internal: bool
+
+    @property
+    def requests_target(self) -> bool:
+        return self.skip_reason is None
 
 
 def resolve_reference(

@@ -46,6 +46,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             scope=context.scope,
             extractors=context.hooks.extractors,
             robots_token=context.settings.robots_user_agent,
+            follow_nofollow=context.settings.follow_nofollow,
             strip_params=context.strip_params,
         )
     )

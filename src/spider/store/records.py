@@ -70,7 +70,7 @@ type LinkType = Literal[
     "sitemap_hreflang",
     "javascript_redirect",
 ]
-type DeclaredIn = Literal["html", "http_header"]
+type DeclaredIn = Literal["head", "body", "http_header"]
 type DiscoveredVia = (
     Literal["seed"] | LinkType | Literal["redirect", "list", "sitemap_input", "sitemap_index"]
 )

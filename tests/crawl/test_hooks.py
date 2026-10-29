@@ -3,20 +3,29 @@
 import json
 import sqlite3
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing
 from dataclasses import dataclass, fields, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import msgspec
 import pytest
 from selectolax.lexbor import LexborHTMLParser
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection, Engine, event, text
 from sqlalchemy.dialects import sqlite
 
 from spider.clock import Clock
-from spider.crawl.engine.hooks import Hooks, Pass, PassContext, UrlResult, handler
+from spider.crawl.engine.hooks import (
+    Hooks,
+    Pass,
+    PassContext,
+    UrlFailure,
+    UrlResponse,
+    UrlResult,
+    handler,
+)
 from spider.crawl.pages.preparation import Extractor, PageInput, extractor
 from spider.output.reporter import Collected
 from spider.services.hooks import default_hooks
@@ -44,11 +53,11 @@ def _seen(result: UrlResult) -> tuple[Seen, ...]:
     return (Seen(result.url_id, result.fetch_state),)
 
 
-def _write_seen(connection: Connection, row: Seen) -> None:
+def _write_seen(connection: Connection, rows: Sequence[Seen]) -> None:
     connection.execute(text("CREATE TABLE IF NOT EXISTS test_seen (url_id INTEGER, state TEXT)"))
     connection.execute(
         text("INSERT INTO test_seen VALUES (:url_id, :state)"),
-        {"url_id": row.url_id, "state": row.fetch_state},
+        [{"url_id": row.url_id, "state": row.fetch_state} for row in rows],
     )
 
 
@@ -206,7 +215,7 @@ BOOM_SITE = Site(
 )
 
 
-def _with_extractors(*extractors: Extractor[Any]) -> Hooks:
+def _with_extractors(*extractors: Extractor[Any, Any]) -> Hooks:
     hooks = default_hooks()
     return replace(hooks, extractors=(*hooks.extractors, *extractors))
 
@@ -262,15 +271,24 @@ class Outputs:
     names: str
 
 
+_EXPLODING = extractor("exploding", _exploding, None)
+_FOUND = extractor("found", _found, None)
+
+
 def _outputs(result: UrlResult) -> tuple[Outputs, ...]:
-    return (Outputs(result.url_id, ",".join(sorted(result.outputs))),)
+    found = [
+        registered.name
+        for registered in (_EXPLODING, _FOUND)
+        if registered.output(result.outputs) is not None
+    ]
+    return (Outputs(result.url_id, ",".join(found)),)
 
 
-def _write_outputs(connection: Connection, row: Outputs) -> None:
+def _write_outputs(connection: Connection, rows: Sequence[Outputs]) -> None:
     connection.execute(text("CREATE TABLE IF NOT EXISTS test_outputs (url_id INTEGER, names TEXT)"))
     connection.execute(
         text("INSERT INTO test_outputs VALUES (:url_id, :names)"),
-        {"url_id": row.url_id, "names": row.names},
+        [{"url_id": row.url_id, "names": row.names} for row in rows],
     )
 
 
@@ -278,9 +296,7 @@ def test_handlers_get_the_outputs_of_the_extractors_that_did_not_fail(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = _with_extractors(
-        extractor("exploding", _exploding, None), extractor("found", _found, None)
-    )
+    hooks = _with_extractors(_EXPLODING, _FOUND)
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, handler("outputs", _outputs, _write_outputs)),
@@ -389,15 +405,15 @@ def _unwritable(result: UrlResult) -> tuple[Unwritable, ...]:
     return (Unwritable(result.url_id),) if result.url.endswith("/boom") else ()
 
 
-def _refuse(connection: Connection, row: Unwritable) -> None:
-    raise ValueError(f"no row for {row.url_id}")
+def _refuse(connection: Connection, rows: Sequence[Unwritable]) -> None:
+    raise ValueError(f"no row for {rows[0].url_id}")
 
 
-def _refuse_with_the_file(connection: Connection, row: Unwritable) -> None:
+def _refuse_with_the_file(connection: Connection, rows: Sequence[Unwritable]) -> None:
     raise sqlite3.OperationalError("disk I/O error")
 
 
-def _with_row_writer(writer: Callable[[Connection, Unwritable], None]) -> Hooks:
+def _with_row_writer(writer: Callable[[Connection, Sequence[Unwritable]], None]) -> Hooks:
     hooks = default_hooks()
     return replace(
         hooks,
@@ -471,6 +487,38 @@ def _not_a_struct(tree: LexborHTMLParser, page: PageInput, config: None) -> Foun
     return {"url": page.url}  # type: ignore[return-value]
 
 
+class Moved(msgspec.Struct, frozen=True):
+    url: str
+    status: int
+
+
+def _found_or_moved(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
+    # A branch that builds the struct of another extractor: mypy is told to look away.
+    if page.url.endswith("/ok"):
+        return Moved(page.url, page.status_code)  # type: ignore[return-value]
+    return Found(page.url)
+
+
+def test_an_extractor_that_returns_another_struct_than_it_declares_is_an_extractor_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+
+    result = crawl_result(
+        server.url("/"), _with_extractors(extractor("found", _found_or_moved, None))
+    )
+
+    assert query(
+        result.crawl_file,
+        "SELECT url, parsed, parse_error, parse_error_message FROM urls WHERE url IN (?, ?) "
+        "ORDER BY id",
+        [server.url("/"), server.url("/ok")],
+    ) == [
+        (server.url("/"), 1, None, None),
+        (server.url("/ok"), 1, "extractor_error", "found: TypeError"),
+    ]
+
+
 def test_an_extractor_that_returns_no_struct_is_an_extractor_error(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
@@ -496,12 +544,12 @@ def _flaky(result: UrlResult) -> tuple[Flaky, ...]:
     return (Flaky(result.url_id),) if result.crawl_depth == 0 else ()
 
 
-def _write_flaky(written: list[int]) -> Callable[[Connection, Flaky], None]:
-    def write(connection: Connection, row: Flaky) -> None:
+def _write_flaky(written: list[int]) -> Callable[[Connection, Sequence[Flaky]], None]:
+    def write(connection: Connection, rows: Sequence[Flaky]) -> None:
         # Fails when the writer runs the unit again, which ends the writer (017 D6).
         if written:
             raise RuntimeError("not the same twice")
-        written.append(row.url_id)
+        written.extend(row.url_id for row in rows)
 
     return write
 
@@ -531,26 +579,27 @@ class RowValues:
 
 
 def _row_values(result: UrlResult) -> tuple[RowValues, ...]:
+    response = result.response
     values = (
         result.fetch_state,
-        result.status_code,
-        result.content_type,
+        None if response is None else response.status_code,
+        None if response is None else response.content_type,
         result.parsed,
         result.discovered_via,
         result.found_on_url_id is not None,
-        result.fetched_at is not None,
-        result.response_time_ms is not None,
+        response is not None,
+        response is not None,
         result.is_internal,
         result.in_scope,
     )
     return (RowValues(result.url_id, repr(values)),)
 
 
-def _write_row_values(connection: Connection, row: RowValues) -> None:
+def _write_row_values(connection: Connection, rows: Sequence[RowValues]) -> None:
     connection.execute(text("CREATE TABLE IF NOT EXISTS test_values (url_id INTEGER, v TEXT)"))
     connection.execute(
         text("INSERT INTO test_values VALUES (:url_id, :v)"),
-        {"url_id": row.url_id, "v": row.values},
+        [{"url_id": row.url_id, "v": row.values} for row in rows],
     )
 
 
@@ -594,12 +643,12 @@ def test_a_handler_gets_the_row_values_of_the_url(
 
 
 def _slowly(
-    writer: Callable[[Connection, Unwritable], None],
-) -> Callable[[Connection, Unwritable], None]:
-    def write(connection: Connection, row: Unwritable) -> None:
+    writer: Callable[[Connection, Sequence[Unwritable]], None],
+) -> Callable[[Connection, Sequence[Unwritable]], None]:
+    def write(connection: Connection, rows: Sequence[Unwritable]) -> None:
         # Still running when the engine goes on, so the failure reaches it later.
         time.sleep(0.5)
-        writer(connection, row)
+        writer(connection, rows)
 
     return write
 
@@ -715,16 +764,29 @@ def test_a_handler_gets_the_robots_txt_verdict_of_the_url(
     ]
 
 
-_RESULT_FIELDS = {field.name for field in fields(UrlResult)}
+# By final state: the store record, and where the UrlResult keeps that outcome's values.
+_OUTCOMES: dict[str, tuple[type, tuple[type, ...]]] = {
+    "fetched": (FetchedUrl, (UrlResponse, UrlResult)),
+    "skipped": (SkippedUrl, (UrlResult,)),
+    "error": (ErroredUrl, (UrlFailure, UrlResult)),
+}
 # By final state, the urls columns that its record shares with the UrlResult.
 _SHARED = {
     state: [
         field.name
         for field in fields(record)
-        if field.name in _RESULT_FIELDS and field.name != "url_id"
+        if field.name != "url_id"
+        and any(field.name in {f.name for f in fields(source)} for source in sources)
     ]
-    for state, record in [("fetched", FetchedUrl), ("skipped", SkippedUrl), ("error", ErroredUrl)]
+    for state, (record, sources) in _OUTCOMES.items()
 }
+
+
+def _value(result: UrlResult, name: str) -> object:
+    for source in (result.response, result.failure, result):
+        if source is not None and name in {f.name for f in fields(source)}:
+            return getattr(source, name)
+    raise AssertionError(f"no {name}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -735,19 +797,20 @@ class Values:
 
 def _values(result: UrlResult) -> tuple[Values, ...]:
     shared = _SHARED.get(result.fetch_state, [])
-    values: dict[str, object] = {name: getattr(result, name) for name in shared}
-    if "fetched_at" in values:
-        values["fetched_at"] = Timestamp().process_bind_param(result.fetched_at, sqlite.dialect())
+    values = {name: _value(result, name) for name in shared}
+    fetched_at = values.get("fetched_at")
+    if isinstance(fetched_at, datetime):
+        values["fetched_at"] = Timestamp().process_bind_param(fetched_at, sqlite.dialect())
     # As the store keeps a flag.
     stored = {name: int(v) if isinstance(v, bool) else v for name, v in values.items()}
     return (Values(result.url_id, json.dumps({"fetch_state": result.fetch_state, **stored})),)
 
 
-def _write_values(connection: Connection, row: Values) -> None:
+def _write_values(connection: Connection, rows: Sequence[Values]) -> None:
     connection.execute(text("CREATE TABLE IF NOT EXISTS test_values (url_id INTEGER, v TEXT)"))
     connection.execute(
         text("INSERT INTO test_values VALUES (:url_id, :v)"),
-        {"url_id": row.url_id, "v": row.values},
+        [{"url_id": row.url_id, "v": row.values} for row in rows],
     )
 
 
@@ -762,10 +825,13 @@ def test_each_url_is_recorded_with_the_values_its_handlers_saw(
                 "/": Page(
                     body='<a href="/a">A</a> <a href="/missing">Gone</a> '
                     '<a href="/logout">Out</a> <a href="/private">Private</a> '
-                    '<a href="http://127.0.0.1:1/">Down</a> <img src="/logo.png">'
+                    '<a href="http://127.0.0.1:1/">Down</a> <a href="/broken">Broken</a> '
+                    '<img src="/logo.png">'
                 ),
                 "/a": Page(body="<p>A</p>"),
                 "/logo.png": Status(200),
+                # The connection breaks inside the body: an error after its own request.
+                "/broken": Page(body="x" * 100_000, reset_after=100),
             }
         )
     )
@@ -792,3 +858,239 @@ def _urls_rows(file: Path) -> list[sqlite3.Row]:
         connection.row_factory = sqlite3.Row
         rows: list[sqlite3.Row] = connection.execute("SELECT * FROM urls").fetchall()
         return rows
+
+
+@dataclass(frozen=True, slots=True)
+class Header:
+    url_id: int
+    name: str
+
+
+def _headers(result: UrlResult) -> tuple[Header, ...]:
+    headers = () if result.response is None else result.response.headers
+    return tuple(Header(result.url_id, name) for name, _ in headers)
+
+
+def _write_headers(connection: Connection, rows: Sequence[Header]) -> None:
+    connection.execute(text("CREATE TABLE IF NOT EXISTS test_headers (url_id INTEGER, name TEXT)"))
+    connection.execute(
+        text("INSERT INTO test_headers VALUES (:url_id, :name)"),
+        [{"url_id": row.url_id, "name": row.name} for row in rows],
+    )
+
+
+def test_a_handler_s_rows_for_a_url_are_written_in_one_statement(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/a">A</a>'), "/a": Page(body="<p>A</p>")})
+    )
+    hooks = default_hooks()
+    hooks = replace(hooks, handlers=(*hooks.handlers, handler("headers", _headers, _write_headers)))
+    inserts: list[str] = []
+
+    def count(conn: object, cursor: object, statement: str, *args: object) -> None:
+        if statement.startswith("INSERT INTO test_headers"):
+            inserts.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", count)
+    try:
+        crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+    finally:
+        event.remove(Engine, "before_cursor_execute", count)
+
+    assert (len(inserts), query(crawl_file, "SELECT count(DISTINCT url_id) FROM test_headers")) == (
+        2,
+        [(2,)],
+    )
+    assert query(crawl_file, "SELECT count(*) > 2 FROM test_headers") == [(1,)]
+
+
+def _x_robots_tag(result: UrlResult) -> tuple[Seen, ...]:
+    if result.response is None:
+        return ()
+    directives = result.response.directives
+    said = (directives.x_robots_tag_noindex, directives.x_robots_tag_nofollow)
+    return (Seen(result.url_id, repr(said)),)
+
+
+def test_a_handler_sees_the_x_robots_tag_of_a_pdf(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/report.pdf">Report</a>'),
+                "/report.pdf": Page(
+                    body="%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n",
+                    content_type="application/pdf",
+                    headers=[("X-Robots-Tag", "googlebot: noindex"), ("X-Robots-Tag", "nofollow")],
+                ),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), handlers=(handler("directives", _x_robots_tag, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    # (noindex, nofollow): the googlebot line is for another crawler.
+    assert query(
+        crawl_file,
+        "SELECT test_seen.state FROM test_seen JOIN urls ON urls.id = test_seen.url_id "
+        "WHERE urls.url = ?",
+        [server.url("/report.pdf")],
+    ) == [(repr((False, True)),)]
+
+
+def _always_exploding(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
+    raise ValueError(page.url)
+
+
+def _links(result: UrlResult) -> tuple[Seen, ...]:
+    return tuple(
+        Seen(result.url_id, repr((link.type, link.target, link.declared_in)))
+        for link in result.links
+    )
+
+
+def _links_seen(crawl_file: Path, url: str) -> list[str]:
+    rows = query(
+        crawl_file,
+        "SELECT test_seen.state FROM test_seen JOIN urls ON urls.id = test_seen.url_id "
+        "WHERE urls.url = ? ORDER BY test_seen.rowid",
+        [url],
+    )
+    return [state for (state,) in rows]
+
+
+def test_a_handler_sees_the_links_of_a_page_whose_extractor_failed(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/a">A</a>'), "/a": Page(body="<p>A</p>")})
+    )
+    hooks = replace(
+        _with_extractors(extractor("exploding", _always_exploding, None)),
+        handlers=(handler("links", _links, _write_seen),),
+    )
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert _links_seen(crawl_file, server.url("/")) == [
+        repr(("hyperlink", server.url("/a"), "body"))
+    ]
+
+
+def test_a_canonical_in_the_body_is_placed_in_the_body(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(
+                    body='<html><head><link rel="canonical" href="/c"></head>'
+                    '<body><p>Text</p><link rel="canonical" href="/d"></body></html>'
+                ),
+                "/c": Page(body="<p>C</p>"),
+                # An error page with links, as a site's 404 template has.
+                "/d": Status(404, body='<a href="/">Home</a> <a href="/e">E</a>'),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), handlers=(handler("links", _links, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert _links_seen(crawl_file, server.url("/")) == [
+        repr(("canonical", server.url("/c"), "head")),
+        repr(("canonical", server.url("/d"), "body")),
+    ]
+    assert _links_seen(crawl_file, server.url("/d")) == []
+
+
+def _requested(result: UrlResult) -> tuple[Seen, ...]:
+    return tuple(
+        Seen(result.url_id, repr((link.target, link.requests_target))) for link in result.links
+    )
+
+
+def test_a_nofollow_link_does_not_request_its_target(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/a">A</a> <a rel="nofollow" href="/b">B</a>'),
+                "/a": Page(body="<p>A</p>"),
+                "/b": Page(body="<p>B</p>"),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), handlers=(handler("requested", _requested, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert _links_seen(crawl_file, server.url("/")) == [
+        repr((server.url("/a"), True)),
+        repr((server.url("/b"), False)),
+    ]
+
+
+def _reason(result: UrlResult) -> tuple[Seen, ...]:
+    return () if result.response is None else (Seen(result.url_id, result.response.reason or ""),)
+
+
+def test_a_handler_sees_the_reason_phrase(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/missing">Gone</a> <a href="/old">Old</a>'),
+                "/missing": Status(404),
+                # As some servers word it, which no table of phrases rebuilds.
+                "/old": Status(404, reason="Page Not Here"),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), handlers=(handler("reason", _reason, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert (
+        _links_seen(crawl_file, server.url("/missing")),
+        _links_seen(crawl_file, server.url("/old")),
+    ) == (["Not Found"], ["Page Not Here"])
+
+
+def _meta_robots(result: UrlResult) -> tuple[Seen, ...]:
+    if result.response is None:
+        return ()
+    directives = result.response.directives
+    said = (directives.meta_robots, directives.meta_robots_noindex, directives.meta_robots_nofollow)
+    return (Seen(result.url_id, repr(said)),)
+
+
+def test_a_handler_sees_the_robots_meta_of_a_parsed_page(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/draft">Draft</a>'),
+                # A staging Page kept out of the index by its meta alone, with no X-Robots-Tag.
+                "/draft": Page(
+                    body='<!doctype html><html lang="en"><head><meta charset="utf-8">'
+                    '<meta name="robots" content="noindex, nofollow"><title>Draft</title></head>'
+                    '<body><h1>Draft</h1><a href="/next">Next</a></body></html>'
+                ),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), handlers=(handler("meta", _meta_robots, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert _links_seen(crawl_file, server.url("/draft")) == [
+        repr(("noindex, nofollow", True, True))
+    ]

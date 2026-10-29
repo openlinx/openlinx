@@ -122,6 +122,7 @@ def _seen(page: PreparedPage) -> tuple[DiscoveredLink, ...]:
 
 _PAGE_WITH_A_CANONICAL_HEADER = FetchResult(
     status_code=200,
+    reason="OK",
     headers=(("Content-Type", "text/html"), ("Link", "</c>; rel=canonical")),
     body=b'<a href="/a">A</a>',
     fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
@@ -137,7 +138,7 @@ def test_header_links_come_before_the_links_of_the_document() -> None:
 
     assert [(link.ordinal, link.declared_in, link.target) for link in _seen(page)] == [
         (1, "http_header", "http://site.test/c"),
-        (2, "html", "http://site.test/a"),
+        (2, "body", "http://site.test/a"),
     ]
 
 
@@ -190,6 +191,7 @@ def test_the_header_links_accept_any_values(headers: list[tuple[str, str]]) -> N
 def test_stripped_parameters_leave_every_link_of_a_page() -> None:
     response = FetchResult(
         status_code=200,
+        reason="OK",
         headers=(("Content-Type", "text/html"), ("Link", "</c?utm_id=1>; rel=canonical")),
         body=b'<a href="/a?utm_id=2&x=1">A</a>',
         fetched_at=datetime(2026, 10, 14, tzinfo=UTC),
