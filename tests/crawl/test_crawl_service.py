@@ -55,7 +55,7 @@ def test_the_dns_resolver_hook_reaches_the_crawl(
     assert (
         query(result.crawl_file, "SELECT url, fetch_state, status_code FROM urls"),
         [request.path for request in hosts.site.requests],
-    ) == ([("http://site.test/", "fetched", 200)], ["/"])
+    ) == ([("http://site.test/", "fetched", 200)], ["/robots.txt", "/"])
 
 
 def test_a_secret_setting_is_redacted_in_the_recorded_config(

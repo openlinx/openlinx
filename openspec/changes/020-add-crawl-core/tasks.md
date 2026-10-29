@@ -260,22 +260,36 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [x] 10.1 Drive "The group for the tool's token applies" at seam 4. Done when: the robots.txt reader is on Protego and reads at most 512,000 bytes, decoded with replacement.
 - [x] 10.2 Drive "Another token can be chosen" at seam 4. Done when: `--robots-user-agent` also sets `PageSettings.robots_token` in the snapshot the engine starts the page executor with, so the prefixes of `X-Robots-Tag` follow the chosen token, and a test pins it.
-- [ ] 10.3 **Guard:** "Any robots.txt gives a decision", as a hypothesis property at seam 4.
-- [ ] 10.4 Drive "robots.txt is fetched once per origin" at seam 3.
-- [ ] 10.5 Drive "A disallowed URL is not requested" (seam 3) and "A disallowed URL is recorded as blocked" (seam 3+6), a trivial pair. Done when: `blocked_by_robots_txt` is declared.
-- [ ] 10.6 Drive "robots.txt is stored with its origin" and "A URL that is not requested still points to its origin" at seam 3+6, a pair. Done when: the `robots_*` columns of `origins` are declared, with `robots_state` and `robots_sitemaps` NULL until robots.txt is fetched.
-- [ ] 10.7 Drive "A blocked Seed is reported" at seam 1. Done when: `seed_blocked_by_robots_txt` is declared.
-- [ ] 10.8 Drive "Disallowed URLs are crawled and still labelled" at seam 3+6.
-- [ ] 10.9 Drive "A missing robots.txt allows everything" at seam 3+6.
-- [ ] 10.10 Drive "An unreachable robots.txt blocks its origin" at seam 3+6.
-- [ ] 10.11 Drive "An unreachable robots.txt of the site is reported" at seam 1. Done when: `robots_unreachable` is declared.
-- [ ] 10.12 Drive "A redirected robots.txt is followed" at seam 3+6.
-- [ ] 10.13 Drive "More than five robots.txt redirects count as missing" at seam 3+6.
-- [ ] 10.14 Drive "A dead External domain is a DNS error" at seam 3+6, with the DNS resolver hook of task 6.1.
+- [x] 10.3 **Guard:** "Any robots.txt gives a decision", as a hypothesis property at seam 4.
+- [x] 10.4 Drive "robots.txt is fetched once per origin" at seam 3.
+- [x] 10.5 Drive "A disallowed URL is not requested" (seam 3) and "A disallowed URL is recorded as blocked" (seam 3+6), a trivial pair. Done when: `blocked_by_robots_txt` is declared.
+- [x] 10.6 Drive "robots.txt is stored with its origin" and "A URL that is not requested still points to its origin" at seam 3+6, a pair. Done when: the `robots_*` columns of `origins` are declared, with `robots_state` and `robots_sitemaps` NULL until robots.txt is fetched.
+- [x] 10.7 Drive "A blocked Seed is reported" at seam 1. Done when: `seed_blocked_by_robots_txt` is declared.
+- [x] 10.8 Drive "Disallowed URLs are crawled and still labelled" at seam 3+6.
+- [x] 10.9 Drive "A missing robots.txt allows everything" at seam 3+6.
+- [x] 10.10 Drive "An unreachable robots.txt blocks its origin" at seam 3+6.
+- [x] 10.11 Drive "An unreachable robots.txt of the site is reported" at seam 1. Done when: `robots_unreachable` is declared.
+- [x] 10.12 Drive "A redirected robots.txt is followed" at seam 3+6.
+- [x] 10.13 Drive "More than five robots.txt redirects count as missing" at seam 3+6.
+- [x] 10.14 Drive "A dead External domain is a DNS error" at seam 3+6, with the DNS resolver hook of task 6.1.
 
   Done when: each URL of an origin whose robots.txt request got no HTTP response is recorded with `fetch_state` = `error` and that request's `fetch_error`, without a request of its own, with a `fetch_error_message` that names the robots.txt request; the origin has `robots_state` = `unreachable`, `robots_status_code` NULL, and the request's error in `robots_fetch_error` and `robots_fetch_error_message`, declared with their `docs/schema.md` rows and the CHECK values of the `fetch_error` `Literal`; 5xx and 429 stay `robots_unreachable`; and "An unknown host is a DNS error" still passes (design D6). The Seed's origin pauses the Crawl instead from task 12.6 on.
-- [ ] 10.15 Docs: document robots.txt handling (status mapping, no HTTP response, `--ignore-robots`, `--robots-user-agent`, Crawl-delay) in `docs/crawling.md`.
-- [ ] 10.16 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [x] 10.15 Docs: document robots.txt handling (status mapping, no HTTP response, `--ignore-robots`, `--robots-user-agent`, Crawl-delay) in `docs/crawling.md`.
+- [x] 10.16 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [ ] 10.17 Fix the review of group 10 (rulings of 2026-10-15), each red first or red by mutation:
+  - An origin's robots.txt verdict, once known, decides a URL before the URL limit, which guards only a new request, robots.txt's or the URL's own, so a disallowed URL left after the limit is still recorded and the Crawl can end `completed`. `RequestLimits` splits the pure query from the call that marks the limit reached.
+  - A URL skipped as `max_depth` reaches no handler, since a Link found later at a smaller depth re-queues it (design D5).
+  - The robots.txt memo keeps the parsed rules only; the text goes straight to the store.
+  - A line that the 512,000-byte limit cuts is dropped, and a robots.txt status outside 200–599 is `unreachable`, as 500–599 and 429 are.
+  - `--robots-user-agent` must match RFC 9309's `[a-zA-Z_-]+`: refused as `invalid_value` (exit 2), and in the settings file as `settings_invalid` (exit 3).
+  - Tests pin the token on the robots.txt side, one robots.txt request for an origin that two URLs reach at once, no `seed_blocked_by_robots_txt` for a blocked URL that is not the Seed, no `robots_unreachable` for an External origin, and a fallback row whose verdict is 1.
+  - `docs/testing.md` places `tests/crawl/test_warning_log.py` at seam 2, with the Crawl Service's reporter.
+- [ ] 10.18 Extract the Requester (design D7), behaviour unchanged: `spider.crawl.requester` makes every request of a Crawl. It takes the host's slot, then the global cap, and counts a URL's own request toward `--max-urls` or refuses it; a robots.txt request is never counted. The engine and the robots.txt loader call it, and neither holds the Fetcher or takes a slot itself. The engine's per-run dependencies (the outcomes, the limits, the Requester, the robots.txt loader, the checks) are one frozen record.
+
+  Done when: a guard in `tests/test_code_style.py` names each call of a Fetcher's `fetch` and each `Request` made in `src/spider` outside the Requester, red by mutation of the robots.txt loader; `--rate` (11.1), the watchdog (12.14), the network pause with its probes (12.11–12.22) and `022`'s retries are written into the Requester, not into its callers.
+- [ ] 10.19 Rework the hooks (design D9, D14): `Handler(name, handle, write)` names the store function that writes its rows, generic in the row type, so a handler and a writer of different row types fail mypy; `Hooks.row_writers` is gone, and the URL's unit writes each handler's rows with that handler's writer, with no dispatch on a row's type, so the `TypeError` of a missing writer and its test go. One handler gives one row type for one table. `Pass.run` takes one frozen `PassContext(writer, clock)`, and passes run in the order `Hooks` declares them. Red first: a `Handler` without `write` cannot be built.
+- [ ] 10.20 Give extractors their own config (design D9): `Extractor(name, extract, config)`, where `config` is a frozen `msgspec.Struct` or `None`, resolved from the Crawl's settings where the hooks are built, and carried in the settings snapshot with its extractor. `PageSettings` has no field of any one extractor, so `030`'s `content_area` is its Page extractor's config. Red first: an extractor gets its own config.
+- [ ] 10.21 Docs: `docs/architecture.md`'s crawl pipeline names the Requester, a handler's writer (one handler, one table), `PassContext` and the declared order of passes, and an extractor's config; it no longer names a Scheduler or a `frontier/` package, which do not exist.
 
 ## 11. Politeness (widening)
 
@@ -302,7 +316,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
 
   Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`.
-- [ ] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 1, with a handler and a row writer registered for the test. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
+- [ ] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 1, with a handler and its writer registered for the test. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
 
   Done when: the record-failure count of design D16 trips at `RECORD_FAILURE_LIMIT` (100) URL units in a row that failed on their first run, a URL unit that commits resets it, fallback units do not count, and the constant's comment says why.
 - [ ] 12.11 Drive "A network wait of zero fails at once" at seam 1, with the reset route of task 5.11.
@@ -332,7 +346,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [ ] 13.1 Drive "Ctrl+C stops a Crawl on macOS and Linux" at seam 1, subprocess, POSIX in CI.
 
-  Done when: the signal handlers set the `StopSignal` through `loop.call_soon_threadsafe`, no `KeyboardInterrupt` reaches `010`'s runner during a Crawl, and the `stopped` end goes through `check_transition` with `interrupt`.
+  Done when: the signal handlers set the `StopSignal` through `loop.call_soon_threadsafe`, no `KeyboardInterrupt` reaches `010`'s runner during a Crawl, and the `stopped` end goes through `check_transition` with `interrupt`; a test pins that an interrupt that ends a depth reads no deeper one (the stop's `break` of task 9.19, which nothing could reach before interrupts).
 - [ ] 13.2 Drive "Ctrl+Break stops a Crawl on Windows (Windows)" at seam 1, subprocess, Windows in CI.
 - [ ] 13.3 Drive "An interrupt is reported by one error" at seam 1, subprocess. Done when: `010`'s `interrupted` is the one error, with exit code 130.
 - [ ] 13.4 **Guard:** "An interrupted Crawl keeps its queue", at seam 1, subprocess.
@@ -357,7 +371,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 ## 15. Reading `<noscript>` as browsers that run scripts do
 
 - [x] 15.1 Fix: page preparation reads `<noscript>` as a browser that runs scripts does, before selectolax offers lexbor's scripting flag (the user's decision of 2026-10-14; design D5). lexbor parses with scripting off, so a head `<noscript><img>`, the common tracking pixel, ends `<head>` and every later head element (canonical, meta description, robots, hreflang) lands in `<body>`, and a head-noscript `<title>` moves out of its `<noscript>`. Before lexbor parses the decoded text, every `<noscript>` start and end tag becomes a `<template>` tag, whose start tag carries the `data-<APP_NAME>-noscript` attribute with the index of the `<noscript>`'s text; HTML allows `<template>` in `<head>`, and its content stays out of the tree. The text of each `<noscript>`, up to the next `</noscript>`, as a browser that runs scripts reads it, is fragment-parsed for its Links: a `<link>` or `<meta>` gives nothing, the other elements give theirs in document order (task 7.19), a head-noscript pixel's `src` included. A page's own `<template>` gives no Link, as before. The noscript ancestor walk goes (task 7.23). Done when: tests at seam 4 pin that a head-noscript pixel keeps the canonical, hreflang and metas in `<head>`, that a head-noscript title and robots meta are ignored, that body-noscript Links are found in document order, that HTML without a `<noscript>` tag is left as it is, that a literal `<noscript` is renamed wherever it stands, and the edges of design Risks; a never-raises property runs over text with noscript tags; and the commit shows each existing noscript test red with the renaming disabled, as the guard of the walk's removal.
-- [ ] 15.2 Waits for the selectolax release that offers lexbor's scripting flag (the upstream draft pull request rushter/selectolax#228). Page preparation then parses with scripting on and fragment-parses the text of each `<noscript>`, which replaces 15.1's renaming; 15.1's tests stay. Done when: the renaming is gone, and 15.1's tests pass.
+- [ ] 15.2 Waits for the first selectolax release that contains upstream commit 69eddd1, lexbor's scripting flag (rushter/selectolax#228, merged into its master on 2026-10-14 and not yet released); never a pin to a git URL, and 15.1's renaming stays until then. Page preparation then parses with scripting on and fragment-parses the text of each `<noscript>`, which replaces 15.1's renaming; 15.1's tests stay. Done when: the renaming is gone, and 15.1's tests pass.
 
 ## 16. Change check
 

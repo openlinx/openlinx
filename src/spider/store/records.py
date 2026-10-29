@@ -32,6 +32,8 @@ type CrawlState = Literal["running", "stopped", "completed", "failed", "interrup
 type StopReason = Literal[
     "max_urls", "interrupt", "requested", "seed_unreachable", "site_unreachable", "write_failed"
 ]
+# Rules applied, everything allowed, or everything disallowed or unanswered (D6).
+type RobotsState = Literal["ok", "missing", "unreachable"]
 type SkipReason = Literal[
     "excluded",
     "blocked_by_robots_txt",
@@ -187,12 +189,14 @@ class FetchedUrl:
     parsed: bool
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
+    # NULL when robots.txt was not checked (design D6).
+    blocked_by_robots_txt: bool | None = None
     discovered: tuple[NewUrl, ...] = ()
     # What the handlers returned, written in the same unit (design D9).
     rows: tuple[object, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class SkippedUrl:
     """A URL recorded without a request, with what the handlers returned for it."""
 
@@ -200,6 +204,7 @@ class SkippedUrl:
     skip_reason: SkipReason
     # The depth the skip was decided on: a URL lowered since then is decided again (design D5).
     crawl_depth: int
+    blocked_by_robots_txt: bool | None = None
     rows: tuple[object, ...] = ()
 
 
@@ -210,5 +215,22 @@ class ErroredUrl:
     url_id: int
     fetch_error: FetchError
     fetch_error_message: str
-    fetched_at: datetime
+    # None without a request of its own: its origin's robots.txt got no response.
+    fetched_at: datetime | None
+    blocked_by_robots_txt: bool | None = None
     rows: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RobotsTxtRecord:
+    """What an origin's robots.txt request gave, for the origin's row (design D6)."""
+
+    origin: str
+    state: RobotsState
+    status_code: int | None
+    fetch_error: FetchError | None = None
+    fetch_error_message: str | None = None
+    fetched_at: datetime
+    text: str | None
+    crawl_delay_ms: int | None
+    sitemaps: tuple[str, ...]

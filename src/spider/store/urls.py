@@ -65,20 +65,25 @@ _FETCHED = _URL_ROW.values(
     parsed=bindparam("is_parsed"),
     parse_error=bindparam("parse_failure"),
     parse_error_message=bindparam("parse_failure_message"),
+    blocked_by_robots_txt=bindparam("robots_blocked"),
 )
 _SKIPPED = _URL_ROW.where(urls.c.crawl_depth == bindparam("decided_depth")).values(
-    fetch_state="skipped", skip_reason=bindparam("reason")
+    fetch_state="skipped",
+    skip_reason=bindparam("reason"),
+    blocked_by_robots_txt=bindparam("robots_blocked"),
 )
 _ERRORED = _URL_ROW.values(
     fetch_state="error",
     fetch_error=bindparam("failure"),
     fetch_error_message=bindparam("failure_message"),
     fetched_at=bindparam("request_at"),
+    blocked_by_robots_txt=bindparam("robots_blocked"),
 )
 _UNWRITTEN = _URL_ROW.values(
     fetch_state="error",
     fetch_error="record_failed",
     fetch_error_message=bindparam("failure_message"),
+    blocked_by_robots_txt=bindparam("robots_blocked"),
 )
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
@@ -185,6 +190,7 @@ def record_fetched(
         "is_parsed": fetched.parsed,
         "parse_failure": fetched.parse_error,
         "parse_failure_message": fetched.parse_error_message,
+        "robots_blocked": fetched.blocked_by_robots_txt,
     }
     new_rows = [
         {
@@ -227,6 +233,7 @@ def record_skipped(
         "url_id": skipped.url_id,
         "reason": skipped.skip_reason,
         "decided_depth": skipped.crawl_depth,
+        "robots_blocked": skipped.blocked_by_robots_txt,
     }
 
     def unit(connection: Connection) -> None:
@@ -245,6 +252,7 @@ def record_error(
         "failure": errored.fetch_error,
         "failure_message": errored.fetch_error_message,
         "request_at": errored.fetched_at,
+        "robots_blocked": errored.blocked_by_robots_txt,
     }
 
     def unit(connection: Connection) -> None:
@@ -254,9 +262,14 @@ def record_error(
     return unit
 
 
-def record_unwritten(url_id: int, message: str) -> UrlUnit:
-    """The fallback unit of a URL whose own unit failed: only its state (design D2)."""
-    values = {"url_id": url_id, "failure_message": message}
+def record_unwritten(url_id: int, message: str, *, blocked_by_robots_txt: bool | None) -> UrlUnit:
+    """The fallback unit of a URL whose own unit failed: only its state, and what robots.txt
+    said of it (design D2)."""
+    values = {
+        "url_id": url_id,
+        "failure_message": message,
+        "robots_blocked": blocked_by_robots_txt,
+    }
 
     def unit(connection: Connection) -> None:
         connection.execute(_UNWRITTEN, values)

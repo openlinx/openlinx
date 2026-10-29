@@ -14,6 +14,7 @@ from spider.crawl.urls import (
     NormalizedUrl,
     normalize_url,
     parse_seed,
+    robots_txt_url,
     strip_params_pattern,
 )
 
@@ -245,3 +246,10 @@ _NEAR_MISSES = st.builds(
 @given(_NEAR_MISSES)
 def test_the_fast_path_agrees_with_the_full_normalisation(url: str) -> None:
     assert normalize_url(url) == normalize_url(f"{url}#f")
+
+
+def test_the_robots_txt_url_is_at_the_root_of_the_urls_origin() -> None:
+    url = normalize_url("https://site.test:8443/a/b?q=1")
+    assert isinstance(url, str)
+
+    assert robots_txt_url(url) == "https://site.test:8443/robots.txt"

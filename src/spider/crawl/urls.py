@@ -206,5 +206,10 @@ def url_origin(url: NormalizedUrl) -> str:
     return "/".join(url.split("/", 3)[:3])
 
 
+def robots_txt_url(url: NormalizedUrl) -> NormalizedUrl:
+    """The robots.txt of the URL's origin: a normalised origin and a plain path stay normal."""
+    return NormalizedUrl(f"{url_origin(url)}/robots.txt")
+
+
 def url_path(url: NormalizedUrl) -> str:
     return "/" + url.split("/", 3)[3].partition("?")[0]
