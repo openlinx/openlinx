@@ -49,6 +49,7 @@ from spider.output.reporter import Collected
 from spider.services.crawls import create_crawl
 from spider.store.reading import reading
 from spider.store.records import NewCrawl, SecretNames
+from spider.store.schema import origins
 from spider.store.types import Flag, Timestamp
 from spider.store.writer import CrawlWriter, CrawlWriterClosedError
 from spider.workspace.discovery import resolve_workspace
@@ -81,9 +82,10 @@ MAX_RSS_MIB = 400
 SAMPLE_SECONDS = 0.2
 READ_PAUSE_SECONDS = 1.0
 
-# Provisional, shaped like the prototype's (020's draft tables): they exist only in this check's
-# scratch crawl file, never in the declared schema. The check moves to the schema blueprint's
-# links layout when it lands.
+# Provisional, shaped like the prototype's (020's draft tables). create_crawl declares urls and
+# origins, so create_all makes only links, and the URL rows must meet the declared urls: an
+# origin_id, and none of the draft's later columns. The check moves to the declared tables
+# when 030 declares links.
 METADATA = MetaData()
 URLS = Table(
     "urls",
@@ -91,6 +93,7 @@ URLS = Table(
     Column("id", Integer, primary_key=True),
     Column("url", Text, nullable=False, unique=True),
     Column("host", Text, nullable=False),
+    Column("origin_id", Integer, nullable=False),
     Column("is_internal", Flag, nullable=False),
     Column("in_scope", Flag, nullable=False),
     Column("crawl_depth", Integer, nullable=False),
@@ -103,9 +106,6 @@ URLS = Table(
     Column("response_time_ms", Integer),
     Column("fetched_at", Timestamp),
     Column("parsed", Flag, nullable=False),
-    Column("size_bytes", Integer),
-    Column("transferred_bytes", Integer),
-    Column("attempts", Integer),
 )
 Index("urls_frontier", URLS.c.crawl_depth, URLS.c.id, sqlite_where=URLS.c.fetch_state == "queued")
 LINKS = Table(
@@ -161,6 +161,8 @@ class Link(NamedTuple):
 @dataclass(frozen=True)
 class Site:
     urls: list[str]
+    # Each origin of the URLs; a URL's origin_id is its index + 1.
+    origins: list[str]
     discovered: list[dict[str, Any]]
     templates: list[list[Link]]
     fetched: dict[str, Any]
@@ -184,6 +186,8 @@ def build_site(page_count: int) -> Site:
     ]
     external_urls = [f"https://ext{k % 50}.example/r/{k}" for k in range(EXTERNALS)]
     urls = page_urls + template_urls + external_urls
+    origins = list(dict.fromkeys(_origin(url) for url in urls))
+    origin_ids = {origin: index + 1 for index, origin in enumerate(origins)}
     templates: list[list[Link]] = []
     via = ["hyperlink"] * len(urls)
     for t in range(TEMPLATES):
@@ -205,6 +209,7 @@ def build_site(page_count: int) -> Site:
         {
             "url": url,
             "host": url.split("/")[2],
+            "origin_id": origin_ids[_origin(url)],
             "is_internal": url.startswith(HOST),
             "in_scope": url.startswith(HOST),
             "crawl_depth": 2,
@@ -222,11 +227,13 @@ def build_site(page_count: int) -> Site:
         "response_time_ms": 240,
         "fetched_at": datetime.now(UTC),
         "parsed": True,
-        "size_bytes": 98_304,
-        "transferred_bytes": 24_576,
-        "attempts": 1,
     }
-    return Site(urls, discovered, templates, fetched)
+    return Site(urls, origins, discovered, templates, fetched)
+
+
+def _origin(url: str) -> str:
+    scheme, _, host = url.split("/")[:3]
+    return f"{scheme}//{host}"
 
 
 def prepare_pages(page_count: int) -> list[Page]:
@@ -285,6 +292,18 @@ def write_page(site: Site, page: Page, connection: Connection) -> None:
 
 def seed_pages(site: Site, page_count: int, connection: Connection) -> None:
     METADATA.create_all(connection)
+    connection.execute(
+        insert(origins),
+        [
+            {
+                "id": index + 1,
+                "origin": origin,
+                "host": origin.split("/")[2],
+                "is_internal": origin == HOST,
+            }
+            for index, origin in enumerate(site.origins)
+        ],
+    )
     connection.execute(
         insert(URLS),
         [

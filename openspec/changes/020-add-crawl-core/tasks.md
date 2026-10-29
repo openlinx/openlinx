@@ -474,6 +474,8 @@ Order: 12.1, 12.2, 12.3, 12.5, 12.9, 12.10, 12.11, 12.6, 12.21, 12.8, 12.13, the
   Waits for the public repository, which waits for the product name; it is ticked in the pull request that runs CI. Until then the gate, the whole suite under Python 3.12 and 3.13, and one run on Linux in WSL stand in; macOS has none.
 - [x] 16.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md` and ADR-0006, then refactor with the whole suite green. It is the change's milestone review.
   Done when: four read-only agents have reviewed it, two on Standards by code area, each with the codebase-design lens and a pass over the tests' realism with a mutation sample of about ten tests, and two on the Spec, each with half of the spec and the design; every finding is checked against the code, the triage is ruled before the one review commit, and the design carries no task numbers.
+- [x] 16.6 Fix: `scripts/writer_throughput.py`, `017`'s throughput check, runs on the declared schema: its URL rows get an `origins` row and their `origin_id`, and none of the draft's columns the declared `urls` lacks.
+  Done when: a smoke test runs the script as a process at its smallest size, red with the `origin_id` its rows lacked.
 
 ## 17. The crawl package layout
 
