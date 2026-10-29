@@ -108,6 +108,9 @@ def _arguments(command: Command) -> list[dict[str, Any]]:
 def _options(command: Command, meta: CommandMeta, tables: SettingsTables) -> list[dict[str, Any]]:
     entries = []
     for param, extra in options_with_meta(command):
+        # The tool passes a hidden option to itself; it is no input of an agent's.
+        if param.hidden:
+            continue
         choices = getattr(param.type, "choices", None)
         if param.name == FORMAT_PARAMETER:
             # Click knows every format; the Command offers only its own.

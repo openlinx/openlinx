@@ -104,6 +104,12 @@ def test_a_secret_option_without_a_setting() -> None:
     assert (option["setting"], option["secret"]) == (None, True)
 
 
+def test_a_hidden_option_is_not_described() -> None:
+    options = _options(run_cli("commands", app=example_app()).json(), "example-settings")
+
+    assert list(options) == ["--format", "--level", "--token", "--api-key"]
+
+
 def test_error_codes_of_this_change() -> None:
     diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
     expected = {
