@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Working name:** `spider`. That covers the command, the Python package, `spider.toml` and the `.spider/` Workspace folder. The product name is still open and must be chosen, and checked as free on PyPI and GitHub, before the first release.
+> **Name:** the product is OpenLinx (PyPI `openlinx`, GitHub organisation `openlinx`). The code still uses the working name `spider` for the command, the Python package, `spider.toml` and the `.spider/` Workspace folder, until a rename change moves them to the product name.
 
 Terms follow [CONTEXT.md](CONTEXT.md). How the pieces fit together is in [docs/architecture.md](docs/architecture.md), the decisions behind them are in [docs/adr/](docs/adr/), and how everything is tested is in [docs/testing.md](docs/testing.md).
 
@@ -20,13 +20,14 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 
 ## Positioning
 
-Other tools already ship a crawler with a CLI, an MCP server and a Skill. This one stands on four things:
-- **Built for large sites:** a full crawl of every URL in Scope, never a sample, at the scale target of about 500k URLs. Checking 50 pages is a commodity; a complete crawl of a large site, run in the background for hours and queried while it runs, is the job. The frontier lives in the crawl file, so memory stays flat and a Crawl can stop and continue.
-- **Your crawl is a database:** each Crawl is a SQLite file with a public, versioned, documented schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)) and read-only `spider sql`, which works while a background Crawl is still writing. Every Issue can be reproduced by a query.
+A deep, local technical crawler for agents. Other tools already ship a crawler with a CLI, an MCP server and a Skill, and a SQLite store or no telemetry alone sets none apart; the open all-in-one SEO suites offer the audit as one capped module on top of a paid data API. This one leads with:
+- **Your crawl is a database:** arbitrary read-only SQL over a public, versioned schema, with every Issue reproducible by a query. Each Crawl is a SQLite file with a documented schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)), and `spider sql` works while a background Crawl is still writing.
 - **A contract-tested CLI for agents:** one JSON result per Command, a registry of diagnostics and error codes, and cursor paging.
-- **No telemetry, no account, no LLM calls** ([ADR-0004](docs/adr/0004-tool-never-calls-an-llm.md)).
+- **Local diff and crawl continue:** a stopped or interrupted Crawl continues where it ended, and Crawl Diff (v0.2) compares two crawl files on your machine, with no cloud.
+- **Built for large sites, with no page cap:** a full crawl of every URL in Scope, never a sample, at the scale target of about 500k URLs. Checking 50 pages is a commodity; a complete crawl of a large site, run in the background for hours and queried while it runs, is the job. The frontier lives in the crawl file, so memory stays flat.
+- **No account, no paid API keys, no telemetry, no LLM calls** ([ADR-0004](docs/adr/0004-tool-never-calls-an-llm.md)).
 
-We deliberately do not claim these as unique: the MCP server, the Skill, the CI gate, Crawl Diff, the Health Score and `llms.txt` checks.
+We deliberately do not claim these as unique: the MCP server, the Skill, the CI gate, the Health Score and `llms.txt` checks.
 
 ## v0.1: first public pre-release
 
@@ -37,8 +38,8 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | done |
 | 017 | `017-speed-up-crawl-writer` | `crawl-store` (modified) | none | done |
 | 018 | `018-add-schema-conventions` | `crawl-store` (modified) | `schema` (`indexes`) | done |
-| 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | in progress |
-| 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | planned, min |
+| 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | first part done; the rest code-complete |
+| 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | done on its branch, min |
 | 030 | `030-add-page-data` | `page-data` | none (data only) | in progress, min |
 | 040 | `040-add-rules` | `rules` | `rules` | in progress, 15 Rules |
 | 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | in progress, min |
@@ -64,13 +65,15 @@ widen:                                        ├─► 022-min ─┐
                                               └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 sql, summary/pages/page ─► 080 ─┴─► 026 benchmark re-run (sizes the pool) ─► 085 ─► v0.1 tag
 ```
 
-- **Where the build is:** 000, 010, 015, 017 and 018 are done (017: PR #4, merge f5abc9e; 018: PR #5, merge 89da89a; both 2026-10-11). 020 is in progress. It merges in two pull requests (decided 2026-10-14): the first after its group 6, the slice, while the change stays open, and the second after groups 7–14, with the archive. The first, PR #6 (groups 1–6), is merged (01d18d1, 2026-10-14). Parallel coding streams, each on its own branch in its own worktree: 026 (`026-add-parse-pool`), whose group 2 is in review; 030-min (`030-add-page-data`), whose thin slice (groups 1–3) is done; and the 040-min slice (040's groups 1–4), on a branch from 030 (the user's decision of 2026-10-14).
-- **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies (settled at 030's re-grounding, 2026-10-11). 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test (settled at 050's re-grounding, 2026-10-11); 040's slice is its task groups 1–4, the Rule model and `spider rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing` (marked at its re-grounding of 2026-10-14).
+- **Where the build is:**
+  - **In main:** 000, 010, 015, 017, 018, and the first part of 020 (its groups 1–6), so `spider crawl <url>` crawls a site in the foreground.
+  - **On branches:** 020, the crawl core, is code-complete and reviewed; it merges into main once CI runs on the public repository. 022-min, the fetch policy, is done for v0.1 and merges after 020. 030-min, the page data, is in progress. 026 (the parse pool), 040 (the Rules) and 050 (the queries) are partly built and continue after 020 merges.
+  - **Not started:** 060-min (crawl control), 080 (the agent Skill) and 085 (the release).
+- **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `spider rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.
 - **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts its synthetic site alongside 020 and the rest once 020's slice is in (its first pull request), and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
-- **HTML parser** (the user's decision of 2026-10-14, after the parser research of 2026-10-14): the crawler stays on selectolax 1.0.0. selectolax always parses with scripting off, so a head `<noscript>` holding a body-only element, such as the common tracking pixel, ends `<head>`, and every later head element (canonical, meta description, robots, hreflang) lands in `<body>`, where a browser that runs scripts, as Google's renderer does, never puts it. 020 bridges this with a pre-pass that turns `<noscript>` into `<template>` before parsing, and a draft pull request to selectolax that exposes lexbor's `scripting` option continues upstream.
-  - **Checkpoint:** if no selectolax release has the `scripting` option before 030's canonical and Indexability groups start, and at the latest at 026's benchmark re-run before 085, the project switches to turbohtml 1.15.1, pinned exactly, whose selectors are made to skip `<template>` content, as a browser's and lexbor's do. turbohtml builds the same tree as the WHATWG reference with either scripting flag, runs within 10% of selectolax, and stays linear on deeply nested markup, which it caps at 512 levels as Chromium does; it was created in June 2026 and has one maintainer, which is why it is the fallback and not the default. 020's and 030's designs carry the checkpoint under Risks.
-- **Release:** 085 comes last, before the v0.1 tag. The product name must be chosen, and checked as free on PyPI and GitHub, before 085 starts.
+- **HTML parser:** selectolax 1.0.1 or later, parsing with scripting on, as a browser that runs scripts does. A head `<noscript>` therefore keeps the later head elements (canonical, meta description, robots, hreflang) in `<head>`, and a body `<noscript>` gives its Links.
+- **Release:** 085 comes last, before the v0.1 tag, and publishes under the product name, OpenLinx.
 - **v0.1.1** comes after the v0.1 release: 090. The v0.2 changes come after that.
 
 ### The v0.1 Rules
@@ -122,7 +125,7 @@ If a change needs something another change owns, it depends on that change inste
   - The `--crawl latest|<id>|<path>` option used by every query Command.
   - Redaction of secrets in recorded commands and config: whole values (`***`) and URL passwords (`user:***@proxy`). 022 adds the header shape (`Cookie: ***`) in v0.2.
   - Table conventions, and `docs/schema.md` as the contract: the public schema reference of [ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md), in v0.1. It is checked against the declared schema, and a new crawl file against both through `PRAGMA table_info`.
-- **017-speed-up-crawl-writer** (v0.1, decided 2026-10-11 from the writer prototype; the store layer only; done 2026-10-11, PR #4, merge f5abc9e):
+- **017-speed-up-crawl-writer** (v0.1, from the writer prototype; the store layer only; done):
   - It modifies `crawl-store` and builds on 015's `CrawlWriter` as built. It comes after 015 and before 020, whose per-URL unit uses it.
   - **The writer stays a thread.** A writer process is out: it tied the thread under the parse pool (40.1 against 40.4 Pages/s) and writer-only at ~466 Link rows per Page (17.6 against 17.2), its WAL peaked at 402 MB against 212 MB, and it would need units as records with a registry, errors sent over a pipe and a slow test group.
   - **`run()` and `run_async()` are unchanged:** their result means the unit ran, and `flush()` means it is durable.
@@ -133,9 +136,9 @@ If a change needs something another change owns, it depends on that change inste
   - **Prebuilt statements** are a rule for every store module: built once and run as `execute(stmt, params)`, never `.values(<literals>)` per unit and never `insert().values(list)`. Its design decides whether a guard test enforces it.
   - **A local throughput check,** never part of the CI gate: writer-only, 20k Pages at ~466 Link rows per Page, at least 12 Pages/s, a WAL peak of at most 300 MB and a crawler RSS of at most 400 MB. 017 records only a 5k-Page smoke run; the 20k run that sets the floor moves to 030, once on the links layout that the links benchmark chooses, and restates the floor (decided 2026-10-11).
   - Not in 017: the partial frontier index (020), the parse pool (026), and the pipes between a Crawl's processes (060). A writer process, if one is ever added, starts through a dedicated entry module whose imports a startup-allowlist-style test checks.
-- **018-add-schema-conventions** (v0.1, decided 2026-10-11; a separate small change before 020; done 2026-10-11, PR #5, merge 89da89a):
+- **018-add-schema-conventions** (v0.1; a separate small change before 020; done):
   - [ADR-0005](docs/adr/0005-crawl-file-schema-conventions.md), the crawl file's schema conventions. It records:
-    - the user's schema decisions of 2026-10-10: one v0.1 blueprint, derived values written only by post-crawl passes, later columns as NULL, TEXT + CHECK enumerations
+    - one v0.1 blueprint, derived values written only by post-crawl passes, later columns as NULL, TEXT + CHECK enumerations
     - indexes built during the Crawl
     - every Link occurrence as a row
     - STRICT tables
@@ -172,6 +175,9 @@ If a change needs something another change owns, it depends on that change inste
   - The standard proxy variables `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are honoured (010's one exception to its no-environment-variables rule), with proxy passwords redacted.
   - HTTPS, virtual hosts and gzip on the fixture site (trustme).
   - **(v0.2)** HTTP version per origin via ALPN (`http_1_1` / `http_2`), the `--proxy` flag (and `[crawl] proxy`), basic auth and custom headers.
+  - **(v0.2)** Bot-challenge detection, with the hostile-site work: a bot-protection or WAF challenge page, recognised by the headers, cookies and body markers of the common CDNs and WAFs, marks its URL `blocked`, never a Page with a missing title or H1. It detects and classifies; it never evades.
+  - **(v0.2)** With that detection, an External URL that answers 403 or a challenge is checked again with a browser-like request before it counts as broken. External URLs are already checked with GET, never HEAD.
+  - **(v0.2)** Web Bot Auth, opt-in: requests are signed per RFC 9421 (Ed25519, with the public key served from a key directory), so a site owner behind a bot gatekeeper can verify the crawler and allow it. With no key configured, requests go out unsigned.
 - **024-add-list-and-sitemap-modes** (v0.2):
   - List mode (`--list <file|->`) and Sitemap mode (`--sitemap <url>`, repeatable, with index files and gzip).
   - `mode_conflict` when two Crawl Modes are given.
@@ -180,7 +186,7 @@ If a change needs something another change owns, it depends on that change inste
   - The pool's default size is physical cores minus 2, at least 1, until the sweep below picks it (decided 2026-10-14; psutil counts the cores at run time). In the writer prototype, 6 workers (physical cores minus 2) on the maintainer's hybrid laptop (an i5-12450H: 4 performance cores with SMT plus 4 efficiency cores, 12 threads) still took CPU from the writer and capped the Crawl at about 40 Pages/s. So the benchmark sweeps the worker count (for example 2, 3, 4 and 6) on that laptop, records machine-wide CPU and clock frequency, and picks the default that gives the most Pages/s while the writer is never short of CPU. Physical cores minus 2 is the sweep's upper bound. The ~500k-URL benchmark also sizes the queue bounds and doubles as the soak test. It runs by hand on a stated machine, never in CI, and its numbers go in `docs/benchmarks.md`.
   - It also measures the crawl-file layout variants that the store benchmark of 2026-10-10 left out (decided 2026-10-11): the `links` layout, a 16 KB page size, a zstd dictionary for stored HTML, and the WAL size of a ~100k-Page run without a concurrent reader. For the `links` layout, if 030's task 10.1 has already chosen it, 026 uses that layout; otherwise 026 runs 10.1's benchmark and decision rule, and 030 reuses the result. Whichever comes first settles the layout once.
 - **030-add-page-data** (min in v0.1):
-  - Every Internal-tab column, added in the slice where it is first needed.
+  - Every per-Page column of the crawl file, under the column names SEO practitioners already use, added in the slice where it is first needed.
   - Indexability and Indexability Status.
   - Link attributes stored for analysis (building on 020's discovered Links and Link types).
   - Inlink and outlink counts, computed in the post-crawl passes.
@@ -190,7 +196,7 @@ If a change needs something another change owns, it depends on that change inste
 - **040-add-rules** (15 Rules in v0.1):
   - The Rule model and the 15 Rules listed above; `http-url` is a Warning with High Priority. **(v0.2)** the other 27 Rules of the 42-Rule catalogue.
   - Thresholds and disabling in `spider.toml`.
-  - **Every Rule is one reproducing SQL query** over the public schema, the foundation of v0.3's User SQL Rules, and it is the Rule's only form (user decision, 2026-10-11):
+  - **Every Rule is one reproducing SQL query** over the public schema, the foundation of v0.3's User SQL Rules, and it is the Rule's only form:
     - a running Crawl writes no Issue; while a Crawl has no final pass (`running`, `failed` or `interrupted`), the Issues reader runs the queries live, read-only, and returns the shape of the stored Issues
     - when a Crawl ends as `completed` or `stopped`, the post-crawl pass materialises each Rule's rows into `affected_urls`, then the Health Score; 050's Commands read Issues through the same reader
     - `rules show <id>` prints the query, and an Issue can point to it ("reproduce with `spider sql`")
@@ -202,6 +208,10 @@ If a change needs something another change owns, it depends on that change inste
     - `/llms.txt` missing or invalid
     - main content missing from the raw HTML, approximated from the Word Count until JavaScript rendering arrives in v1.1
     - no structured data on Indexable Pages
+    - deterministic readiness checks: question-style headings, a visible date, author markup and answer blocks, with an optional score of their own next to the Health Score
+  - **(v0.2)** A Rules pack, pulled forward from v1.x, that extends the catalogue beyond the 42 Rules:
+    - accessibility from the parsed HTML: links and buttons without a name, form controls without a label, iframes without a title, a viewport that blocks zoom, a positive `tabindex`, and skipped heading levels
+    - JSON-LD checked against the required fields of Google's rich results
 - **050-add-query-and-segments** (min in v0.1):
   - `summary` (the data model shared with the Report). **(v0.2)** its per-Segment breakdown.
   - `pages` with the basic `--where` language (comparisons, `contains`, `is [not] null` and `and`), `--fields`, `--sort` and paging. **(v0.2)** the rest of `--where`: `~`/`!~`, `in`, `or`, `not` and parentheses.
@@ -209,7 +219,8 @@ If a change needs something another change owns, it depends on that change inste
   - `issues` and `issues <rule-id>`.
   - The **end-to-end CI test** on Windows, macOS and Linux: a foreground `crawl` → `issues`. It is the last part of the thin slice. 070's end-to-end test is added in v0.2.
   - Read-only `sql`: exactly one `SELECT`/`WITH` statement, with a default row limit and a timeout.
-  - **(v0.2)** `export <view>`: `jsonl` by default, or `csv`; the `resources` view is defined over `urls` and `links`.
+  - **(v0.2)** `export <view>`: `jsonl` by default, or `csv`; the `resources` view is defined over `urls` and `links`. With 030's stored HTML, Pages also export as Markdown, as input for AI tools.
+  - **(v0.2)** A ready-made what-to-fix-first ranking: Issues ordered by Priority and Affected URL count, later also an MCP tool (090). Each Rule's guidance (`description`, `why_it_matters`, `how_to_fix`) is already printed by 040's `rules show <id>`.
   - **(v0.2)** **Segments** and `--segment`.
   - **(v0.2)** **The CSV policy and output files**, for every Command (moved from 010 on 2026-10-01):
     - the `csv` format; the single **CSV policy** is UTF-8 with BOM, CRLF and formula neutralisation, with `--no-bom` to turn the BOM off
@@ -230,7 +241,7 @@ If a change needs something another change owns, it depends on that change inste
   - Report Sections, and `report brief --section <id>` / `--list`.
   - Report Notes, SVG charts, Health Score per Segment, and escaping.
   - The table script, tested at seam 9.
-  - To weigh at its re-grounding (the user's wish of 2026-10-14, not a decision): a polished, terminal-style look with switchable dark palettes and a light one, a monospace and sans-serif pairing, block-character bars, terse copy, and charts richer than a minimal SVG builder; it meets the draft's no-web-fonts rule, its own SVG builder and its offline CSP (070 design, Open Questions).
+  - To weigh at its re-grounding, not decided: a polished, terminal-style look with switchable dark palettes and a light one, a monospace and sans-serif pairing, block-character bars, terse copy, and charts richer than a minimal SVG builder; it meets the draft's no-web-fonts rule, its own SVG builder and its offline CSP (070 design, Open Questions).
   - The **end-to-end CI test** on all three OSes: `crawl --detach` → `status` → `issues` → `report`.
 - **080-add-agent-skill** (min in v0.1):
   - **The Skill** (workflows, install instructions and one-liners), generated from `spider commands` by a developer script (`scripts/generate_skill.py`). In v0.1 the one-liner is `uv tool install`, and the workflows use only v0.1 Commands.
@@ -240,9 +251,11 @@ If a change needs something another change owns, it depends on that change inste
   - An **SQL cookbook** in the Skill: `sql` recipes over the public schema. **(v0.2)** Segment recipes.
   - **(v0.2)** the Full audit workflow (it needs 070's `report brief`); the dry run and the Hand-off rule (when the URL estimate is `null`, the Skill hands the command to the user), which need 060; the install-script one-liners (100); Segments and their recipes; `doctor --proxy`; and the plugin marketplace, which ships with 090's `.mcp.json`.
   - **(v0.2)** The **fix and verify** workflow: the agent reads the Issues, fixes the site's code in the repository, re-crawls only the Affected URLs in List mode, and confirms that the Issue is gone. It depends on 024 and on `rules apply`.
+  - **(v0.2)** Plugins: a Claude Code plugin (`.claude-plugin/plugin.json`) bundles the Skill and 090's MCP server and installs with one command, and a Cursor plugin sits next to it.
+  - To weigh at its re-grounding: the Skill runs the tool through `uvx openlinx` when no command is installed, and several narrow task Skills (a site audit, broken-link fixes, a pre-launch gate) replace one general Skill.
 - **085-add-release** (v0.1; not drafted yet, so `openspec/changes/085-*` does not exist):
-  - Before it starts: the product name is chosen and checked as free on PyPI and GitHub.
-  - Its first task: the re-run of 026's ~500k benchmark on the full v0.1 pipeline, which sweeps the worker count and sets the pool's default, reports `response_headers`' share of the file, and measures 040's live Issues during the Crawl, recorded in `docs/benchmarks.md` (026 design D6; ruled 2026-10-14).
+  - It publishes the package as `openlinx` on PyPI.
+  - Its first task: the re-run of 026's ~500k benchmark on the full v0.1 pipeline, which sweeps the worker count and sets the pool's default, reports `response_headers`' share of the file, and measures 040's live Issues during the Crawl, recorded in `docs/benchmarks.md` (026 design D6).
   - A GitHub Actions workflow triggered by `v*` tags: the test suite, the sdist and wheel built with `uv build`, publishing to PyPI through trusted publishing, and a GitHub release with them.
   - The release gates: the tag matches the package version, and the committed Skill copy matches the generator's output (moved from 100).
   - The documented install with `uv tool install` or `pipx` (moved from 100).
@@ -254,7 +267,7 @@ If a change needs something another change owns, it depends on that change inste
 - **110-add-ci-gate** (v0.2; not drafted yet): SEO regression testing in CI, "SEO checks that block a bad deploy, the way tests do".
   - Crawl Diff (`diff A B`), pulled forward from v0.3. The diff Report stays in v0.3.
   - `--fail-on <issue|warning|opportunity>`: a non-zero exit when the new Crawl has new Issues of that Issue Type or a more severe one, compared with a baseline Crawl. The exit code is decided when 110 is drafted.
-  - CI output formats besides the exit code: SARIF and JUnit.
+  - CI output formats besides the exit code: SARIF, JUnit XML and GitHub Actions annotations.
   - A composite GitHub Action: install spider, crawl a staging site or localhost, diff against a baseline crawl file kept as a CI artifact, and fail the job.
   - Depends on 024 (List mode, to re-crawl a URL list) and on 040's Issues.
 
@@ -283,47 +296,16 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
   - The `.mcpb` bundle: `scripts/build_mcpb.py`, added to 085's release workflow, so it is attached to every GitHub release from v0.1.1.
   - A `.mcp.json` example and the client config snippets, shipped as docs in `docs/mcp.md`.
   - **(v0.2)** The plugin `.mcp.json`, which comes with 080's plugin marketplace.
+  - **(v0.2)** MCP UI widgets (MCP Apps) that show results inside the agent's chat.
 - **Distribution in v0.1.1:**
-  - List the MCP server on the MCP Registry, under the chosen product name.
+  - List the MCP server on the MCP Registry, as OpenLinx.
   - Offer the CLI as a deterministic crawler backend for popular SEO skill packs.
 
-**Re-grounding checklist** (what to fix or design when each change is re-grounded):
-- 090: `design.md` lines 14, 99 and 127, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin; they move to 085's release workflow and to `docs/mcp.md`.
-- 080 (done 2026-10-11, with the re-grounding of its docs parts): `design.md:95` and task 7.8 named 100's release pipeline for the Skill-copy check, which is now 085's.
-- 060 (done 2026-10-14, at its re-grounding): re-ground for v0.1. Its proposal and the release notes in `specs/crawl-control/spec.md` still say v0.1.1 for 060-min; they become v0.1, except the command recorded for Crawls started through MCP (v0.1.1). It may not assume 022: 060-min needs only 015 and 020.
-- 015 (done at its archive, 2026-10-10): its `design.md` (lines 13 and 86) and `proposal.md` (lines 11 and 71) say 060-min is v0.1.1. Fix the wording when 015 is archived; the one-writer-by-construction rule in 015 is unchanged until 060 lands.
-- 015 (done at its archive, 2026-10-10): its design D6 names "020's `seq` on URLs" as the order column; 020 D1 uses `urls.id`, which already grows in insertion order. `docs/crawl-store.md` says resuming arrives with 060 in v0.2; it is v0.1 now. Fix both when 015 is archived.
-- 060 (done 2026-10-14, at its re-grounding: design D12): own what moved from 015 (see 060's entry): its design still calls `015`'s `check_writer`, `write_control`, reservation and `crawl_id_taken`, and its spec and tasks rely on them.
-- 060 (done 2026-10-14, at its re-grounding: design D12 and crawl-store's "A Crawl being created is not latest"; `latest` skips a file without a complete schema while its writer claim is held, instead of a rename): remove the window in which a just-claimed, still-empty `<id>.sqlite` makes `--crawl latest` report crawl_file_invalid. Create the file as `<id>.sqlite.tmp` (claimed exclusively, counted as taken) and rename it after the schema is written, together with the reservations.
-- 060: `crawls rm` deletes a crawl file together with its SQLite companions (`<id>.sqlite-wal`, `<id>.sqlite-shm`), because reading a WAL crawl file may leave them behind (015 crawl-store.md).
-- 020 (done 2026-10-10): `--max-urls` has no default limit (was 10,000); the spec, the `max_urls_reached` scenarios and the URL estimate are updated. 030: raw HTML storage can no longer be decided from a default `--max-urls`. Decided 2026-10-11: opt-in by a flag (see 030's entry). Done at 030's re-grounding (2026-10-11): `--store-html` / `--no-store-html`, from v0.2.
-- 020 (done 2026-10-10, design D12–D15): decide four design points from the architecture review of 2026-10-05 before its tasks are written:
-  - **Crawl state transitions:** 015's `set_state` writes any state from any state. A table of allowed transitions and one pure function that refuses the others, used by 020 (`running`, `completed`, `stopped`, `failed`) and later by 060 (`interrupted`, resume).
-  - **URL types:** a `NormalizedUrl` type (a `NewType` or a small frozen class) that only URL normalisation creates, so mypy refuses a raw string wherever the frontier, Scope or Links expect a normalised URL. Decide whether crawl ids get a type too.
-  - **Data access stays in the store:** writer units are defined only in `spider.store.*` modules, and the engine, extractors and Rules call them instead of writing SQL. Decide how 030 and 040 add their units under that rule.
-  - **One context for a Crawl's dependencies:** the clock, the Reporter, the writer, the settings, the Fetcher and the Scope are built in one place and passed as one object, instead of growing every signature.
-- 020: page preparation (parse, extract and normalise, ending in frozen records) is one pure, picklable function of the fetched response, called through an executor seam. 020 ships the in-process executor; 026 plugs in the pool without touching the engine.
-- 020: selectolax 1.0 removed its old backend (`from selectolax.parser import HTMLParser` raises `ImportError`); the link extractor uses `selectolax.lexbor.LexborHTMLParser` (found by the store benchmark, 2026-10-11).
-- 020: D2's unit goes through 017's `submit()`: the URL's task ends at the submit, and the unit's outcome arrives at its commit. Under the robustness rule, a unit that fails, even when it runs again after another unit failed, never stops the Crawl: the engine records that URL as `error` through a fallback unit. Only a failed commit or a writer that has ended is `write_failed` (D16).
-- 020: D1's frontier reads are writer units that commit nothing (017), and `urls` gets the partial index `(crawl_depth, id) WHERE fetch_state = 'queued'` (flat at 1–2 ms in the store benchmark; a cursor alone breaks once a continue re-queues URLs).
-- 060: `resume` is v0.1 now; its spec markers move with 060-min's.
-- 060: its "Crawl State transitions" requirement builds on 020's (020 D12): it adds `running` → `interrupted` and `interrupted` → `running` to 020's `TRANSITIONS`, and records `interrupted` through 020's `set_state`. 020's `stop_reason` now also covers `failed` (`seed_unreachable`, `site_unreachable`, `write_failed`).
-- 060 (done 2026-10-14, at its re-grounding: both "A killed Crawl can be resumed at once" scenarios): 020 dropped its kill-then-continue scenarios ("Continuing a killed Crawl completes it", "Continuing does not request fetched URLs again" after a kill, "A Crawl killed on Windows can be continued"), because continuing a killed Crawl needs `interrupted`. 060's "A killed Crawl can be resumed at once" scenarios cover them; add that the resume requests no URL that was `fetched` before the kill.
-- 060 (done 2026-10-14, at its re-grounding: design D3 and D6): builds the detached Crawl's `CrawlContext` (020 D15) and sets its `StopSignal` from control rows with `requested`.
-- 060 (done 2026-10-14, at its re-grounding: design D4 and Risks): the detached process tree includes 026's pool workers: no console windows, and a clean shutdown on stop and interrupt.
-- 060 (done 2026-10-14, at its re-grounding: design D3 and D4): on Windows, a process started with `sys.executable` from a venv, or from `spider.exe`, is a launcher whose child is the real interpreter, so killing the recorded pid leaves the Crawl running. Start the base interpreter (`sys._base_executable`) with `__PYVENV_LAUNCHER__` set, as `multiprocessing` does, or put the tree in a Job object, and record the real pid for `status`.
-- 060 (done 2026-10-14, at its re-grounding: design Risks): any `OSError` on a pipe between the Crawl's processes means end of input: on Windows a closed pipe can surface as `BrokenPipeError` at `poll()`, not as `EOFError`.
-- 060 (done, design D7): `status` reports the average rate over the whole Crawl next to `rate`.
-- 050 (done 2026-10-11, design D16): check `summary` against Screaming Frog's Overview counts: URLs encountered, blocked by robots.txt and crawled; Internal and External; Indexable and non-Indexable; and content types with their shares.
-- 030 and 040: under 020 D9 and D14, handlers are pure and return store rows declared in `spider.store.*`, and post-crawl passes are store functions (030: `spider.store.pages` and `spider.store.links`; 040: `spider.store.issues`). 030 (done 2026-10-11): a pure Page handler returns store rows, and its inlink pass is a store function, both listed in `default_hooks()`, which lives in `spider.services.hooks`, the composition root (020's ruling of 2026-10-14). 040 (done 2026-10-11): it registers only its post-crawl pass, because its Rules are SQL queries.
-- 024 (v0.2): decide whether 020's apex-to-www rule applies to each Seed of List and Sitemap mode.
-- 022-min: the recorded `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` values must go through 015's URL redaction (`user:***@host`). Today it is the private `_redact_value` in `spider.store.redaction`, so 022 either makes a public `redact_url` or routes the variables through `SecretNames`.
-- 026 (done 2026-10-14, at its re-grounding): re-ground for v0.1; the benchmark runs on Windows, macOS and Linux runners or a stated machine, never as part of the CI gate; 026 chose a stated machine, by hand.
-- 026 (done 2026-10-14, at its re-grounding): `psutil` is no longer a dependency of 015; it is a test dependency today, and 026 makes it a runtime dependency to count physical cores, imported off the startup path.
-- 026 (done 2026-10-14, at its re-grounding): the 500k run reports `response_headers`' share of the crawl file; if it exceeds 10%, the table stores Internal URLs only (decided 2026-10-11).
-- 026 (done 2026-10-14, at its re-grounding, for the re-run in 085): the 500k run measures the latency of 040's live Issues during the Crawl, for both 050's full `issues` list (every Rule's query over the stored rows) and live `page <url>` (every Rule's query for one URL), and its effect on WAL checkpoints, because a long read keeps the WAL from being reset. If the full live list takes over 30 s at 500k URLs, 040's live path is revisited: per-Rule reads, or materialising at intervals. If live `page <url>` takes over 1 s, 040's reader gets per-URL forms of the queries (decided 2026-10-11).
-- 020–050: no Alembic revision per change before v0.1; tables are added to the declared schema and `docs/schema.md` in the same slice (015 D5, D6).
-- 040 (done 2026-10-11): every Rule is its reproducing SQL query over the public schema, stored in `rules.reproduce_sql`. Issues are read live while a Crawl has no final pass, and the post-crawl pass materialises them. `rules show <id>` prints the query, and an Issue can point to it.
+**Re-grounding checklist** (what each change still has to fix or design when it is re-grounded):
+- 090: its `design.md`, `specs/installation/` and `tasks.md` still name 100's `release.yml`, its pin test and 080's plugin. They move to 085's release workflow and to `docs/mcp.md`.
+- 060: `crawls rm` deletes a crawl file together with its SQLite companions (`<id>.sqlite-wal`, `<id>.sqlite-shm`), because reading a crawl file in WAL mode may leave them behind ([docs/crawl-store.md](docs/crawl-store.md)).
+- 024 (v0.2): decide whether 020's apex-to-www Scope rule applies to each Seed of List and Sitemap mode.
+- 030 to 050: before v0.1 a change adds no Alembic revision; its tables join the declared schema and `docs/schema.md` in the same slice (015 design D5, D6).
 
 **From a code review of a peer open-source crawler (2026-10-05),** to weigh when each change is re-grounded. Points our drafts already cover are left out.
 - 020:
@@ -357,13 +339,15 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 | 100 | `100-add-installers` | `installation` | none (install scripts) | planned |
 | 110 | `110-add-ci-gate` | decided when it is drafted | `diff A B`, `--fail-on`; a GitHub Action | planned, not drafted yet |
 
-- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands; 022's ALPN, `--proxy`, auth and custom headers; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules and the `ai_search` category; 050's `export`, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, fix and verify, dry run and Hand-off, install-script one-liners and plugin marketplace.
+- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands and its MCP UI widgets; 022's ALPN, `--proxy`, auth and custom headers, bot-challenge detection with the External re-check, and Web Bot Auth; 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules, the `ai_search` category and the Rules pack; 050's `export` (with Pages as Markdown), the fix-first ranking, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, fix and verify, dry run and Hand-off, install-script one-liners, plugin marketplace and plugins.
 - **Order:** 024 first. The rest of 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 110 needs 024 and 040's Issues. 100 comes last.
 - Link graph views: `links <url> --in|--out`.
 - Redirect Chain analysis: `redirects`, with per-hop headers and timing.
 - Sitemap analysis: `sitemaps` (sitemap vs crawl, non-indexable URLs in the sitemap).
 - Link Score.
 - Rules that need the whole site: orphan Pages, hreflang return links, sitemap coverage.
+- Soft-404 detection: a random path that cannot exist is fetched once per host, and Pages that answer like it are flagged. 030 or 040 owns it, decided when it is drafted.
+- Technology detection as crawl data: the server, CDN or WAF, CMS, framework and analytics of each host, read passively from headers, cookies, the meta generator and script URLs. It serves 080's fix and verify workflow.
 - Report Sections for links, redirects and sitemaps.
 - `rules apply`, which recomputes Issues from stored data after thresholds change.
 
@@ -373,7 +357,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 - Custom Extraction (CSS, XPath, regex; configured in `spider.toml`).
 - **User SQL Rules**, stage 1: user Rules written as read-only SQL over the public schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)), with Rule metadata (Issue Type, Priority, description, how to fix). They are kept in `spider.toml` or in rule files, and can be shared as Rule packs. Stage 1 reuses 040's mechanism, where every built-in Rule already ships its SQL query. Stage 2, Python plugins, comes only after v1.0 (see Backlog).
 - Near-Duplicates (our own MinHash) with `duplicates [--exact|--near]`.
-- Offline structured-data validation (schema.org plus Google's rules for about 10 types, stored as YAML) with `structured-data`.
+- Offline structured-data validation (schema.org plus Google's rules for about 10 types, stored as YAML) with `structured-data`. v0.2's Rules pack checks only the required fields.
 
 ## v1.0: stable
 
@@ -387,13 +371,13 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 
 ## Backlog
 
-- **Site metrics beyond Screaming Frog parity:** after v0.1, decide which site-level measurements to add on top of the Screaming Frog tabs. Nothing is chosen yet.
+- **More site metrics:** after v0.1, decide which site-level measurements to add beyond the standard technical-audit columns. Nothing is chosen yet.
 
-- **Data import (high priority, before Integrations):** `spider import <file> --as <table>` loads a CSV, such as a GSC or Ahrefs export, into the crawl file as an extra table. Agents can then join it with crawl data in SQL and rank Issues by traffic. It is a cheap, agent-first alternative to OAuth integrations, and suits agents that already have Ahrefs or GSC MCP servers.
+- **Data import (high priority, before Integrations):** `spider import <file> --as <table>` loads a CSV, such as a Search Console or a backlink tool export, into the crawl file as an extra table. Agents can then join it with crawl data in SQL and rank Issues by traffic. It is a cheap, agent-first alternative to OAuth integrations, and suits agents that already have Search Console or backlink data through MCP servers.
 - **Report formats:** PDF, report translations.
-- **Integrations:** Google Search Console (including URL Inspection), GA4, PageSpeed Insights / Core Web Vitals, Ahrefs. Data import comes first.
+- **Integrations:** Google Search Console (including URL Inspection), GA4, PageSpeed Insights / Core Web Vitals, a backlink data provider. Data import comes first.
 - **New interfaces:** REST API and web UI.
-- **More analysis:** RDFa, accessibility, spelling, screenshots, more rich-result types.
+- **More analysis:** RDFa, accessibility beyond v0.2's Rules pack, spelling, screenshots, more rich-result types.
 - **Rule plugins (after v1.0 only):** stage 2 of User SQL Rules (v0.3): Rules as Python entry-point plugins, once the internal APIs are stable.
 - **Crawl operation:** scheduled or distributed Crawls.
 - **Community Skill workflow packs:** workflows such as an e-commerce audit or a migration check, contributed as Markdown through the plugin marketplace.

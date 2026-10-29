@@ -162,4 +162,4 @@ _Avoid_: plugin, prompt
 - **"Finished"**: say which Crawl State you mean. *completed* means the Crawl ran to the end. The work done after a Crawl ends as *completed* or *stopped* is the "post-crawl passes".
 - **"Section"**: never use it alone. Say **Section Crawl** (crawling part of a site), **Segment** (analysing part of a Crawl) or **Report Section** (part of a Report).
 - **"Language"** can mean the language a Page declares or the language detected from its text. They can differ, so name which one you mean.
-- **"Issue"** is both the concept and one of the Issue Type values, a naming inherited from Screaming Frog. "An Issue of type Warning" is fine. For the first value, write "an *Issue*-type Issue".
+- **"Issue"** is both the concept and one of the Issue Type values, a naming common among SEO crawlers. "An Issue of type Warning" is fine. For the first value, write "an *Issue*-type Issue".

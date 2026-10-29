@@ -1,8 +1,10 @@
-# spider
+# OpenLinx
 
 [![CI](https://github.com/bogzak/seo_spider/actions/workflows/ci.yml/badge.svg)](https://github.com/bogzak/seo_spider/actions/workflows/ci.yml)
 
-`spider` is the working name of an open-source, agent-first SEO crawler, in the spirit of Screaming Frog SEO Spider but with no GUI.
+OpenLinx is an open-source, agent-first SEO crawler. It runs locally and stores each Crawl as a SQLite file with a public, versioned schema, so an agent can query it with arbitrary read-only SQL (`sql`, coming in v0.1), and every Issue it reports can be reproduced by a query. It has no GUI, no account and no telemetry. If you know desktop SEO crawlers such as Screaming Frog, the column names will be familiar.
+
+`spider` is the working name of the command and the Python package until a rename change moves them to OpenLinx.
 
 AI agents drive it through a command-line tool, and a local MCP server is coming in v0.1.1:
 - They run a Crawl of a website.
@@ -15,7 +17,7 @@ A Skill teaches the agent when and how to use each Command. The tool itself neve
 
 Pre-release: there is no release yet.
 - **Progress:** done and archived: the scaffold (`000`), Workspaces and the CLI contract (`010`), the crawl store (`015`), the faster crawl writer (`017`) and the schema conventions (`018`). That is `spider init`, `spider commands`, `spider schema`, `--crawl`, and one SQLite file per Crawl with a documented schema. `020-add-crawl-core` is in progress: its first part is merged, so `spider crawl <url>` crawls a site in the foreground. [ROADMAP.md](ROADMAP.md) says where the build is.
-- **Name:** the product name is still open. `spider` is a placeholder for the command, the Python package, `spider.toml` and the `.spider/` directory of each Workspace.
+- **Name:** the product is OpenLinx (PyPI `openlinx`, GitHub organisation `openlinx`). `spider` is the working name of the command, the Python package, `spider.toml` and the `.spider/` directory of each Workspace until the rename.
 
 ## Development quick start
 

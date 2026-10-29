@@ -159,7 +159,7 @@ Every public table, column and index SHALL follow these conventions (ADR-0005):
 - **JSON:** TEXT holding valid JSON, with the format `json`, only for recorded inputs and for lists without a fixed shape. A value that queries filter, sort or count by SHALL be a column of its own.
 - **Enumerations:** TEXT whose allowed values are lowercase snake_case, listed in `values`. The file SHALL refuse any other value. Values that a later release adds are listed from v0.1, and one enumeration has one value set in every table that holds it.
 - **Errors:** an error is a code column whose values are listed, and its text is in a column named `<code column>_message`.
-- **Measured quantities:** the column name ends with its unit: `_ms`, `_seconds`, `_bytes`, `_px` or `_pct` (a share from 0 to 100). A count ends with `_count`. Each column has one meaning, so two different measures, such as two hashes or two sizes, are two distinctly named columns. A column named after a Screaming Frog column keeps that name.
+- **Measured quantities:** the column name ends with its unit: `_ms`, `_seconds`, `_bytes`, `_px` or `_pct` (a share from 0 to 100). A count ends with `_count`. Each column has one meaning, so two different measures, such as two hashes or two sizes, are two distinctly named columns. A column that carries the name SEO practitioners already use keeps that name.
 - **Indexes:** each is named `<table>_<columns>`, and its description names the query it serves. An index is built while the Crawl writes, never after it.
 - **Order:** a table whose rows have an order SHALL carry it in an INTEGER column that grows in insert order, such as `seeds.position`. Queries that list rows in order SHALL use that column, never a timestamp.
 
