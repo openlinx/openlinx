@@ -98,3 +98,19 @@ def test_hreflang_and_mobile_alternate_links() -> None:
         ("hreflang", "de", None),
         ("mobile_alternate", None, "only screen and (max-width: 640px)"),
     ]
+
+
+def test_links_declared_in_a_header() -> None:
+    (link,) = page_link_rows(
+        "<p>Page two</p>", headers=(("Link", '</p3>; rel="next"'),), url="https://example.test/p2"
+    )
+
+    assert (
+        link.type,
+        link.target,
+        link.ordinal,
+        link.declared_in,
+        link.element,
+        link.attribute,
+        link.link_position,
+    ) == ("pagination", "https://example.test/p3", 1, "http_header", None, None, None)
