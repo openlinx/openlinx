@@ -41,6 +41,8 @@ def test_the_units_of_links_run_again_the_same(temp_workspace: TempWorkspace) ->
                 rel_nofollow=False,
                 rel_ugc=False,
                 rel_sponsored=False,
+                hreflang=None,
+                media=None,
                 link_position="content",
             )
             for ordinal, anchor in ((1, "About"), (2, "About us"))

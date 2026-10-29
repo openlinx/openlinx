@@ -30,5 +30,7 @@ def _row(source_url_id: int, link: DiscoveredLink, attributes: LinkAttributes | 
         rel_nofollow="nofollow" in link.rel,
         rel_ugc="ugc" in link.rel,
         rel_sponsored="sponsored" in link.rel,
+        hreflang=None if attributes is None else attributes.hreflang,
+        media=None if attributes is None else attributes.media,
         link_position=None if attributes is None else attributes.link_position,
     )

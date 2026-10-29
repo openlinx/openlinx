@@ -145,7 +145,7 @@ Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code,
 - [x] 10.4 Drive "Image-only anchor takes the alt text" at seam 4.
 - [x] 10.5 Drive "Every occurrence is stored" at seam 4.
 - [x] 10.6 Drive "Link positions come from the enclosing element" at seam 4, and add `link_position`, from the element that places the Link, a `noscript` for a Link from its content.
-- [ ] 10.7 Drive "Hreflang and mobile alternate Links" at seam 4, and add `hreflang` and `media`.
+- [x] 10.7 Drive "Hreflang and mobile alternate Links" at seam 4, and add `hreflang` and `media`.
 - [ ] 10.8 Drive "Links declared in a header" at seam 4.
 - [ ] 10.8b Drive "Hreflang from a Link header" at seam 4, over the `UrlResult` of an in-Scope 200 PDF, which no extractor reads: the `links` handler takes `hreflang` from the header walk.
 - [ ] 10.9 Drive "Discovered URLs are the stored Link targets" at seam 3+6. Write the Links of the URL's result: those of analysed Pages, and the header Links of in-Scope 2xx responses that are not analysed Pages, such as a PDF or a Page whose preparation failed. Other results carry no Links, and the handler writes none for them.

@@ -8,7 +8,7 @@ from selectolax.lexbor import LexborHTMLParser, LexborNode
 from spider.crawl.pages.links import locate_links
 from spider.crawl.pages.preparation import PageInput, extractor
 from spider.crawl.references import DiscoveredLink
-from spider.extract.text import element_text, normalized
+from spider.extract.text import element_text, normalized, trimmed
 from spider.store.page_records import LinkPosition
 
 _SECTIONS: Mapping[str, LinkPosition] = {
@@ -23,6 +23,8 @@ class LinkAttributes(msgspec.Struct, frozen=True, kw_only=True):
     ordinal: int
     anchor_text: str | None
     alt_text: str | None
+    hreflang: str | None
+    media: str | None
     link_position: LinkPosition
 
 
@@ -39,6 +41,8 @@ def extract_page_links(tree: LexborHTMLParser, page: PageInput, config: None) ->
                 ordinal=link.ordinal,
                 anchor_text=_anchor_text(link, element),
                 alt_text=_alt_text(link, element),
+                hreflang=_attribute(link, element, "hreflang", "hreflang"),
+                media=_attribute(link, element, "mobile_alternate", "media"),
                 link_position=_position(link, placing, positions),
             )
             for link, element, placing in locate_links(tree, page.links)
@@ -63,6 +67,12 @@ def _alt_text(link: DiscoveredLink, element: LexborNode) -> str | None:
     if link.type != "image" or element.tag != "img" or "alt" not in element.attributes:
         return None
     return normalized(element.attributes["alt"] or "")
+
+
+def _attribute(link: DiscoveredLink, element: LexborNode, link_type: str, name: str) -> str | None:
+    if link.type != link_type:
+        return None
+    return trimmed(element.attributes.get(name) or "")
 
 
 def _position(

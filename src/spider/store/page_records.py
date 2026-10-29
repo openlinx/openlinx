@@ -128,4 +128,6 @@ class LinkRow:
     rel_nofollow: bool
     rel_ugc: bool
     rel_sponsored: bool
+    hreflang: str | None
+    media: str | None
     link_position: LinkPosition | None

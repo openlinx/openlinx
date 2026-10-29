@@ -85,3 +85,16 @@ def test_link_positions_come_from_the_enclosing_element() -> None:
         ("hyperlink", "https://site.test/f", "navigation"),
         ("image", "https://site.test/pixel.gif", "footer"),
     ]
+
+
+def test_hreflang_and_mobile_alternate_links() -> None:
+    rows = page_link_rows(
+        '<head><link rel="alternate" hreflang="de" href="/de/">'
+        '<link rel="alternate" media="only screen and (max-width: 640px)" '
+        'href="https://m.example.test/"></head>'
+    )
+
+    assert [(row.type, row.hreflang, row.media) for row in rows] == [
+        ("hreflang", "de", None),
+        ("mobile_alternate", None, "only screen and (max-width: 640px)"),
+    ]

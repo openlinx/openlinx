@@ -1020,6 +1020,18 @@ links = public_table(
     Column("rel_ugc", Flag, nullable=False, comment="1 when rel holds ugc."),
     Column("rel_sponsored", Flag, nullable=False, comment="1 when rel holds sponsored."),
     Column(
+        "hreflang",
+        Text,
+        comment="For a hreflang Link, the trimmed hreflang of its element; NULL for other Links, "
+        "or when the Page's Link extractor failed.",
+    ),
+    Column(
+        "media",
+        Text,
+        comment="For a mobile_alternate Link, the trimmed media of its element; NULL for other "
+        "Links, or when the Page's Link extractor failed.",
+    ),
+    Column(
         "link_position",
         Text,
         comment="Where on the Page the Link is: head for a Link the parser places in head; "
