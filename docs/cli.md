@@ -16,7 +16,7 @@ How every `linx` Command talks to agents and people. The spec is [openspec/specs
 - **Plain text** appears in three places only, all on stdout with exit code 0:
   - `--help`, on the tool or on any Command
   - `linx` with no arguments, which prints the same as `linx --help`
-  - `linx --version`, which prints `linx <version>`
+  - `linx --version`, which prints `OpenLinx <version>`
 - **`--format`** chooses the format of the result. Each Command supports the formats that `linx commands` lists for it. Any other format fails with `invalid_value`, and the hint lists the Command's formats. Errors stay JSON whatever `--format` says.
 
 ```

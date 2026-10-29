@@ -3,6 +3,8 @@
 # The command users type, and the name of the package, its files and the robots token.
 COMMAND_NAME = "linx"
 PACKAGE_NAME = "openlinx"
+# The product in prose, in --version and in the User-Agent's product token.
+PRODUCT_NAME = "OpenLinx"
 DATA_DIR_NAME = f".{PACKAGE_NAME}"
 SETTINGS_FILE_NAME = f"{PACKAGE_NAME}.toml"
 # Selects robots.txt groups and prefixed robots directives unless --robots-user-agent is given.
