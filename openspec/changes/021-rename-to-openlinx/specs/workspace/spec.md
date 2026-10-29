@@ -13,7 +13,7 @@ A local Workspace SHALL be a folder, its root, that contains a `.openlinx/` data
 
 The global Workspace SHALL keep its Crawls in `H/.openlinx/crawls/` and read its settings from `H/.openlinx/openlinx.toml`.
 
-Every data folder SHALL contain a `.gitignore` file whose content is exactly `# Created by OpenLinx: crawl data is not committed.\n*\n`.
+Every data folder SHALL contain a `.gitignore` file whose content is exactly `# Created by linx: crawl data is not committed.\n*\n`.
 
 #### Scenario: Files of a new local Workspace
 - **WHEN** `linx init` runs in the empty folder `H/work/shop`
@@ -21,7 +21,7 @@ Every data folder SHALL contain a `.gitignore` file whose content is exactly `# 
 
 #### Scenario: Data folder ignores its own contents
 - **WHEN** `linx init` runs in the empty folder `H/work/shop`
-- **THEN** `H/work/shop/.openlinx/.gitignore` contains exactly `# Created by OpenLinx: crawl data is not committed.\n*\n`
+- **THEN** `H/work/shop/.openlinx/.gitignore` contains exactly `# Created by linx: crawl data is not committed.\n*\n`
 
 #### Scenario: Location of the global Workspace
 - **WHEN** the global Workspace is resolved

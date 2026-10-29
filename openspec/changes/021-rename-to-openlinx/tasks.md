@@ -6,7 +6,7 @@ Seams are those of docs/testing.md: seam 1 is the CLI through `run_cli`, "seam 1
 
 ## 2. The codemod
 
-- [ ] 2.1 Run the codemod on a clean tree, then `ruff check --select I --fix` and `ruff format`, `uv lock`, and `uv sync`. In the same commit, add the guard `test_no_working_name`: no `spider` outside the kept spans of design D2 and D3, the archive, `openspec/specs` and this change's folder.
+- [x] 2.1 Run the codemod on a clean tree, then `ruff check --select I --fix` and `ruff format`, `uv lock`, and `uv sync`. In the same commit, add the guard `test_no_working_name`: no `spider` outside the kept spans of design D2 and D3, the archive, `openspec/specs` and this change's folder.
   Done when: check.py passes; a second run of the codemod changes nothing and `--check` exits 0; the codemod reports no `spider` left; and the guard is red with one `spider` planted in `src`, in `docs` and in a test.
 
 ## 3. The three names (design D1, D4, D5)
