@@ -21,6 +21,8 @@ from sqlalchemy import (
 from spider.store.page_records import (
     Indexability,
     IndexabilityStatus,
+    LinkAttribute,
+    LinkElement,
     LinkPosition,
     RedirectType,
     SameSite,
@@ -992,12 +994,14 @@ links = public_table(
         "element",
         Text,
         comment="The HTML element the Link came from; NULL for a header Link.",
+        info={"values": literal_values(LinkElement)},
     ),
     Column(
         "attribute",
         Text,
         comment="The attribute the Link came from, such as src or srcset of an img; NULL for "
         "a header Link.",
+        info={"values": literal_values(LinkAttribute)},
     ),
     Column(
         "anchor_text",

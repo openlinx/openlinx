@@ -1,13 +1,14 @@
 """The links handler: a row for each Link of a URL's result (030-add-page-data D4)."""
 
 from collections.abc import Iterable, Mapping
+from typing import cast
 
 from spider.crawl.engine.hooks import UrlResult
 from spider.crawl.pages.headers import header_links_with_parameters
 from spider.crawl.references import DiscoveredLink
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.page_links import PAGE_LINKS, LinkAttributes
-from spider.store.page_records import LinkRow
+from spider.store.page_records import LinkAttribute, LinkElement, LinkRow
 
 
 def link_rows(result: UrlResult) -> Iterable[LinkRow]:
@@ -51,8 +52,10 @@ def _row(
         target=link.target,
         type=link.type,
         declared_in=link.declared_in,
-        element=link.element,
-        attribute=link.attribute,
+        # Discovery gives them as text; a guard in tests/extract/test_links.py holds what it reads
+        # to these enumerations.
+        element=cast(LinkElement | None, link.element),
+        attribute=cast(LinkAttribute | None, link.attribute),
         anchor_text=None if attributes is None else attributes.anchor_text,
         alt_text=None if attributes is None else attributes.alt_text,
         rel=" ".join(link.rel) or None,

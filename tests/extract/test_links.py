@@ -1,5 +1,7 @@
 """Link attributes (030-add-page-data, page-data; seam 4)."""
 
+from spider.store.page_records import LinkAttribute, LinkElement
+from spider.store.schema import literal_values
 from tests.support.page_data import page_link_rows, response_link_rows
 
 
@@ -131,3 +133,29 @@ def test_hreflang_from_a_link_header() -> None:
         link.element,
         link.link_position,
     ) == ("hreflang", "https://example.test/de/guide.pdf", "de", "http_header", None, None)
+
+
+# Every element and attribute that Link discovery reads, as real pages write them: a frame
+# only in a frameset document, a source in a picture and in a video, a track in a video and an
+# image in a noscript, whose content discovery parses again.
+_EVERY_LINK_ELEMENT = """<html><head><link rel="stylesheet" href="/site.css">
+<meta http-equiv="refresh" content="30; url=/news"><script src="/app.js"></script></head>
+<body><a href="/about">About</a>
+<img src="/map.png" usemap="#m"><map name="m"><area href="/north" alt="North"></map>
+<iframe src="/widget.html"></iframe>
+<img src="/logo.png" srcset="/logo@2x.png 2x" alt="Logo">
+<picture><source srcset="/hero.webp" type="image/webp"><img src="/hero.jpg" alt=""></picture>
+<video src="/intro.mp4" poster="/intro.jpg"><track src="/intro.vtt" kind="captions"></video>
+<video controls><source src="/demo.mp4" type="video/mp4"></video>
+<audio src="/theme.mp3"></audio><embed src="/tour.swf"><object data="/brochure.pdf"></object>
+<noscript><img src="/pixel.gif" alt=""></noscript></body></html>"""
+_FRAMESET = '<html><frameset cols="20%,80%"><frame src="/menu.html"><frame src="/main.html">'
+
+
+def test_every_element_and_attribute_discovery_reads_is_enumerated() -> None:
+    rows = page_link_rows(_EVERY_LINK_ELEMENT) + page_link_rows(_FRAMESET)
+
+    assert (
+        {row.element for row in rows},
+        {row.attribute for row in rows},
+    ) == (set(literal_values(LinkElement)), set(literal_values(LinkAttribute)))

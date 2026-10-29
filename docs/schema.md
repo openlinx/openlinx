@@ -270,8 +270,8 @@ One row for each Link the Crawl discovered in a response: in an analysed Page's 
 | `target_url_id` | INTEGER | no | → `urls.id` | | | The URL of the Link's normalised target. |
 | `type` | TEXT | no | | | `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect` | The Link type. |
 | `declared_in` | TEXT | no | | | `head`, `body`, `http_header` | Where the Link was declared: in the document's head or body as the parser builds them, or in a response header. |
-| `element` | TEXT | yes | | | | The HTML element the Link came from; NULL for a header Link. |
-| `attribute` | TEXT | yes | | | | The attribute the Link came from, such as src or srcset of an img; NULL for a header Link. |
+| `element` | TEXT | yes | | | `a`, `area`, `link`, `iframe`, `frame`, `meta`, `img`, `source`, `video`, `audio`, `track`, `embed`, `object`, `script` | The HTML element the Link came from; NULL for a header Link. |
+| `attribute` | TEXT | yes | | | `href`, `src`, `srcset`, `poster`, `data`, `content` | The attribute the Link came from, such as src or srcset of an img; NULL for a header Link. |
 | `anchor_text` | TEXT | yes | | | | For a hyperlink, the normalised text of its element, or when that is empty the alt texts of the img elements inside it, joined with a space; for an area, its alt; NULL for other types, or when the Page's Link extractor failed. |
 | `alt_text` | TEXT | yes | | | | For an image Link from an img element, its alt attribute, normalised: the empty string when it has no value; NULL when it is absent, for other Links, or when the Page's Link extractor failed. |
 | `rel` | TEXT | yes | | | | The Link's rel tokens, lowercased, joined with single spaces; NULL without any. |
