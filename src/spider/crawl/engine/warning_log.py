@@ -5,11 +5,11 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from spider.crawl.urls import NormalizedUrl
-from spider.output.codes import DECLARED, MAX_URLS_REACHED, NETWORK_PAUSED
+from spider.output.codes import DECLARED, Kept
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Reporter
 
-# A code without a detail is written each time it is given (design D10).
+_KEPT: Mapping[str, Kept] = {code.code: code.kept for code in DECLARED}
 _ONCE_PER: Mapping[str, str] = {
     code.code: code.once_per for code in DECLARED if code.once_per is not None
 }
@@ -42,21 +42,20 @@ class WarningLog:
             self._restore(diagnostic)
 
     def _restore(self, diagnostic: Diagnostic) -> None:
-        # How one run ended, not what the site did: a run that stops at the limit again
-        # writes it anew.
-        if diagnostic.code == MAX_URLS_REACHED.code:
+        # A code that a later version no longer declares is kept as it was stored.
+        kept = _KEPT.get(diagnostic.code, "each")
+        # How one run ended, not what the site did: a run that ends so again writes it anew.
+        if kept == "run":
             return
         index = len(self._warnings)
         self._warnings.append(diagnostic)
         details = diagnostic.details
-        detail = _ONCE_PER.get(diagnostic.code)
-        if diagnostic.code == NETWORK_PAUSED.code:
+        if kept == "pauses":
             self._pauses = _Pauses(index, details["count"], details["total_seconds"])
-        # Only count() gives a warning its first URL.
-        elif "first_url" in details:
+        elif kept == "counted":
             self._counted[diagnostic.code] = (index, details["count"])
-        elif detail is not None:
-            self._written[diagnostic.code, details.get(detail)] = index
+        elif kept == "once":
+            self._written[diagnostic.code, details.get(_ONCE_PER[diagnostic.code])] = index
 
     @property
     def warnings(self) -> tuple[Diagnostic, ...]:

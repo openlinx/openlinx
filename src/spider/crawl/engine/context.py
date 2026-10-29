@@ -23,7 +23,7 @@ class CrawlContext:
     # --strip-params, compiled once: the Seed, the engine and page preparation share it.
     strip_params: re.Pattern[str] | None
     clock: Clock
-    reporter: WarningLog
+    warnings: WarningLog
     writer: CrawlWriter
     fetcher: Fetcher
     pages: PageExecutor

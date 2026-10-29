@@ -1101,7 +1101,7 @@ def test_a_hand_off_outside_the_hold_is_named() -> None:
 REAL_IO_CALLS = {"AiohttpFetcher", "aiohttp_fetcher", "ClientSession"}
 REAL_IO_FIXTURES = {"fixture_site", "fixture_hosts"}
 # Without a fake Fetcher, these crawl through the aiohttp Fetcher.
-CRAWLS = {"crawl_result", "start_crawl"}
+CRAWLS = {"crawl_result", "start_crawl", "continued", "continue_crawl"}
 
 
 def _called(call: ast.Call) -> str:
@@ -1157,11 +1157,14 @@ def test_a_virtual_clock_beside_real_io_is_named() -> None:
         "    clock = FakeClock()\n"
         "    crawl_result(seed, clock=clock, fetcher=FakeFetcher(clock, {}))\n"
         "def test_system(temp_workspace, fixture_site):\n"
-        "    crawl_result(server.url('/'), clock=SystemClock())\n",
+        "    crawl_result(server.url('/'), clock=SystemClock())\n"
+        "def test_continue(temp_workspace):\n"
+        "    continued(result, clock=FakeClock())\n",
     }
 
     assert fake_clock_with_real_io(sources) == [
         "tests/crawl/test_timing.py:1 test_site pairs FakeClock with real I/O",
+        "tests/crawl/test_timing.py:13 test_continue pairs FakeClock with real I/O",
         "tests/crawl/test_timing.py:3 test_session pairs FakeClock with real I/O",
         "tests/crawl/test_timing.py:6 test_crawl pairs FakeClock with real I/O",
     ]

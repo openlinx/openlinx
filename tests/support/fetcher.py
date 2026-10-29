@@ -37,14 +37,17 @@ class FakeFetcher:
         *,
         outages: Sequence[tuple[float, float]] = (),
         on_start: Mapping[str, Callable[[], object]] | None = None,
+        on_answer: Mapping[str, Callable[[], object]] | None = None,
     ) -> None:
         """`outages` are spans of monotonic time in which no request started gets a response,
         whatever its URL: the network itself is down. `on_start` runs a callback, by the whole
-        URL or else by path, when its request starts, as a stop request that arrives then."""
+        URL or else by path, when its request starts, as a stop request that arrives then;
+        `on_answer` runs one when its response is about to be returned."""
         self._clock = clock
         self._pages = pages
         self._outages = outages
         self._on_start = on_start or {}
+        self._on_answer = on_answer or {}
         self.starts: list[tuple[str, float]] = []
         self._in_flight = 0
         self.most_in_flight = 0
@@ -73,6 +76,9 @@ class FakeFetcher:
                 await self._clock.sleep(page.delay)
         finally:
             self._in_flight -= 1
+        answered = self._on_answer.get(request.url) or self._on_answer.get(path)
+        if answered is not None:
+            answered()
         if fails is not None:
             return FetchFailure(
                 fetch_error=fails,

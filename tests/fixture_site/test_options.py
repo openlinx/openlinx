@@ -93,8 +93,11 @@ async def test_after_holds_the_response_until_the_site_receives_the_other_path(
             return time.monotonic()
 
         held = asyncio.create_task(answered("/a"))
-        # Time for /a to reach the site first; the order below fails if it did not.
-        await asyncio.sleep(0.2)
+        # /b is sent only once the site has /a, which the route holds back.
+        deadline = time.monotonic() + 10
+        while not any(request.path == "/a" for request in server.requests):
+            assert time.monotonic() < deadline, "/a never reached the site"
+            await asyncio.sleep(0.01)
         await answered("/b")
         a_answered = await held
 

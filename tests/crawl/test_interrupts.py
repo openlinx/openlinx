@@ -17,6 +17,7 @@ from spider.crawl.engine.stop import StopSignal
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlResult
 from spider.services.hooks import default_hooks
+from spider.store.records import StopReason
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.server import ServerHandle
@@ -511,3 +512,57 @@ def test_a_crawl_run_from_another_thread_keeps_the_process_handlers(
         [result.summary.state for result in results],
         signal.getsignal(signal.SIGINT) is before,
     ) == ([], ["completed"], True)
+
+
+def test_a_requested_stop_ends_the_crawl_stopped_after_its_passes(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    stop = StopSignal()
+    passes_run: list[str] = []
+
+    async def record(context: PassContext) -> None:
+        passes_run.append("record")
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("record", record)))
+    pages = {
+        "/": FakePage('<a href="/a">A</a><a href="/b">B</a>'),
+        "/a": FakePage("<p>A</p>", delay=5),
+        "/b": FakePage("<p>B</p>"),
+    }
+    # 060's stop command sets the flag the Crawl Service was given, as this does mid-crawl.
+    fetcher = FakeFetcher(clock, pages, on_start={"/b": lambda: stop.set("requested")})
+
+    result = crawl_result("http://site.test/", hooks, clock=clock, fetcher=fetcher, stop=stop)
+
+    assert (
+        result.summary.state,
+        result.summary.stop_reason,
+        result.failure,
+        passes_run,
+        crawl_row(result.crawl_file)["state"],
+    ) == ("stopped", "requested", None, ["record"], "stopped")
+
+
+@pytest.mark.parametrize(
+    ("first", "then", "kept"),
+    [
+        ("site_unreachable", "write_failed", "write_failed"),
+        ("seed_unreachable", "write_failed", "write_failed"),
+        ("write_failed", "site_unreachable", "write_failed"),
+        ("max_urls", "site_unreachable", "site_unreachable"),
+        ("interrupt", "write_failed", "write_failed"),
+        ("interrupt", "max_urls", "interrupt"),
+        ("site_unreachable", "seed_unreachable", "site_unreachable"),
+    ],
+)
+def test_a_write_failure_outranks_the_network_failures(
+    first: StopReason, then: StopReason, kept: StopReason
+) -> None:
+    stop = StopSignal()
+
+    stop.set(first)
+    stop.set(then)
+
+    assert stop.reason == kept

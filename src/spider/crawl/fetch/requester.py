@@ -39,8 +39,9 @@ class Stop(Protocol):
 
 
 class Requester:
-    """The host's slot, its turn under --rate, the global cap and the URL limit for every
-    request; the watchdog, the network pause and 022's retries belong here, not in its callers."""
+    """The host's slot, its turn under --rate, the global cap, the URL limit and the watchdog
+    for every request, and the network pause's gate and probes; the engine decides from a
+    URL's outcome whether the pause retries it (design D7, D16)."""
 
     def __init__(
         self,

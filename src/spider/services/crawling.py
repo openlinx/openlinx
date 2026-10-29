@@ -100,12 +100,12 @@ class CrawlPlan:
     new_crawl: NewCrawl
 
 
-class Recorded(Enum):
+class _Override(Enum):
     KEEP = "keep"
 
 
 # An override left out: the continue runs with the recorded value.
-KEEP = Recorded.KEEP
+KEEP = _Override.KEEP
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -113,9 +113,9 @@ class CrawlOverrides:
     """The settings a continue may change, as 060 D8 lets a resume change them; 060 checks
     that a URL limit is only raised (design D20)."""
 
-    max_urls: int | Literal[Recorded.KEEP] | None = KEEP
-    concurrency: int | Literal[Recorded.KEEP] = KEEP
-    rate: float | Literal[Recorded.KEEP] | None = KEEP
+    max_urls: int | Literal[_Override.KEEP] | None = KEEP
+    concurrency: int | Literal[_Override.KEEP] = KEEP
+    rate: float | Literal[_Override.KEEP] | None = KEEP
 
     def given(self) -> dict[str, Any]:
         values = {field.name: getattr(self, field.name) for field in fields(self)}
@@ -418,9 +418,6 @@ async def _crawl_and_end(crawl: _Crawl) -> _End:
             failure = NETWORK_FAILURES[reason]
             plan = crawl.plan
             return replace(ended, failure=failure(plan.seed, plan.settings, crawl.crawl_file))
-        elif reason not in (None, "max_urls", "interrupt"):
-            # 060's stop request has no end it records yet.
-            raise stop.cause or RuntimeError(f"no end is built for {reason}")
         else:
             # Before the end is written, for completed and stopped alike: 040 reads either
             # state as "its Issues are materialised".
@@ -493,7 +490,7 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
                     scope=plan.scope,
                     strip_params=plan.strip_params,
                     clock=clock,
-                    reporter=crawl.log,
+                    warnings=crawl.log,
                     writer=writer,
                     fetcher=fetcher,
                     pages=executor,

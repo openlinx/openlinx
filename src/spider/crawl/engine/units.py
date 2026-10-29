@@ -1,7 +1,6 @@
 """A URL's unit: its final state, as its handlers see it, and its record (020-add-crawl-core D5)."""
 
-import asyncio
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Any
 
 from spider.crawl.engine.context import CrawlContext
@@ -16,24 +15,20 @@ from spider.crawl.engine.crawl_warnings import (
 )
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
-from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
-from spider.crawl.engine.pause import NetworkPause, Redispatch
-from spider.crawl.engine.stop import StopGrace, StopSignal
+from spider.crawl.engine.outcomes import Recorded, provenance_of
+from spider.crawl.engine.tasks import Run
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
-from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
-from spider.crawl.fetch.requester import NotStarted, Requester
+from spider.crawl.fetch.requester import NotStarted
 from spider.crawl.pages.preparation import (
     is_html_type,
     response_directives,
     response_links,
 )
-from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.robots.reader import OriginRobots
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import host_key, url_origin
 from spider.output.diagnostics import Diagnostic
-from spider.store.failures import is_write_failure
 from spider.store.records import (
     RESOURCE_LINK_TYPES,
     ErroredUrl,
@@ -45,62 +40,6 @@ from spider.store.records import (
 )
 from spider.store.rows import HandlerRows
 from spider.store.urls import record_error, record_fetched, record_skipped
-from spider.store.writer import CrawlWriterClosedError
-
-
-class TaskFailure:
-    """The first exception that escaped a URL's task: a bug, which ends the run (design D16)."""
-
-    def __init__(self, stop: StopSignal) -> None:
-        self._stop = stop
-        self._error: BaseException | None = None
-
-    @property
-    def is_set(self) -> bool:
-        return self._error is not None
-
-    def track(self, tasks: set[asyncio.Task[None]], task: asyncio.Task[None]) -> None:
-        tasks.add(task)
-        task.add_done_callback(lambda done: self._ended(tasks, done))
-
-    def raise_first(self) -> None:
-        if self._error is not None:
-            raise self._error
-
-    def _ended(self, tasks: set[asyncio.Task[None]], task: asyncio.Task[None]) -> None:
-        tasks.discard(task)
-        if task.cancelled():
-            return
-        # Retrieved here, since a task that ends before a gather waits on it has already left
-        # its set: unseen, its URL would stay queued and be dispatched again by every sweep.
-        error = task.exception()
-        if isinstance(error, CrawlWriterClosedError):
-            # Not a bug: an ended writer refuses every unit, and its cause says why (017 D6).
-            self._stop.set("write_failed", error.__cause__ or error)
-        elif error is not None and is_write_failure(error):
-            # Not a bug either: the file refused a write outside the URL's unit, such as its
-            # origin's robots.txt row.
-            self._stop.set("write_failed", error)
-        elif error is not None and self._error is None:
-            self._error = error
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Run:
-    """One run's dependencies, made once by run_crawl."""
-
-    context: CrawlContext
-    outcomes: Outcomes
-    limits: RequestLimits
-    requester: Requester
-    robots: RobotsLoader
-    blocking: BlockingRuns
-    # The tasks of Checked URLs in flight, which never hold the depth barrier (design D3).
-    checked_urls: set[asyncio.Task[None]]
-    task_failure: TaskFailure
-    pause: NetworkPause
-    redispatch: Redispatch
-    grace: StopGrace
 
 
 def via_resource(queued: QueuedUrl) -> bool:
@@ -162,7 +101,7 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
             context.settings, origin_robots, queued, decision
         )
         for warning in warnings:
-            context.reporter.warn(warning)
+            context.warnings.warn(warning)
     decided = replace(dispatched, blocked_by_robots_txt=blocked)
     if skip_reason is not None:
         skipped = replace(decided, fetch_state="skipped", skip_reason=skip_reason)
@@ -190,7 +129,7 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
         else:
             run.pause.responded()
     if decision.is_internal and run.blocking.responded(host, status_code):
-        context.reporter.warn(possible_blocking(host))
+        context.warnings.warn(possible_blocking(host))
     if isinstance(response, FetchFailure):
         failure = UrlFailure(
             fetch_error=response.fetch_error,
@@ -269,11 +208,11 @@ async def _fetched(context: CrawlContext, decided: UrlResult, response: FetchRes
     if parsed and decided.discovered_via == "seed":
         mismatch = seed_base_mismatch(url, links, context.scope)
         if mismatch is not None:
-            context.reporter.warn(mismatch)
+            context.warnings.warn(mismatch)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
-        context.reporter.count(parse_failure(url, parse_error, parse_error_message), url)
+        context.warnings.count(parse_failure(url, parse_error, parse_error_message), url)
     url_response = UrlResponse(
         status_code=response.status_code,
         reason=response.reason,

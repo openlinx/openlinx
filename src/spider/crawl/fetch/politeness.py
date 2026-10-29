@@ -112,7 +112,8 @@ class RequestLimits:
         return self._refused
 
     async def reserve_task(self) -> None:
-        """Waits for room under the global cap before a URL's task is created."""
+        """Waits for room under the task bound, the global cap plus the page executor's
+        backlog, before a URL's task is created."""
         await self._tasks.acquire()
 
     def task_ended(self) -> None:
