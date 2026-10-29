@@ -1,6 +1,6 @@
 # The Workspace
 
-Where `linx` keeps its Crawls and settings, and how every Command finds them. The spec is [openspec/specs/workspace/spec.md](../openspec/specs/workspace/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
+Where OpenLinx keeps its Crawls and settings, and how every Command finds them. The spec is [openspec/specs/workspace/spec.md](../openspec/specs/workspace/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
 ## Layout
 

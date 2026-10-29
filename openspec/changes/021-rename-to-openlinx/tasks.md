@@ -22,7 +22,7 @@ Seams are those of docs/testing.md: seam 1 is the CLI through `run_cli`, "seam 1
 
 ## 5. Docs
 
-- [ ] 5.1 The prose the codemod leaves to people: README's opening, `CONTRIBUTING.md`'s names paragraph with `PRODUCT_NAME`, `AGENTS.md`, and `docs/` wherever a sentence now reads wrong. Done when: a read of each changed paragraph finds the right one of the three names.
+- [x] 5.1 The prose the codemod leaves to people: README's opening, `CONTRIBUTING.md`'s names paragraph with `PRODUCT_NAME`, `AGENTS.md`, and `docs/` wherever a sentence now reads wrong. Done when: a read of each changed paragraph finds the right one of the three names.
 
 ## 6. Guards
 
