@@ -13,12 +13,13 @@ from spider.crawl.pages.preparation import (
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.extract.content_area import ContentArea
+from spider.extract.link_handler import link_rows
 from spider.extract.page_data import PAGE_DATA, page_data_extractor
 from spider.extract.page_handler import page_rows
 from spider.extract.status_phrases import STATUS_PHRASES
 from spider.naming import DEFAULT_ROBOTS_TOKEN
 from spider.services.hooks import default_hooks
-from spider.store.page_records import PageRow
+from spider.store.page_records import LinkRow, PageRow
 
 _URL = NormalizedUrl("https://site.test/")
 # The spec's fixture A, which later scenarios refer to.
@@ -42,6 +43,25 @@ def page_row(
     Content-Type, through the built-in extractors, the Page extractor's config being
     `content_area` when it is given. Its Links are the engine's: the headers', then the
     document's."""
+    (row,) = page_rows(page_result(html, content_type, content_area, headers, url, status_code))
+    return row
+
+
+def page_link_rows(
+    html: str | bytes, headers: tuple[tuple[str, str], ...] = (), url: str = _URL
+) -> tuple[LinkRow, ...]:
+    """The Link rows of an analysed Page, as page_row builds it."""
+    return tuple(link_rows(page_result(html, headers=headers, url=url)))
+
+
+def page_result(
+    html: str | bytes,
+    content_type: str = "text/html; charset=utf-8",
+    content_area: ContentArea | None = None,
+    headers: tuple[tuple[str, str], ...] = (),
+    url: str = _URL,
+    status_code: int = 200,
+) -> UrlResult:
     # The crawl engine prepares only a 2xx response; another status is unprepared_page_row's.
     assert 200 <= status_code < 300, status_code
     body = html.encode() if isinstance(html, str) else html
@@ -64,7 +84,7 @@ def page_row(
     settings = PageSettings(scope=scope, extractors=extractors, strip_params=None)
     prepared = prepare_page(page_url, response, settings)
     assert prepared.parse_error is None, prepared.parse_error_message
-    result = UrlResult(
+    return UrlResult(
         url_id=1,
         url=page_url,
         crawl_depth=0,
@@ -87,8 +107,6 @@ def page_row(
         links=response_links(page_url, response, scope, None) + prepared.html_links,
         outputs=dict(prepared.outputs),
     )
-    (row,) = page_rows(result)
-    return row
 
 
 def unprepared_page_row(

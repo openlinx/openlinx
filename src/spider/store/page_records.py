@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from spider.store.records import DeclaredIn, LinkType
+
 type SameSite = Literal["strict", "lax", "none"]
 type Indexability = Literal["indexable", "non_indexable"]
 type IndexabilityStatus = Literal[
@@ -107,3 +109,18 @@ class CookieRow:
     http_only: bool
     partitioned: bool
     same_site: SameSite | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LinkRow:
+    source_url_id: int
+    ordinal: int
+    # Stored as target_url_id: the writer finds the id in the unit that records the target URL.
+    target: str
+    type: LinkType
+    declared_in: DeclaredIn
+    anchor_text: str | None
+    rel: str | None
+    rel_nofollow: bool
+    rel_ugc: bool
+    rel_sponsored: bool

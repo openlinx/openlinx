@@ -258,3 +258,27 @@ One row for each Set-Cookie header of a Page's response, with the cookie's name 
 | `http_only` | INTEGER | no | | `boolean` | | 1 when the HttpOnly attribute is present. |
 | `partitioned` | INTEGER | no | | `boolean` | | 1 when the Partitioned attribute is present. |
 | `same_site` | TEXT | yes | | | `strict`, `lax`, `none` | The SameSite attribute, lowercased; NULL when absent or another value. |
+
+## Table `links`
+
+One row for each Link the Crawl discovered in a response: in an analysed Page's HTML, or in the Link and Refresh headers of an in-Scope 2xx response.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `source_url_id` | INTEGER | no | PK, → `urls.id` | | | The URL whose response contains the Link. |
+| `ordinal` | INTEGER | no | PK | | | The Link's position in that response, from 1: header Links first in the order received, then the document's in document order, as the Crawl's Link discovery numbers them. |
+| `target_url_id` | INTEGER | no | → `urls.id` | | | The URL of the Link's normalised target. |
+| `type` | TEXT | no | | | `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect` | The Link type. |
+| `declared_in` | TEXT | no | | | `head`, `body`, `http_header` | Where the Link was declared: in the document's head or body as the parser builds them, or in a response header. |
+| `anchor_text` | TEXT | yes | | | | For a hyperlink, the normalised text of its element; NULL for other types, or when the Page's Link extractor failed. |
+| `rel` | TEXT | yes | | | | The Link's rel tokens, lowercased, joined with single spaces; NULL without any. |
+| `rel_nofollow` | INTEGER | no | | `boolean` | | 1 when rel holds nofollow. |
+| `rel_ugc` | INTEGER | no | | `boolean` | | 1 when rel holds ugc. |
+| `rel_sponsored` | INTEGER | no | | `boolean` | | 1 when rel holds sponsored. |
+
+### Indexes
+
+| Name | Columns | Unique | Where | Description |
+|---|---|---|---|---|
+| `links_target` | `target_url_id` | no | | The inlinks of a URL: every Link that points at it. |
+| `links_type_target` | `type`, `target_url_id` | no | | The inlinks of a URL of one Link type, such as its hyperlink inlinks. |

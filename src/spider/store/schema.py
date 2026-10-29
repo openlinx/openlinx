@@ -25,10 +25,12 @@ from spider.store.page_records import (
 from spider.store.records import (
     CrawlMode,
     CrawlState,
+    DeclaredIn,
     DiscoveredVia,
     FetchError,
     FetchState,
     JournalMode,
+    LinkType,
     ParseError,
     RobotsState,
     SkipReason,
@@ -940,4 +942,76 @@ cookies = public_table(
     "attributes, never its value.",
     change=30,
     without_rowid=True,
+)
+
+links = public_table(
+    "links",
+    Column(
+        "source_url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        autoincrement=False,
+        comment="The URL whose response contains the Link.",
+    ),
+    Column(
+        "ordinal",
+        Integer,
+        primary_key=True,
+        autoincrement=False,
+        comment="The Link's position in that response, from 1: header Links first in the order "
+        "received, then the document's in document order, as the Crawl's Link discovery "
+        "numbers them.",
+    ),
+    Column(
+        "target_url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        nullable=False,
+        comment="The URL of the Link's normalised target.",
+    ),
+    Column(
+        "type",
+        Text,
+        nullable=False,
+        comment="The Link type.",
+        info={"values": literal_values(LinkType)},
+    ),
+    Column(
+        "declared_in",
+        Text,
+        nullable=False,
+        comment="Where the Link was declared: in the document's head or body as the parser "
+        "builds them, or in a response header.",
+        info={"values": literal_values(DeclaredIn)},
+    ),
+    Column(
+        "anchor_text",
+        Text,
+        comment="For a hyperlink, the normalised text of its element; NULL for other types, or "
+        "when the Page's Link extractor failed.",
+    ),
+    Column(
+        "rel",
+        Text,
+        comment="The Link's rel tokens, lowercased, joined with single spaces; NULL without any.",
+    ),
+    Column("rel_nofollow", Flag, nullable=False, comment="1 when rel holds nofollow."),
+    Column("rel_ugc", Flag, nullable=False, comment="1 when rel holds ugc."),
+    Column("rel_sponsored", Flag, nullable=False, comment="1 when rel holds sponsored."),
+    comment="One row for each Link the Crawl discovered in a response: in an analysed Page's "
+    "HTML, or in the Link and Refresh headers of an in-Scope 2xx response.",
+    change=30,
+)
+# The layout and these indexes are provisional until the links benchmark chooses (design D4).
+Index(
+    "links_target",
+    links.c.target_url_id,
+    info={"description": "The inlinks of a URL: every Link that points at it."},
+)
+Index(
+    "links_type_target",
+    links.c.type,
+    links.c.target_url_id,
+    info={"description": "The inlinks of a URL of one Link type, such as its hyperlink inlinks."},
 )
