@@ -2,6 +2,7 @@
 
 import json
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -291,6 +292,27 @@ def test_a_crawl_puts_the_process_handlers_back(temp_workspace: TempWorkspace) -
     # A later Ctrl+C in the same process, an embedding app's or a test runner's, reaches its own
     # handler again, not a finished Crawl's stop flag.
     assert {signum: signal.getsignal(signum) for signum in before} == before
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+def test_a_crawl_gives_back_the_wakeup_fd_it_found(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    # The fd an embedding app or a test runner set, as asyncio's own loop does for its signals.
+    reader, writer = socket.socketpair()
+    with reader, writer:
+        writer.setblocking(False)
+        ours = writer.fileno()
+        earlier = signal.set_wakeup_fd(ours)
+        try:
+            crawl_result(
+                "http://site.test/",
+                clock=clock,
+                fetcher=FakeFetcher(clock, {"/": FakePage("<p>/</p>")}),
+            )
+        finally:
+            after = signal.set_wakeup_fd(earlier)
+
+    assert after == ours
 
 
 # An hour away: a request that hangs well past the grace, and the watchdog's 120 seconds.
