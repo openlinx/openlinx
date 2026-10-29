@@ -264,7 +264,7 @@ def test_a_normalized_url_made_outside_its_makers_is_named() -> None:
     ]
 
 
-# Only the store writes SQL; the schema service loads sqlalchemy lazily (020 design D14).
+# Only the store writes SQL; the schema service loads sqlalchemy lazily (020-add-crawl-core D14).
 SQLALCHEMY_IMPORTERS = ("spider/store/", "spider/services/schema.py")
 
 
@@ -345,7 +345,7 @@ def positional_bound(x): ...
     ]
 
 
-# The crawl core never imports the layers that wire it or plug into it (020 design D9).
+# The crawl core never imports the layers that wire it or plug into it (020-add-crawl-core D9).
 PLUGIN_LAYERS = ("spider.services", "spider.extract", "spider.rules", "spider.cli")
 
 
@@ -705,7 +705,8 @@ def test_a_parse_with_scripting_off_is_named() -> None:
     ]
 
 
-# Every request of a Crawl goes through the Requester, which owns its politeness (020 D7).
+# Every request of a Crawl goes through the Requester, which owns its politeness
+# (020-add-crawl-core D7).
 REQUESTER = "spider/crawl/fetch/requester.py"
 
 
@@ -753,7 +754,7 @@ def test_a_request_outside_the_requester_is_named() -> None:
 
 
 # Built only through their generic factories, which check the type parameter where the hooks are
-# registered: one built in place inside Hooks(...) takes it as Any (020 D9).
+# registered: one built in place inside Hooks(...) takes it as Any (020-add-crawl-core D9).
 FACTORIES = {
     "Handler": "src/spider/crawl/engine/hooks.py",
     "Extractor": "src/spider/crawl/pages/preparation.py",
@@ -802,7 +803,8 @@ def test_a_hook_built_outside_its_factory_is_named() -> None:
     ]
 
 
-# A Crawl waits only through its Clock, so a fake Clock drives every wait of a test (020 D7).
+# A Crawl waits only through its Clock, so a fake Clock drives every wait of a test
+# (020-add-crawl-core D7).
 WAITERS = ("spider/crawl/", "spider/services/crawling.py")
 # The one deadline outside the Clock bounds a real request, where timing tests put a fake Fetcher.
 FETCHER = "spider/crawl/fetch/fetcher.py"

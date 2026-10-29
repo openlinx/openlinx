@@ -371,6 +371,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 
 ## Backlog
 
+- **Test names that call a Checked URL a check:** in `tests/crawl/test_depth.py` and `tests/crawl/test_hooks.py`, rename them with the glossary term.
 - **More site metrics:** after v0.1, decide which site-level measurements to add beyond the standard technical-audit columns. Nothing is chosen yet.
 
 - **Data import (high priority, before Integrations):** `spider import <file> --as <table>` loads a CSV, such as a Search Console or a backlink tool export, into the crawl file as an extra table. Agents can then join it with crawl data in SQL and rank Issues by traffic. It is a cheap, agent-first alternative to OAuth integrations, and suits agents that already have Search Console or backlink data through MCP servers.

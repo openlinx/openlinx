@@ -6,9 +6,7 @@ from typing import Any
 
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.hooks import UrlResult
-from spider.output.codes import (
-    RECORD_FAILED,
-)
+from spider.output.codes import RECORD_FAILED
 from spider.output.diagnostics import Diagnostic
 from spider.store.failures import is_one_urls_failure
 from spider.store.urls import UrlUnit, record_unwritten

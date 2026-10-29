@@ -302,7 +302,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - A skip decided at dispatch reaches its handlers once, also when a late check lowers the URL's depth first; or, if that fix is out of proportion, a Risks line and a test that its rows are written once, by ruling.
   - The warning log keys each code by its own identity: the host for `possible_blocking` and `robots_unreachable`. Where a code is kept once per code, D10 says so and a test pins it.
   - The URL limit's refusal before robots.txt is one Requester method.
-  - `_result` takes typed keywords. `blocked_by_robots_txt` travels inside the unit, and the URL records stop repeating `UrlResult`'s fields.
+  - `_result` takes typed keywords. `blocked_by_robots_txt` travels inside the unit, and each URL record is built once, in the outcome that decides it.
   - Refactor:
     - Split the engine, keeping each module under about 300 lines: the unit building, the outcomes, and the warnings next to the warning log. `BlockingRuns` and the blocking warning move with them.
     - The Crawl Service's parameters are one record, `fetcher` included.
@@ -323,6 +323,14 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
     - a Resource of an in-Scope HTML Resource beyond the limit;
     - the Provenance of one Page's Links;
     - a Page's own `<template>`.
+- [x] 10.24 Fix the review of 10.23, each fix red first or red by mutation, each refactor with behaviour unchanged:
+  - One builder per URL record in `spider.crawl.engine.units` takes the `UrlResult`, so a record and the `UrlResult` agree on every field they share; a crawl of the fixture site with a URL in each final state pins it.
+  - The Checked URL term replaces "check" for a URL and "decided" where a Checked URL is meant, in the code, the design and the docs; its definition admits the in-Scope HTML that a Resource Link reaches, which is followed.
+  - A handler's purity is a contract in design D9.
+  - Each warning code declares its warning-log key in `spider.output.codes`, and a test checks that each key names a detail of its code's warnings.
+  - The URL limit: the robots.txt loader answers whether a URL needs a new request, the mutating limit method is named for what it does, and the Requester passes no call through.
+  - The docs say who does what after the engine split, without the drift and the history of `docs/crawling.md`; full change tags; one test for "A Resource of an HTML Resource is beyond the limit"; single-name imports on one line.
+  Done when: the whole suite passes, and each new test fails under the mutation its commit names.
 
 ## 11. Politeness (widening)
 

@@ -1,26 +1,32 @@
 """The hooks of a Crawl: handlers, passes and extractors (020-add-crawl-core D9; seam 2)."""
 
+import json
 import sqlite3
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from contextlib import closing
+from dataclasses import dataclass, fields, replace
+from pathlib import Path
 from typing import Any
 
 import msgspec
 import pytest
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, text
+from sqlalchemy.dialects import sqlite
 
 from spider.clock import Clock
 from spider.crawl.engine.hooks import Hooks, Pass, PassContext, UrlResult, handler
 from spider.crawl.pages.preparation import Extractor, PageInput, extractor
 from spider.output.reporter import Collected
 from spider.services.hooks import default_hooks
+from spider.store.connections import connect
 from spider.store.crawls import crawl_summary
-from spider.store.records import CrawlState
+from spider.store.records import CrawlState, ErroredUrl, FetchedUrl, SkippedUrl
+from spider.store.types import Timestamp
 from spider.store.writer import CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Robots, Site
+from tests.fixture_site.routes import Page, Robots, Site, Status
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
@@ -707,3 +713,82 @@ def test_a_handler_gets_the_robots_txt_verdict_of_the_url(
         (server.url("/private/a"), "True"),
         (server.url("/a"), "False"),
     ]
+
+
+_RESULT_FIELDS = {field.name for field in fields(UrlResult)}
+# By final state, the urls columns that its record shares with the UrlResult.
+_SHARED = {
+    state: [
+        field.name
+        for field in fields(record)
+        if field.name in _RESULT_FIELDS and field.name != "url_id"
+    ]
+    for state, record in [("fetched", FetchedUrl), ("skipped", SkippedUrl), ("error", ErroredUrl)]
+}
+
+
+@dataclass(frozen=True, slots=True)
+class Values:
+    url_id: int
+    values: str
+
+
+def _values(result: UrlResult) -> tuple[Values, ...]:
+    shared = _SHARED.get(result.fetch_state, [])
+    values: dict[str, object] = {name: getattr(result, name) for name in shared}
+    if "fetched_at" in values:
+        values["fetched_at"] = Timestamp().process_bind_param(result.fetched_at, sqlite.dialect())
+    # As the store keeps a flag.
+    stored = {name: int(v) if isinstance(v, bool) else v for name, v in values.items()}
+    return (Values(result.url_id, json.dumps({"fetch_state": result.fetch_state, **stored})),)
+
+
+def _write_values(connection: Connection, row: Values) -> None:
+    connection.execute(text("CREATE TABLE IF NOT EXISTS test_values (url_id INTEGER, v TEXT)"))
+    connection.execute(
+        text("INSERT INTO test_values VALUES (:url_id, :v)"),
+        {"url_id": row.url_id, "v": row.values},
+    )
+
+
+def test_each_url_is_recorded_with_the_values_its_handlers_saw(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/robots.txt": Robots("User-agent: *\nDisallow: /private\n"),
+                # A link to a port nothing listens on: its robots.txt gets no response.
+                "/": Page(
+                    body='<a href="/a">A</a> <a href="/missing">Gone</a> '
+                    '<a href="/logout">Out</a> <a href="/private">Private</a> '
+                    '<a href="http://127.0.0.1:1/">Down</a> <img src="/logo.png">'
+                ),
+                "/a": Page(body="<p>A</p>"),
+                "/logo.png": Status(200),
+            }
+        )
+    )
+    hooks = default_hooks()
+    hooks = replace(hooks, handlers=(*hooks.handlers, handler("values", _values, _write_values)))
+
+    crawl_file = crawl_result(server.url("/"), hooks, exclude=["/logout$"]).crawl_file
+
+    seen = {url_id: json.loads(v) for url_id, v in query(crawl_file, "SELECT * FROM test_values")}
+    recorded = {row["id"]: row for row in _urls_rows(crawl_file)}
+    assert (
+        sorted({values["fetch_state"] for values in seen.values()}),
+        [
+            (url_id, name)
+            for url_id, values in seen.items()
+            for name, value in values.items()
+            if recorded[url_id][name] != value
+        ],
+    ) == (["error", "fetched", "skipped"], [])
+
+
+def _urls_rows(file: Path) -> list[sqlite3.Row]:
+    with closing(connect(file, read_only=True)) as connection:
+        connection.row_factory = sqlite3.Row
+        rows: list[sqlite3.Row] = connection.execute("SELECT * FROM urls").fetchall()
+        return rows

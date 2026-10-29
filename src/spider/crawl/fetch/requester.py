@@ -32,11 +32,6 @@ class Requester:
                 return UrlLimitRefused()
             return await self._send(url)
 
-    def refuses_a_new_request(self) -> bool:
-        """Asked before a URL's robots.txt, which a URL the limit refuses never requests
-        (design D6)."""
-        return self._limits.refused()
-
     async def request_robots_txt(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
         """One hop of an origin's robots.txt, which the URL limit never counts (design D6)."""
         async with self._slots(url):

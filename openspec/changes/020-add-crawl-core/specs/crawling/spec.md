@@ -655,7 +655,7 @@ The crawl store SHALL hold one row for each distinct normalised URL of the Crawl
 | `is_internal` | INTEGER | no | boolean | 1 for an Internal URL, 0 for an External URL |
 | `in_scope` | INTEGER | no | boolean | 1 when the URL is inside the Scope, so it may be followed |
 | `crawl_depth` | INTEGER | no | | Crawl Depth; 0 for Seeds |
-| `discovered_via` | TEXT | no | listed below | How the URL was first found, through a followed Link once one has reached it |
+| `discovered_via` | TEXT | no | listed below | How the URL was first found: through its first Resource Link, else through a followed Link once one has reached it |
 | `found_on_url_id` | INTEGER, references `urls.id` | yes | | The URL whose response first revealed this one, through a followed Link once one has reached it; NULL for Seeds |
 | `fetch_state` | TEXT | no | `queued`, `fetched`, `error`, `skipped` | Frontier state: waiting, a response was recorded, no response, or not requested |
 | `skip_reason` | TEXT | yes | listed below | Why a skipped URL was not requested |
@@ -821,7 +821,9 @@ The Crawl Service SHALL be able to continue a Crawl from its store when its Craw
 - **THEN** the fixture site receives no request during the continuation for a URL that had `fetch_state` = `fetched` before it
 
 ### Requirement: Per-response hook
-For each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`) when it is dispatched, the rows of every registered per-response handler SHALL be written exactly once, with that state. A handler SHALL be pure, without side effects: a URL that a shorter path queued again may reach it again, and the rows of the earlier call are discarded. A URL that only Links that are not followed reach is recorded `skipped` when it is discovered, and reaches no handler, since a later followed Link may still queue it. A URL skipped as `max_depth` reaches no handler either, since a Link found later at a smaller depth re-queues it. A handler SHALL receive the URL's row values. For a `fetched` URL it SHALL also receive the status code, the response headers and, when the response was parsed, the extractor outputs. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
+**In short:** every registered handler's rows for a URL are written once, with the URL's final state and row values.
+
+For each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`) when it is dispatched, the rows of every registered per-response handler SHALL be written exactly once, with that state. A URL that only Links that are not followed reach is recorded `skipped` when it is discovered, and reaches no handler, since a later followed Link may still queue it. A URL skipped as `max_depth` reaches no handler either, since a Link found later at a smaller depth re-queues it. A handler SHALL receive the URL's row values. For a `fetched` URL it SHALL also receive the status code, the response headers and, when the response was parsed, the extractor outputs. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
 
 #### Scenario: A registered handler sees every URL once
 - **WHEN** a handler registered for the test records the URLs and states it receives, `/` links to `/a`, `/missing` (which returns 404) and `/logout`, and `spider crawl {site}/ --exclude "/logout$"` runs

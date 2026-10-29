@@ -5,28 +5,13 @@ from dataclasses import replace
 from typing import Any, Protocol
 
 from spider.crawl.urls import NormalizedUrl
-from spider.output.codes import (
-    HANDLER_FAILED,
-    PARSE_FAILED,
-    POSSIBLE_BLOCKING,
-    RECORD_FAILED,
-    ROBOTS_UNREACHABLE,
-    SEED_BASE_MISMATCH,
-    SEED_BLOCKED_BY_ROBOTS_TXT,
-)
+from spider.output.codes import DECLARED
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Reporter
 
-# The detail that makes two warnings of a code one, or None for one per code; a code not
-# named here is written each time it is given (design D10).
-_KEPT_ONCE_PER: Mapping[str, str | None] = {
-    ROBOTS_UNREACHABLE.code: "host",
-    POSSIBLE_BLOCKING.code: "host",
-    SEED_BLOCKED_BY_ROBOTS_TXT.code: "seed",
-    SEED_BASE_MISMATCH.code: "seed",
-    PARSE_FAILED.code: None,
-    HANDLER_FAILED.code: None,
-    RECORD_FAILED.code: None,
+# A code without a detail is written each time it is given (design D10).
+_ONCE_PER: Mapping[str, str] = {
+    code.code: code.once_per for code in DECLARED if code.once_per is not None
 }
 
 
@@ -69,15 +54,15 @@ class WarningLog:
             self._counted[diagnostic.code] = (index, count + 1)
             return
         first = replace(diagnostic, details={**diagnostic.details, "count": 1, "first_url": url})
-        self._counted[diagnostic.code] = (self._write(first), 1)
+        self._counted[diagnostic.code] = (self._keep(first), 1)
 
     def _write(self, diagnostic: Diagnostic) -> int:
-        """Where the warning is kept: a warning already written for what its code names is
-        kept once, and a count goes on it."""
-        if diagnostic.code not in _KEPT_ONCE_PER:
+        """Where the warning is kept: one already written for the detail its code names is
+        kept once."""
+        detail = _ONCE_PER.get(diagnostic.code)
+        if detail is None:
             return self._keep(diagnostic)
-        detail = _KEPT_ONCE_PER[diagnostic.code]
-        key = (diagnostic.code, None if detail is None else diagnostic.details.get(detail))
+        key = (diagnostic.code, diagnostic.details.get(detail))
         index = self._written.get(key)
         if index is None:
             index = self._written[key] = self._keep(diagnostic)

@@ -24,15 +24,13 @@ from spider.crawl.robots.loader import RobotsLoader
 from spider.crawl.robots.reader import OriginRobots
 from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import url_host, url_origin
-from spider.output.codes import (
-    HANDLER_FAILED,
-    PARSE_FAILED,
-)
+from spider.output.codes import HANDLER_FAILED, PARSE_FAILED
 from spider.output.diagnostics import Diagnostic
 from spider.store.records import (
     ErroredUrl,
     FetchedUrl,
     FetchError,
+    NewUrl,
     QueuedUrl,
     SkippedUrl,
     SkipReason,
@@ -51,7 +49,7 @@ class Run:
     requester: Requester
     robots: RobotsLoader
     blocking: BlockingRuns
-    # The tasks of decided URLs in flight, which never hold the depth barrier (design D3).
+    # The tasks of Checked URLs in flight, which never hold the depth barrier (design D3).
     checked_urls: set[asyncio.Task[None]]
 
 
@@ -69,12 +67,13 @@ async def unit_of(
     context, robots = run.context, run.robots
     dispatched = _dispatched(queued, decision)
     skip_reason = _skip_reason(context, queued, decision)
-    # Only a URL that would be requested is decided, so a skip never requests robots.txt.
+    # Only a URL that would be requested is checked against robots.txt, so a skip never
+    # requests it.
     blocked = None
     if skip_reason is None:
         # A verdict already requested decides the URL before the limit, which guards only a
         # new request (design D6).
-        if not robots.requested(queued.url) and run.requester.refuses_a_new_request():
+        if not robots.requested(queued.url) and run.limits.refuse_if_full():
             return None
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
         origin_robots = await robots.robots_of(queued.url)
@@ -90,17 +89,9 @@ async def unit_of(
     decided = replace(dispatched, blocked_by_robots_txt=blocked)
     if skip_reason is not None:
         skipped = replace(decided, fetch_state="skipped", skip_reason=skip_reason)
-        unit = record_skipped(
-            SkippedUrl(
-                url_id=skipped.url_id,
-                skip_reason=skip_reason,
-                crawl_depth=skipped.crawl_depth,
-                blocked_by_robots_txt=skipped.blocked_by_robots_txt,
-                # Not final: a shorter path re-queues it, and its handlers see it then (D5).
-                rows=() if skip_reason == "max_depth" else _handler_rows(context, skipped),
-            )
-        )
-        return skipped, unit
+        # Not final: a shorter path re-queues it, and its handlers see it then (D5).
+        rows = () if skip_reason == "max_depth" else _handler_rows(context, skipped)
+        return skipped, record_skipped(_skipped_record(skipped, skip_reason, rows))
     response = await run.requester.request_url(queued.url)
     if isinstance(response, UrlLimitRefused):
         return None
@@ -129,17 +120,8 @@ def _errored(
         fetch_error_message=message,
         fetched_at=fetched_at,
     )
-    unit = record_error(
-        ErroredUrl(
-            url_id=failed.url_id,
-            fetch_error=fetch_error,
-            fetch_error_message=message,
-            fetched_at=fetched_at,
-            blocked_by_robots_txt=failed.blocked_by_robots_txt,
-            rows=_handler_rows(context, failed),
-        )
-    )
-    return failed, unit
+    rows = _handler_rows(context, failed)
+    return failed, record_error(_errored_record(failed, fetch_error, message, rows))
 
 
 def _robots_verdict(
@@ -168,7 +150,7 @@ def _skip_reason(
     if decision.skip_reason is not None:
         return decision.skip_reason
     # A followed Page's Resources are requested one deeper than the limit, no deeper: what
-    # a decided URL that was HTML links to is two deeper (design D5).
+    # a Checked URL that was HTML links to is two deeper (design D5).
     if max_depth is not None and queued.crawl_depth > max_depth + via_resource(queued):
         return "max_depth"
     if not (decision.is_internal or context.settings.check_external):
@@ -181,7 +163,7 @@ async def _fetched(
 ) -> tuple[UrlResult, UrlUnit]:
     url = decided.url
     content_type = response.header("Content-Type")
-    # An External URL or one outside the Scope is decided, never parsed (design D5).
+    # An External URL or one outside the Scope is a Checked URL, never parsed (design D5).
     followed = decided.in_scope and 200 <= response.status_code < 300
     prepared = followed and is_html_type(content_type)
     page = await context.pages.prepare(url, response) if prepared else None
@@ -218,22 +200,59 @@ async def _fetched(
         headers=response.headers,
         outputs={} if page is None else dict(page.outputs),
     )
-    unit = record_fetched(
-        FetchedUrl(
-            url_id=fetched.url_id,
-            status_code=response.status_code,
-            content_type=content_type,
-            fetched_at=response.fetched_at,
-            response_time_ms=response.response_time_ms,
-            parsed=parsed,
-            parse_error=parse_error,
-            parse_error_message=parse_error_message,
-            blocked_by_robots_txt=fetched.blocked_by_robots_txt,
-            discovered=discovered,
-            rows=_handler_rows(context, fetched),
-        )
+    rows = _handler_rows(context, fetched)
+    return fetched, record_fetched(_fetched_record(fetched, response, discovered, rows))
+
+
+# Each record reads from the UrlResult every field it shares with it; a field that the
+# record narrows comes from the value that set it in the UrlResult.
+def _skipped_record(
+    skipped: UrlResult, skip_reason: SkipReason, rows: tuple[HandlerRows[Any], ...]
+) -> SkippedUrl:
+    return SkippedUrl(
+        url_id=skipped.url_id,
+        skip_reason=skip_reason,
+        crawl_depth=skipped.crawl_depth,
+        blocked_by_robots_txt=skipped.blocked_by_robots_txt,
+        rows=rows,
     )
-    return fetched, unit
+
+
+def _errored_record(
+    failed: UrlResult,
+    fetch_error: FetchError,
+    message: str,
+    rows: tuple[HandlerRows[Any], ...],
+) -> ErroredUrl:
+    return ErroredUrl(
+        url_id=failed.url_id,
+        fetch_error=fetch_error,
+        fetch_error_message=message,
+        fetched_at=failed.fetched_at,
+        blocked_by_robots_txt=failed.blocked_by_robots_txt,
+        rows=rows,
+    )
+
+
+def _fetched_record(
+    fetched: UrlResult,
+    response: FetchResult,
+    discovered: tuple[NewUrl, ...],
+    rows: tuple[HandlerRows[Any], ...],
+) -> FetchedUrl:
+    return FetchedUrl(
+        url_id=fetched.url_id,
+        status_code=response.status_code,
+        content_type=fetched.content_type,
+        fetched_at=response.fetched_at,
+        response_time_ms=response.response_time_ms,
+        parsed=fetched.parsed,
+        parse_error=fetched.parse_error,
+        parse_error_message=fetched.parse_error_message,
+        blocked_by_robots_txt=fetched.blocked_by_robots_txt,
+        discovered=discovered,
+        rows=rows,
+    )
 
 
 def _dispatched(queued: QueuedUrl, decision: ScopeDecision) -> UrlResult:
