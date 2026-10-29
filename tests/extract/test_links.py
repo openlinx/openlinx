@@ -27,3 +27,12 @@ def test_hyperlink_with_rel_flags() -> None:
         False,
         "body",
     )
+
+
+def test_image_alt_attribute_absent_or_empty() -> None:
+    rows = page_link_rows('<img src="/a.png"><img src="/b.png" alt="">')
+
+    assert [(row.target, row.element, row.attribute, row.alt_text) for row in rows] == [
+        ("https://site.test/a.png", "img", "src", None),
+        ("https://site.test/b.png", "img", "src", ""),
+    ]

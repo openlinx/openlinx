@@ -119,7 +119,10 @@ class LinkRow:
     target: str
     type: LinkType
     declared_in: DeclaredIn
+    element: str | None
+    attribute: str | None
     anchor_text: str | None
+    alt_text: str | None
     rel: str | None
     rel_nofollow: bool
     rel_ugc: bool

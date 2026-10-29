@@ -986,10 +986,28 @@ links = public_table(
         info={"values": literal_values(DeclaredIn)},
     ),
     Column(
+        "element",
+        Text,
+        comment="The HTML element the Link came from; NULL for a header Link.",
+    ),
+    Column(
+        "attribute",
+        Text,
+        comment="The attribute the Link came from, such as src or srcset of an img; NULL for "
+        "a header Link.",
+    ),
+    Column(
         "anchor_text",
         Text,
         comment="For a hyperlink, the normalised text of its element; NULL for other types, or "
         "when the Page's Link extractor failed.",
+    ),
+    Column(
+        "alt_text",
+        Text,
+        comment="For an image Link from an img element, its alt attribute, normalised: the "
+        "empty string when it has no value; NULL when it is absent, for other Links, or when "
+        "the Page's Link extractor failed.",
     ),
     Column(
         "rel",
