@@ -36,3 +36,22 @@ def test_image_alt_attribute_absent_or_empty() -> None:
         ("https://site.test/a.png", "img", "src", None),
         ("https://site.test/b.png", "img", "src", ""),
     ]
+
+
+def test_image_only_anchor_takes_the_alt_text() -> None:
+    (link, _) = page_link_rows('<a href="/c"><img src="/i.png" alt="Logo"></a>')
+
+    assert (link.type, link.anchor_text) == ("hyperlink", "Logo")
+
+
+def test_an_image_map_area_takes_its_alt_text() -> None:
+    rows = page_link_rows(
+        '<img src="/map.png" usemap="#m"><map name="m">'
+        '<area shape="rect" coords="0,0,50,50" href="/north" alt="North  office">'
+        '<area shape="rect" coords="50,0,100,50" href="/south"></map>'
+    )
+
+    assert [(row.target, row.anchor_text) for row in rows if row.type == "hyperlink"] == [
+        ("https://site.test/north", "North office"),
+        ("https://site.test/south", ""),
+    ]

@@ -999,8 +999,9 @@ links = public_table(
     Column(
         "anchor_text",
         Text,
-        comment="For a hyperlink, the normalised text of its element; NULL for other types, or "
-        "when the Page's Link extractor failed.",
+        comment="For a hyperlink, the normalised text of its element, or when that is empty the "
+        "alt texts of the img elements inside it, joined with a space; for an area, its alt; "
+        "NULL for other types, or when the Page's Link extractor failed.",
     ),
     Column(
         "alt_text",

@@ -35,7 +35,13 @@ def extract_page_links(tree: LexborHTMLParser, page: PageInput, config: None) ->
 def _anchor_text(link: DiscoveredLink, element: LexborNode) -> str | None:
     if link.type != "hyperlink":
         return None
-    return normalized(element_text(element))
+    if element.tag == "area":
+        return normalized(element.attributes.get("alt") or "")
+    text = normalized(element_text(element))
+    if text:
+        return text
+    # A logo or an icon as the whole link: what its images say is the link's text.
+    return normalized(" ".join(img.attributes.get("alt") or "" for img in element.css("img")))
 
 
 def _alt_text(link: DiscoveredLink, element: LexborNode) -> str | None:
