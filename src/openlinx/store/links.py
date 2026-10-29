@@ -1,9 +1,19 @@
 """The row writer of the links table, and the inlink pass's units (030-add-page-data D4, D6)."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import fields
 
-from sqlalchemy import Connection, bindparam, case, distinct, func, insert, select, update
+from sqlalchemy import (
+    Connection,
+    Integer,
+    bindparam,
+    case,
+    distinct,
+    func,
+    insert,
+    select,
+    update,
+)
 
 from openlinx.store.page_records import LinkRow
 from openlinx.store.schema import links, pages, urls
@@ -23,10 +33,19 @@ def write_links(connection: Connection, rows: Sequence[LinkRow]) -> None:
     )
 
 
-# About 10k Pages per unit, so no unit holds the writer long (030-add-page-data D6).
+# About 10k Pages per unit, so no unit holds the writer long (030-add-page-data D6). The
+# ranges are cut by Page, since the url_ids of a Crawl's Pages are interleaved with its other
+# URLs'.
 _RANGE = 10_000
+_RANKED = select(
+    pages.c.url_id, func.row_number().over(order_by=pages.c.url_id).label("rank")
+).subquery()
+_RANGE_STARTS = (
+    select(_RANKED.c.url_id).where((_RANKED.c.rank - 1) % _RANGE == 0).order_by(_RANKED.c.url_id)
+)
+_LAST_PAGE = select(func.max(pages.c.url_id))
+_PAGES_200 = select(func.count()).where(pages.c.status_code == 200)
 _SOURCE = pages.alias("source")
-_PAGES_200 = select(func.count()).where(pages.c.status_code == 200).scalar_subquery()
 _INLINKS = (
     select(
         links.c.target_url_id.label("url_id"),
@@ -45,6 +64,7 @@ _INLINKS = (
     .group_by(links.c.target_url_id)
     .subquery()
 )
+_ALL_200 = bindparam("pages_200", type_=Integer)
 _COUNTS = (
     select(
         pages.c.url_id,
@@ -52,9 +72,9 @@ _COUNTS = (
         func.coalesce(_INLINKS.c.unique_inlinks, 0).label("unique_inlinks"),
         # Integer arithmetic, so the quotient is rounded half up exactly, not as a double.
         case(
-            (_PAGES_200 == 0, None),
-            else_=(20_000 * func.coalesce(_INLINKS.c.sources_200, 0) + _PAGES_200)
-            // (2 * _PAGES_200)
+            (_ALL_200 == 0, None),
+            else_=(20_000 * func.coalesce(_INLINKS.c.sources_200, 0) + _ALL_200)
+            // (2 * _ALL_200)
             / 100.0,
         ).label("linking_pages_pct"),
     )
@@ -71,17 +91,26 @@ _UPDATE_INLINKS = (
         linking_pages_pct=_COUNTS.c.linking_pages_pct,
     )
 )
-_PAGE_IDS = select(func.min(pages.c.url_id), func.max(pages.c.url_id))
 
 
 def inlink_ranges(connection: Connection) -> list[tuple[int, int]]:
     """The url_id ranges of the inlink pass's units, first and last included."""
-    first, last = connection.execute(_PAGE_IDS).one()
-    if first is None:
+    starts: list[int] = list(connection.execute(_RANGE_STARTS).scalars())
+    if not starts:
         return []
-    return [(start, min(start + _RANGE - 1, last)) for start in range(first, last + 1, _RANGE)]
+    last: int = connection.execute(_LAST_PAGE).scalar_one()
+    return list(zip(starts, [start - 1 for start in starts[1:]] + [last], strict=True))
 
 
-def write_inlinks(first: int, last: int, connection: Connection) -> None:
+def pages_with_status_200(connection: Connection) -> int:
+    """Read once per pass: linking_pages_pct divides by it."""
+    return connection.execute(_PAGES_200).scalar_one()
+
+
+def inlink_counts(first: int, last: int, pages_200: int) -> Callable[[Connection], None]:
     """Every inlink column of the Pages in the range, 0 included, so a rerun replaces them."""
-    connection.execute(_UPDATE_INLINKS, {"first": first, "last": last})
+
+    def write(connection: Connection) -> None:
+        connection.execute(_UPDATE_INLINKS, {"first": first, "last": last, "pages_200": pages_200})
+
+    return write

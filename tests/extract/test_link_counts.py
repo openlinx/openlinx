@@ -11,7 +11,7 @@ from openlinx.store.crawls import crawl_summary
 from openlinx.store.schema import pages
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -23,13 +23,15 @@ _COUNTS_OF = (
 
 
 def _linked_site(fixture_hosts: StartHosts) -> Path:
-    # The spec's site. D is reached only through a pagination Link, which no count reads.
+    # The spec's site. D is reached only through a pagination Link, which no count reads, and
+    # one of A's Links to B is nofollow, which still counts.
     hosts = fixture_hosts(
         Site(
             routes={
                 "/": Page(
                     body='<html><head><link rel="next" href="/d"></head><body>'
-                    '<a href="/b">B</a> <a href="/b">More about B</a> <a href="/c">C</a>'
+                    '<a href="/b">B</a> <a href="/b" rel="nofollow">More about B</a>'
+                    ' <a href="/c">C</a>'
                     ' <a href="/">Home</a> <a href="http://other.test/e1">E1</a>'
                     ' <a href="http://other.test/e1">E1 again</a>'
                     ' <a href="http://other.test/e2">E2</a></body></html>'
@@ -101,3 +103,15 @@ def test_linking_pages_pct_is_rounded_half_up(
         "SELECT DISTINCT linking_pages_pct FROM pages WHERE address <> ?",
         [server.url("/")],
     ) == [(3.13,)]
+
+
+def test_linking_pages_pct_is_null_without_a_page_with_status_200(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Status(404, body="<p>Gone</p>")}))
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(crawl_file, _COUNTS_OF, [server.url("/")]) == [
+        (0, 0, None, None, None, None, None)
+    ]

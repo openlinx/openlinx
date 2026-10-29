@@ -171,9 +171,9 @@ A search engine first has to be allowed to fetch the URL, then needs a usable re
 ## Link counts
 
 The link counts count `hyperlink` Links whose source is a Page, nofollow included, and leave out a Link to its own source, since every Page listed in a menu would otherwise count a link to itself.
-- **Outlinks** are written with each analysed Page, from its own Links: `outlinks` and `external_outlinks` count its Links to Internal and to External URLs, and the `unique_` columns their distinct targets. They are NULL for a Page that is not analysed.
-- **Inlinks** are derived: `inlinks` counts the Links from Pages to the Page, `unique_inlinks` their distinct sources, and `linking_pages_pct` is the share of the Crawl's Pages with status 200 that link to it, rounded half up to 2 decimals. They are NULL until the post-crawl passes have run, and then set for every Page, 0 for one that no Page links to.
-- **When the passes run:** after the last URL is recorded, before the Crawl is written as `completed` or `stopped`, and again after a continue, each run replacing the last. A Crawl that fails before its passes have run once keeps the inlink columns NULL.
+- **Outlinks** are written with each analysed Page, from its own Links: `outlinks` and `external_outlinks` count its Links to Internal and to External URLs, and the `unique_` columns their distinct targets. They are NULL for a Page that is not analysed, and set for one whose Page or Link extractor failed, since they come from the Links the Crawl discovered.
+- **Inlinks** are derived: `inlinks` counts the Links from Pages to the Page, `unique_inlinks` their distinct sources, and `linking_pages_pct` is the share of the Crawl's Pages with status 200 that link to it, rounded half up to 2 decimals, or NULL when no Page has status 200. They are NULL until the post-crawl passes have run, and then set for every Page, 0 for one that no Page links to.
+- **When the passes run:** after the last URL is recorded, before the Crawl is written as `completed` or `stopped`, and again after a continue, each run replacing the last. A Crawl that fails before its passes have run once keeps the inlink columns NULL, and a continued Crawl shows the last run's counts until its passes run again.
 
 ## Crawl Depth and Folder Depth
 

@@ -18,7 +18,7 @@ def test_inlink_columns_are_derived() -> None:
     columns = run_cli("schema", "pages").json()["items"][0]["columns"]
     descriptions = {column["name"]: column["description"] for column in columns}
 
-    assert [
-        descriptions[name].startswith("Derived: ")
+    assert {
+        name: descriptions[name][: len("Derived: ")]
         for name in ("inlinks", "unique_inlinks", "linking_pages_pct")
-    ] == [True, True, True]
+    } == dict.fromkeys(("inlinks", "unique_inlinks", "linking_pages_pct"), "Derived: ")
