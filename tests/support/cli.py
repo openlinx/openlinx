@@ -46,7 +46,11 @@ def run_cli(
 
 def run_cli_process(*args: str, env: Mapping[str, str] | None = None) -> CliResult:
     completed = subprocess.run(
-        [sys.executable, "-m", "openlinx", *args], capture_output=True, env=env, check=False
+        [sys.executable, "-m", "openlinx", *args],
+        capture_output=True,
+        env=env,
+        check=False,
+        timeout=PROCESS_TIMEOUT,
     )
     return CliResult(completed.returncode, completed.stdout, completed.stderr)
 
