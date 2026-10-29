@@ -46,6 +46,12 @@ class CrawlSettings(BaseModel):
         description="The most URL requests the Crawl starts; robots.txt requests do not "
         "count. No limit when unset.",
     )
+    network_wait: int = Field(
+        1800,
+        ge=0,
+        description="The seconds a Crawl paused by lost network access waits for its Seed to "
+        "answer before it fails; 0 fails at once.",
+    )
     robots_user_agent: str = Field(
         DEFAULT_ROBOTS_TOKEN,
         description="The token that selects robots.txt groups and user-agent-prefixed "

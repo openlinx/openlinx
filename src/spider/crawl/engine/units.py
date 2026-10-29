@@ -17,10 +17,11 @@ from spider.crawl.engine.crawl_warnings import (
 from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
+from spider.crawl.engine.pause import NetworkPause
 from spider.crawl.engine.stop import StopSignal
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
-from spider.crawl.fetch.requester import Requester, UrlLimitRefused
+from spider.crawl.fetch.requester import NotStarted, Requester
 from spider.crawl.pages.preparation import (
     is_html_type,
     response_directives,
@@ -32,6 +33,7 @@ from spider.crawl.scope import ScopeDecision
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import host_key, url_origin
 from spider.output.diagnostics import Diagnostic
+from spider.store.failures import is_write_failure
 from spider.store.records import (
     RESOURCE_LINK_TYPES,
     ErroredUrl,
@@ -75,6 +77,10 @@ class TaskFailure:
         if isinstance(error, CrawlWriterClosedError):
             # Not a bug: an ended writer refuses every unit, and its cause says why (017 D6).
             self._stop.set("write_failed", error.__cause__ or error)
+        elif error is not None and is_write_failure(error):
+            # Not a bug either: the file refused a write outside the URL's unit, such as its
+            # origin's robots.txt row.
+            self._stop.set("write_failed", error)
         elif error is not None and self._error is None:
             self._error = error
 
@@ -92,6 +98,7 @@ class Run:
     # The tasks of Checked URLs in flight, which never hold the depth barrier (design D3).
     checked_urls: set[asyncio.Task[None]]
     task_failure: TaskFailure
+    pause: NetworkPause
 
 
 def via_resource(queued: QueuedUrl) -> bool:
@@ -100,9 +107,9 @@ def via_resource(queued: QueuedUrl) -> bool:
 
 async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recorded | None:
     """The URL's final state as its handlers see it, which a fallback unit keeps part of,
-    and the unit that records it with their rows; or None when the URL limit refuses a new
-    request, which leaves it queued. `decision` is taken once, at dispatch, so a URL found
-    on several Pages is recorded once (design D1)."""
+    and the unit that records it with their rows; or None when a stop or the URL limit keeps a
+    new request from starting, which leaves it queued. `decision` is taken once, at dispatch,
+    so a URL found on several Pages is recorded once (design D1)."""
     context, robots = run.context, run.robots
     dispatched = _dispatched(queued, decision)
     skip_reason = _skip_reason(context, queued, decision)
@@ -118,6 +125,8 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
         origin_robots = await robots.robots_of(queued.url)
         origin_error = origin_robots.origin_error
         if origin_error is not None:
+            if decision.is_internal:
+                run.pause.failed(origin_error)
             # The origin cannot be reached: the URL gets the error without a request of
             # its own (design D6).
             message = (
@@ -130,6 +139,8 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
                 fetched_at=None,
             )
             return _errored(context, dispatched, failure)
+        if decision.is_internal:
+            run.pause.robots_txt_answered()
         skip_reason, blocked, warnings = _robots_verdict(
             context.settings, origin_robots, queued, decision
         )
@@ -146,10 +157,15 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
             skipped, record_skipped(_skipped_record(skipped, skip_reason, rows)), failed_handlers
         )
     response = await run.requester.request_url(queued.url)
-    if isinstance(response, UrlLimitRefused):
+    if isinstance(response, NotStarted):
         return None
     host = host_key(queued.url)
     status_code = None if isinstance(response, FetchFailure) else response.status_code
+    if decision.is_internal:
+        if isinstance(response, FetchFailure):
+            run.pause.failed(response.fetch_error)
+        else:
+            run.pause.responded()
     if decision.is_internal and run.blocking.responded(host, status_code):
         context.reporter.warn(possible_blocking(host))
     if isinstance(response, FetchFailure):

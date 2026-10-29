@@ -3,7 +3,7 @@
 import json
 
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Site, Status
 from tests.support.cli import run_cli
 from tests.support.crawling import crawled
 from tests.support.crawls import crawl_row, query
@@ -16,6 +16,7 @@ SMALL_SITE = Site(
         "/b": Page(body="<p>B</p>"),
     }
 )
+ROBOTS_DOWN = Site(routes={**SMALL_SITE.routes, "/robots.txt": Status(503)})
 
 
 def test_an_invalid_seed_is_rejected(temp_workspace: TempWorkspace) -> None:
@@ -27,6 +28,32 @@ def test_an_invalid_seed_is_rejected(temp_workspace: TempWorkspace) -> None:
         ["invalid_url"],
         [],
     )
+
+
+def test_a_negative_network_wait_is_rejected(temp_workspace: TempWorkspace) -> None:
+    result = run_cli("crawl", "http://site.test/", "--network-wait", "-1")
+
+    assert (result.exit_code, [error["code"] for error in result.errors()]) == (
+        2,
+        ["invalid_value"],
+    )
+
+
+def test_a_negative_network_wait_in_the_settings_file_is_refused(
+    temp_workspace: TempWorkspace,
+) -> None:
+    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nnetwork_wait = -1\n")
+
+    result = run_cli("crawl", "http://site.test/")
+
+    assert (
+        result.exit_code,
+        [
+            (error["code"], problem["key"])
+            for error in result.errors()
+            for problem in error["details"]["errors"]
+        ],
+    ) == (3, [("settings_invalid", "crawl.network_wait")])
 
 
 def test_a_seed_with_userinfo_is_rejected_with_a_hint_about_auth(
@@ -183,6 +210,28 @@ def test_the_first_event_line_is_the_start_event(
             "parse_workers": 0,
         },
     )
+
+
+def test_every_stderr_line_is_an_event_or_a_diagnostic(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(ROBOTS_DOWN)
+
+    result = run_cli("crawl", server.url("/"))
+
+    assert (result.stray_stderr_lines(), bool(result.stderr)) == ([], True)
+
+
+def test_a_warning_is_written_as_a_diagnostic(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(ROBOTS_DOWN)
+
+    lines = run_cli("crawl", server.url("/")).stderr_json_lines()
+
+    assert [line["level"] for line in lines if line.get("code") == "robots_unreachable"] == [
+        "warning"
+    ]
 
 
 def test_the_recorded_config_holds_every_registered_crawl_setting(

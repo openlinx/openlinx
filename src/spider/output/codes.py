@@ -185,6 +185,28 @@ SEED_OUT_OF_SCOPE = _declare(
     "The Seed is outside its own Scope: it matches an --exclude pattern, or no --include "
     "pattern; details.seed holds it.",
 )
+CRAWL_WRITE_FAILED = _declare(
+    "crawl_write_failed",
+    "error",
+    ExitCode.IO,
+    "Writing the crawl file failed during a Crawl, such as on a full disk; the Crawl ended "
+    "failed, with write_failed, and details.error says what failed.",
+)
+SEED_UNREACHABLE = _declare(
+    "seed_unreachable",
+    "error",
+    ExitCode.NETWORK,
+    "The Seed's robots.txt or the Seed got no HTTP response, and its origin did not answer "
+    "within --network-wait; the Crawl ended failed, and details.network_wait says how long it "
+    "waited.",
+)
+SITE_UNREACHABLE = _declare(
+    "site_unreachable",
+    "error",
+    ExitCode.NETWORK,
+    "Internal requests in a row got no HTTP response, and the site did not answer within "
+    "--network-wait; the Crawl ended failed, and details.network_wait says how long it waited.",
+)
 MAX_URLS_REACHED = _declare(
     "max_urls_reached",
     "warning",

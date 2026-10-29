@@ -5,6 +5,7 @@ import asyncio
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import url_limit_reached
 from spider.crawl.engine.outcomes import Outcomes
+from spider.crawl.engine.pause import NetworkPause
 from spider.crawl.engine.units import Run, TaskFailure, unit_of, via_resource
 from spider.crawl.fetch.fetcher import REQUEST_DEADLINE_SECONDS
 from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
@@ -36,6 +37,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         cap=cap,
         clock=context.clock,
         watchdog_seconds=watchdog_seconds(REQUEST_DEADLINE_SECONDS),
+        stopped=lambda: context.stop.is_set,
     )
     run = Run(
         context=context,
@@ -46,6 +48,9 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         blocking=BlockingRuns(),
         checked_urls=set(),
         task_failure=TaskFailure(context.stop),
+        pause=NetworkPause(
+            context.settings.concurrency, context.settings.network_wait, context.stop
+        ),
     )
     decision = context.scope.decide(seed)
     await context.writer.run_async(

@@ -1,7 +1,7 @@
 """The Requester: every request of a Crawl, made politely (020-add-crawl-core D7)."""
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
@@ -18,8 +18,9 @@ def watchdog_seconds(request_deadline_seconds: float) -> float:
 
 
 @dataclass(frozen=True, slots=True)
-class UrlLimitRefused:
-    """The URL limit refused a URL's request, which leaves the URL queued."""
+class NotStarted:
+    """A stop or the URL limit kept a URL's request from starting, which leaves the URL
+    queued."""
 
 
 class Requester:
@@ -36,6 +37,7 @@ class Requester:
         cap: int,
         clock: Clock,
         watchdog_seconds: float,
+        stopped: Callable[[], bool],
     ) -> None:
         self._fetcher = fetcher
         self._limits = limits
@@ -43,16 +45,18 @@ class Requester:
         self._concurrency = concurrency
         self._clock = clock
         self._watchdog_seconds = watchdog_seconds
+        self._stopped = stopped
         self._hosts: dict[str, asyncio.Semaphore] = {}
         self._requests = asyncio.Semaphore(cap)
 
-    async def request_url(self, url: NormalizedUrl) -> FetchResult | FetchFailure | UrlLimitRefused:
+    async def request_url(self, url: NormalizedUrl) -> FetchResult | FetchFailure | NotStarted:
         """A URL's own request, which the URL limit counts with the slots held, so the count is
-        exact."""
+        exact. After a stop, none starts (design D16)."""
         async with self._slots(url):
-            if not self._limits.start_request():
-                # The start the gate gave it stays taken: after a refusal, no request starts.
-                return UrlLimitRefused()
+            # Refused with its turn under --rate already taken, and never given back: after a
+            # stop or at the limit, no request starts again.
+            if self._stopped() or not self._limits.start_request():
+                return NotStarted()
             return await self._send(url)
 
     async def request_robots_txt(self, url: NormalizedUrl) -> FetchResult | FetchFailure:

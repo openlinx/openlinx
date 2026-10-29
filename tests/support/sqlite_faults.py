@@ -1,9 +1,13 @@
-"""A -shm file still held by a killed writer, as SQLite reports it (015-add-crawl-store)."""
+"""SQLite failures that tests cannot cause for real: a -shm file still held by a killed writer
+(015-add-crawl-store), and a full disk (020-add-crawl-core)."""
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import pytest
+from sqlalchemy import Engine, event
 
 SQLITE_IOERR_TRUNCATE = 1546
 
@@ -39,3 +43,21 @@ def shm_held(monkeypatch: pytest.MonkeyPatch, opens: int | None) -> None:
         return _Held(connection)
 
     monkeypatch.setattr(sqlite3, "connect", connect)
+
+
+@contextmanager
+def disk_full_after(pages: int) -> Iterator[None]:
+    """SQLite reports a full disk once a crawl file grows `pages` pages past its size when the
+    connection opened, as on a disk with that much room left. A file being created is not
+    capped, and the next connection gets room again, as one opened after space was freed."""
+
+    def cap(connection: sqlite3.Connection, _: Any) -> None:
+        if connection.execute("SELECT 1 FROM sqlite_schema WHERE name = 'crawl'").fetchone():
+            (count,) = connection.execute("PRAGMA page_count").fetchone()
+            connection.execute(f"PRAGMA max_page_count = {count + pages}")
+
+    event.listen(Engine, "connect", cap)
+    try:
+        yield
+    finally:
+        event.remove(Engine, "connect", cap)

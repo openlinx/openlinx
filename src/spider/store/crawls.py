@@ -2,10 +2,11 @@
 
 import platform
 import sqlite3
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.exc import DBAPIError
@@ -74,6 +75,15 @@ def record_state(
     return unit
 
 
+def record_warnings(warnings: Sequence[Mapping[str, Any]]) -> Callable[[Connection], None]:
+    """A unit that writes the Crawl's warnings, as JSON objects."""
+
+    def unit(connection: Connection) -> None:
+        connection.execute(update(crawl).values(warnings=list(warnings)))
+
+    return unit
+
+
 def crawl_summary() -> Callable[[Connection], CrawlSummary]:
     """A unit that only reads: the crawl and seeds values of a Crawl's result."""
 
@@ -131,6 +141,7 @@ def _write_new_file(
                 crawl_mode=request.crawl_mode,
                 section_crawl=request.section_crawl,
                 scope=dict(request.scope),
+                warnings=[],
                 state="running",
                 started_at=started_at,
                 command_argv=list(request.command_argv),

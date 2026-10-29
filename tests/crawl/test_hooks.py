@@ -28,6 +28,7 @@ from spider.crawl.engine.hooks import (
 )
 from spider.crawl.pages.preparation import Extractor, PageInput, extractor
 from spider.output.reporter import Collected
+from spider.services.crawling import CrawlResult
 from spider.services.hooks import default_hooks
 from spider.store.connections import connect
 from spider.store.crawls import crawl_summary
@@ -40,7 +41,9 @@ from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
 from tests.support.fetcher import FakeFetcher, FakePage
+from tests.support.network import closed_port
 from tests.support.sites import LATE_SHORTER_PATH, NINE_PAGES
+from tests.support.sqlite_faults import disk_full_after
 from tests.support.workspace import TempWorkspace
 
 
@@ -188,6 +191,60 @@ def test_post_crawl_passes_run_when_the_url_limit_stops_a_crawl(
     crawl_result(server.url("/"), hooks, max_urls=3)
 
     assert runs == ["run"]
+
+
+_RULES = ("missing_title", "missing_description", "missing_h1", "thin_content")
+
+
+async def _materialise_issues(context: PassContext) -> None:
+    """Writes an Issue of each rule for every URL, as 040's pass does."""
+
+    def unit(connection: Connection) -> None:
+        connection.execute(
+            text("CREATE TABLE test_issues (url_id INTEGER, rule TEXT, details TEXT)")
+        )
+        urls = connection.execute(text("SELECT id, url FROM urls")).all()
+        connection.execute(
+            text("INSERT INTO test_issues VALUES (:url_id, :rule, :details)"),
+            [
+                {"url_id": id, "rule": rule, "details": json.dumps({"url": url, "why": rule * 40})}
+                for id, url in urls
+                for rule in _RULES
+            ],
+        )
+
+    await context.writer.run_async(unit)
+
+
+def test_a_full_disk_in_a_post_crawl_pass_fails_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(_articles(120))
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("issues", _materialise_issues)))
+
+    with disk_full_after(pages=24):
+        result = crawl_result(server.url("/"), hooks)
+
+    assert (*_failed_with(result)[:2], crawl_row(result.crawl_file)["state"]) == (
+        "failed",
+        "write_failed",
+        "failed",
+    )
+
+
+def test_post_crawl_passes_do_not_run_for_a_failed_crawl(temp_workspace: TempWorkspace) -> None:
+    runs: list[str] = []
+
+    async def count_runs(context: PassContext) -> None:
+        runs.append("run")
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
+
+    result = crawl_result(f"http://127.0.0.1:{closed_port()}/", hooks, network_wait=0)
+
+    assert (result.summary.state, runs) == ("failed", [])
 
 
 class Found(msgspec.Struct, frozen=True):
@@ -487,6 +544,75 @@ def test_a_url_whose_rows_cannot_be_written_is_recorded_as_an_error(
     )
 
 
+def _articles(count: int) -> Site:
+    articles = range(1, count + 1)
+    return Site(
+        routes={
+            "/": Page(body="".join(f'<a href="/p{n}">Article {n}</a>' for n in articles)),
+            **{f"/p{n}": Page(body=f"<h1>Article {n}</h1>") for n in articles},
+        }
+    )
+
+
+def _unwritable_but_the_seed(result: UrlResult) -> tuple[Unwritable, ...]:
+    return () if result.url.endswith("/") else (Unwritable(result.url_id),)
+
+
+def _unwritable_odd_articles(result: UrlResult) -> tuple[Unwritable, ...]:
+    return (Unwritable(result.url_id),) if result.url[-1] in "13579" else ()
+
+
+def test_recording_that_fails_for_every_url_fails_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(_articles(120))
+    hooks = default_hooks()
+    hooks = replace(
+        hooks, handlers=(*hooks.handlers, handler("unwritable", _unwritable_but_the_seed, _refuse))
+    )
+
+    result = crawl_result(server.url("/"), hooks)
+
+    assert (*_failed_with(result)[:2], result.failure and result.failure.code) == (
+        "failed",
+        "write_failed",
+        "crawl_write_failed",
+    )
+
+
+@pytest.mark.parametrize(("articles", "state"), [(99, "completed"), (100, "failed")])
+def test_recording_fails_the_crawl_at_100_urls_in_a_row(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, articles: int, state: str
+) -> None:
+    server = fixture_site(_articles(articles))
+    hooks = default_hooks()
+    hooks = replace(
+        hooks, handlers=(*hooks.handlers, handler("unwritable", _unwritable_but_the_seed, _refuse))
+    )
+
+    result = crawl_result(server.url("/"), hooks)
+
+    assert result.summary.state == state
+
+
+def test_recording_that_fails_for_half_the_urls_does_not_fail_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # More failures than the limit, but a recorded URL between any two.
+    server = fixture_site(_articles(220))
+    hooks = default_hooks()
+    hooks = replace(
+        hooks, handlers=(*hooks.handlers, handler("unwritable", _unwritable_odd_articles, _refuse))
+    )
+
+    result = crawl_result(server.url("/"), hooks)
+
+    assert (
+        result.summary.state,
+        [(w.code, w.details["count"]) for w in result.warnings if w.code == "record_failed"],
+    ) == ("completed", [("record_failed", 110)])
+
+
 def test_a_checked_url_whose_rows_cannot_be_written_is_recorded_when_it_ends_last(
     temp_workspace: TempWorkspace,
 ) -> None:
@@ -508,16 +634,19 @@ def test_a_checked_url_whose_rows_cannot_be_written_is_recorded_when_it_ends_las
     ) == ([("error", "record_failed")], "completed")
 
 
-def test_a_unit_that_fails_with_the_file_is_never_completed(
+def test_a_unit_that_fails_with_the_file_fails_the_crawl(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
 
-    with pytest.raises(sqlite3.OperationalError):
-        crawl_result(server.url("/"), _with_row_writer(_refuse_with_the_file))
-    (crawl_file,) = temp_workspace.home.rglob("*.sqlite")
+    result = crawl_result(server.url("/"), _with_row_writer(_refuse_with_the_file))
+    row = crawl_row(result.crawl_file)
 
-    assert crawl_row(crawl_file)["state"] == "running"
+    assert (row["state"], row["stop_reason"], result.failure and result.failure.code) == (
+        "failed",
+        "write_failed",
+        "crawl_write_failed",
+    )
 
 
 def _seen_then_boom(result: UrlResult) -> Iterator[Seen]:
@@ -630,8 +759,9 @@ def test_a_writer_that_ends_reports_why_it_ended(
         ),
     )
 
-    with pytest.raises(CrawlWriterReplayError):
-        crawl_result(server.url("/"), hooks)
+    result = crawl_result(server.url("/"), hooks)
+
+    assert _failed_with(result) == ("failed", "write_failed", CrawlWriterReplayError.__name__)
 
 
 def test_a_url_that_meets_an_ended_writer_reports_why_the_writer_ended(
@@ -651,8 +781,15 @@ def test_a_url_that_meets_an_ended_writer_reports_why_the_writer_ended(
         ),
     )
 
-    with pytest.raises(CrawlWriterReplayError):
-        crawl_result(server.url("/"), hooks)
+    result = crawl_result(server.url("/"), hooks)
+
+    assert _failed_with(result) == ("failed", "write_failed", CrawlWriterReplayError.__name__)
+
+
+def _failed_with(result: CrawlResult) -> tuple[str, str | None, str | None]:
+    """The end, and the type of the error that ended the Crawl."""
+    error = None if result.failure is None else result.failure.diagnostic.details["error"]
+    return (result.summary.state, result.summary.stop_reason, error and error.split(":")[0])
 
 
 @dataclass(frozen=True, slots=True)
@@ -772,8 +909,11 @@ def test_a_file_failure_after_the_url_limit_ends_the_crawl_with_that_failure(
 ) -> None:
     server = fixture_site(LIMIT_SITE)
 
-    with pytest.raises(sqlite3.OperationalError):
-        crawl_result(server.url("/"), _with_row_writer(_slowly(_refuse_with_the_file)), max_urls=2)
+    result = crawl_result(
+        server.url("/"), _with_row_writer(_slowly(_refuse_with_the_file)), max_urls=2
+    )
+
+    assert _failed_with(result) == ("failed", "write_failed", "OperationalError")
 
 
 @pytest.mark.slow
@@ -783,15 +923,17 @@ def test_a_crawl_that_failed_after_its_url_limit_gives_no_limit_warning(
     server = fixture_site(LIMIT_SITE)
     reporter = Collected()
 
-    with pytest.raises(sqlite3.OperationalError):
-        crawl_result(
-            server.url("/"),
-            _with_row_writer(_slowly(_refuse_with_the_file)),
-            reporter=reporter,
-            max_urls=2,
-        )
+    result = crawl_result(
+        server.url("/"),
+        _with_row_writer(_slowly(_refuse_with_the_file)),
+        reporter=reporter,
+        max_urls=2,
+    )
 
-    assert [warning.code for warning in reporter.warnings] == []
+    assert ([warning.code for warning in reporter.warnings], result.summary.state) == (
+        [],
+        "failed",
+    )
 
 
 def test_a_url_recorded_as_unwritten_keeps_its_robots_txt_verdict(

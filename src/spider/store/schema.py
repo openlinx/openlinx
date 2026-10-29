@@ -135,6 +135,13 @@ crawl = public_table(
         info={"values": literal_values(StopReason)},
     ),
     Column(
+        "warnings",
+        Json,
+        nullable=False,
+        comment="The Crawl's warnings, as an array of diagnostics of level, code, message, hint "
+        "and details; [] when the Crawl is created.",
+    ),
+    Column(
         "command_argv",
         Json,
         nullable=False,
