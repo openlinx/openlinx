@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from spider.aio import first_of
 from spider.clock import Clock
 from spider.crawl.engine.crawl_warnings import network_paused
 from spider.crawl.engine.stop import StopSignal
@@ -294,15 +295,8 @@ class NetworkPause:
             delay = until - self._clock.monotonic()
             if delay <= 0 or self._stop.is_set:
                 return False
-            sleep = asyncio.ensure_future(self._clock.sleep(delay))
-            stopped = asyncio.ensure_future(self._stop.wait())
             waiting = {probe for probe in probes if not probe.done()}
-            try:
-                await asyncio.wait({sleep, stopped, *waiting}, return_when=asyncio.FIRST_COMPLETED)
-            finally:
-                sleep.cancel()
-                stopped.cancel()
-                await asyncio.wait({sleep, stopped})
+            await first_of(self._clock.sleep(delay), self._stop.wait(), wake_on=waiting)
         return True
 
     def _end(self, probes: list[asyncio.Task[bool]], dead_before: float) -> PauseEnd:
