@@ -348,7 +348,7 @@ An option whose `setting` is not null SHALL take `secret` from that setting, so 
 
 **In short:** `--help` and `--version` print plain text and exit 0, and are the only outputs that are not JSON.
 
-`--help`, on the tool or on any Command, SHALL print plain-text help to stdout and exit 0. `linx` with no arguments SHALL do the same as `linx --help`. `linx --version` SHALL print `linx <version>` followed by `\n`, and exit 0. These SHALL be the only outputs that are not JSON.
+`--help`, on the tool or on any Command, SHALL print plain-text help to stdout and exit 0. `linx` with no arguments SHALL do the same as `linx --help`. `linx --version` SHALL print `OpenLinx <version>` followed by `\n`, and exit 0. These SHALL be the only outputs that are not JSON.
 
 #### Scenario: Help
 - **WHEN** `linx init --help` runs
@@ -360,17 +360,28 @@ An option whose `setting` is not null SHALL take `secret` from that setting, so 
 
 #### Scenario: Version
 - **WHEN** `linx --version` runs
-- **THEN** stdout is exactly `linx `, then the `version` in `pyproject.toml`, then `\n`
+- **THEN** stdout is exactly `OpenLinx `, then the `version` in `pyproject.toml`, then `\n`
 
 
 ## ADDED Requirements
 
 ### Requirement: Two console scripts
 
-**In short:** the package installs `linx` and `openlinx`, which run the same entry point.
+**In short:** the package installs `linx` and `openlinx`, which run the same entry point, and the usage line and the recorded command line name the one that ran.
 
 The distribution SHALL install two console scripts with the same entry point: `linx`, the name the docs use, and `openlinx`, for a machine where another package's `linx` comes first on PATH.
+- The usage line of `--help` SHALL name the script that ran, and `linx` when the tool runs some other way, such as `python -m openlinx`.
+- `crawl.command_argv` SHALL start with that same name (`crawl-store`).
+- Hints that name a command SHALL name `linx`.
 
 #### Scenario: Both console scripts run the same entry point
 - **WHEN** the console scripts of the installed distribution are read
 - **THEN** `linx` and `openlinx` both name `openlinx.cli.app:main`
+
+#### Scenario: Usage names the script that ran
+- **WHEN** `openlinx --help` runs through its console script, and then `python -m openlinx --help` runs
+- **THEN** the first stdout starts with `Usage: openlinx `, and the second with `Usage: linx `
+
+#### Scenario: The recorded command line starts with the script that ran
+- **WHEN** `openlinx crawl <url>` runs through its console script, for a URL of the local fixture site
+- **THEN** the Crawl's `crawl.command_argv` starts with `"openlinx"`, `"crawl"`

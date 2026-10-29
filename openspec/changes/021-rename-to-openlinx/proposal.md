@@ -12,7 +12,7 @@ The product is OpenLinx, but the code, the docs and the specs still use the work
 - **What users see:**
   - `--version` prints `OpenLinx <version>`;
   - `commands` names the tool `openlinx`;
-  - hints and usage text name the command that was run, `linx` or `openlinx`, and `crawl.command_argv` starts with it.
+  - the usage line names the script that ran, `linx` or `openlinx`, and `crawl.command_argv` starts with it; hints name `linx`.
 - **Not renamed:**
   - The Crawl Mode value `spider` and the term Spider mode: they name how a Crawl finds URLs, not the product.
   - The archived changes, which are history.

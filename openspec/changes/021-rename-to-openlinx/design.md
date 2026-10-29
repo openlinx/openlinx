@@ -33,10 +33,12 @@ The working name `spider` is in the import package, `pyproject.toml`, `spider.na
 - **The branches' order:** merge main up to the commit before the codemod, run the script and commit, then merge the codemod commit. Both sides then made the same `git mv` and the same line edits, so the merge pairs the renames.
 - *Alternative:* hand edits per area. Branches would conflict on every line both touched. Rejected.
 
-### D4. Hints name the invoked command
-- **In short:** usage text, hints and `crawl.command_argv[0]` name the script that ran, `linx` or `openlinx`, with `linx` when it is neither.
-- A user on the `openlinx` fallback, whose `linx` is another package's, then gets hints that run.
-- *Alternative:* always `linx`. Simpler, but it sends exactly those users to the other tool. Rejected.
+### D4. Usage and the recorded command line name the invoked script
+- **In short:** the usage line and `crawl.command_argv[0]` name the script that ran, `linx` or `openlinx`, and `linx` when the tool runs some other way, such as `python -m openlinx`. Hints name `linx`.
+- The runner takes the name from the script's file name and gives it to Click as the program name, so the usage line and the recorded command line agree.
+- **Why hints stay `linx`:** they are built in five layers (the store, the Workspace, the crawl engine, the services and the runner), and some are stored in the crawl file, in `crawl.warnings`. A per-process name would need a parameter through each of those layers.
+- *Alternative:* the invoked name as a parameter of every function that builds a hint. It changes signatures that the open branches call, against D3's small merges, and a stored warning would record whichever script ran. Rejected.
+- *Alternative:* rewrite `linx <Command>` at the output edge. It misses the document's `warnings` and `crawl.warnings` unless they are rewritten too. Rejected.
 
 ### D5. `--version` names the product
 - **In short:** `--version` prints `OpenLinx <version>` whichever script ran, so a `linx` on PATH can be told from another package's.
@@ -49,6 +51,7 @@ The working name `spider` is in the import package, `pyproject.toml`, `spider.na
 
 - [`022`'s User-Agent names `https://openlinx.dev`, which needs a page that explains the crawler before `022` merges] → Its owner publishes the page; until then the URL is in `022`'s plan only.
 - [Another package's `linx` comes first on PATH] → `openlinx` runs the same entry point (D1), `--version` tells them apart (D5), and `080`'s PATH check looks for both.
+- [A user on the `openlinx` fallback reads hints that say `linx`, which may run the other package (D4)] → `--version` identifies ours (D5), and `080`'s doctor warns when a foreign `linx` comes first and names `openlinx`.
 - [A branch's own new code uses the product name in prose, which the codemod maps to `COMMAND_NAME`] → `test_no_working_name` and the tests that pin hint text catch it, and the branch's review checks each prose use.
 - [Crawl files made under the working name keep `["spider", ...]` in `crawl.command_argv`] → It is what was run, and it stays.
 

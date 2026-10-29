@@ -159,7 +159,7 @@ Every crawl file SHALL hold the table `crawl`, with exactly one row, and the tab
 | `crawl.state` | the Crawl State |
 | `crawl.started_at` | the start time |
 | `crawl.completed_at` | the time the state became `completed`; NULL in every other state |
-| `crawl.command_argv` | the command line, as a JSON array that starts with `"linx"`, with secrets redacted |
+| `crawl.command_argv` | the command line, as a JSON array that starts with the name of the script that ran (see `cli-contract`), with secrets redacted |
 | `crawl.cwd` | the absolute folder the Command ran in |
 | `crawl.settings_file` | the absolute path of the `openlinx.toml` that was read, or NULL |
 | `crawl.config` | the resolved settings, as a JSON object of tables and keys, with secrets redacted |
