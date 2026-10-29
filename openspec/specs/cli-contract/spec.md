@@ -6,7 +6,7 @@ Defines how every Command talks to agents and people:
 - output formats and encoding
 - paging of lists
 - progress events and diagnostics on stderr, and partial results
-- exit codes, the global flags, and the `spider commands` self-description
+- exit codes, the global flags, and the `linx commands` self-description
 
 The `csv` format, the CSV policy, `--no-bom` and `-o/--output` are defined by `050-add-query-and-segments`.
 
@@ -31,18 +31,18 @@ Without `--format`, a Command SHALL write its result to stdout as one compact JS
 - **THEN** stdout is exactly `{"total":5,"items":[{"n":1},{"n":2},{"n":3},{"n":4},{"n":5}],"next_cursor":null}` followed by `\n`
 
 #### Scenario: Non-ASCII characters are not escaped
-- **WHEN** `spider init --workspace H/work/Проверка` runs
+- **WHEN** `linx init --workspace H/work/Проверка` runs
 - **THEN** stdout contains the UTF-8 bytes of `Проверка`, not `\u` escapes
 
 #### Scenario: Nothing on stdout when a Command fails
-- **WHEN** `spider nosuchcommand` runs
+- **WHEN** `linx nosuchcommand` runs
 - **THEN** stdout is empty
 
 ### Requirement: Output formats
 
 **In short:** `--format` chooses `json`, `jsonl` or `table` among the formats a Command supports, and errors stay JSON whatever the format.
 
-`--format` SHALL accept `json`, `jsonl` and `table`. Each Command SHALL support the formats that `spider commands` lists for it:
+`--format` SHALL accept `json`, `jsonl` and `table`. Each Command SHALL support the formats that `linx commands` lists for it:
 - document Commands: `json` (the default) and `table`
 - list Commands: `json` (the default), `jsonl` and `table`
 - rows Commands: `jsonl` (the default)
@@ -54,19 +54,19 @@ A format that is unknown, or that the Command does not support, SHALL fail with 
 With `jsonl` or `table`, when more items exist than were printed, the Command SHALL write the info line `more_items` to stderr, with `details.total` and `details.next_cursor`.
 
 #### Scenario: Unsupported format
-- **WHEN** `spider commands --format jsonl` runs
+- **WHEN** `linx commands --format jsonl` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value` and a hint that contains `json` and `table`
 
 #### Scenario: Unknown format
-- **WHEN** `spider init --format xml` runs
+- **WHEN** `linx init --format xml` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value`
 
 #### Scenario: Table for people
-- **WHEN** `spider init --format table` runs in the empty folder `H/work/shop`
+- **WHEN** `linx init --format table` runs in the empty folder `H/work/shop`
 - **THEN** stdout contains the text `data_dir`
 
 #### Scenario: Errors stay JSON
-- **WHEN** `spider init --format table --workspace H/work/notes.txt/site` runs, and `H/work/notes.txt` is a file
+- **WHEN** `linx init --format table --workspace H/work/notes.txt/site` runs, and `H/work/notes.txt` is a file
 - **THEN** the last line of stderr parses as a JSON object with `"code":"workspace_not_writable"`
 
 #### Scenario: More items notice
@@ -88,7 +88,7 @@ With `jsonl` or `table`, when more items exist than were printed, the Command SH
 - **THEN** stdout is exactly `{"n":1}\n{"n":2}\n`
 
 #### Scenario: Documents have no JSON Lines
-- **WHEN** `spider init --format jsonl` runs
+- **WHEN** `linx init --format jsonl` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value`
 
 ### Requirement: UTF-8 output on every OS
@@ -98,19 +98,19 @@ With `jsonl` or `table`, when more items exist than were printed, the Command SH
 stdout and stderr SHALL carry UTF-8 bytes on every OS, whatever the console code page, the locale or `PYTHONIOENCODING`. JSON documents, JSON Lines and stderr lines SHALL end with `\n` alone, on Windows too.
 
 #### Scenario: Piped output on Windows
-- **WHEN** on Windows `spider init --workspace H\work\Проверка` runs as a real process with stdout piped
+- **WHEN** on Windows `linx init --workspace H\work\Проверка` runs as a real process with stdout piped
 - **THEN** stdout contains the bytes `D0 9F D1 80 D0 BE D0 B2 D0 B5 D1 80 D0 BA D0 B0`, the UTF-8 encoding of `Проверка`
 
 #### Scenario: PYTHONIOENCODING does not change the output
-- **WHEN** `spider init --workspace H/work/Проверка` runs as a real process with the environment variable `PYTHONIOENCODING=cp1252`
+- **WHEN** `linx init --workspace H/work/Проверка` runs as a real process with the environment variable `PYTHONIOENCODING=cp1252`
 - **THEN** stdout contains the bytes `D0 9F D1 80 D0 BE D0 B2 D0 B5 D1 80 D0 BA D0 B0`
 
 #### Scenario: No carriage returns on Windows
-- **WHEN** on Windows `spider commands` runs as a real process
+- **WHEN** on Windows `linx commands` runs as a real process
 - **THEN** stdout ends with `}` followed by `\n`, and contains no `\r` byte
 
 #### Scenario: UTF-8 on stderr
-- **WHEN** `spider init --workspace H/work/Проверка.txt/site` runs as a real process, and `H/work/Проверка.txt` is a file
+- **WHEN** `linx init --workspace H/work/Проверка.txt/site` runs as a real process, and `H/work/Проверка.txt` is a file
 - **THEN** stderr contains the bytes `D0 9F D1 80 D0 BE D0 B2 D0 B5 D1 80 D0 BA D0 B0`
 
 ### Requirement: Paging envelope for list Commands
@@ -168,7 +168,7 @@ Items SHALL come in a deterministic order, so the same request against unchanged
 
 **In short:** `--fields` chooses which keys each item has, and in what order.
 
-`--fields` SHALL take a comma-separated list of field names. Each item then has exactly those keys, in that order. `--fields all` SHALL select every available field, in the Command's field order. Without `--fields`, the Command's default fields apply, as listed by `spider commands`.
+`--fields` SHALL take a comma-separated list of field names. Each item then has exactly those keys, in that order. `--fields all` SHALL select every available field, in the Command's field order. Without `--fields`, the Command's default fields apply, as listed by `linx commands`.
 
 An unknown field name SHALL fail with `unknown_field`, with `details.field` and `details.available`.
 
@@ -289,20 +289,20 @@ Errors found while parsing the command line SHALL use the same shape: `usage_err
 Nothing else SHALL appear on stderr apart from progress events: no raw tracebacks, progress bars or log lines.
 
 #### Scenario: Unknown Command
-- **WHEN** `spider nosuchcommand` runs
+- **WHEN** `linx nosuchcommand` runs
 - **THEN** the exit code is 2, and the error has the code `usage_error`
 
 #### Scenario: Error object
-- **WHEN** `spider nosuchcommand` runs
+- **WHEN** `linx nosuchcommand` runs
 - **THEN** the last line of stderr is a JSON object whose keys are exactly `level`, `code`, `message`, `hint` and `details`, with `"level":"error"`
 
 #### Scenario: Only JSON lines on stderr
-- **WHEN** `spider init --workspace H/work/notes.txt/site` runs, and `H/work/notes.txt` is a file
+- **WHEN** `linx init --workspace H/work/notes.txt/site` runs, and `H/work/notes.txt` is a file
 - **THEN** every line of stderr parses as a JSON object
 
 #### Scenario: Unexpected failure
 - **WHEN** a Command raises `RuntimeError("disk exploded")`
-- **THEN** the exit code is 70, and the error has the code `internal_error` and a `details.traceback` that contains `RuntimeError: disk exploded`
+- **THEN** the exit code is 70, and the error has the code `internal_error`, a `message` that ends with `This is a bug in OpenLinx.` and a `details.traceback` that contains `RuntimeError: disk exploded`
 
 #### Scenario: A warning is readable at once
 - **WHEN** a Command running as a real process with stderr piped writes a warning, and then waits for a line on its stdin before it ends
@@ -327,7 +327,7 @@ Every Command SHALL exit with one of these codes. The meaning of a code SHALL ne
 | 0 | `ok` | success |
 | 1 | `failed` | the Command ran but could not do everything asked; the error says what |
 | 2 | `usage` | the command line is wrong: an unknown Command, flag or name, or a missing or invalid value |
-| 3 | `config` | `spider.toml` or a setting is invalid |
+| 3 | `config` | `openlinx.toml` or a setting is invalid |
 | 4 | `not_found` | a Workspace, Crawl or item named on the command line does not exist |
 | 5 | `busy` | another process holds the Crawl |
 | 6 | `incompatible` | the crawl file cannot be used by this version |
@@ -342,26 +342,26 @@ Every diagnostic code that is an error SHALL map to exactly one exit code:
 
 Warnings and info lines SHALL NOT change the exit code.
 
-Every diagnostic code SHALL be declared once, with its level, its exit code (none for warnings and info) and a description. `spider commands` SHALL list exactly the declared codes, and no Command SHALL report a code that is not declared.
+Every diagnostic code SHALL be declared once, with its level, its exit code (none for warnings and info) and a description. `linx commands` SHALL list exactly the declared codes, and no Command SHALL report a code that is not declared.
 
 #### Scenario: The table is self-described
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** the `code` and `name` pairs of `exit_codes` are, in order, `0 ok`, `1 failed`, `2 usage`, `3 config`, `4 not_found`, `5 busy`, `6 incompatible`, `7 io`, `8 network`, `70 internal`, `130 interrupted`
 
 #### Scenario: Error codes of this change
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** its `diagnostics` give these exit codes: `usage_error` 2, `invalid_value` 2, `unknown_field` 2, `invalid_cursor` 2, `settings_invalid` 3, `workspace_not_found` 4, `workspace_not_writable` 7, `internal_error` 70 and `interrupted` 130
 
 #### Scenario: Warning and info codes of this change
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** its `diagnostics` include `workspace_nested` with `"level":"warning"` and `more_items` with `"level":"info"`, both with `"exit_code":null`
 
 #### Scenario: Naming rule for input errors
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** every diagnostic whose code starts with `invalid_` or `unknown_` has `"exit_code":2`
 
 #### Scenario: A warning keeps exit code 0
-- **WHEN** `spider init` runs in `H/work/shop/blog`, and `H/work/shop` contains `.spider/`
+- **WHEN** `linx init` runs in `H/work/shop/blog`, and `H/work/shop` contains `.openlinx/`
 - **THEN** the exit code is 0
 
 ### Requirement: Global flags
@@ -375,26 +375,26 @@ Every diagnostic code SHALL be declared once, with its level, its exit code (non
 `--crawl` is defined by `015-add-crawl-store`.
 
 #### Scenario: After the Command name
-- **WHEN** `spider init --format json` runs in the empty folder `H/work/shop`
+- **WHEN** `linx init --format json` runs in the empty folder `H/work/shop`
 - **THEN** the exit code is 0
 
 #### Scenario: A flag the Command does not use
-- **WHEN** `spider commands --workspace H/work` runs
+- **WHEN** `linx commands --workspace H/work` runs
 - **THEN** the exit code is 2, and the error has the code `usage_error`
 
 #### Scenario: Before the Command name
-- **WHEN** `spider --format table init` runs
+- **WHEN** `linx --format table init` runs
 - **THEN** the exit code is 2, and the error has the code `usage_error` and a hint that contains `after the Command name`
 
 #### Scenario: Global flags of init
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** the options of the `init` entry include `--workspace` and `--format`, each with `"global":true`
 
-### Requirement: Self-description with spider commands
+### Requirement: Self-description with linx commands
 
-**In short:** `spider commands` describes every Command, exit code, diagnostic and honoured environment variable in one JSON document, the same on every OS.
+**In short:** `linx commands` describes every Command, exit code, diagnostic and honoured environment variable in one JSON document, the same on every OS.
 
-`spider commands` SHALL return one JSON document with these keys:
+`linx commands` SHALL return one JSON document with these keys:
 
 | Key | Content |
 |---|---|
@@ -410,7 +410,7 @@ A Command's name is its full path, for example `crawls list`. Each Command entry
 - `events`: `true` when the Command reports progress events
 - `formats`
 - `arguments`: each with `name`, `type`, `required`, `variadic`, `default` and `description`
-- `options`: each with `name`, `short`, `type`, `choices`, `default`, `required`, `multiple`, `global`, `setting` (its `spider.toml` key, or null), `secret` and `description`
+- `options`: each with `name`, `short`, `type`, `choices`, `default`, `required`, `multiple`, `global`, `setting` (its `openlinx.toml` key, or null), `secret` and `description`
 - `fields`: `{available, default}` for list and rows Commands, otherwise null
 - `examples`
 
@@ -431,69 +431,94 @@ An option whose `setting` is not null SHALL take `secret` from that setting, so 
 - **THEN** building the tool fails, naming that Command
 
 #### Scenario: A secret option inherits from its setting
-- **WHEN** `spider commands` runs in a tool that includes the example settings Command, whose `--level` maps to `example.level` and whose `--token` maps to the secret setting `example.token`
+- **WHEN** `linx commands` runs in a tool that includes the example settings Command, whose `--level` maps to `example.level` and whose `--token` maps to the secret setting `example.token`
 - **THEN** its `--token` option has `"setting":"example.token"` and `"secret":true`, and its `--level` option has `"setting":"example.level"` and `"secret":false`
 
 #### Scenario: A secret option without a setting
-- **WHEN** `spider commands` runs in a tool that includes the example settings Command, whose `--api-key` maps to no setting and is declared secret
+- **WHEN** `linx commands` runs in a tool that includes the example settings Command, whose `--api-key` maps to no setting and is declared secret
 - **THEN** its `--api-key` option has `"setting":null` and `"secret":true`
 
 #### Scenario: The Command lists itself
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** `commands` has an entry with `"name":"commands"`
 
 #### Scenario: Entry of a document Command
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** the `init` entry has `"output":"document"`, `"events":false`, `"formats":["json","table"]` and `"fields":null`
 
 #### Scenario: Entry of a list Command
-- **WHEN** `spider commands` runs in a tool that includes the example list Command
+- **WHEN** `linx commands` runs in a tool that includes the example list Command
 - **THEN** its entry has `"output":"list"`, `"formats":["json","jsonl","table"]` and `"fields":{"available":["n","sq"],"default":["n"]}`
 
 #### Scenario: Option details
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** the `--workspace` option of the `init` entry has `"type":"path"`, `"default":null`, `"global":true`, `"setting":null` and `"secret":false`
 
 #### Scenario: Tool version
-- **WHEN** `spider commands` runs
-- **THEN** `tool` is `{"name":"spider","version":V}`, where V is the `version` in `pyproject.toml`
+- **WHEN** `linx commands` runs
+- **THEN** `tool` is `{"name":"openlinx","version":V}`, where V is the `version` in `pyproject.toml`
 
 #### Scenario: Same description on every OS
-- **WHEN** `spider commands` runs on Windows, macOS and Linux
+- **WHEN** `linx commands` runs on Windows, macOS and Linux
 - **THEN** the entry for `init` is byte-identical on all three
 
 ### Requirement: Light start
 
-**In short:** `spider --help` and `spider commands` load only a small, fixed set of modules, and a settings table loads only with the settings.
+**In short:** `linx --help` and `linx commands` load only a small, fixed set of modules, and a settings table loads only with the settings.
 
-`spider --help` and `spider commands` SHALL start without loading any module outside the standard library, Typer and the modules Typer itself depends on, orjson and `spider`. `spider commands` MAY also load pydantic when an option maps to a setting. A settings table SHALL be loaded only when settings load, or when the settings template is written.
+`linx --help` and `linx commands` SHALL start without loading any module outside the standard library, Typer and the modules Typer itself depends on, orjson and `openlinx`. `linx commands` MAY also load pydantic when an option maps to a setting. A settings table SHALL be loaded only when settings load, or when the settings template is written.
 
 #### Scenario: Help starts light
-- **WHEN** `spider --help` runs in a fresh process
-- **THEN** every top-level module loaded is in the standard library, Typer or its dependencies, orjson or `spider`
+- **WHEN** `linx --help` runs in a fresh process
+- **THEN** every top-level module loaded is in the standard library, Typer or its dependencies, orjson or `openlinx`
 
 #### Scenario: The self-description starts light
-- **WHEN** `spider commands` runs in a fresh process
-- **THEN** every top-level module loaded is in the standard library, Typer or its dependencies, orjson or `spider`
+- **WHEN** `linx commands` runs in a fresh process
+- **THEN** every top-level module loaded is in the standard library, Typer or its dependencies, orjson or `openlinx`
 
 #### Scenario: Settings tables load with the settings
-- **WHEN** `spider --help` runs in a fresh process, in a tool whose `example` table is registered
+- **WHEN** `linx --help` runs in a fresh process, in a tool whose `example` table is registered
 - **THEN** the module that defines the `example` table is not loaded
 
 ### Requirement: Help and version are plain text
 
 **In short:** `--help` and `--version` print plain text and exit 0, and are the only outputs that are not JSON.
 
-`--help`, on the tool or on any Command, SHALL print plain-text help to stdout and exit 0. `spider` with no arguments SHALL do the same as `spider --help`. `spider --version` SHALL print `spider <version>` followed by `\n`, and exit 0. These SHALL be the only outputs that are not JSON.
+`--help`, on the tool or on any Command, SHALL print plain-text help to stdout and exit 0. `linx` with no arguments SHALL do the same as `linx --help`. `linx --version` SHALL print `OpenLinx <version>` followed by `\n`, and exit 0. These SHALL be the only outputs that are not JSON.
 
 #### Scenario: Help
-- **WHEN** `spider init --help` runs
+- **WHEN** `linx init --help` runs
 - **THEN** the exit code is 0, and stdout contains `Usage:`
 
 #### Scenario: No arguments
-- **WHEN** `spider` runs with no arguments
-- **THEN** the exit code is 0, stdout is the same as for `spider --help`, and stderr is empty
+- **WHEN** `linx` runs with no arguments
+- **THEN** the exit code is 0, stdout is the same as for `linx --help`, and stderr is empty
 
 #### Scenario: Version
-- **WHEN** `spider --version` runs
-- **THEN** stdout is exactly `spider `, then the `version` in `pyproject.toml`, then `\n`
+- **WHEN** `linx --version` runs
+- **THEN** stdout is exactly `OpenLinx `, then the `version` in `pyproject.toml`, then `\n`
+
+### Requirement: Two console scripts
+
+**In short:** the package installs `linx` and `openlinx`, which run the same entry point, and the usage line and the recorded command line name the one that ran.
+
+The distribution SHALL install two console scripts with the same entry point: `linx`, the name the docs use, and `openlinx`, for a machine where another package's `linx` comes first on PATH.
+- The usage line of `--help` SHALL name the script that ran, and `linx` when the tool runs some other way, such as `python -m openlinx`.
+- `crawl.command_argv` SHALL start with that same name (`crawl-store`).
+- Hints that name a command SHALL name `linx`.
+
+#### Scenario: Both console scripts run the same entry point
+- **WHEN** the console scripts of the installed distribution are read
+- **THEN** `linx` and `openlinx` both name `openlinx.cli.app:main`
+
+#### Scenario: Usage names the script that ran
+- **WHEN** `openlinx --help` runs through its console script, and then `python -m openlinx --help` runs
+- **THEN** the first stdout starts with `Usage: openlinx `, and the second with `Usage: linx `
+
+#### Scenario: A hint names linx whichever script ran
+- **WHEN** `openlinx crawl <url> --workspace <folder>` runs through its console script, for a folder that does not exist
+- **THEN** the error has the code `workspace_not_found`, and its hint starts with `Create it with: linx init`
+
+#### Scenario: The recorded command line starts with the script that ran
+- **WHEN** `openlinx crawl <url>` runs through its console script, for a URL of the local fixture site
+- **THEN** the Crawl's `crawl.command_argv` starts with `"openlinx"`, `"crawl"`

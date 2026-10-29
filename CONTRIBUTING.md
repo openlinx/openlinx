@@ -29,7 +29,7 @@ Features and fixes are built as OpenSpec changes under `openspec/changes/<id>/`.
 - Claude Code finds OpenSpec's agent skills in `.claude/skills/`. Codex uses the same agent skills from `.agents/skills/`.
 - The exception: fixes to the planning documents of a change that is not in progress go straight to `main`.
 - OpenSpec is a Node tool. Install Node (current LTS), then the version CI uses: `npm install -g @fission-ai/openspec@1.13.0`.
-- `linx` sends no telemetry, so turn OpenSpec's off before running it:
+- OpenLinx sends no telemetry, so turn OpenSpec's off before running it:
   - bash: `export OPENSPEC_TELEMETRY=0`
   - PowerShell: `$env:OPENSPEC_TELEMETRY = "0"`
 
@@ -110,7 +110,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 4. `ruff check .`, then `ruff format --check .`.
 5. `mypy` (strict).
 6. `pytest`, with the 90% coverage gate and the hypothesis `ci` profile.
-7. The wheel smoke test: `uv build`, then `linx --version` from the built wheel in an isolated environment.
+7. The wheel smoke test: `uv build`, then `linx --version` and `openlinx --version` from the built wheel in an isolated environment, which must print the same `OpenLinx <version>` line.
 8. Install Node (current LTS) and OpenSpec 1.13.0.
 9. `openspec validate --all --strict`, with telemetry off.
 10. `node --test "tests/js/**/*.test.mjs"`.
@@ -178,7 +178,7 @@ Plug it into `default_hooks()` in `openlinx/services/hooks.py`, as [How 030 and 
 
 - **Terms:** use the terms of [CONTEXT.md](CONTEXT.md) exactly, capitalised as defined there, such as Workspace, Crawl, Page, Issue and Command. This applies in code, tests, docs and commit messages. Test names use them too.
 - **Decisions:** a settled architectural decision is an ADR in [docs/adr/](docs/adr/). Don't reopen a decision that has one. Write a new ADR instead of quietly working around it.
-- **Names:** the module `openlinx.naming` holds every name users see: `COMMAND_NAME` (`linx`), `PACKAGE_NAME` (`openlinx`), the settings file name, the data folder and the global Workspace folder. Use those constants rather than typing a name in `src/`, and say "the settings file" or "the data folder" in comments. `tests/test_naming.py` fails on the literals `openlinx.toml` and `.openlinx` anywhere else in `src/`; tests keep the literals.
+- **Names:** the module `openlinx.naming` holds every name users see: `COMMAND_NAME` (`linx`), `PACKAGE_NAME` (`openlinx`), `PRODUCT_NAME` (`OpenLinx`), the settings file name, the data folder and the global Workspace folder. Use those constants rather than typing a name in `src/`, and say "the settings file" or "the data folder" in comments. `tests/test_naming.py` fails on the literals `openlinx.toml`, `.openlinx`, `"linx"`, `"openlinx"` and `"OpenLinx"` anywhere else in `src/`; tests keep the literals.
 
 ## Code style
 
@@ -188,7 +188,7 @@ Plug it into `default_hooks()` in `openlinx/services/hooks.py`, as [How 030 and 
 - **The paradigm** is [ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md): logic in pure functions, data in frozen dataclasses (frozen `msgspec.Struct`s for page preparation's per-response records, which cross the parse pool, and for records that define a JSON document), dependencies as parameters typed by a Protocol, state only where it is inherent, no class hierarchies of our own, and pydantic only at the boundary.
 - **A memo** of a pure function, `functools.lru_cache(maxsize=N)` on a function whose result depends only on its arguments, is allowed and is not module-level state (ADR-0006). It always has a bound, never `maxsize=None` or `functools.cache`, and a one-line comment at the decorator says why it pays.
 - **Errors:**
-  - An error that a user or an agent sees is a `OpenLinxError` with a `DiagnosticCode` from the registry in `openlinx.output.codes`. A warning is a `Diagnostic` made with `Diagnostic.of(code, ...)` and given to the `Reporter`. Never report a bare message without a code.
+  - An error that a user or an agent sees is an `OpenLinxError` with a `DiagnosticCode` from the registry in `openlinx.output.codes`. A warning is a `Diagnostic` made with `Diagnostic.of(code, ...)` and given to the `Reporter`. Never report a bare message without a code.
   - A broken contract inside our own code, such as a settings table registered twice, raises a built-in `TypeError` or `RuntimeError`. It is a bug, not a diagnostic.
   - An error class of the store, such as `CrawlWriterClosedError`, is turned into a code by the service that catches it.
 - **`# type: ignore[code]` and `# noqa: CODE`** always name the code, and are used only when the fault is not ours: a third-party API or stub, or the one place that one of our banned-API rules (`TID251`) leads to. In a test, a deliberate type guard or a deliberately wrong call takes one too, with its reason. Prefer fixing the type. A short reason goes on the line, or in the comment right above it when the line would grow too long. That comment must not start with `noqa`, which ruff would read as a blanket directive and flag (`RUF100`).

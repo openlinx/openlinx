@@ -68,7 +68,7 @@ Every release must also publish the same artifacts reproducibly: the PyPI packag
 
 - Signed standalone binaries and winget come **after v1.0** (Backlog: distribution).
 - A Homebrew tap, a Scoop bucket and a multi-arch Docker image on GHCR come in **v1.0**.
-- A short custom domain for the one-liners comes after the product name is chosen. Until then `OWNER/REPO` and `linx` are placeholders. Publishing is blocked until the name is free on PyPI and GitHub, but the specs are not.
+- A short custom domain for the one-liners is still open, and `OWNER/REPO` is a placeholder for the repository. Publishing is blocked until the name is free on PyPI and GitHub, but the specs are not.
 - An `--uninstall` mode is not part of v0.1. The uninstall steps are documented only, and the mode is an open question.
 - Offline or air-gapped installation is not planned.
 - The `.mcpb` bundle is not a v0.1 release asset. It comes with the MCP server in **v0.1.1** (`090-add-mcp-server`).

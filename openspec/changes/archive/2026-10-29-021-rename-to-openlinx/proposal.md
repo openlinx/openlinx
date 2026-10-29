@@ -6,13 +6,13 @@ The product is OpenLinx, but the code, the docs and the specs still use the work
 
 - **Names:**
   - The command is `linx`. `openlinx` is a second console script with the same entry point, for a machine where another package's `linx` comes first on PATH.
-  - The distribution, the import package and the files are `openlinx`: `openlinx.toml`, the `.openlinx/` data folder, `~/.openlinx`, the environment prefix `OPENLINX_`.
+  - The distribution, the import package and the files are `openlinx`: `openlinx.toml`, the `.openlinx/` data folder and `~/.openlinx`.
   - The product name in prose is OpenLinx.
 - **The robots user-agent token** is `openlinx` by default.
 - **What users see:**
   - `--version` prints `OpenLinx <version>`;
   - `commands` names the tool `openlinx`;
-  - hints and usage text name the command that was run, `linx` or `openlinx`, and `crawl.command_argv` starts with it.
+  - the usage line names the script that ran, `linx` or `openlinx`, and `crawl.command_argv` starts with it; hints name `linx`.
 - **Not renamed:**
   - The Crawl Mode value `spider` and the term Spider mode: they name how a Crawl finds URLs, not the product.
   - The archived changes, which are history.
@@ -34,4 +34,3 @@ None.
 
 - Every module moves from `spider` to `openlinx`, and every test, script, doc and plan that names the old package, command or files follows.
 - Open branches (`022`, `026`, `030`, `040`, `050`): each runs the codemod on its tree, then merges main.
-- `022`'s User-Agent becomes `OpenLinx/<version> (+https://openlinx.dev)`.

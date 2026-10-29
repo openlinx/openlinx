@@ -24,7 +24,7 @@ Both scripts SHALL accept the same options:
 | `--dry-run` | `-DryRun` |
 | `--help` | `-Help` |
 
-Options SHALL be passable to piped scripts: `curl … | sh -s -- <options>`, and `& ([scriptblock]::Create((irm <url>))) <options>` in PowerShell. `OWNER/REPO` and the package and command name `linx` are placeholders until the product name is chosen.
+Options SHALL be passable to piped scripts: `curl … | sh -s -- <options>`, and `& ([scriptblock]::Create((irm <url>))) <options>` in PowerShell. `OWNER/REPO` is a placeholder for the repository.
 
 #### Scenario: Unknown option in sh
 - **WHEN** `sh scripts/install.sh --bogus` runs
