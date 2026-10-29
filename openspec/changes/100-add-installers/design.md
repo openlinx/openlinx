@@ -125,7 +125,7 @@ verify ──► build ──► smoke (ubuntu sh · macos sh · windows powersh
   - **Linters:** `shellcheck -s sh` and PSScriptAnalyzer run in CI.
 - **No test doubles.** Our CLI is never replaced: every test that reaches `linx` runs the real one from the installed wheel. Agents are detected through the `~/.claude` and `~/.codex` folders, so no fake `claude` or `codex` program exists. The failure paths use real conditions:
   - a wheel path that does not exist
-  - a `openlinx.toml` that makes `doctor` fail
+  - an `openlinx.toml` that makes `doctor` fail
   - a new session without a terminal
 
 ## Risks / Trade-offs

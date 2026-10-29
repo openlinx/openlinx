@@ -1,6 +1,6 @@
 ## Why
 
-`020-add-crawl-core` and `022-add-fetch-policy` fetch URLs, discover and follow Links and record how each URL responded, but nothing yet turns a fetched HTML document into the SEO data that agents, Rules and Reports work with. Screaming Frog's "Internal" tab is the record SEO people and agents already know. This change defines that record as stored, documented Page data, together with the attributes of every discovered Link. Rules (`040`), query Commands (`050`) and the Report (`070`) can then all read one set of columns with precise definitions.
+`020-add-crawl-core` and `022-add-fetch-policy` fetch URLs, discover and follow Links and record how each URL responded, but nothing yet turns a fetched HTML document into the SEO data that agents, Rules and Reports work with. SEO people and agents already know a flat record per Page under familiar column names. This change defines that record as stored, documented Page data, together with the attributes of every discovered Link. Rules (`040`), query Commands (`050`) and the Report (`070`) can then all read one set of columns with precise definitions.
 
 ## What Changes
 
@@ -22,16 +22,16 @@
 - **(v0.2) SERP pixel widths** for titles (Arial 20 px) and meta descriptions (Arial 14 px), from a bundled table of Arial-metric character widths.
 - **Structured data:** item counts and types for JSON-LD and Microdata, plus a count of JSON-LD blocks that fail to parse.
 - **Link data:**
-  - Inlink and outlink counts, including % of Total (`linking_pages_pct`). The inlink counts are computed in the post-crawl passes.
+  - Inlink and outlink counts, including the share of Pages that link to the Page (`linking_pages_pct`). The inlink counts are computed in the post-crawl passes.
   - Folder Depth
-  - Crawl Depth, copied from `urls`
+  - Crawl Depth, the shortest path over followed Links, which a post-crawl pass also writes to `urls`
 - **Small additions beyond the Internal-tab list,** needed by Rules and agents:
   - `title_count`, `meta_description_count`, `h1_count`, `h2_count` and `canonical_count`
   - `url_path` and `url_query`, the path and query of `address`
   - `canonical_url`, the URL that all canonical declarations agree on, and `canonical_relative`
   - per-source noindex/nofollow flags
   - `syllable_count`
-  - `jsonld_parse_errors`
+  - `jsonld_parse_error_count`
 - **New `crawl` flags and their `openlinx.toml` equivalents under `[crawl]`, both from v0.2:**
   - `--store-html` / `--no-store-html` (`store_html = true | false`). HTML is not stored unless storage is turned on. The decision is made when the Crawl starts, recorded, and kept on resume.
   - `--detect-language` (`detect_language = false`) also stores the language detected from the Content Area text.
@@ -73,7 +73,7 @@ _None._ This change builds on requirements of `010`, `015`, `017`, `018`, `020` 
 - **Depends on `020-add-crawl-core`** for:
   - the `urls` table: `is_internal`, `in_scope`, `fetch_state`, `content_type`, `parsed`, `blocked_by_robots_txt`, `crawl_depth` and `fetched_at`
   - Link discovery, `DiscoveredLink` and the `LinkType` list, the robots directives parser and page preparation with its extractors
-  - the hooks: pure per-response handlers that return store rows, post-crawl passes that are store functions, and `default_hooks()` (its design D9 and D14)
+  - the hooks: pure per-response handlers that return store rows, post-crawl passes that are store functions, and `default_hooks()` in `openlinx.services.hooks`, the composition root (its design D9 and D14)
   - the injectable clock
 - **Depends on `022-add-fetch-policy`** for:
   - `redirect_url_id`, `size_bytes`, `transferred_bytes` and `content_encoding` on `urls`
@@ -87,7 +87,7 @@ _None._ This change builds on requirements of `010`, `015`, `017`, `018`, `020` 
   - `060` records the new settings in the equivalent command, or warns when they cannot be written as flags.
   - `070` builds the Report.
   - `080` generates the Skill's column reference from the column descriptions.
-- **Code:** `src/openlinx/extract/` (the Page extractor, content, readability, pixel widths, structured data, Link attributes), `src/openlinx/store/` (`openlinx.store.pages` and `openlinx.store.links`: the tables, their row values and writers, and the inlink pass) and `docs/schema.md`.
+- **Code:** `src/openlinx/extract/` (the Page extractor and the Page handler, content, readability, pixel widths, structured data, Link attributes), `src/openlinx/store/` (the tables in `openlinx.store.schema`, their row values in `openlinx.store.page_records`, and their writers and the inlink pass in `openlinx.store.pages` and `openlinx.store.links`), `openlinx.services.hooks` (`default_hooks()` lists them) and `docs/schema.md`.
 - **Dependencies:**
   - `zstandard` (v0.2), shared with `022-add-fetch-policy`
   - `py3langid` (v0.2), imported only when `--detect-language` is set

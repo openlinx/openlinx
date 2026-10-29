@@ -136,9 +136,11 @@ def test_file_from_a_newer_tool(temp_workspace: TempWorkspace) -> None:
     with pytest.raises(OpenLinxError) as raised:
         read_metadata(crawl.path)
 
-    assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (
+    diagnostic = raised.value.diagnostic
+    assert (raised.value.code, raised.value.exit_code, diagnostic.hint, diagnostic.details) == (
         "crawl_schema_too_new",
         6,
+        "Upgrade OpenLinx to read it.",
         {"file_schema_version": 99, "tool_schema_version": 1},
     )
 

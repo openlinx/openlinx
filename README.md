@@ -16,7 +16,7 @@ A Skill teaches the agent when and how to use each Command. The tool itself neve
 ## Status
 
 Pre-release: there is no release yet.
-- **Progress:** done and archived: the scaffold (`000`), Workspaces and the CLI contract (`010`), the crawl store (`015`), the faster crawl writer (`017`), the schema conventions (`018`) and the crawl core (`020`). That is `linx init`, `linx commands`, `linx schema`, `--crawl`, one SQLite file per Crawl with a documented schema, and `linx crawl <url>`, which crawls a site in the foreground. [ROADMAP.md](ROADMAP.md) says where the build is.
+- **Progress:** done and archived: the scaffold (`000`), Workspaces and the CLI contract (`010`), the crawl store (`015`), the faster crawl writer (`017`), the schema conventions (`018`), the crawl core (`020`) and the rename to OpenLinx (`021`). That is `linx init`, `linx commands`, `linx schema`, `--crawl`, one SQLite file per Crawl with a documented schema, and `linx crawl <url>`, which crawls a site in the foreground. [ROADMAP.md](ROADMAP.md) says where the build is.
 - **Name:** OpenLinx: the command `linx`, the PyPI and import package `openlinx`, the GitHub organisation `openlinx`, `openlinx.toml` and the `.openlinx/` directory of each Workspace.
 
 ## Development quick start

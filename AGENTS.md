@@ -24,7 +24,7 @@ OpenLinx is an open-source, agent-first SEO crawler, run as the `linx` command: 
 - **mypy:** strict mypy for 3.12. A `# type: ignore` must name its code.
 - **`tests/test_code_style.py`:** frozen records only, no class hierarchy of our own, a bound on every memo, sqlalchemy only in `openlinx.store` (and the schema service), and the crawl core never imports its plugins.
 - **`tests/cli/test_startup.py`:** `--help` loads only its allowlist, so heavy imports go inside the function body.
-- **`tests/test_naming.py`:** the settings file and data folder names come from `openlinx.naming`, never typed as literals in `src/`.
+- **`tests/test_naming.py`:** the three names, the settings file and the data folder come from `openlinx.naming`, never typed as literals in `src/`.
 - **`tests/test_dependencies.py`:** a new runtime dependency goes into `tests/dependency_allowlist.txt`. Telemetry and LLM SDKs are refused.
 - **Schema contract tests:** a table or column goes into `openlinx.store.schema` and `docs/schema.md` in the same commit.
 - **`tests/workspace/test_tables.py`:** settings tables follow the table rules, and every option's setting exists.
@@ -35,7 +35,7 @@ OpenLinx is an open-source, agent-first SEO crawler, run as the `linx` command: 
 - **A guard test that passes at once is proven by a mutation.** If a guard test never went red, break the code on purpose and show the test fails. The commit says which mutation it used.
 - **Comments:** only for a non-obvious *why*. No docstring that repeats a name and its types. Every module starts with a one-line docstring that names the design decision it implements.
 - **[ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md):** logic in pure functions. Data in frozen records, with `slots=True` for records made per URL or Page and `kw_only=True` above three fields. Dependencies passed in, typed by a Protocol. pydantic only at the boundary.
-- **Errors:** an error a user sees is a `OpenLinxError` with a code from `openlinx.output.codes`. A broken internal contract raises `TypeError` or `RuntimeError`.
+- **Errors:** an error a user sees is an `OpenLinxError` with a code from `openlinx.output.codes`. A broken internal contract raises `TypeError` or `RuntimeError`.
 - **Tests:** only the boundary doubles listed in docs/testing.md, never a mock of our own modules. Expected values are literals taken from the spec. Use `127.0.0.1`, never `localhost`.
 - **Store:** a unit that runs once per URL or Page executes a statement built at import. A unit may run twice, so it has no effect outside its connection.
 - **Docs in the same slice:** new codes, settings, options and Commands are documented where their area is.

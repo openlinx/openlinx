@@ -166,7 +166,7 @@ Nothing else SHALL appear on stderr apart from progress events: no raw traceback
 
 #### Scenario: Unexpected failure
 - **WHEN** a Command raises `RuntimeError("disk exploded")`
-- **THEN** the exit code is 70, and the error has the code `internal_error` and a `details.traceback` that contains `RuntimeError: disk exploded`
+- **THEN** the exit code is 70, and the error has the code `internal_error`, a `message` that ends with `This is a bug in OpenLinx.` and a `details.traceback` that contains `RuntimeError: disk exploded`
 
 #### Scenario: A warning is readable at once
 - **WHEN** a Command running as a real process with stderr piped writes a warning, and then waits for a line on its stdin before it ends
@@ -320,7 +320,7 @@ An option whose `setting` is not null SHALL take `secret` from that setting, so 
 
 #### Scenario: Tool version
 - **WHEN** `linx commands` runs
-- **THEN** `tool` is `{"name":"spider","version":V}`, where V is the `version` in `pyproject.toml`
+- **THEN** `tool` is `{"name":"openlinx","version":V}`, where V is the `version` in `pyproject.toml`
 
 #### Scenario: Same description on every OS
 - **WHEN** `linx commands` runs on Windows, macOS and Linux
@@ -330,15 +330,15 @@ An option whose `setting` is not null SHALL take `secret` from that setting, so 
 
 **In short:** `linx --help` and `linx commands` load only a small, fixed set of modules, and a settings table loads only with the settings.
 
-`linx --help` and `linx commands` SHALL start without loading any module outside the standard library, Typer and the modules Typer itself depends on, orjson and `linx`. `linx commands` MAY also load pydantic when an option maps to a setting. A settings table SHALL be loaded only when settings load, or when the settings template is written.
+`linx --help` and `linx commands` SHALL start without loading any module outside the standard library, Typer and the modules Typer itself depends on, orjson and `openlinx`. `linx commands` MAY also load pydantic when an option maps to a setting. A settings table SHALL be loaded only when settings load, or when the settings template is written.
 
 #### Scenario: Help starts light
 - **WHEN** `linx --help` runs in a fresh process
-- **THEN** every top-level module loaded is in the standard library, Typer or its dependencies, orjson or `linx`
+- **THEN** every top-level module loaded is in the standard library, Typer or its dependencies, orjson or `openlinx`
 
 #### Scenario: The self-description starts light
 - **WHEN** `linx commands` runs in a fresh process
-- **THEN** every top-level module loaded is in the standard library, Typer or its dependencies, orjson or `linx`
+- **THEN** every top-level module loaded is in the standard library, Typer or its dependencies, orjson or `openlinx`
 
 #### Scenario: Settings tables load with the settings
 - **WHEN** `linx --help` runs in a fresh process, in a tool whose `example` table is registered
@@ -348,7 +348,7 @@ An option whose `setting` is not null SHALL take `secret` from that setting, so 
 
 **In short:** `--help` and `--version` print plain text and exit 0, and are the only outputs that are not JSON.
 
-`--help`, on the tool or on any Command, SHALL print plain-text help to stdout and exit 0. `linx` with no arguments SHALL do the same as `linx --help`. `linx --version` SHALL print `linx <version>` followed by `\n`, and exit 0. These SHALL be the only outputs that are not JSON.
+`--help`, on the tool or on any Command, SHALL print plain-text help to stdout and exit 0. `linx` with no arguments SHALL do the same as `linx --help`. `linx --version` SHALL print `OpenLinx <version>` followed by `\n`, and exit 0. These SHALL be the only outputs that are not JSON.
 
 #### Scenario: Help
 - **WHEN** `linx init --help` runs
@@ -360,17 +360,32 @@ An option whose `setting` is not null SHALL take `secret` from that setting, so 
 
 #### Scenario: Version
 - **WHEN** `linx --version` runs
-- **THEN** stdout is exactly `linx `, then the `version` in `pyproject.toml`, then `\n`
+- **THEN** stdout is exactly `OpenLinx `, then the `version` in `pyproject.toml`, then `\n`
 
 
 ## ADDED Requirements
 
 ### Requirement: Two console scripts
 
-**In short:** the package installs `linx` and `openlinx`, which run the same entry point.
+**In short:** the package installs `linx` and `openlinx`, which run the same entry point, and the usage line and the recorded command line name the one that ran.
 
 The distribution SHALL install two console scripts with the same entry point: `linx`, the name the docs use, and `openlinx`, for a machine where another package's `linx` comes first on PATH.
+- The usage line of `--help` SHALL name the script that ran, and `linx` when the tool runs some other way, such as `python -m openlinx`.
+- `crawl.command_argv` SHALL start with that same name (`crawl-store`).
+- Hints that name a command SHALL name `linx`.
 
 #### Scenario: Both console scripts run the same entry point
 - **WHEN** the console scripts of the installed distribution are read
 - **THEN** `linx` and `openlinx` both name `openlinx.cli.app:main`
+
+#### Scenario: Usage names the script that ran
+- **WHEN** `openlinx --help` runs through its console script, and then `python -m openlinx --help` runs
+- **THEN** the first stdout starts with `Usage: openlinx `, and the second with `Usage: linx `
+
+#### Scenario: A hint names linx whichever script ran
+- **WHEN** `openlinx crawl <url> --workspace <folder>` runs through its console script, for a folder that does not exist
+- **THEN** the error has the code `workspace_not_found`, and its hint starts with `Create it with: linx init`
+
+#### Scenario: The recorded command line starts with the script that ran
+- **WHEN** `openlinx crawl <url>` runs through its console script, for a URL of the local fixture site
+- **THEN** the Crawl's `crawl.command_argv` starts with `"openlinx"`, `"crawl"`

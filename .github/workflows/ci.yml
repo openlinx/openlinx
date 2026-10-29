@@ -70,7 +70,13 @@ jobs:
         run: uv build
 
       - name: Wheel smoke test
-        run: uv run --isolated --no-project --with "$(ls dist/*.whl)" linx --version
+        # Both console scripts of the built wheel run, and print the same OpenLinx version line.
+        run: |
+          wheel="$(ls dist/*.whl)"
+          linx="$(uv run --isolated --no-project --with "$wheel" linx --version)"
+          openlinx="$(uv run --isolated --no-project --with "$wheel" openlinx --version)"
+          echo "$linx"
+          test "${linx#OpenLinx }" != "$linx" && test "$linx" = "$openlinx"
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

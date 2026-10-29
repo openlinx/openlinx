@@ -24,7 +24,7 @@ The crawl file is a public contract ([ADR-0002](0002-sqlite-crawl-store-public-s
    - When a table refers to the same table twice, a role prefix tells the roles apart: `source_url_id`, `target_url_id`, `redirect_url_id`, `found_on_url_id`.
 4. **Time:**
    - A time we record ends in `_at`, as UTC text `YYYY-MM-DDTHH:MM:SS.sssZ`.
-   - A header's raw value keeps the header's name and its text (`last_modified`).
+   - A header's raw value keeps the header's name and its text (`content_type`). A time read from a header keeps the header's name and takes the timestamp form (`last_modified`).
 5. **Quantities:**
    - The unit is a suffix: `_ms`, `_seconds`, `_bytes`, `_px` or `_pct` (a share from 0 to 100). A count ends in `_count`.
    - A score is neither (`health_score`).

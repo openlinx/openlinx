@@ -121,7 +121,7 @@ The `path` check SHALL look up the `linx` command on PATH (`linx.exe` on Windows
 - **THEN** the `path` check has status `"warn"` and its hint contains `uv tool update-shell`
 
 #### Scenario: A different linx comes first
-- **WHEN** the `path` check is evaluated for a first `linx` on PATH at `/opt/old/bin/linx` that reports `linx 0.0.1`, while the running CLI is `0.2.0`
+- **WHEN** the `path` check is evaluated for a first `linx` on PATH at `/opt/old/bin/linx` that reports `OpenLinx 0.0.1`, while the running CLI is `0.2.0`
 - **THEN** its status is `warn`, and its message contains `/opt/old/bin/linx` and `0.0.1`
 
 #### Scenario: Windows executable

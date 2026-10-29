@@ -4,7 +4,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 NAMING = SRC / "openlinx" / "naming.py"
-NAME_LITERALS = ("openlinx.toml", ".openlinx")
+NAME_LITERALS = ("openlinx.toml", ".openlinx", '"linx"', '"openlinx"', '"OpenLinx"')
 
 
 def test_name_derived_literals_appear_only_in_openlinx_naming() -> None:

@@ -39,6 +39,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 017 | `017-speed-up-crawl-writer` | `crawl-store` (modified) | none | done |
 | 018 | `018-add-schema-conventions` | `crawl-store` (modified) | `schema` (`indexes`) | done |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | done |
+| 021 | `021-rename-to-openlinx` | `workspace`, `cli-contract`, `crawl-store`, `crawling` (modified) | `linx`, `openlinx` | done |
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | done on its branch, min |
 | 030 | `030-add-page-data` | `page-data` | none (data only) | in progress, min |
 | 040 | `040-add-rules` | `rules` | `rules` | in progress, 15 Rules |
@@ -66,7 +67,7 @@ widen:                                        ├─► 022-min ─┐
 ```
 
 - **Where the build is:**
-  - **In main:** 000, 010, 015, 017, 018 and 020, the crawl core, so `linx crawl <url>` crawls a site in the foreground.
+  - **In main:** 000, 010, 015, 017, 018, 020, the crawl core, and 021, the rename to OpenLinx, so `linx crawl <url>` crawls a site in the foreground.
   - **On branches:** 022-min, the fetch policy, is done for v0.1 and merges next. 030-min, the page data, is in progress. 026 (the parse pool), 040 (the Rules) and 050 (the queries) are partly built and continue on their branches.
   - **Not started:** 060-min (crawl control), 080 (the agent Skill) and 085 (the release).
 - **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `linx rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.

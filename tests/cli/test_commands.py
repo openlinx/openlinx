@@ -20,7 +20,7 @@ def test_the_command_lists_itself() -> None:
     assert "commands" in names
 
 
-def test_tool_is_openlinx_with_the_project_version() -> None:
+def test_tool_version() -> None:
     tool = run_cli("commands").json()["tool"]
 
     assert tool == {"name": "openlinx", "version": project_version()}

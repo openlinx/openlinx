@@ -5,7 +5,7 @@ Teaches AI agents when and how to use OpenLinx's Commands. It does this through 
 ## ADDED Requirements
 
 ### Requirement: Generated Skill folder
-The generated Skill SHALL be a folder named `linx` that contains exactly these files:
+The generated Skill SHALL be a folder named `openlinx` that contains exactly these files:
 - `SKILL.md`
 - `references/columns.md`
 - `references/commands.md`
@@ -53,7 +53,7 @@ Generated files SHALL:
 
 ### Requirement: Skill frontmatter
 The frontmatter SHALL follow the Agent Skills format:
-- `name` is `linx`, the same as the Skill folder name.
+- `name` is `openlinx`, the same as the Skill folder name.
 - `description` is 1 to 1024 characters long.
 - `license` is `Apache-2.0`.
 - `compatibility` says that the OpenLinx CLI must be installed and that crawling needs network access.
@@ -489,14 +489,14 @@ The repository SHALL contain the latest release's Skill at `skills/openlinx/`, b
 - **THEN** the Skill's `metadata.version` equals the plugin's `version`
 
 ### Requirement: Plugin marketplace manifests
-The repository SHALL contain these two files, with `OWNER/REPO` and the name `linx` as placeholders until the product name and the repository exist:
+The repository SHALL contain these two files, with `OWNER/REPO` as a placeholder for the repository:
 - `.claude-plugin/plugin.json`, for a plugin with:
-  - `name` `linx`
+  - `name` `openlinx`
   - `version` equal to the Skill copy's stamp
   - a `description`
   - `license` `Apache-2.0`
   - `homepage` and `repository` URLs
-- `.claude-plugin/marketplace.json`, with a `name`, an `owner` and exactly one plugin entry, whose `name` is `linx` and whose `source` is `./`
+- `.claude-plugin/marketplace.json`, with a `name`, an `owner` and exactly one plugin entry, whose `name` is `openlinx` and whose `source` is `./`
 
 The plugin's only Skill SHALL be `skills/openlinx/`.
 

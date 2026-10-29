@@ -9,7 +9,7 @@
 
 **In short:** a Workspace is a folder with a data folder, a settings file or both; the global one lives in the home folder.
 
-A local Workspace SHALL be a folder, its root, that contains a `.openlinx/` data folder, a `openlinx.toml` settings file, or both. Its Crawls SHALL be stored in `<root>/.openlinx/crawls/`, and its settings SHALL be read from `<root>/openlinx.toml`.
+A local Workspace SHALL be a folder, its root, that contains a `.openlinx/` data folder, an `openlinx.toml` settings file, or both. Its Crawls SHALL be stored in `<root>/.openlinx/crawls/`, and its settings SHALL be read from `<root>/openlinx.toml`.
 
 The global Workspace SHALL keep its Crawls in `H/.openlinx/crawls/` and read its settings from `H/.openlinx/openlinx.toml`.
 
@@ -217,15 +217,15 @@ A setting that mirrors a flag SHALL live in a table the Command reads, usually n
 - **THEN** `example.level` is `"low"`
 
 #### Scenario: Settings file over default
-- **WHEN** the settings are resolved from a `openlinx.toml` that contains `[example]\nlevel = "high"\n`
+- **WHEN** the settings are resolved from an `openlinx.toml` that contains `[example]\nlevel = "high"\n`
 - **THEN** `example.level` is `"high"`
 
 #### Scenario: Flag over settings file
-- **WHEN** the settings are resolved from a `openlinx.toml` that contains `[example]\nlevel = "high"\n`, with the flag value `"low"` given for `example.level`
+- **WHEN** the settings are resolved from an `openlinx.toml` that contains `[example]\nlevel = "high"\n`, with the flag value `"low"` given for `example.level`
 - **THEN** `example.level` is `"low"`
 
 #### Scenario: Named entries
-- **WHEN** the settings are resolved from a `openlinx.toml` that contains `[groups.blog]\nlevel = "high"\n`
+- **WHEN** the settings are resolved from an `openlinx.toml` that contains `[groups.blog]\nlevel = "high"\n`
 - **THEN** `groups.blog.level` is `"high"`
 
 #### Scenario: Output flags have no settings key

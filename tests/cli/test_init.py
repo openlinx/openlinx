@@ -45,7 +45,7 @@ def test_data_folder_ignores_its_own_contents(shop: Path) -> None:
     run_cli("init")
 
     assert (shop / ".openlinx" / ".gitignore").read_bytes() == (
-        b"# Created by linx: crawl data is not committed.\n*\n"
+        b"# Created by OpenLinx: crawl data is not committed.\n*\n"
     )
 
 
@@ -154,6 +154,14 @@ def test_no_nested_warning_for_a_workspace_above_a_target_outside_home(
     result = run_cli("init", "--workspace", str(outer / "site"))
 
     assert (result.exit_code, result.stderr) == (0, b"")
+
+
+def test_the_template_names_the_product(shop: Path) -> None:
+    run_cli("init")
+
+    first = (shop / "openlinx.toml").read_text(encoding="utf-8").splitlines()[0]
+
+    assert first == "# OpenLinx settings. Each setting takes the first value it finds:"
 
 
 def test_a_setting_in_the_template(shop: Path) -> None:

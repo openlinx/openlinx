@@ -36,7 +36,7 @@ Every crawl setting is an option of `linx crawl` and a key of the `[crawl]` tabl
 | `--retries <n>` | `retries` | `2` | How many times, 0 to 10, a request that timed out, could not connect or got a 429 or 5xx status is tried again (see [Timeouts and retries](#timeouts-and-retries)). |
 | `--max-redirects <n>` | `max_redirects` | `10` | The most consecutive redirects followed from the first URL of a Redirect Chain, 0 to 50 (see [The hop limit](#the-hop-limit)). |
 | `--user-agent <string>` | `user_agent` | `OpenLinx/<version> (+<project URL>)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
-| `--robots-user-agent <token>` | `robots_user_agent` | `linx` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
+| `--robots-user-agent <token>` | `robots_user_agent` | `openlinx` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
 `--workspace` and `--format` are the global flags of every Command.
 
@@ -515,7 +515,7 @@ With `--ignore-robots`, the Crawl requests the URLs that robots.txt disallows an
 
 ### The robots user-agent token
 
-`--robots-user-agent <token>` (default `linx`) selects the robots.txt group that applies, and the `X-Robots-Tag` values with a crawler prefix (see [Robots directives](#robots-directives)). It is independent of the `User-Agent` request header. As RFC 9309 says, a token has only letters, `_` and `-`: any other is rejected, as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3).
+`--robots-user-agent <token>` (default `openlinx`) selects the robots.txt group that applies, and the `X-Robots-Tag` values with a crawler prefix (see [Robots directives](#robots-directives)). It is independent of the `User-Agent` request header. As RFC 9309 says, a token has only letters, `_` and `-`: any other is rejected, as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3).
 
 ## Links
 
@@ -582,7 +582,7 @@ The Crawl reads the robots directives of every parsed Page from two sources:
 | `x_robots_tag` | every `X-Robots-Tag` response header, joined with `, ` in the order received |
 
 - Directives are comma-separated tokens, compared without case: `NOINDEX` is `noindex`, and `none` means `noindex, nofollow`.
-- A header value that starts with a name and a colon, such as `googlebot: noindex`, applies only to the crawler it names. It applies to this Crawl when the name equals the robots user-agent token (`linx` by default), compared without case.
+- A header value that starts with a name and a colon, such as `googlebot: noindex`, applies only to the crawler it names. It applies to this Crawl when the name equals the robots user-agent token (`openlinx` by default), compared without case.
 - `unavailable_after:`, `max-snippet:`, `max-image-preview:` and `max-video-preview:` are directives with a value, not crawler names: `unavailable_after: 25 Jun 2030 15:00:00 PST, noindex` gives `noindex`.
 - `<meta>` elements named after one crawler, such as `<meta name="googlebot">`, are not read, nor a robots `<meta>` inside `<noscript>`, which a browser that runs scripts never sees.
 

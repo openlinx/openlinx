@@ -78,7 +78,7 @@ The number of Links followed from the Seed to reach a URL.
 _Avoid_: click depth, level
 
 **Indexability**:
-Whether search engines are allowed to index a URL: *Indexable* or *Non-Indexable*. The **Indexability Status** gives the reason when it is not, such as noindex, canonicalised, blocked by robots.txt or a non-200 response.
+Whether search engines are allowed to index a URL: *Indexable* or *Non-Indexable*. The **Indexability Status** gives the reason when it is not, such as noindex, canonicalised, blocked by robots.txt or a non-2xx response.
 _Avoid_: indexation (that is what a search engine did, not what the page allows)
 
 ### Content

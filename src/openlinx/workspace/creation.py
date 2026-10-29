@@ -5,12 +5,12 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from openlinx.naming import COMMAND_NAME
+from openlinx.naming import PRODUCT_NAME
 from openlinx.output.codes import WORKSPACE_NOT_WRITABLE
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.workspace.discovery import Workspace
 
-GITIGNORE = f"# Created by {COMMAND_NAME}: crawl data is not committed.\n*\n"
+GITIGNORE = f"# Created by {PRODUCT_NAME}: crawl data is not committed.\n*\n"
 
 
 def create_workspace(workspace: Workspace, settings_text: str) -> list[Path]:

@@ -838,7 +838,7 @@ Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, a 
 
 #### Scenario: Recording that fails for every URL fails the Crawl
 - **WHEN** a handler registered for the test returns, for every URL other than `{site}/`, a row whose store writer, registered for the test, raises an error, `/` links to `/p1` to `/p120`, and `linx crawl {site}/` runs
-- **THEN** the Command exits with code 7, stdout holds the result with `"state": "failed"` and `"stop_reason": "write_failed"`, and the last stderr line is an error with `code` = `crawl_write_failed`
+- **THEN** the Command exits with code 7, stdout holds the result with `"state": "failed"` and `"stop_reason": "write_failed"`, and the last stderr line is an error with `code` = `crawl_write_failed` whose `hint` contains `in a handler or in OpenLinx itself`
 
 #### Scenario: Deeply nested HTML does not stop the Crawl
 - **WHEN** `/` links to `/deep`, whose body nests 10,000 `<div>` elements around a link to `/after`, and `linx crawl {site}/` ends

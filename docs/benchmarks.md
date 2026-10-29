@@ -13,7 +13,7 @@ Measured capacity, and the machine each number was measured on. Benchmarks run b
   - So that 20,000 Pages fit in memory, a Page is prepared as indexes into shared URLs and templates. Its unit builds its rows on the writer thread, so the floor includes that cost.
 - **Running it:** `uv run python scripts/writer_throughput.py` on a quiet machine. It prints one JSON document and exits non-zero below its floor, or when the writer ends during the run, with the cause in the document. `--pages` sets a smaller run.
 - **Its floor:** at least 12 Pages/s at 20,000 Pages, a WAL peak of at most 300 MiB and an RSS of at most 400 MiB, and the atomicity check passes: no row from a failed unit, every other Page stored.
-- **Its links layout is provisional.** Its `urls` and `links` tables are drafts of `020`'s, and they exist only in its scratch crawl file. The first run against the floor, at 20,000 Pages, waits for `030`'s re-grounding on the schema blueprint's links layout, which restates the floor.
+- **Its links layout is provisional.** Its `links` table has the columns of `030`'s `links`, on a rowid table with indexes on `target_url_id` and `(type, target_url_id)`, and it exists only in its scratch crawl file. The first run against the floor, at 20,000 Pages, waits for the links benchmark to choose the layout, and restates the floor.
 
 ### Smoke run, 2026-10-11
 

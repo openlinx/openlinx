@@ -6,7 +6,7 @@ Offers OpenLinx's crawl-control, query and report Commands as tools of a local M
 
 ### Requirement: stdio MCP server
 `linx mcp [--workspace <path>]` SHALL run an MCP server over stdio until its input stream closes. It SHALL:
-- report the server name `linx` and the CLI version.
+- report the server name `openlinx` and the CLI version.
 - write nothing to stdout except MCP protocol messages. All logs and warnings go to stderr.
 - exit with code 0 when the client closes its input.
 
@@ -401,7 +401,7 @@ The archive SHALL also contain a `pyproject.toml` that depends on exactly `openl
 - **THEN** it exits with code 0
 
 ### Requirement: Plugin MCP configuration
-The repository root, which is the plugin root of the `080-add-agent-skill` marketplace entry, SHALL contain `.mcp.json`. It SHALL declare one MCP server named `linx` that runs the command `linx` with the argument `mcp`.
+The repository root, which is the plugin root of the `080-add-agent-skill` marketplace entry, SHALL contain `.mcp.json`. It SHALL declare one MCP server named `openlinx` that runs the command `linx` with the argument `mcp`.
 
 #### Scenario: Plugin MCP config
 - **WHEN** `.mcp.json` is parsed as JSON
@@ -416,7 +416,7 @@ The repository root, which is the plugin root of the `080-add-agent-skill` marke
 | Cursor | `.cursor/mcp.json` | `mcpServers` |
 | VS Code | `.vscode/mcp.json` | `servers`, with `"type": "stdio"` |
 | Gemini CLI | `~/.gemini/settings.json` | `mcpServers` |
-| Claude Code | none | the command `claude mcp add linx -- linx mcp` |
+| Claude Code | none | the command `claude mcp add openlinx -- linx mcp` |
 
 It SHALL also:
 - explain how to choose the Workspace by adding `--workspace <folder>` to the arguments.
@@ -428,8 +428,8 @@ It SHALL also:
 
 #### Scenario: JSON snippets
 - **WHEN** the fenced `json` blocks of the Cursor, VS Code and Gemini CLI sections are parsed
-- **THEN** each declares a server `linx` with command `"linx"` and args `["mcp"]`, and the VS Code one is under `servers` with `type` `"stdio"`
+- **THEN** each declares a server `openlinx` with command `"linx"` and args `["mcp"]`, and the VS Code one is under `servers` with `type` `"stdio"`
 
 #### Scenario: Claude Code, Workspace and Windows notes
 - **WHEN** `docs/mcp.md` is read
-- **THEN** it contains `claude mcp add linx -- linx mcp`, `--workspace` and `\.local\bin\linx.exe`
+- **THEN** it contains `claude mcp add openlinx -- linx mcp`, `--workspace` and `\.local\bin\linx.exe`
