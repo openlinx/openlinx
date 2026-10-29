@@ -1,7 +1,14 @@
 """Inlink and outlink counts (030-add-page-data, page-data; seam 3+6)."""
 
+from dataclasses import replace
 from pathlib import Path
 
+from sqlalchemy import Connection, select
+
+from openlinx.crawl.engine.hooks import Pass, PassContext
+from openlinx.services.hooks import default_hooks
+from openlinx.store.crawls import crawl_summary
+from openlinx.store.schema import pages
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
@@ -51,6 +58,32 @@ def test_repeated_inlinks_from_one_source(
     assert [
         query(crawl_file, _COUNTS_OF, [f"http://site.test{path}"])[0][:3] for path in ("/b", "/d")
     ] == [(2, 1, 25.0), (0, 0, 0.0)]
+
+
+def _stored_inlinks(connection: Connection) -> list[int | None]:
+    return list(connection.execute(select(pages.c.inlinks)).scalars())
+
+
+def test_inlinks_are_null_while_the_crawl_runs(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/a">A</a>'), "/a": Page(body='<a href="/">Home</a>')})
+    )
+    seen: list[tuple[str, list[int | None]]] = []
+
+    async def record_inlinks(context: PassContext) -> None:
+        state = (await context.writer.run_async(crawl_summary())).state
+        seen.append((state, await context.writer.run_async(_stored_inlinks)))
+
+    defaults = default_hooks()
+    # The passes run before the Crawl's end is written, so a pass ahead of the inlink pass
+    # sees the Crawl running with every Page stored.
+    hooks = replace(defaults, passes=(Pass("record_inlinks", record_inlinks), *defaults.passes))
+
+    crawl_result(server.url("/"), hooks)
+
+    assert seen == [("running", [None, None])]
 
 
 def test_linking_pages_pct_is_rounded_half_up(
