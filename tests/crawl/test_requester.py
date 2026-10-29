@@ -5,9 +5,9 @@ from typing import get_args
 
 import pytest
 
-from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
-from spider.crawl.fetch.requester import is_retried
-from spider.store.records import FetchError
+from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult
+from openlinx.crawl.fetch.requester import is_retried
+from openlinx.store.records import FetchError
 
 _AT = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
 

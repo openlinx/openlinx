@@ -8,8 +8,8 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from spider.store.connections import connect
-from spider.store.writer import CrawlWriter
+from openlinx.store.connections import connect
+from openlinx.store.writer import CrawlWriter
 from tests.support.cli import PROCESS_TIMEOUT, REPO_ROOT
 from tests.support.clock import FakeClock
 from tests.support.crawls import insert_seed

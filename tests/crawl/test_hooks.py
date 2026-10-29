@@ -16,8 +16,8 @@ from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, Engine, event, text
 from sqlalchemy.dialects import sqlite
 
-from spider.clock import Clock
-from spider.crawl.engine.hooks import (
+from openlinx.clock import Clock
+from openlinx.crawl.engine.hooks import (
     Hooks,
     Pass,
     PassContext,
@@ -26,15 +26,15 @@ from spider.crawl.engine.hooks import (
     UrlResult,
     handler,
 )
-from spider.crawl.pages.preparation import Extractor, PageInput, extractor
-from spider.output.reporter import Collected
-from spider.services.crawling import CrawlResult
-from spider.services.hooks import default_hooks
-from spider.store.connections import connect
-from spider.store.crawls import crawl_summary
-from spider.store.records import CrawlState, ErroredUrl, FetchedUrl, Provenance, SkippedUrl
-from spider.store.types import Timestamp
-from spider.store.writer import CrawlWriterReplayError
+from openlinx.crawl.pages.preparation import Extractor, PageInput, extractor
+from openlinx.output.reporter import Collected
+from openlinx.services.crawling import CrawlResult
+from openlinx.services.hooks import default_hooks
+from openlinx.store.connections import connect
+from openlinx.store.crawls import crawl_summary
+from openlinx.store.records import CrawlState, ErroredUrl, FetchedUrl, Provenance, SkippedUrl
+from openlinx.store.types import Timestamp
+from openlinx.store.writer import CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site, Status
 from tests.support.clock import FakeClock

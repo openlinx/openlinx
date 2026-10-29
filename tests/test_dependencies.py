@@ -33,8 +33,8 @@ TELEMETRY_AND_LLM_SDKS = (
 
 def runtime_requirements() -> list[Requirement]:
     found: list[Requirement] = []
-    walked = {"spider"}
-    to_walk = ["spider"]
+    walked = {"openlinx"}
+    to_walk = ["openlinx"]
     while to_walk:
         for line in metadata.requires(to_walk.pop()) or []:
             requirement = Requirement(line)

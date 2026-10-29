@@ -1,6 +1,6 @@
 ## Purpose
 
-Defines the Rules that turn a Crawl's data into Issues. It covers the Rule model with fixed guidance, the v0.1 catalogue, overrides in `spider.toml`, each Rule's reproducing query, Issues read live during a Crawl and materialised by the post-crawl pass, stored Issues and Affected URLs, the Health Score, and the `spider rules` Command that lets agents inspect them.
+Defines the Rules that turn a Crawl's data into Issues. It covers the Rule model with fixed guidance, the v0.1 catalogue, overrides in `openlinx.toml`, each Rule's reproducing query, Issues read live during a Crawl and materialised by the post-crawl pass, stored Issues and Affected URLs, the Health Score, and the `linx rules` Command that lets agents inspect them.
 
 ## ADDED Requirements
 
@@ -21,11 +21,11 @@ The categories SHALL be, in this order: `response_codes`, `security`, `titles`, 
 In the scenarios, `{site}` is the origin of the local fixture site.
 
 #### Scenario: Rule ids are unique kebab-case
-- **WHEN** `spider rules list --limit 50` runs
+- **WHEN** `linx rules list --limit 50` runs
 - **THEN** all 42 `id` values match `^[a-z0-9]+(-[a-z0-9]+)*$` and no value appears twice
 
 #### Scenario: Every Rule has its guidance
-- **WHEN** `spider rules list --limit 50` runs
+- **WHEN** `linx rules list --limit 50` runs
 - **THEN** 0 items have an empty `description`, `why_it_matters` or `how_to_fix`
 
 ### Requirement: What Rules apply to
@@ -53,7 +53,7 @@ A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). 
 The Rule catalogue SHALL contain exactly the 42 Rules defined in the category requirements below, with the Issue Type, Priority, population, default thresholds, condition and `detail` keys given there. Column names refer to the `urls` table and to the tables of `030-add-page-data`.
 
 #### Scenario: Catalogue size
-- **WHEN** `spider rules list --limit 50` runs in a Workspace without `[rules]` settings
+- **WHEN** `linx rules list --limit 50` runs in a Workspace without `[rules]` settings
 - **THEN** `total` is 42 and every item has `enabled` true
 
 ### Requirement: Response code Rules
@@ -458,7 +458,7 @@ The `images` category SHALL contain these Rules:
 - **THEN** `image-broken` has no Affected URL for it
 
 ### Requirement: Threshold overrides and disabling Rules
-A table `[rules.<id>]` in the Workspace's `spider.toml` SHALL be able to set:
+A table `[rules.<id>]` in the Workspace's `openlinx.toml` SHALL be able to set:
 
 - `enabled = false` to disable that Rule
 - any of the Rule's thresholds, by name, to a non-negative integer that replaces the default
@@ -466,37 +466,37 @@ A table `[rules.<id>]` in the Workspace's `spider.toml` SHALL be able to set:
 The table name is the Rule id itself. These settings mirror no flag, so `010-add-workspace-and-cli-contract`'s flag-mirroring rule for keys does not apply to them. A disabled Rule SHALL NOT be evaluated and SHALL produce no Issue.
 
 #### Scenario: Raised title limit
-- **WHEN** `spider.toml` has `[rules.title-too-long]` with `max_chars = 70`, and an analysed Page has `title_1_length` 65
+- **WHEN** `openlinx.toml` has `[rules.title-too-long]` with `max_chars = 70`, and an analysed Page has `title_1_length` 65
 - **THEN** `title-too-long` has no Affected URL for it
 
 #### Scenario: Disabled Rule produces no Issue
-- **WHEN** `spider.toml` has `[rules.h2-missing]` with `enabled = false`, and a Crawl of the fixture site with Pages without `<h2>` ends as `completed`
+- **WHEN** `openlinx.toml` has `[rules.h2-missing]` with `enabled = false`, and a Crawl of the fixture site with Pages without `<h2>` ends as `completed`
 - **THEN** `issues` holds no row for `h2-missing`
 
 #### Scenario: Override shown by the rules Command
-- **WHEN** `spider.toml` has `[rules.title-too-long]` with `max_chars = 70` and `spider rules show title-too-long` runs
+- **WHEN** `openlinx.toml` has `[rules.title-too-long]` with `max_chars = 70` and `linx rules show title-too-long` runs
 - **THEN** its output has `thresholds.max_chars` equal to `{"value": 70, "default": 60, "unit": "characters"}`
 
 ### Requirement: Invalid Rule configuration is rejected
-Any Command that loads the Workspace's `spider.toml` SHALL fail with the settings error of `010-add-workspace-and-cli-contract` (exit code 3, error code `settings_invalid`), which is checked when the settings load. It SHALL do so in any of these cases:
+Any Command that loads the Workspace's `openlinx.toml` SHALL fail with the settings error of `010-add-workspace-and-cli-contract` (exit code 3, error code `settings_invalid`), which is checked when the settings load. It SHALL do so in any of these cases:
 
 - `[rules]` names an unknown Rule id
 - a Rule table has a key other than `enabled` or one of that Rule's threshold names
 - a threshold is not a non-negative integer
 - `enabled` is not a boolean
 
-Each problem's `details.errors[].key` SHALL be the dotted key, for example `rules.title-to-long`, and the hint SHALL name the closest known Rule id or key when there is one. `spider crawl` SHALL fail before any URL is requested.
+Each problem's `details.errors[].key` SHALL be the dotted key, for example `rules.title-to-long`, and the hint SHALL name the closest known Rule id or key when there is one. `linx crawl` SHALL fail before any URL is requested.
 
 #### Scenario: Misspelt Rule id
-- **WHEN** `spider.toml` has `[rules.title-to-long]` and `spider rules list` runs
+- **WHEN** `openlinx.toml` has `[rules.title-to-long]` and `linx rules list` runs
 - **THEN** the exit code is 3, the error has the code `settings_invalid` and `details.errors[0].key` `"rules.title-to-long"`, and the hint contains `title-too-long`
 
 #### Scenario: Negative threshold
-- **WHEN** `spider.toml` has `[rules.low-word-count]` with `min_words = -5` and `spider crawl {site}/` runs
+- **WHEN** `openlinx.toml` has `[rules.low-word-count]` with `min_words = -5` and `linx crawl {site}/` runs
 - **THEN** the exit code is 3, `details.errors[0].key` is `"rules.low-word-count.min_words"`, and the fixture site receives 0 requests
 
 #### Scenario: Unknown key
-- **WHEN** `spider.toml` has `[rules.h2-missing]` with `max_chars = 10` and `spider rules list` runs
+- **WHEN** `openlinx.toml` has `[rules.h2-missing]` with `max_chars = 10` and `linx rules list` runs
 - **THEN** the exit code is 3 and `details.errors[0].key` is `"rules.h2-missing.max_chars"`
 
 ### Requirement: Rule configuration is fixed per Crawl
@@ -504,7 +504,7 @@ When a Crawl starts, it SHALL resolve every Rule's enabled state and effective t
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
-| `id` | TEXT, primary key | no | | The Rule id, as typed in `spider rules show` and `spider.toml` |
+| `id` | TEXT, primary key | no | | The Rule id, as typed in `linx rules show` and `openlinx.toml` |
 | `category` | TEXT | no | the categories of the Rule model | The Rule's category |
 | `issue_type` | TEXT | no | `issue`, `warning`, `opportunity` | The Issue Type of the Rule's Issues |
 | `priority` | TEXT | no | `high`, `medium`, `low` | The Priority of the Rule's Issues |
@@ -516,10 +516,10 @@ When a Crawl starts, it SHALL resolve every Rule's enabled state and effective t
 | `how_to_fix` | TEXT | no | | How to fix its Issues |
 | `reproduce_sql` | TEXT | no | | The Rule's reproducing query (see "Rules are SQL queries") |
 
-The Crawl SHALL use this configuration throughout, including after `resume`. Editing `spider.toml` later SHALL NOT change the Issues stored for an existing Crawl. v0.1 has no Command that recomputes them; `rules apply` arrives in v0.2.
+The Crawl SHALL use this configuration throughout, including after `resume`. Editing `openlinx.toml` later SHALL NOT change the Issues stored for an existing Crawl. v0.1 has no Command that recomputes them; `rules apply` arrives in v0.2.
 
 #### Scenario: Keys of the Rule tables
-- **WHEN** `spider schema rules` and `spider schema affected_urls` run
+- **WHEN** `linx schema rules` and `linx schema affected_urls` run
 - **THEN** the columns with `primary_key` true are `id` of `rules`, with the type `TEXT`, and `rule_id` and `url_id` of `affected_urls`, whose `references` are `rules.id` and `urls.id`
 
 #### Scenario: Crawl records the thresholds it used
@@ -527,18 +527,18 @@ The Crawl SHALL use this configuration throughout, including after `resume`. Edi
 - **THEN** its `rules` row for `low-word-count` has `thresholds` `{"min_words": 300}`
 
 #### Scenario: Later edits do not change a completed Crawl
-- **WHEN** a Crawl ended as `completed` with the default `min_words` and `spider.toml` then sets `min_words = 5000`
+- **WHEN** a Crawl ended as `completed` with the default `min_words` and `openlinx.toml` then sets `min_words = 5000`
 - **THEN** that Crawl's `issues` and `affected_urls` rows for `low-word-count` are unchanged
 
 #### Scenario: Resumed Crawl keeps the recorded configuration
-- **WHEN** a Crawl started with `min_words = 300` stops at its `--max-urls` limit, `spider.toml` is changed to `min_words = 50`, and the Crawl is resumed through the Crawl Service with a higher limit
+- **WHEN** a Crawl started with `min_words = 300` stops at its `--max-urls` limit, `openlinx.toml` is changed to `min_words = 50`, and the Crawl is resumed through the Crawl Service with a higher limit
 - **THEN** an Indexable Page with `word_count` 120 written after the resume is an Affected URL of `low-word-count`
 
 ### Requirement: Rules are SQL queries
 Every Rule SHALL have a reproducing query and SHALL be evaluated only by it. The query is one read-only SQL `SELECT` over the public schema that returns the Rule's Affected URLs in a crawl file, as the columns `url_id` and `detail`.
 - It SHALL read only stored columns, and the Rule's effective thresholds from the Crawl's `rules` row, so its text is the same in every Workspace and gives the right answer under overrides.
 - A query that leaves out a value the Rule's condition would otherwise match SHALL say why in an SQL comment, as the queries of `internal-no-response` and `image-broken` do for `record_failed`.
-- The `rules` table stores it in `reproduce_sql`, and `spider rules list` and `show` print it.
+- The `rules` table stores it in `reproduce_sql`, and `linx rules list` and `show` print it.
 
 No Rule SHALL be evaluated while a URL is recorded: this change registers no per-response handler, and the Crawl's writer writes no Affected URL while the Crawl runs.
 
@@ -547,7 +547,7 @@ No Rule SHALL be evaluated while a URL is recorded: this change registers no per
 - **THEN** for every Rule the rows returned equal the Rule's `affected_urls` rows, with `detail` compared as JSON
 
 #### Scenario: The rules Command prints the reproducing query
-- **WHEN** a Crawl has started in a Workspace, and `spider rules show title-missing` runs in that Workspace
+- **WHEN** a Crawl has started in a Workspace, and `linx rules show title-missing` runs in that Workspace
 - **THEN** its `reproduce_sql` equals the `reproduce_sql` of the Crawl's `rules` row for `title-missing`
 
 ### Requirement: Issues of a Crawl without a final pass
@@ -618,11 +618,11 @@ The Issues SHALL be a view `issues` over `rules` and `affected_urls`, with one r
 - **THEN** `issues` holds no row for `title-multiple`
 
 #### Scenario: Issues is a view
-- **WHEN** `spider schema issues --fields name,kind` runs
+- **WHEN** `linx schema issues --fields name,kind` runs
 - **THEN** `items` is `[{"name":"issues","kind":"view"}]`
 
 #### Scenario: Indexes of affected_urls
-- **WHEN** `spider schema affected_urls --fields indexes` runs
+- **WHEN** `linx schema affected_urls --fields indexes` runs
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"affected_urls_url_id","columns":["url_id"],"unique":false,"where":null}`
 
 ### Requirement: Health Score
@@ -673,7 +673,7 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** `health_score` is NULL
 
 #### Scenario: Health fields are derived
-- **WHEN** `spider schema crawl` runs
+- **WHEN** `linx schema crawl` runs
 - **THEN** the columns `health_score`, `health_internal_page_count`, `health_affected_page_count` and `health_calculated_at` have `nullable` `true` and a `description` that starts with `Derived: `
 
 #### Scenario: Health Score of a Segment
@@ -685,41 +685,41 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** `health_score` is 75
 
 ### Requirement: List Rules
-`spider rules` and `spider rules list` SHALL print the Rules as configured in the current Workspace, without reading any Crawl. The output SHALL follow the output contract of `010-add-workspace-and-cli-contract`: the paging envelope `{total, items, next_cursor}` and the `--fields`, `--limit`, `--cursor` and `--format` options. Items SHALL be in catalogue order: by category, in the order of the Rule model, then in the order the Rules appear in their category's table. Each item SHALL have these fields:
+`linx rules` and `linx rules list` SHALL print the Rules as configured in the current Workspace, without reading any Crawl. The output SHALL follow the output contract of `010-add-workspace-and-cli-contract`: the paging envelope `{total, items, next_cursor}` and the `--fields`, `--limit`, `--cursor` and `--format` options. Items SHALL be in catalogue order: by category, in the order of the Rule model, then in the order the Rules appear in their category's table. Each item SHALL have these fields:
 
 - `id`, `category`, `issue_type`, `priority`, `applies_to` and `enabled`
 - `thresholds`: an object that maps each threshold name to `{value, default, unit}`, where the unit is `characters`, `pixels`, `words`, `kilobytes` or `hops`
 - `description`, `why_it_matters`, `how_to_fix` and `reproduce_sql`
 
 #### Scenario: First Rule in the list
-- **WHEN** `spider rules list --limit 1` runs without `[rules]` settings
+- **WHEN** `linx rules list --limit 1` runs without `[rules]` settings
 - **THEN** `items[0].id` is `internal-4xx`, `items[0].category` is `response_codes` and `next_cursor` is not null
 
 #### Scenario: Rule without thresholds
-- **WHEN** `spider rules list --limit 50` runs
+- **WHEN** `linx rules list --limit 50` runs
 - **THEN** the item with `id` `title-missing` has `thresholds` `{}`
 
 #### Scenario: Disabled Rule is listed
-- **WHEN** `spider.toml` has `[rules.url-parameters]` with `enabled = false` and `spider rules list --limit 50` runs
+- **WHEN** `openlinx.toml` has `[rules.url-parameters]` with `enabled = false` and `linx rules list --limit 50` runs
 - **THEN** the item with `id` `url-parameters` has `enabled` false
 
 ### Requirement: Show one Rule
-`spider rules show <id>` SHALL print one JSON object with the same fields as a list item. An unknown id SHALL fail with the error code `rule_not_found`, which maps to exit code 4 under the rules of `010-add-workspace-and-cli-contract`. Its `message` SHALL contain the id and its `hint` SHALL mention `spider rules list`.
+`linx rules show <id>` SHALL print one JSON object with the same fields as a list item. An unknown id SHALL fail with the error code `rule_not_found`, which maps to exit code 4 under the rules of `010-add-workspace-and-cli-contract`. Its `message` SHALL contain the id and its `hint` SHALL mention `linx rules list`.
 
 #### Scenario: Show a Rule with thresholds
-- **WHEN** `spider rules show title-too-long` runs without `[rules]` settings
+- **WHEN** `linx rules show title-too-long` runs without `[rules]` settings
 - **THEN** it exits 0 and prints `category` `titles`, `issue_type` `opportunity`, `priority` `medium` and `thresholds` `{"max_chars": {"value": 60, "default": 60, "unit": "characters"}}`
 
 #### Scenario: Unknown Rule id
-- **WHEN** `spider rules show nope` runs
-- **THEN** the exit code is 4, the error has the code `rule_not_found`, its `message` contains `nope` and its `hint` contains `spider rules list`
+- **WHEN** `linx rules show nope` runs
+- **THEN** the exit code is 4, the error has the code `rule_not_found`, its `message` contains `nope` and its `hint` contains `linx rules list`
 
 #### Scenario: Windows console output
-- **WHEN** `spider rules show title-too-long` runs as a subprocess on Windows with console code page 1251
+- **WHEN** `linx rules show title-too-long` runs as a subprocess on Windows with console code page 1251
 - **THEN** its stdout bytes decode as UTF-8 into a JSON object whose `id` is `title-too-long`
 
 ### Requirement: Documented Rule tables
-`spider schema` SHALL list the tables `rules` and `affected_urls` with the `kind` `table`, the view `issues` with the `kind` `view`, and the four `health_*` fields of the `crawl` table, following the conventions of `018-add-schema-conventions`:
+`linx schema` SHALL list the tables `rules` and `affected_urls` with the `kind` `table`, the view `issues` with the `kind` `view`, and the four `health_*` fields of the `crawl` table, following the conventions of `018-add-schema-conventions`:
 
 - `references` for `rule_id` and `url_id`
 - the `json` format for `thresholds` and `detail`, and the `boolean` format for `enabled`
@@ -730,9 +730,9 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 `docs/schema.md` SHALL document them as `018-add-schema-conventions` requires.
 
 #### Scenario: Issue Types are an enumeration
-- **WHEN** `spider schema issues` runs
+- **WHEN** `linx schema issues` runs
 - **THEN** the `values` of the column `issue_type` are `["issue","warning","opportunity"]`
 
 #### Scenario: Categories are an enumeration
-- **WHEN** `spider schema rules` runs
+- **WHEN** `linx schema rules` runs
 - **THEN** the `values` of the column `category` are `["response_codes","security","titles","meta_descriptions","headings","canonicals","directives","content","urls","images"]`

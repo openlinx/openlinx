@@ -14,7 +14,7 @@ A slice that needs a new table or column adds it through `018`'s `public_table()
 
 Seams (docs/testing.md):
 - **[CLI]**: seam 1, `CliRunner`
-- **[Subprocess]**: seam 1, real `spider` processes, run on Windows, macOS and Linux in CI unless a task limits the OS
+- **[Subprocess]**: seam 1, real `linx` processes, run on Windows, macOS and Linux in CI unless a task limits the OS
 - **[Services]**: seam 2, the Crawl Service and the store API with a temporary Workspace
 - **[HTTP]**: seam 3, the real crawler against the fixture site, asserting on its request log
 - **[3+6]**: run the Commands, then read the documented tables read-only
@@ -26,7 +26,7 @@ Seams (docs/testing.md):
 
 - [ ] 1.1 [Subprocess] Drive "A foreground Crawl in another terminal is stopped", after `020`'s `stopped` end (task 9.7 or 13.1, whichever lands first) and post-crawl passes on a stop (task 9.16). It covers:
   - the `stop` Command
-  - the `control_requests` table (`id`, `kind`, `requested_at`, `requested_by_pid`) declared with `info={"control": True}`, and `write_control` in `spider.store.control` over the `control` connection role (design D12)
+  - the `control_requests` table (`id`, `kind`, `requested_at`, `requested_by_pid`) declared with `info={"control": True}`, and `write_control` in `openlinx.store.control` over the `control` connection role (design D12)
   - the crawl process checking for requests every second through a read-only unit on `run_async`, and calling `context.stop.set("requested")` (design D6)
 - [ ] 1.2 [Services] Drive "A control write cannot change other tables": the authorizer of `write_control`.
 - [ ] 1.3 [3+6] Drive "A stop request is recorded as handled": the `handled_at` column.
@@ -37,7 +37,7 @@ Seams (docs/testing.md):
 - [ ] 1.8 [Subprocess] Drive "A request that outlasts the grace period stays queued", after `020` task 13.5.
 - [ ] 1.9 [CLI] Drive "Stopping a completed Crawl changes nothing".
 - [ ] 1.10 [Subprocess] Drive "A Crawl waiting for the network stops at once": a stop request ends `020`'s network pause without waiting for the next probe, after `020` task 12.17.
-- [ ] 1.11 Docs: start `docs/crawl-control.md` with the Crawl State transitions, `stop_requested` and `spider stop`.
+- [ ] 1.11 Docs: start `docs/crawl-control.md` with the Crawl State transitions, `stop_requested` and `linx stop`.
 - [ ] 1.12 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Status, rate and ETA
@@ -59,11 +59,11 @@ Seams (docs/testing.md):
 
 ## 3. Dead processes
 
-- [ ] 3.1 [Subprocess] Drive "A killed Crawl is reported as interrupted". Add the writer claim in `spider.store.claim`, taken where `create_crawl` claims the id, before `<id>.sqlite` is created, and `check_writer`, which records `interrupted` under the claim through `020`'s `set_state` with `running` → `interrupted` added to `TRANSITIONS` (design D12).
+- [ ] 3.1 [Subprocess] Drive "A killed Crawl is reported as interrupted". Add the writer claim in `openlinx.store.claim`, taken where `create_crawl` claims the id, before `<id>.sqlite` is created, and `check_writer`, which records `interrupted` under the claim through `020`'s `set_state` with `running` → `interrupted` added to `TRANSITIONS` (design D12).
 - [ ] 3.2 [Subprocess, Windows in CI] Drive "A Crawl ended with TerminateProcess is reported as interrupted (Windows)".
 - [ ] 3.3 [3+6] Drive "The interrupted state is recorded": the `crawl_runs.end_state` column.
-- [ ] 3.4 [Services + Fake clock] Drive "A stale heartbeat is reported as a warning", with the test process holding the claim through `spider.store.claim`.
-- [ ] 3.5 [Services] Drive "A Crawl being created is not the latest" (`crawl-store`): `_latest` skips a newest file whose `user_version` is 0 while its claim is held, with the test process holding the claim through `spider.store.claim`; `015`'s "A broken newest file is reported, not skipped" still passes (design D12).
+- [ ] 3.4 [Services + Fake clock] Drive "A stale heartbeat is reported as a warning", with the test process holding the claim through `openlinx.store.claim`.
+- [ ] 3.5 [Services] Drive "A Crawl being created is not the latest" (`crawl-store`): `_latest` skips a newest file whose `user_version` is 0 while its claim is held, with the test process holding the claim through `openlinx.store.claim`; `015`'s "A broken newest file is reported, not skipped" still passes (design D12).
 - [ ] 3.6 Docs: document dead-process detection, `heartbeat_stale` and a Crawl being created in `docs/crawl-control.md`.
 - [ ] 3.7 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
@@ -85,7 +85,7 @@ Seams (docs/testing.md):
 - [ ] 4.14 [Subprocess] Drive "Two resumes at the same time": claim acquisition with a 2-second retry.
 - [ ] 4.15 [Subprocess, Windows in CI] Drive "A killed Crawl can be resumed at once (Windows)", including that no URL `fetched` before the kill is requested again.
 - [ ] 4.16 [Subprocess, POSIX in CI] Drive "A killed Crawl can be resumed at once (macOS and Linux)", with the same check.
-- [ ] 4.17 Docs: document `spider resume` (the Crawl States it accepts, what may change, the URL limit, the proxy variables) in `docs/crawl-control.md`.
+- [ ] 4.17 Docs: document `linx resume` (the Crawl States it accepts, what may change, the URL limit, the proxy variables) in `docs/crawl-control.md`.
 - [ ] 4.18 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Background Crawls
@@ -115,7 +115,7 @@ Seams (docs/testing.md):
 - [ ] 6.1 Verify that every `#### Scenario:` that groups 1–5 drive, in `specs/crawl-control/spec.md` and `specs/crawl-store/spec.md` (its three new ones included), has exactly one test named after it, with a small script over the test ids. The scenarios of groups 7–11 are checked when their release builds them.
 - [ ] 6.2 [Subprocess] The end-to-end CI test on Windows, macOS and Linux (ROADMAP, 060-min): `crawl --detach` → `status` → `issues`, with a `sql` query while the Crawl is still running, then `stop`, after `050`'s `issues` and `sql`.
 - [ ] 6.3 Verify that the whole suite, including the subprocess scenarios, passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
-- [ ] 6.4 **Guard:** every v0.1 code this change declares (design D14) is listed by `spider commands` with its level and exit code, at the CLI seam. The v0.2 codes join the guard in the slices that raise them.
+- [ ] 6.4 **Guard:** every v0.1 code this change declares (design D14) is listed by `linx commands` with its level and exit code, at the CLI seam. The v0.2 codes join the guard in the slices that raise them.
 - [ ] 6.5 Review: run the code-review skill on groups 1–6 against `specs/crawl-control/spec.md`, then refactor with the whole suite green.
 
 ## 7. (v0.1.1) Crawls started without a command line
@@ -126,7 +126,7 @@ Seams (docs/testing.md):
 
 - [ ] 8.1 [CLI] Drive "Redacted credentials must be given again": `secrets_required` for secrets that came from flags.
 - [ ] 8.2 [HTTP] Drive "Credentials given again are used".
-- [ ] 8.3 [HTTP] Drive "Credentials from spider.toml are read again".
+- [ ] 8.3 [HTTP] Drive "Credentials from openlinx.toml are read again".
 - [ ] 8.4 [Subprocess] Drive "A secret is not on the background command line": secrets handed over in one environment variable, which the child removes after reading.
 - [ ] 8.5 Docs: document the credential overrides of `resume` and secrets in `docs/crawl-control.md`.
 - [ ] 8.6 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
@@ -140,13 +140,13 @@ Seams (docs/testing.md):
 
 ## 10. (v0.2) Dry run, estimate and equivalent command
 
-- [ ] 10.1 [CLI] Drive "The resolved config is printed": `--dry-run` reusing `020`'s `plan_crawl` (validation and config resolution, `spider.services.crawling`).
+- [ ] 10.1 [CLI] Drive "The resolved config is printed": `--dry-run` reusing `020`'s `plan_crawl` (validation and config resolution, `openlinx.services.crawling`).
 - [ ] 10.2 [CLI] Drive "A dry run writes nothing".
 - [ ] 10.3 [CLI] Drive "Invalid arguments fail as in a real Crawl".
 - [ ] 10.4 [Pure] Drive "Quoting for POSIX shells": the command renderer, with its flag order and default suppression.
 - [ ] 10.5 [Pure] Drive "Quoting for PowerShell".
 - [ ] 10.6 [Pure] Drive "A Windows list path is quoted for PowerShell (Windows)".
-- [ ] 10.7 [CLI] Drive "A setting from spider.toml becomes a flag".
+- [ ] 10.7 [CLI] Drive "A setting from openlinx.toml becomes a flag".
 - [ ] 10.8 [CLI] Drive "Settings that are not flags are reported": `settings_not_in_command`.
 - [ ] 10.9 [CLI] Drive "Proxy variables are left to the environment".
 - [ ] 10.10 [CLI] Drive "A relative list path becomes absolute".

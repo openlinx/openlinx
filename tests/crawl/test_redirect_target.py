@@ -2,8 +2,8 @@
 
 import pytest
 
-from spider.crawl.following import redirect_target
-from spider.crawl.urls import NormalizedUrl
+from openlinx.crawl.following import redirect_target
+from openlinx.crawl.urls import NormalizedUrl
 
 _URL = NormalizedUrl("http://site.test/dir/page")
 

@@ -6,13 +6,13 @@ from pathlib import Path
 import pytest
 from sqlalchemy import delete, update
 
-from spider.output.diagnostics import SpiderError
-from spider.store.crawls import set_state
-from spider.store.records import CrawlFile
-from spider.store.schema import crawl as crawl_table
-from spider.store.selection import resolve_crawl
-from spider.store.writer import CrawlWriter
-from spider.workspace.discovery import resolve_workspace
+from openlinx.output.diagnostics import OpenLinxError
+from openlinx.store.crawls import set_state
+from openlinx.store.records import CrawlFile
+from openlinx.store.schema import crawl as crawl_table
+from openlinx.store.selection import resolve_crawl
+from openlinx.store.writer import CrawlWriter
+from openlinx.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
 from tests.support.crawls import STARTED_AT, create_crawl_at, current_workspace
 from tests.support.workspace import TempWorkspace
@@ -74,7 +74,7 @@ def test_companion_files_are_not_crawls(temp_workspace: TempWorkspace) -> None:
 
 
 def test_no_crawls(temp_workspace: TempWorkspace) -> None:
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_latest(temp_workspace)
 
     assert (raised.value.code, raised.value.exit_code) == ("no_crawls", 4)
@@ -84,7 +84,7 @@ def test_unknown_id(temp_workspace: TempWorkspace) -> None:
     create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
     workspace = current_workspace(temp_workspace)
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_crawl("20260101-000000-zzzz", workspace=workspace, cwd=temp_workspace.root)
 
     assert (raised.value.code, raised.value.exit_code) == ("crawl_not_found", 4)
@@ -93,7 +93,7 @@ def test_unknown_id(temp_workspace: TempWorkspace) -> None:
 def test_malformed_reference(temp_workspace: TempWorkspace) -> None:
     workspace = current_workspace(temp_workspace)
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_crawl("yesterday", workspace=workspace, cwd=temp_workspace.root)
 
     assert (raised.value.code, raised.value.exit_code) == ("invalid_value", 2)
@@ -104,7 +104,7 @@ def test_not_a_crawl_file(temp_workspace: TempWorkspace) -> None:
     notes.write_text("hello", encoding="utf-8")
     workspace = current_workspace(temp_workspace)
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_crawl(str(notes), workspace=workspace, cwd=temp_workspace.root)
 
     assert (
@@ -119,7 +119,7 @@ def test_a_crawl_file_without_its_crawl_row(temp_workspace: TempWorkspace) -> No
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         writer.run(executing(delete(crawl_table)))
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_latest(temp_workspace)
 
     assert raised.value.code == "crawl_file_invalid"
@@ -129,7 +129,7 @@ def test_a_missing_crawl_file_path(temp_workspace: TempWorkspace) -> None:
     missing = temp_workspace.root / "none.sqlite"
     workspace = current_workspace(temp_workspace)
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_crawl("none.sqlite", workspace=workspace, cwd=temp_workspace.root)
 
     assert (
@@ -145,7 +145,7 @@ def test_a_crawl_file_that_holds_another_id(temp_workspace: TempWorkspace) -> No
         writer.run(executing(update(crawl_table).values(id="20260927-090000-zzzz")))
     workspace = current_workspace(temp_workspace)
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_crawl("20260927-100000-aaaa", workspace=workspace, cwd=temp_workspace.root)
 
     assert (raised.value.code, raised.value.diagnostic.details) == (
@@ -168,7 +168,7 @@ def test_latest_that_holds_another_id(temp_workspace: TempWorkspace) -> None:
     newest = create_crawl_at(temp_workspace, "2026-09-27T11:00:00.000Z", "bbbb")
     holding_another_id(newest, "20260927-090000-zzzz")
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_latest(temp_workspace)
 
     assert (raised.value.code, raised.value.diagnostic.details["expected_id"]) == (
@@ -184,7 +184,7 @@ def test_a_same_second_file_that_holds_another_id_is_reported(
     loser = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.100Z", "zzzz")
     holding_another_id(loser, "20260927-090000-yyyy")
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_latest(temp_workspace)
 
     assert raised.value.diagnostic.details["file"] == str(loser.path)
@@ -207,7 +207,7 @@ def test_a_broken_newest_file_is_reported_not_skipped(temp_workspace: TempWorksp
     crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
     (crawl.path.parent / "20260927-110000-bbbb.sqlite").write_bytes(b"")
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_latest(temp_workspace)
 
     assert (raised.value.code, Path(raised.value.diagnostic.details["file"]).name) == (
@@ -221,10 +221,10 @@ def test_reading_creates_nothing(temp_workspace: TempWorkspace) -> None:
     notes.mkdir()
     workspace = resolve_workspace(cwd=notes, flag=None, home=temp_workspace.home)
 
-    with pytest.raises(SpiderError):
+    with pytest.raises(OpenLinxError):
         resolve_crawl("latest", workspace=workspace, cwd=notes)
 
-    assert (workspace.is_global, (temp_workspace.home / ".spider").exists()) == (True, False)
+    assert (workspace.is_global, (temp_workspace.home / ".openlinx").exists()) == (True, False)
 
 
 def test_a_sqlite_file_not_named_by_an_id_is_not_a_crawl(temp_workspace: TempWorkspace) -> None:

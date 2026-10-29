@@ -1,21 +1,21 @@
 # Crawling
 
-How `spider crawl` decides what a URL is, which URLs it requests and how it records them. The spec is [openspec/specs/crawling/spec.md](../openspec/specs/crawling/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
+How `linx crawl` decides what a URL is, which URLs it requests and how it records them. The spec is [openspec/specs/crawling/spec.md](../openspec/specs/crawling/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
-## The `spider crawl` Command
+## The `linx crawl` Command
 
-`spider crawl <url>` crawls a site in Spider mode from one Seed, in the foreground, and records every URL in a new crawl file of the Workspace (`.spider/crawls/<crawl id>.sqlite`). The Seed is an http or https URL, or a host such as `site.test`, which gets `https://` (see [Seeds](#seeds)); it is written to `seeds` as given.
+`linx crawl <url>` crawls a site in Spider mode from one Seed, in the foreground, and records every URL in a new crawl file of the Workspace (`.openlinx/crawls/<crawl id>.sqlite`). The Seed is an http or https URL, or a host such as `site.test`, which gets `https://` (see [Seeds](#seeds)); it is written to `seeds` as given.
 
 ```
-spider crawl site.test
-spider crawl https://site.test/shop/ --concurrency 2
+linx crawl site.test
+linx crawl https://site.test/shop/ --concurrency 2
 ```
 
 The Crawl requests the Seed, reads the Links of each response it parses, follows the hyperlinks in its Scope and checks the others, unless they are skipped (see [External URLs](#external-urls)), Crawl Depth by Crawl Depth (see [Crawl Depth](#crawl-depth)): every followed URL at one depth is done before any followed URL one deeper starts, and the URLs of a depth start in the order they were first recorded (`urls.id`), several at a time (see [Requests in flight](#requests-in-flight)). The `urls` table is the queue: a URL waits there as `queued` until its response is recorded, and a URL found twice is recorded once. A response is parsed for Links when its URL is in the Scope, its status is 2xx and its `Content-Type` is HTML (`text/html` or `application/xhtml+xml`); a PDF, an image, a response without a `Content-Type` or the response of an External URL is recorded but not parsed.
 
 ### Options and `[crawl]` settings
 
-Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` table of `spider.toml`, named after the option's long name without its dashes and with `-` as `_`. A flag beats `spider.toml`, which beats the built-in default. `crawl.config` records the resolved value of every setting of every table, secrets as `***`.
+Every crawl setting is an option of `linx crawl` and a key of the `[crawl]` table of `openlinx.toml`, named after the option's long name without its dashes and with `-` as `_`. A flag beats `openlinx.toml`, which beats the built-in default. `crawl.config` records the resolved value of every setting of every table, secrets as `***`.
 
 | Option | `[crawl]` key | Default | Meaning |
 |---|---|---|---|
@@ -35,8 +35,8 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | `--timeout <s>` | `timeout` | `20` | Seconds within which a request attempt, its body included, must complete: a finite number above 0 (see [Timeouts and retries](#timeouts-and-retries)). |
 | `--retries <n>` | `retries` | `2` | How many times, 0 to 10, a request that timed out, could not connect or got a 429 or 5xx status is tried again (see [Timeouts and retries](#timeouts-and-retries)). |
 | `--max-redirects <n>` | `max_redirects` | `10` | The most consecutive redirects followed from the first URL of a Redirect Chain, 0 to 50 (see [The hop limit](#the-hop-limit)). |
-| `--user-agent <string>` | `user_agent` | `spider/<version> (+<project URL>)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
-| `--robots-user-agent <token>` | `robots_user_agent` | `spider` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
+| `--user-agent <string>` | `user_agent` | `OpenLinx/<version> (+<project URL>)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
+| `--robots-user-agent <token>` | `robots_user_agent` | `linx` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
 `--workspace` and `--format` are the global flags of every Command.
 
@@ -62,7 +62,7 @@ The Seed has `crawl_depth` = 0, and every other URL the fewest Links followed fr
 
 With `--max-depth <n>`, a URL deeper than `n` is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_depth`. Resources of followed Pages are the exception, one deeper than `n` and no deeper, so with `--max-depth 0` the Seed's images are still checked. A URL that a Page reaches through a Resource Link is a Resource, even when that Page or another Page at the same depth or above hyperlinked it first, while it was not yet requested: an image that a gallery hyperlinks is still checked beyond the limit. There is no depth limit by default.
 
-The rows of `spider crawl site.test --max-depth 1`, for a Seed that links to `/a` and holds `/logo.png`, where `/a` links to `/b` and holds `/a.png`:
+The rows of `linx crawl site.test --max-depth 1`, for a Seed that links to `/a` and holds `/logo.png`, where `/a` links to `/b` and holds `/a.png`:
 
 ```
 http://site.test/          depth 0, fetched
@@ -80,10 +80,10 @@ There is no URL limit by default. With `--max-urls <n>`, the Crawl starts at mos
 - A request counts from the moment it starts, so requests in flight count. A URL recorded without a request, such as an excluded one, does not count, and neither do robots.txt requests.
 - At the first request the limit refuses, nothing new starts. The requests in flight get the grace of [Stopping a Crawl](#stopping-a-crawl), and every URL not requested stays `queued`. So a request that runs past the grace leaves its URL `queued`, and the Crawl may record fewer than `n` URLs; a continue requests it.
 - The Crawl ends `stopped` with `crawl.stop_reason` = `max_urls`, and exits with code 0. Its post-crawl passes have run, as for a `completed` Crawl.
-- The result holds a `max_urls_reached` warning whose hint is the command that continues the Crawl with twice the limit, such as `spider resume --crawl 20261014-101500-k3f9 --max-urls 6`.
+- The result holds a `max_urls_reached` warning whose hint is the command that continues the Crawl with twice the limit, such as `linx resume --crawl 20261014-101500-k3f9 --max-urls 6`.
 - A site with exactly `n` URLs ends `completed`, since no request was refused.
 
-A value below 1 is rejected with `invalid_value` (exit 2) on the command line, and with `settings_invalid` (exit 3) in `spider.toml`.
+A value below 1 is rejected with `invalid_value` (exit 2) on the command line, and with `settings_invalid` (exit 3) in `openlinx.toml`.
 
 ### Events
 
@@ -132,7 +132,7 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
  "started_at": "2026-10-14T10:15:00.123Z", "ended_at": "2026-10-14T10:15:04.456Z", "duration_s": 4.333,
  "urls": {"discovered": 4, "fetched": 4, "errors": 0, "skipped": 0, "queued": 0}, "pages": 3,
  "status_classes": {"2xx": 3, "3xx": 0, "4xx": 1, "5xx": 0, "other": 0},
- "crawl_file": "/home/me/shop/.spider/crawls/20261014-101500-k3f9.sqlite", "warnings": []}
+ "crawl_file": "/home/me/shop/.openlinx/crawls/20261014-101500-k3f9.sqlite", "warnings": []}
 ```
 
 ### Exit codes
@@ -141,7 +141,7 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 |---|---|---|
 | 0 | the Crawl is `completed`, or `stopped` by `--max-urls` or by `060`'s stop request | |
 | 2 | the Seed is not a valid http or https URL, a pattern is not a valid regular expression, or an option value is not allowed; no crawl file is created | `invalid_url` (with `details.reason`: `malformed`, `unsupported_scheme`, `userinfo`, `missing_host` or `invalid_host`), `invalid_pattern` (with `details.pattern`), `invalid_value`, `option_conflict`, `subfolder_is_root`, `seed_out_of_scope` |
-| 3 | `spider.toml` is invalid | `settings_invalid` |
+| 3 | `openlinx.toml` is invalid | `settings_invalid` |
 | 5 | another connection held the crawl file for longer than the writer waits | `crawl_busy` |
 | 7 | the Workspace or the crawl file cannot be written, or writing the crawl file failed during the Crawl | `workspace_not_writable`, `crawl_not_writable`, `crawl_write_failed` |
 | 8 | the Seed or the site gave no HTTP response within `--network-wait` | `seed_unreachable`, `site_unreachable` |
@@ -160,7 +160,7 @@ A Crawl that cannot go on ends with the Crawl State `failed`. It prints the resu
 | `seed_unreachable` | the Seed's robots.txt or the Seed got no HTTP response, and no probe answered within `--network-wait` | `seed_unreachable` (8) |
 | `site_unreachable` | the network pause gave up: no probe answered within `--network-wait` | `site_unreachable` (8) |
 
-What was recorded so far is kept, URLs not requested stay `queued`, and the post-crawl passes do not run, so the result is a partial one. `details.error` of `crawl_write_failed` says what failed; the hints of `seed_unreachable` and `site_unreachable` say how long the Crawl waited and how to continue it with `spider resume`, and the first that an agent's sandbox often blocks network access. When 100 URLs in a row could not be recorded, `crawl_write_failed` says so, and its hint points to the `record_failed` warning instead of the disk. The end of a write failure is written through a new connection; when that fails too, the crawl file is left `running`.
+What was recorded so far is kept, URLs not requested stay `queued`, and the post-crawl passes do not run, so the result is a partial one. `details.error` of `crawl_write_failed` says what failed; the hints of `seed_unreachable` and `site_unreachable` say how long the Crawl waited and how to continue it with `linx resume`, and the first that an agent's sandbox often blocks network access. When 100 URLs in a row could not be recorded, `crawl_write_failed` says so, and its hint points to the `record_failed` warning instead of the disk. The end of a write failure is written through a new connection; when that fails too, the crawl file is left `running`.
 
 ### Stopping a Crawl
 
@@ -169,7 +169,7 @@ An interrupt stops a foreground Crawl gracefully: Ctrl+C, and on Windows also Ct
 1. The Crawl writes a `stopping` event and starts no new request, a robots.txt request included.
 2. The requests in flight get 10 seconds, the grace, and those still running then are cancelled. A URL whose response was already handed to the writer is recorded; the others stay `queued`. A network pause ends at once, with no probe after the interrupt.
 3. The post-crawl passes run, and the Crawl ends `stopped` with `stop_reason` = `interrupt`.
-4. The Command prints the result, then one error, `interrupted`, whose hint is the command that continues the Crawl, such as `spider resume --crawl 20261014-101500-k3f9`, and exits with code 130.
+4. The Command prints the result, then one error, `interrupted`, whose hint is the command that continues the Crawl, such as `linx resume --crawl 20261014-101500-k3f9`, and exits with code 130.
 
 Every stop takes the same grace, the URL limit's and a failure's too.
 
@@ -204,7 +204,7 @@ The `urls` table is the queue, and nothing else is: a URL leaves `queued` only i
 
 ### Continuing a Crawl
 
-The Crawl Service continues a `stopped` or `failed` Crawl from its crawl file alone; `060`'s `spider resume` calls it, and adds `interrupted` Crawls. A continue:
+The Crawl Service continues a `stopped` or `failed` Crawl from its crawl file alone; `060`'s `linx resume` calls it, and adds `interrupted` Crawls. A continue:
 
 1. builds the Crawl from the file: the `[crawl]` settings from `crawl.config`, the Scope from `crawl.scope` and the Seed from `seeds`, none of them decided again
 2. in one unit, sets `crawl.state` back to `running` with `stop_reason` NULL, writes the settings it runs with into `crawl.config`, and queues again every `error` URL and every URL skipped as `robots_unreachable`, since those outcomes are usually transient
@@ -270,7 +270,7 @@ What normalisation never changes:
 
 ### Seeds
 
-The Seed is the URL given to `spider crawl`. Without a scheme it gets `https://`: `site.test/shop` is the Seed `https://site.test/shop`.
+The Seed is the URL given to `linx crawl`. Without a scheme it gets `https://`: `site.test/shop` is the Seed `https://site.test/shop`.
 
 A Seed has a scheme when it starts with a scheme name and `:`, unless a port number follows the `:`:
 
@@ -292,7 +292,7 @@ The `seeds` table keeps the Seed exactly as given, and `urls` holds its normalis
 - A name is matched after its percent-encodings are normalised, so `utm_*` also removes `utm%5Fsource`.
 
 ```
-spider crawl site.test --strip-params "utm_*,fbclid"
+linx crawl site.test --strip-params "utm_*,fbclid"
 http://site.test/p?utm_source=x&id=7&fbclid=y   ->   http://site.test/p?id=7
 http://site.test/p?a=1&b=2 with "*"               ->   http://site.test/p
 ```
@@ -362,7 +362,7 @@ The Seed's folder is its path up to and including its last `/`: the Seed `http:/
 - **Exclude wins:** a URL that matches both is skipped.
 
 ```
-spider crawl site.test/blog/ --include "/blog/" --exclude "draft"
+linx crawl site.test/blog/ --include "/blog/" --exclude "draft"
 http://site.test/blog/a        in the Scope
 http://site.test/news/n        internal, outside the Scope: checked, not followed
 http://site.test/blog/draft-1  skipped: excluded
@@ -388,7 +388,7 @@ The Crawl records the Scope it resolved in `crawl.scope` when the crawl file is 
 | `include`, `exclude` | the patterns, as given |
 
 ```
-spider crawl site.test/blog/ --scope subfolder --exclude "/draft"
+linx crawl site.test/blog/ --scope subfolder --exclude "/draft"
 {"mode": "subfolder", "hosts": ["site.test", "www.site.test"], "folder": "/blog/", "include": [], "exclude": ["/draft"]}
 ```
 
@@ -398,7 +398,7 @@ An agent reads it to know what a Crawl covered without parsing its command line.
 
 ### The User-Agent header
 
-Every request, robots.txt's included, carries the header `User-Agent: spider/<version> (+<project URL>)`, where the version is the tool's and the project URL its repository's, so a site owner can tell the crawler apart and reach its maintainer. `--user-agent <string>` replaces it on every request. It holds visible ASCII characters, spaces and tabs only: an empty value or one of spaces only, which is empty on the wire, a CR or LF, which would end the header or add one, and a character outside ASCII, which servers and log pipelines misread, are rejected as `invalid_value` (exit code 2), or in `spider.toml` as `settings_invalid` (exit code 3). When it is not given, `crawl.config` records `user_agent` as null; the default it stood for follows from `crawl.tool_version`. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
+Every request, robots.txt's included, carries the header `User-Agent: OpenLinx/<version> (+<project URL>)`, where the version is the tool's and the project URL its repository's, so a site owner can tell the crawler apart and reach its maintainer. `--user-agent <string>` replaces it on every request. It holds visible ASCII characters, spaces and tabs only: an empty value or one of spaces only, which is empty on the wire, a CR or LF, which would end the header or add one, and a character outside ASCII, which servers and log pipelines misread, are rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3). When it is not given, `crawl.config` records `user_agent` as null; the default it stood for follows from `crawl.tool_version`. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
 
 ### Cookies
 
@@ -414,7 +414,7 @@ The `response_headers` table keeps the headers of each URL whose last attempt go
 
 ### Timeouts and retries
 
-- **Timeout:** a request attempt that has not completed within `--timeout` seconds (default 20) fails, its body included, so a server that sends its headers and then the body a byte at a time is cut off too. A URL whose attempts all time out is recorded with `fetch_state` = `error` and `fetch_error` = `timeout`. A value of 0, a negative one or one that is not finite is rejected as `invalid_value` (exit code 2), or in `spider.toml` as `settings_invalid` (exit code 3).
+- **Timeout:** a request attempt that has not completed within `--timeout` seconds (default 20) fails, its body included, so a server that sends its headers and then the body a byte at a time is cut off too. A URL whose attempts all time out is recorded with `fetch_state` = `error` and `fetch_error` = `timeout`. A value of 0, a negative one or one that is not finite is rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3).
 - **Retries:** a request that times out (`timeout`), cannot connect (`connection_refused`, `connection_error`) or gets a 429 or 5xx status is tried again up to `--retries` times (default 2, at most 10), robots.txt's included. A name that does not resolve (`dns_error`), a certificate that does not verify (`tls_error`) and a response that is not HTTP (`invalid_response`) are answers and are not retried, so a dead External domain costs one lookup; nor is any other status: a 404 is requested once. A network-wide outage is the network pause's to wait out, not the retries'.
 - **Backoff:** before retry n the Crawl waits 2^(n-1) seconds, 1, then 2, then 4, with no jitter. A waiting retry holds none of the host's `--concurrency` slots, and each attempt waits its `--rate` turn again.
 - **Retry-After and 429:** a `Retry-After` header on a 429 or 503 response, in seconds or as an HTTP date, sets the wait instead, capped at 120 seconds; a 429 without one waits 10 seconds. During such a wait the host is paused: no request to it starts, the retried one's or any other, with or without `--rate`. The pause comes whether or not the URL has a retry left, with `--retries 0` too.
@@ -464,7 +464,7 @@ FROM urls AS source JOIN urls AS target ON target.id = source.redirect_url_id
 
 ### The hop limit
 
-`--max-redirects <n>` (default 10, at most 50, `crawl.max_redirects`) is the most consecutive redirects the Crawl follows from the first URL of a chain. The target of the next one is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, unrequested. The count is read back from the crawl file, never kept in memory. A Link found later to that URL queues it again, as a URL found through the Link. `--max-redirects 0` follows no redirect. A value above 50 is rejected as `invalid_value`, and in `spider.toml` as `settings_invalid`: a longer chain is a misconfiguration, and each hop is a request.
+`--max-redirects <n>` (default 10, at most 50, `crawl.max_redirects`) is the most consecutive redirects the Crawl follows from the first URL of a chain. The target of the next one is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, unrequested. The count is read back from the crawl file, never kept in memory. A Link found later to that URL queues it again, as a URL found through the Link. `--max-redirects 0` follows no redirect. A value above 50 is rejected as `invalid_value`, and in `openlinx.toml` as `settings_invalid`: a longer chain is a misconfiguration, and each hop is a request.
 
 ### Loops
 
@@ -515,7 +515,7 @@ With `--ignore-robots`, the Crawl requests the URLs that robots.txt disallows an
 
 ### The robots user-agent token
 
-`--robots-user-agent <token>` (default `spider`) selects the robots.txt group that applies, and the `X-Robots-Tag` values with a crawler prefix (see [Robots directives](#robots-directives)). It is independent of the `User-Agent` request header. As RFC 9309 says, a token has only letters, `_` and `-`: any other is rejected, as `invalid_value` (exit code 2), or in `spider.toml` as `settings_invalid` (exit code 3).
+`--robots-user-agent <token>` (default `linx`) selects the robots.txt group that applies, and the `X-Robots-Tag` values with a crawler prefix (see [Robots directives](#robots-directives)). It is independent of the `User-Agent` request header. As RFC 9309 says, a token has only letters, `_` and `-`: any other is rejected, as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3).
 
 ## Links
 
@@ -582,7 +582,7 @@ The Crawl reads the robots directives of every parsed Page from two sources:
 | `x_robots_tag` | every `X-Robots-Tag` response header, joined with `, ` in the order received |
 
 - Directives are comma-separated tokens, compared without case: `NOINDEX` is `noindex`, and `none` means `noindex, nofollow`.
-- A header value that starts with a name and a colon, such as `googlebot: noindex`, applies only to the crawler it names. It applies to this Crawl when the name equals the robots user-agent token (`spider` by default), compared without case.
+- A header value that starts with a name and a colon, such as `googlebot: noindex`, applies only to the crawler it names. It applies to this Crawl when the name equals the robots user-agent token (`linx` by default), compared without case.
 - `unavailable_after:`, `max-snippet:`, `max-image-preview:` and `max-video-preview:` are directives with a value, not crawler names: `unavailable_after: 25 Jun 2030 15:00:00 PST, noindex` gives `noindex`.
 - `<meta>` elements named after one crawler, such as `<meta name="googlebot">`, are not read, nor a robots `<meta>` inside `<noscript>`, which a browser that runs scripts never sees.
 

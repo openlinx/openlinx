@@ -1,11 +1,11 @@
-"""What `spider crawl` reports about robots.txt (020-add-crawl-core D6, crawling; seam 1)."""
+"""What `linx crawl` reports about robots.txt (020-add-crawl-core D6, crawling; seam 1)."""
 
 import json
 from pathlib import Path
 
 import pytest
 
-from spider.naming import DEFAULT_ROBOTS_TOKEN
+from openlinx.naming import DEFAULT_ROBOTS_TOKEN
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site, Status
 from tests.support.cli import run_cli
@@ -67,7 +67,7 @@ def test_a_robots_user_agent_token_outside_rfc_9309_is_rejected(
 def test_a_robots_user_agent_token_outside_rfc_9309_in_the_settings_file_is_refused(
     temp_workspace: TempWorkspace, token: str
 ) -> None:
-    (temp_workspace.root / "spider.toml").write_bytes(
+    (temp_workspace.root / "openlinx.toml").write_bytes(
         f'[crawl]\nrobots_user_agent = "{token}"\n'.encode()
     )
 
@@ -104,7 +104,7 @@ def test_a_robots_user_agent_token_of_rfc_9309_in_the_settings_file_is_taken(
     temp_workspace: TempWorkspace, fixture_site: StartSite, token: str
 ) -> None:
     server = fixture_site(Site(routes={"/": Page(body="<p>/</p>")}))
-    (temp_workspace.root / "spider.toml").write_bytes(
+    (temp_workspace.root / "openlinx.toml").write_bytes(
         f'[crawl]\nrobots_user_agent = "{token}"\n'.encode()
     )
 

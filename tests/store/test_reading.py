@@ -10,16 +10,16 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 
-from spider.output.diagnostics import SpiderError
-from spider.output.reporter import Collected
-from spider.services.crawls import create_crawl
-from spider.store.connections import connect
-from spider.store.crawls import set_state
-from spider.store.reading import read_metadata, reading
-from spider.store.records import CrawlFile
-from spider.store.schema import seeds
-from spider.store.writer import CrawlWriter
-from spider.workspace.discovery import resolve_workspace
+from openlinx.output.diagnostics import OpenLinxError
+from openlinx.output.reporter import Collected
+from openlinx.services.crawls import create_crawl
+from openlinx.store.connections import connect
+from openlinx.store.crawls import set_state
+from openlinx.store.reading import read_metadata, reading
+from openlinx.store.records import CrawlFile
+from openlinx.store.schema import seeds
+from openlinx.store.writer import CrawlWriter
+from openlinx.workspace.discovery import resolve_workspace
 from tests.support.cli import PROCESS_TIMEOUT
 from tests.support.clock import FakeClock
 from tests.support.crawls import STARTED_AT, create_any_crawl, new_crawl, sha256_of
@@ -133,7 +133,7 @@ def crawl_from_a_newer_tool(temp_workspace: TempWorkspace) -> CrawlFile:
 def test_file_from_a_newer_tool(temp_workspace: TempWorkspace) -> None:
     crawl = crawl_from_a_newer_tool(temp_workspace)
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         read_metadata(crawl.path)
 
     assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (
@@ -147,7 +147,7 @@ def test_a_refused_file_is_unchanged(temp_workspace: TempWorkspace) -> None:
     crawl = crawl_from_a_newer_tool(temp_workspace)
     before = sha256_of(crawl.path)
 
-    with pytest.raises(SpiderError):
+    with pytest.raises(OpenLinxError):
         read_metadata(crawl.path)
 
     assert sha256_of(crawl.path) == before
@@ -168,7 +168,7 @@ def test_a_file_held_past_the_timeout_is_reported_as_crawl_busy(
     crawl = create_any_crawl(temp_workspace)
     shm_held(monkeypatch, opens=None)
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         CrawlWriter(crawl.path, FakeClock(), busy_seconds=0.2)
 
     assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (

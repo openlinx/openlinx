@@ -40,19 +40,19 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from spider.clock import SystemClock
-from spider.crawl.scope import scope_rules
-from spider.crawl.urls import NormalizedUrl
-from spider.output.codes import CRAWL_BUSY
-from spider.output.diagnostics import SpiderError
-from spider.output.reporter import Collected
-from spider.services.crawls import create_crawl
-from spider.store.reading import reading
-from spider.store.records import NewCrawl, SecretNames
-from spider.store.schema import origins
-from spider.store.types import Flag, Timestamp
-from spider.store.writer import CrawlWriter, CrawlWriterClosedError
-from spider.workspace.discovery import resolve_workspace
+from openlinx.clock import SystemClock
+from openlinx.crawl.scope import scope_rules
+from openlinx.crawl.urls import NormalizedUrl
+from openlinx.output.codes import CRAWL_BUSY
+from openlinx.output.diagnostics import OpenLinxError
+from openlinx.output.reporter import Collected
+from openlinx.services.crawls import create_crawl
+from openlinx.store.reading import reading
+from openlinx.store.records import NewCrawl, SecretNames
+from openlinx.store.schema import origins
+from openlinx.store.types import Flag, Timestamp
+from openlinx.store.writer import CrawlWriter, CrawlWriterClosedError
+from openlinx.workspace.discovery import resolve_workspace
 
 PAGES = 20_000
 RATE_WINDOW_PAGES = 5_000
@@ -325,7 +325,7 @@ def read_while_written(path: Path, page_count: int, stop: Event, result: Path) -
                 with reading(path) as connection:
                     connection.execute(text(sql), params).all()
                 reads += 1
-            except SpiderError as error:
+            except OpenLinxError as error:
                 if error.code != CRAWL_BUSY.code:
                     raise
                 busy += 1
@@ -421,7 +421,7 @@ def measure(folder: Path, page_count: int) -> dict[str, Any]:
             workspace=workspace,
             crawl_mode="spider",
             seeds=[f"{HOST}/"],
-            command_argv=["spider", "crawl", f"{HOST}/"],
+            command_argv=["linx", "crawl", f"{HOST}/"],
             cwd=folder,
             config={},
             scope=scope_rules(NormalizedUrl(f"{HOST}/")).to_json(),

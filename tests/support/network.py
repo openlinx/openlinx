@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from spider.aio import loop_factory
+from openlinx.aio import loop_factory
 
 
 class NetworkAccessBlocked(OSError):

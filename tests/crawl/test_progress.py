@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any
 
-from spider.output.reporter import Collected
+from openlinx.output.reporter import Collected
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query

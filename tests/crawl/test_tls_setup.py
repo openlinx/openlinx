@@ -9,7 +9,7 @@ import pytest
 import trustme
 import truststore
 
-from spider.crawl.fetch.tls import tls_context
+from openlinx.crawl.fetch.tls import tls_context
 
 # typeshed types every value of a certificate as a string or a tuple.
 type _Subject = tuple[tuple[tuple[str, str], ...], ...]

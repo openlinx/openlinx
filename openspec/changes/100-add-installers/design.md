@@ -35,11 +35,11 @@ Each script declares `PYTHON_VERSION=3.14` (in PowerShell, `$PythonVersion = '3.
 
 ### D3. Install, upgrade and reinstall commands
 The script chooses its command by what `uv tool list` shows:
-- **spider not installed:** `uv tool install --python 3.14 spider`
-- **spider installed, no `--package`:** `uv tool upgrade spider`
+- **OpenLinx not installed:** `uv tool install --python 3.14 openlinx`
+- **OpenLinx installed, no `--package`:** `uv tool upgrade openlinx`
 - **`--package <spec>`:** `uv tool install --python 3.14 --reinstall <spec>`. This covers a wheel file, a pinned version or a git URL.
 
-The old and new versions come from `uv tool list` before and after, and give the `spider <old> -> <new>` line. A later default run upgrades from a pinned spec only after `--package spider` resets it. The docs say so.
+The old and new versions come from `uv tool list` before and after, and give the `linx <old> -> <new>` line. A later default run upgrades from a pinned spec only after `--package openlinx` resets it. The docs say so.
 
 ### D4. Minimum uv version 0.9.0
 This is the first release with stable Python 3.14 downloads. Implementation re-checks the value and keeps it in one constant.
@@ -62,7 +62,7 @@ In both, the default answer is yes.
 - **Parameters:** there is no `[CmdletBinding()]`. The parameters are plain switches plus `-Package`, and leftover arguments land in `$args`. The script then prints usage and returns 2. This gives the same exit code 2 for `-Bogus` as `install.sh` gives for `--bogus`.
 - **Exit:** when the script runs from a file (`$PSCommandPath` is set), it ends with `exit <code>`. Inside an existing session (`iex` or a script block), it sets `$global:LASTEXITCODE` and returns instead, so it never closes the user's window.
 - **Downloads and errors:** the script sets `[Net.ServicePointManager]::SecurityProtocol` to TLS 1.2 or higher for Windows PowerShell 5.1 downloads, and `$ErrorActionPreference = 'Stop'` inside a try block that maps failures to exit codes.
-- **Encoding:** the script saves `[Console]::OutputEncoding`, sets it to UTF-8 while `spider` runs so that paths with non-ASCII characters print correctly, and restores it afterwards.
+- **Encoding:** the script saves `[Console]::OutputEncoding`, sets it to UTF-8 while `linx` runs so that paths with non-ASCII characters print correctly, and restores it afterwards.
 
 ### D8. Output format
 - Steps print as `==> …` lines on stdout.
@@ -74,7 +74,7 @@ This format is plain enough for an agent to parse, and the tests assert on it.
 
 ### D9. The installers' own exit codes: 0, 1, 2 and 10
 - These are separate from the CLI's table in `010-add-workspace-and-cli-contract`.
-- 10 means "installed, but `spider doctor` found a failed check". It sits far from the small codes, so no one confuses it with a CLI code. An agent or CI job can then tell a broken install (1) from a machine problem, such as a blocked network or TLS inspection, that `doctor` already explained.
+- 10 means "installed, but `linx doctor` found a failed check". It sits far from the small codes, so no one confuses it with a CLI code. An agent or CI job can then tell a broken install (1) from a machine problem, such as a blocked network or TLS inspection, that `doctor` already explained.
 - When Codex's `CODEX_SANDBOX_NETWORK_DISABLED=1` is set, the hint for 1 explains the Codex fix. Reading that variable is detection, not a setting.
 
 ### D10. The release gates live in a small Python script
@@ -123,9 +123,9 @@ verify ──► build ──► smoke (ubuntu sh · macos sh · windows powersh
     - the parsed `release.yml` and `docs/installation.md`
     - the static search for `sudo` and `RunAs`
   - **Linters:** `shellcheck -s sh` and PSScriptAnalyzer run in CI.
-- **No test doubles.** Our CLI is never replaced: every test that reaches `spider` runs the real one from the installed wheel. Agents are detected through the `~/.claude` and `~/.codex` folders, so no fake `claude` or `codex` program exists. The failure paths use real conditions:
+- **No test doubles.** Our CLI is never replaced: every test that reaches `linx` runs the real one from the installed wheel. Agents are detected through the `~/.claude` and `~/.codex` folders, so no fake `claude` or `codex` program exists. The failure paths use real conditions:
   - a wheel path that does not exist
-  - a `spider.toml` that makes `doctor` fail
+  - a `openlinx.toml` that makes `doctor` fail
   - a new session without a terminal
 
 ## Risks / Trade-offs
@@ -139,7 +139,7 @@ verify ──► build ──► smoke (ubuntu sh · macos sh · windows powersh
 - **The PyPI name is not settled.**
   - Mitigation: placeholders everywhere. Publishing stays blocked until the name is free on PyPI and GitHub, but nothing else is.
 - **Corporate proxies and TLS inspection.**
-  - Mitigation: uv honours `HTTPS_PROXY` and the system certificate store (with `--native-tls` when needed). The docs cover both, and `spider doctor`'s `tls` check explains failures after install (exit code 10).
+  - Mitigation: uv honours `HTTPS_PROXY` and the system certificate store (with `--native-tls` when needed). The docs cover both, and `linx doctor`'s `tls` check explains failures after install (exit code 10).
 - **GitHub runners have administrator rights,** so "no admin needed" cannot be shown by running without them.
   - Mitigation: the static check, the "only user-scoped locations" rule, and runs with the home folder and all uv folders inside a temporary folder.
 - **A user who pastes `irm … | iex` into a constrained-language-mode session.**

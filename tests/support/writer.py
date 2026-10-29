@@ -5,7 +5,7 @@ from contextlib import suppress
 
 from sqlalchemy import Connection, Executable
 
-from spider.store.writer import CrawlWriter
+from openlinx.store.writer import CrawlWriter
 
 
 def executing(statement: Executable) -> Callable[[Connection], None]:

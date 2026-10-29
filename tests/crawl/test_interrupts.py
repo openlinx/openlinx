@@ -13,12 +13,12 @@ from typing import Any
 
 import pytest
 
-from spider.crawl.engine.hooks import Pass, PassContext
-from spider.crawl.engine.stop import StopSignal
-from spider.output.reporter import Collected
-from spider.services.crawling import CrawlResult
-from spider.services.hooks import default_hooks
-from spider.store.records import StopReason
+from openlinx.crawl.engine.hooks import Pass, PassContext
+from openlinx.crawl.engine.stop import StopSignal
+from openlinx.output.reporter import Collected
+from openlinx.services.crawling import CrawlResult
+from openlinx.services.hooks import default_hooks
+from openlinx.store.records import StopReason
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.server import ServerHandle
@@ -141,7 +141,7 @@ def test_an_interrupt_is_reported_by_one_error(
 
     lines = [json.loads(line) for line in stderr.splitlines()]
     errors = [line for line in lines if line.get("level") == "error"]
-    resume = f"spider resume --crawl {json.loads(stdout)['crawl_id']}"
+    resume = f"linx resume --crawl {json.loads(stdout)['crawl_id']}"
     # An agent is told how to go on, as every other early end of a Crawl tells it.
     assert (
         process.returncode,

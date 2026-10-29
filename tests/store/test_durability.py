@@ -2,9 +2,9 @@
 
 import pytest
 
-from spider.output.diagnostics import SpiderError
-from spider.store.selection import resolve_crawl
-from spider.store.writer import CrawlWriter
+from openlinx.output.diagnostics import OpenLinxError
+from openlinx.store.selection import resolve_crawl
+from openlinx.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import (
     crawl_without_seeds,
@@ -97,7 +97,7 @@ def test_busy_in_rollback_journal_mode(temp_workspace: TempWorkspace) -> None:
 
     with StoreWorker(crawl.path) as worker:
         worker.lock()
-        with pytest.raises(SpiderError) as raised:
+        with pytest.raises(OpenLinxError) as raised:
             resolve_crawl(str(crawl.path), workspace=workspace, cwd=temp_workspace.root)
 
     assert (raised.value.code, raised.value.exit_code) == ("crawl_busy", 5)
@@ -108,7 +108,7 @@ def test_a_busy_writer_on_open(temp_workspace: TempWorkspace) -> None:
 
     with StoreWorker(crawl.path) as worker:
         worker.lock()
-        with pytest.raises(SpiderError) as raised:
+        with pytest.raises(OpenLinxError) as raised:
             CrawlWriter(crawl.path, FakeClock(), busy_seconds=SHORT_BUSY_SECONDS)
 
     assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (
@@ -130,7 +130,7 @@ def test_a_busy_writer_in_a_unit(temp_workspace: TempWorkspace) -> None:
             writer.run(insert_seed(9, "https://example.com/9"))
 
     # Around the writer's with block too: leaving it raises the same crawl_busy again.
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         run_while_locked()
 
     assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (

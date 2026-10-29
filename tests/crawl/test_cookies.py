@@ -2,7 +2,7 @@
 
 import pytest
 
-from spider.crawl.fetch.cookies import redacted_header
+from openlinx.crawl.fetch.cookies import redacted_header
 
 
 def test_a_cookie_header_is_redacted_pair_by_pair() -> None:

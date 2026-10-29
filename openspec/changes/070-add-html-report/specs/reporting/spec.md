@@ -6,47 +6,47 @@ Turns a Crawl into a Report for people: one self-contained, offline HTML file wi
 
 ### Requirement: Report files
 
-`spider report` SHALL write the files of one Report into a destination folder:
+`linx report` SHALL write the files of one Report into a destination folder:
 - **Files:** an HTML file `report.html` and a folder `report-csv`. With `--segment <name>`, they are `report-<name>.html` and `report-<name>-csv`.
-- **Destination:** the folder is `--dest <dir>`, created if it is missing. Without `--dest`, it is `reports/<crawl id>/` inside the Workspace's `.spider` directory.
+- **Destination:** the folder is `--dest <dir>`, created if it is missing. Without `--dest`, it is `reports/<crawl id>/` inside the Workspace's `.openlinx` directory.
 - **The default folder** holds only what is written for that Crawl's Reports, and `060-add-crawl-control`'s `crawls rm` deletes it together with the Crawl.
 - **Replacement:** running `report` again with the same destination SHALL replace the HTML file and the whole CSV folder. If the files cannot be replaced, the command SHALL fail with `output_not_writable` (exit code 7, `050-add-query-and-segments`), whose message names the path, and leave the previous Report unchanged.
 
 #### Scenario: Default location
-- **WHEN** the Workspace's `.spider` directory is `<tmp>/site/.spider`, the latest Crawl has the id `<id>`, and `spider report` runs
-- **THEN** the file `<tmp>/site/.spider/reports/<id>/report.html` exists
+- **WHEN** the Workspace's `.openlinx` directory is `<tmp>/site/.openlinx`, the latest Crawl has the id `<id>`, and `linx report` runs
+- **THEN** the file `<tmp>/site/.openlinx/reports/<id>/report.html` exists
 
 #### Scenario: Default CSV folder
-- **WHEN** the Workspace's `.spider` directory is `<tmp>/site/.spider`, the latest Crawl has the id `<id>`, and `spider report` runs
-- **THEN** the folder `<tmp>/site/.spider/reports/<id>/report-csv` exists
+- **WHEN** the Workspace's `.openlinx` directory is `<tmp>/site/.openlinx`, the latest Crawl has the id `<id>`, and `linx report` runs
+- **THEN** the folder `<tmp>/site/.openlinx/reports/<id>/report-csv` exists
 
 #### Scenario: Location of a Segment Report
-- **WHEN** the Segment `blog` is defined and `spider report --segment blog` runs for the Crawl `<id>`
-- **THEN** the files `reports/<id>/report-blog.html` and `reports/<id>/report-blog-csv/issues.csv` exist inside the Workspace's `.spider` directory
+- **WHEN** the Segment `blog` is defined and `linx report --segment blog` runs for the Crawl `<id>`
+- **THEN** the files `reports/<id>/report-blog.html` and `reports/<id>/report-blog-csv/issues.csv` exist inside the Workspace's `.openlinx` directory
 
 #### Scenario: --dest names the folder
-- **WHEN** `<tmp>/out` does not exist and `spider report --dest <tmp>/out` runs
+- **WHEN** `<tmp>/out` does not exist and `linx report --dest <tmp>/out` runs
 - **THEN** the file `<tmp>/out/report.html` and the folder `<tmp>/out/report-csv` exist
 
 #### Scenario: Re-running removes CSV files that no longer apply
-- **WHEN** `spider report --segment blog` wrote `report-blog-csv/title-missing.csv`
-- **AND** the `blog` definition is changed so that none of its Pages lacks a title, and `spider report --segment blog` runs again
+- **WHEN** `linx report --segment blog` wrote `report-blog-csv/title-missing.csv`
+- **AND** the `blog` definition is changed so that none of its Pages lacks a title, and `linx report --segment blog` runs again
 - **THEN** `report-blog-csv/title-missing.csv` no longer exists
 
 #### Scenario: Windows folder with spaces and non-ASCII characters
-- **WHEN** on Windows, `spider report --dest "<tmp>\Отчёты клиента"` runs as a real subprocess
+- **WHEN** on Windows, `linx report --dest "<tmp>\Отчёты клиента"` runs as a real subprocess
 - **THEN** the file `<tmp>\Отчёты клиента\report.html` exists, and the receipt's `path` is exactly that absolute path
 
 #### Scenario: A locked CSV file on Windows leaves the previous Report intact
-- **WHEN** on Windows, a previous `spider report` wrote `report.html` and `report-csv/issues.csv`, and another process holds `report-csv/issues.csv` open
-- **AND** `spider report` runs again
+- **WHEN** on Windows, a previous `linx report` wrote `report.html` and `report-csv/issues.csv`, and another process holds `report-csv/issues.csv` open
+- **AND** `linx report` runs again
 - **THEN** the exit code is 7, the error has the code `output_not_writable` and a message that contains the path of `issues.csv`, and `report.html` is byte-identical to before
 
 ### Requirement: Report receipt
 
-`spider report` SHALL print one JSON object on stdout, the receipt: `{path, csv_dir, crawl_id, segment, health_score, sections, notes, warnings, opened}`. `-o <file>` SHALL write the receipt to that file instead, following the rule of `050-add-query-and-segments`.
+`linx report` SHALL print one JSON object on stdout, the receipt: `{path, csv_dir, crawl_id, segment, health_score, sections, notes, warnings, opened}`. `-o <file>` SHALL write the receipt to that file instead, following the rule of `050-add-query-and-segments`.
 - `path` and `csv_dir` are absolute paths in the operating system's native form.
-- `health_score` is the value of `health_score.score` in `spider summary` for the same Crawl and Segment.
+- `health_score` is the value of `health_score.score` in `linx summary` for the same Crawl and Segment.
 - `sections` lists the rendered Report Section ids in Report order.
 - `notes` is `{dir, applied, missing}`. `dir` is the absolute notes folder, or `null` without `--notes`. `applied` lists the notes that were rendered, `summary` first and then the Report Section ids in Report order. `missing` lists, in the same order, `summary` and the applicable Report Section ids that have no notes file.
 - `warnings` lists the warnings as the diagnostic objects of `010-add-workspace-and-cli-contract` (`{level, code, message, hint, details}`, with `level` `warning`). Each warning is also written to stderr as a diagnostic line.
@@ -55,11 +55,11 @@ Turns a Crawl into a Report for people: one self-contained, offline HTML file wi
 A Report written with warnings SHALL still exit with code 0.
 
 #### Scenario: Receipt without notes
-- **WHEN** no Segments are defined, the Crawl's Health Score is 80, and `spider report` runs without `--notes`
+- **WHEN** no Segments are defined, the Crawl's Health Score is 80, and `linx report` runs without `--notes`
 - **THEN** the receipt contains `"health_score": 80`, `"notes": {"dir": null, "applied": [], "missing": ["summary", "overview", "response-codes", "indexability", "titles", "meta-descriptions", "headings", "canonicals-and-directives", "content", "urls", "images", "security", "structured-data"]}`, `"warnings": []` and `"opened": false`
 
 #### Scenario: -o redirects the receipt
-- **WHEN** `spider report -o receipt.json` runs
+- **WHEN** `linx report -o receipt.json` runs
 - **THEN** stdout is empty, and `receipt.json` holds a JSON object whose `path` ends with `report.html`
 
 ### Requirement: Self-contained offline Report
@@ -99,11 +99,11 @@ They also use these codes from other changes:
 An error about a Report Section id SHALL list the ids in `details.accepted`, and `unknown_section` SHALL also give the closest ids in `details.suggestions`.
 
 #### Scenario: Usage class
-- **WHEN** `spider report brief --section title` runs
+- **WHEN** `linx report brief --section title` runs
 - **THEN** the exit code is 2, and the error has the code `unknown_section` and a `details.suggestions` that starts with `titles`
 
 #### Scenario: Not-found class
-- **WHEN** `spider report --notes does-not-exist` runs
+- **WHEN** `linx report --notes does-not-exist` runs
 - **THEN** the exit code is 4, and the error has the code `notes_dir_not_found`
 
 ### Requirement: Report language and header
@@ -164,11 +164,11 @@ Each Report Section is a `section` element whose `id` is `section-<id>` and whos
 - **THEN** `section#section-titles` contains an `article` element with `data-rule-id="title-missing"`
 
 #### Scenario: The category mapping
-- **WHEN** `spider report brief --list` runs
+- **WHEN** `linx report brief --list` runs
 - **THEN** the `categories` of its entries, in order, are `[]`, `["response_codes"]`, `[]`, `["titles"]`, `["meta_descriptions"]`, `["headings"]`, `["canonicals", "directives"]`, `["content"]`, `["urls"]`, `["images"]`, `["security"]`, `[]` and `[]`
 
 #### Scenario: Every Rule category has a Report Section
-- **WHEN** the `category` values of all Rules that `spider rules list --limit 1000` returns are compared with the `categories` of the entries that `spider report brief --list` returns
+- **WHEN** the `category` values of all Rules that `linx rules list --limit 1000` returns are compared with the `categories` of the entries that `linx report brief --list` returns
 - **THEN** each of the 10 categories `response_codes`, `security`, `titles`, `meta_descriptions`, `headings`, `canonicals`, `directives`, `content`, `urls` and `images` appears in the `categories` of exactly one entry
 
 ### Requirement: Issues in a Report Section
@@ -185,22 +185,22 @@ The table SHALL have the columns URL, Detail, Status Code, Indexability, Unique 
 
 #### Scenario: Guidance of the Rule
 - **WHEN** a Crawl has the Issue `title-missing` and the Report is parsed
-- **THEN** the text of `article[data-rule-id="title-missing"]` contains the `description`, `why_it_matters` and `how_to_fix` texts that `spider rules show title-missing` prints
+- **THEN** the text of `article[data-rule-id="title-missing"]` contains the `description`, `why_it_matters` and `how_to_fix` texts that `linx rules show title-missing` prints
 
 #### Scenario: Thresholds
 - **WHEN** a Crawl ran with the threshold `max_chars` of `title-too-long` set to 70, and that Issue exists
 - **THEN** `article[data-rule-id="title-too-long"]` contains a `dt` with the text `max_chars` followed by a `dd` with the text `70`
 
 #### Scenario: Top 20 by default
-- **WHEN** the Issue `title-missing` has 30 Affected URLs and `spider report` runs
+- **WHEN** the Issue `title-missing` has 30 Affected URLs and `linx report` runs
 - **THEN** the table in `article[data-rule-id="title-missing"]` has 20 body rows
 
 #### Scenario: --top
-- **WHEN** the Issue `title-missing` has 30 Affected URLs and `spider report --top 5` runs
+- **WHEN** the Issue `title-missing` has 30 Affected URLs and `linx report --top 5` runs
 - **THEN** the table in `article[data-rule-id="title-missing"]` has 5 body rows
 
 #### Scenario: --top out of range
-- **WHEN** `spider report --top 0` runs
+- **WHEN** `linx report --top 0` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value`
 
 #### Scenario: Most-linked Affected URLs first
@@ -212,7 +212,7 @@ The table SHALL have the columns URL, Detail, Status Code, Indexability, Unique 
 - **THEN** its Detail cell reads `length: 61, width_px: 536`
 
 #### Scenario: Link to the full list
-- **WHEN** the Issue `title-missing` has 30 Affected URLs and `spider report` runs
+- **WHEN** the Issue `title-missing` has 30 Affected URLs and `linx report` runs
 - **THEN** `article[data-rule-id="title-missing"]` contains an `a` element with `href="report-csv/title-missing.csv"` whose text contains `30`
 
 #### Scenario: A Report Section without Issues
@@ -225,7 +225,7 @@ The table SHALL have the columns URL, Detail, Status Code, Indexability, Unique 
 
 ### Requirement: Key numbers
 
-Each Report Section SHALL show its key numbers as elements with `data-metric="<key>"` and `data-value="<number>"`, where `data-value` is empty for a value that is `null`. Every Report Section from `response-codes` to `structured-data` SHALL have the keys `issues` (the number of its Issues) and `affected_count` (the sum of their `affected_count` values). In `overview`, these keys SHALL equal these members of `spider summary` for the same Crawl and Segment:
+Each Report Section SHALL show its key numbers as elements with `data-metric="<key>"` and `data-value="<number>"`, where `data-value` is empty for a value that is `null`. Every Report Section from `response-codes` to `structured-data` SHALL have the keys `issues` (the number of its Issues) and `affected_count` (the sum of their `affected_count` values). In `overview`, these keys SHALL equal these members of `linx summary` for the same Crawl and Segment:
 
 | key | summary member |
 |---|---|
@@ -244,7 +244,7 @@ Each Report Section SHALL show its key numbers as elements with `data-metric="<k
 - **THEN** in `section#section-overview`, `[data-metric="pages"]` has `data-value="10"` and `[data-metric="health_score"]` has `data-value="80"`
 
 #### Scenario: Overview matches summary
-- **WHEN** the Report and `spider summary` are produced from the same `completed` Crawl of the local fixture site
+- **WHEN** the Report and `linx summary` are produced from the same `completed` Crawl of the local fixture site
 - **THEN** each overview key in the table above has a `data-value` equal to the summary member named next to it
 
 #### Scenario: Issue totals of a Report Section
@@ -329,11 +329,11 @@ The CSV folder SHALL contain:
 The CSV files SHALL follow the CSV policy of `050-add-query-and-segments`. Under `--segment`, the rows SHALL be limited to the Segment. Every link from the HTML file to a CSV file SHALL be a relative link into the CSV folder.
 
 #### Scenario: One row per Affected URL
-- **WHEN** the Issue `title-missing` has 30 Affected URLs and `spider report` runs
+- **WHEN** the Issue `title-missing` has 30 Affected URLs and `linx report` runs
 - **THEN** `report-csv/title-missing.csv` has 31 lines, and its first line after the byte-order mark is `url,detail,status_code,indexability,unique_inlinks,segment`
 
 #### Scenario: Issue list
-- **WHEN** a Crawl has 3 Issues and `spider report` runs
+- **WHEN** a Crawl has 3 Issues and `linx report` runs
 - **THEN** `report-csv/issues.csv` has 4 lines, and its first line after the byte-order mark is `rule_id,category,issue_type,priority,affected_count,description`
 
 #### Scenario: Relative links
@@ -342,12 +342,12 @@ The CSV files SHALL follow the CSV policy of `050-add-query-and-segments`. Under
 
 #### Scenario: CSV of a Segment Report
 - **WHEN** the Issue `title-missing` has the Affected URLs `https://example.com/blog/a`, `https://example.com/blog/b` and `https://example.com/shop/c`, and the Segment `blog` holds the first two
-- **AND** `spider report --segment blog` runs
+- **AND** `linx report --segment blog` runs
 - **THEN** `report-blog-csv/title-missing.csv` has 3 lines
 
 ### Requirement: Crawled text is escaped
 
-All text from the Crawl, such as titles, headings, meta descriptions, URLs, `detail` values and header values, and all text from `spider.toml`, such as Segment expressions, SHALL be escaped wherever it appears in the Report: element text, attribute values, SVG labels and the document title. Only the URL cells of Affected URL tables SHALL be links, and only when the URL starts with `http://` or `https://`. Such links SHALL have `rel="noopener noreferrer"`.
+All text from the Crawl, such as titles, headings, meta descriptions, URLs, `detail` values and header values, and all text from `openlinx.toml`, such as Segment expressions, SHALL be escaped wherever it appears in the Report: element text, attribute values, SVG labels and the document title. Only the URL cells of Affected URL tables SHALL be links, and only when the URL starts with `http://` or `https://`. Such links SHALL have `rel="noopener noreferrer"`.
 
 #### Scenario: A script in a Page title does not run
 - **WHEN** a Page whose title_1 is `<script>alert(1)</script>` is an Affected URL of `title-too-long`, and the Report is parsed
@@ -358,7 +358,7 @@ All text from the Crawl, such as titles, headings, meta descriptions, URLs, `det
 - **THEN** the document has no `img` element and no attribute whose name starts with `on`
 
 #### Scenario: Segment expressions are escaped
-- **WHEN** `spider.toml` defines `blog = "address contains '<b>x</b>'"` and the Report is parsed
+- **WHEN** `openlinx.toml` defines `blog = "address contains '<b>x</b>'"` and the Report is parsed
 - **THEN** the text of `section#section-segments` contains `address contains '<b>x</b>'`, and `section#section-segments` has no `b` element
 
 #### Scenario: Only web URLs become links
@@ -377,35 +377,35 @@ All text from the Crawl, such as titles, headings, meta descriptions, URLs, `det
 - A `<dir>` that does not exist SHALL be rejected with the error code `notes_dir_not_found`.
 
 #### Scenario: Executive summary
-- **WHEN** `notes/summary.md` holds `Overall the site is healthy.` and `spider report --notes notes` runs
+- **WHEN** `notes/summary.md` holds `Overall the site is healthy.` and `linx report --notes notes` runs
 - **THEN** the text of `#executive-summary` contains `Overall the site is healthy.`
 
 #### Scenario: Notes of one Report Section
-- **WHEN** `notes/titles.md` holds `Titles are too long on product pages.` and `spider report --notes notes` runs
+- **WHEN** `notes/titles.md` holds `Titles are too long on product pages.` and `linx report --notes notes` runs
 - **THEN** the text of `section#section-titles .report-notes` contains `Titles are too long on product pages.`
 
 #### Scenario: File names ignore case
-- **WHEN** the only notes file is `notes/Titles.MD` and `spider report --notes notes` runs
+- **WHEN** the only notes file is `notes/Titles.MD` and `linx report --notes notes` runs
 - **THEN** the receipt's `notes.applied` is `["titles"]`
 
 #### Scenario: Applied and missing notes
-- **WHEN** no Segments are defined, `notes` holds only `summary.md` and `titles.md`, and `spider report --notes notes` runs
+- **WHEN** no Segments are defined, `notes` holds only `summary.md` and `titles.md`, and `linx report --notes notes` runs
 - **THEN** `notes.applied` is `["summary", "titles"]` and `notes.missing` is `["overview", "response-codes", "indexability", "meta-descriptions", "headings", "canonicals-and-directives", "content", "urls", "images", "security", "structured-data"]`
 
 #### Scenario: Unknown notes file
-- **WHEN** `notes` holds `title.md` and `spider report --notes notes` runs
+- **WHEN** `notes` holds `title.md` and `linx report --notes notes` runs
 - **THEN** `warnings` holds an entry with code `unknown_notes_file` whose hint contains `titles.md`
 
 #### Scenario: Notes for a Report Section that is not rendered
-- **WHEN** no Segments are defined, `notes` holds `segments.md`, and `spider report --notes notes` runs
+- **WHEN** no Segments are defined, `notes` holds `segments.md`, and `linx report --notes notes` runs
 - **THEN** `warnings` holds an entry with code `notes_not_applicable`
 
 #### Scenario: Hidden files are ignored
-- **WHEN** `notes` holds `.DS_Store` and `titles.md`, and `spider report --notes notes` runs
+- **WHEN** `notes` holds `.DS_Store` and `titles.md`, and `linx report --notes notes` runs
 - **THEN** `warnings` is `[]`
 
 #### Scenario: A Report Section without notes
-- **WHEN** `notes` holds only `titles.md` and `spider report --notes notes` runs
+- **WHEN** `notes` holds only `titles.md` and `linx report --notes notes` runs
 - **THEN** `section#section-images` contains no element with the class `report-notes`
 
 ### Requirement: Report Notes are rendered safely
@@ -463,7 +463,7 @@ A notes file SHALL be read as UTF-8, with or without a byte-order mark, or as UT
 - **THEN** the text of `section#section-titles .report-notes` contains `Заголовки`
 
 #### Scenario: Invalid bytes
-- **WHEN** `notes/titles.md` holds the bytes `Hello \xff world`, and `spider report --notes notes` runs
+- **WHEN** `notes/titles.md` holds the bytes `Hello \xff world`, and `linx report --notes notes` runs
 - **THEN** `warnings` holds an entry with code `notes_encoding` whose message contains `titles.md`
 
 ### Requirement: Section Crawls and incomplete Crawls are labelled
@@ -492,23 +492,23 @@ For a Section Crawl, the header SHALL show the text `Section Crawl` in `#section
 
 ### Requirement: Segment Report
 
-`spider report --segment <name>` SHALL build every Report Section from that Segment's Pages, using the Segment rules of `050-add-query-and-segments`. It SHALL show the Segment name in `#report-segment` and leave out the `segments` Report Section. An unknown name SHALL be rejected with 050's `unknown_segment` (exit code 2).
+`linx report --segment <name>` SHALL build every Report Section from that Segment's Pages, using the Segment rules of `050-add-query-and-segments`. It SHALL show the Segment name in `#report-segment` and leave out the `segments` Report Section. An unknown name SHALL be rejected with 050's `unknown_segment` (exit code 2).
 
 #### Scenario: Segment name in the header
-- **WHEN** the Segment `blog` is defined and `spider report --segment blog` runs
+- **WHEN** the Segment `blog` is defined and `linx report --segment blog` runs
 - **THEN** the text of `#report-segment` is `blog`
 
 #### Scenario: Health Score of the Segment
-- **WHEN** `spider summary --segment blog` returns a `health_score.score` of 75 and `spider report --segment blog` runs
+- **WHEN** `linx summary --segment blog` returns a `health_score.score` of 75 and `linx report --segment blog` runs
 - **THEN** the text of `#health-score` is `75`
 
 #### Scenario: Unknown Segment
-- **WHEN** `spider report --segment blgo` runs
+- **WHEN** `linx report --segment blgo` runs
 - **THEN** the exit code is 2, and the error has the code `unknown_segment`
 
 ### Requirement: Opening the Report
 
-`spider report --open` SHALL hand the HTML file to the operating system's default browser without waiting for the browser to close:
+`linx report --open` SHALL hand the HTML file to the operating system's default browser without waiting for the browser to close:
 - on Windows, through the file's default association
 - on macOS, with `open`
 - on Linux, with `xdg-open`, but only when a desktop session is present (`DISPLAY` or `WAYLAND_DISPLAY` is set)
@@ -516,23 +516,23 @@ For a Section Crawl, the header SHALL show the text `Section Crawl` in `#section
 When the Report cannot be handed over, it SHALL still be written, the command SHALL exit with code 0, `opened` SHALL be `false`, and `warnings` SHALL hold an entry with code `open_failed`. Without `--open`, no browser SHALL be started.
 
 #### Scenario: Windows
-- **WHEN** on Windows, `spider report --open` runs
+- **WHEN** on Windows, `linx report --open` runs
 - **THEN** the operating system is asked once to open the receipt's `path` with its default application, and the receipt has `"opened": true`
 
 #### Scenario: macOS
-- **WHEN** on macOS, `spider report --open` runs
+- **WHEN** on macOS, `linx report --open` runs
 - **THEN** a process `open <path>` is started without being waited for, and the receipt has `"opened": true`
 
 #### Scenario: Linux desktop
-- **WHEN** on Linux with `DISPLAY=:0`, `spider report --open` runs
+- **WHEN** on Linux with `DISPLAY=:0`, `linx report --open` runs
 - **THEN** a process `xdg-open <path>` is started without being waited for
 
 #### Scenario: Linux without a desktop
-- **WHEN** on Linux, with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, `spider report --open` runs
+- **WHEN** on Linux, with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, `linx report --open` runs
 - **THEN** no process is started, the exit code is 0, and `warnings` holds an entry with code `open_failed`
 
 #### Scenario: No opener installed
-- **WHEN** on Linux with `DISPLAY=:0` and no `xdg-open` on the `PATH`, `spider report --open` runs
+- **WHEN** on Linux with `DISPLAY=:0` and no `xdg-open` on the `PATH`, `linx report --open` runs
 - **THEN** the exit code is 0, and the receipt has `"opened": false`
 
 ### Requirement: No settings or secrets in the Report
@@ -540,15 +540,15 @@ When the Report cannot be handed over, it SHALL still be written, the command SH
 The Report and its CSV files SHALL NOT include the command line or the config recorded for the Crawl, or any value from them, such as credentials, custom header values or proxy settings.
 
 #### Scenario: Credentials are not copied
-- **WHEN** the Crawl was recorded with the basic-auth password `s3cr3t-pass` and the custom header `Authorization: Bearer tok123`, and `spider report` runs
+- **WHEN** the Crawl was recorded with the basic-auth password `s3cr3t-pass` and the custom header `Authorization: Bearer tok123`, and `linx report` runs
 - **THEN** neither `s3cr3t-pass` nor `tok123` occurs in the HTML file or in any file of the CSV folder
 
 ### Requirement: Repeatable output
 
-Two runs of `spider report` for the same Crawl, Segment definitions, notes and flags SHALL produce CSV files with identical bytes, and HTML files that differ only in the text of `#generated-at`.
+Two runs of `linx report` for the same Crawl, Segment definitions, notes and flags SHALL produce CSV files with identical bytes, and HTML files that differ only in the text of `#generated-at`.
 
 #### Scenario: Two runs
-- **WHEN** `spider report --dest a` and `spider report --dest b` run one after the other against the same `completed` Crawl
+- **WHEN** `linx report --dest a` and `linx report --dest b` run one after the other against the same `completed` Crawl
 - **THEN** `a/report.html` and `b/report.html` are identical once the text of `#generated-at` is removed from both, and `a/report-csv` and `b/report-csv` hold byte-identical files
 
 ### Requirement: Report size is bounded
@@ -556,15 +556,15 @@ Two runs of `spider report` for the same Crawl, Segment definitions, notes and f
 The HTML file's size SHALL depend on the number of Issues and on `--top`, not on the number of Pages.
 
 #### Scenario: A large Crawl
-- **WHEN** a Crawl has 100,000 Pages and 20 Issues, each with `affected_count` 100,000, and `spider report` runs with the default `--top`
+- **WHEN** a Crawl has 100,000 Pages and 20 Issues, each with `affected_count` 100,000, and `linx report` runs with the default `--top`
 - **THEN** the HTML file is at most 5,000,000 bytes
 
 ### Requirement: Section Brief
 
-`spider report brief --section <id>` SHALL return one JSON object, the Section Brief, with exactly these members:
+`linx report brief --section <id>` SHALL return one JSON object, the Section Brief, with exactly these members:
 - `brief_version`: `1`
 - `section`: `{id, title, applicable, notes_file}`, where `notes_file` is `<id>.md`
-- `crawl`: the `crawl` member of `spider summary`
+- `crawl`: the `crawl` member of `linx summary`
 - `segment`
 - `counts`: the Report Section's key numbers, with the same keys and values as its `data-metric` elements
 - `issues`: the Report Section's Issues in Report order, each `{rule_id, category, issue_type, priority, affected_count, description, how_to_fix, thresholds, sample_affected_urls}`, where `sample_affected_urls` holds up to 5 `{url, detail}` taken from the top of the Issue's table
@@ -575,47 +575,47 @@ The HTML file's size SHALL depend on the number of Issues and on `--top`, not on
 `--segment` SHALL limit the brief to one Segment, as in the Report. A Report Section that would not be rendered SHALL still get a brief, with `section.applicable` `false`, empty `counts` and empty `issues`. The `overview` brief holds the Crawl's top 10 Issues across all Report Sections.
 
 #### Scenario: Members
-- **WHEN** `spider report brief --section titles` runs
+- **WHEN** `linx report brief --section titles` runs
 - **THEN** the output's keys are exactly `brief_version`, `section`, `crawl`, `segment`, `counts`, `issues`, `rules_without_issues`, `partial_link_metrics`, `truncated`, `omitted_issues` and `max_bytes`
 
 #### Scenario: The brief's section member
-- **WHEN** `spider report brief --section titles` runs
+- **WHEN** `linx report brief --section titles` runs
 - **THEN** `section` is `{"id": "titles", "title": "Titles", "applicable": true, "notes_file": "titles.md"}`
 
 #### Scenario: Samples come from the top of the table
 - **WHEN** the Issue `title-missing` has the Affected URLs `https://example.com/p1` to `https://example.com/p7`, whose Unique Inlinks equal their numbers
-- **AND** `spider report brief --section titles` runs
+- **AND** `linx report brief --section titles` runs
 - **THEN** the `url` values of that Issue's `sample_affected_urls` are `https://example.com/p7`, `https://example.com/p6`, `https://example.com/p5`, `https://example.com/p4` and `https://example.com/p3`
 
 #### Scenario: Thresholds in the brief
 - **WHEN** a Crawl ran with the threshold `max_chars` of `title-too-long` set to 70, and that Issue exists
-- **AND** `spider report brief --section titles` runs
+- **AND** `linx report brief --section titles` runs
 - **THEN** the `thresholds` of the `title-too-long` item is `{"max_chars": 70, "max_pixels": 561}`
 
 #### Scenario: Rules without Issues
 - **WHEN** `title-missing` is the Crawl's only Issue in the `titles` category
-- **AND** `spider report brief --section titles` runs
+- **AND** `linx report brief --section titles` runs
 - **THEN** `rules_without_issues` contains `title-too-long` and does not contain `title-missing`
 
 #### Scenario: Counts equal the Report
-- **WHEN** the Report and `spider report brief --section titles` are produced from the same `completed` Crawl
+- **WHEN** the Report and `linx report brief --section titles` are produced from the same `completed` Crawl
 - **THEN** the brief's `counts` equals the `data-metric` keys and `data-value` numbers of `section#section-titles`
 
 #### Scenario: Crawl member equals the summary
-- **WHEN** `spider report brief --section overview` and `spider summary` run against the same `completed` Crawl
+- **WHEN** `linx report brief --section overview` and `linx summary` run against the same `completed` Crawl
 - **THEN** the brief's `crawl` equals the summary's `crawl`
 
 #### Scenario: A brief for one Segment
 - **WHEN** the Issue `title-missing` has the Affected URLs `https://example.com/blog/a`, `https://example.com/blog/b` and `https://example.com/shop/c`, and the Segment `blog` holds the first two
-- **AND** `spider report brief --section titles --segment blog` runs
+- **AND** `linx report brief --section titles --segment blog` runs
 - **THEN** `segment` is `blog`, and the `title-missing` item has `"affected_count": 2`
 
 #### Scenario: A Report Section that is not rendered
-- **WHEN** no Segments are defined and `spider report brief --section segments` runs
+- **WHEN** no Segments are defined and `linx report brief --section segments` runs
 - **THEN** the exit code is 0, and the output has `"applicable": false` in `section`, `"counts": {}` and `"issues": []`
 
 #### Scenario: Section Crawl brief
-- **WHEN** `spider report brief --section overview` runs against a Section Crawl
+- **WHEN** `linx report brief --section overview` runs against a Section Crawl
 - **THEN** `partial_link_metrics` is `true`
 
 ### Requirement: Section Brief size budget
@@ -629,17 +629,17 @@ The Section Brief, serialised as compact UTF-8 JSON, SHALL be at most `max_bytes
 `truncated` SHALL be `true` exactly when a step was applied.
 
 #### Scenario: A small brief is complete
-- **WHEN** `spider report brief --section titles` runs against a Crawl with 2 Issues in the `titles` category and short URLs
+- **WHEN** `linx report brief --section titles` runs against a Crawl with 2 Issues in the `titles` category and short URLs
 - **THEN** `truncated` is `false` and `omitted_issues` is `[]`
 
 #### Scenario: The budget holds for long URLs
 - **WHEN** the `titles` Report Section has 6 Issues, each with 5 or more Affected URLs of 2,000 characters
-- **AND** `spider report brief --section titles` runs
+- **AND** `linx report brief --section titles` runs
 - **THEN** stdout is at most 16,384 bytes, and `truncated` is `true`
 
 #### Scenario: Samples are reduced first
 - **WHEN** the full `titles` brief is 20,000 bytes only because of its samples, and cutting every Issue to 1 sample brings it under 16,384 bytes
-- **AND** `spider report brief --section titles` runs
+- **AND** `linx report brief --section titles` runs
 - **THEN** `omitted_issues` is `[]`, every Issue still has `how_to_fix`, and every Issue has exactly 1 sample
 
 #### Scenario: A smaller budget
@@ -647,38 +647,38 @@ The Section Brief, serialised as compact UTF-8 JSON, SHALL be at most `max_bytes
 - **THEN** stdout is at most 8,192 bytes
 
 #### Scenario: Budget out of range
-- **WHEN** `spider report brief --section titles --max-bytes 100` runs
+- **WHEN** `linx report brief --section titles --max-bytes 100` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value`
 
 ### Requirement: Choosing a Report Section
 
-`spider report brief --list` SHALL return `{sections: [...]}` with one entry per Report Section id, in Report order: `{id, title, applicable, categories, issues, affected_count, notes_file}`. `categories` lists the snake_case Rule category ids of `040-add-rules` that the Report Section shows. The accepted values of `--section` that `spider commands --format json` lists SHALL be exactly the thirteen Report Section ids.
+`linx report brief --list` SHALL return `{sections: [...]}` with one entry per Report Section id, in Report order: `{id, title, applicable, categories, issues, affected_count, notes_file}`. `categories` lists the snake_case Rule category ids of `040-add-rules` that the Report Section shows. The accepted values of `--section` that `linx commands --format json` lists SHALL be exactly the thirteen Report Section ids.
 - `report brief` without `--section` or `--list`, and `report brief` with both, SHALL fail with the `usage_error` of `010-add-workspace-and-cli-contract`, whose `details.accepted` lists the Report Section ids.
 - An unknown id SHALL fail with `unknown_section`.
 
 #### Scenario: Listed ids
-- **WHEN** `spider report brief --list` runs
+- **WHEN** `linx report brief --list` runs
 - **THEN** the `id` values of `sections` are `overview`, `response-codes`, `indexability`, `titles`, `meta-descriptions`, `headings`, `canonicals-and-directives`, `content`, `urls`, `images`, `security`, `structured-data` and `segments`, in that order
 
 #### Scenario: Applicability without Segments
-- **WHEN** no Segments are defined and `spider report brief --list` runs
+- **WHEN** no Segments are defined and `linx report brief --list` runs
 - **THEN** the `segments` entry has `"applicable": false`, and every other entry has `"applicable": true`
 
 #### Scenario: Issue counts per Report Section
 - **WHEN** a Crawl's only Issues in the `titles` category are `title-missing` with `affected_count` 4 and `title-too-long` with 5
-- **AND** `spider report brief --list` runs
+- **AND** `linx report brief --list` runs
 - **THEN** the `titles` entry has `"issues": 2` and `"affected_count": 9`
 
 #### Scenario: Accepted values for agents
-- **WHEN** `spider commands --format json` runs
+- **WHEN** `linx commands --format json` runs
 - **THEN** the accepted values of `report brief --section` are exactly the thirteen Report Section ids
 
 #### Scenario: No Report Section given
-- **WHEN** `spider report brief` runs without `--section` or `--list`
+- **WHEN** `linx report brief` runs without `--section` or `--list`
 - **THEN** the exit code is 2, and the error has the code `usage_error` and a `details.accepted` that starts with `overview`
 
 #### Scenario: Both --section and --list
-- **WHEN** `spider report brief --section titles --list` runs
+- **WHEN** `linx report brief --section titles --list` runs
 - **THEN** the exit code is 2, and the error has the code `usage_error`
 
 ### Requirement: Report of a detached Crawl, end to end
@@ -686,5 +686,5 @@ The Section Brief, serialised as compact UTF-8 JSON, SHALL be at most `max_bytes
 On Windows, macOS and Linux, a Crawl started with `crawl --detach` (`060-add-crawl-control`) and followed with `status` until its Crawl State is `completed` SHALL give, through `issues` and `report` run as separate processes, a Report of that Crawl.
 
 #### Scenario: Detached Crawl to Report
-- **WHEN** on each CI operating system, as real subprocesses, `spider crawl <fixture site>/ --detach` runs, `spider status` is polled until it reports the Crawl State `completed`, and then `spider issues` and `spider report` run, against a fixture site that has a Page without a `<title>`
+- **WHEN** on each CI operating system, as real subprocesses, `linx crawl <fixture site>/ --detach` runs, `linx status` is polled until it reports the Crawl State `completed`, and then `linx issues` and `linx report` run, against a fixture site that has a Page without a `<title>`
 - **THEN** every command exits with code 0, and the HTML file named by the receipt's `path` contains an `article` element with `data-rule-id="title-missing"`

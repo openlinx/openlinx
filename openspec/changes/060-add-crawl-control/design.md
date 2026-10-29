@@ -5,7 +5,7 @@
 See proposal.md (Why) for the motivation. The approach is shaped by these constraints:
 
 - **`015-add-crawl-store`,** as built and archived:
-  - one crawl file per Crawl in `.spider/crawls/`
+  - one crawl file per Crawl in `.openlinx/crawls/`
   - the Crawl State values `running`, `stopped`, `completed`, `failed` and `interrupted`
   - crawl ids, taken when `<id>.sqlite` exists, and crawl files created exclusively
   - the `CrawlWriter`, which is the only writer while no Crawl can be resumed or detached
@@ -17,14 +17,14 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - the paging envelope, and the exit-code table (busy 5, usage 2)
   - no environment variables as settings
 - **`020-add-crawl-core`,** re-grounded on 2026-10-14 against its code through group 6 (its first pull request):
-  - the Crawl Service in `spider.services.crawling`: `plan_crawl(request, tables)`, validation and config resolution before anything is created, which turns a `CrawlRequest` (the Seed, `cwd`, `home`, `workspace`, `command_argv`, `secret_names` and the settings given as `flags`) into a `CrawlPlan` (`seed`, `settings`, `scope`, `new_crawl`); and `start_crawl(plan, clock, reporter, hooks, *, resolver=None)`, which creates the Crawl, builds its `CrawlContext` in one place (`_crawl_context`, `020` D15), runs it under `asyncio.Runner(loop_factory=loop_factory)` and returns the `CrawlResult`, whose `to_json()` is the result of a foreground `spider crawl`
-  - the stop flag: `StopSignal` in `spider.crawl.stop`, in the context, set once with `set(reason, cause=None)`; the engine starts no request once it is set
-  - `TRANSITIONS` and `check_transition` in `spider.store.transitions`, which already allows `stopped` → `running` and `failed` → `running`, and `set_state(connection, state, at, stop_reason)` with its unit `record_state` in `spider.store.crawls`, the one writer of how a Crawl ends (D12); `StopReason` holds the six values of `crawl.stop_reason`
-  - `url_counts()` in `spider.store.urls`, the counting unit of the result, whose `UrlCounts` holds the `fetch_state` counts, `pages` and the five status classes
-  - `WarningLog` in `spider.crawl.warning_log`, the Crawl's Reporter, over `010`'s `CliReporter`, which writes events and diagnostics to stderr
-  - the settings registry with `CrawlSettings` (`spider.crawl.settings`), `OptionMeta(setting=...)`, and `secret_names(command, tables)` in `spider.cli.options`
+  - the Crawl Service in `openlinx.services.crawling`: `plan_crawl(request, tables)`, validation and config resolution before anything is created, which turns a `CrawlRequest` (the Seed, `cwd`, `home`, `workspace`, `command_argv`, `secret_names` and the settings given as `flags`) into a `CrawlPlan` (`seed`, `settings`, `scope`, `new_crawl`); and `start_crawl(plan, clock, reporter, hooks, *, resolver=None)`, which creates the Crawl, builds its `CrawlContext` in one place (`_crawl_context`, `020` D15), runs it under `asyncio.Runner(loop_factory=loop_factory)` and returns the `CrawlResult`, whose `to_json()` is the result of a foreground `linx crawl`
+  - the stop flag: `StopSignal` in `openlinx.crawl.stop`, in the context, set once with `set(reason, cause=None)`; the engine starts no request once it is set
+  - `TRANSITIONS` and `check_transition` in `openlinx.store.transitions`, which already allows `stopped` → `running` and `failed` → `running`, and `set_state(connection, state, at, stop_reason)` with its unit `record_state` in `openlinx.store.crawls`, the one writer of how a Crawl ends (D12); `StopReason` holds the six values of `crawl.stop_reason`
+  - `url_counts()` in `openlinx.store.urls`, the counting unit of the result, whose `UrlCounts` holds the `fetch_state` counts, `pages` and the five status classes
+  - `WarningLog` in `openlinx.crawl.warning_log`, the Crawl's Reporter, over `010`'s `CliReporter`, which writes events and diagnostics to stderr
+  - the settings registry with `CrawlSettings` (`openlinx.crawl.settings`), `OptionMeta(setting=...)`, and `secret_names(command, tables)` in `openlinx.cli.options`
 - **What `020` builds after its first pull request,** which some tasks here wait for (tasks.md names the `020` task each time): the `stopped` end of a stop flag and `--max-urls` (tasks 9.7 and 13.1), post-crawl passes on a stop (task 9.16), robots.txt (group 10), `--rate` (task 11.1), the progress counters and `progress` events (task 12.4), the failed ends with their errors (tasks 12.6–12.12), the network pause (tasks 12.15–12.22), interrupts and the stop's grace period (group 13), and the continue operation (group 14). Today the Crawl Service raises for any stop flag, because no `stopped` end is built yet.
-- **`015`'s code that this change builds on:** `create_crawl(request, clock, reporter, choice=secrets.choice)` in `spider.services.crawls` draws the id with `new_crawl_id(started_at, choice)` and claims it by creating `<id>.sqlite` exclusively (`_claim_new_file` in `spider.store.crawls`), drawing again when that file exists; `opening(path, *, role, busy_seconds=None)` in `spider.store.connections` opens a connection with a `ConnectionRole` (`create`, `write` or `read`, `017` D8); and `--crawl` (`CrawlOpt` in `spider.cli.options`, with `latest`) resolves through `resolve_crawl(reference, workspace=..., cwd=...)` in `spider.store.selection`.
+- **`015`'s code that this change builds on:** `create_crawl(request, clock, reporter, choice=secrets.choice)` in `openlinx.services.crawls` draws the id with `new_crawl_id(started_at, choice)` and claims it by creating `<id>.sqlite` exclusively (`_claim_new_file` in `openlinx.store.crawls`), drawing again when that file exists; `opening(path, *, role, busy_seconds=None)` in `openlinx.store.connections` opens a connection with a `ConnectionRole` (`create`, `write` or `read`, `017` D8); and `--crawl` (`CrawlOpt` in `openlinx.cli.options`, with `latest`) resolves through `resolve_crawl(reference, workspace=..., cwd=...)` in `openlinx.store.selection`.
 - **`024-add-list-and-sitemap-modes`:** the list and sitemap readers.
 - **Consumers:**
   - `090-add-mcp-server` (v0.1.1) starts long Crawls detached, needs the detach JSON within 10 seconds, and relies on breakaway from Windows job objects.
@@ -57,10 +57,10 @@ The OS releases the claim when a process dies, so "`running` and nobody holds th
 - *Alternative:* a heartbeat timeout alone. It is slow to notice deaths, and it wrongly declares suspended processes dead. Rejected as the authority.
 
 ### D3. Detach: the parent reserves the id, the child creates the Crawl
-1. **The parent checks** the arguments with `020`'s `plan_crawl` (validation and config resolution, in `spider.services.crawling`).
+1. **The parent checks** the arguments with `020`'s `plan_crawl` (validation and config resolution, in `openlinx.services.crawling`).
 2. **The parent reserves an id** by creating `<id>.log` exclusively (D12). If creation finds the id taken, it draws another. If the child's create still meets `crawl_id_taken`, the child exits and the parent reports `detach_failed`.
 3. **In List mode, the parent stores the Seeds first.** It also reads the list, from a file or from standard input, with `024`'s reader. It reports list errors such as `empty_list` itself, and stores the Seeds in the hand-over file `<id>.seeds.json` before spawning, because a detached child cannot read the parent's standard input.
-4. **The parent spawns the child** with `sys.executable -m spider crawl --_run-detached <id>`. The child's stdout and stderr go to the log file, and stdin comes from the null device.
+4. **The parent spawns the child** with `sys.executable -m openlinx crawl --_run-detached <id>`. The child's stdout and stderr go to the log file, and stdin comes from the null device.
 5. **The parent passes the rest through the environment:** the original argv (for `crawl.command_argv`) and the secret values, in a single JSON variable that the child removes from its own environment after reading it. This is an internal hand-over, not a settings source.
 6. **The child creates the Crawl with the reserved id,** holding the writer claim from the first moment, through `020`'s Crawl Service: `plan_crawl` again from the handed-over argv, then the start operation with the chosen id, so a detached Crawl builds its `CrawlContext` in the same place as a foreground one (`020` D15), and its `StopSignal` is the one the control check sets (D6). It writes `seeds` from the hand-over file (v0.2, List mode) and deletes that file, then writes its `crawl_runs` row, whose `pid` is its own `os.getpid()`.
 7. **The parent polls** every 100 ms, for up to 10 seconds, for that row, and prints the `pid` the row records, never the one `Popen` returned (D4). Then:
@@ -76,7 +76,7 @@ No moment exists in which a Crawl exists without a live writer, so a concurrent 
 - **Flags:** `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB`, with `close_fds=True`.
 - **Why CREATE_NO_WINDOW rather than DETACHED_PROCESS:** with CREATE_NO_WINDOW the background process owns a hidden console and is still detached from the caller's console. This also matters for `026`'s parse pool, which is unconditional in v0.1: under DETACHED_PROCESS, which has no console, every `spawn` parse worker would get a visible console window, while under CREATE_NO_WINDOW they inherit the hidden one. The maintainer approved this on 2026-09-27.
 - **No breakaway allowed:** if `CreateProcess` fails with `ERROR_ACCESS_DENIED` because the job object forbids breakaway, the call is repeated without `CREATE_BREAKAWAY_FROM_JOB`. If the caller's job object has `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, the output gets `job_may_end_crawl`. The job object is queried through `ctypes`.
-- **The real interpreter:** from a virtual environment, or from the `spider.exe` entry point, `sys.executable` on Windows is a launcher whose child is the real interpreter, so a killed launcher leaves the Crawl running. The child is therefore started from `sys._base_executable` with `__PYVENV_LAUNCHER__` set to `sys.executable`, as `multiprocessing` does, and the pid that `status` reports and the tests end is the one the child records itself (D3).
+- **The real interpreter:** from a virtual environment, or from the `linx.exe` entry point, `sys.executable` on Windows is a launcher whose child is the real interpreter, so a killed launcher leaves the Crawl running. The child is therefore started from `sys._base_executable` with `__PYVENV_LAUNCHER__` set to `sys.executable`, as `multiprocessing` does, and the pid that `status` reports and the tests end is the one the child records itself (D3).
 
 ### D5. POSIX process creation
 `start_new_session=True` (setsid), stdin from `/dev/null`, stdout and stderr to the log file, and `close_fds=True`. SIGHUP and signals to the caller's process group do not reach the Crawl. Some agent sandboxes kill every descendant anyway. `status` then shows `interrupted`, `resume` continues the Crawl, and the Skill prefers Hand-off for large Crawls.
@@ -103,44 +103,44 @@ Everything that decides which URLs belong to the Crawl stays fixed: the Crawl Mo
 - **What may change:** the URL limit, which can only be raised; politeness (`--concurrency`, `--rate`); and credentials (`--auth`, `--header`, `--proxy`).
 - **Where secrets came from** is read from the recorded command:
   - A secret in `crawl.command_argv` came from a flag and must be given again.
-  - A redacted value in `crawl.config` with no flag in the argv came from `spider.toml` and is read again from it.
+  - A redacted value in `crawl.config` with no flag in the argv came from `openlinx.toml` and is read again from it.
   - The proxy variables (the `environment` table) are simply read again from the resuming process's environment.
 - **Recording:** accepted overrides update the `crawl` table of `crawl.config`, and the run's `command_argv` records them.
 
 ### D9. The dry run and its estimate
-- **Validation:** it reuses `020`'s `plan_crawl` (validation and config resolution, in `spider.services.crawling`), so dry runs and real runs cannot disagree.
+- **Validation:** it reuses `020`'s `plan_crawl` (validation and config resolution, in `openlinx.services.crawling`), so dry runs and real runs cannot disagree.
 - **Network use:** only robots.txt and sitemaps are requested (with `024`'s sitemap reader), one at a time and obeying robots.txt, within a budget of 50 files and 60 seconds.
 - **Degrading:** failures lower the confidence and never fail the Command. With the network blocked, `urls` is null and the Skill (`080`) treats the Crawl as large.
 - **Confidence:** Spider-mode estimates are never `high`, because sitemaps undercount Pages and a Crawl also requests Resources and External URLs.
 
 ### D10. The equivalent command and synthesised commands
 - **The renderer** is a pure function over (Crawl Mode, Seeds or list path or sitemap URLs, the `crawl` config table, detach):
-  - The flag order follows the change that added each flag. `spider commands` gives the order for later changes.
+  - The flag order follows the change that added each flag. `linx commands` gives the order for later changes.
   - Only non-default values are rendered, and list paths are made absolute with `crawl.cwd`.
   - POSIX quoting follows `shlex.quote`'s safe set. PowerShell uses single quotes and a smaller safe set, because `,` builds arrays and `@` splats.
 - **Settings that are not flags:** keys of `crawl.config` outside the `crawl` and `environment` tables that differ from their defaults are listed in `settings_not_in_command`, because the command alone cannot carry them. The `environment` table is left out: the command reads the proxy variables wherever it runs.
 - **Synthesised commands:** the Crawl Service uses the same renderer to synthesise `crawl.command_argv` for callers without a command line, which is the MCP server's case.
 
 ### D11. Listing and removing
-- **Listing:** `crawls list` goes through `.spider/crawls/*.sqlite`, opens each file read-only through `015`, and probes the claim only for Crawls stored as `running`. An unreadable file becomes an item with a full `crawl_file_invalid` diagnostic.
+- **Listing:** `crawls list` goes through `.openlinx/crawls/*.sqlite`, opens each file read-only through `015`, and probes the claim only for Crawls stored as `running`. An unreadable file becomes an item with a full `crawl_file_invalid` diagnostic.
 - **Removing:** `crawls rm` acquires the claim, which rules out a writer, and then renames the crawl file to a temporary name.
   - On Windows the rename fails when another process has the file open, and the Command reports `file_in_use` before anything is deleted.
   - Otherwise it deletes, and lists in `paths`:
     - the `-wal`, `-shm`, log and hand-over files
-    - `.spider/reports/<id>/`, which holds `070`'s Reports and `090`'s saved notes
+    - `.openlinx/reports/<id>/`, which holds `070`'s Reports and `090`'s saved notes
   - It then releases the claim and deletes the claim's lock file.
 
 ### D12. The writer claim, control writes, `interrupted` and reserved ids
-`015` was planned to build these, and they moved here on 2026-10-05, because only background Crawls and `resume` need them. They live in `spider.store` (`020` D14).
-- **The writer claim** (`spider.store.claim`): an operating-system lock on `<id>.lock`, taken without waiting: `msvcrt.locking` on Windows and `fcntl.flock` on POSIX, on the lock file, never on the crawl file.
+`015` was planned to build these, and they moved here on 2026-10-05, because only background Crawls and `resume` need them. They live in `openlinx.store` (`020` D14).
+- **The writer claim** (`openlinx.store.claim`): an operating-system lock on `<id>.lock`, taken without waiting: `msvcrt.locking` on Windows and `fcntl.flock` on POSIX, on the lock file, never on the crawl file.
   - The operating system releases it when the process ends, SIGKILL and TerminateProcess included, so "`running` and the claim is free" means the process is dead (D2).
   - It is taken where the id is claimed: `create_crawl` draws the id and takes `<id>.lock` before it creates `<id>.sqlite` (`_claim_new_file`), and gives the claim to the Crawl Service with the `CrawlFile`; a resume takes it before it opens the writer. The Crawl Service holds it until the writer is closed. A Crawl therefore never exists without a live claim (D3).
   - Failing to take it is `crawl_locked` (exit code 5), declared by this change.
   - The lock file stays behind. It is harmless, it marks the id as taken, and `crawls rm` deletes it.
-- **Control writes** (`write_control`, in `spider.store.control`): a read-write connection without the claim, opened with `opening(path, role="control", busy_seconds=5)`, a new `ConnectionRole` whose connect listener installs a SQLite authorizer that refuses every write to a table not marked `info={"control": True}`.
+- **Control writes** (`write_control`, in `openlinx.store.control`): a read-write connection without the claim, opened with `opening(path, role="control", busy_seconds=5)`, a new `ConnectionRole` whose connect listener installs a SQLite authorizer that refuses every write to a table not marked `info={"control": True}`.
 - **Recording `interrupted`** (`check_writer`, in the same module): it tries the claim without waiting. When it gets it and the state is `running`, one transaction records `interrupted` through `020`'s `set_state`, whose `TRANSITIONS` this change extends with `running` → `interrupted` and `interrupted` → `running`, and sets the last run's `end_state`. Then it releases the claim.
 - **Reserved and chosen ids** (`crawl-store`'s "Crawl ids", modified): the id draw (`new_crawl_id` and `_claim_new_file`) also counts `<id>.lock` and `<id>.log` as taken. The detaching parent reserves an id by creating `<id>.log` exclusively, and `create_crawl` accepts a chosen id, failing with `crawl_id_taken` when the exclusive create of `<id>.sqlite` finds the file.
-- **A Crawl being created is not latest** (ROADMAP's checklist, ruled 2026-10-14): `_claim_new_file` creates `<id>.sqlite` empty, and `_set_journal_mode` sets its journal mode outside any transaction, before `_write_new_file` writes the schema, `PRAGMA user_version`, the `crawl` row and the Seeds in one transaction. So a reader sees either no schema or all of it, and `user_version` = `SCHEMA_VERSION` marks a complete file. `latest` (`_latest` in `spider.store.selection`) skips a newest file whose `user_version` is 0 while its writer claim is held, and picks the newest of the others; the claim is taken before `<id>.sqlite` exists (above), so a file being created always has a live claim. A file without a complete schema whose claim is free is broken, and `015`'s "A broken newest file is reported, not skipped" still reports it as `crawl_file_invalid`. The probe takes the claim without waiting and releases it at once, the same probe as D2's.
+- **A Crawl being created is not latest** (ROADMAP's checklist, ruled 2026-10-14): `_claim_new_file` creates `<id>.sqlite` empty, and `_set_journal_mode` sets its journal mode outside any transaction, before `_write_new_file` writes the schema, `PRAGMA user_version`, the `crawl` row and the Seeds in one transaction. So a reader sees either no schema or all of it, and `user_version` = `SCHEMA_VERSION` marks a complete file. `latest` (`_latest` in `openlinx.store.selection`) skips a newest file whose `user_version` is 0 while its writer claim is held, and picks the newest of the others; the claim is taken before `<id>.sqlite` exists (above), so a file being created always has a live claim. A file without a complete schema whose claim is free is broken, and `015`'s "A broken newest file is reported, not skipped" still reports it as `crawl_file_invalid`. The probe takes the claim without waiting and releases it at once, the same probe as D2's.
   - *Alternative:* create the file as `<id>.sqlite.tmp`, counted as taken, and rename it once its schema is written. It adds a second taken name, and the rename needs every handle closed and the `-wal` and `-shm` companions gone; on Windows an antivirus or indexer that holds the file makes the rename the flaky step. Rejected.
   - *Alternative:* skip every file without a complete schema. It hides a broken file that `015` decided to report. Rejected.
 - *Alternative:* `filelock`, as `015`'s first draft planned. It is a new dependency for about 30 lines of standard-library code. Rejected, unless the two platform locks prove awkward when they are built.
@@ -159,7 +159,7 @@ Both tables go through `018`'s `public_table()`, so they are `STRICT`, with CHEC
 - **The counters** end in `_count` (rule 5) and are NOT NULL: the run's row is inserted with the counters seeded at the start of the run. `urls_per_second` is NULL until the first heartbeat. `paused_since` is NULL whenever the Crawl is not paused, like `ended_at` while a run runs.
 
 ### D14. Codes
-Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 does, each by the slice that first raises it. Exit codes follow `010`'s classes and naming rule; every warning has the level `warning` and no exit code.
+Declared as `DiagnosticCode` constants in `openlinx.output.codes`, as `020` D17 does, each by the slice that first raises it. Exit codes follow `010`'s classes and naming rule; every warning has the level `warning` and no exit code.
 - **v0.1:**
   - errors, exit 1: `crawl_completed` (`resume` of a `completed` Crawl), `detach_failed` (the background process ended before it created the Crawl)
   - errors, exit 2: `override_not_allowed`, `limit_reached` (`resume` arguments)
@@ -187,7 +187,7 @@ Seams from docs/testing.md:
     - job objects with and without breakaway
     - listing visible windows on Windows
     - `crawls rm` with a file held open
-- **Services and store API (2):** status fields, state transitions, the heartbeat's counters, control writes, the synthesised argv, and holding the writer claim from the test process through `spider.store.claim` (for the stale heartbeat).
+- **Services and store API (2):** status fields, state transitions, the heartbeat's counters, control writes, the synthesised argv, and holding the writer claim from the test process through `openlinx.store.claim` (for the stale heartbeat).
 - **HTTP (local fixture site) (3):**
   - The slow fixture site keeps Crawls running.
   - Request logs prove what resume and the dry run requested.
@@ -219,7 +219,7 @@ None. Before v0.1 the schema is not yet public: this change adds `crawl_runs` an
 ## Open Questions
 
 These are deferrable, and each adds a Command or flag later without changing these specs:
-- `spider crawl --like <id>` (or `crawls rerun <id>`), to re-run a Crawl directly from its recorded config.
+- `linx crawl --like <id>` (or `crawls rerun <id>`), to re-run a Crawl directly from its recorded config.
 - Retention: `crawls prune --older-than`, or a Workspace setting that caps the number of kept Crawls.
 - `status --watch` for people.
 - `crawls rm --force`, which stops a running Crawl and then removes it.

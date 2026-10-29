@@ -44,6 +44,6 @@
   - `030-add-page-data`, whose Page extractor runs in the pool, and whose `links` layout this change's benchmark may settle (ROADMAP, 026).
   - `040-add-rules`, whose live Issues latency the 500k run measures (`040` D16).
   - `060-add-crawl-control`, whose background process uses CREATE_NO_WINDOW so the workers inherit a hidden console.
-- **Code:** `scripts/crawl_500k.py` and its synthetic site, and `spider.crawl.parse_pool` with the pool executor and its workers behind `020`'s seam.
-- **New dependencies:** `psutil` becomes a runtime dependency (it is a test dependency today), to count physical cores; `spider.crawl.parse_pool` imports it, never the startup path.
+- **Code:** `scripts/crawl_500k.py` and its synthetic site, and `openlinx.crawl.parse_pool` with the pool executor and its workers behind `020`'s seam.
+- **New dependencies:** `psutil` becomes a runtime dependency (it is a test dependency today), to count physical cores; `openlinx.crawl.parse_pool` imports it, never the startup path.
 - **Docs:** the benchmark results in `docs/benchmarks.md`, and the parse pool in `docs/architecture.md`.

@@ -5,8 +5,8 @@ from collections.abc import Iterator
 import pytest
 from sqlalchemy import Column, Integer, Table
 
-from spider.services.schema import describe_schema
-from spider.store.schema import metadata
+from openlinx.services.schema import describe_schema
+from openlinx.store.schema import metadata
 
 
 @pytest.fixture

@@ -6,11 +6,11 @@ from typing import Annotated, Any
 import pytest
 import typer
 
-from spider.cli.app import AppExtra, build_app
-from spider.cli.meta import command_meta
-from spider.cli.options import FormatOpt, OptionMeta
-from spider.output.paging import Fields
-from spider.output.writer import Format
+from openlinx.cli.app import AppExtra, build_app
+from openlinx.cli.meta import command_meta
+from openlinx.cli.options import FormatOpt, OptionMeta
+from openlinx.output.paging import Fields
+from openlinx.output.writer import Format
 
 
 def no_format() -> dict[str, Any]:

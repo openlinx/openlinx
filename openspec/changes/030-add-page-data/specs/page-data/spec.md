@@ -188,11 +188,11 @@ The Kind column marks how a column is filled:
 `url_id` SHALL be the primary key. `pages` SHALL have one secondary index, `pages_address`, unique over `address`, which serves finding a Page by its display address and is the tie-breaker of the keyset paging of `050-add-query-and-segments`. Other sorts and filters over `pages` scan the table.
 
 #### Scenario: Schema lists exactly the Page record columns
-- **WHEN** `spider schema pages` runs
+- **WHEN** `linx schema pages` runs
 - **THEN** the item's columns, reduced to `name`, `type` and `nullable`, are the 96 rows of the table above, as a set
 
 #### Scenario: Indexes of pages
-- **WHEN** `spider schema pages --fields indexes` runs
+- **WHEN** `linx schema pages --fields indexes` runs
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"pages_address","columns":["address"],"unique":true,"where":null}`
 
 ### Requirement: Address columns
@@ -577,19 +577,19 @@ When no reason applies, `indexability` SHALL be `indexable` and `indexability_st
 - **THEN** `indexability_status` is `redirected`
 
 ### Requirement: Content Area
-The Content Area of an analysed Page SHALL be found from the `[content_area]` settings in `spider.toml`, which take two lists of CSS selectors:
+The Content Area of an analysed Page SHALL be found from the `[content_area]` settings in `openlinx.toml`, which take two lists of CSS selectors:
 
 - `include` (default: empty)
 - `exclude` (default: `["nav", "header", "footer"]`)
 
-A value set in `spider.toml` replaces the default list.
+A value set in `openlinx.toml` replaces the default list.
 
 - **Roots.** When `include` is empty, the only root is `<body>`. Otherwise the roots are the elements that match an `include` selector and have no ancestor that also matches one.
 - **Membership.** A node is in the Content Area when it is a root or inside a root, and neither the node nor any of its ancestors matches an `exclude` selector.
 
 The *Content Area text* is the text of the nodes in the Content Area, in document order, with block breaks kept.
 
-An invalid selector SHALL make `spider crawl` fail before any URL is requested, with the error code `settings_invalid` of `010-add-workspace-and-cli-contract`. The effective settings SHALL be recorded in the Crawl's recorded config under `content_area`.
+An invalid selector SHALL make `linx crawl` fail before any URL is requested, with the error code `settings_invalid` of `010-add-workspace-and-cli-contract`. The effective settings SHALL be recorded in the Crawl's recorded config under `content_area`.
 
 Fixture A below is referred to by later scenarios:
 
@@ -615,7 +615,7 @@ Fixture A below is referred to by later scenarios:
 - **THEN** `word_count` is 6
 
 #### Scenario: Invalid selector stops the Crawl
-- **WHEN** `spider crawl {site}/` runs with `spider.toml` containing `[content_area]` and `exclude = ["nav["]`
+- **WHEN** `linx crawl {site}/` runs with `openlinx.toml` containing `[content_area]` and `exclude = ["nav["]`
 - **THEN** the exit code is 3, the error has the code `settings_invalid` and `details.errors[0].key` `"content_area.exclude"`, and the fixture site receives 0 requests
 
 ### Requirement: Word, sentence and syllable counts
@@ -726,14 +726,14 @@ The detected language SHALL NOT be used.
 The two languages SHALL be stored separately:
 
 - **`declared_language`** is the trimmed `lang` attribute of the root `<html>` element. It is the empty string when the attribute is present but empty, and NULL when it is absent.
-- **`detected_language`** is filled from v0.2, and SHALL be NULL in every Page in v0.1. From v0.2 it SHALL be NULL unless the Crawl was started with `--detect-language`, or with `detect_language = true` under `[crawl]` in `spider.toml`. In that case it is the ISO 639-1 code of the language detected offline from the Content Area text. It is NULL when that text has no words.
+- **`detected_language`** is filled from v0.2, and SHALL be NULL in every Page in v0.1. From v0.2 it SHALL be NULL unless the Crawl was started with `--detect-language`, or with `detect_language = true` under `[crawl]` in `openlinx.toml`. In that case it is the ISO 639-1 code of the language detected offline from the Content Area text. It is NULL when that text has no words.
 
 #### Scenario: Declared language is trimmed, not normalised
 - **WHEN** an analysed Page's HTML starts with `<html lang=" en-GB ">`
 - **THEN** `declared_language` is `en-GB`
 
 #### Scenario: Language detection is off by default
-- **WHEN** a Crawl runs without `--detect-language` and without `detect_language = true` in `spider.toml`
+- **WHEN** a Crawl runs without `--detect-language` and without `detect_language = true` in `openlinx.toml`
 - **THEN** every Page of the Crawl has `detected_language` NULL
 
 #### Scenario: Detected Russian text
@@ -845,7 +845,7 @@ This change stores each discovered Link together with the attributes that analys
 - **THEN** its `pagination` Link to `https://example.test/p3` has `ordinal` 1, `declared_in` `http_header`, and `element`, `attribute` and `link_position` NULL
 
 #### Scenario: Columns of links
-- **WHEN** `spider schema links` runs
+- **WHEN** `linx schema links` runs
 - **THEN** the item's columns, reduced to `name`, `type` and `nullable`, are the rows of the table above, as a set, with each `rel_*` flag as a row of its own
 
 ### Requirement: Stored Links match discovery
@@ -890,7 +890,7 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 - **THEN** every stored Page has `inlinks` NULL
 
 #### Scenario: Inlink columns are derived
-- **WHEN** `spider schema pages` runs
+- **WHEN** `linx schema pages` runs
 - **THEN** the descriptions of `inlinks`, `unique_inlinks` and `linking_pages_pct` start with `Derived: `
 
 ### Requirement: Crawl Depth and Folder Depth
@@ -909,9 +909,9 @@ The crawl store SHALL have the table `page_sources` from v0.1, so that storing H
 
 From v0.2, storing the HTML of a Crawl's Pages SHALL be opt-in, and SHALL be decided once, when the Crawl starts:
 
-- `--store-html`, or `store_html = true` under `[crawl]` in `spider.toml`, turns storage on.
+- `--store-html`, or `store_html = true` under `[crawl]` in `openlinx.toml`, turns storage on.
 - `--no-store-html`, or `store_html = false`, turns it off.
-- A flag overrides `spider.toml`, as `010-add-workspace-and-cli-contract` defines.
+- A flag overrides `openlinx.toml`, as `010-add-workspace-and-cli-contract` defines.
 - When neither is set, HTML is not stored, whatever the Crawl's `max_urls`.
 
 The Crawl's recorded config SHALL hold the decision as `store_html` = `true` or `false`, and a resumed Crawl SHALL keep it.
@@ -944,8 +944,8 @@ When storage is off, `page_sources` SHALL hold no rows.
 - **WHEN** a Crawl runs with `--no-store-html`
 - **THEN** `page_sources` holds 0 rows and the recorded `store_html` is `false`
 
-#### Scenario: Flag overrides spider.toml
-- **WHEN** `spider.toml` sets `store_html = false` under `[crawl]` and the Crawl runs with `--store-html`
+#### Scenario: Flag overrides openlinx.toml
+- **WHEN** `openlinx.toml` sets `store_html = false` under `[crawl]` and the Crawl runs with `--store-html`
 - **THEN** every Page of the Crawl has a `page_sources` row
 
 #### Scenario: Encoding of stored HTML
@@ -966,11 +966,11 @@ These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0, unt
 - **THEN** 0 Pages have a non-NULL value in any of the 17 columns listed above, and 0 `links` rows have a non-NULL `html_source`
 
 #### Scenario: Deferred columns are described with their release
-- **WHEN** `spider schema pages` runs
+- **WHEN** `linx schema pages` runs
 - **THEN** the description of `link_score` starts with `Filled from v0.2. `, the description of `near_duplicate_count` starts with `Filled from v0.3. ` and the description of `unique_js_inlinks` starts with `Filled from v1.1. `
 
 ### Requirement: Documented Page data tables
-`spider schema` SHALL list the tables `pages`, `links`, `cookies` and `page_sources`, following the schema conventions of `018-add-schema-conventions`:
+`linx schema` SHALL list the tables `pages`, `links`, `cookies` and `page_sources`, following the schema conventions of `018-add-schema-conventions`:
 
 - every table is `STRICT`, and the file refuses a value outside an enumeration's `values` or a flag other than 0 and 1
 - `references` for every id column
@@ -981,12 +981,12 @@ These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0, unt
 `docs/schema.md` SHALL document these tables as `015-add-crawl-store` requires.
 
 #### Scenario: Link types are an enumeration
-- **WHEN** `spider schema links` runs
+- **WHEN** `linx schema links` runs
 - **THEN** the `values` of the column `type` are `["hyperlink","canonical","pagination","hreflang","iframe","meta_refresh","http_refresh","image","css","javascript","video","audio","media","amphtml","mobile_alternate","misc","xml_sitemap","sitemap_hreflang","javascript_redirect"]`
 
 ### Requirement: Same values on every operating system
 The same fixture Crawl SHALL store identical Page data on Windows, macOS and Linux, whatever the console code page, locale or installed fonts.
 
 #### Scenario: Non-ASCII title on a Windows console
-- **WHEN** `spider crawl {site}/ru` runs as a subprocess on Windows with console code page 1251, and the Page's title is `Привет, мир`
+- **WHEN** `linx crawl {site}/ru` runs as a subprocess on Windows with console code page 1251, and the Page's title is `Привет, мир`
 - **THEN** the stored `title_1` is `Привет, мир` and `title_1_length` is 11

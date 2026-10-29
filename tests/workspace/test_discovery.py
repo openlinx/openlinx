@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from spider.output.diagnostics import SpiderError
-from spider.workspace.discovery import resolve_workspace
+from openlinx.output.diagnostics import OpenLinxError
+from openlinx.workspace.discovery import resolve_workspace
 from tests.support.workspace import TempWorkspace
 
 
 def test_workspace_in_the_current_folder(temp_workspace: TempWorkspace) -> None:
     shop = temp_workspace.home / "work" / "shop"
-    (shop / ".spider").mkdir(parents=True)
+    (shop / ".openlinx").mkdir(parents=True)
 
     workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
 
@@ -21,7 +21,7 @@ def test_workspace_in_the_current_folder(temp_workspace: TempWorkspace) -> None:
 
 def test_workspace_in_a_parent_folder(temp_workspace: TempWorkspace) -> None:
     shop = temp_workspace.home / "work" / "shop"
-    (shop / ".spider").mkdir(parents=True)
+    (shop / ".openlinx").mkdir(parents=True)
     (shop / "blog").mkdir()
 
     workspace = resolve_workspace(cwd=shop / "blog", flag=None, home=temp_workspace.home)
@@ -31,8 +31,8 @@ def test_workspace_in_a_parent_folder(temp_workspace: TempWorkspace) -> None:
 
 def test_the_nearest_workspace_wins(temp_workspace: TempWorkspace) -> None:
     work = temp_workspace.home / "work"
-    (work / ".spider").mkdir()
-    (work / "shop" / ".spider").mkdir(parents=True)
+    (work / ".openlinx").mkdir()
+    (work / "shop" / ".openlinx").mkdir(parents=True)
     (work / "shop" / "blog").mkdir()
 
     workspace = resolve_workspace(cwd=work / "shop" / "blog", flag=None, home=temp_workspace.home)
@@ -43,7 +43,7 @@ def test_the_nearest_workspace_wins(temp_workspace: TempWorkspace) -> None:
 def test_a_settings_file_alone_marks_a_workspace(temp_workspace: TempWorkspace) -> None:
     shop = temp_workspace.home / "work" / "shop"
     (shop / "blog").mkdir(parents=True)
-    (shop / "spider.toml").write_text("", encoding="utf-8")
+    (shop / "openlinx.toml").write_text("", encoding="utf-8")
 
     workspace = resolve_workspace(cwd=shop / "blog", flag=None, home=temp_workspace.home)
 
@@ -56,18 +56,18 @@ def test_fallback_to_the_global_workspace(temp_workspace: TempWorkspace) -> None
 
     workspace = resolve_workspace(cwd=notes, flag=None, home=temp_workspace.home)
 
-    assert (workspace.is_global, workspace.data_dir) == (True, temp_workspace.home / ".spider")
+    assert (workspace.is_global, workspace.data_dir) == (True, temp_workspace.home / ".openlinx")
 
 
 def test_the_home_folder_is_the_global_workspace(temp_workspace: TempWorkspace) -> None:
     home = temp_workspace.home
-    (home / ".spider").mkdir()
+    (home / ".openlinx").mkdir()
 
     workspace = resolve_workspace(cwd=home, flag=None, home=home)
 
     assert (workspace.is_global, workspace.settings_file) == (
         True,
-        home / ".spider" / "spider.toml",
+        home / ".openlinx" / "openlinx.toml",
     )
 
 
@@ -77,14 +77,14 @@ def test_location_of_the_global_workspace(temp_workspace: TempWorkspace) -> None
     workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=home)
 
     assert (workspace.data_dir, workspace.settings_file) == (
-        home / ".spider",
-        home / ".spider" / "spider.toml",
+        home / ".openlinx",
+        home / ".openlinx" / "openlinx.toml",
     )
 
 
 def test_the_flag_wins(temp_workspace: TempWorkspace) -> None:
     work = temp_workspace.home / "work"
-    (work / "a" / ".spider").mkdir(parents=True)
+    (work / "a" / ".openlinx").mkdir(parents=True)
     (work / "b").mkdir()
 
     workspace = resolve_workspace(cwd=work / "a", flag=work / "b", home=temp_workspace.home)
@@ -102,14 +102,14 @@ def test_the_home_folder_given_with_workspace_is_the_global_workspace(
 
     assert (workspace.is_global, workspace.settings_file) == (
         True,
-        home / ".spider" / "spider.toml",
+        home / ".openlinx" / "openlinx.toml",
     )
 
 
 def test_missing_workspace_folder_is_workspace_not_found(temp_workspace: TempWorkspace) -> None:
     home = temp_workspace.home
 
-    with pytest.raises(SpiderError) as raised:
+    with pytest.raises(OpenLinxError) as raised:
         resolve_workspace(cwd=temp_workspace.root, flag=home / "missing", home=home)
 
     assert (raised.value.code, raised.value.exit_code) == ("workspace_not_found", 4)
@@ -134,16 +134,16 @@ def test_home_folder_with_non_ascii_characters_on_windows(tmp_path: Path) -> Non
 
     workspace = resolve_workspace(cwd=home / "notes", flag=None, home=home)
 
-    assert str(workspace.data_dir) == str(home) + r"\.spider"
+    assert str(workspace.data_dir) == str(home) + r"\.openlinx"
 
 
 def test_a_workspace_variable_is_ignored(
     temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     work = temp_workspace.home / "work"
-    (work / "a" / ".spider").mkdir(parents=True)
-    (work / "b" / ".spider").mkdir(parents=True)
-    monkeypatch.setenv("SPIDER_WORKSPACE", str(work / "b"))
+    (work / "a" / ".openlinx").mkdir(parents=True)
+    (work / "b" / ".openlinx").mkdir(parents=True)
+    monkeypatch.setenv("OPENLINX_WORKSPACE", str(work / "b"))
     monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:3128")
 
     workspace = resolve_workspace(cwd=work / "a", flag=None, home=temp_workspace.home)
@@ -160,5 +160,5 @@ def test_the_home_folder_given_with_dot_dot_is_the_global_workspace(
 
     assert (workspace.is_global, workspace.settings_file) == (
         True,
-        home / ".spider" / "spider.toml",
+        home / ".openlinx" / "openlinx.toml",
     )

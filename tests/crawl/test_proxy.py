@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from spider.crawl.fetch.proxy import ProxyVariables
+from openlinx.crawl.fetch.proxy import ProxyVariables
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site

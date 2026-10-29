@@ -2,9 +2,9 @@
 
 import asyncio
 
-from spider.aio import loop_factory
-from spider.crawl.fetch.fetcher import FetchResult, Request
-from spider.crawl.urls import NormalizedUrl
+from openlinx.aio import loop_factory
+from openlinx.crawl.fetch.fetcher import FetchResult, Request
+from openlinx.crawl.urls import NormalizedUrl
 from tests.support.clock import FakeClock
 from tests.support.fetcher import FakeFetcher, FakePage
 

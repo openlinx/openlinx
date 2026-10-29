@@ -4,7 +4,7 @@ import asyncio
 
 import aiohttp
 
-from spider.aio import loop_factory
+from openlinx.aio import loop_factory
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.routes import Page, Site
 from tests.support.proxy import StartProxy

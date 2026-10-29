@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from spider.naming import SETTINGS_FILE_NAME
+from openlinx.naming import SETTINGS_FILE_NAME
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Site, Status, redirect_chain

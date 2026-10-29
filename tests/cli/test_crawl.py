@@ -1,4 +1,4 @@
-"""`spider crawl` (020-add-crawl-core, crawling)."""
+"""`linx crawl` (020-add-crawl-core, crawling)."""
 
 import json
 
@@ -42,7 +42,7 @@ def test_a_negative_network_wait_is_rejected(temp_workspace: TempWorkspace) -> N
 def test_a_negative_network_wait_in_the_settings_file_is_refused(
     temp_workspace: TempWorkspace,
 ) -> None:
-    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nnetwork_wait = -1\n")
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[crawl]\nnetwork_wait = -1\n")
 
     result = run_cli("crawl", "http://site.test/")
 
@@ -274,22 +274,22 @@ def test_the_recorded_config_holds_every_registered_crawl_setting(
     assert (config["crawl"], bool(defaults)) == (defaults, True)
 
 
-def test_spider_toml_sets_a_crawl_setting(
+def test_openlinx_toml_sets_a_crawl_setting(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(SMALL_SITE)
-    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nconcurrency = 2\n")
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[crawl]\nconcurrency = 2\n")
 
     config = json.loads(crawl_row(crawled(server.url("/")))["config"])
 
     assert config["crawl"]["concurrency"] == 2
 
 
-def test_a_flag_overrides_spider_toml(
+def test_a_flag_overrides_openlinx_toml(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(SMALL_SITE)
-    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nconcurrency = 2\n")
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[crawl]\nconcurrency = 2\n")
 
     config = json.loads(crawl_row(crawled(server.url("/"), "--concurrency", "3"))["config"])
 
@@ -318,7 +318,7 @@ def test_a_concurrency_of_zero_is_rejected(temp_workspace: TempWorkspace) -> Non
 def test_a_concurrency_above_50_in_the_settings_file_is_refused(
     temp_workspace: TempWorkspace,
 ) -> None:
-    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nconcurrency = 51\n")
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[crawl]\nconcurrency = 51\n")
 
     result = run_cli("crawl", "http://site.test/")
     errors = [error["code"] for error in result.errors()]

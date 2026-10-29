@@ -43,7 +43,7 @@ Our CLI is never replaced, and no fake `claude` or `codex` program is used: agen
 - [ ] 2.2 Drive "Step lines" (install-and-packaging seam).
 - [ ] 2.3 Drive "Install fails" (install-and-packaging seam, with a wheel path that does not exist): `error:` and `hint:` on stderr, and exit code 1.
 - [ ] 2.4 Drive "Codex hint on a blocked download" (install-and-packaging seam).
-- [ ] 2.5 Drive "Doctor reports a failure" (install-and-packaging seam, run in a folder with an invalid `spider.toml`): exit code 10 once the remaining steps have run.
+- [ ] 2.5 Drive "Doctor reports a failure" (install-and-packaging seam, run in a folder with an invalid `openlinx.toml`): exit code 10 once the remaining steps have run.
 - [ ] 2.6 Drive "Upgrade plan" (install-and-packaging seam, after installing `<wheel>`).
 - [ ] 2.7 Drive "Upgrade reported" (install-and-packaging seam, with a second wheel built from a temporary copy of the checkout with the version set to `0.0.1`).
 - [ ] 2.8 Drive "Already up to date" (install-and-packaging seam).
@@ -66,7 +66,7 @@ Our CLI is never replaced, and no fake `claude` or `codex` program is used: agen
 - [ ] 3.6 Drive "Profile path with a space" (install-and-packaging seam), including agent detection under `USERPROFILE`, and `Read-Host` only in an interactive, non-redirected host.
 - [ ] 3.7 Drive the Windows run of "First install plan" (install-and-packaging seam), with the test parametrised over both scripts.
 - [ ] 3.8 Drive the Windows run of "Package spec" (install-and-packaging seam).
-- [ ] 3.9 Drive the Windows run of "Successful install" (install-and-packaging seam). Save and restore `[Console]::OutputEncoding` around the `spider` calls.
+- [ ] 3.9 Drive the Windows run of "Successful install" (install-and-packaging seam). Save and restore `[Console]::OutputEncoding` around the `linx` calls.
 - [ ] 3.10 Drive the Windows run of "Install fails" (install-and-packaging seam).
 - [ ] 3.11 Drive the Windows run of "Doctor reports a failure" (install-and-packaging seam).
 - [ ] 3.12 Drive the Windows run of "Codex hint on a blocked download" (install-and-packaging seam).
@@ -86,7 +86,7 @@ Our CLI is never replaced, and no fake `claude` or `codex` program is used: agen
 ## 5. Release gates and workflow structure
 
 - [ ] 5.1 Drive "Tag must match the package version" (install-and-packaging seam, running `scripts/release_check.py` against a temporary copy of the checkout).
-- [ ] 5.2 Drive "Stale Skill copy blocks the release" (install-and-packaging seam). Run `scripts/generate_skill.py` from `080-add-agent-skill` into a temporary folder and compare it byte for byte with `skills/spider/`.
+- [ ] 5.2 Drive "Stale Skill copy blocks the release" (install-and-packaging seam). Run `scripts/generate_skill.py` from `080-add-agent-skill` into a temporary folder and compare it byte for byte with `skills/openlinx/`.
 - [ ] 5.3 Drive "Plugin version must match" (install-and-packaging seam).
 - [ ] 5.4 Drive "Pre-release detection" (install-and-packaging seam), with the JSON result on stdout.
 - [ ] 5.5 Drive "Tag trigger" (install-and-packaging seam) with a first `.github/workflows/release.yml`.
@@ -94,7 +94,7 @@ Our CLI is never replaced, and no fake `claude` or `codex` program is used: agen
 - [ ] 5.7 Drive "Trusted publishing only" (install-and-packaging seam), with `pypa/gh-action-pypi-publish`, environment `pypi` and `id-token: write`.
 - [ ] 5.8 Drive "Scripts are release assets" (install-and-packaging seam). The `release` job uses `gh release create`, adding `--prerelease` from the gate output.
 - [ ] 5.9 Docs: write `RELEASING.md`:
-  - the release-commit steps: bump the version, run `scripts/generate_skill.py skills/spider`, bump `plugin.json`
+  - the release-commit steps: bump the version, run `scripts/generate_skill.py skills/openlinx`, bump `plugin.json`
   - tagging
   - the trusted-publisher setup, with the placeholder project name
 - [ ] 5.10 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.

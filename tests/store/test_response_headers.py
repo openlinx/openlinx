@@ -2,12 +2,12 @@
 
 from datetime import UTC, datetime
 
-from spider.crawl.urls import NormalizedUrl
-from spider.store.records import FetchedUrl, Provenance, ResponseHeaders
-from spider.store.response_headers import write_response_headers
-from spider.store.rows import HandlerRows
-from spider.store.urls import record_fetched, record_seed
-from spider.store.writer import CrawlWriter
+from openlinx.crawl.urls import NormalizedUrl
+from openlinx.store.records import FetchedUrl, Provenance, ResponseHeaders
+from openlinx.store.response_headers import write_response_headers
+from openlinx.store.rows import HandlerRows
+from openlinx.store.urls import record_fetched, record_seed
+from openlinx.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, query
 from tests.support.workspace import TempWorkspace

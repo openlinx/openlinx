@@ -5,8 +5,8 @@ from typing import get_args
 
 import pytest
 
-from spider.crawl.following import skip_reason
-from spider.store.records import DiscoverySkipReason, LinkType
+from openlinx.crawl.following import skip_reason
+from openlinx.store.records import DiscoverySkipReason, LinkType
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status

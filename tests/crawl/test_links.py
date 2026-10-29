@@ -4,9 +4,9 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.crawl.pages.links import links_in_tree, locate_links, parse_html
-from spider.crawl.references import DiscoveredLink
-from spider.crawl.urls import NormalizedUrl
+from openlinx.crawl.pages.links import links_in_tree, locate_links, parse_html
+from openlinx.crawl.references import DiscoveredLink
+from openlinx.crawl.urls import NormalizedUrl
 from tests.support.pages import page_links
 
 SITE = NormalizedUrl("http://site.test/")

@@ -6,12 +6,12 @@ from pathlib import Path, PureWindowsPath
 
 import pytest
 
-from spider.cli.app import build_app
-from spider.clock import SystemClock
-from spider.output.reporter import Collected
-from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
-from spider.services.hooks import default_hooks
-from spider.store.records import SecretNames
+from openlinx.cli.app import build_app
+from openlinx.clock import SystemClock
+from openlinx.output.reporter import Collected
+from openlinx.services.crawling import CrawlRequest, plan_crawl, start_crawl
+from openlinx.services.hooks import default_hooks
+from openlinx.store.records import SecretNames
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
@@ -30,14 +30,14 @@ def test_the_journal_mode_setting_reaches_the_crawl_file(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(HOME_PAGE)
-    (temp_workspace.root / "spider.toml").write_bytes(b'[store]\njournal_mode = "delete"\n')
+    (temp_workspace.root / "openlinx.toml").write_bytes(b'[store]\njournal_mode = "delete"\n')
     tables = settings_tables(build_app())
     request = CrawlRequest(
         seed=server.url("/"),
         cwd=temp_workspace.root,
         home=temp_workspace.home,
         workspace=None,
-        command_argv=["spider", "crawl", server.url("/")],
+        command_argv=["linx", "crawl", server.url("/")],
         secret_names=SecretNames(),
         flags={},
     )
@@ -64,7 +64,7 @@ def test_a_secret_setting_is_redacted_in_the_recorded_config(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(HOME_PAGE)
-    (temp_workspace.root / "spider.toml").write_bytes(b'[example]\ntoken = "s3cret"\n')
+    (temp_workspace.root / "openlinx.toml").write_bytes(b'[example]\ntoken = "s3cret"\n')
 
     result = run_cli("crawl", server.url("/"), app=example_app())
     config = json.loads(crawl_row(Path(result.json()["crawl_file"]))["config"])

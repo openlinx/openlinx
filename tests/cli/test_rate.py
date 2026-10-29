@@ -33,7 +33,7 @@ def test_a_rate_that_is_not_a_finite_number_above_zero_in_the_settings_file_is_r
     temp_workspace: TempWorkspace, rate: str
 ) -> None:
     # nan and inf are TOML floats as written.
-    (temp_workspace.root / "spider.toml").write_bytes(f"[crawl]\nrate = {rate}\n".encode())
+    (temp_workspace.root / "openlinx.toml").write_bytes(f"[crawl]\nrate = {rate}\n".encode())
 
     result = run_cli("crawl", "http://site.test/")
 

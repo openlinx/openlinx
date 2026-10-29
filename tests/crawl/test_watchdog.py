@@ -2,7 +2,7 @@
 
 import pytest
 
-from spider.crawl.fetch.requester import watchdog_seconds
+from openlinx.crawl.fetch.requester import watchdog_seconds
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query

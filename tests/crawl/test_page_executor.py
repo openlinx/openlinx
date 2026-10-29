@@ -5,12 +5,12 @@ from typing import Any
 
 import pytest
 
-from spider.crawl.engine.hooks import Hooks, Pass, PassContext
-from spider.crawl.fetch.fetcher import FetchResult
-from spider.crawl.pages.preparation import PageSettings, PreparedPage, prepare_page
-from spider.crawl.urls import NormalizedUrl
-from spider.output.diagnostics import Diagnostic
-from spider.output.reporter import Collected
+from openlinx.crawl.engine.hooks import Hooks, Pass, PassContext
+from openlinx.crawl.fetch.fetcher import FetchResult
+from openlinx.crawl.pages.preparation import PageSettings, PreparedPage, prepare_page
+from openlinx.crawl.urls import NormalizedUrl
+from openlinx.output.diagnostics import Diagnostic
+from openlinx.output.reporter import Collected
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.clock import FakeClock

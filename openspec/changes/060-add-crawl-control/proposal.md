@@ -19,11 +19,11 @@ Both need five things:
 >
 > **Moved from 015 (2026-10-05):** the writer claim (`crawl_locked`), control writes by processes without the claim, recording a dead Crawl as `interrupted`, and reserved and chosen crawl ids (`crawl_id_taken`). `015` did not build them, so this change does (design D12).
 >
-> **Re-grounded (2026-10-14)** against `020-add-crawl-core`'s code through its group 6, its first pull request: `plan_crawl` and `start_crawl` in `spider.services.crawling`, `StopSignal`, `TRANSITIONS` with `set_state`, `url_counts()`, `create_crawl` with its id draw, `opening()` and its connection roles, and `--crawl`. The parts of `020` that land later (the `stopped` end, the progress counters, the failed ends, the network pause, interrupts and the continue operation) are named in tasks.md where a task waits for them, and the tasks are grouped by release.
+> **Re-grounded (2026-10-14)** against `020-add-crawl-core`'s code through its group 6, its first pull request: `plan_crawl` and `start_crawl` in `openlinx.services.crawling`, `StopSignal`, `TRANSITIONS` with `set_state`, `url_counts()`, `create_crawl` with its id draw, `opening()` and its connection roles, and `--crawl`. The parts of `020` that land later (the `stopped` end, the progress counters, the failed ends, the network pause, interrupts and the continue operation) are named in tasks.md where a task waits for them, and the tasks are grouped by release.
 >
 > **Schema blueprint (2026-10-11):** `crawl_runs.id` and `control_requests.handled_by_run_id` follow ADR-0005, `crawl_runs.stop_reason` shares `crawl.stop_reason`'s six values, and the heartbeat records the progress counters, so `status` never counts over `urls` while a Crawl runs.
 
-- **`spider crawl … --detach`**:
+- **`linx crawl … --detach`**:
   - It validates like a foreground `crawl`, reserves the crawl id, and starts a separate background process that creates the Crawl.
   - Within 10 seconds it prints `{crawl_id, state, run, pid, crawl_file, log_file, warnings, hint}`.
   - The background process survives closing the terminal:
@@ -31,25 +31,25 @@ Both need five things:
     - macOS and Linux: a new session.
   - Progress events and diagnostics go to `<crawl-id>.log`. Secrets are passed through the environment, never on the command line.
   - In List mode, the detaching Command reads and checks the list and stores the Seeds before the background process starts, so `--list -` works and list errors come back at once.
-- **`spider crawl … --dry-run`** with **`--no-estimate`**:
+- **`linx crawl … --dry-run`** with **`--no-estimate`**:
   - It validates exactly like a real Crawl and writes nothing.
   - It prints the resolved config, the equivalent command (argv, POSIX shell and PowerShell forms) and a URL estimate.
   - The estimate comes from sitemaps, or from the list. It has a stated basis and a confidence, and `urls` may be null.
   - Only robots.txt and sitemap files are requested.
   - Settings that are not `crawl` flags (for example `[store]` or `[rules]`) are listed in a `settings_not_in_command` warning.
-- **`spider status [--crawl]`:**
+- **`linx status [--crawl]`:**
   - It reports:
     - the Crawl State and whether a stop request is pending, and since when a Crawl waits for the network (`020`'s network pause)
     - `urls` counts, `status_classes`, `seed_count`
     - rate (from the heartbeat), average rate over all runs, ETA (and whether it is a lower bound), heartbeat age and PID
     - the error of a failed Crawl, the log file, warnings and a next-step hint
   - It detects a dead crawl process and records `interrupted`.
-- **`spider stop [--crawl] [--wait <s>]`:** it writes a stop request row, and the Crawl stops gracefully and stays resumable.
-- **`spider resume [--crawl] [--detach]`:**
+- **`linx stop [--crawl] [--wait <s>]`:** it writes a stop request row, and the Crawl stops gracefully and stays resumable.
+- **`linx resume [--crawl] [--detach]`:**
   - It continues a `stopped`, `interrupted` or `failed` Crawl with its recorded config, and refuses a `completed` one.
   - The only overrides are `--max-urls`, `--concurrency`, `--rate`, `--auth`, `--header` and `--proxy`.
-  - Secrets given as flags must be given again (`secrets_required`). Secrets from `spider.toml` are read again from it.
-- **`spider crawls list [--state]`, `crawls show <id|latest>`, `crawls rm <id>…`:**
+  - Secrets given as flags must be given again (`secrets_required`). Secrets from `openlinx.toml` are read again from it.
+- **`linx crawls list [--state]`, `crawls show <id|latest>`, `crawls rm <id>…`:**
   - `show` includes the recorded command, every run and a re-run command.
   - `rm` also deletes the Crawl's reports folder and its Report Notes, and lists the removed paths.
 - **Crawls started without a command line,** such as by the MCP server, record a synthesised equivalent argv.
@@ -103,11 +103,11 @@ Both need five things:
   - `080-add-agent-skill`: Hand-off and polling workflows.
   - `090-add-mcp-server`: the crawl-control tools and detached starts.
 - **Code:**
-  - `spider.services.control`: detach, status, stop and resume, next to `020`'s `spider.services.crawling` (the start) and `015`'s `spider.services.crawls` (creating a Crawl), which gains a chosen id and, in v0.2, `crawls list|show|rm`.
-  - `spider.crawl.process`: background start per OS.
-  - `spider.crawl.heartbeat`: the control check and the heartbeat beside the engine.
-  - `spider.store.claim`, `spider.store.control` (control writes and `check_writer`) and the `crawl_runs` and `control_requests` units: data access stays in the store (`020` D14).
-  - `spider.cli.control`: the Commands.
-  - **(v0.1.1)** `spider.crawl.commandline`: the equivalent command's argv; **(v0.2)** its shell forms, and `spider.crawl.estimate`.
+  - `openlinx.services.control`: detach, status, stop and resume, next to `020`'s `openlinx.services.crawling` (the start) and `015`'s `openlinx.services.crawls` (creating a Crawl), which gains a chosen id and, in v0.2, `crawls list|show|rm`.
+  - `openlinx.crawl.process`: background start per OS.
+  - `openlinx.crawl.heartbeat`: the control check and the heartbeat beside the engine.
+  - `openlinx.store.claim`, `openlinx.store.control` (control writes and `check_writer`) and the `crawl_runs` and `control_requests` units: data access stays in the store (`020` D14).
+  - `openlinx.cli.control`: the Commands.
+  - **(v0.1.1)** `openlinx.crawl.commandline`: the equivalent command's argv; **(v0.2)** its shell forms, and `openlinx.crawl.estimate`.
 - **Dependencies:** none new. The Windows job-object check uses `ctypes`.
 - **Docs:** `docs/crawl-control.md` (background Crawls, Hand-off, Crawl States, status fields, resume rules and the dry run).

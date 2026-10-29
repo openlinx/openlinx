@@ -7,14 +7,14 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.crawl.robots.reader import (
+from openlinx.crawl.robots.reader import (
     OriginRobots,
     RobotsTxt,
     read_robots_txt,
     robots_state,
     robots_txt_text,
 )
-from spider.naming import DEFAULT_ROBOTS_TOKEN
+from openlinx.naming import DEFAULT_ROBOTS_TOKEN
 
 
 def _read(body: bytes, token: str = DEFAULT_ROBOTS_TOKEN) -> RobotsTxt:
@@ -27,7 +27,7 @@ _TO_THE_LIMIT = b"User-agent: *\n#" + b"-" * (512_000 - 15 - len(_LAST_RULE)) + 
 
 
 def test_the_group_for_the_tool_s_token_applies() -> None:
-    robots = _read(b"User-agent: spider\nDisallow: /a\n\nUser-agent: *\nDisallow: /b")
+    robots = _read(b"User-agent: openlinx\nDisallow: /a\n\nUser-agent: *\nDisallow: /b")
 
     assert (robots.allows("http://site.test/a"), robots.allows("http://site.test/b")) == (
         False,
@@ -105,7 +105,7 @@ _PIECES = st.sampled_from(
         "Visit-time:",
         "Sitemap:",
         "Host:",
-        "spider",
+        "openlinx",
         "*",
         "$",
         "%",

@@ -4,8 +4,8 @@ import pytest
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 
-from spider.store.schema import crawl
-from spider.store.writer import CrawlWriter
+from openlinx.store.schema import crawl
+from openlinx.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, query
 from tests.support.workspace import TempWorkspace

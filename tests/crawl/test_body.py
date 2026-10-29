@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 import brotli
 import pytest
 
-from spider.crawl.fetch.body import BODY_LIMIT, Body, BodyDecodingError, read_body
+from openlinx.crawl.fetch.body import BODY_LIMIT, Body, BodyDecodingError, read_body
 
 # A product listing, as a shop's category page repeats it.
 ROW = b'<li class="product"><a href="/p/1">Trail shoe</a> <span>89.00</span></li>\n'

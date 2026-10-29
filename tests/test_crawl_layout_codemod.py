@@ -7,7 +7,7 @@ from types import ModuleType
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-CRAWL = ROOT / "src" / "spider" / "crawl"
+CRAWL = ROOT / "src" / "openlinx" / "crawl"
 
 
 def _codemod() -> ModuleType:
@@ -57,7 +57,7 @@ REWRITES = [
 
 
 def _spelt(text: str) -> str:
-    return text.format(c="spider.crawl", p="spider/crawl")
+    return text.format(c="openlinx.crawl", p="openlinx/crawl")
 
 
 @pytest.mark.parametrize(("old", "new"), REWRITES)

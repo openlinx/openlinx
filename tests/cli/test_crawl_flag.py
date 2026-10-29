@@ -38,7 +38,7 @@ def test_no_crawls_on_the_command_line(temp_workspace: TempWorkspace) -> None:
     result = run_cli(EXAMPLE_READ_CRAWL, app=example_app())
     error = result.stderr_json_lines()[-1]
 
-    assert (result.exit_code, error["code"], "spider crawl" in error["hint"]) == (
+    assert (result.exit_code, error["code"], "linx crawl" in error["hint"]) == (
         4,
         "no_crawls",
         True,

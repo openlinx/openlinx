@@ -7,8 +7,8 @@ imports and wrap the lines:
     uv run ruff check --select I --fix . && uv run ruff format .
 
 It rewrites the .py files under each path given and prints each file it changed; a second run
-changes nothing. `from spider.crawl import engine` (or pages, robots) means the old module, and
-a bare `spider.crawl.engine` (or pages, robots) the new package.
+changes nothing. `from openlinx.crawl import engine` (or pages, robots) means the old module, and
+a bare `openlinx.crawl.engine` (or pages, robots) the new package.
 """
 
 import argparse
@@ -16,7 +16,7 @@ import re
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
-# The old modules of spider.crawl, each with its new place under spider.crawl.
+# The old modules of openlinx.crawl, each with its new place under openlinx.crawl.
 MOVED = {
     "fetcher": "fetch.fetcher",
     "politeness": "fetch.politeness",
@@ -50,12 +50,12 @@ _SUBMODULES = {new.partition(".")[2] for new in MOVED.values()}
 _SKIPPED_FOLDERS = {".git", ".venv", "node_modules", "__pycache__"}
 
 _IMPORT_FROM = re.compile(
-    r"^(?P<indent>[ \t]*)from spider\.crawl(?:\.(?P<old>\w+))? import "
+    r"^(?P<indent>[ \t]*)from openlinx\.crawl(?:\.(?P<old>\w+))? import "
     r"(?P<names>\([^)]*\)|[^\n]*)",
     re.MULTILINE,
 )
-_DOTTED = re.compile(r"spider\.crawl\.(?P<old>\w+)(?:\.(?P<name>\w+))?(?P<from> import)?")
-_PATH = re.compile(r"spider/crawl/(?P<old>\w+)\.py\b")
+_DOTTED = re.compile(r"openlinx\.crawl\.(?P<old>\w+)(?:\.(?P<name>\w+))?(?P<from> import)?")
+_PATH = re.compile(r"openlinx/crawl/(?P<old>\w+)\.py\b")
 
 
 def rewrite(source: str) -> str:
@@ -108,7 +108,7 @@ def _from_old(old: str, items: list[str], indent: str) -> list[str] | None:
     if list(by_module) == [old]:
         return None
     return [
-        f"{indent}from spider.crawl.{module} import {', '.join(names)}"
+        f"{indent}from openlinx.crawl.{module} import {', '.join(names)}"
         for module, names in by_module.items()
     ]
 
@@ -124,11 +124,11 @@ def _from_crawl(items: list[str], indent: str) -> list[str] | None:
         package, _, module = MOVED[name].rpartition(".")
         local = local.strip() or name
         alias = f" as {local}" if local != module else ""
-        lines.append(f"{indent}from spider.crawl.{package} import {module}{alias}")
+        lines.append(f"{indent}from openlinx.crawl.{package} import {module}{alias}")
     if not lines:
         return None
     if kept:
-        lines.insert(0, f"{indent}from spider.crawl import {', '.join(kept)}")
+        lines.insert(0, f"{indent}from openlinx.crawl import {', '.join(kept)}")
     return lines
 
 
@@ -138,15 +138,15 @@ def _dotted(match: re.Match[str]) -> str:
     if old not in MOVED or match["from"] or (name is not None and _is_new(old, name)):
         return match[0]
     if name is None:
-        return match[0] if old in _PACKAGES else f"spider.crawl.{MOVED[old]}"
-    return f"spider.crawl.{_new_module(old, name)}.{name}"
+        return match[0] if old in _PACKAGES else f"openlinx.crawl.{MOVED[old]}"
+    return f"openlinx.crawl.{_new_module(old, name)}.{name}"
 
 
 def _path(match: re.Match[str]) -> str:
     old = match["old"]
     if old not in MOVED:
         return match[0]
-    return f"spider/crawl/{MOVED[old].replace('.', '/')}.py"
+    return f"openlinx/crawl/{MOVED[old].replace('.', '/')}.py"
 
 
 def _python_files(root: Path) -> Iterator[Path]:

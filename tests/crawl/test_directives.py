@@ -3,9 +3,13 @@
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.crawl.pages.directives import RobotsDirectives, meta_robots_contents, robots_directives
-from spider.crawl.pages.links import parse_html
-from spider.naming import DEFAULT_ROBOTS_TOKEN
+from openlinx.crawl.pages.directives import (
+    RobotsDirectives,
+    meta_robots_contents,
+    robots_directives,
+)
+from openlinx.crawl.pages.links import parse_html
+from openlinx.naming import DEFAULT_ROBOTS_TOKEN
 
 
 def test_meta_robots_directives_are_read_case_insensitively() -> None:

@@ -13,11 +13,11 @@ import pytest
 from sqlalchemy import Connection, func, select, update
 from sqlalchemy.exc import IntegrityError
 
-from spider.output.diagnostics import SpiderError
-from spider.store.connections import connect
-from spider.store.reading import reading
-from spider.store.schema import seeds
-from spider.store.writer import CrawlWriter, CrawlWriterClosedError, CrawlWriterReplayError
+from openlinx.output.diagnostics import OpenLinxError
+from openlinx.store.connections import connect
+from openlinx.store.reading import reading
+from openlinx.store.schema import seeds
+from openlinx.store.writer import CrawlWriter, CrawlWriterClosedError, CrawlWriterReplayError
 from tests.support.clock import FakeClock
 from tests.support.crawls import (
     crawl_without_seeds,
@@ -464,7 +464,7 @@ def test_a_read_only_crawl_file(temp_workspace: TempWorkspace) -> None:
     crawl = create_any_crawl(temp_workspace)
     before = sha256_of(crawl.path)
 
-    with read_only_file(crawl.path), pytest.raises(SpiderError) as raised:
+    with read_only_file(crawl.path), pytest.raises(OpenLinxError) as raised:
         CrawlWriter(crawl.path, FakeClock())
 
     assert (

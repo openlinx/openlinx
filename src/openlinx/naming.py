@@ -1,0 +1,14 @@
+"""The product name and names made from it (design D11 of 010-add-workspace-and-cli-contract)."""
+
+# The command users type, and the name of the package, its files and the robots token.
+COMMAND_NAME = "linx"
+PACKAGE_NAME = "openlinx"
+# Named in every request's User-Agent: the repository until the product is named, and public
+# before the release (ROADMAP, Release).
+PROJECT_URL = "https://github.com/openlinx/openlinx"
+DATA_DIR_NAME = f".{PACKAGE_NAME}"
+SETTINGS_FILE_NAME = f"{PACKAGE_NAME}.toml"
+# Selects robots.txt groups and prefixed robots directives unless --robots-user-agent is given.
+DEFAULT_ROBOTS_TOKEN = PACKAGE_NAME
+# As users see it: symbolic, so text that names it is the same on every OS.
+GLOBAL_DATA_DIR = f"~/{DATA_DIR_NAME}"

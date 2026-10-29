@@ -3,8 +3,8 @@
 from itertools import product
 from typing import get_args
 
-from spider.store.records import CrawlState, StopReason
-from spider.store.transitions import CrawlStateError, check_transition
+from openlinx.store.records import CrawlState, StopReason
+from openlinx.store.transitions import CrawlStateError, check_transition
 
 STATES: tuple[CrawlState, ...] = get_args(CrawlState.__value__)
 REASONS: tuple[StopReason | None, ...] = (None, *get_args(StopReason.__value__))

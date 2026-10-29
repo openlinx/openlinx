@@ -7,10 +7,10 @@ from typing import Any
 
 import pytest
 
-from spider.crawl.engine.pause import pause_after, probe_times
-from spider.crawl.engine.stop import StopSignal
-from spider.output.reporter import CliReporter, Collected
-from spider.output.writer import Output
+from openlinx.crawl.engine.pause import pause_after, probe_times
+from openlinx.crawl.engine.stop import StopSignal
+from openlinx.output.reporter import CliReporter, Collected
+from openlinx.output.writer import Output
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site

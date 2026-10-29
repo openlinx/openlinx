@@ -5,7 +5,7 @@ from contextlib import contextmanager
 
 from sqlalchemy import Column, ForeignKey, Index, Integer, Text
 
-from spider.store.schema import metadata, public_table
+from openlinx.store.schema import metadata, public_table
 
 
 @contextmanager

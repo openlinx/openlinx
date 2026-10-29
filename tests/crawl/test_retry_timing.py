@@ -2,7 +2,7 @@
 
 import pytest
 
-from spider.crawl.fetch.politeness import RateGate
+from openlinx.crawl.fetch.politeness import RateGate
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.fetcher import FakeFetcher, FakePage

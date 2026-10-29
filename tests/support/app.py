@@ -7,9 +7,9 @@ from typing import Annotated, Any, cast
 
 import typer
 
-from spider.cli.app import AppExtra, build_app
-from spider.cli.meta import command_meta
-from spider.cli.options import (
+from openlinx.cli.app import AppExtra, build_app
+from openlinx.cli.meta import command_meta
+from openlinx.cli.options import (
     CrawlOpt,
     CursorOpt,
     FieldsOpt,
@@ -18,16 +18,16 @@ from spider.cli.options import (
     OptionMeta,
     WorkspaceOpt,
 )
-from spider.cli.runner import Invocation, SpiderGroup
-from spider.output.codes import DiagnosticCode, ExitCode
-from spider.output.diagnostics import Diagnostic, Outcome, SpiderError
-from spider.output.paging import Fields, Page, fingerprint, paginate, select_fields
-from spider.output.writer import Format
-from spider.store.records import LATEST
-from spider.workspace.discovery import resolve_workspace
-from spider.workspace.tables import SettingsTables
+from openlinx.cli.runner import Invocation, OpenLinxGroup
+from openlinx.output.codes import DiagnosticCode, ExitCode
+from openlinx.output.diagnostics import Diagnostic, OpenLinxError, Outcome
+from openlinx.output.paging import Fields, Page, fingerprint, paginate, select_fields
+from openlinx.output.writer import Format
+from openlinx.store.records import LATEST
+from openlinx.workspace.discovery import resolve_workspace
+from openlinx.workspace.tables import SettingsTables
 
-# Declared here, not in spider.output.codes: the tool never lists the fixture app's codes.
+# Declared here, not in openlinx.output.codes: the tool never lists the fixture app's codes.
 EXAMPLE_FAILED = DiagnosticCode(
     code="example_failed",
     level="error",
@@ -156,7 +156,7 @@ def example_warn_and_wait(ctx: typer.Context, output_format: FormatOpt = Format.
 @command_meta(output="document", formats=[Format.JSON, Format.TABLE])
 def example_failed_outcome(output_format: FormatOpt = Format.JSON) -> Outcome:
     """Ends with the result state=failed and an error whose exit code is 1."""
-    return Outcome({"state": "failed"}, SpiderError(EXAMPLE_FAILED, "The example failed."))
+    return Outcome({"state": "failed"}, OpenLinxError(EXAMPLE_FAILED, "The example failed."))
 
 
 @command_meta(output="document", formats=[Format.JSON, Format.TABLE])
@@ -214,7 +214,7 @@ def example_read_crawl(
 ) -> Any:
     """Reads the --crawl Crawl and reports its id, as the Commands of 050 will."""
     # Imported here, as in every Command that reads a Crawl: sqlalchemy stays off --help.
-    from spider.store.selection import resolve_crawl
+    from openlinx.store.selection import resolve_crawl
 
     workspace = resolve_workspace(cwd=Path.cwd(), flag=workspace_dir, home=Path.home())
     return {"crawl": resolve_crawl(crawl, workspace=workspace, cwd=Path.cwd()).id}
@@ -248,4 +248,4 @@ def example_app() -> typer.Typer:
 
 def settings_tables(app: typer.Typer) -> SettingsTables:
     """The settings tables an app registered, as its Commands see them."""
-    return cast(SpiderGroup, typer.main.get_group(app)).settings_tables
+    return cast(OpenLinxGroup, typer.main.get_group(app)).settings_tables

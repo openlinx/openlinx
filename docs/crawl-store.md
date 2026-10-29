@@ -1,14 +1,14 @@
 # The crawl store
 
-How `spider` stores each Crawl. The spec is [openspec/specs/crawl-store/spec.md](../openspec/specs/crawl-store/spec.md), and the tables are documented in [schema.md](schema.md). Terms follow [CONTEXT.md](../CONTEXT.md).
+How `linx` stores each Crawl. The spec is [openspec/specs/crawl-store/spec.md](../openspec/specs/crawl-store/spec.md), and the tables are documented in [schema.md](schema.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
 ## Crawl files
 
 Each Crawl is one SQLite file in the `crawls/` folder of the Workspace's data folder ([workspace.md](workspace.md)):
 
 ```
-~/work/shop/.spider/crawls/20260927-140312-k3f9.sqlite    a Crawl of the local Workspace ~/work/shop
-~/.spider/crawls/20260927-140312-k3f9.sqlite              a Crawl of the global Workspace
+~/work/shop/.openlinx/crawls/20260927-140312-k3f9.sqlite    a Crawl of the local Workspace ~/work/shop
+~/.openlinx/crawls/20260927-140312-k3f9.sqlite              a Crawl of the global Workspace
 ```
 
 - The file name is the crawl id followed by `.sqlite`.
@@ -46,24 +46,24 @@ Every Command that reads a Crawl takes the global flag `--crawl`, next to `--wor
 
 | Code | Exit code | When |
 |---|---|---|
-| `no_crawls` | 4 | the Workspace has no Crawl; the hint says how to start one with `spider crawl` |
+| `no_crawls` | 4 | the Workspace has no Crawl; the hint says how to start one with `linx crawl` |
 | `crawl_not_found` | 4 | no Crawl in the Workspace has the given id, or no file exists at the given path (`details.file`) |
 | `crawl_file_invalid` | 6 | the selected file is not a readable crawl file, or a file selected by id or `latest` holds another id (`details.expected_id` and `details.found_id`); `details.file` names it |
 | `invalid_value` | 2 | the value is not `latest`, a crawl id or a path |
 
 ## The data folder
 
-Storing a Crawl needs no `spider init` first. Creating a Crawl creates whatever is missing of the data folder, as `spider init` would:
+Storing a Crawl needs no `linx init` first. Creating a Crawl creates whatever is missing of the data folder, as `linx init` would:
 
 | Created | When |
 |---|---|
-| `.spider/` | the data folder is missing |
-| `.spider/.gitignore` | it is missing; it makes git ignore the crawl data |
-| `.spider/crawls/` | it is missing |
+| `.openlinx/` | the data folder is missing |
+| `.openlinx/.gitignore` | it is missing; it makes git ignore the crawl data |
+| `.openlinx/crawls/` | it is missing |
 
-- **No settings file.** Creating a Crawl never writes `spider.toml`. Only `spider init` does.
-- **The global Workspace.** When no local Workspace is found, the Crawl goes to `~/.spider/crawls/`, and `~/.spider/` is created when it is missing.
-- **An unwritable data folder** fails with `workspace_not_writable` (exit code 7) before anything is crawled. `details.path` names the path that failed, for example `~/.spider` when it is a file instead of a folder, or the new crawl file when `crawls/` does not allow creating files. A permissions problem never shows up as a traceback.
+- **No settings file.** Creating a Crawl never writes `openlinx.toml`. Only `linx init` does.
+- **The global Workspace.** When no local Workspace is found, the Crawl goes to `~/.openlinx/crawls/`, and `~/.openlinx/` is created when it is missing.
+- **An unwritable data folder** fails with `workspace_not_writable` (exit code 7) before anything is crawled. `details.path` names the path that failed, for example `~/.openlinx` when it is a file instead of a folder, or the new crawl file when `crawls/` does not allow creating files. A permissions problem never shows up as a traceback.
 
 ## What a Crawl records about itself
 
@@ -79,7 +79,7 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 
 - **Counts are not recorded while a Crawl runs.** No column that the Crawl writes holds the number of URLs, Pages or Issues: they are counted from the tables that hold them, so they can never disagree. A value derived from the stored rows, such as a score, is stored only by a pass that runs after the Crawl, in a derived column.
 - **`started_at`** is the same instant as the time in the crawl id, read once when the Crawl is created.
-- **`settings_file`** is the `spider.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key, so the file says how it was made even when `spider.toml` changes later.
+- **`settings_file`** is the `openlinx.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key, so the file says how it was made even when `openlinx.toml` changes later.
 - **The environment stamp** (`python_version` and `platform`) helps when a crawl file is attached to a bug report.
 
 ## Secrets are never recorded
@@ -90,8 +90,8 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
   - a setting marked secret on its settings table, such as a token, and every option that maps to it
   - an option that maps to no setting and is marked secret itself
 
-  `spider commands` shows `"secret": true` on such options. A secret option has only long names, such as `--token`, so the attached short form `-tVALUE` never carries a secret.
-- **Where:** the value after a secret flag, in both the `--flag value` and the `--flag=value` forms, and a secret setting's value in `config`, wherever it came from: the flag, `spider.toml` (secrets are allowed there) or a default. An unset secret stays `null`.
+  `linx commands` shows `"secret": true` on such options. A secret option has only long names, such as `--token`, so the attached short form `-tVALUE` never carries a secret.
+- **Where:** the value after a secret flag, in both the `--flag value` and the `--flag=value` forms, and a secret setting's value in `config`, wherever it came from: the flag, `openlinx.toml` (secrets are allowed there) or a default. An unset secret stays `null`.
 - **The two shapes of a redacted value:**
 
   | Secret value | Recorded as |
@@ -113,7 +113,7 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 | `failed` | it could not continue, resumable |
 | `interrupted` | its process died without recording an end, resumable |
 
-The Crawl Service continues a `stopped` or `failed` Crawl (see [Continuing a Crawl](crawling.md#continuing-a-crawl)); `060-add-crawl-control` gives it the `spider resume` Command.
+The Crawl Service continues a `stopped` or `failed` Crawl (see [Continuing a Crawl](crawling.md#continuing-a-crawl)); `060-add-crawl-control` gives it the `linx resume` Command.
 
 - A new Crawl starts as `running`.
 - `completed` is final. A continue takes a `stopped` or `failed` Crawl back to `running` and clears its `stop_reason`.
@@ -178,7 +178,7 @@ Commands that only read a Crawl open its file read-only, for one operation at a 
 
 ## The journal mode
 
-A new crawl file gets its SQLite journal mode once, when it is created, and `crawl.journal_mode` records it. The setting `store.journal_mode` in the Workspace's `spider.toml` chooses it with the file's location:
+A new crawl file gets its SQLite journal mode once, when it is created, and `crawl.journal_mode` records it. The setting `store.journal_mode` in the Workspace's `openlinx.toml` chooses it with the file's location:
 
 | `store.journal_mode` | Local disk | UNC path |
 |---|---|---|
@@ -187,7 +187,7 @@ A new crawl file gets its SQLite journal mode once, when it is created, and `cra
 | `"delete"` | `delete` | `delete` |
 
 - **WAL** (write-ahead logging) lets a Command read a Crawl while it is written. It relies on shared memory between processes, which network file systems do not provide safely, so SQLite advises against WAL on them.
-- **A UNC path** is a data folder whose path starts with `\\` or `//`, such as `\\fileserver\share\site\.spider`, including `\\?\UNC\…` paths; the drive forms `\\?\C:\…` and `\\.\C:\…` are local. Only the path is read; nothing is asked of the system. There `"auto"` falls back to a rollback journal (`delete`) and warns with `store_wal_unavailable`, whose `details.path` names the data folder. In that mode a write shuts readers out (see [Reading a Crawl](#reading-a-crawl)).
+- **A UNC path** is a data folder whose path starts with `\\` or `//`, such as `\\fileserver\share\site\.openlinx`, including `\\?\UNC\…` paths; the drive forms `\\?\C:\…` and `\\.\C:\…` are local. Only the path is read; nothing is asked of the system. There `"auto"` falls back to a rollback journal (`delete`) and warns with `store_wal_unavailable`, whose `details.path` names the data folder. In that mode a write shuts readers out (see [Reading a Crawl](#reading-a-crawl)).
 - **Other network folders,** such as a mapped drive (`Z:`) or an SMB or NFS mount, are not detected in v0.1, so they get WAL. Choose the rollback journal for them yourself:
 
   ```toml
@@ -203,7 +203,7 @@ A new crawl file gets its SQLite journal mode once, when it is created, and `cra
 
 ## Describing the schema
 
-`spider schema` lists the public tables and needs neither a Workspace nor a Crawl. For each table it gives:
+`linx schema` lists the public tables and needs neither a Workspace nor a Crawl. For each table it gives:
 - its columns, with their types, keys, formats and allowed values, and for a reference the `<table>.<column>` it points to
 - its secondary indexes, each with its columns, whether it is unique, the condition of a partial index, and the query it serves
 

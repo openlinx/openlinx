@@ -29,7 +29,7 @@ def run(name: str, command: Sequence[str], env: Mapping[str, str] | None = None)
     code = subprocess.run(command, cwd=REPO_ROOT, env=env, check=False).returncode
     if code != 0:
         message = f"FAILED: {name} (exit code {code})"
-        print(message, file=sys.stderr, flush=True)  # noqa: TID251 - not spider's output
+        print(message, file=sys.stderr, flush=True)  # noqa: TID251 - not OpenLinx's output
         sys.exit(code)
 
 

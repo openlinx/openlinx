@@ -10,7 +10,7 @@ A slice that needs a new column, index or table adds it through `018`'s `public_
 
 An option and its setting are declared by the task that applies them (`020` D11, no inert option), each with `OptionMeta(setting="crawl.<key>")` and its key in `CrawlSettings`: `--user-agent` in 1.2, `--retries` in 3.2, `--timeout` in 3.5 and `--max-redirects` in 4.11.
 
-`response_headers` rows follow `020` D9 and D14: `handler("response_headers", handle, write)` in `default_hooks()` (`spider.services.hooks`), whose writer takes a URL's rows as one sequence and runs one `executemany` of a statement built once (`017` D9).
+`response_headers` rows follow `020` D9 and D14: `handler("response_headers", handle, write)` in `default_hooks()` (`openlinx.services.hooks`), whose writer takes a URL's rows as one sequence and runs one `executemany` of a statement built once (`017` D9).
 
 A value that a handler or the store needs from a response goes on `020`'s `UrlResponse` (`UrlResult.response`), and a request that got none keeps its `UrlFailure` (`UrlResult.failure`); the store record is built from them (`020` task 5.20).
 
@@ -30,7 +30,7 @@ Seams (docs/testing.md):
 ## 1. Request identity and cookies
 
 - [x] 1.0 Refactor, behaviour unchanged: the Crawl Service opens the Fetcher through one factory that takes a frozen `FetchPolicy` and the clock, and the factory replaces `start_crawl`'s `resolver=` and `fetcher=` keywords (design D1). `plan_crawl` builds the policy; `crawl_result` keeps its own keywords and builds the factory from them, so its callers do not change. After `020` task 5.24, which edits the same Fetcher.
-- [x] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` from `FetchPolicy`, built from `APP_NAME`, `spider.__version__` and a `PROJECT_URL` constant next to `APP_NAME` in `spider.naming`, the repository's URL until the product is named (design D1). No `User-Agent` is set today, so aiohttp's own goes out.
+- [x] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` from `FetchPolicy`, built from `COMMAND_NAME`, `openlinx.__version__` and a `PROJECT_URL` constant next to `COMMAND_NAME` in `openlinx.naming`, the repository's URL until the product is named (design D1). No `User-Agent` is set today, so aiohttp's own goes out.
 - [x] 1.2 [HTTP] Drive "A custom user agent is used on every request", and [CLI] "An invalid user agent is rejected", a pair: `--user-agent` and `crawl.user_agent`, which `setting_rules` refuses when it is empty or holds CR, LF or another control character (narrowed to visible ASCII, spaces and tabs by 2.0). robots.txt goes through the same Requester and Fetcher, so its request carries it too.
 - [x] 1.3 [HTTP] **Guard:** "Cookies set by the site are not sent back". `020`'s Fetcher already has a `DummyCookieJar`. `/` sets the cookie through the route's `headers`, and the request log shows the request for `/check`.
 - [x] 1.4 Docs: document the user agent and cookies in `docs/crawling.md`.
@@ -44,7 +44,7 @@ Seams (docs/testing.md):
 - [x] 2.3 [HTTP] Drive "A lower-case proxy variable is honoured".
 - [x] 2.4 [HTTP] Drive "NO_PROXY bypasses the proxy": the spec's NO_PROXY rule inside a pure `ProxyVariables.for_url(url)`, since urllib's `proxy_bypass_environment` is undocumented, with a [Pure] table of its cases: the lower-case variable wins, `NO_PROXY` bypasses, and `ALL_PROXY` is ignored (`test_the_proxy_of_a_url`, design Risks).
 - [x] 2.5 [3+6] Drive "A proxy password from a variable is redacted": the Crawl Service adds the `environment` table of the same snapshot to `crawl.config`, and `environment.http_proxy` and `environment.https_proxy` to `NewCrawl.secret_names` (design D8). `crawl_result` passes empty `SecretNames()`, so the service, not the test helper, must add them, or the test cannot go red.
-- [x] 2.6 Docs: document the proxy variables and `NO_PROXY` in `docs/crawling.md`, and correct `ENVIRONMENT` in `spider.cli.commands`, which names a `--proxy` that v0.1 lacks.
+- [x] 2.6 Docs: document the proxy variables and `NO_PROXY` in `docs/crawling.md`, and correct `ENVIRONMENT` in `openlinx.cli.commands`, which names a `--proxy` that v0.1 lacks.
 - [x] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. Timeouts and retries
@@ -68,8 +68,8 @@ Seams (docs/testing.md):
 
 ## 4. Redirects
 
-- [x] 4.0 Refactor, behaviour unchanged: one `insert_urls` helper in `spider.store.urls` records the rows' origins before it inserts them, and `record_seed` and `record_fetched` insert through it, so no inserter can forget the origin (design D2). A guard test refuses any other insert into `urls`, red by a mutation that inserts directly.
-- [x] 4.1 [3+6] Drive "Every hop of a Redirect Chain is recorded", and [CLI] "Index of redirect targets", a pair: `REDIRECT_STATUSES` and the pure `redirect_target(url, status, location, strip_params)` in `spider.crawl.following`, which the robots.txt loader calls too, carried on `UrlResponse.redirect_target`; the target recorded by the unit of the 3xx response through `insert_urls` at the source's Crawl Depth, the `redirect_location` column, `redirect_url_id` as a declared reference with the partial index `urls_redirect_url_id`, and writing the value `redirect`. Done when: `_crawl_depth` reads the open depth again after its tasks end, so a target recorded at the open depth, or a URL lowered to it below the read cursor, is dispatched in the same run, and no in-flight URL of that depth is dispatched twice (design D2).
+- [x] 4.0 Refactor, behaviour unchanged: one `insert_urls` helper in `openlinx.store.urls` records the rows' origins before it inserts them, and `record_seed` and `record_fetched` insert through it, so no inserter can forget the origin (design D2). A guard test refuses any other insert into `urls`, red by a mutation that inserts directly.
+- [x] 4.1 [3+6] Drive "Every hop of a Redirect Chain is recorded", and [CLI] "Index of redirect targets", a pair: `REDIRECT_STATUSES` and the pure `redirect_target(url, status, location, strip_params)` in `openlinx.crawl.following`, which the robots.txt loader calls too, carried on `UrlResponse.redirect_target`; the target recorded by the unit of the 3xx response through `insert_urls` at the source's Crawl Depth, the `redirect_location` column, `redirect_url_id` as a declared reference with the partial index `urls_redirect_url_id`, and writing the value `redirect`. Done when: `_crawl_depth` reads the open depth again after its tasks end, so a target recorded at the open depth, or a URL lowered to it below the read cursor, is dispatched in the same run, and no in-flight URL of that depth is dispatched twice (design D2).
 - [x] 4.2 [3+6] **Guard:** "A relative Location is resolved": `redirect_target` resolves through `020`'s `resolve_reference` with the Crawl's `strip_params` (design D2).
 - [x] 4.3 [3+6] Drive "A redirect without Location has no target", with the fixture's `Status(302)`. Done when: a Location that gives no `NormalizedUrl`, and a 300, 304 or 305 response, have no target either, by a [Pure] table of `redirect_target` (`test_a_redirect_gives_the_http_url_its_location_names_or_no_target`, design Risks).
 - [x] 4.4 [3+6] **Guard:** "A redirect target keeps the depth", red by a mutation that records the target at depth + 1.
@@ -95,11 +95,11 @@ Seams (docs/testing.md):
   - The loop walk stops at a URL it has seen, with a guard on `/x` → `/cart` while `/cart` and `/login` loop.
   - The context keeps the planned Scope under a name that says so, and every read of the current Scope goes through the Seed chain's one accessor (design D3); one source of "the URL is in the Seed's chain" and one 3xx predicate, `REDIRECT_STATUSES`.
   - `test_a_hop_that_a_link_reached_first_starts_the_hop_count_again` (design Risks), and the stale "continued unit" comment of the walk back.
-- [x] 4.17 Refactor with the whole suite green and no behaviour change: one frozen `Redirect` record in place of `redirect_location`, `redirect` and `max_redirects` on `FetchedUrl`; the redirect statements and walks split out of `spider.store.urls` into `spider.store.redirects`; the chain close moved into `seed_chain.py`; a frozen record for the decisions `reclassify_urls` takes.
+- [x] 4.17 Refactor with the whole suite green and no behaviour change: one frozen `Redirect` record in place of `redirect_location`, `redirect` and `max_redirects` on `FetchedUrl`; the redirect statements and walks split out of `openlinx.store.urls` into `openlinx.store.redirects`; the chain close moved into `seed_chain.py`; a frozen record for the decisions `reclassify_urls` takes.
 
 ## 5. Limits, compression and Resource sizes
 
-- [x] 5.1 [3+6] Drive "A huge page is not parsed": the 20 MiB cap in `read_body` of `spider.crawl.fetch.body`, with [Pure] tests of the cap on real bytes, and the `body_truncated` column, through `FetchResult`, `UrlResponse` and `FetchedUrl` (design D1); the URL's unit gives a capped HTML body `PreparedPage(parse_error="body_too_large")` instead of preparing it. On the fixture's `LargeFile` with `content_type="text/html"`.
+- [x] 5.1 [3+6] Drive "A huge page is not parsed": the 20 MiB cap in `read_body` of `openlinx.crawl.fetch.body`, with [Pure] tests of the cap on real bytes, and the `body_truncated` column, through `FetchResult`, `UrlResponse` and `FetchedUrl` (design D1); the URL's unit gives a capped HTML body `PreparedPage(parse_error="body_too_large")` instead of preparing it. On the fixture's `LargeFile` with `content_type="text/html"`.
 - [x] 5.2 [3+6] Drive "A very long URL is skipped": `ScopeRules.decide` gives `url_too_long` before its patterns (design D12).
 - [x] 5.3 [HTTP] Drive "Requests accept compressed bodies": an explicit `Accept-Encoding: gzip, deflate, br` in `aiohttp_fetcher`, in place of aiohttp's own list, which offers zstd on Python 3.14.
 - [x] 5.4 [Fixture] **Guard:** a precompressed gzip file from a site folder, served with `Page(file=..., content_type="text/javascript", headers=[("Content-Encoding", "gzip")])`, keeps its bytes (design D9).
@@ -112,10 +112,10 @@ Seams (docs/testing.md):
 ## 6. TLS
 
 - [x] 6.1 [Fixture] Add HTTPS listeners with a `trustme` CA to the fixture site, which the DNS resolver hook maps from port 443 of a name, so `FixtureResolver` is keyed by name and port: one for `site.test`, one with a certificate for `other.test` served as `badcert.test`, and one with a certificate from an untrusted CA. The crawler's TLS setup takes extra trust anchors for the test CA through the Fetcher factory of 1.0 (design D5). `trustme` is a dev dependency.
-- [x] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback in `spider.crawl.fetch.tls`, both runtime dependencies with their allowlist lines, imported only from `spider.crawl.fetch`. `aiohttp.ClientSSLError` → `tls_error` is `020`'s already. A [Pure] test covers the fallback branch.
+- [x] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback in `openlinx.crawl.fetch.tls`, both runtime dependencies with their allowlist lines, imported only from `openlinx.crawl.fetch`. `aiohttp.ClientSSLError` → `tls_error` is `020`'s already. A [Pure] test covers the fallback branch.
 - [x] 6.3 [3+6] Drive "A certificate from an unknown CA is a TLS error", and `test_a_robots_txt_with_a_bad_certificate_gives_its_urls_tls_error_without_a_request` [3+6] over the `badcert.test` listener, since the TLS requirement's robots.txt sentence has no scenario of its own.
 - [ ] 6.4 Speed test: `scripts/tls_handshake_speed.py`, a one-off measurement against public hosts that is never a test and never runs in the gate, measures TLS handshake time with truststore and with certifi on Windows, macOS and Linux (WSL). Record the results in `docs/benchmarks.md`, and change the default path only if truststore is measurably slower (design D5). macOS is measured when CI minutes return (workflow_dispatch).
-- [x] 6.5 [CLI] Drive "The HTTP version is a later column" (v0.1): `origins.http_version` declared NULL in every row, with its values from a `Literal` in `spider.store.records` and a description that starts with `Filled from v0.2. `. It is the first later column, so `018`'s guard over derived and later columns gains the assertion that it saw one.
+- [x] 6.5 [CLI] Drive "The HTTP version is a later column" (v0.1): `origins.http_version` declared NULL in every row, with its values from a `Literal` in `openlinx.store.records` and a description that starts with `Filled from v0.2. `. It is the first later column, so `018`'s guard over derived and later columns gains the assertion that it saw one.
 - [x] 6.6 Docs: document TLS trust, the speed-test result and `http_version` (NULL in v0.1) in `docs/crawling.md`.
 - [x] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
@@ -131,7 +131,7 @@ Seams (docs/testing.md):
 
 - [x] 8.1 Verify that every `#### Scenario:` in `specs/fetching/spec.md` that groups 1–7 drive has exactly one test named after it, with `scripts/scenario_coverage.py <spec.md>`, written here as the one shared check (`020` task 16.1 reuses it): it reports missing scenarios, scenarios with more than one test and tests named close to a scenario that no longer exists, and a v0.2 scenario as waiting. It is a check that is run, not a test.
 - [ ] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate, when CI minutes return (workflow_dispatch). Until then the gate runs Python 3.14 on Windows, and one full-suite run on Python 3.12 in WSL Linux proves the minimum version.
-- [x] 8.3 **Guard:** every code this change declares (design D11) is listed by `spider commands` with its level and exit code [CLI]; the `commands.json` snapshot holds only the `commands` Command's own entry, so it does not change.
+- [x] 8.3 **Guard:** every code this change declares (design D11) is listed by `linx commands` with its level and exit code [CLI]; the `commands.json` snapshot holds only the `commands` Command's own entry, so it does not change.
 - [x] 8.4 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.
 - [ ] 8.5 After `020` group 12 is merged: the network pause skips a `tls_error` and counts a retried request as one without a response, the pause sentences of the TLS and retry requirements, done at that merge.
 
@@ -144,7 +144,7 @@ Seams (docs/testing.md):
 - [ ] 9.5 [HTTP] Drive "Credentials are sent to Internal URLs": `--auth`, marked secret.
 - [ ] 9.6 [HTTP] Drive "Credentials never go to External URLs".
 - [ ] 9.7 [3+6] Drive "The recorded command hides the password".
-- [ ] 9.8 [HTTP] Drive "Credentials in spider.toml are used".
+- [ ] 9.8 [HTTP] Drive "Credentials in openlinx.toml are used".
 - [ ] 9.9 Docs: document custom headers, basic auth and secrets in `docs/crawling.md`.
 - [ ] 9.10 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
 

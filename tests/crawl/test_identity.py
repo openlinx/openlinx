@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from spider.naming import SETTINGS_FILE_NAME
+from openlinx.naming import SETTINGS_FILE_NAME
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site
@@ -34,7 +34,7 @@ def test_the_default_user_agent_identifies_the_tool(
     assert [
         path
         for path, agent in agents.items()
-        if not re.fullmatch(r"spider/\d+\.\d+\.\d+\S* \(\+https://\S+\)", agent)
+        if not re.fullmatch(r"linx/\d+\.\d+\.\d+\S* \(\+https://\S+\)", agent)
     ] == []
 
 

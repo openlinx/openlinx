@@ -42,7 +42,7 @@ def test_the_limit_warning_says_how_to_continue(
         (warning["hint"], warning["details"]["max_urls"])
         for warning in document["warnings"]
         if warning["code"] == "max_urls_reached"
-    ] == [(f"spider resume --crawl {document['crawl_id']} --max-urls 6", 3)]
+    ] == [(f"linx resume --crawl {document['crawl_id']} --max-urls 6", 3)]
 
 
 def test_there_is_no_limit_by_default(
@@ -65,7 +65,7 @@ def test_a_limit_below_one_is_rejected(temp_workspace: TempWorkspace) -> None:
 
 
 def test_a_limit_below_one_in_the_settings_file_is_refused(temp_workspace: TempWorkspace) -> None:
-    (temp_workspace.root / "spider.toml").write_bytes(b"[crawl]\nmax_urls = 0\n")
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[crawl]\nmax_urls = 0\n")
 
     result = run_cli("crawl", "http://site.test/")
 

@@ -3,7 +3,7 @@ Service)."""
 
 import pytest
 
-from spider.crawl.fetch.politeness import global_cap
+from openlinx.crawl.fetch.politeness import global_cap
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.fetcher import FakeFetcher, FakePage

@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from spider.output.events import event_line
+from openlinx.output.events import event_line
 from tests.support.clock import FakeClock
 
 

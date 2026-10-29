@@ -3,21 +3,21 @@
 See proposal.md (Why) for the motivation. The approach is shaped by these constraints:
 
 - **`020-add-crawl-core`** provides:
-  - the `Fetcher` Protocol in `spider.crawl.fetch.fetcher`, `async def fetch(self, request: Request) -> FetchResult | FetchFailure`: one attempt and one hop, never a redirect followed, and nothing raised but cancellation (`020` D8). `Request` holds the `NormalizedUrl`. `FetchResult` holds the status, the headers as received, the body and the timing, and `FetchFailure` the `fetch_error`, its message and the time
+  - the `Fetcher` Protocol in `openlinx.crawl.fetch.fetcher`, `async def fetch(self, request: Request) -> FetchResult | FetchFailure`: one attempt and one hop, never a redirect followed, and nothing raised but cancellation (`020` D8). `Request` holds the `NormalizedUrl`. `FetchResult` holds the status, the headers as received, the body and the timing, and `FetchFailure` the `fetch_error`, its message and the time
   - the minimal `AiohttpFetcher`, with a fixed 20-second total timeout, aiohttp's default TLS context and a `DummyCookieJar`, and `fetch_error_of`, which maps an exception to a `fetch_error`
-  - the Requester in `spider.crawl.fetch.requester`, through which a URL's request and robots.txt go, with the per-host slots and `RateGate` of `spider.crawl.fetch.politeness`
-  - the context builder (`020` D15) in `spider.services.crawling`, which opens the writer and the Fetcher and yields the frozen `CrawlContext`
-  - `CrawlSettings` in `spider.crawl.settings`, to which this change adds its keys, and options with `OptionMeta(setting="crawl.<key>")` in `spider.cli.crawl`, declared by the task that applies them (`020` D11)
-  - the engine in `spider.crawl.engine`: `dispatch` reads the frontier depth by depth, and `units` makes one unit per URL from its `UrlResult`, whose outcome is a `UrlResponse` (`response`) or a `UrlFailure` (`failure`), from which the store record is built
-  - `Hooks` in `spider.crawl.engine.hooks`, with `handler(name, handle, write)`, whose writer takes a URL's rows as one sequence, and `default_hooks()` in `spider.services.hooks`, the composition root (`020` D9, D14)
-  - `resolve_reference` in `spider.crawl.references`, by which a Link's reference is resolved, and the Link following rule in `spider.crawl.following`
+  - the Requester in `openlinx.crawl.fetch.requester`, through which a URL's request and robots.txt go, with the per-host slots and `RateGate` of `openlinx.crawl.fetch.politeness`
+  - the context builder (`020` D15) in `openlinx.services.crawling`, which opens the writer and the Fetcher and yields the frozen `CrawlContext`
+  - `CrawlSettings` in `openlinx.crawl.settings`, to which this change adds its keys, and options with `OptionMeta(setting="crawl.<key>")` in `openlinx.cli.crawl`, declared by the task that applies them (`020` D11)
+  - the engine in `openlinx.crawl.engine`: `dispatch` reads the frontier depth by depth, and `units` makes one unit per URL from its `UrlResult`, whose outcome is a `UrlResponse` (`response`) or a `UrlFailure` (`failure`), from which the store record is built
+  - `Hooks` in `openlinx.crawl.engine.hooks`, with `handler(name, handle, write)`, whose writer takes a URL's rows as one sequence, and `default_hooks()` in `openlinx.services.hooks`, the composition root (`020` D9, D14)
+  - `resolve_reference` in `openlinx.crawl.references`, by which a Link's reference is resolved, and the Link following rule in `openlinx.crawl.following`
   - the `urls` and `origins` tables, and the enumeration values this change writes (`020` D18): `redirect` (`discovered_via`), `max_redirects` and `url_too_long` (`skip_reason`), `timeout` and `tls_error` (`fetch_error`), and `body_too_large` (`parse_error`)
   - the fixture site's `Redirect`, `redirect_chain`, `Status` and `LargeFile` routes, the `headers`, `content_type`, `delay`, `hang` and `reset_after` options, the request log with each request's headers, and `fixture_hosts(site, other)`, whose DNS resolver hook maps `site.test` and `www.site.test` to one instance and `other.test` to another, on any port
 - **What `020` has not merged yet:** the network pause (`020` D16). This change's TLS and retry rules leave their pause sentences to it: a `tls_error` does not count, and a retried request counts as one without a response.
-- **`015-add-crawl-store`** redacts secrets in `create_crawl`, from `NewCrawl.secret_names` (a `SecretNames(flags, settings)`): whole values become `***`, and a URL's password becomes `user:***@host` (the private `_redact_value` in `spider.store.redaction`). It has no header form yet (`Cookie: ***`), which this change adds in v0.2.
+- **`015-add-crawl-store`** redacts secrets in `create_crawl`, from `NewCrawl.secret_names` (a `SecretNames(flags, settings)`): whole values become `***`, and a URL's password becomes `user:***@host` (the private `_redact_value` in `openlinx.store.redaction`). It has no header form yet (`Cookie: ***`), which this change adds in v0.2.
 - **`017-speed-up-crawl-writer`** gives the writer that `020`'s unit per URL goes through. A unit may run twice, so the units of this change follow its D7 contract, including the hop count and the loop walk of D2.
 - **`018-add-schema-conventions` and ADR-0005** set the schema rules. Every column, index and table of this change is declared through `018`'s `public_table()` (D10).
-- **`010-add-workspace-and-cli-contract`** takes settings only from flags and `spider.toml`, never from environment variables. The proxy variables are its one exception, which this change owns (the workspace capability, "Proxy variables").
+- **`010-add-workspace-and-cli-contract`** takes settings only from flags and `openlinx.toml`, never from environment variables. The proxy variables are its one exception, which this change owns (the workspace capability, "Proxy variables").
 - **ADR-0001:** aiohttp has no HTTP/2, so `http_version` is measured with an ALPN handshake (v0.2).
 - **`000-scaffold-project`:** its proxy isolation removes `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `ALL_PROXY`, in both cases, before every test, and it leaves HTTPS, named hosts and gzip on the fixture site to this change.
 
@@ -42,17 +42,17 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 - **The values it adds:** `FetchResult` gains only `body_truncated` and `transferred_bytes`, with defaults, so `020`'s fake Fetcher keeps working. The URL's unit derives the rest for `UrlResponse` and the store record: `content_encoding` through the one header lookup, and `size_bytes` as the body's length, NULL for a capped body. A redirect's target id is assigned in the URL's unit, so it is never on `UrlResult`; `030` reads `urls.redirect_url_id`.
 - **Errors:** `TimeoutError`, from which aiohttp's timeouts derive, is `timeout`. `aiohttp.ClientSSLError` (a certificate that does not verify, or another TLS failure) is `tls_error`, tested before `020`'s `ClientConnectorError` branch, which would make it `connection_error`. The rest stay as `020` D8 maps them, a host the resolver cannot encode included (`dns_error`).
 - **Timeout:** `--timeout` sets `FetchPolicy.timeout_seconds`, 20 until then, which goes into `aiohttp.ClientTimeout(total=...)`, which covers the body read too, so a stalled or trickling body times out. It also feeds `020`'s `watchdog_seconds`, `max(120, timeout + 30)` (`020` D16).
-- **Identity:** the session's `User-Agent` is built from `APP_NAME`, `spider.__version__` and `PROJECT_URL`, and `--user-agent` replaces it. `PROJECT_URL` is one constant next to `APP_NAME` in `spider.naming`: the repository's URL until the product is named, changed with the name.
+- **Identity:** the session's `User-Agent` is built from `COMMAND_NAME`, `openlinx.__version__` and `PROJECT_URL`, and `--user-agent` replaces it. `PROJECT_URL` is one constant next to `COMMAND_NAME` in `openlinx.naming`: the repository's URL until the product is named, changed with the name.
 - **Redirects:** `allow_redirects=False` on every request, as `020`'s Fetcher does already.
 - **Decoding:** `auto_decompress=False` and an explicit `Accept-Encoding`, `gzip, deflate, br` in v0.1. The Fetcher decodes gzip and deflate (`zlib`, with raw deflate as the fallback) and br (`brotli`) itself, so it measures both `transferred_bytes` and `size_bytes`.
-  - **One body reader:** `read_body(chunks, coding, limit)` in `spider.crawl.fetch.body` reads the stream up to the cap and chains the bounded decoders, several codings in the reverse order of `Content-Encoding` (RFC 9110 8.4.1). Its [Pure] tests run on real compressed bytes: a bomb, a truncated body, raw deflate and a corrupt stream.
+  - **One body reader:** `read_body(chunks, coding, limit)` in `openlinx.crawl.fetch.body` reads the stream up to the cap and chains the bounded decoders, several codings in the reverse order of `Content-Encoding` (RFC 9110 8.4.1). Its [Pure] tests run on real compressed bytes: a bomb, a truncated body, raw deflate and a corrupt stream.
   - **A body that fails to decode** is `invalid_response`. **A coding that was not offered,** such as zstd in v0.1, is a server that ignored the negotiation: the body is kept undecoded, `size_bytes` is NULL, and an HTML body gets `parse_error` = `unsupported_encoding` instead of being prepared. **(v0.2)** zstd (`zstandard`, or `compression.zstd` on 3.14).
 - **Body limit:** the body is streamed up to 20 MiB, and its decoded size is capped at the same 20 MiB by a decoder bounded in output, so a small compressed body cannot expand past the cap. A capped body has `body_truncated`, `transferred_bytes` the bytes read, and `size_bytes` NULL, since its full size was not measured; the URL's unit gives a capped HTML body `parse_error` = `body_too_large` instead of preparing it.
   - **(v0.2)** `Request` gains its dispatch decision's `in_scope`: a URL outside the Scope is only checked, never parsed (`020` D5), so when its response has a `Content-Length` and no `Content-Encoding` the Fetcher may stop after the headers and take both sizes from `Content-Length`. The 20 MiB cap bounds such a body in v0.1.
 - **No cookies:** `020`'s `DummyCookieJar` stays, so no cookie is ever replayed. This change pins it with a guard.
 - **Environment:** `trust_env=False`, aiohttp's default, which `020` keeps, so aiohttp reads no `.netrc` and no variables by itself. The Fetcher chooses the proxy per request:
   1. **(v0.2)** `--proxy` or `[crawl] proxy` when set
-  2. otherwise `ProxyVariables` in `spider.crawl.fetch.proxy`: `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` read once from the environment into `FetchPolicy` when each run starts, so a resumed Crawl reads them again, and the `environment` table of D8 records the same record. It applies the spec's rule itself: the lower-case name wins, an empty variable is unset, a proxy without a scheme is an http proxy, as curl reads it, and `NO_PROXY` names hosts and domain suffixes.
+  2. otherwise `ProxyVariables` in `openlinx.crawl.fetch.proxy`: `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` read once from the environment into `FetchPolicy` when each run starts, so a resumed Crawl reads them again, and the `environment` table of D8 records the same record. It applies the spec's rule itself: the lower-case name wins, an empty variable is unset, a proxy without a scheme is an http proxy, as curl reads it, and `NO_PROXY` names hosts and domain suffixes.
      - *Alternative: urllib's `getproxies_environment()` and `proxy_bypass_environment()`.* The second is undocumented and has no type stubs, both read every scheme's variable, `ALL_PROXY` included, and the bypass also matches ports and IP addresses, which the spec does not define. Rejected.
 
   **(v0.2)** The ALPN check uses the same choice.
@@ -63,8 +63,8 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 **In short:** every hop is a `urls` row linked through `redirect_url_id`, and the engine, never the Fetcher, follows it as a URL of its own.
 
 The unit that records a 3xx response records its target as a URL discovered from it, with `discovered_via` = `redirect` and the source's Crawl Depth, and the target goes through the Scope, robots.txt and the per-host limits like any URL. A redirect is not a Link: no Link type, nofollow or Link following rule applies to it.
-- **The decision:** `REDIRECT_STATUSES` (301, 302, 303, 307 and 308) and the pure `redirect_target(url, status, location, strip_params)` live in `spider.crawl.following`, beside `020`'s Link following rule, which a redirect never goes through. The robots.txt loader calls the same function, and `UrlResponse.redirect_target` carries its result to the unit and the handlers. A 300, 304 or 305 keeps its `redirect_location` and has no target.
-- **The insert:** one `insert_urls` helper in `spider.store.urls` records the rows' origins before it inserts them, and every inserter goes through it: today an inserter that forgot `record_origins` would get a NULL `origin_id`, an integrity error, and a silent `record_failed`. A target is inserted at its source's depth, a Link's target at depth + 1.
+- **The decision:** `REDIRECT_STATUSES` (301, 302, 303, 307 and 308) and the pure `redirect_target(url, status, location, strip_params)` live in `openlinx.crawl.following`, beside `020`'s Link following rule, which a redirect never goes through. The robots.txt loader calls the same function, and `UrlResponse.redirect_target` carries its result to the unit and the handlers. A 300, 304 or 305 keeps its `redirect_location` and has no target.
+- **The insert:** one `insert_urls` helper in `openlinx.store.urls` records the rows' origins before it inserts them, and every inserter goes through it: today an inserter that forgot `record_origins` would get a NULL `origin_id`, an integrity error, and a silent `record_failed`. A target is inserted at its source's depth, a Link's target at depth + 1.
 - **Resource status:** a Resource's target stays a Resource; any other target is decided by its own Scope. A target keeps the way its chain was found, so a redirected Resource beyond `--max-depth` is still checked, and the depth barrier treats it as a Resource. An in-Scope target of an External or out-of-Scope URL is a Page of the site like any other, and an off-site target is checked by its own decision anyway.
   - *Alternative:* every target keeps its source's checked status. The outcome would then depend on order: an internal Page first reached through an External redirect would be fetched as checked and never parsed, even after an internal hyperlink reaches it, since a fetched row is not decided again. Rejected.
 - **Location:** `redirect_target` resolves it against the redirecting URL through `020`'s `resolve_reference`, with the Crawl's `strip_params`, so URL resolution stays in one place, and then normalises it. A Location that gives no `NormalizedUrl` (a scheme other than http or https, userinfo, or a malformed reference) is not usable: `redirect_url_id` stays NULL, and `redirect_location` keeps the raw text.
@@ -104,7 +104,7 @@ The unit that records a 3xx response records its target as a URL discovered from
 - **robots.txt without a response:** after its retries, a robots.txt that timed out or failed TLS gives its origin's URLs the same `fetch_error` without a request (`020` D6); one that answered 5xx or 429 stays `robots_unreachable`.
 
 ### D5. TLS trust
-- **The default:** `truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)`, in a module of its own (`spider.crawl.fetch.tls`), uses the OS trust store on Windows, macOS and Linux. truststore and certifi are imported only from `spider.crawl.fetch`, which `--help` never loads.
+- **The default:** `truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)`, in a module of its own (`openlinx.crawl.fetch.tls`), uses the OS trust store on Windows, macOS and Linux. truststore and certifi are imported only from `openlinx.crawl.fetch`, which `--help` never loads.
 - **The fallback:** if truststore cannot be loaded, `ssl.create_default_context(cafile=certifi.where())`.
 - **Speed test:** a benchmark task measures handshake cost with truststore and with certifi on each OS, and records the result in the docs. If truststore is measurably slower, only the default path changes, not the behaviour.
 - **Shared setup:** the same context is used for requests and robots.txt, and from v0.2 for the ALPN check. `080`'s `doctor` TLS check reuses it.
@@ -116,20 +116,20 @@ There is one `asyncio.open_connection(host, port, ssl=ctx, server_hostname=host)
 ### D7. Response headers and cookie values
 - **Source:** `FetchResult.headers`, which `020`'s Fetcher decodes from aiohttp's `raw_headers` as Latin-1, keeping order and letter case, and which reaches `UrlResponse.headers`.
 - **Cookie redaction happens before storage,** in the exact format of the spec: `sid=abc123; Path=/` becomes `sid=***; Path=/`, and `a=1; b=2` becomes `a=***; b=***`. Names and attributes stay. The `crawl` redaction itself is `015`'s. This is value hygiene for crawled data, applied where the Fetcher decodes the received headers, so no layer ever holds a cookie value it could store.
-- **How it is written:** `handler("response_headers", handle, write)` in `default_hooks()` (`020` D9, D14). `handle` returns one row for a `UrlResult` with a `response`, and none otherwise; it reads the engine's `UrlResult`, so it lives outside `spider.store`, which imports nothing of the engine. The row type is declared in `spider.store.records`, and the writer in `spider.store.response_headers` takes the URL's rows as one sequence.
+- **How it is written:** `handler("response_headers", handle, write)` in `default_hooks()` (`020` D9, D14). `handle` returns one row for a `UrlResult` with a `response`, and none otherwise; it reads the engine's `UrlResult`, so it lives outside `openlinx.store`, which imports nothing of the engine. The row type is declared in `openlinx.store.records`, and the writer in `openlinx.store.response_headers` takes the URL's rows as one sequence.
 - **A plain INSERT:** a URL never gets a second row, so a duplicate is a bug that surfaces as `record_failed`. A replayed unit runs after its batch is rolled back; a `fetched` URL is never queued again; and retries stay in the Requester, so one unit carries the last attempt.
   - *Alternative: `ON CONFLICT(url_id) DO UPDATE`.* It would hide such a bug as a silent overwrite. Rejected.
 - **Consumers:** `030` reads cookie names and attributes from `UrlResult.headers`, so the redaction loses nothing for Page data.
 
 ### D8. What is secret
 - **v0.1, the proxy variables:** the ones that are set are recorded in an `environment` table of `crawl.config`, which the Crawl Service adds to `NewCrawl.config` next to the registered tables. `environment.http_proxy` and `environment.https_proxy` are added to `SecretNames.settings`, so `015`'s `create_crawl` redacts them by its URL form (`user:***@host`), and no public `redact_url` is needed (ROADMAP's 022-min item). `no_proxy` is not a secret. A proxy URL without a password is then recorded as `***`, as `015` records every secret that has none.
-  - *Alternative:* a public `redact_url` in `spider.store.redaction` that keeps a URL without a password, called by the Crawl Service for the `environment` table. It makes the Crawl Service a second redactor. Not taken in v0.1.
+  - *Alternative:* a public `redact_url` in `openlinx.store.redaction` that keeps a URL without a password, called by the Crawl Service for the `environment` table. It makes the Crawl Service a second redactor. Not taken in v0.1.
 - **(v0.2) The flags** declare their secret form, and `015` does all the redaction:
   - `--auth` is a whole secret, so `015` writes `***`.
   - `--header` (and the setting `crawl.header`) is a header secret. `015` redacts `Cookie`, and every header whose name contains `auth`, `token`, `secret`, `key` or `password`.
   - `--proxy` is a URL secret, so its password becomes `***`.
 
-  Credentials in `spider.toml` are allowed, and `060`'s `resume` re-reads them from there.
+  Credentials in `openlinx.toml` are allowed, and `060`'s `resume` re-reads them from there.
 
   **The setting key** is `crawl.header`, a list of `Name: Value` strings, because `010`'s rule makes a setting's key the flag's long name. It keeps the curl-style `--header` flag.
 
@@ -168,7 +168,7 @@ This change adds to `020`'s tables and adds one of its own, all through `018`'s 
 - *Alternative:* one row per header. That is about 7.5M rows at 500k URLs, for a filter that no Rule or documented query needs in v0.1. Rejected by ruling Q5.
 
 ### D11. Codes
-Declared as `DiagnosticCode` constants in `spider.output.codes`, as `020` D17 does, by the slice that first raises them:
+Declared as `DiagnosticCode` constants in `openlinx.output.codes`, as `020` D17 does, by the slice that first raises them:
 - warning: `seed_redirected_out_of_scope` (a Seed's redirect chain ends outside the Crawl's Scope, on another registrable domain or outside the Seed's folder; the Scope does not change)
 
 Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid_value` (exit 2). The values that this change writes to `urls.fetch_error`, `skip_reason` and `parse_error` (`timeout`, `tls_error`, `max_redirects`, `url_too_long`, `body_too_large`, `unsupported_encoding`) are enumeration values, not diagnostic codes.
@@ -250,7 +250,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_each_cookie_value_is_redacted_and_the_rest_kept`, since the spec's Set-Cookie value without `=`, an empty one, an `=` inside a value, a Cookie part without `=`, a trailing `;`, the letter case of the name and a header that is no cookie have no scenario of their own.
   - `test_headers_are_stored_in_the_order_received`, since the scenarios find one pair anywhere, and repeated names around another header must keep their order.
   - `test_the_fetcher_never_holds_a_cookie_value`, since a redaction moved to the handler or the writer would pass every crawl test while `FetchResult.headers` held the value.
-  - `test_the_codes_of_the_fetch_policy_are_listed`, since a code this change declares must reach `spider commands` with its level and exit code.
+  - `test_the_codes_of_the_fetch_policy_are_listed`, since a code this change declares must reach `linx commands` with its level and exit code.
   - `test_the_response_headers_writer_runs_again_the_same`, since a replayed unit must write the same rows from the file alone.
   - `test_a_seed_chain_that_ends_without_a_response_widens_nothing`, since a chain that ends in a `fetch_error` must leave the Scope as it was, and only the error path tells it so.
   - `test_a_location_without_a_target_is_kept_as_received`, since a 3xx keeps its raw Location even when it names no URL the Crawl follows.
@@ -276,4 +276,4 @@ None. Before v0.1 the schema is not yet public. This change adds its columns, it
 - SOCKS proxies (`aiohttp-socks`).
 - An opt-in cookie session (`--cookies session`).
 - A time-to-first-byte column (`ttfb_ms`), which needs a fixture route that delays the body after the headers.
-- `--auth-file <path>`, to keep credentials out of shell history, as an alternative to `[crawl] auth` in `spider.toml`.
+- `--auth-file <path>`, to keep credentials out of shell history, as an alternative to `[crawl] auth` in `openlinx.toml`.

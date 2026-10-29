@@ -1,4 +1,4 @@
-"""`spider.aio.loop_factory` (design D15 of 000-scaffold-project)."""
+"""`openlinx.aio.loop_factory` (design D15 of 000-scaffold-project)."""
 
 import asyncio
 import sys
@@ -6,7 +6,7 @@ from contextlib import closing
 
 import pytest
 
-from spider.aio import loop_factory
+from openlinx.aio import loop_factory
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the Proactor loop exists only on Windows")

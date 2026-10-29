@@ -3,11 +3,11 @@
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src"
-NAMING = SRC / "spider" / "naming.py"
-NAME_LITERALS = ("spider.toml", ".spider")
+NAMING = SRC / "openlinx" / "naming.py"
+NAME_LITERALS = ("openlinx.toml", ".openlinx")
 
 
-def test_name_derived_literals_appear_only_in_spider_naming() -> None:
+def test_name_derived_literals_appear_only_in_openlinx_naming() -> None:
     hits = [
         f"{path.relative_to(SRC).as_posix()}:{number}"
         for path in sorted(SRC.rglob("*.py"))

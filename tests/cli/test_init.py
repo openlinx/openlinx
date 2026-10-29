@@ -1,4 +1,4 @@
-"""`spider init` (010-add-workspace-and-cli-contract, workspace)."""
+"""`linx init` (010-add-workspace-and-cli-contract, workspace)."""
 
 import sys
 from pathlib import Path
@@ -17,16 +17,16 @@ def test_first_run(shop: Path) -> None:
         0,
         [
             ("workspace", str(shop)),
-            ("data_dir", str(shop / ".spider")),
-            ("settings_file", str(shop / "spider.toml")),
+            ("data_dir", str(shop / ".openlinx")),
+            ("settings_file", str(shop / "openlinx.toml")),
             ("global", False),
             (
                 "created",
                 [
-                    str(shop / ".spider"),
-                    str(shop / ".spider" / ".gitignore"),
-                    str(shop / ".spider" / "crawls"),
-                    str(shop / "spider.toml"),
+                    str(shop / ".openlinx"),
+                    str(shop / ".openlinx" / ".gitignore"),
+                    str(shop / ".openlinx" / "crawls"),
+                    str(shop / "openlinx.toml"),
                 ],
             ),
         ],
@@ -38,14 +38,14 @@ def test_files_of_a_new_local_workspace(shop: Path) -> None:
 
     entries = sorted(path.relative_to(shop).as_posix() for path in shop.rglob("*"))
 
-    assert entries == [".spider", ".spider/.gitignore", ".spider/crawls", "spider.toml"]
+    assert entries == [".openlinx", ".openlinx/.gitignore", ".openlinx/crawls", "openlinx.toml"]
 
 
 def test_data_folder_ignores_its_own_contents(shop: Path) -> None:
     run_cli("init")
 
-    assert (shop / ".spider" / ".gitignore").read_bytes() == (
-        b"# Created by spider: crawl data is not committed.\n*\n"
+    assert (shop / ".openlinx" / ".gitignore").read_bytes() == (
+        b"# Created by linx: crawl data is not committed.\n*\n"
     )
 
 
@@ -58,11 +58,11 @@ def test_second_run_creates_nothing(shop: Path) -> None:
 
 
 def test_existing_settings_file_is_kept_byte_for_byte(shop: Path) -> None:
-    (shop / "spider.toml").write_bytes(b'[example]\nlevel = "high"\n')
+    (shop / "openlinx.toml").write_bytes(b'[example]\nlevel = "high"\n')
 
     run_cli("init", app=example_app())
 
-    assert (shop / "spider.toml").read_bytes() == b'[example]\nlevel = "high"\n'
+    assert (shop / "openlinx.toml").read_bytes() == b'[example]\nlevel = "high"\n'
 
 
 def test_target_folder_is_created(temp_workspace: TempWorkspace) -> None:
@@ -70,7 +70,7 @@ def test_target_folder_is_created(temp_workspace: TempWorkspace) -> None:
 
     result = run_cli("init", "--workspace", str(site))
 
-    assert (result.exit_code, (site / ".spider" / "crawls").is_dir()) == (0, True)
+    assert (result.exit_code, (site / ".openlinx" / "crawls").is_dir()) == (0, True)
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows paths only")
@@ -92,13 +92,13 @@ def test_initialising_the_home_folder(
 
     assert (result["global"], result["settings_file"]) == (
         True,
-        str(home / ".spider" / "spider.toml"),
+        str(home / ".openlinx" / "openlinx.toml"),
     )
 
 
 @pytest.fixture
 def blog_in_shop(shop: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    (shop / ".spider").mkdir()
+    (shop / ".openlinx").mkdir()
     blog = shop / "blog"
     blog.mkdir()
     monkeypatch.chdir(blog)
@@ -134,8 +134,8 @@ def test_unwritable_target_folder(temp_workspace: TempWorkspace) -> None:
 
 
 def test_a_crawls_entry_that_is_a_file_makes_the_workspace_unwritable(shop: Path) -> None:
-    (shop / ".spider").mkdir()
-    (shop / ".spider" / "crawls").write_bytes(b"")
+    (shop / ".openlinx").mkdir()
+    (shop / ".openlinx" / "crawls").write_bytes(b"")
 
     result = run_cli("init")
 
@@ -149,7 +149,7 @@ def test_no_nested_warning_for_a_workspace_above_a_target_outside_home(
     temp_workspace: TempWorkspace,
 ) -> None:
     outer = temp_workspace.home.parent / "outer"
-    (outer / ".spider").mkdir(parents=True)
+    (outer / ".openlinx").mkdir(parents=True)
 
     result = run_cli("init", "--workspace", str(outer / "site"))
 
@@ -159,7 +159,7 @@ def test_no_nested_warning_for_a_workspace_above_a_target_outside_home(
 def test_a_setting_in_the_template(shop: Path) -> None:
     run_cli("init", app=example_app())
 
-    lines = (shop / "spider.toml").read_text(encoding="utf-8").splitlines()
+    lines = (shop / "openlinx.toml").read_text(encoding="utf-8").splitlines()
 
     assert lines.index("[example]") < lines.index('# level = "low"')
 
@@ -167,7 +167,7 @@ def test_a_setting_in_the_template(shop: Path) -> None:
 def test_an_unset_setting_in_the_template(shop: Path) -> None:
     run_cli("init", app=example_app())
 
-    lines = (shop / "spider.toml").read_text(encoding="utf-8").splitlines()
+    lines = (shop / "openlinx.toml").read_text(encoding="utf-8").splitlines()
 
     assert lines.index("[example]") < lines.index("# token =")
 
@@ -175,6 +175,6 @@ def test_an_unset_setting_in_the_template(shop: Path) -> None:
 def test_a_keyed_table_in_the_template(shop: Path) -> None:
     run_cli("init", app=example_app())
 
-    lines = (shop / "spider.toml").read_text(encoding="utf-8").splitlines()
+    lines = (shop / "openlinx.toml").read_text(encoding="utf-8").splitlines()
 
     assert '# level = "low"' in lines[lines.index("# [groups.<name>]") :]

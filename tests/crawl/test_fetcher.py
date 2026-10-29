@@ -10,16 +10,16 @@ from aiohttp.client_reqrep import ConnectionKey
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
-from spider.clock import SystemClock
-from spider.crawl.fetch.fetcher import (
+from openlinx.clock import SystemClock
+from openlinx.crawl.fetch.fetcher import (
     AiohttpFetcher,
     FetchFailure,
     FetchResult,
     Request,
     fetch_error_of,
 )
-from spider.crawl.fetch.proxy import ProxyVariables
-from spider.crawl.urls import parse_seed
+from openlinx.crawl.fetch.proxy import ProxyVariables
+from openlinx.crawl.urls import parse_seed
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 

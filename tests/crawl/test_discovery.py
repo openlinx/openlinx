@@ -2,10 +2,10 @@
 
 import pytest
 
-from spider.crawl.engine.discovery import discovered_urls
-from spider.crawl.scope import scope_rules
-from spider.crawl.urls import NormalizedUrl
-from spider.store.records import NewUrl
+from openlinx.crawl.engine.discovery import discovered_urls
+from openlinx.crawl.scope import scope_rules
+from openlinx.crawl.urls import NormalizedUrl
+from openlinx.store.records import NewUrl
 from tests.support.pages import page_links
 
 SITE = NormalizedUrl("http://site.test/")

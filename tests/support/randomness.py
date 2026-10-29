@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from spider.store.ids import Choice
+from openlinx.store.ids import Choice
 
 
 def scripted_choice(characters: str) -> Choice:

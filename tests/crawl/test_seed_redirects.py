@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from spider.services.crawling import CrawlResult
+from openlinx.services.crawling import CrawlResult
 from tests.fixture_site.hosts import StartNamedHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Robots, Site
