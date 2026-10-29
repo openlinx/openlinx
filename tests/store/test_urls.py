@@ -20,6 +20,7 @@ from spider.store.records import (
     SkipReason,
     UrlCounts,
 )
+from spider.store.rows import HandlerRows
 from spider.store.schema import literal_values
 from spider.store.urls import (
     next_depth,
@@ -105,15 +106,12 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     response_time_ms=120,
                     parsed=True,
                     discovered=found,
-                    rows=(Note(seed_id),),
+                    rows=(HandlerRows(_write_note, (Note(seed_id),)),),
                 ),
-                {Note: _write_note},
             )
         )
         writer.run(
-            record_skipped(
-                SkippedUrl(url_id=seed_id + 2, skip_reason="excluded", crawl_depth=1), {}
-            )
+            record_skipped(SkippedUrl(url_id=seed_id + 2, skip_reason="excluded", crawl_depth=1))
         )
         deeper = writer.run(next_depth(0))
         second = writer.run(queued_batch(1, 0, 1))
@@ -125,7 +123,6 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     fetch_error_message="ConnectionRefusedError: refused",
                     fetched_at=datetime(2026, 9, 27, 14, 3, 14, tzinfo=UTC),
                 ),
-                {},
             )
         )
         writer.run(record_unwritten(seed_id + 3, "ValueError: no row", blocked_by_robots_txt=False))
@@ -225,13 +222,10 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
                     _new("https://site.test/out"),
                     _new("https://site.test/about"),
                 ),
-                {},
             )
         )
         writer.run(
-            record_skipped(
-                SkippedUrl(url_id=seed_id + 4, skip_reason="excluded", crawl_depth=1), {}
-            )
+            record_skipped(SkippedUrl(url_id=seed_id + 4, skip_reason="excluded", crawl_depth=1))
         )
         about_id = seed_id + 5
         writer.run(
@@ -244,7 +238,6 @@ def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
                     _new("https://site.test/out"),
                     _new("https://site.test/"),
                 ),
-                {},
             )
         )
         replay_now(writer)
@@ -273,7 +266,7 @@ def _target_at_depth_three(writer: CrawlWriter) -> dict[str, int]:
     ids = {"/": seed_id}
     for page, links in (("/", ("/1", "/s")), ("/1", ("/2", "/s2")), ("/2", ("/t", "/s3"))):
         news = tuple(_new(f"https://site.test{link}") for link in links)
-        writer.run(record_fetched(_fetched(ids[page], *news), {}))
+        writer.run(record_fetched(_fetched(ids[page], *news)))
         ids |= {link: seed_id + len(ids) + n for n, link in enumerate(links)}
     return ids
 
@@ -311,11 +304,11 @@ def test_a_followed_link_to_a_recorded_url_changes_it_only_on_a_shorter_path_it_
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         ids = _target_at_depth_three(writer)
         if state == "fetched":
-            writer.run(record_fetched(_fetched(ids["/t"]), {}))
+            writer.run(record_fetched(_fetched(ids["/t"])))
         elif state != "queued":
             skipped = SkippedUrl(url_id=ids["/t"], skip_reason=state, crawl_depth=3)
-            writer.run(record_skipped(skipped, {}))
-        writer.run(record_fetched(_fetched(ids[page], _new(_TARGET)), {}))
+            writer.run(record_skipped(skipped))
+        writer.run(record_fetched(_fetched(ids[page], _new(_TARGET))))
         replay_now(writer)
 
     found_on = expected[1]
@@ -330,11 +323,14 @@ def test_a_skip_decided_on_a_depth_lowered_meanwhile_leaves_the_url_queued_witho
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         writer.run(executing(text("CREATE TABLE test_notes (url_id INTEGER)")))
         ids = _target_at_depth_three(writer)
-        writer.run(record_fetched(_fetched(ids["/s"], _new(_TARGET)), {}))
+        writer.run(record_fetched(_fetched(ids["/s"], _new(_TARGET))))
         skipped = SkippedUrl(
-            url_id=ids["/t"], skip_reason="max_depth", crawl_depth=3, rows=(Note(ids["/t"]),)
+            url_id=ids["/t"],
+            skip_reason="max_depth",
+            crawl_depth=3,
+            rows=(HandlerRows(_write_note, (Note(ids["/t"]),)),),
         )
-        writer.run(record_skipped(skipped, {Note: _write_note}))
+        writer.run(record_skipped(skipped))
         replay_now(writer)
 
     assert (_target(crawl.path), query(crawl.path, "SELECT url_id FROM test_notes")) == (

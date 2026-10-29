@@ -46,7 +46,7 @@ Seams (docs/testing.md):
 ## 3. Timeouts and retries
 
 - [ ] 3.1 [Fixture] Add response sequences to the fixture site, a new route kind (for example 503 once, then 200).
-- [ ] 3.2 [3+6] Drive "A temporary 503 is retried": `--retries` and `crawl.retries`, the engine's retry loop around the Fetcher (design D4), and the `attempt_count` column.
+- [ ] 3.2 [3+6] Drive "A temporary 503 is retried": `--retries` and `crawl.retries`, the retry loop around the Fetcher in `020`'s Requester (design D4, `020` D7), and the `attempt_count` column.
 - [ ] 3.3 [3+6] Drive "A persistent 500 is recorded after the retries".
 - [ ] 3.4 [3+6] Drive "A 404 is not retried".
 - [ ] 3.5 [3+6] Drive "A hanging response times out": `--timeout` and `crawl.timeout` in place of `_REQUEST_DEADLINE_SECONDS`, and `TimeoutError` → `timeout` (design D1). The timeout feeds `020`'s `watchdog_seconds` here if `020` task 12.14 is on main, or in that task otherwise.

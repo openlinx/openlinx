@@ -39,7 +39,7 @@ A change's `design.md` names the seams it is tested at. Adding a new seam is a d
 | `tests/cli/` | 1, CLI |
 | `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API; 4, the store's pure logic, such as crawl ids |
 | `tests/output/` | 4, the output layer's pure logic |
-| `tests/crawl/` | 4, the crawler's pure logic, such as URL normalisation; 3 and 3+6, Crawls of the fixture site; 2, the Crawl Service |
+| `tests/crawl/` | 4, the crawler's pure logic, such as URL normalisation; 3 and 3+6, Crawls of the fixture site; 2, the Crawl Service, and its reporter, the warning log (`test_warning_log.py`) |
 | `tests/contract/` | 6, the store contract (`test_schema.py`, which reads `docs/schema.md` with `spider.services.schema_doc.parse_tables`), and the hand-written expected JSON of the CLI contract tests (`commands/`) |
 | `tests/js/` | 9, the Report script |
 | `tests/` | the repository's own guards: dependencies, naming, line endings, docs links, isolation |

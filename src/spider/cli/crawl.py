@@ -1,5 +1,6 @@
 """`spider crawl` over the Crawl Service (020-add-crawl-core D10, D11)."""
 
+import re
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -9,13 +10,23 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
-from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN
+from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN, ROBOTS_USER_AGENT_PATTERN
 from spider.output.codes import OPTION_CONFLICT
 from spider.output.diagnostics import SpiderError
 from spider.output.writer import Format
 from spider.store.records import ScopeKind
 
 CRAWL = "crawl"
+
+
+def _robots_token(token: str) -> str:
+    # The settings file is checked by CrawlSettings' pattern, which gives settings_invalid.
+    if re.fullmatch(ROBOTS_USER_AGENT_PATTERN, token) is None:
+        raise typer.BadParameter(
+            f"{token!r} is not a robots user-agent token: RFC 9309 allows only letters, "
+            "'_' and '-'."
+        )
+    return token
 
 
 @command_meta(
@@ -95,8 +106,10 @@ def crawl(
         str,
         typer.Option(
             "--robots-user-agent",
+            callback=_robots_token,
             help="The token that selects robots.txt groups and user-agent-prefixed "
-            "X-Robots-Tag values; independent of the User-Agent request header.",
+            "X-Robots-Tag values, letters, '_' and '-' only; independent of the User-Agent "
+            "request header.",
         ),
         OptionMeta(setting="crawl.robots_user_agent"),
     ] = DEFAULT_ROBOTS_TOKEN,

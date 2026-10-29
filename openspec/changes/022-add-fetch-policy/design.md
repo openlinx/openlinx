@@ -25,7 +25,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 ## Goals / Non-Goals
 
 **Goals:**
-- Every request policy lives behind the Fetcher interface, the engine's retry loop and the per-host gate, so the engine's decisions (Scope, robots.txt, depth) are untouched.
+- Every request policy lives behind the Fetcher interface and `020`'s Requester (`020` D7), with its retry loop and the per-host gate, so the engine's decisions (Scope, robots.txt, depth) are untouched.
 - The Fetcher stays one attempt and one hop. Retries and redirects are the engine's, so `020`'s fake Fetcher drives them in the timing tests, and `020`'s watchdog races one attempt.
 - Per-hop data (status, Location, timing, headers) is recorded now, so v0.2's `redirects` needs no re-crawl.
 - Deterministic tests: the real aiohttp against the fixture site, with fake timing only for backoff and pauses.
@@ -88,7 +88,7 @@ A chain that ends on another registrable domain (SSO, parking pages) only raises
 - *Alternative:* start the workers early with the first Scope and replace them when the Scope widens. It keeps the overlap, but adds a restart path for the rare widening. Not taken: the user's decision starts them once, with the final Scope.
 
 ### D4. Retries and backoff
-- **Where:** one retry loop in the shell, around the Fetcher, which the engine's URL task and `020`'s robots.txt loader both call. Each attempt is one `fetch` inside the host's semaphore, raced by `020`'s watchdog on its own. Backoff waits on the context's `Clock` outside the semaphore, so a waiting retry holds none of the host's `--concurrency` slots. `020`'s fake Fetcher then drives the retries in the timing scenarios; a retry loop inside the Fetcher would bypass it.
+- **Where:** one retry loop in `020`'s Requester (`020` D7), around the Fetcher, so a URL's own request and a robots.txt request both get it. Each attempt is one `fetch` inside the host's semaphore, raced by `020`'s watchdog on its own. Backoff waits on the context's `Clock` outside the semaphore, so a waiting retry holds none of the host's `--concurrency` slots. `020`'s fake Fetcher then drives the retries in the timing scenarios; a retry loop inside the Fetcher would bypass it.
 - **Retries:** on no response, 5xx or 429, as `--retries`. The URL's unit writes `attempt_count`.
 - **Backoff:** 1 s, 2 s, …, with no jitter, so fake-clock tests assert exact times.
 - **Retry-After:** seconds or an HTTP date, capped at 120 s. A 429 without `Retry-After` pauses the host for 10 s.

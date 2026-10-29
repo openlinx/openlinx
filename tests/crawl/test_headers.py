@@ -13,10 +13,10 @@ from spider.crawl.fetcher import FetchResult
 from spider.crawl.headers import header_links
 from spider.crawl.links import DiscoveredLink
 from spider.crawl.pages import (
-    Extractor,
     PageInput,
     PageSettings,
     PreparedPage,
+    extractor,
     prepare_page,
     response_links,
 )
@@ -111,7 +111,7 @@ class _Seen(msgspec.Struct, frozen=True):
     links: tuple[DiscoveredLink, ...]
 
 
-def _links_seen(tree: LexborHTMLParser, page: PageInput) -> _Seen:
+def _links_seen(tree: LexborHTMLParser, page: PageInput, config: None) -> _Seen:
     return _Seen(page.links)
 
 
@@ -129,7 +129,7 @@ _PAGE_WITH_A_CANONICAL_HEADER = FetchResult(
     response_time_ms=1,
 )
 _SEEING = PageSettings(
-    scope=scope_rules(SITE), extractors=(Extractor("seen", _links_seen),), strip_params=None
+    scope=scope_rules(SITE), extractors=(extractor("seen", _links_seen, None),), strip_params=None
 )
 
 

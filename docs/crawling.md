@@ -311,7 +311,7 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 
 - A robots.txt request goes through the same per-host limits as a URL's, but it is not recorded as a URL and does not count toward `--max-urls`.
 - A redirected robots.txt is followed for up to 5 hops; a longer chain counts as missing.
-- Only its first 512,000 bytes are parsed, decoded as UTF-8 with replacement; a leading byte order mark is dropped.
+- Only its first 512,000 bytes are parsed, without a line that this limit cuts, decoded as UTF-8 with replacement; a leading byte order mark is dropped. So a cut `Disallow: /private` never becomes the shorter `Disallow: /priv`.
 - `Crawl-delay` is recorded, not applied.
 
 ### What the response means
@@ -320,7 +320,7 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 |---|---|---|
 | 2xx | `ok` | Requested, unless its rules disallow them for the token: a disallowed URL is `skipped` with `skip_reason` = `blocked_by_robots_txt`. |
 | 4xx other than 429, or more than 5 redirects | `missing` | All requested. |
-| 5xx or 429 | `unreachable` | None requested: each is `skipped` with `skip_reason` = `robots_unreachable`. An Internal origin gives a `robots_unreachable` warning, once per host, whose hint names `--ignore-robots`. |
+| 5xx, 429, or a status outside 200–599 | `unreachable` | None requested: each is `skipped` with `skip_reason` = `robots_unreachable`. An Internal origin gives a `robots_unreachable` warning, once per host, whose hint names `--ignore-robots`. |
 | No HTTP response | `unreachable` | None requested: each is `error`, with the `fetch_error` of the robots.txt request, such as `dns_error`, and a `fetch_error_message` that names that request. |
 
 `urls.blocked_by_robots_txt` is 1 for a URL the rules disallow, 0 for one they allow, and NULL for a URL that was not checked: one skipped before robots.txt mattered, or one of an origin whose rules are unknown.
@@ -335,7 +335,7 @@ With `--ignore-robots`, the Crawl requests the URLs that robots.txt disallows an
 
 ### The robots user-agent token
 
-`--robots-user-agent <token>` (default `spider`) selects the robots.txt group that applies, and the `X-Robots-Tag` values with a crawler prefix (see [Robots directives](#robots-directives)). It is independent of the `User-Agent` request header.
+`--robots-user-agent <token>` (default `spider`) selects the robots.txt group that applies, and the `X-Robots-Tag` values with a crawler prefix (see [Robots directives](#robots-directives)). It is independent of the `User-Agent` request header. As RFC 9309 says, a token has only letters, `_` and `-`: any other is rejected, as `invalid_value` (exit code 2), or in `spider.toml` as `settings_invalid` (exit code 3).
 
 ## Links
 

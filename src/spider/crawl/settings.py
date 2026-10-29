@@ -1,8 +1,10 @@
 """The [crawl] settings table (020-add-crawl-core D11)."""
 
-from pydantic import BaseModel, ConfigDict, Field
+import re
 
-from spider.naming import DEFAULT_ROBOTS_TOKEN
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from spider.naming import DEFAULT_ROBOTS_TOKEN, ROBOTS_USER_AGENT_PATTERN
 from spider.store.records import ScopeKind
 
 
@@ -42,7 +44,8 @@ class CrawlSettings(BaseModel):
     robots_user_agent: str = Field(
         DEFAULT_ROBOTS_TOKEN,
         description="The token that selects robots.txt groups and user-agent-prefixed "
-        "X-Robots-Tag values; independent of the User-Agent request header.",
+        "X-Robots-Tag values, letters, '_' and '-' only; independent of the User-Agent "
+        "request header.",
     )
     scope: ScopeKind = Field(
         "host",
@@ -64,3 +67,11 @@ class CrawlSettings(BaseModel):
         description="Regular expressions of URLs that are never requested; each is searched "
         "for in the normalised URL.",
     )
+
+    @field_validator("robots_user_agent")
+    @classmethod
+    def _is_a_robots_token(cls, token: str) -> str:
+        # The pattern the CLI checks too, with a message a person reads instead of the regex.
+        if re.fullmatch(ROBOTS_USER_AGENT_PATTERN, token) is None:
+            raise ValueError("a robots user-agent token has letters, '_' and '-' only (RFC 9309)")
+        return token
