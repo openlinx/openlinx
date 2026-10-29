@@ -55,9 +55,9 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     text_ratio_pct: float | None
     declared_language: str | None
     content_hash: str | None
-    jsonld_items: int
-    microdata_items: int
-    jsonld_parse_errors: int
+    jsonld_item_count: int
+    microdata_item_count: int
+    jsonld_parse_error_count: int
     structured_data_types: tuple[str, ...]
 
 
@@ -107,9 +107,9 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         text_ratio_pct=text_ratio_pct(tree, page.length),
         declared_language=declared_language(tree),
         content_hash=content_hash(blocks, words),
-        jsonld_items=found.jsonld_items,
-        microdata_items=found.microdata_items,
-        jsonld_parse_errors=found.jsonld_parse_errors,
+        jsonld_item_count=found.jsonld_item_count,
+        microdata_item_count=found.microdata_item_count,
+        jsonld_parse_error_count=found.jsonld_parse_error_count,
         structured_data_types=found.structured_data_types,
     )
 

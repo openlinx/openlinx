@@ -15,9 +15,9 @@ _SCHEMA_ORG = ("http://schema.org/", "https://schema.org/")
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class StructuredData:
-    jsonld_items: int
-    microdata_items: int
-    jsonld_parse_errors: int
+    jsonld_item_count: int
+    microdata_item_count: int
+    jsonld_parse_error_count: int
     structured_data_types: tuple[str, ...]
 
 
@@ -45,9 +45,9 @@ def structured_data(tree: LexborHTMLParser) -> StructuredData:
     # Empty once the prefix is gone too: a template that had no type to put after it.
     types = {name for name in map(_without_schema_org, names) if name}
     return StructuredData(
-        jsonld_items=len(items),
-        microdata_items=len(scopes),
-        jsonld_parse_errors=errors,
+        jsonld_item_count=len(items),
+        microdata_item_count=len(scopes),
+        jsonld_parse_error_count=errors,
         structured_data_types=tuple(sorted(types)),
     )
 

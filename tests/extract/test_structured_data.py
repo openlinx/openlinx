@@ -16,9 +16,9 @@ def test_json_ld_graph_a_broken_block_and_nested_microdata() -> None:
     )
 
     assert (
-        row.jsonld_items,
-        row.jsonld_parse_errors,
-        row.microdata_items,
+        row.jsonld_item_count,
+        row.jsonld_parse_error_count,
+        row.microdata_item_count,
         row.structured_data_types,
     ) == (2, 1, 1, ("Organization", "Product", "WebSite"))
 
@@ -39,9 +39,9 @@ def test_json_ld_array_type_lists_and_an_http_type() -> None:
     )
 
     assert (
-        row.jsonld_items,
-        row.jsonld_parse_errors,
-        row.microdata_items,
+        row.jsonld_item_count,
+        row.jsonld_parse_error_count,
+        row.microdata_item_count,
         row.structured_data_types,
     ) == (5, 0, 1, ("Article", "BlogPosting", "BreadcrumbList", "NewsArticle", "Person"))
 
@@ -52,7 +52,9 @@ def test_page_without_structured_data() -> None:
         "<body><h1>About us</h1><p>We make kettles.</p></body></html>"
     )
 
-    assert (row.jsonld_items, row.microdata_items, row.structured_data_types) == (0, 0, ())
+    counts = (row.jsonld_item_count, row.microdata_item_count, row.structured_data_types)
+
+    assert counts == (0, 0, ())
 
 
 def test_a_type_that_is_only_the_schema_org_prefix_is_skipped() -> None:
@@ -62,7 +64,25 @@ def test_a_type_that_is_only_the_schema_org_prefix_is_skipped() -> None:
         '<div itemscope itemtype="https://schema.org/"><p>Item</p></div>'
     )
 
-    assert (row.jsonld_items, row.microdata_items, row.structured_data_types) == (1, 1, ())
+    counts = (row.jsonld_item_count, row.microdata_item_count, row.structured_data_types)
+
+    assert counts == (1, 1, ())
+
+
+def test_a_number_beyond_a_double_and_an_unpaired_surrogate_are_parse_errors() -> None:
+    # A measurement written out of range, and a description cut to a length limit in the
+    # middle of an emoji's surrogate pair.
+    row = page_row(
+        '<script type="application/ld+json">{"@type":"Product","weight":1e400}</script>'
+        '<script type="application/ld+json">{"@type":"Review","description":"Great \\ud83d"}'
+        '</script><script type="application/ld+json">{"@type":"Thing"}</script>'
+    )
+
+    assert (
+        row.jsonld_item_count,
+        row.jsonld_parse_error_count,
+        row.structured_data_types,
+    ) == (1, 2, ("Thing",))
 
 
 def _nested(levels: int) -> str:
@@ -72,4 +92,4 @@ def _nested(levels: int) -> str:
 def test_a_json_ld_block_nested_more_than_1024_levels_is_a_parse_error() -> None:
     row = page_row(_nested(1024) + _nested(1025) + _nested(100_000) + "<h1>Still read</h1>")
 
-    assert (row.jsonld_parse_errors, row.h1_1) == (2, "Still read")
+    assert (row.jsonld_parse_error_count, row.h1_1) == (2, "Still read")

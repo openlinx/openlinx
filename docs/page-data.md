@@ -109,9 +109,9 @@ The Content Area text is read as [Text](#text) is, block by block.
 
 The structured-data columns count the items a Page declares in JSON-LD and Microdata. Only top-level items count: an Offer inside a Product is a property of the Product, so it adds neither a count nor a type.
 
-- **JSON-LD scripts.** A `<script>` is JSON-LD when its `type`, trimmed of ASCII whitespace, is `application/ld+json` in any letter case. `jsonld_parse_errors` counts the scripts that are not valid JSON (RFC 8259), such as a block a template cut short or one that holds `NaN`, and the scripts nested more than 1024 levels deep. Such a script adds no items.
+- **JSON-LD scripts.** A `<script>` is JSON-LD when its `type`, trimmed of ASCII whitespace, is `application/ld+json` in any letter case. `jsonld_parse_error_count` counts the scripts that are not valid JSON (RFC 8259), such as a block a template cut short or one that holds `NaN`, and the scripts nested more than 1024 levels deep. A number beyond the range of a double, such as `1e400`, and an unpaired surrogate escape, such as a description cut in the middle of an emoji, make a script invalid too, as RFC 8259 lets a parser decide. Such a script adds no items.
 - **JSON-LD items.** A top-level object is one item, unless its `@graph` is an array or an object: then the objects of its `@graph` are the items. A top-level array contributes what each of its objects does. Strings, numbers and nested arrays add nothing.
-- **Microdata items.** `microdata_items` counts the elements with `itemscope` and no `itemprop`.
+- **Microdata items.** `microdata_item_count` counts the elements with `itemscope` and no `itemprop`.
 - **Types.** `structured_data_types` is a JSON array of the distinct types of the counted items, sorted by code point, and `[]` when there are none. A type comes from `@type`, a string or an array of strings, where an empty string or a value of another kind is skipped, and from `itemtype`, which can name several types separated by whitespace. A leading `http://schema.org/` or `https://schema.org/` is removed, so `https://schema.org/Product` is `Product`, and a type that is only that prefix, as a template without a type to fill in leaves it, is skipped.
 
 ## Values of the response and of `urls`

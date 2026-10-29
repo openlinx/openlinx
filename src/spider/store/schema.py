@@ -835,7 +835,7 @@ pages = public_table(
         comment="Crawl Depth, equal to urls.crawl_depth: 0 for Seeds.",
     ),
     Column(
-        "jsonld_items",
+        "jsonld_item_count",
         Integer,
         comment="The number of JSON-LD items in the application/ld+json scripts: each top-level "
         "object, of a script or of a top-level array, or instead the content of its @graph, an "
@@ -843,13 +843,13 @@ pages = public_table(
         "extractor failed.",
     ),
     Column(
-        "microdata_items",
+        "microdata_item_count",
         Integer,
         comment="The number of top-level Microdata items: elements with itemscope and no "
         "itemprop; NULL when the Page is not analysed or its Page extractor failed.",
     ),
     Column(
-        "jsonld_parse_errors",
+        "jsonld_parse_error_count",
         Integer,
         comment="The number of application/ld+json scripts that are not valid JSON, or nest more "
         "than 1024 levels deep; NULL when the Page is not analysed or its Page extractor "
