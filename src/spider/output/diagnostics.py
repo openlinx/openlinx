@@ -7,7 +7,7 @@ from typing import Any
 from spider.output.codes import DiagnosticCode, Level
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Diagnostic:
     level: Level
     code: str
@@ -23,7 +23,24 @@ class Diagnostic:
         hint: str | None = None,
         details: Mapping[str, Any] | None = None,
     ) -> "Diagnostic":
-        return cls(code.level, code.code, message, hint, dict(details or {}))
+        return cls(
+            level=code.level,
+            code=code.code,
+            message=message,
+            hint=hint,
+            details=dict(details or {}),
+        )
+
+    @classmethod
+    def from_json(cls, stored: Mapping[str, Any]) -> "Diagnostic":
+        """A diagnostic as to_json gave it, such as a warning that crawl.warnings stored."""
+        return cls(
+            level=stored["level"],
+            code=stored["code"],
+            message=stored["message"],
+            hint=stored["hint"],
+            details=stored["details"],
+        )
 
     def to_json(self) -> dict[str, Any]:
         return {

@@ -87,22 +87,23 @@ async def test_after_holds_the_response_until_the_site_receives_the_other_path(
 
     async with aiohttp.ClientSession() as session:
 
-        async def answered(path: str) -> float:
+        async def answered(path: str) -> list[str]:
+            """The paths the site had received when the answer came."""
             async with session.get(server.url(path)) as response:
                 await response.read()
-            return time.monotonic()
+            return [request.path for request in server.requests]
 
         held = asyncio.create_task(answered("/a"))
-        # Time for /a to reach the site first; the order below fails if it did not.
-        await asyncio.sleep(0.2)
+        # /b is sent only once the site has /a, which the route holds back.
+        deadline = time.monotonic() + 10
+        while not any(request.path == "/a" for request in server.requests):
+            assert time.monotonic() < deadline, "/a never reached the site"
+            await asyncio.sleep(0.01)
         await answered("/b")
-        a_answered = await held
+        seen_by_a = await held
 
-    requests = server.requests
-    assert ([request.path for request in requests], a_answered > requests[1].received_at) == (
-        ["/a", "/b"],
-        True,
-    )
+    # Read in order, not from timestamps: 3.12's monotonic clock on Windows ticks every 15.6 ms.
+    assert seen_by_a == ["/a", "/b"]
 
 
 async def test_after_fails_the_test_when_its_path_is_never_requested() -> None:

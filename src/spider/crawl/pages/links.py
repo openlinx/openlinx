@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Callable, Container, Iterable, Iterator, Mapping
-from typing import NamedTuple
+from dataclasses import dataclass
 
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
@@ -164,7 +164,8 @@ def links_in_tree(
     return links
 
 
-class LinkReference(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LinkReference:
     """A reference of a document before it is resolved, with the element it came from and
     the element of the document that places it: the element itself, or the <noscript> whose
     text held it."""
@@ -184,14 +185,22 @@ def link_references(tree: LexborHTMLParser) -> Iterator[LinkReference]:
         attributes = node.attributes
         rel = rel_tokens(attributes.get("rel") or "")
         for link_type, attribute, raw in _references(node.tag or "", attributes, rel, node.parent):
-            yield LinkReference(node, placing, declared_in, link_type, attribute, raw, rel)
+            yield LinkReference(
+                element=node,
+                placing=placing,
+                declared_in=declared_in,
+                type=link_type,
+                attribute=attribute,
+                raw=raw,
+                rel=rel,
+            )
 
 
 def locate_links(
     tree: LexborHTMLParser, links: Iterable[DiscoveredLink]
 ) -> list[tuple[DiscoveredLink, LexborNode, LexborNode]]:
     """Each HTML Link that links_in_tree found in the tree, with the element it came from and
-    the element that places it; header Links are left out. Raises ValueError for a Link the
+    the element that places it; header Links are left out. Raises RuntimeError for a Link the
     tree does not hold."""
     pending = [link for link in links if link.declared_in != "http_header"]
     located: list[tuple[DiscoveredLink, LexborNode, LexborNode]] = []
@@ -210,7 +219,7 @@ def locate_links(
         ):
             located.append((link, reference.element, reference.placing))
     if len(located) != len(pending):
-        raise ValueError(f"link {pending[len(located)].ordinal} is not in the tree")
+        raise RuntimeError(f"link {pending[len(located)].ordinal} is not in the tree")
     return located
 
 

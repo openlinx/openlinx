@@ -175,7 +175,7 @@ class AppGroup(SpiderGroup): ...
 
 
 URL_MODULE = "spider/crawl/urls.py"
-# Group 4 adds each store module that casts urls.url to a NormalizedUrl (design D13).
+# Each store module that casts urls.url to a NormalizedUrl (design D13).
 NORMALIZED_URL_MAKERS = {URL_MODULE, "spider/store/urls.py"}
 
 
@@ -973,6 +973,11 @@ HANDOFFS = {
 # A submitted unit's Future resolves at its commit, which comes at the loop's commit deadline
 # and so waits for clock time: a hold would stop the time it waits for. This one call only.
 WAITS_FOR_CLOCK_TIME = {("spider/store/writer.py", "submit_async", "asyncio.wrap_future(done)")}
+# A signal handler schedules the stop from the loop's own thread, between two bytecodes; the
+# loop waits for nothing it hands over, so no hold is needed. This one call only.
+FROM_A_SIGNAL_HANDLER = {
+    ("spider/services/interrupts.py", "handler", "loop.call_soon_threadsafe(stop.set, 'interrupt')")
+}
 
 
 class _HandOffs(ast.NodeVisitor):
@@ -1027,7 +1032,8 @@ class _HandOffs(ast.NodeVisitor):
             name = self._names.get(node.func.id)
         else:
             name = None
-        exempt = (self._module, self._function, ast.unparse(node)) in WAITS_FOR_CLOCK_TIME
+        call = (self._module, self._function, ast.unparse(node))
+        exempt = call in WAITS_FOR_CLOCK_TIME or call in FROM_A_SIGNAL_HANDLER
         if name in HANDOFFS and not self._held and not exempt:
             self.found.append(
                 f"{self._module}:{node.lineno} hands off outside clock.off_loop(): "
@@ -1095,7 +1101,7 @@ def test_a_hand_off_outside_the_hold_is_named() -> None:
 REAL_IO_CALLS = {"AiohttpFetcher", "aiohttp_fetcher", "ClientSession"}
 REAL_IO_FIXTURES = {"fixture_site", "fixture_hosts"}
 # Without a fake Fetcher, these crawl through the aiohttp Fetcher.
-CRAWLS = {"crawl_result", "start_crawl"}
+CRAWLS = {"crawl_result", "start_crawl", "continued", "continue_crawl"}
 
 
 def _called(call: ast.Call) -> str:
@@ -1151,11 +1157,14 @@ def test_a_virtual_clock_beside_real_io_is_named() -> None:
         "    clock = FakeClock()\n"
         "    crawl_result(seed, clock=clock, fetcher=FakeFetcher(clock, {}))\n"
         "def test_system(temp_workspace, fixture_site):\n"
-        "    crawl_result(server.url('/'), clock=SystemClock())\n",
+        "    crawl_result(server.url('/'), clock=SystemClock())\n"
+        "def test_continue(temp_workspace):\n"
+        "    continued(result, clock=FakeClock())\n",
     }
 
     assert fake_clock_with_real_io(sources) == [
         "tests/crawl/test_timing.py:1 test_site pairs FakeClock with real I/O",
+        "tests/crawl/test_timing.py:13 test_continue pairs FakeClock with real I/O",
         "tests/crawl/test_timing.py:3 test_session pairs FakeClock with real I/O",
         "tests/crawl/test_timing.py:6 test_crawl pairs FakeClock with real I/O",
     ]

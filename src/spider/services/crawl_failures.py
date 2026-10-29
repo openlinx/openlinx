@@ -7,10 +7,15 @@ from spider.crawl.engine.pause import pause_after
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.urls import NormalizedUrl, url_origin
 from spider.naming import APP_NAME
-from spider.output.codes import CRAWL_WRITE_FAILED, SEED_UNREACHABLE, SITE_UNREACHABLE
+from spider.output.codes import (
+    CRAWL_WRITE_FAILED,
+    INTERRUPTED,
+    SEED_UNREACHABLE,
+    SITE_UNREACHABLE,
+)
 from spider.output.diagnostics import SpiderError
+from spider.store.failures import write_failure_cause
 from spider.store.records import CrawlFile, StopReason
-from spider.store.writer import CrawlWriterClosedError
 
 
 def _seed_unreachable(
@@ -57,9 +62,8 @@ def write_failed(crawl_file: CrawlFile, cause: BaseException | None) -> SpiderEr
     # A file another connection holds is reported as the writer raised it (exit 5).
     if isinstance(cause, SpiderError):
         return cause
-    # An ended writer refuses with the error it ended on as the cause (017 D6).
-    if isinstance(cause, CrawlWriterClosedError) and cause.__cause__ is not None:
-        cause = cause.__cause__
+    if cause is not None:
+        cause = write_failure_cause(cause)
     error = f"{type(cause).__name__}: {cause}"
     details = {"crawl_file": str(crawl_file.path), "error": error}
     if isinstance(cause, RecordingFailedError):
@@ -78,6 +82,16 @@ def write_failed(crawl_file: CrawlFile, cause: BaseException | None) -> SpiderEr
         hint="Free disk space or fix the file system, then continue it with: "
         f"{_resume(crawl_file)}",
         details=details,
+    )
+
+
+def interrupted(crawl_file: CrawlFile) -> SpiderError:
+    # 010's own text names Ctrl+C, which is wrong for Ctrl+Break and SIGTERM, and no way on.
+    return SpiderError(
+        INTERRUPTED,
+        "The Crawl stopped on an interrupt; what it recorded is kept.",
+        hint=f"Continue it with: {_resume(crawl_file)}",
+        details={"crawl_file": str(crawl_file.path)},
     )
 
 

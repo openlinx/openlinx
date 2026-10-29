@@ -41,7 +41,7 @@ class UrlCounters:
 async def report_progress(
     *,
     clock: Clock,
-    log: WarningLog,
+    warnings: WarningLog,
     crawl_id: str,
     counters: UrlCounters,
     rate: Callable[[float], float],
@@ -54,7 +54,7 @@ async def report_progress(
     for tick in count(1):
         await clock.sleep(started + tick * PROGRESS_SECONDS - clock.monotonic())
         elapsed = clock.monotonic() - started
-        log.event(
+        warnings.event(
             "progress",
             crawl_id=crawl_id,
             elapsed_s=round(elapsed, 3),

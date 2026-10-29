@@ -273,7 +273,7 @@ def test_two_extractors_of_one_name_are_refused_when_the_hooks_are_built() -> No
 
     # As when a later change registers its extractor under a name already taken: outputs are
     # keyed by name, so the first's output would be lost and its columns left NULL.
-    with pytest.raises(ValueError, match="two extractors named page"):
+    with pytest.raises(TypeError, match="two extractors named page"):
         replace(hooks, extractors=(*hooks.extractors, extractor("page", _title, None)))
 
 
@@ -281,7 +281,7 @@ def test_two_handlers_of_one_name_are_refused_when_the_hooks_are_built() -> None
     hooks = Hooks()
     hooks = replace(hooks, handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)))
 
-    with pytest.raises(ValueError, match="two handlers named seen"):
+    with pytest.raises(TypeError, match="two handlers named seen"):
         replace(hooks, handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)))
 
 
@@ -605,7 +605,8 @@ def test_recording_that_fails_for_every_url_fails_the_crawl(
         error and error.code,
         error and error.message.startswith("100 URLs in a row could not be recorded"),
         error and "record_failed" in (error.hint or "") and "resume" in (error.hint or ""),
-    ) == ("failed", "write_failed", "crawl_write_failed", True, True)
+        result.failure and result.failure.exit_code,
+    ) == ("failed", "write_failed", "crawl_write_failed", True, True, 7)
 
 
 @pytest.mark.parametrize(("articles", "state"), [(99, "completed"), (100, "failed")])
@@ -1236,6 +1237,28 @@ def test_a_handler_sees_the_links_of_a_page_whose_extractor_failed(
 
     assert _links_seen(crawl_file, server.url("/")) == [
         repr(("hyperlink", server.url("/a"), "body"))
+    ]
+
+
+def test_a_handler_sees_the_header_links_before_the_document_links(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/b">B</a>', headers=[("Link", '</h>; rel="canonical"')]),
+                "/b": Page(body="<p>B</p>"),
+                "/h": Page(body="<p>H</p>"),
+            }
+        )
+    )
+    hooks = replace(Hooks(), handlers=(handler("links", _links, _write_seen),))
+
+    crawl_file = crawl_result(server.url("/"), hooks).crawl_file
+
+    assert _links_seen(crawl_file, server.url("/")) == [
+        repr(("canonical", server.url("/h"), "http_header")),
+        repr(("hyperlink", server.url("/b"), "body")),
     ]
 
 

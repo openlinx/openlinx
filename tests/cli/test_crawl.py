@@ -136,6 +136,30 @@ def test_the_result_counts_a_small_site(
     )
 
 
+def test_the_result_counts_every_status_class(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    links = "".join(
+        f'<a href="{path}">L</a>' for path in ("/moved", "/missing", "/down", "/error", "/odd")
+    )
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body=links),
+                "/moved": Status(301),
+                "/down": Status(503),
+                "/error": Status(500),
+                # Outside 200-599, as a misbehaving server or proxy may answer.
+                "/odd": Status(999),
+            }
+        )
+    )
+
+    result = run_cli("crawl", server.url("/")).json()
+
+    assert result["status_classes"] == {"2xx": 1, "3xx": 1, "4xx": 1, "5xx": 2, "other": 1}
+
+
 def test_a_completed_crawl_exits_with_code_0(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:

@@ -1,15 +1,15 @@
 """The warning log: each warning kept once per what its code names (020-add-crawl-core D10)."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
 from spider.crawl.urls import NormalizedUrl
-from spider.output.codes import DECLARED
+from spider.output.codes import DECLARED, Kept
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Reporter
 
-# A code without a detail is written each time it is given (design D10).
+_KEPT: Mapping[str, Kept] = {code.code: code.kept for code in DECLARED}
 _ONCE_PER: Mapping[str, str] = {
     code.code: code.once_per for code in DECLARED if code.once_per is not None
 }
@@ -25,15 +25,37 @@ class _Pauses:
 
 
 class WarningLog:
-    """The Crawl's Reporter: passes everything on, and keeps the warnings for the result."""
+    """The Crawl's Reporter: passes everything on, and keeps the warnings for the result.
 
-    def __init__(self, reporter: Reporter) -> None:
+    A continuing run's log starts from the warnings its earlier runs stored, without writing
+    them again: a warning kept once stays once over the Crawl's life, and a counted one adds
+    up (design D10)."""
+
+    def __init__(self, reporter: Reporter, earlier: Sequence[Diagnostic] = ()) -> None:
         self._reporter = reporter
         self._warnings: list[Diagnostic] = []
         self._written: dict[tuple[str, object], int] = {}
         # By code: where a counted warning is kept, and how many URLs it affected so far.
         self._counted: dict[str, tuple[int, int]] = {}
         self._pauses: _Pauses | None = None
+        for diagnostic in earlier:
+            self._restore(diagnostic)
+
+    def _restore(self, diagnostic: Diagnostic) -> None:
+        # A code that a later version no longer declares is kept as it was stored.
+        kept = _KEPT.get(diagnostic.code, "each")
+        # How one run ended, not what the site did: a run that ends so again writes it anew.
+        if kept == "run":
+            return
+        index = len(self._warnings)
+        self._warnings.append(diagnostic)
+        details = diagnostic.details
+        if kept == "pauses":
+            self._pauses = _Pauses(index, details["count"], details["total_seconds"])
+        elif kept == "counted":
+            self._counted[diagnostic.code] = (index, details["count"])
+        elif kept == "once":
+            self._written[diagnostic.code, details.get(_ONCE_PER[diagnostic.code])] = index
 
     @property
     def warnings(self) -> tuple[Diagnostic, ...]:

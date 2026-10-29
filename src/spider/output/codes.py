@@ -7,6 +7,11 @@ from typing import Any, Literal
 from spider.naming import SETTINGS_FILE_NAME
 
 type Level = Literal["error", "warning", "info"]
+# How the warning log keeps a warning of the code: each one; once per the detail once_per
+# names; counted, one entry whose count is the URLs it affected; pauses, one entry counting
+# the network pauses; or for its run only, which a continue drops (design D10 of
+# 020-add-crawl-core).
+type Kept = Literal["each", "once", "counted", "pauses", "run"]
 
 
 class ExitCode(IntEnum):
@@ -32,17 +37,16 @@ class ExitCode(IntEnum):
     IO = 7, "reading or writing a file or folder failed"
     NETWORK = 8, "the network or a required host cannot be reached"
     INTERNAL = 70, "an unexpected failure, which is a bug in the tool"
-    INTERRUPTED = 130, "stopped with Ctrl+C"
+    INTERRUPTED = 130, "stopped by an interrupt, such as Ctrl+C"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class DiagnosticCode:
     code: str
     level: Level
     exit_code: ExitCode | None
     description: str
-    # The detail by which the warning log keeps one warning of the code; without one, each
-    # warning of the code is kept (design D10 of 020-add-crawl-core).
+    kept: Kept = "each"
     once_per: str | None = None
 
     def to_json(self) -> dict[str, Any]:
@@ -64,9 +68,19 @@ def _declare(
     exit_code: ExitCode | None,
     description: str,
     *,
+    kept: Kept = "each",
     once_per: str | None = None,
 ) -> DiagnosticCode:
-    declared = DiagnosticCode(code, level, exit_code, description, once_per)
+    if (kept == "once") != (once_per is not None):
+        raise TypeError(f"{code}: a code kept once names its detail, and only it does")
+    declared = DiagnosticCode(
+        code=code,
+        level=level,
+        exit_code=exit_code,
+        description=description,
+        kept=kept,
+        once_per=once_per,
+    )
     DECLARED.append(declared)
     return declared
 
@@ -152,7 +166,12 @@ INTERNAL_ERROR = _declare(
     ExitCode.INTERNAL,
     "An unexpected failure, which is a bug; details.traceback holds the Python traceback.",
 )
-INTERRUPTED = _declare("interrupted", "error", ExitCode.INTERRUPTED, "Stopped with Ctrl+C.")
+INTERRUPTED = _declare(
+    "interrupted",
+    "error",
+    ExitCode.INTERRUPTED,
+    "Stopped by an interrupt: Ctrl+C, Ctrl+Break or a termination signal.",
+)
 INVALID_URL = _declare(
     "invalid_url",
     "error",
@@ -213,6 +232,7 @@ MAX_URLS_REACHED = _declare(
     None,
     "The Crawl reached --max-urls and stopped with URLs left queued; the hint is the command "
     "that continues it with a higher limit.",
+    kept="run",
 )
 SEED_BASE_MISMATCH = _declare(
     "seed_base_mismatch",
@@ -220,6 +240,7 @@ SEED_BASE_MISMATCH = _declare(
     None,
     "A www Seed whose Page names its apex host as the site; the hint gives the Seed on the apex "
     "host, and the Crawl went on in its Scope.",
+    kept="once",
     once_per="seed",
 )
 SEED_BLOCKED_BY_ROBOTS_TXT = _declare(
@@ -228,6 +249,7 @@ SEED_BLOCKED_BY_ROBOTS_TXT = _declare(
     None,
     "robots.txt disallows the Seed for the robots user-agent token, so it was not requested; "
     "the hint names --ignore-robots, and details.seed holds the Seed.",
+    kept="once",
     once_per="seed",
 )
 ROBOTS_UNREACHABLE = _declare(
@@ -238,6 +260,7 @@ ROBOTS_UNREACHABLE = _declare(
     "URLs was requested, or under --ignore-robots all were, without its rules; the hint names "
     "--ignore-robots unless it was given, and details.origin, details.host and "
     "details.status_code say which.",
+    kept="once",
     once_per="host",
 )
 ROBOTS_REDIRECT_FAILED = _declare(
@@ -247,6 +270,7 @@ ROBOTS_REDIRECT_FAILED = _declare(
     "The robots.txt of an Internal origin redirected to a URL that got no HTTP response, so "
     "robots.txt counts as missing and every URL of the origin is allowed; details.origin, "
     "details.host, details.target and details.fetch_error say which.",
+    kept="once",
     once_per="origin",
 )
 POSSIBLE_BLOCKING = _declare(
@@ -256,6 +280,7 @@ POSSIBLE_BLOCKING = _declare(
     "10 responses in a row from an Internal host had status 403 or 429, so it may be "
     "blocking the Crawl, which went on; the hint names --rate and --concurrency, and "
     "details.host says which host, and details.count is the length of the run that raises it.",
+    kept="once",
     once_per="host",
 )
 PARSE_FAILED = _declare(
@@ -265,6 +290,7 @@ PARSE_FAILED = _declare(
     "A registered extractor raised an error, or a Page's preparation gave nothing "
     "(body_too_large, worker_crashed, parse_timeout), so a Page was recorded without its "
     "output; details.count says for how many URLs, details.first_url for which first.",
+    kept="counted",
 )
 HANDLER_FAILED = _declare(
     "handler_failed",
@@ -272,6 +298,7 @@ HANDLER_FAILED = _declare(
     None,
     "A per-response handler raised an error, so the URL was recorded without that handler's "
     "rows; details.count says for how many URLs, details.first_url for which first.",
+    kept="counted",
 )
 NETWORK_PAUSED = _declare(
     "network_paused",
@@ -280,6 +307,7 @@ NETWORK_PAUSED = _declare(
     "Internal requests in a row got no HTTP response, so the Crawl paused until a probe of its "
     "Seed answered; details.count says how many times it paused, details.total_seconds for how "
     "long in all.",
+    kept="pauses",
 )
 RECORD_FAILED = _declare(
     "record_failed",
@@ -288,6 +316,7 @@ RECORD_FAILED = _declare(
     "The unit that records a URL failed with an error of one row, so the URL was recorded as an "
     "error without the URLs found on it; details.count says for how many URLs, "
     "details.first_url for which first.",
+    kept="counted",
 )
 WORKSPACE_NESTED = _declare(
     "workspace_nested", "warning", None, "The new Workspace is inside another Workspace."

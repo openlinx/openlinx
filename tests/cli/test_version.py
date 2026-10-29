@@ -1,4 +1,4 @@
-"""`spider --version` (000-scaffold-project, tasks 2.1 and 2.2)."""
+"""`spider --version` (000-scaffold-project)."""
 
 from tests.support.cli import run_cli, run_cli_process
 from tests.support.project import project_version

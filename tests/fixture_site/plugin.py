@@ -1,7 +1,8 @@
 """`fixture_site` fixtures: start a site, stop it afterwards (design D9 of 000-scaffold-project)."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import ExitStack
+from typing import Protocol
 
 import pytest
 
@@ -9,14 +10,19 @@ from tests.fixture_site.hosts import FixtureHosts, StartHosts, hosts_for
 from tests.fixture_site.routes import Site
 from tests.fixture_site.server import RunningServer, ServerHandle
 
-StartSite = Callable[[Site], ServerHandle]
+
+class StartSite(Protocol):
+    """Starts a site, on `port` when one is given, such as the one a failed Crawl
+    could not reach."""
+
+    def __call__(self, site: Site, *, port: int = 0) -> ServerHandle: ...
 
 
 def _serve_sites() -> Iterator[StartSite]:
     with ExitStack() as running:
 
-        def start(site: Site) -> ServerHandle:
-            server = RunningServer(site)
+        def start(site: Site, *, port: int = 0) -> ServerHandle:
+            server = RunningServer(site, port=port)
             running.callback(server.stop)
             return server.handle
 

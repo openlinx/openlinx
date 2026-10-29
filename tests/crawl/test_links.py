@@ -58,7 +58,7 @@ def test_each_link_comes_with_its_element_and_the_element_that_places_it() -> No
 
 
 def test_a_link_the_tree_does_not_hold_is_an_error() -> None:
-    with pytest.raises(ValueError, match="link 2 is not in the tree"):
+    with pytest.raises(RuntimeError, match="link 2 is not in the tree"):
         locate_links(parse_html('<a href="/a">A</a>'), _links('<a href="/a">A</a><a href="/b">'))
 
 

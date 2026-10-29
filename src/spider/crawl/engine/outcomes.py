@@ -39,10 +39,10 @@ class Outcomes:
     """Every submitted unit's Future until its outcome has reached the engine (design D2)."""
 
     def __init__(
-        self, writer: CrawlWriter, reporter: WarningLog, stop: StopSignal, counters: UrlCounters
+        self, writer: CrawlWriter, warnings: WarningLog, stop: StopSignal, counters: UrlCounters
     ) -> None:
         self._writer = writer
-        self._reporter = reporter
+        self._warnings = warnings
         self._stop = stop
         self._counters = counters
         self._pending: set[asyncio.Future[Any]] = set()
@@ -69,16 +69,16 @@ class Outcomes:
         error = done.exception()
         result, failure = recorded.result, recorded.handler_failure
         if failure is not None and (error is not None or done.result().recorded):
-            self._reporter.count(failure, result.url)
+            self._warnings.count(failure, result.url)
         if error is None:
             # At the commit, as the file then shows it (design D10).
             self._counters.add(done.result().tally)
             self._failed_in_a_row = 0
             return
         if not is_one_urls_failure(error):
-            self._stop.set("write_failed", error)
+            self._stop.write_failed(error)
             return
-        self._reporter.count(record_failure(result.url, error), result.url)
+        self._warnings.count(record_failure(result.url, error), result.url)
         self._failed_in_a_row += 1
         if self._failed_in_a_row >= RECORD_FAILURE_LIMIT:
             failed = RecordingFailedError(
@@ -86,7 +86,7 @@ class Outcomes:
                 f"{type(error).__name__}: {error}"
             )
             failed.__cause__ = error
-            self._stop.set("write_failed", failed)
+            self._stop.write_failed(failed)
         fallback = asyncio.ensure_future(self._fall_back(result, error))
         self._pending.add(fallback)
         fallback.add_done_callback(self._pending.discard)
@@ -104,7 +104,7 @@ class Outcomes:
             self._counters.add(recording.tally)
         # A fallback that fails is the file's failure, not the URL's (design D2).
         except Exception as failure:
-            self._stop.set("write_failed", failure)
+            self._stop.write_failed(failure)
 
 
 def provenance_of(result: UrlResult) -> Provenance:

@@ -124,4 +124,4 @@ class Hooks:
 def _refuse_twice(kind: str, names: list[str]) -> None:
     twice = sorted({name for name in names if names.count(name) > 1})
     if twice:
-        raise ValueError(f"two {kind} named {', '.join(twice)}: give each its own name")
+        raise TypeError(f"two {kind} named {', '.join(twice)}: give each its own name")
