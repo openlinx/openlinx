@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import Connection, select
 from sqlalchemy.exc import DBAPIError
 
-from openlinx.naming import COMMAND_NAME
+from openlinx.naming import PRODUCT_NAME
 from openlinx.output.codes import CRAWL_SCHEMA_TOO_NEW
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.connections import READER_BUSY_SECONDS, busy_error, is_busy, opening
@@ -35,7 +35,7 @@ def _check_schema_version(connection: Connection, path: Path) -> None:
             CRAWL_SCHEMA_TOO_NEW,
             f"The crawl file {path} has schema version {version}, newer than this tool's "
             f"{SCHEMA_VERSION}.",
-            hint=f"Upgrade {COMMAND_NAME} to read it.",
+            hint=f"Upgrade {PRODUCT_NAME} to read it.",
             details={"file_schema_version": version, "tool_schema_version": SCHEMA_VERSION},
         )
 

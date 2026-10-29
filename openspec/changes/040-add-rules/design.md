@@ -110,7 +110,7 @@ No count of Affected URLs is stored: a count that only repeats the rows of anoth
 - **Which Issue Types count.** They are read from the Crawl's `rules` table, never from the installed tool.
 
 ### D9. Strict configuration through `010`'s settings validation
-`[rules.<id>]` tables are part of the settings model, which `010` validates eagerly whenever settings load. Unknown ids, unknown keys and bad values become `settings_invalid` problems with dotted keys, such as `rules.title-to-long`, and a hint naming the closest known id or key. A silent typo would quietly change audit results. The cost is that a `openlinx.toml` written for a newer version, with new Rule ids, fails on an older tool; the message names the unknown id, so the fix is obvious.
+`[rules.<id>]` tables are part of the settings model, which `010` validates eagerly whenever settings load. Unknown ids, unknown keys and bad values become `settings_invalid` problems with dotted keys, such as `rules.title-to-long`, and a hint naming the closest known id or key. A silent typo would quietly change audit results. The cost is that an `openlinx.toml` written for a newer version, with new Rule ids, fails on an older tool; the message names the unknown id, so the fix is obvious.
 
 The table names are Rule ids. They mirror no flag, so `010`'s flag-mirroring key rule does not apply to them.
 

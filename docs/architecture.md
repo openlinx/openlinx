@@ -39,9 +39,9 @@ A short map for contributors and coding agents. Terms follow [CONTEXT.md](../CON
   - Every stderr line, a diagnostic or an event, is written under a lock and flushed at once.
   - ruff bans `print`, `sys.stdout`, `sys.stderr` and the echo functions everywhere else.
 - **The error-code registry:** every diagnostic code is one `DiagnosticCode` constant in `openlinx.output.codes`, with its level, exit code and description, and no code is declared anywhere else in `src/`. `OpenLinxError` takes such a constant, never a loose string. `linx commands` lists the codes and the exit codes from it, and the MCP server maps errors from it.
-- **The startup allowlist:** `linx --help` and `linx commands` may load only the standard library, Typer and its own dependencies (not rich: Typer's rich help is off), orjson and `linx`. A test checks it in a fresh process, so a new dependency must be allowed or imported lazily. pydantic, rich and every settings table load only in the Commands that need them.
+- **The startup allowlist:** `linx --help` and `linx commands` may load only the standard library, Typer and its own dependencies (not rich: Typer's rich help is off), orjson and `openlinx`. A test checks it in a fresh process, so a new dependency must be allowed or imported lazily. pydantic, rich and every settings table load only in the Commands that need them.
 - **Typer's vendored Click** (`typer._click`) is imported only in `openlinx.cli.click_compat`, and `typer` is pinned below the next minor version, so an upgrade touches one module and one pin.
-- **The product name** is still open: every name-derived string in `src/` (the command name, the settings file, the data folder) comes from `openlinx.naming`.
+- **The names:** every name-derived string in `src/` comes from `openlinx.naming`: `COMMAND_NAME` (`linx`), `PACKAGE_NAME` (`openlinx`) and `PRODUCT_NAME` (`OpenLinx`), with the settings file and the data folder made from them.
 
 ## Settings
 

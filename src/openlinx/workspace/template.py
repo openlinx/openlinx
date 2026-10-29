@@ -3,11 +3,11 @@
 import json
 from typing import Any
 
-from openlinx.naming import COMMAND_NAME, SETTINGS_FILE_NAME
+from openlinx.naming import PRODUCT_NAME, SETTINGS_FILE_NAME
 from openlinx.workspace.tables import SettingsTables, keyed_entry
 
 HEADER = (
-    f"# {COMMAND_NAME} settings. Each setting takes the first value it finds:\n"
+    f"# {PRODUCT_NAME} settings. Each setting takes the first value it finds:\n"
     f"# its flag, then this file ({SETTINGS_FILE_NAME}), then its default.\n"
     "# Every setting below is commented out, so its default applies.\n"
 )
