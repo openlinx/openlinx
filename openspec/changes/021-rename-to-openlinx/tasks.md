@@ -12,7 +12,7 @@ Seams are those of docs/testing.md: seam 1 is the CLI through `run_cli`, "seam 1
 ## 3. The three names (design D1, D4, D5)
 
 - [x] 3.1 Drive "Version" at seam 1: `--version` prints `OpenLinx <version>`, from `PRODUCT_NAME` in `openlinx.naming`. Done when: the scenario's delta says so.
-- [ ] 3.2 Prose names the product: "a bug in OpenLinx", "Upgrade OpenLinx to read it", and `# Created by OpenLinx: ...` in the data folder's `.gitignore`, each through `PRODUCT_NAME`, each with its delta and a test red first.
+- [x] 3.2 Prose names the product: "a bug in OpenLinx", "Upgrade OpenLinx to read it", and `# Created by OpenLinx: ...` in the data folder's `.gitignore`, each through `PRODUCT_NAME`, each with its delta and a test red first.
 - [ ] 3.3 Drive "Usage names the script that ran" and "The recorded command line starts with the script that ran" at seam 1, subprocess, through the installed console scripts (design D4). Hints keep `linx`.
 
 ## 4. The second console script

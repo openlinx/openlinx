@@ -15,7 +15,7 @@ from openlinx.cli.click_compat import UsageError as ClickUsageError
 from openlinx.cli.meta import formats_hint, meta_of
 from openlinx.cli.options import FORMAT_PARAMETER, options_with_meta
 from openlinx.clock import SystemClock
-from openlinx.naming import COMMAND_NAME
+from openlinx.naming import COMMAND_NAME, PRODUCT_NAME
 from openlinx.output.codes import INTERNAL_ERROR, INTERRUPTED, INVALID_VALUE, USAGE_ERROR, ExitCode
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.reporter import CliReporter, Reporter
@@ -140,7 +140,7 @@ def _interrupted() -> OpenLinxError:
 def _internal_error() -> OpenLinxError:
     return OpenLinxError(
         INTERNAL_ERROR,
-        f"An unexpected failure stopped the Command. This is a bug in {COMMAND_NAME}.",
+        f"An unexpected failure stopped the Command. This is a bug in {PRODUCT_NAME}.",
         hint="Report it with details.traceback.",
         details={"traceback": traceback.format_exc()},
     )

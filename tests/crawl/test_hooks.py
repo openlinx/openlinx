@@ -606,8 +606,9 @@ def test_recording_that_fails_for_every_url_fails_the_crawl(
         error and error.code,
         error and error.message.startswith("100 URLs in a row could not be recorded"),
         error and "record_failed" in (error.hint or "") and "resume" in (error.hint or ""),
+        error and "in a handler or in OpenLinx itself" in (error.hint or ""),
         result.failure and result.failure.exit_code,
-    ) == ("failed", "write_failed", "crawl_write_failed", True, True, 7)
+    ) == ("failed", "write_failed", "crawl_write_failed", True, True, True, 7)
 
 
 @pytest.mark.parametrize(("articles", "state"), [(99, "completed"), (100, "failed")])

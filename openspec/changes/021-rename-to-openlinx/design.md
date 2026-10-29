@@ -53,6 +53,7 @@ The working name `spider` is in the import package, `pyproject.toml`, `spider.na
 - [Another package's `linx` comes first on PATH] → `openlinx` runs the same entry point (D1), `--version` tells them apart (D5), and `080`'s PATH check looks for both.
 - [A user on the `openlinx` fallback reads hints that say `linx`, which may run the other package (D4)] → `--version` identifies ours (D5), and `080`'s doctor warns when a foreign `linx` comes first and names `openlinx`.
 - [A branch's own new code uses the product name in prose, which the codemod maps to `COMMAND_NAME`] → `test_no_working_name` and the tests that pin hint text catch it, and the branch's review checks each prose use.
+- [Tests named after no scenario, which the scenario check does not count] → In `tests/cli/test_init.py`: `test_the_template_names_the_product`, which guards the settings template's first line, which no spec states.
 - [Crawl files made under the working name keep `["spider", ...]` in `crawl.command_argv`] → It is what was run, and it stays.
 
 ## Migration Plan

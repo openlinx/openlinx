@@ -57,7 +57,7 @@ It creates only what is missing, and never changes a file that exists. A `openli
 | Created | Content |
 |---|---|
 | `.openlinx/` | the data folder |
-| `.openlinx/.gitignore` | `# Created by linx: crawl data is not committed.` and `*`, so git ignores the data folder's contents |
+| `.openlinx/.gitignore` | `# Created by OpenLinx: crawl data is not committed.` and `*`, so git ignores the data folder's contents |
 | `.openlinx/crawls/` | where Crawls are stored |
 | `openlinx.toml` | the settings file, which sets no value |
 
