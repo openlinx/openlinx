@@ -229,7 +229,9 @@ class NetworkPause:
                 self._count_no_more(paused.count)
             seconds = self._clock.monotonic() - paused.began
             if end is None:
-                self._stop.set(paused.reason)
+                # A stop that ended the wait keeps its reason; giving up sets the pause's.
+                if not self._stop.is_set:
+                    self._stop.set(paused.reason)
             else:
                 await self._resumed(end, tuple(paused.count))
                 self._log.event(
@@ -257,9 +259,9 @@ class NetworkPause:
         self._dead_origins.update(dead - {url_origin(self._seed)})
 
     async def _wait_for_answer(self, began: float) -> PauseEnd | None:
-        """How the pause ended: a probe answered before the wait ended, or none did, and every
-        probe still in flight is cancelled then. The first probe's answer means a dead section,
-        a later one's an outage."""
+        """How the pause ended: a probe answered before the wait ended, or none did, or the
+        Crawl stopped, and every probe still in flight is cancelled then. The first probe's
+        answer means a dead section, a later one's an outage."""
         probes: list[asyncio.Task[bool]] = []
         times = probe_times(self._network_wait)
         # A first probe that hangs in its connection may answer only after the network came
@@ -269,6 +271,8 @@ class NetworkPause:
             for at in times:
                 if await self._answer_before(probes, began + at):
                     return self._end(probes, dead_before)
+                if self._stop.is_set:
+                    return None
                 probes.append(asyncio.create_task(self._probe_once()))
             if await self._answer_before(probes, began + self._network_wait):
                 return self._end(probes, dead_before)
@@ -279,17 +283,21 @@ class NetworkPause:
             await asyncio.gather(*probes, return_exceptions=True)
 
     async def _answer_before(self, probes: list[asyncio.Task[bool]], until: float) -> bool:
+        """Whether a probe answered by `until`; a stop, whatever its reason, ends the wait
+        with no answer (design D16)."""
         while not any(_answered(probe) for probe in probes):
             delay = until - self._clock.monotonic()
-            if delay <= 0:
+            if delay <= 0 or self._stop.is_set:
                 return False
             sleep = asyncio.ensure_future(self._clock.sleep(delay))
+            stopped = asyncio.ensure_future(self._stop.wait())
             waiting = {probe for probe in probes if not probe.done()}
             try:
-                await asyncio.wait({sleep, *waiting}, return_when=asyncio.FIRST_COMPLETED)
+                await asyncio.wait({sleep, stopped, *waiting}, return_when=asyncio.FIRST_COMPLETED)
             finally:
                 sleep.cancel()
-                await asyncio.wait({sleep})
+                stopped.cancel()
+                await asyncio.wait({sleep, stopped})
         return True
 
     def _end(self, probes: list[asyncio.Task[bool]], dead_before: float) -> PauseEnd:

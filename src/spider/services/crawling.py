@@ -40,9 +40,10 @@ from spider.output.codes import (
 from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
-from spider.services.crawl_failures import NETWORK_FAILURES, write_failed
+from spider.services.crawl_failures import NETWORK_FAILURES, interrupted, write_failed
 from spider.services.crawls import create_crawl
 from spider.services.hooks import default_page_executor
+from spider.services.interrupts import interrupts_stop
 from spider.store.crawls import crawl_summary, record_state, record_warnings
 from spider.store.failures import is_write_failure
 from spider.store.records import (
@@ -214,10 +215,12 @@ def start_crawl(
     resolver: AbstractResolver | None = None,
     pages: Callable[[], PageExecutor] | None = None,
     fetcher: Fetcher | None = None,
+    stop: StopSignal | None = None,
 ) -> CrawlResult:
     """`resolver` is the DNS resolver hook of multi-host tests, `pages` builds the page
-    executor instead of `default_page_executor`, and `fetcher` is the fake Fetcher of the
-    timing scenarios, used instead of aiohttp's (design D9, D15)."""
+    executor instead of `default_page_executor`, `fetcher` is the fake Fetcher of the timing
+    scenarios, used instead of aiohttp's, and `stop` is the stop flag that `060`'s control rows
+    set (design D9, D10, D15)."""
     log = WarningLog(reporter)
     crawl = _Crawl(
         plan=plan,
@@ -228,8 +231,16 @@ def start_crawl(
         resolver=resolver,
         pages=pages or default_page_executor,
         fetcher=fetcher,
+        stop=stop or StopSignal(),
     )
-    with asyncio.Runner(loop_factory=loop_factory) as runner:
+    # Before the loop runs: an interrupt's stop is set on the loop, and may come first.
+    crawl.stop.on_first_set(
+        lambda reason: log.event("stopping", crawl_id=crawl.crawl_file.id, reason=reason)
+    )
+    with (
+        asyncio.Runner(loop_factory=loop_factory) as runner,
+        interrupts_stop(runner.get_loop(), crawl.stop),
+    ):
         ended = runner.run(_run(crawl))
     return CrawlResult(
         crawl_id=crawl.crawl_file.id,
@@ -262,6 +273,7 @@ class _Crawl:
     resolver: AbstractResolver | None
     pages: Callable[[], PageExecutor]
     fetcher: Fetcher | None
+    stop: StopSignal
 
 
 async def _run(crawl: _Crawl) -> _End:
@@ -291,23 +303,29 @@ async def _crawl_and_end(crawl: _Crawl) -> _End:
     async with _crawl_context(crawl) as context:
         await run_crawl(context, crawl.plan.seed)
         stop = context.stop
-        if stop.reason == "write_failed":
+        # Read once: a stop that comes during the passes or the end's writes finds the frontier
+        # empty, and must not change the end that is being written.
+        reason = stop.reason
+        if reason == "write_failed":
             raise _WriteFailed(stop.cause)
-        if stop.reason is not None and stop.reason in NETWORK_FAILURES:
-            ended = await _end(crawl, context.writer, "failed", stop.reason)
-            failure = NETWORK_FAILURES[stop.reason]
+        if reason is not None and reason in NETWORK_FAILURES:
+            ended = await _end(crawl, context.writer, "failed", reason)
+            failure = NETWORK_FAILURES[reason]
             plan = crawl.plan
             return replace(ended, failure=failure(plan.seed, plan.settings, crawl.crawl_file))
-        elif stop.reason not in (None, "max_urls"):
-            # An interrupt has no end it records yet.
-            raise stop.cause or RuntimeError(f"no end is built for {stop.reason}")
+        elif reason not in (None, "max_urls", "interrupt"):
+            # 060's stop request has no end it records yet.
+            raise stop.cause or RuntimeError(f"no end is built for {reason}")
         else:
             # Before the end is written, for completed and stopped alike: 040 reads either
             # state as "its Issues are materialised".
             for crawl_pass in crawl.hooks.passes:
                 await crawl_pass.run(PassContext(context.writer, crawl.clock))
-            state: CrawlState = "completed" if stop.reason is None else "stopped"
-            return await _end(crawl, context.writer, state, stop.reason)
+            state: CrawlState = "completed" if reason is None else "stopped"
+            ended = await _end(crawl, context.writer, state, reason)
+            if reason == "interrupt":
+                return replace(ended, failure=interrupted(crawl.crawl_file))
+            return ended
 
 
 async def _failed_end(crawl: _Crawl, error: SpiderError) -> _End:
@@ -375,7 +393,7 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
                     fetcher=fetcher,
                     pages=executor,
                     hooks=crawl.hooks,
-                    stop=StopSignal(),
+                    stop=crawl.stop,
                 )
         except BaseException:
             # An ended writer raises why it ended once more; the error raised says it first.

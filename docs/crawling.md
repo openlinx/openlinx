@@ -73,7 +73,7 @@ http://site.test/a.png     depth 2, fetched (a Resource of /a)
 There is no URL limit by default. With `--max-urls <n>`, the Crawl starts at most `n` URL requests:
 
 - A request counts from the moment it starts, so requests in flight count. A URL recorded without a request, such as an excluded one, does not count, and neither do robots.txt requests.
-- At the first request the limit refuses, nothing new starts. The requests in flight end and are recorded, and every URL not requested stays `queued`.
+- At the first request the limit refuses, nothing new starts. The requests in flight get the grace of [Stopping a Crawl](#stopping-a-crawl), and every URL not requested stays `queued`. So a request that runs past the grace leaves its URL `queued`, and the Crawl may record fewer than `n` URLs; a continue requests it.
 - The Crawl ends `stopped` with `crawl.stop_reason` = `max_urls`, and exits with code 0. Its post-crawl passes have run, as for a `completed` Crawl.
 - The result holds a `max_urls_reached` warning whose hint is the command that continues the Crawl with twice the limit, such as `spider resume --crawl 20261014-101500-k3f9 --max-urls 6`.
 - A site with exactly `n` URLs ends `completed`, since no request was refused.
@@ -90,6 +90,7 @@ While it runs, the Command writes events to stderr, one JSON object per line, as
 | `progress` | every 10 seconds, during a network pause too | `crawl_id`, `elapsed_s`, `urls` (`discovered`, `fetched`, `errors`, `skipped`, `queued`, as recorded so far), `rate` (URL requests started per second over the last 60 seconds, or since the start while the Crawl is younger), `paused` |
 | `crawl_paused` | when the Crawl pauses (see [The network pause](#the-network-pause)) | `crawl_id`, `reason` (the `fetch_error` of the request that paused it), `urls` (the URLs whose requests made up the count) |
 | `crawl_resumed` | when a probe answers | `crawl_id`, `duration_s` (the time paused), `outcome` (`dead_section` or `outage`) |
+| `stopping` | once, when the Crawl starts to stop before its frontier is empty: at the URL limit, on an interrupt or when it fails | `crawl_id`, `reason` (the `stop_reason` it stops with) |
 
 ### Warnings
 
@@ -139,7 +140,7 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 | 5 | another connection held the crawl file for longer than the writer waits | `crawl_busy` |
 | 7 | the Workspace or the crawl file cannot be written, or writing the crawl file failed during the Crawl | `workspace_not_writable`, `crawl_not_writable`, `crawl_write_failed` |
 | 8 | the Seed or the site gave no HTTP response within `--network-wait` | `seed_unreachable`, `site_unreachable` |
-| 130 | the Crawl was stopped by an interrupt (Ctrl+C) | `interrupted` |
+| 130 | the Crawl was stopped by an interrupt (see [Stopping a Crawl](#stopping-a-crawl)) | `interrupted` |
 
 A Seed with a user name or password is refused, and the error never repeats it: give the URL without them. Credentials for a site will be an option of their own (`--auth`, planned for v0.2).
 
@@ -155,6 +156,19 @@ A Crawl that cannot go on ends with the Crawl State `failed`. It prints the resu
 
 What was recorded so far is kept, URLs not requested stay `queued`, and the post-crawl passes do not run, so the result is a partial one. `details.error` of `crawl_write_failed` says what failed; the hints of `seed_unreachable` and `site_unreachable` say how long the Crawl waited and how to continue it with `spider resume`, and the first that an agent's sandbox often blocks network access. When 100 URLs in a row could not be recorded, `crawl_write_failed` says so, and its hint points to the `record_failed` warning instead of the disk. The end of a write failure is written through a new connection; when that fails too, the crawl file is left `running`.
 
+### Stopping a Crawl
+
+An interrupt stops a foreground Crawl gracefully: Ctrl+C, and on Windows also Ctrl+Break, and on macOS and Linux also SIGTERM and SIGHUP.
+
+1. The Crawl writes a `stopping` event and starts no new request, a robots.txt request included.
+2. The requests in flight get 10 seconds, the grace, and those still running then are cancelled. A URL whose response was already handed to the writer is recorded; the others stay `queued`. A network pause ends at once, with no probe after the interrupt.
+3. The post-crawl passes run, and the Crawl ends `stopped` with `stop_reason` = `interrupt`.
+4. The Command prints the result, then one error, `interrupted`, whose hint is the command that continues the Crawl, such as `spider resume --crawl 20261014-101500-k3f9`, and exits with code 130.
+
+Every stop takes the same grace, the URL limit's and a failure's too.
+
+A second interrupt ends the process at once, with no result and no error. The crawl file keeps every unit committed before it, which is about a second of work behind, and stays `running`; it can be continued like a stopped Crawl.
+
 ### The network pause
 
 When requests stop getting answers, the Crawl pauses instead of recording the rest of the site as errors:
@@ -164,6 +178,7 @@ When requests stop getting answers, the Crawl pauses instead of recording the re
 - **Probes:** the Crawl requests its Seed 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, through the host's limits. A probe is not recorded and does not count toward `--max-urls`.
 - **Outcomes:** when the first probe answers, the failures were the site's own (`dead_section`): their errors are kept and the Crawl goes on. From then on, the origins of those URLs no longer count toward a pause, the Seed's origin aside, so a dead subdomain pauses the Crawl once; their URLs are still requested and recorded as errors. When a later probe answers, the network was down (`outage`): the URLs of the count are queued again, each at most once a run, and the Internal origins whose robots.txt got no response ask for it again.
 - **Giving up:** a probe starts only before `--network-wait` seconds have passed since the pause's start (default 1800). When none has answered by then, the probes still in flight are cancelled and the Crawl fails with `site_unreachable`. With `--network-wait 0` nothing pauses: no probe starts, no pause event or `network_paused` is written, and the Crawl fails at once.
+- **A stop** (the URL limit, an interrupt) ends a pause at once: the probes are cancelled, nothing is queued again, and the URLs that waited at the pause stay `queued`.
 - **The Seed:** until the Seed's origin has answered, one request of its robots.txt or of the Seed without a response pauses the Crawl at once, since a network may come up or switch just as a Crawl starts. A probe that answers then requests robots.txt and the Seed again; when none does, the Crawl fails with `seed_unreachable`.
 
 The events `crawl_paused` and `crawl_resumed` mark a pause, `progress` events go on during it with `paused` = true, and the counted `network_paused` warning says how often and how long the Crawl paused. It is written to stderr when the first pause begins, and the result counts every pause.

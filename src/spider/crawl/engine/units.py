@@ -18,7 +18,7 @@ from spider.crawl.engine.discovery import discovered_urls
 from spider.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
 from spider.crawl.engine.pause import NetworkPause, Redispatch
-from spider.crawl.engine.stop import StopSignal
+from spider.crawl.engine.stop import StopGrace, StopSignal
 from spider.crawl.fetch.fetcher import FetchFailure, FetchResult
 from spider.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from spider.crawl.fetch.requester import NotStarted, Requester
@@ -100,6 +100,7 @@ class Run:
     task_failure: TaskFailure
     pause: NetworkPause
     redispatch: Redispatch
+    grace: StopGrace
 
 
 def via_resource(queued: QueuedUrl) -> bool:
@@ -124,11 +125,21 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
             return None
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
         origin_robots = await robots.robots_of(queued.url)
-        while origin_robots.origin_error is not None and run.pause.paused:
+        while (
+            not isinstance(origin_robots, NotStarted)
+            and origin_robots.origin_error is not None
+            and run.pause.paused
+        ):
             # Held with its task slot, as a request at the pause's gate is, so the pause's
             # count stays bounded; an outage drops the verdict, so it is read again then.
             await run.pause.ended()
+            if context.stop.is_set:
+                # A stop ended the pause: the URL was never requested, so it stays queued.
+                return None
             origin_robots = await robots.robots_of(queued.url)
+        if isinstance(origin_robots, NotStarted):
+            # A stop kept its origin's robots.txt request from starting: it stays queued.
+            return None
         origin_error = origin_robots.origin_error
         if origin_error is not None:
             if decision.is_internal:
