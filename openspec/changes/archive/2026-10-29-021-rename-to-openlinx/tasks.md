@@ -31,4 +31,4 @@ Seams are those of docs/testing.md: seam 1 is the CLI through `run_cli`, "seam 1
 ## 7. Review and archive
 
 - [x] 7.1 Review: the code-review skill on the change, then refactor with the whole suite green.
-- [ ] 7.2 Archive the change; `openspec/specs` takes the deltas, and `test_no_working_name` drops `openspec/specs` from its exceptions.
+- [x] 7.2 Archive the change; `openspec/specs` takes the deltas, and `test_no_working_name` drops `openspec/specs` from its exceptions.
