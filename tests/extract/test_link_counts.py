@@ -43,6 +43,16 @@ def test_counts_for_a_linked_page(temp_workspace: TempWorkspace, fixture_hosts: 
     assert query(crawl_file, _COUNTS_OF, ["http://site.test/"]) == [(3, 3, 75.0, 3, 2, 3, 2)]
 
 
+def test_repeated_inlinks_from_one_source(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    crawl_file = _linked_site(fixture_hosts)
+
+    assert [
+        query(crawl_file, _COUNTS_OF, [f"http://site.test{path}"])[0][:3] for path in ("/b", "/d")
+    ] == [(2, 1, 25.0), (0, 0, 0.0)]
+
+
 def test_linking_pages_pct_is_rounded_half_up(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
