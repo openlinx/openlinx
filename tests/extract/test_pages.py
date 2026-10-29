@@ -2,12 +2,13 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import select
 
-from openlinx.crawl.pages.preparation import PageInput, extractor
+from openlinx.crawl.pages.preparation import Extractor, PageInput, extractor
 from openlinx.extract.page_data import PAGE_DATA, PageData
 from openlinx.extract.page_links import PAGE_LINKS, PageLinks
 from openlinx.services.hooks import default_hooks
@@ -305,12 +306,14 @@ def test_a_page_whose_page_extractor_failed_keeps_its_response_data_and_links(
         )
     )
     broken = server.url("/broken")
+    failing: dict[str, Extractor[Any, Any]] = {
+        PAGE_DATA.name: extractor(PAGE_DATA.name, _failing_page_data, None),
+        PAGE_LINKS.name: extractor(PAGE_LINKS.name, _failing_page_links, None),
+    }
+    defaults = default_hooks()
     hooks = replace(
-        default_hooks(),
-        extractors=(
-            extractor(PAGE_DATA.name, _failing_page_data, None),
-            extractor(PAGE_LINKS.name, _failing_page_links, None),
-        ),
+        defaults,
+        extractors=tuple(failing.get(built.name, built) for built in defaults.extractors),
     )
 
     crawl_file = crawl_result(broken, hooks).crawl_file

@@ -1,6 +1,6 @@
 # Page data
 
-What a Crawl stores about each Page: the flat Page record in `pages`, one row per Page, read without joins, and one `links` row for each Link the Crawl discovered. The spec is [openspec/changes/030-add-page-data/specs/page-data/spec.md](../openspec/changes/030-add-page-data/specs/page-data/spec.md), and each column's one definition is its description in [schema.md](schema.md#table-pages); this page explains what several columns share. Terms follow [CONTEXT.md](../CONTEXT.md).
+What a Crawl stores about each Page: the flat Page record in `pages`, one row per Page, read without joins, and one `links` row for each Link the Crawl discovered. The spec is [openspec/changes/030-add-page-data/specs/page-data/spec.md](../openspec/changes/030-add-page-data/specs/page-data/spec.md), and each column's one definition is its description in [schema.md](schema.md#table-pages) and [its `links` section](schema.md#table-links); this page explains what several columns share. Terms follow [CONTEXT.md](../CONTEXT.md).
 
 ## What a Page is
 
@@ -163,10 +163,10 @@ A search engine first has to be allowed to fetch the URL, then needs a usable re
 
 `links` has one row for each Link that the Crawl's Link discovery found in a response, keyed by the URL of that response (`source_url_id`) and the Link's `ordinal` there, from 1: the `Link` and `Refresh` header Links first, in the order received, then the document's in document order. The target is a URL id; join `urls` on `target_url_id` for its text and whether it is Internal. See [schema.md](schema.md#table-links) for each column.
 
-- **What Link discovery decides.** Which references are Links, their type, their target, where they were declared (`declared_in`: `head` or `body` as the parser builds them, or `http_header`), the element and attribute they came from, their `rel` tokens, and which targets the Crawl requests. Every discovered Link gets a row, whether its target was requested or not: a `nofollow` hyperlink is stored, and its target has a `urls` row though it was never requested. A malformed or non-http(s) reference is no Link and has no row.
+- **What Link discovery decides.** Which references are Links, their type, their target, where they were declared (`declared_in`: `head` or `body` as the parser builds them, or `http_header`), the element and attribute they came from, their `rel` tokens, and which targets the Crawl requests. Every discovered Link gets a row, whether or not the Crawl requests its target: a `nofollow` hyperlink is stored, and its target has a `urls` row. A malformed or non-http(s) reference is no Link and has no row.
 - **What Page data adds.** The `anchor_text` of a hyperlink, the `alt_text` of an `<img>`, the `hreflang` and `media` of alternate Links, and the `link_position`, all read from the same parse of the Page, so the HTML is never parsed twice. These are NULL for a header Link, which has no element, except the `hreflang` of a header Link, which is its `hreflang` parameter.
 - **Which responses have Links.** An analysed Page has its header Links and its document's. Any other in-Scope 2xx response, such as a PDF or a Page too large to analyse, has its header Links only, so a PDF's `Link: <...>; rel="canonical"` is stored. Other responses, such as a redirect or a 404, have no Links in `links`.
-- **Link position.** `head` for a Link that the parser places in `<head>`. Otherwise it comes from the nearest enclosing `nav` (`navigation`), `header`, `footer` or `aside` (`sidebar`), and is `content` without one. A Link from a `noscript`'s content takes the `noscript`'s place. It reads elements only, so a site that marks its menu with a class gets `content` for it, and the `[content_area]` settings do not change it.
+- **Link position.** `link_position` reads elements only, so a site that marks its menu with a class rather than `nav` gets `content` for it, and the `[content_area]` settings do not change it.
 
 ## Cookies
 

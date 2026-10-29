@@ -36,16 +36,20 @@ def test_hyperlink_with_rel_flags() -> None:
 def test_image_alt_attribute_absent_or_empty() -> None:
     rows = page_link_rows('<img src="/a.png"><img src="/b.png" alt="">')
 
-    assert [(row.target, row.element, row.attribute, row.alt_text) for row in rows] == [
-        ("https://site.test/a.png", "img", "src", None),
-        ("https://site.test/b.png", "img", "src", ""),
+    assert [(row.type, row.target, row.element, row.attribute, row.alt_text) for row in rows] == [
+        ("image", "https://site.test/a.png", "img", "src", None),
+        ("image", "https://site.test/b.png", "img", "src", ""),
     ]
 
 
 def test_image_only_anchor_takes_the_alt_text() -> None:
     (link, _) = page_link_rows('<a href="/c"><img src="/i.png" alt="Logo"></a>')
 
-    assert (link.type, link.anchor_text) == ("hyperlink", "Logo")
+    assert (link.type, link.target, link.anchor_text) == (
+        "hyperlink",
+        "https://site.test/c",
+        "Logo",
+    )
 
 
 def test_an_image_map_area_takes_its_alt_text() -> None:

@@ -2,14 +2,18 @@
 
 from datetime import UTC, datetime
 
+import msgspec
+
 from openlinx.crawl.engine.hooks import UrlResponse, UrlResult
 from openlinx.crawl.fetch.fetcher import FetchResult
+from openlinx.crawl.pages.directives import RobotsDirectives
 from openlinx.crawl.pages.preparation import (
     PageSettings,
     prepare_page,
     response_directives,
     response_links,
 )
+from openlinx.crawl.references import DiscoveredLink
 from openlinx.crawl.scope import scope_rules
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.extract.content_area import ContentArea
@@ -20,6 +24,7 @@ from openlinx.extract.status_phrases import STATUS_PHRASES
 from openlinx.naming import DEFAULT_ROBOTS_TOKEN
 from openlinx.services.hooks import default_hooks
 from openlinx.store.page_records import LinkRow, PageRow
+from openlinx.store.records import ParseError
 
 _URL = NormalizedUrl("https://site.test/")
 # The spec's fixture A, which later scenarios refer to.
@@ -65,14 +70,7 @@ def page_result(
     # The crawl engine prepares only a 2xx response; another status is unprepared_page_row's.
     assert 200 <= status_code < 300, status_code
     body = html.encode() if isinstance(html, str) else html
-    response = FetchResult(
-        status_code=status_code,
-        reason=STATUS_PHRASES[status_code],
-        headers=(("Content-Type", content_type), *headers),
-        body=body,
-        fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
-        response_time_ms=1,
-    )
+    response = _response(status_code, content_type, headers, body)
     extractors = default_hooks().extractors
     if content_area is not None:
         page_data = page_data_extractor(content_area)
@@ -84,27 +82,13 @@ def page_result(
     settings = PageSettings(scope=scope, extractors=extractors, strip_params=None)
     prepared = prepare_page(page_url, response, settings)
     assert prepared.parse_error is None, prepared.parse_error_message
-    return UrlResult(
-        url_id=1,
-        url=page_url,
-        crawl_depth=0,
-        discovered_via="seed",
-        found_on_url_id=None,
-        is_internal=True,
-        in_scope=True,
-        fetch_state="fetched",
-        blocked_by_robots_txt=False,
-        response=UrlResponse(
-            status_code=response.status_code,
-            reason=response.reason,
-            content_type=content_type,
-            headers=response.headers,
-            fetched_at=response.fetched_at,
-            response_time_ms=response.response_time_ms,
-            directives=prepared.directives,
-        ),
-        parsed=True,
+    return _url_result(
+        page_url,
+        response,
+        content_type,
+        prepared.directives,
         links=response_links(page_url, response, scope, None) + prepared.html_links,
+        parsed=True,
         outputs=dict(prepared.outputs),
     )
 
@@ -115,33 +99,12 @@ def response_link_rows(
     """The Link rows of an in-Scope 200 response that is not HTML, such as a PDF, built as the
     crawl engine builds its result: its header Links, and no extractor output."""
     page_url = NormalizedUrl(url)
-    response = FetchResult(
-        status_code=200,
-        reason="OK",
-        headers=(("Content-Type", content_type), *headers),
-        body=b"%PDF-1.7",
-        fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
-        response_time_ms=1,
-    )
-    result = UrlResult(
-        url_id=1,
-        url=page_url,
-        crawl_depth=0,
-        discovered_via="seed",
-        found_on_url_id=None,
-        is_internal=True,
-        in_scope=True,
-        fetch_state="fetched",
-        blocked_by_robots_txt=False,
-        response=UrlResponse(
-            status_code=200,
-            reason="OK",
-            content_type=content_type,
-            headers=response.headers,
-            fetched_at=response.fetched_at,
-            response_time_ms=1,
-            directives=response_directives(response, DEFAULT_ROBOTS_TOKEN),
-        ),
+    response = _response(200, content_type, headers, b"")
+    result = _url_result(
+        page_url,
+        response,
+        content_type,
+        response_directives(response, DEFAULT_ROBOTS_TOKEN),
         links=response_links(page_url, response, scope_rules(page_url), None),
     )
     return tuple(link_rows(result))
@@ -158,16 +121,48 @@ def unprepared_page_row(
     2xx. The engine prepares no other status, and a 2xx one gives nothing when its body was too
     large."""
     page_url = NormalizedUrl(url)
-    response = FetchResult(
+    response = _response(status_code, "text/html", headers, b"")
+    followed = 200 <= status_code < 300
+    result = _url_result(
+        page_url,
+        response,
+        "text/html",
+        response_directives(response, DEFAULT_ROBOTS_TOKEN),
+        links=response_links(page_url, response, scope_rules(page_url), None) if followed else (),
+        parse_error="body_too_large" if followed else None,
+        blocked_by_robots_txt=blocked_by_robots_txt,
+    )
+    (row,) = page_rows(result)
+    return row
+
+
+def _response(
+    status_code: int, content_type: str, headers: tuple[tuple[str, str], ...], body: bytes
+) -> FetchResult:
+    return FetchResult(
         status_code=status_code,
         reason=STATUS_PHRASES.get(status_code, ""),
-        headers=(("Content-Type", "text/html"), *headers),
-        body=b"",
+        headers=(("Content-Type", content_type), *headers),
+        body=body,
         fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
         response_time_ms=1,
     )
-    followed = 200 <= status_code < 300
-    result = UrlResult(
+
+
+def _url_result(
+    page_url: NormalizedUrl,
+    response: FetchResult,
+    content_type: str,
+    directives: RobotsDirectives,
+    *,
+    links: tuple[DiscoveredLink, ...],
+    parsed: bool = False,
+    parse_error: ParseError | None = None,
+    outputs: dict[str, msgspec.Struct] | None = None,
+    blocked_by_robots_txt: bool | None = False,
+) -> UrlResult:
+    """The result of an in-Scope seed URL that was fetched, as the crawl engine builds it."""
+    return UrlResult(
         url_id=1,
         url=page_url,
         crawl_depth=0,
@@ -178,17 +173,16 @@ def unprepared_page_row(
         fetch_state="fetched",
         blocked_by_robots_txt=blocked_by_robots_txt,
         response=UrlResponse(
-            status_code=status_code,
+            status_code=response.status_code,
             reason=response.reason,
-            content_type="text/html",
+            content_type=content_type,
             headers=response.headers,
             fetched_at=response.fetched_at,
-            response_time_ms=1,
-            directives=response_directives(response, DEFAULT_ROBOTS_TOKEN),
+            response_time_ms=response.response_time_ms,
+            directives=directives,
         ),
-        parsed=False,
-        parse_error="body_too_large" if followed else None,
-        links=response_links(page_url, response, scope_rules(page_url), None) if followed else (),
+        parsed=parsed,
+        parse_error=parse_error,
+        links=links,
+        outputs={} if outputs is None else outputs,
     )
-    (row,) = page_rows(result)
-    return row

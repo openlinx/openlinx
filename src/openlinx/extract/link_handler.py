@@ -30,13 +30,13 @@ def _header_hreflangs(result: UrlResult) -> Mapping[int, str]:
     return {
         link.ordinal: parameters["hreflang"]
         for link, parameters in header_links_with_parameters(
-            result.response.headers, result.url, is_internal=_any, strip_params=None
+            result.response.headers, result.url, is_internal=_every_url_internal, strip_params=None
         )
         if link.type == "hreflang" and "hreflang" in parameters
     }
 
 
-def _any(url: NormalizedUrl) -> bool:
+def _every_url_internal(url: NormalizedUrl) -> bool:
     return True
 
 
