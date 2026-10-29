@@ -91,7 +91,7 @@ def test_every_option_setting_names_a_setting_of_a_registered_table(
         setting
         for setting in settings
         if not _names_a_flat_setting(tables, *setting.partition(".")[::2])
-    ] == []
+    ] == [], "an option's OptionMeta(setting=...) names no registered setting: fix its key"
 
 
 @pytest.mark.parametrize("app", [build_app, example_app])

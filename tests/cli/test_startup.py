@@ -212,4 +212,7 @@ def test_startup_loads_only_the_allowlist(command: list[str], allowed: set[str])
         if name not in startup
     }
 
-    assert outside_the_standard_library(loaded, this_standard_library()) - allowed == set()
+    assert outside_the_standard_library(loaded, this_standard_library()) - allowed == set(), (
+        f"{' '.join(command)} loads a module outside the startup allowlist: import it inside "
+        "the function body of the Command that needs it"
+    )
