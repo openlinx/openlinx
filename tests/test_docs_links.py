@@ -1,4 +1,5 @@
-"""Relative links in the contributor docs resolve (000-scaffold-project)."""
+"""Relative links and their heading anchors in the contributor docs resolve (000-scaffold-project;
+023-fix-code-audit D15)."""
 
 import re
 from pathlib import Path
@@ -13,7 +14,11 @@ INLINE_CODE = re.compile(r"`[^`\n]*`")
 # one level of parentheses inside it, as in `foo(1).md`, is allowed.
 INLINE_LINK = re.compile(r"\]\(\s*(<[^>\n]*>|(?:[^()\s]|\([^()\s]*\))+)")
 REFERENCE_LINK = re.compile(r"^ {0,3}\[(?!\^)[^\]]+\]:\s*(<[^>\n]*>|\S+)", re.MULTILINE)
-NOT_A_FILE = ("http://", "https://", "mailto:", "#")
+NOT_A_FILE = ("http://", "https://", "mailto:")
+HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.+?)[ \t#]*$", re.MULTILINE)
+# GitHub's anchor of a heading: its text, lowercase, without punctuation, spaces as hyphens.
+NOT_IN_AN_ANCHOR = re.compile(r"[^\w\- ]")
+LINK_TEXT = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 
 
 def links_in(markdown: str) -> list[str]:
@@ -23,16 +28,41 @@ def links_in(markdown: str) -> list[str]:
     return [target.removeprefix("<").removesuffix(">") for target in targets]
 
 
+def anchors_in(markdown: str) -> set[str]:
+    """The anchors GitHub gives the headings outside code, a repeated one numbered -1, -2..."""
+    found: set[str] = set()
+    for heading in HEADING.findall(FENCED_CODE.sub("", markdown)):
+        text = LINK_TEXT.sub(r"\1", heading).replace("`", "")
+        slug = NOT_IN_AN_ANCHOR.sub("", text.strip().lower()).replace(" ", "-")
+        anchor, number = slug, 0
+        while anchor in found:
+            number += 1
+            anchor = f"{slug}-{number}"
+        found.add(anchor)
+    return found
+
+
 def resolves(doc: Path, target: str) -> bool:
-    path = unquote(re.split(r"[?#]", target, maxsplit=1)[0])
+    path_part, _, fragment = target.partition("#")
+    path = unquote(path_part.split("?", maxsplit=1)[0])
     base = REPO_ROOT if path.startswith("/") else doc.parent
-    return (base / path.lstrip("/")).exists()
+    file = doc if not path else base / path.lstrip("/")
+    if not file.exists():
+        return False
+    if not fragment or file.suffix != ".md":
+        return True
+    return unquote(fragment).lower() in anchors_in(file.read_text(encoding="utf-8"))
 
 
 def contributor_docs() -> list[Path]:
+    # AGENTS.md first: it is the file agents trust most.
     return [
+        REPO_ROOT / "AGENTS.md",
+        REPO_ROOT / "CONTEXT.md",
         REPO_ROOT / "README.md",
         REPO_ROOT / "CONTRIBUTING.md",
+        REPO_ROOT / "ROADMAP.md",
+        REPO_ROOT / "tests" / "fixture_site" / "README.md",
         *sorted((REPO_ROOT / "docs").rglob("*.md")),
     ]
 
@@ -75,6 +105,11 @@ def test_link_targets_are_read_from_markdown(markdown: str, targets: list[str]) 
         ("docs/testing.md?plain=1#helpers", True),
         ("/docs/adr/", True),
         ("missing.md", False),
+        ("CONTRIBUTING.md#common-changes", True),
+        ("CONTRIBUTING.md#a-diagnostic-code", True),
+        ("CONTRIBUTING.md#no-such-heading", False),
+        ("#openlinx", True),
+        ("#nowhere", False),
     ],
 )
 def test_a_target_resolves_relative_to_its_doc_or_the_repo_root(target: str, exists: bool) -> None:
@@ -82,4 +117,7 @@ def test_a_target_resolves_relative_to_its_doc_or_the_repo_root(target: str, exi
 
 
 def test_relative_links_in_the_contributor_docs_point_to_existing_files() -> None:
-    assert broken_links() == []
+    assert broken_links() == [], (
+        "a relative link or its #anchor resolves to nothing: fix the path, or the anchor to the "
+        "heading's text in lowercase, without punctuation, with hyphens for spaces"
+    )
