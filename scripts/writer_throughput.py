@@ -81,9 +81,9 @@ MAX_RSS_MIB = 400
 SAMPLE_SECONDS = 0.2
 READ_PAUSE_SECONDS = 1.0
 
-# Provisional, shaped like the prototype's (020's draft tables): they exist only in this check's
-# scratch crawl file, never in the declared schema. The check moves to the schema blueprint's
-# links layout when it lands.
+# Provisional: urls is shaped like 020's draft table, and links has 030's columns on its
+# provisional layout (030 D4). They exist only in this check's scratch crawl file, never in the
+# declared schema; the check moves to the declared links layout once the benchmark chooses it.
 METADATA = MetaData()
 URLS = Table(
     "urls",
@@ -115,7 +115,7 @@ LINKS = Table(
     Column("ordinal", Integer, nullable=False),
     Column("target_url_id", Integer, ForeignKey("urls.id"), nullable=False),
     Column("type", Text, nullable=False),
-    Column("origin", Text, nullable=False),
+    Column("declared_in", Text, nullable=False),
     Column("element", Text),
     Column("attribute", Text),
     Column("anchor_text", Text),
@@ -124,10 +124,11 @@ LINKS = Table(
     Column("rel_nofollow", Flag, nullable=False),
     Column("rel_ugc", Flag, nullable=False),
     Column("rel_sponsored", Flag, nullable=False),
+    Column("followed", Flag, nullable=False),
     Column("hreflang", Text),
     Column("media", Text),
-    Column("target_is_internal", Flag, nullable=False),
-    Column("in_content_area", Flag, nullable=False),
+    Column("link_position", Text),
+    Column("html_source", Text),
     PrimaryKeyConstraint("source_url_id", "ordinal"),
 )
 Index("links_target", LINKS.c.target_url_id)
@@ -155,7 +156,7 @@ class Link(NamedTuple):
     element: str
     attribute: str
     anchor_text: str | None
-    in_content_area: bool
+    link_position: str
 
 
 @dataclass(frozen=True)
@@ -191,11 +192,11 @@ def build_site(page_count: int) -> Site:
         for j in range(TEMPLATE_TARGETS):
             target = page_count + t * TEMPLATE_TARGETS + j
             if j < 10:
-                link = Link(target, "css", "link", "href", None, False)
+                link = Link(target, "css", "link", "href", None, "head")
             elif j < 30:
-                link = Link(target, "image", "img", "src", None, False)
+                link = Link(target, "image", "img", "src", None, "header")
             else:
-                link = Link(target, "hyperlink", "a", "href", f"Section {j}", False)
+                link = Link(target, "hyperlink", "a", "href", f"Section {j}", "navigation")
             via[target] = link.type
             links.append(link)
         # The footer repeats part of the navigation.
@@ -242,7 +243,7 @@ def prepare_pages(page_count: int) -> list[Page]:
 
 def write_page(site: Site, page: Page, connection: Connection) -> None:
     links = site.templates[page.template] + [
-        Link(target, "hyperlink", "a", "href", ANCHORS[(page.url_id + n) % len(ANCHORS)], True)
+        Link(target, "hyperlink", "a", "href", ANCHORS[(page.url_id + n) % len(ANCHORS)], "content")
         for n, target in enumerate(page.targets)
     ]
     targets = list(dict.fromkeys(link.target for link in links))
@@ -259,7 +260,7 @@ def write_page(site: Site, page: Page, connection: Connection) -> None:
             "ordinal": ordinal,
             "target_url_id": ids[site.urls[target]],
             "type": kind,
-            "origin": "html",
+            "declared_in": "head" if position == "head" else "body",
             "element": element,
             "attribute": attribute,
             "anchor_text": anchor,
@@ -268,12 +269,13 @@ def write_page(site: Site, page: Page, connection: Connection) -> None:
             "rel_nofollow": False,
             "rel_ugc": False,
             "rel_sponsored": False,
+            "followed": True,
             "hreflang": None,
             "media": None,
-            "target_is_internal": site.discovered[target]["is_internal"],
-            "in_content_area": in_content,
+            "link_position": position,
+            "html_source": None,
         }
-        for ordinal, (target, kind, element, attribute, anchor, in_content) in enumerate(
+        for ordinal, (target, kind, element, attribute, anchor, position) in enumerate(
             links, start=1
         )
     ]
