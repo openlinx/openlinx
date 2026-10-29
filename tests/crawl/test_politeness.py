@@ -34,7 +34,7 @@ def test_the_global_cap_bounds_requests_across_hosts(temp_workspace: TempWorkspa
 
     assert (
         fetcher.most_in_flight,
-        sorted(path for path, _ in fetcher.starts if path != "/robots.txt"),
+        sorted(path for path, _ in fetcher.path_starts if path != "/robots.txt"),
     ) == (
         20,
         sorted(["/", *(f"/p{n}" for n in range(30))]),

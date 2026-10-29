@@ -30,6 +30,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | `--exclude <regex>` | `exclude` | `[]` | A URL that the pattern matches is never requested; give the option once per pattern (see [Include and exclude patterns](#include-and-exclude-patterns)). |
 | `--max-depth <n>` | `max_depth` | none | The deepest Crawl Depth whose URLs are requested, 0 or more; Resources of followed Pages are requested one deeper (see [Crawl Depth](#crawl-depth)). |
 | `--max-urls <n>` | `max_urls` | none | The most URL requests the Crawl starts, 1 or more (see [The URL limit](#the-url-limit)). |
+| `--network-wait <seconds>` | `network_wait` | `1800` | How long a Crawl that lost the network waits for its Seed to answer before it fails, 0 or more; 0 fails at once (see [The network pause](#the-network-pause)). |
 | `--ignore-robots` | `ignore_robots` | `false` | Request URLs that robots.txt disallows; they are still recorded with `blocked_by_robots_txt` = 1 (see [`--ignore-robots`](#--ignore-robots)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `spider` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
@@ -86,8 +87,17 @@ While it runs, the Command writes events to stderr, one JSON object per line, as
 | `event` | When | `data` |
 |---|---|---|
 | `crawl_started` | once the crawl file exists, before any other event | `crawl_id`, `crawl_mode`, `seed_count`, `crawl_file`, `parse_workers` (the processes that prepare Pages besides the crawl process; 0 while Pages are prepared in it) |
+| `progress` | every 10 seconds, during a network pause too | `crawl_id`, `elapsed_s`, `urls` (`discovered`, `fetched`, `errors`, `skipped`, `queued`, as recorded so far), `rate` (URL requests started per second over the last 60 seconds, or since the start while the Crawl is younger), `paused` |
+| `crawl_paused` | when the Crawl pauses (see [The network pause](#the-network-pause)) | `crawl_id`, `reason` (the `fetch_error` of the request that paused it), `urls` (the URLs whose requests made up the count) |
+| `crawl_resumed` | when a probe answers | `crawl_id`, `duration_s` (the time paused), `outcome` (`dead_section` or `outage`) |
 
-Warnings are written to stderr as diagnostics when they occur, and kept in the result.
+### Warnings
+
+A warning is written to stderr as a diagnostic when it first occurs, and kept for the result's `warnings` and for `crawl.warnings` in the crawl file, which holds them as a JSON array once the Crawl ends (`[]` while it runs). A warning about a host, such as `robots_unreachable`, is written once per host; a warning about the tool's own code is counted (see [When one URL fails](#when-one-url-fails)), and so is `network_paused`, which counts pauses instead of URLs:
+
+| Code | Counts | `details` |
+|---|---|---|
+| `network_paused` | the network pauses of the Crawl | `count`, `total_seconds` |
 
 ### The result
 
@@ -128,10 +138,40 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 | 3 | `spider.toml` is invalid | `settings_invalid` |
 | 5 | another connection held the crawl file for longer than the writer waits | `crawl_busy` |
 | 7 | the Workspace or the crawl file cannot be written, or writing the crawl file failed during the Crawl | `workspace_not_writable`, `crawl_not_writable`, `crawl_write_failed` |
+| 8 | the Seed or the site gave no HTTP response within `--network-wait` | `seed_unreachable`, `site_unreachable` |
+| 130 | the Crawl was stopped by an interrupt (Ctrl+C) | `interrupted` |
 
 A Seed with a user name or password is refused, and the error never repeats it: give the URL without them. Credentials for a site will be an option of their own (`--auth`, planned for v0.2).
 
-When the crawl file itself cannot be written, for example on a full disk, the Crawl stops requesting URLs, records the Crawl State `failed` with `stop_reason` = `write_failed`, prints the result and ends with `crawl_write_failed` (exit 7), or `crawl_busy` (exit 5) for a file another connection holds. `details.error` says what failed. Every URL recorded so far is kept, and the post-crawl passes do not run. The end is written through a new connection; when that fails too, the crawl file is left `running`.
+### How a Crawl fails
+
+A Crawl that cannot go on ends with the Crawl State `failed`. It prints the result and then one error, and its `stop_reason` says why:
+
+| `stop_reason` | When | Error, exit code |
+|---|---|---|
+| `write_failed` | writing the crawl file failed, wherever it was written, such as on a full disk; or 100 URLs in a row could not be recorded, which points at a broken handler, not at the URLs | `crawl_write_failed` (7), or `crawl_busy` (5) for a file another connection holds |
+| `seed_unreachable` | the Seed's robots.txt or the Seed got no HTTP response, and no probe answered within `--network-wait` | `seed_unreachable` (8) |
+| `site_unreachable` | the network pause gave up: no probe answered within `--network-wait` | `site_unreachable` (8) |
+
+What was recorded so far is kept, URLs not requested stay `queued`, and the post-crawl passes do not run, so the result is a partial one. `details.error` of `crawl_write_failed` says what failed; the hints of `seed_unreachable` and `site_unreachable` say how long the Crawl waited and how to continue it with `spider resume`, and the first that an agent's sandbox often blocks network access. When 100 URLs in a row could not be recorded, `crawl_write_failed` says so, and its hint points to the `record_failed` warning instead of the disk. The end of a write failure is written through a new connection; when that fails too, the crawl file is left `running`.
+
+### The network pause
+
+When requests stop getting answers, the Crawl pauses instead of recording the rest of the site as errors:
+
+- **The count:** Internal URLs in a row whose request got no HTTP response, `max(8, 2 × --concurrency)` of them, pause the Crawl. These count: the `fetch_error` codes `dns_error`, `connection_refused`, `connection_error`, `invalid_response` and `watchdog`, and the URLs left unrequested because their origin's robots.txt got no response. `tls_error` and External URLs never count, and any response resets the count.
+- **While paused,** no request starts. A request in flight that gets a response is recorded; one that ends without a response is not, so its URL stays `queued` and is requested again later, and counts toward `--max-urls` only then.
+- **Probes:** the Crawl requests its Seed 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, through the host's limits. A probe is not recorded and does not count toward `--max-urls`.
+- **Outcomes:** when the first probe answers, the failures were the site's own (`dead_section`): their errors are kept and the Crawl goes on. From then on, the origins of those URLs no longer count toward a pause, the Seed's origin aside, so a dead subdomain pauses the Crawl once; their URLs are still requested and recorded as errors. When a later probe answers, the network was down (`outage`): the URLs of the count are queued again, each at most once a run, and the Internal origins whose robots.txt got no response ask for it again.
+- **Giving up:** a probe starts only before `--network-wait` seconds have passed since the pause's start (default 1800). When none has answered by then, the probes still in flight are cancelled and the Crawl fails with `site_unreachable`. With `--network-wait 0` nothing pauses: no probe starts, no pause event or `network_paused` is written, and the Crawl fails at once.
+- **The Seed:** until the Seed's origin has answered, one request of its robots.txt or of the Seed without a response pauses the Crawl at once, since a network may come up or switch just as a Crawl starts. A probe that answers then requests robots.txt and the Seed again; when none does, the Crawl fails with `seed_unreachable`.
+
+The events `crawl_paused` and `crawl_resumed` mark a pause, `progress` events go on during it with `paused` = true, and the counted `network_paused` warning says how often and how long the Crawl paused. It is written to stderr when the first pause begins, and the result counts every pause.
+
+### Backstops
+
+- **The watchdog:** a request that has not ended 120 seconds after it started, or the Fetcher's whole request deadline plus 30 seconds when that is longer, is cancelled and recorded with `fetch_error` = `watchdog`. It counts as a request without a response for the network pause.
+- **Recording that keeps failing:** 100 URLs in a row whose rows could not be recorded end the Crawl with `write_failed`; a URL recorded in between starts the count again.
 
 ### When one URL fails
 
@@ -139,11 +179,11 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 
 | What fails | How the URL is recorded |
 |---|---|
-| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `tls_error` (the TLS handshake failed, such as a self-signed or expired certificate), `connection_error` (any other failure, a connection reset in the middle of the body included) |
+| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `tls_error` (the TLS handshake failed, such as a self-signed or expired certificate), `connection_error` (any other failure, a connection reset in the middle of the body included), `watchdog` (the request had not ended when the watchdog cancelled it, see [Backstops](#backstops)) |
 | The body has bytes its character encoding cannot hold | Nothing: they are decoded as replacement characters, and the Page is parsed as usual. |
 | A registered extractor raises an error | `parsed` stays 1 and the Page's Links are followed; `parse_error` = `extractor_error`, and `parse_error_message` names the extractor and the error's type, such as `title: ValueError`. Only that extractor's output is missing. |
 | A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |
-| The URL's rows cannot be written | The URL alone is recorded, with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs found on it or its handlers' rows. This holds for a value the file refuses (a constraint, a value too big, a value that cannot be bound) and for an error of the tool's own row code; any other database error stops the Crawl, as above. |
+| The URL's rows cannot be written | The URL alone is recorded, with `fetch_state` = `error`, `fetch_error` = `record_failed` and the error in `fetch_error_message`, without the URLs found on it or its handlers' rows. This holds for a value the file refuses (a constraint, a value too big, a value that cannot be bound) and for an error of the tool's own row code; any other database error fails the Crawl (see [How a Crawl fails](#how-a-crawl-fails)). |
 | The URL matches an `--exclude` pattern | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `excluded`, and no response columns. When only Links that are not followed reach it, its `skip_reason` is `nofollow` or `link_type_not_followed` instead. |
 | Only nofollow Links reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `nofollow` (see [Nofollow](#nofollow)). |
 | Only Links of a type that is not requested reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `link_type_not_followed` (see [Link types](#link-types)). |

@@ -273,6 +273,14 @@ HANDLER_FAILED = _declare(
     "A per-response handler raised an error, so the URL was recorded without that handler's "
     "rows; details.count says for how many URLs, details.first_url for which first.",
 )
+NETWORK_PAUSED = _declare(
+    "network_paused",
+    "warning",
+    None,
+    "Internal requests in a row got no HTTP response, so the Crawl paused until a probe of its "
+    "Seed answered; details.count says how many times it paused, details.total_seconds for how "
+    "long in all.",
+)
 RECORD_FAILED = _declare(
     "record_failed",
     "warning",

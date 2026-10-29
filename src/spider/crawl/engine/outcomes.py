@@ -7,11 +7,12 @@ from typing import Any
 
 from spider.crawl.engine.crawl_warnings import record_failure
 from spider.crawl.engine.hooks import UrlResult
+from spider.crawl.engine.progress import UrlCounters
 from spider.crawl.engine.stop import StopSignal
 from spider.crawl.engine.warning_log import WarningLog
 from spider.output.diagnostics import Diagnostic
 from spider.store.failures import is_one_urls_failure
-from spider.store.records import Provenance
+from spider.store.records import Provenance, Recording
 from spider.store.urls import UrlUnit, record_unwritten
 from spider.store.writer import CrawlWriter, CrawlWriterClosedError
 
@@ -37,10 +38,13 @@ class Recorded:
 class Outcomes:
     """Every submitted unit's Future until its outcome has reached the engine (design D2)."""
 
-    def __init__(self, writer: CrawlWriter, reporter: WarningLog, stop: StopSignal) -> None:
+    def __init__(
+        self, writer: CrawlWriter, reporter: WarningLog, stop: StopSignal, counters: UrlCounters
+    ) -> None:
         self._writer = writer
         self._reporter = reporter
         self._stop = stop
+        self._counters = counters
         self._pending: set[asyncio.Future[Any]] = set()
         self._failed_in_a_row = 0
 
@@ -60,13 +64,15 @@ class Outcomes:
             if self._pending:
                 await asyncio.wait(set(self._pending))
 
-    def _unit_done(self, recorded: Recorded, done: asyncio.Future[bool]) -> None:
+    def _unit_done(self, recorded: Recorded, done: asyncio.Future[Recording]) -> None:
         self._pending.discard(done)
         error = done.exception()
         result, failure = recorded.result, recorded.handler_failure
-        if failure is not None and (error is not None or done.result()):
+        if failure is not None and (error is not None or done.result().recorded):
             self._reporter.count(failure, result.url)
         if error is None:
+            # At the commit, as the file then shows it (design D10).
+            self._counters.add(done.result().tally)
             self._failed_in_a_row = 0
             return
         if not is_one_urls_failure(error):
@@ -94,7 +100,8 @@ class Outcomes:
             provenance=provenance_of(result),
         )
         try:
-            await (await self._writer.submit_async(unit))
+            recording = await (await self._writer.submit_async(unit))
+            self._counters.add(recording.tally)
         # A fallback that fails is the file's failure, not the URL's (design D2).
         except Exception as failure:
             self._stop.set("write_failed", failure)
