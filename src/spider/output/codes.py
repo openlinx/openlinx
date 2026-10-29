@@ -162,7 +162,7 @@ SUBFOLDER_IS_ROOT = _declare(
     "error",
     ExitCode.USAGE,
     "--scope subfolder with a Seed whose folder is the root, such as a folder's URL without its "
-    "trailing slash; the hint gives the Seed with it.",
+    "trailing slash; details.suggested_seed holds the Seed with it, or null for a root Seed.",
 )
 INVALID_PATTERN = _declare(
     "invalid_pattern",
@@ -176,6 +176,13 @@ SEED_OUT_OF_SCOPE = _declare(
     ExitCode.USAGE,
     "The Seed is outside its own Scope: it matches an --exclude pattern, or no --include "
     "pattern; details.seed holds it.",
+)
+MAX_URLS_REACHED = _declare(
+    "max_urls_reached",
+    "warning",
+    None,
+    "The Crawl reached --max-urls and stopped with URLs left queued; the hint is the command "
+    "that continues it with a higher limit.",
 )
 SEED_BASE_MISMATCH = _declare(
     "seed_base_mismatch",

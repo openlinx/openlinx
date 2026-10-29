@@ -2,7 +2,8 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from spider.crawl.scope import ScopeKind
+from spider.naming import DEFAULT_ROBOTS_TOKEN
+from spider.store.records import ScopeKind
 
 
 class CrawlSettings(BaseModel):
@@ -20,6 +21,23 @@ class CrawlSettings(BaseModel):
         False,
         description="Follow nofollow hyperlinks, and every hyperlink of a Page whose robots "
         "directives say nofollow, like any other hyperlink.",
+    )
+    max_depth: int | None = Field(
+        None,
+        ge=0,
+        description="The deepest Crawl Depth whose URLs are requested, the Seed's being 0; "
+        "Resources of followed Pages are requested one deeper. No limit when unset.",
+    )
+    max_urls: int | None = Field(
+        None,
+        ge=1,
+        description="The most URL requests the Crawl starts; robots.txt requests do not "
+        "count. No limit when unset.",
+    )
+    robots_user_agent: str = Field(
+        DEFAULT_ROBOTS_TOKEN,
+        description="The token that selects robots.txt groups and user-agent-prefixed "
+        "X-Robots-Tag values; independent of the User-Agent request header.",
     )
     scope: ScopeKind = Field(
         "host",

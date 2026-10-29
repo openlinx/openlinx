@@ -232,33 +232,34 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 8.13 **Guard:** "A www Seed whose Links stay on www is not reported", at seam 1, run at seam 2 for the same reason as 8.12.
 - [x] 8.14 Docs: document Section Crawls, the recorded Scope and `seed_base_mismatch` in `docs/crawling.md`.
 - [x] 8.15 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
-- [ ] 8.16 Review fixes of group 8 (rulings of 2026-10-14). Done when: `ScopeRules.from_json` rebuilds every decision from `crawl.scope`, which a round-trip test over a URL table proves, and `NewCrawl.scope` is a `RecordedScope`; the 8.13 guard proves the Seed was parsed; `seed_base_mismatch` decides on the Seed on the apex host, and a canonical to the Seed's own host ends the check; `NewCrawl.section_crawl` is required; `subfolder_is_root` gives `details.suggested_seed`, and no hint ends with a URL that a period sticks to.
+- [x] 8.16 Review fixes of group 8 (rulings of 2026-10-14). Done when: `ScopeRules.from_json` rebuilds every decision from `crawl.scope`, which a round-trip test over a URL table proves, and `NewCrawl.scope` is a `RecordedScope`; the 8.13 guard proves the Seed was parsed; `seed_base_mismatch` decides on the Seed on the apex host, and a canonical to the Seed's own host ends the check; `NewCrawl.section_crawl` is required; `subfolder_is_root` gives `details.suggested_seed`, and no hint ends with a URL that a period sticks to.
 
 ## 9. Resources, Crawl Depth, limits and invariants (widening)
 
 - [x] 9.1 Drive "An image is checked but not parsed" at seam 3+6. Group 4's review parses only HTML, so the parse half may pass at once; its red then comes from a mutation.
-- [ ] 9.2 **Guard:** "A broken image is recorded", at seam 3+6.
-- [ ] 9.3 Drive "The shortest path wins over a faster, longer one" at seam 3+6. Done when: followed URLs of depth d+1 wait for every followed URL of depth d, and checks never wait (design D3).
-- [ ] 9.4 Drive "A Resource is one deeper than its Page" at seam 3+6.
-- [ ] 9.5 Drive "Links beyond the limit are not requested" at seam 3+6. Done when: `--max-depth` is declared with `OptionMeta(setting="crawl.max_depth")` and the default `None`, no limit (design D11).
-- [ ] 9.6 Drive "Resources are checked beyond the depth limit" at seam 3+6.
-- [ ] 9.7 Drive "The Crawl stops at the limit" at seam 1. Done when: `--max-urls` is declared with `OptionMeta(setting="crawl.max_urls")` and the default `None`, no limit, and the `stopped` end goes through `check_transition` with `max_urls`.
-- [ ] 9.8 Drive "URLs not requested stay queued" at seam 3+6.
-- [ ] 9.9 Drive "The limit warning says how to continue" at seam 1. Done when: `max_urls_reached` is declared, with a hint built from `spider.naming`.
-- [ ] 9.10 Drive "The limit holds under concurrency" at seam 3. Done when: requests in flight count toward the limit.
-- [ ] 9.11 **Guard:** "There is no limit by default" (seam 1) and "No limit is recorded as null" (seam 3+6), a pair.
-- [ ] 9.12 Drive "A limit below one is rejected" at seam 1.
-- [ ] 9.13 **Guard:** "Each URL is requested once", at seam 3.
-- [ ] 9.14 **Guard:** "A link cycle ends", at seam 3+6.
-- [ ] 9.15 **Guard:** "Followed URLs start in discovery order", at seam 3.
-- [ ] 9.16 Drive "Post-crawl passes run when the URL limit stops a Crawl" at seam 2.
-- [ ] 9.17 Docs: document Resources, Crawl Depth, `--max-depth`, `--max-urls` (no default, what counts) and the dispatch order in `docs/crawling.md`.
-- [ ] 9.18 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [x] 9.2 **Guard:** "A broken image is recorded", at seam 3+6.
+- [x] 9.3 Drive "The shortest path wins over a faster, longer one" at seam 3+6. Done when: followed URLs of depth d+1 wait for every followed URL of depth d, and checks never wait (design D3).
+- [x] 9.4 Drive "A Resource is one deeper than its Page" at seam 3+6.
+- [x] 9.5 Drive "Links beyond the limit are not requested" at seam 3+6. Done when: `--max-depth` is declared with `OptionMeta(setting="crawl.max_depth")` and the default `None`, no limit (design D11).
+- [x] 9.6 Drive "Resources are checked beyond the depth limit" at seam 3+6.
+- [x] 9.7 Drive "The Crawl stops at the limit" at seam 1. Done when: `--max-urls` is declared with `OptionMeta(setting="crawl.max_urls")` and the default `None`, no limit, and the `stopped` end goes through `check_transition` with `max_urls`.
+- [x] 9.8 Drive "URLs not requested stay queued" at seam 3+6.
+- [x] 9.9 Drive "The limit warning says how to continue" at seam 1. Done when: `max_urls_reached` is declared, with a hint built from `spider.naming`.
+- [x] 9.10 Drive "The limit holds under concurrency" at seam 3. Done when: requests in flight count toward the limit.
+- [x] 9.11 **Guard:** "There is no limit by default" (seam 1) and "No limit is recorded as null" (seam 3+6), a pair.
+- [x] 9.12 Drive "A limit below one is rejected" at seam 1.
+- [x] 9.13 **Guard:** "Each URL is requested once", at seam 3.
+- [x] 9.14 **Guard:** "A link cycle ends", at seam 3+6.
+- [x] 9.15 **Guard:** "Followed URLs start in discovery order", at seam 3.
+- [x] 9.16 Drive "Post-crawl passes run when the URL limit stops a Crawl" at seam 2.
+- [x] 9.17 Docs: document Resources, Crawl Depth, `--max-depth`, `--max-urls` (no default, what counts) and the dispatch order in `docs/crawling.md`.
+- [x] 9.18 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [x] 9.19 Fix the review of group 9 (rulings of 2026-10-14), each red first or red by mutation: the frontier waits for every outcome, fallbacks included, before it reads the queue again from the top, so a URL whose unit failed is requested once; a `skipped` `max_depth` row that a Link reaches at a smaller depth is re-queued, and a skip is recorded only on the depth it was decided on; a failure outranks a stop in the stop flag, and the `max_urls_reached` warning is given only for a `max_urls` stop; the engine reads no deeper depth once a stop has ended a depth; 9.9's test checks the whole hint and `details.max_urls`; `docs/crawling.md` and the `max_urls` help say what counts today, and task 14.2 adds the requests of a continued Crawl; a seam-6 table pins every branch of the discovered-URL conflict.
 
 ## 10. robots.txt (widening)
 
-- [ ] 10.1 Drive "The group for the tool's token applies" at seam 4. Done when: the robots.txt reader is on Protego and reads at most 512,000 bytes, decoded with replacement.
-- [ ] 10.2 Drive "Another token can be chosen" at seam 4. Done when: `--robots-user-agent` also sets `PageSettings.robots_token` in the snapshot the engine starts the page executor with, so the prefixes of `X-Robots-Tag` follow the chosen token, and a test pins it.
+- [x] 10.1 Drive "The group for the tool's token applies" at seam 4. Done when: the robots.txt reader is on Protego and reads at most 512,000 bytes, decoded with replacement.
+- [x] 10.2 Drive "Another token can be chosen" at seam 4. Done when: `--robots-user-agent` also sets `PageSettings.robots_token` in the snapshot the engine starts the page executor with, so the prefixes of `X-Robots-Tag` follow the chosen token, and a test pins it.
 - [ ] 10.3 **Guard:** "Any robots.txt gives a decision", as a hypothesis property at seam 4.
 - [ ] 10.4 Drive "robots.txt is fetched once per origin" at seam 3.
 - [ ] 10.5 Drive "A disallowed URL is not requested" (seam 3) and "A disallowed URL is recorded as blocked" (seam 3+6), a trivial pair. Done when: `blocked_by_robots_txt` is declared.
@@ -345,7 +346,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 14.1 **Guard:** "A killed Crawl leaves no half-recorded Page", at seam 1, subprocess, killed with `Popen.kill()`. Mark it `slow`.
 - [ ] 14.2 Drive "Continuing a stopped Crawl completes it" at seam 2.
 
-  Done when: the Crawl Service's continue operation (which `060`'s `resume` calls) accepts `stopped` and `failed` Crawls, goes back to `running` through `check_transition`, counts the URL limit over the Crawl's whole life, and inserts the `urls` row of a Seed that has none.
+  Done when: the Crawl Service's continue operation (which `060`'s `resume` calls) accepts `stopped` and `failed` Crawls, goes back to `running` through `check_transition`, counts the URL limit over the Crawl's whole life (saying so in the `max_urls` help and in `docs/crawling.md`), and inserts the `urls` row of a Seed that has none.
 - [ ] 14.3 **Guard:** "Continuing does not request fetched URLs again", at seam 2.
 - [ ] 14.4 Drive "Continuing clears how the Crawl ended" at seam 2, read by a handler registered for the test.
 - [ ] 14.5 Drive "A failed Crawl is continued once its Seed answers" at seam 2. Done when: continuing re-queues `error` and `robots_unreachable` URLs.

@@ -408,6 +408,7 @@ def measure(folder: Path, page_count: int) -> dict[str, Any]:
             scope=scope_rules(NormalizedUrl(f"{HOST}/")).to_json(),
             secret_names=SecretNames(),
             journal_setting="auto",
+            section_crawl=False,
         ),
         SystemClock(),
         Collected(),

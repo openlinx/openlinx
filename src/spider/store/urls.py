@@ -24,8 +24,10 @@ type UrlUnit = Callable[[Connection], None]
 # Each row binds its origin, whose row the unit records first (design D18).
 _INSERT = insert(urls).values(origin_id=ORIGIN_ID)
 _INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])
-# A followed Link re-queues a URL that only unfollowed Links reached, as found through it;
-# every other conflict changes nothing, so a replayed unit gives the same rows (design D5).
+# A followed Link re-queues a URL that only unfollowed Links reached, as found through it, and
+# gives the shorter path a check found after its depth closed (design D3) to a URL still queued,
+# or skipped beyond the depth limit, which dispatch then decides again; every other conflict
+# changes nothing, so a replayed unit gives the same rows (design D5).
 _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     index_elements=[urls.c.url],
     set_={
@@ -35,15 +37,23 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
         "discovered_via": _INSERT.excluded.discovered_via,
         "found_on_url_id": _INSERT.excluded.found_on_url_id,
     },
-    where=or_(
-        *(
-            urls.c.skip_reason == literal_column(f"'{reason}'")
-            for reason in literal_values(DiscoverySkipReason)
+    where=(
+        or_(
+            *(
+                urls.c.skip_reason == literal_column(f"'{reason}'")
+                for reason in literal_values(DiscoverySkipReason)
+            ),
+            (
+                (urls.c.fetch_state == literal_column("'queued'"))
+                | (urls.c.skip_reason == literal_column("'max_depth'"))
+            )
+            & (urls.c.crawl_depth > _INSERT.excluded.crawl_depth),
         )
     )
     & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
 )
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
+_DEPTH = select(urls.c.crawl_depth).where(urls.c.id == bindparam("url_id"))
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _URL_ROW = update(urls).where(urls.c.id == bindparam("url_id"))
 _FETCHED = _URL_ROW.values(
@@ -56,7 +66,9 @@ _FETCHED = _URL_ROW.values(
     parse_error=bindparam("parse_failure"),
     parse_error_message=bindparam("parse_failure_message"),
 )
-_SKIPPED = _URL_ROW.values(fetch_state="skipped", skip_reason=bindparam("reason"))
+_SKIPPED = _URL_ROW.where(urls.c.crawl_depth == bindparam("decided_depth")).values(
+    fetch_state="skipped", skip_reason=bindparam("reason")
+)
 _ERRORED = _URL_ROW.values(
     fetch_state="error",
     fetch_error=bindparam("failure"),
@@ -181,7 +193,6 @@ def record_fetched(
             "origin": url_origin(new.url),
             "is_internal": new.is_internal,
             "in_scope": new.in_scope,
-            "crawl_depth": new.crawl_depth,
             "discovered_via": new.discovered_via,
             "found_on_url_id": url_id,
             "fetch_state": "queued" if new.skip_reason is None else "skipped",
@@ -197,7 +208,11 @@ def record_fetched(
         record_origins(connection, origins)
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
-            connection.execute(_INSERT_DISCOVERED, new_rows)
+            # The stored depth, which a late check may have lowered while the URL was in
+            # flight, so what it links to stays one deeper than it (design D3).
+            depth = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one() + 1
+            rows = [{**row, "crawl_depth": depth} for row in new_rows]
+            connection.execute(_INSERT_DISCOVERED, rows)
         write_rows(connection, fetched.rows, row_writers)
 
     return unit
@@ -206,12 +221,17 @@ def record_fetched(
 def record_skipped(
     skipped: SkippedUrl, row_writers: Mapping[type, RowWriter]
 ) -> Callable[[Connection], None]:
-    """A unit that records a URL as not requested, why, and its rows."""
-    values = {"url_id": skipped.url_id, "reason": skipped.skip_reason}
+    """A unit that records a URL as not requested, why, and its rows, unless a shorter path
+    lowered its depth after the skip was decided: it then stays queued (design D5)."""
+    values = {
+        "url_id": skipped.url_id,
+        "reason": skipped.skip_reason,
+        "decided_depth": skipped.crawl_depth,
+    }
 
     def unit(connection: Connection) -> None:
-        connection.execute(_SKIPPED, values)
-        write_rows(connection, skipped.rows, row_writers)
+        if connection.execute(_SKIPPED, values).rowcount:
+            write_rows(connection, skipped.rows, row_writers)
 
     return unit
 

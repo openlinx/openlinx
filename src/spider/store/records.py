@@ -4,12 +4,27 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from spider.crawl.urls import NormalizedUrl
 from spider.workspace.discovery import Workspace
 
 type CrawlMode = Literal["spider", "list", "sitemap"]
+
+# A plain alias, not a type statement: Typer reads it as the choices of --scope.
+ScopeKind = Literal["host", "subdomains", "subfolder"]
+
+
+class RecordedScope(TypedDict):
+    """crawl.scope (020-add-crawl-core D18)."""
+
+    mode: ScopeKind
+    hosts: list[str]
+    folder: str | None
+    include: list[str]
+    exclude: list[str]
+
+
 type JournalMode = Literal["wal", "delete"]
 type JournalSetting = Literal["auto", "wal", "delete"]
 type CrawlState = Literal["running", "stopped", "completed", "failed", "interrupted"]
@@ -90,14 +105,13 @@ class NewCrawl:
     command_argv: Sequence[str]
     cwd: Path
     config: Mapping[str, Any]
-    # The recorded Scope, {mode, hosts, folder, include, exclude} (020-add-crawl-core D18).
-    scope: Mapping[str, Any]
+    scope: RecordedScope
     # No defaults: a creator that forgot its secrets would record them, and one that forgot the
     # store.journal_mode setting would silently ignore it.
     secret_names: SecretNames
     journal_setting: JournalSetting
+    section_crawl: bool
     settings_file: Path | None = None
-    section_crawl: bool = False
 
 
 @dataclass(frozen=True)
@@ -119,10 +133,10 @@ class QueuedUrl:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewUrl:
-    """A URL discovered from a response, recorded unless the Crawl has it already."""
+    """A URL discovered from a response, recorded unless the Crawl has it already, one
+    deeper than the URL it was found on as the store holds it (design D3)."""
 
     url: NormalizedUrl
-    crawl_depth: int
     discovered_via: DiscoveredVia
     is_internal: bool
     in_scope: bool
@@ -184,6 +198,8 @@ class SkippedUrl:
 
     url_id: int
     skip_reason: SkipReason
+    # The depth the skip was decided on: a URL lowered since then is decided again (design D5).
+    crawl_depth: int
     rows: tuple[object, ...] = ()
 
 

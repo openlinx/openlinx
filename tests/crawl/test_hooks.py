@@ -1,6 +1,7 @@
 """The hooks of a Crawl: handlers, passes and extractors (020-add-crawl-core D9; seam 2)."""
 
 import sqlite3
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 
@@ -11,6 +12,7 @@ from sqlalchemy import Connection, text
 
 from spider.crawl.hooks import Handler, Hooks, Pass, UrlResult
 from spider.crawl.pages import Extractor, PageInput
+from spider.output.reporter import Collected
 from spider.services.hooks import default_hooks
 from spider.store.crawls import crawl_summary
 from spider.store.records import CrawlState
@@ -19,6 +21,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
+from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
 
@@ -93,6 +96,23 @@ def test_post_crawl_passes_run_before_a_crawl_is_completed(
     crawl_result(server.url("/"), hooks)
 
     assert seen == ["running"]
+
+
+def test_post_crawl_passes_run_when_the_url_limit_stops_a_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+    runs: list[str] = []
+
+    async def count_runs(writer: CrawlWriter) -> None:
+        runs.append("run")
+
+    hooks = default_hooks()
+    hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
+
+    crawl_result(server.url("/"), hooks, max_urls=3)
+
+    assert runs == ["run"]
 
 
 class Found(msgspec.Struct, frozen=True):
@@ -493,3 +513,69 @@ def test_a_handler_gets_the_row_values_of_the_url(
             ),
         ),
     ]
+
+
+def _slowly(
+    writer: Callable[[Connection, Unwritable], None],
+) -> Callable[[Connection, Unwritable], None]:
+    def write(connection: Connection, row: Unwritable) -> None:
+        # Still running when the engine goes on, so the failure reaches it later.
+        time.sleep(0.5)
+        writer(connection, row)
+
+    return write
+
+
+def test_a_check_whose_unit_fails_as_the_frontier_runs_dry_is_requested_once(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<img src="/boom">'),
+                # Answers after the frontier has run dry, so its unit is the last one submitted.
+                "/boom": Page(body="<p>B</p>", delay=0.3),
+            }
+        )
+    )
+
+    crawl_result(server.url("/"), _with_row_writer(_slowly(_refuse)))
+
+    assert [request.path for request in server.requests if request.path == "/boom"] == ["/boom"]
+
+
+# /boom is a check: its unit, slow to fail, is the last one the URL limit waits for.
+LIMIT_SITE = Site(
+    routes={
+        "/": Page(body='<img src="/boom"><a href="/a">A</a><a href="/b">B</a>'),
+        "/boom": Page(body="<p>B</p>"),
+        "/a": Page(body="<p>A</p>"),
+        "/b": Page(body="<p>B</p>"),
+    }
+)
+
+
+def test_a_file_failure_after_the_url_limit_ends_the_crawl_with_that_failure(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(LIMIT_SITE)
+
+    with pytest.raises(sqlite3.OperationalError):
+        crawl_result(server.url("/"), _with_row_writer(_slowly(_refuse_with_the_file)), max_urls=2)
+
+
+def test_a_crawl_that_failed_after_its_url_limit_gives_no_limit_warning(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(LIMIT_SITE)
+    reporter = Collected()
+
+    with pytest.raises(sqlite3.OperationalError):
+        crawl_result(
+            server.url("/"),
+            _with_row_writer(_slowly(_refuse_with_the_file)),
+            reporter=reporter,
+            max_urls=2,
+        )
+
+    assert [warning.code for warning in reporter.warnings] == []

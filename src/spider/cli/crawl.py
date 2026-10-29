@@ -9,11 +9,11 @@ from spider.cli.meta import Example, command_meta
 from spider.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
 from spider.cli.runner import Invocation
 from spider.clock import SystemClock
-from spider.crawl.scope import ScopeKind
-from spider.naming import APP_NAME
+from spider.naming import APP_NAME, DEFAULT_ROBOTS_TOKEN
 from spider.output.codes import OPTION_CONFLICT
 from spider.output.diagnostics import SpiderError
 from spider.output.writer import Format
+from spider.store.records import ScopeKind
 
 CRAWL = "crawl"
 
@@ -60,6 +60,37 @@ def crawl(
         ),
         OptionMeta(setting="crawl.follow_nofollow"),
     ] = False,
+    max_depth: Annotated[
+        int | None,
+        typer.Option(
+            "--max-depth",
+            min=0,
+            help="The deepest Crawl Depth whose URLs are requested, the Seed's being 0; "
+            "Resources of followed Pages are requested one deeper. No limit by default.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.max_depth"),
+    ] = None,
+    max_urls: Annotated[
+        int | None,
+        typer.Option(
+            "--max-urls",
+            min=1,
+            help="The most URL requests the Crawl starts; robots.txt requests do not count. "
+            "No limit by default.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.max_urls"),
+    ] = None,
+    robots_user_agent: Annotated[
+        str,
+        typer.Option(
+            "--robots-user-agent",
+            help="The token that selects robots.txt groups and user-agent-prefixed "
+            "X-Robots-Tag values; independent of the User-Agent request header.",
+        ),
+        OptionMeta(setting="crawl.robots_user_agent"),
+    ] = DEFAULT_ROBOTS_TOKEN,
     scope: Annotated[
         ScopeKind,
         typer.Option(
