@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 
 import pytest
 
-from spider.crawl.politeness import RateGate, RequestLimits, global_cap
+from spider.crawl.fetch.politeness import RateGate, RequestLimits, global_cap
 from tests.support.clock import FakeClock
 
 

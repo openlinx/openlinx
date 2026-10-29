@@ -12,8 +12,8 @@ from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, text
 
 from spider.clock import Clock
-from spider.crawl.hooks import Hooks, Pass, PassContext, UrlResult, handler
-from spider.crawl.pages import Extractor, PageInput, extractor
+from spider.crawl.engine.hooks import Hooks, Pass, PassContext, UrlResult, handler
+from spider.crawl.pages.preparation import Extractor, PageInput, extractor
 from spider.output.reporter import Collected
 from spider.services.hooks import default_hooks
 from spider.store.crawls import crawl_summary

@@ -4,8 +4,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
-from spider.crawl.fetcher import Fetcher, FetchFailure, FetchResult, Request
-from spider.crawl.politeness import RateGate, RequestLimits
+from spider.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
+from spider.crawl.fetch.politeness import RateGate, RequestLimits
 from spider.crawl.urls import NormalizedUrl, url_host
 
 

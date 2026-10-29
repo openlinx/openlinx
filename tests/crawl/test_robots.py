@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.crawl.robots import (
+from spider.crawl.robots.reader import (
     OriginRobots,
     RobotsTxt,
     read_robots_txt,

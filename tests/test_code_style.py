@@ -1,7 +1,8 @@
-"""Guard: decidable code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14)."""
+"""Guard: code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14, D19)."""
 
 import ast
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src"
@@ -247,17 +248,17 @@ def test_a_normalized_url_made_outside_its_makers_is_named() -> None:
     sources = {
         URL_MODULE: "NormalizedUrl('http://site.test/')\n",
         "spider/crawl/scope.py": "urls.NormalizedUrl('http://site.test/')\n",
-        "spider/crawl/engine.py": "url = NormalizedUrl('http://site.test/')\n",
+        "spider/crawl/engine/dispatch.py": "url = NormalizedUrl('http://site.test/')\n",
         "spider/store/pages.py": "url = cast(NormalizedUrl, row.url)\n",
         "spider/store/urls.py": "url = NormalizedUrl(row.url)\n",
         "spider/store/origins.py": "url = typing.cast('NormalizedUrl', row.url)\n",
         "spider/crawl/frontier.py": "def f(url: NormalizedUrl) -> None: ...\n",
-        "spider/crawl/links.py": "n = cast(int, row.n)\n",
+        "spider/crawl/pages/links.py": "n = cast(int, row.n)\n",
     }
 
     assert url_type_violations(sources) == [
         "spider/crawl/scope.py makes a NormalizedUrl",
-        "spider/crawl/engine.py makes a NormalizedUrl",
+        "spider/crawl/engine/dispatch.py makes a NormalizedUrl",
         "spider/store/pages.py makes a NormalizedUrl",
         "spider/store/origins.py makes a NormalizedUrl",
     ]
@@ -289,16 +290,16 @@ def test_only_the_store_imports_sqlalchemy() -> None:
 
 def test_an_import_of_sqlalchemy_outside_the_store_is_named() -> None:
     sources = {
-        "spider/crawl/engine.py": "import sqlalchemy\n",
+        "spider/crawl/engine/dispatch.py": "import sqlalchemy\n",
         "spider/crawl/frontier.py": "from sqlalchemy.dialects.sqlite import insert\n",
         "spider/services/crawling.py": "def late():\n    from sqlalchemy import select\n",
-        "spider/crawl/links.py": "import sqlalchemy_utils\nfrom spider.store import urls\n",
+        "spider/crawl/pages/links.py": "import sqlalchemy_utils\nfrom spider.store import urls\n",
         "spider/store/urls.py": "from sqlalchemy import insert\n",
         "spider/services/schema.py": "def late():\n    from sqlalchemy.dialects import sqlite\n",
     }
 
     assert sqlalchemy_violations(sources) == [
-        "spider/crawl/engine.py imports sqlalchemy",
+        "spider/crawl/engine/dispatch.py imports sqlalchemy",
         "spider/crawl/frontier.py imports sqlalchemy.dialects.sqlite",
         "spider/services/crawling.py imports sqlalchemy",
     ]
@@ -395,24 +396,181 @@ def test_the_crawl_core_imports_no_plugin_layer() -> None:
 
 def test_an_import_of_a_plugin_layer_in_the_crawl_core_is_named() -> None:
     sources = {
-        "spider/crawl/engine.py": "from spider.services.hooks import default_hooks\n",
-        "spider/crawl/pages.py": "def late():\n    import spider.extract.page\n",
+        "spider/crawl/engine/dispatch.py": "from spider.services.hooks import default_hooks\n",
+        "spider/crawl/pages/preparation.py": "def late():\n    import spider.extract.page\n",
         "spider/crawl/scope.py": "from spider import rules, store\n",
-        "spider/crawl/links.py": "from ..cli import app\n",
-        "spider/crawl/hooks.py": "from spider.store import rows\nimport spider.servicesx\n",
+        "spider/crawl/pages/links.py": "from ...cli import app\n",
+        "spider/crawl/engine/hooks.py": "from spider.store import rows\nimport spider.servicesx\n",
         "spider/services/crawling.py": "from spider.services.hooks import default_hooks\n",
     }
 
     assert plugin_import_violations(sources) == [
-        "spider/crawl/engine.py imports spider.services.hooks",
-        "spider/crawl/pages.py imports spider.extract.page",
+        "spider/crawl/engine/dispatch.py imports spider.services.hooks",
+        "spider/crawl/pages/preparation.py imports spider.extract.page",
         "spider/crawl/scope.py imports spider.rules",
-        "spider/crawl/links.py imports spider.cli",
+        "spider/crawl/pages/links.py imports spider.cli",
+    ]
+
+
+@dataclass(frozen=True)
+class ImportRule:
+    """Modules within `importers` import nothing within `forbidden` but what is within `allowed`.
+
+    A name ending in ".*" holds the modules directly in its package.
+    """
+
+    importers: str
+    forbidden: tuple[str, ...]
+    allowed: tuple[str, ...] = ()
+
+
+# Inside spider.crawl, imports run one way: top-level modules, fetch, then pages and robots, which
+# are peers, then engine (020-add-crawl-core design D19).
+IMPORT_RULES = (
+    ImportRule(
+        "spider.crawl.*",
+        ("spider.crawl.fetch", "spider.crawl.pages", "spider.crawl.robots", "spider.crawl.engine"),
+    ),
+    ImportRule(
+        "spider.crawl.fetch", ("spider.crawl.pages", "spider.crawl.robots", "spider.crawl.engine")
+    ),
+    ImportRule("spider.crawl.pages", ("spider.crawl.robots", "spider.crawl.engine")),
+    ImportRule("spider.crawl.robots", ("spider.crawl.pages", "spider.crawl.engine")),
+    # The one cycle between the crawl core and the store runs through urls, which imports nothing.
+    ImportRule("spider.store", ("spider.crawl",), allowed=("spider.crawl.urls",)),
+    # The parse pool's workers import pages, so they never load the writer.
+    ImportRule("spider.crawl.pages", ("spider.store",), allowed=("spider.store.records",)),
+)
+
+
+def _module_name(path: str) -> str:
+    return path.removesuffix(".py").removesuffix("/__init__").replace("/", ".")
+
+
+def _within(module: str, name: str) -> bool:
+    if name.endswith(".*"):
+        package = name.removesuffix("*")
+        return module.startswith(package) and "." not in module.removeprefix(package)
+    return module == name or module.startswith(f"{name}.")
+
+
+def _imported(path: str, tree: ast.AST) -> list[str]:
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            base = _absolute(path, node.level, node.module)
+            # `from spider.crawl import pages` names the module in the alias.
+            found += [f"{base}.{alias.name}" for alias in node.names]
+    return found
+
+
+def import_rule_violations(
+    sources: Mapping[str, str], rules: Sequence[ImportRule] = IMPORT_RULES
+) -> list[str]:
+    """Imports that break a rule, given every module's source by its path."""
+    return [
+        f"{path} imports {name}"
+        for path, source in sources.items()
+        for rule in rules
+        if _within(_module_name(path), rule.importers)
+        for name in _imported(path, ast.parse(source))
+        if any(_within(name, forbidden) for forbidden in rule.forbidden)
+        and not any(_within(name, allowed) for allowed in rule.allowed)
+    ]
+
+
+def unnamed_modules(rules: Sequence[ImportRule], paths: Iterable[str]) -> list[str]:
+    """Names of the rules that name no module, and the packages of spider.crawl they leave out."""
+    modules = {_module_name(path) for path in paths}
+    named = {
+        name.removesuffix(".*")
+        for rule in rules
+        for name in (rule.importers, *rule.forbidden, *rule.allowed)
+    }
+    packages = {
+        _module_name(path)
+        for path in paths
+        if path.startswith("spider/crawl/")
+        and path.endswith("/__init__.py")
+        and path.count("/") == 3
+    }
+    return [f"{name} names no module" for name in sorted(named - modules)] + [
+        f"{package} is a package of spider.crawl that no import rule names"
+        for package in sorted(packages - named - {"spider.crawl"})
+    ]
+
+
+def _src_sources() -> dict[str, str]:
+    return {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+
+def test_the_crawl_imports_run_one_way() -> None:
+    assert import_rule_violations(_src_sources()) == []
+
+
+def test_an_import_against_an_import_rule_is_named() -> None:
+    sources = {
+        "spider/crawl/fetch/requester.py": "from spider.crawl.pages.preparation import x\n",
+        "spider/crawl/pages/links.py": "from ..robots.reader import OriginRobots\n",
+        "spider/crawl/robots/loader.py": "def late():\n    from spider.crawl import engine\n",
+        "spider/crawl/scope.py": "if TYPE_CHECKING:\n    from spider.crawl.pages import links\n",
+        "spider/store/urls.py": (
+            "from spider.crawl.scope import ScopeRules\n"
+            "from spider.crawl.urls import NormalizedUrl\n"
+        ),
+        "spider/crawl/pages/preparation.py": (
+            "import spider.store.writer\nfrom spider.store.records import ParseError\n"
+        ),
+        "spider/crawl/engine/units.py": (
+            "from spider.crawl.pages.preparation import x\nfrom spider.store.writer import y\n"
+        ),
+        "spider/crawl/pages/headers.py": (
+            "from .links import rel_tokens\nfrom spider.crawl.fetch.fetcher import FetchResult\n"
+        ),
+        "spider/crawl/references.py": "from spider.crawl.urls import NormalizedUrl\n",
+    }
+
+    assert import_rule_violations(sources) == [
+        "spider/crawl/fetch/requester.py imports spider.crawl.pages.preparation.x",
+        "spider/crawl/pages/links.py imports spider.crawl.robots.reader.OriginRobots",
+        "spider/crawl/robots/loader.py imports spider.crawl.engine",
+        "spider/crawl/scope.py imports spider.crawl.pages.links",
+        "spider/store/urls.py imports spider.crawl.scope.ScopeRules",
+        "spider/crawl/pages/preparation.py imports spider.store.writer",
+    ]
+
+
+def test_the_import_rules_name_each_crawl_package_and_no_missing_module() -> None:
+    assert unnamed_modules(IMPORT_RULES, _src_sources()) == []
+
+
+def test_a_module_that_an_import_rule_names_and_that_does_not_exist_is_named() -> None:
+    rules = (
+        ImportRule("spider.crawl.frontier", ("spider.crawl.pages",)),
+        ImportRule("spider.store", ("spider.crawl",), allowed=("spider.crawl.fetch.retries",)),
+    )
+    paths = (
+        "spider/crawl/__init__.py",
+        "spider/crawl/pages/__init__.py",
+        "spider/crawl/pages/links.py",
+        "spider/crawl/redirects/__init__.py",
+        "spider/store/__init__.py",
+    )
+
+    assert unnamed_modules(rules, paths) == [
+        "spider.crawl.fetch.retries names no module",
+        "spider.crawl.frontier names no module",
+        "spider.crawl.redirects is a package of spider.crawl that no import rule names",
     ]
 
 
 # lexbor's serializer recurses into template content: `.html` of a <template> nested 20,000
-# deep ends the process with a native stack overflow (020 design Risks, task 15.1).
+# deep ends the process with a native stack overflow (020-add-crawl-core design Risks).
 SERIALIZERS = frozenset({"html", "inner_html", "html_pretty", "inner_html_pretty"})
 PAGE_READERS = ("spider/crawl/", "spider/extract/")
 
@@ -440,22 +598,115 @@ def test_no_module_that_reads_pages_serializes_a_node() -> None:
 
 def test_a_serialization_of_a_node_is_named() -> None:
     sources = {
-        "spider/crawl/links.py": "def f(node):\n    return node.html\n",
+        "spider/crawl/pages/links.py": "def f(node):\n    return node.html\n",
         "spider/extract/page_data.py": "text = tree.body.inner_html\n",
-        "spider/crawl/pages.py": "x = node.css('a')\ny = node.attributes\n",
+        "spider/crawl/pages/preparation.py": "x = node.css('a')\ny = node.attributes\n",
         "spider/report/html.py": "page = node.html\n",
     }
 
     assert serializer_violations(sources) == [
-        "spider/crawl/links.py:2 serializes a node with .html, which overflows the stack on deeply "
-        "nested templates",
+        "spider/crawl/pages/links.py:2 serializes a node with .html, which overflows the stack on "
+        "deeply nested templates",
         "spider/extract/page_data.py:1 serializes a node with .inner_html, which overflows the "
         "stack on deeply nested templates",
     ]
 
 
+# With scripting off, a head <noscript><img> ends <head> (020-add-crawl-core design D5). The one
+# fragment parse reads an HTML <noscript>'s text as markup.
+FRAGMENT_PARSE = ("spider/crawl/pages/links.py", "_noscript_links")
+
+
+def _calls_in_functions(
+    node: ast.AST, function: str | None = None
+) -> Iterator[tuple[ast.Call, str | None]]:
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            yield from _calls_in_functions(child, child.name)
+            continue
+        if isinstance(child, ast.Call):
+            yield child, function
+        yield from _calls_in_functions(child, function)
+
+
+def _sets(call: ast.Call, flag: str) -> bool:
+    return any(
+        keyword.arg == flag
+        and isinstance(keyword.value, ast.Constant)
+        and keyword.value.value is True
+        for keyword in call.keywords
+    )
+
+
+def _parses(sources: Mapping[str, str]) -> list[tuple[str, int, str | None]]:
+    """Each parser built in the modules that read Pages, with what it breaches, if anything."""
+    found = []
+    for module, source in sources.items():
+        if not module.startswith(PAGE_READERS):
+            continue
+        tree = ast.parse(source)
+        names = {"LexborHTMLParser"} | {
+            alias.asname
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+            if alias.name == "LexborHTMLParser" and alias.asname
+        }
+        for call, function in _calls_in_functions(tree):
+            if _base_name(call.func) not in names:
+                continue
+            breach = None
+            if _sets(call, "is_fragment") and (module, function) != FRAGMENT_PARSE:
+                breach = "parses a fragment outside the noscript re-parse"
+            elif not _sets(call, "scripting") and not _sets(call, "is_fragment"):
+                breach = "parses a document with scripting off"
+            found.append((module, call.lineno, breach))
+    return found
+
+
+def parse_violations(sources: Mapping[str, str]) -> list[str]:
+    """Parsers that break design D5, given every module's source by path."""
+    return [f"{module}:{line} {breach}" for module, line, breach in _parses(sources) if breach]
+
+
+def test_every_page_is_parsed_with_scripting_on() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert (parse_violations(sources), bool(_parses(sources))) == ([], True)
+
+
+def test_a_parse_with_scripting_off_is_named() -> None:
+    sources = {
+        "spider/crawl/pages/links.py": (
+            "tree = LexborHTMLParser(text)\n"
+            "def _noscript_links(text):\n"
+            "    return LexborHTMLParser(text, is_fragment=True)\n"
+        ),
+        "spider/extract/page_data.py": "tree = lexbor.LexborHTMLParser(text, scripting=False)\n",
+        "spider/crawl/pages/preparation.py": (
+            "a = LexborHTMLParser(text, scripting=True)\n"
+            "def prepare(text):\n"
+            "    return LexborHTMLParser(text, is_fragment=True)\n"
+        ),
+        "spider/crawl/pages/headers.py": (
+            "from selectolax.lexbor import LexborHTMLParser as Parser\ntree = Parser(text)\n"
+        ),
+        "spider/report/html.py": "tree = LexborHTMLParser(text)\n",
+    }
+
+    assert parse_violations(sources) == [
+        "spider/crawl/pages/links.py:1 parses a document with scripting off",
+        "spider/extract/page_data.py:1 parses a document with scripting off",
+        "spider/crawl/pages/preparation.py:3 parses a fragment outside the noscript re-parse",
+        "spider/crawl/pages/headers.py:2 parses a document with scripting off",
+    ]
+
+
 # Every request of a Crawl goes through the Requester, which owns its politeness (020 D7).
-REQUESTER = "spider/crawl/requester.py"
+REQUESTER = "spider/crawl/fetch/requester.py"
 
 
 def request_violations(sources: Mapping[str, str]) -> list[str]:
@@ -483,25 +734,30 @@ def test_every_request_goes_through_the_requester() -> None:
 
 def test_a_request_outside_the_requester_is_named() -> None:
     sources = {
-        "spider/crawl/robots_loader.py": "async def f(self, url):\n"
+        "spider/crawl/robots/loader.py": "async def f(self, url):\n"
         "    return await self._fetcher.fetch(Request(url))\n",
-        "spider/crawl/engine.py": "fetch = context.fetcher.fetch\nrequest = fetcher.Request(u)\n",
+        "spider/crawl/engine/dispatch.py": (
+            "fetch = context.fetcher.fetch\nrequest = fetcher.Request(u)\n"
+        ),
         REQUESTER: "async def f(self, url):\n    return await self._fetcher.fetch(Request(url))\n",
-        "spider/crawl/fetcher.py": "class AiohttpFetcher:\n"
+        "spider/crawl/fetch/fetcher.py": "class AiohttpFetcher:\n"
         "    async def fetch(self, request): ...\n",
     }
 
     assert request_violations(sources) == [
-        "spider/crawl/robots_loader.py:2 calls a Fetcher outside the Requester",
-        "spider/crawl/robots_loader.py:2 makes a Request outside the Requester",
-        "spider/crawl/engine.py:1 calls a Fetcher outside the Requester",
-        "spider/crawl/engine.py:2 makes a Request outside the Requester",
+        "spider/crawl/robots/loader.py:2 calls a Fetcher outside the Requester",
+        "spider/crawl/robots/loader.py:2 makes a Request outside the Requester",
+        "spider/crawl/engine/dispatch.py:1 calls a Fetcher outside the Requester",
+        "spider/crawl/engine/dispatch.py:2 makes a Request outside the Requester",
     ]
 
 
 # Built only through their generic factories, which check the type parameter where the hooks are
 # registered: one built in place inside Hooks(...) takes it as Any (020 D9).
-FACTORIES = {"Handler": "src/spider/crawl/hooks.py", "Extractor": "src/spider/crawl/pages.py"}
+FACTORIES = {
+    "Handler": "src/spider/crawl/engine/hooks.py",
+    "Extractor": "src/spider/crawl/pages/preparation.py",
+}
 
 
 def factory_violations(sources: Mapping[str, str]) -> list[str]:
@@ -532,9 +788,11 @@ def test_a_hook_built_outside_its_factory_is_named() -> None:
     sources = {
         "tests/crawl/test_hooks.py": "hooks = Hooks(handlers=(Handler('x', rows, write),))\n",
         "src/spider/services/hooks.py": "h = hooks.Handler('x', rows, write)\n",
-        "src/spider/crawl/hooks.py": "def handler(n, h, w):\n    return Handler(n, h, w)\n",
+        "src/spider/crawl/engine/hooks.py": "def handler(n, h, w):\n    return Handler(n, h, w)\n",
         "src/spider/services/pages.py": "e = pages.Extractor('x', extract, None)\n",
-        "src/spider/crawl/pages.py": "def extractor(n, e, c):\n    return Extractor(n, e, c)\n",
+        "src/spider/crawl/pages/preparation.py": (
+            "def extractor(n, e, c):\n    return Extractor(n, e, c)\n"
+        ),
     }
 
     assert factory_violations(sources) == [
@@ -547,7 +805,7 @@ def test_a_hook_built_outside_its_factory_is_named() -> None:
 # A Crawl waits only through its Clock, so a fake Clock drives every wait of a test (020 D7).
 WAITERS = ("spider/crawl/", "spider/services/crawling.py")
 # The one deadline outside the Clock bounds a real request, where timing tests put a fake Fetcher.
-FETCHER = "spider/crawl/fetcher.py"
+FETCHER = "spider/crawl/fetch/fetcher.py"
 SLEEPS = {("asyncio", "sleep"), ("time", "sleep")}
 CALLBACKS = {"call_later", "call_at", "reschedule"}
 # Where each asyncio call that may wait takes its timeout as a positional argument, if it does.
@@ -644,7 +902,7 @@ def test_a_crawl_waits_only_through_its_clock() -> None:
 
 def test_a_wait_outside_the_clock_is_named() -> None:
     sources = {
-        "spider/crawl/engine.py": "await asyncio.sleep(0)\n"
+        "spider/crawl/engine/dispatch.py": "await asyncio.sleep(0)\n"
         "time.sleep(1)\n"
         "loop.call_later(1, f)\n"
         "self._loop.call_at(t, f)\n"
@@ -661,38 +919,41 @@ def test_a_wait_outside_the_clock_is_named() -> None:
         "for done in asyncio.as_completed(tasks, timeout=5): ...\n"
         "cm.reschedule(t)\n"
         "timeout = aiohttp.ClientTimeout(total=5)\n",
-        "spider/crawl/politeness.py": "from asyncio import sleep, Lock\nfrom time import sleep\n"
+        "spider/crawl/fetch/politeness.py": "from asyncio import sleep, Lock\n"
+        "from time import sleep\n"
         "await self._clock.sleep(1)\n"
         "await asyncio.wait_for(task, None)\n"
         "await asyncio.wait(tasks)\n"
         "async with asyncio.timeout(None): ...\n"
         "from asyncio.tasks import sleep as nap\n"
         "for done in asyncio.as_completed(tasks): ...\n",
-        "spider/crawl/fetcher.py": "timeout = aiohttp.ClientTimeout(total=20)\n",
+        "spider/crawl/fetch/fetcher.py": "timeout = aiohttp.ClientTimeout(total=20)\n",
         "spider/services/crawling.py": "async with asyncio.timeout(delay=1): ...\n",
         "spider/services/listing.py": "await asyncio.sleep(1)\n",
         "spider/clock.py": "await asyncio.sleep(seconds)\n",
     }
 
     assert wait_violations(sources) == [
-        "spider/crawl/engine.py:1 waits outside the Clock: asyncio.sleep(0)",
-        "spider/crawl/engine.py:2 waits outside the Clock: time.sleep(1)",
-        "spider/crawl/engine.py:3 waits outside the Clock: loop.call_later(1, f)",
-        "spider/crawl/engine.py:4 waits outside the Clock: self._loop.call_at(t, f)",
-        "spider/crawl/engine.py:5 waits outside the Clock: asyncio.wait_for(task, 5)",
-        "spider/crawl/engine.py:6 waits outside the Clock: asyncio.wait_for(task, timeout=5)",
-        "spider/crawl/engine.py:7 waits outside the Clock: asyncio.wait(tasks, timeout=5)",
-        "spider/crawl/engine.py:8 waits outside the Clock: asyncio.timeout(5)",
-        "spider/crawl/engine.py:9 waits outside the Clock: asyncio.timeout_at(when=t)",
-        "spider/crawl/engine.py:12 waits outside the Clock: aio.sleep(1)",
-        "spider/crawl/engine.py:13 waits outside the Clock: t.sleep(1)",
-        "spider/crawl/engine.py:14 waits outside the Clock: asyncio.tasks.sleep(1)",
-        "spider/crawl/engine.py:15 waits outside the Clock: asyncio.as_completed(tasks, timeout=5)",
-        "spider/crawl/engine.py:16 waits outside the Clock: cm.reschedule(t)",
-        "spider/crawl/engine.py:17 sets a deadline outside the Fetcher: "
+        "spider/crawl/engine/dispatch.py:1 waits outside the Clock: asyncio.sleep(0)",
+        "spider/crawl/engine/dispatch.py:2 waits outside the Clock: time.sleep(1)",
+        "spider/crawl/engine/dispatch.py:3 waits outside the Clock: loop.call_later(1, f)",
+        "spider/crawl/engine/dispatch.py:4 waits outside the Clock: self._loop.call_at(t, f)",
+        "spider/crawl/engine/dispatch.py:5 waits outside the Clock: asyncio.wait_for(task, 5)",
+        "spider/crawl/engine/dispatch.py:6 waits outside the Clock: "
+        "asyncio.wait_for(task, timeout=5)",
+        "spider/crawl/engine/dispatch.py:7 waits outside the Clock: asyncio.wait(tasks, timeout=5)",
+        "spider/crawl/engine/dispatch.py:8 waits outside the Clock: asyncio.timeout(5)",
+        "spider/crawl/engine/dispatch.py:9 waits outside the Clock: asyncio.timeout_at(when=t)",
+        "spider/crawl/engine/dispatch.py:12 waits outside the Clock: aio.sleep(1)",
+        "spider/crawl/engine/dispatch.py:13 waits outside the Clock: t.sleep(1)",
+        "spider/crawl/engine/dispatch.py:14 waits outside the Clock: asyncio.tasks.sleep(1)",
+        "spider/crawl/engine/dispatch.py:15 waits outside the Clock: "
+        "asyncio.as_completed(tasks, timeout=5)",
+        "spider/crawl/engine/dispatch.py:16 waits outside the Clock: cm.reschedule(t)",
+        "spider/crawl/engine/dispatch.py:17 sets a deadline outside the Fetcher: "
         "aiohttp.ClientTimeout(total=5)",
-        "spider/crawl/politeness.py:1 imports asyncio.sleep by name",
-        "spider/crawl/politeness.py:2 imports time.sleep by name",
-        "spider/crawl/politeness.py:7 imports asyncio.tasks.sleep by name",
+        "spider/crawl/fetch/politeness.py:1 imports asyncio.sleep by name",
+        "spider/crawl/fetch/politeness.py:2 imports time.sleep by name",
+        "spider/crawl/fetch/politeness.py:7 imports asyncio.tasks.sleep by name",
         "spider/services/crawling.py:1 waits outside the Clock: asyncio.timeout(delay=1)",
     ]

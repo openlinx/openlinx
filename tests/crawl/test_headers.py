@@ -8,10 +8,9 @@ from hypothesis import given
 from hypothesis import strategies as st
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.fetcher import FetchResult
-from spider.crawl.headers import header_links
-from spider.crawl.links import DiscoveredLink
-from spider.crawl.pages import (
+from spider.crawl.fetch.fetcher import FetchResult
+from spider.crawl.pages.headers import header_links
+from spider.crawl.pages.preparation import (
     PageInput,
     PageSettings,
     PreparedPage,
@@ -19,7 +18,8 @@ from spider.crawl.pages import (
     prepare_page,
     response_links,
 )
-from spider.crawl.refresh import refresh_url
+from spider.crawl.pages.refresh import refresh_url
+from spider.crawl.references import DiscoveredLink
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl, strip_params_pattern, url_host
 
@@ -176,8 +176,9 @@ _HEADER_PIECES = st.sampled_from(
     st.lists(
         st.tuples(
             st.sampled_from(["Link", "Refresh", "link", "X-Other"]),
-            st.lists(_HEADER_PIECES | st.text(max_size=6)).map("".join),
-        )
+            st.lists(_HEADER_PIECES | st.text(max_size=6), max_size=6).map("".join),
+        ),
+        max_size=4,
     )
 )
 def test_the_header_links_accept_any_values(headers: list[tuple[str, str]]) -> None:

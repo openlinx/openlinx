@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from spider.clock import Clock
-from spider.crawl.fetcher import FetchResult, Request
+from spider.crawl.fetch.fetcher import FetchResult, Request
 
 
 @dataclass(frozen=True, slots=True)

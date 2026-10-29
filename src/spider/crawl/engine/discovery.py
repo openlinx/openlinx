@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable
 
-from spider.crawl.links import DiscoveredLink
+from spider.crawl.references import DiscoveredLink
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import DiscoverySkipReason, LinkType, NewUrl

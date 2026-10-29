@@ -7,8 +7,8 @@ import msgspec
 import pytest
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.fetcher import FetchResult
-from spider.crawl.pages import PageInput, PageSettings, extractor, prepare_page
+from spider.crawl.fetch.fetcher import FetchResult
+from spider.crawl.pages.preparation import PageInput, PageSettings, extractor, prepare_page
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 

@@ -1,7 +1,7 @@
 """A Crawl's hooks, composed here: the crawl core never imports them (020-add-crawl-core D9)."""
 
-from spider.crawl.hooks import Hooks
-from spider.crawl.pages import InProcessExecutor, PageExecutor
+from spider.crawl.engine.hooks import Hooks
+from spider.crawl.pages.preparation import InProcessExecutor, PageExecutor
 
 
 def default_hooks() -> Hooks:

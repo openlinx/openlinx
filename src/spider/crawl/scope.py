@@ -13,7 +13,7 @@ from spider.store.records import RecordedScope, ScopeKind, SkipReason
 if TYPE_CHECKING:
     from publicsuffixlist import PublicSuffixList
 
-    from spider.crawl.links import DiscoveredLink
+    from spider.crawl.references import DiscoveredLink
 
 
 @dataclass(frozen=True, slots=True)

@@ -13,14 +13,15 @@ from aiohttp.abc import AbstractResolver
 
 from spider.aio import loop_factory
 from spider.clock import Clock
-from spider.crawl.context import CrawlContext
-from spider.crawl.engine import run_crawl
-from spider.crawl.fetcher import Fetcher, aiohttp_fetcher
-from spider.crawl.hooks import Hooks, PassContext
-from spider.crawl.pages import PageExecutor
+from spider.crawl.engine.context import CrawlContext
+from spider.crawl.engine.dispatch import run_crawl
+from spider.crawl.engine.hooks import Hooks, PassContext
+from spider.crawl.engine.stop import StopSignal
+from spider.crawl.engine.warning_log import WarningLog
+from spider.crawl.fetch.fetcher import Fetcher, aiohttp_fetcher
+from spider.crawl.pages.preparation import PageExecutor
 from spider.crawl.scope import ScopeDecision, ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
-from spider.crawl.stop import StopSignal
 from spider.crawl.urls import (
     InvalidUrl,
     InvalidUrlReason,
@@ -30,7 +31,6 @@ from spider.crawl.urls import (
     url_origin,
     url_path,
 )
-from spider.crawl.warning_log import WarningLog
 from spider.output.codes import (
     INVALID_PATTERN,
     INVALID_URL,

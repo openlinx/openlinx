@@ -9,17 +9,17 @@ from typing import Any, Protocol
 import msgspec
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.decoding import decode_html
-from spider.crawl.directives import (
+from spider.crawl.fetch.fetcher import FetchResult
+from spider.crawl.pages.decoding import decode_html
+from spider.crawl.pages.directives import (
     NO_DIRECTIVES,
     RobotsDirectives,
     meta_robots_contents,
     robots_directives,
 )
-from spider.crawl.fetcher import FetchResult
-from spider.crawl.headers import header_links
-from spider.crawl.links import DiscoveredLink, base_url, links_in_tree
-from spider.crawl.noscript import parse_html
+from spider.crawl.pages.headers import header_links
+from spider.crawl.pages.links import base_url, links_in_tree, parse_html
+from spider.crawl.references import DiscoveredLink
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import DEFAULT_ROBOTS_TOKEN
@@ -107,14 +107,13 @@ class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
 def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettings) -> PreparedPage:
     """Decodes and parses once; the link extractor and later extractors share the tree."""
     decoded = decode_html(response.body, response.header("Content-Type"))
-    html = parse_html(decoded.text)
-    tree = html.tree
+    tree = parse_html(decoded.text)
     is_internal = partial(_is_internal, settings.scope)
     # The header Links come first, as 030's ordinals count them (design D5).
     from_headers = response_links(url, response, settings.scope, settings.strip_params)
     from_document = tuple(
         links_in_tree(
-            html,
+            tree,
             base=base_url(tree, url, decoded.encoding),
             encoding=decoded.encoding,
             is_internal=is_internal,
