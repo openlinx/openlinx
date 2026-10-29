@@ -13,14 +13,14 @@ from openlinx.cli.init import init
 from openlinx.cli.meta import check_command
 from openlinx.cli.runner import Invocation, OpenLinxGroup
 from openlinx.cli.schema import schema
-from openlinx.naming import COMMAND_NAME
+from openlinx.naming import COMMAND_NAME, PRODUCT_NAME
 from openlinx.workspace.tables import SettingsTables
 
 
 def _print_version(ctx: typer.Context, value: bool) -> None:
     if value:
         invocation: Invocation = ctx.obj
-        invocation.output.text(f"{COMMAND_NAME} {__version__}\n")
+        invocation.output.text(f"{PRODUCT_NAME} {__version__}\n")
         raise typer.Exit
 
 

@@ -159,7 +159,7 @@ Every crawl file SHALL hold the table `crawl`, with exactly one row, and the tab
 | `crawl.state` | the Crawl State |
 | `crawl.started_at` | the start time |
 | `crawl.completed_at` | the time the state became `completed`; NULL in every other state |
-| `crawl.command_argv` | the command line, as a JSON array that starts with `"linx"`, with secrets redacted |
+| `crawl.command_argv` | the command line, as a JSON array that starts with the name of the script that ran (see `cli-contract`), with secrets redacted |
 | `crawl.cwd` | the absolute folder the Command ran in |
 | `crawl.settings_file` | the absolute path of the `openlinx.toml` that was read, or NULL |
 | `crawl.config` | the resolved settings, as a JSON object of tables and keys, with secrets redacted |
@@ -549,3 +549,20 @@ This change's diagnostic codes SHALL be declared in the registry of `010-add-wor
   - `crawl_not_writable` 7
   - `unknown_table` 2
   - `store_wal_unavailable` null
+
+### Requirement: Crawl files from a newer tool are refused
+
+**In short:** a crawl file from a newer tool is refused and left untouched, with a hint to upgrade.
+
+A crawl file whose schema version is newer than the tool's SHALL be refused with `crawl_schema_too_new`, without changing the file:
+- `details.file_schema_version` and `details.tool_schema_version` give the two versions
+- the hint is `Upgrade OpenLinx to read it.`
+
+#### Scenario: File from a newer tool
+- **WHEN** a crawl file at schema version 99 is opened by a tool whose schema version is 1
+- **THEN** the open fails with the error code `crawl_schema_too_new` and `"details":{"file_schema_version":99,"tool_schema_version":1}`, and the hint `Upgrade OpenLinx to read it.`
+
+#### Scenario: A refused file is unchanged
+- **WHEN** a crawl file at schema version 99 is opened by a tool whose schema version is 1
+- **THEN** the SHA-256 of the crawl file is the same as before
+

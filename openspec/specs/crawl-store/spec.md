@@ -7,7 +7,7 @@ Defines how each Crawl is stored as one self-contained SQLite file with a public
 - crawl metadata, Crawl States and the redaction of secrets
 - the transactional writer, its write check, and reading while a Crawl is written
 - the journal mode
-- `spider schema`, `docs/schema.md`, and the conventions every table follows
+- `linx schema`, `docs/schema.md`, and the conventions every table follows
 
 Conventions used in the scenarios:
 - `H` is the absolute path of the home folder.
@@ -25,7 +25,7 @@ Each Crawl SHALL be stored as one SQLite file, `<data folder>/crawls/<crawl-id>.
 
 #### Scenario: Location of a crawl file
 - **WHEN** a Crawl with the id `20260927-140312-k3f9` is created in the local Workspace `H/work/shop`
-- **THEN** the file `H/work/shop/.spider/crawls/20260927-140312-k3f9.sqlite` exists
+- **THEN** the file `H/work/shop/.openlinx/crawls/20260927-140312-k3f9.sqlite` exists
 
 #### Scenario: A copied file opens by its path
 - **WHEN** the crawl file of the Crawl `20260927-140312-k3f9` is copied to `H/work/copy/c.sqlite`, and the Crawl `H/work/copy/c.sqlite` is opened
@@ -61,20 +61,20 @@ An id SHALL count as taken in a Workspace when `<id>.sqlite` exists in its `craw
 Creating a Crawl SHALL create the Workspace's data folder, its `.gitignore` and its `crawls/` folder, as `010-add-workspace-and-cli-contract` defines them, when they are missing. It SHALL NOT create the settings file. When the data folder cannot be created or written, creating the Crawl SHALL fail with `workspace_not_writable`, whose `details.path` names the path that failed, before anything is crawled.
 
 #### Scenario: First Crawl in the global Workspace
-- **WHEN** a Crawl with the id `20260927-140312-k3f9` is created in the global Workspace, and `H/.spider` does not exist
-- **THEN** the file `H/.spider/crawls/20260927-140312-k3f9.sqlite` exists
+- **WHEN** a Crawl with the id `20260927-140312-k3f9` is created in the global Workspace, and `H/.openlinx` does not exist
+- **THEN** the file `H/.openlinx/crawls/20260927-140312-k3f9.sqlite` exists
 
 #### Scenario: No settings file is created by storing a Crawl
-- **WHEN** a Crawl is created in the local Workspace `H/work/shop`, which has `.spider/` but no `spider.toml`
-- **THEN** `H/work/shop/spider.toml` does not exist
+- **WHEN** a Crawl is created in the local Workspace `H/work/shop`, which has `.openlinx/` but no `openlinx.toml`
+- **THEN** `H/work/shop/openlinx.toml` does not exist
 
 #### Scenario: Unwritable data folder
-- **WHEN** a Crawl is created in the global Workspace, and `H/.spider` is a file
-- **THEN** creation fails with the error code `workspace_not_writable`, and `details.path` starts with `H/.spider`
+- **WHEN** a Crawl is created in the global Workspace, and `H/.openlinx` is a file
+- **THEN** creation fails with the error code `workspace_not_writable`, and `details.path` starts with `H/.openlinx`
 
 #### Scenario: Unwritable crawls folder
-- **WHEN** a Crawl is created in the local Workspace `H/work/shop`, and no new file can be created in `H/work/shop/.spider/crawls/`
-- **THEN** creation fails with the error code `workspace_not_writable`, and `details.path` starts with `H/work/shop/.spider/crawls`
+- **WHEN** a Crawl is created in the local Workspace `H/work/shop`, and no new file can be created in `H/work/shop/.openlinx/crawls/`
+- **THEN** creation fails with the error code `workspace_not_writable`, and `details.path` starts with `H/work/shop/.openlinx/crawls`
 
 ### Requirement: The writer checks that it can write
 
@@ -105,7 +105,7 @@ Failures SHALL use these error codes:
 
 | Code | When |
 |---|---|
-| `no_crawls` | the Workspace has no Crawl; the hint names `spider crawl` |
+| `no_crawls` | the Workspace has no Crawl; the hint names `linx crawl` |
 | `crawl_not_found` | no Crawl has the given id, or no file exists at the given path |
 | `crawl_file_invalid` | the selected file is not a readable crawl file, or a file selected by id or `latest` holds another id; `details.file` names it |
 | `invalid_value` | any other value |
@@ -163,8 +163,8 @@ Failures SHALL use these error codes:
 - **THEN** resolution fails with the error code `crawl_file_invalid`, and `details.file` ends with `20260927-110000-bbbb.sqlite`
 
 #### Scenario: Reading creates nothing
-- **WHEN** `latest` is resolved from the current folder `H/work/notes`, which resolves to the global Workspace, and `H/.spider` does not exist
-- **THEN** `H/.spider` still does not exist afterwards
+- **WHEN** `latest` is resolved from the current folder `H/work/notes`, which resolves to the global Workspace, and `H/.openlinx` does not exist
+- **THEN** `H/.openlinx` still does not exist afterwards
 
 #### Scenario: The flag defaults to latest
 - **WHEN** a Command that reads a Crawl runs without `--crawl` in a Workspace holding `20260927-100000-aaaa` and `20260927-110000-bbbb`
@@ -176,7 +176,7 @@ Failures SHALL use these error codes:
 
 #### Scenario: No Crawls on the command line
 - **WHEN** a Command that reads a Crawl runs in a Workspace with no Crawl
-- **THEN** the exit code is 4, and the error has the code `no_crawls` and a hint that contains `spider crawl`
+- **THEN** the exit code is 4, and the error has the code `no_crawls` and a hint that contains `linx crawl`
 
 #### Scenario: A text file on the command line
 - **WHEN** a Command that reads a Crawl runs with `--crawl H/work/notes.sqlite`, a text file containing `hello`
@@ -187,7 +187,7 @@ Failures SHALL use these error codes:
 - **THEN** the exit code is 2, and the error has the code `invalid_value`
 
 #### Scenario: The flag is described as global
-- **WHEN** `spider commands` runs on the test app
+- **WHEN** `linx commands` runs on the test app
 - **THEN** the example Command's `--crawl` option has `"global":true` and `"default":"latest"`
 
 ### Requirement: Crawl metadata
@@ -204,9 +204,9 @@ Every crawl file SHALL hold the table `crawl`, with exactly one row, and the tab
 | `crawl.state` | the Crawl State |
 | `crawl.started_at` | the start time |
 | `crawl.completed_at` | the time the state became `completed`; NULL in every other state |
-| `crawl.command_argv` | the command line, as a JSON array that starts with `"spider"`, with secrets redacted |
+| `crawl.command_argv` | the command line, as a JSON array that starts with the name of the script that ran (see `cli-contract`), with secrets redacted |
 | `crawl.cwd` | the absolute folder the Command ran in |
-| `crawl.settings_file` | the absolute path of the `spider.toml` that was read, or NULL |
+| `crawl.settings_file` | the absolute path of the `openlinx.toml` that was read, or NULL |
 | `crawl.config` | the resolved settings, as a JSON object of tables and keys, with secrets redacted |
 | `crawl.tool_version` | the tool version that created the Crawl |
 | `crawl.schema_version` | the file's schema version, also stored as SQLite `user_version` |
@@ -222,13 +222,13 @@ The `crawl` row SHALL hold no counts or statistics that are written while the Cr
 - **WHEN** a Spider-mode Crawl is created with:
   - the time `2026-09-27T14:03:12.345Z`
   - the Seed `https://example.com/`
-  - the command line `["spider","crawl","https://example.com/"]`
-  - the current folder `H/work/shop`, which has no `spider.toml`
+  - the command line `["linx","crawl","https://example.com/"]`
+  - the current folder `H/work/shop`, which has no `openlinx.toml`
   - the resolved config `{"store":{"journal_mode":"auto"}}`
 - **THEN** its `crawl` row has:
   - `crawl_mode` `"spider"`, `section_crawl` `0` and `state` `"running"`
   - `started_at` `"2026-09-27T14:03:12.345Z"` and `completed_at` NULL
-  - `command_argv` `["spider","crawl","https://example.com/"]`, `cwd` `"H/work/shop"`, `settings_file` NULL
+  - `command_argv` `["linx","crawl","https://example.com/"]`, `cwd` `"H/work/shop"`, `settings_file` NULL
   - `config` `{"store":{"journal_mode":"auto"}}`
 
 #### Scenario: Seeds keep their order
@@ -266,7 +266,7 @@ The `crawl` row SHALL hold no counts or statistics that are written while the Cr
 | `interrupted` | its process died without recording an end |
 
 #### Scenario: State values are documented
-- **WHEN** `spider schema crawl` runs
+- **WHEN** `linx schema crawl` runs
 - **THEN** the `state` column has `"values":["running","stopped","completed","failed","interrupted"]`
 
 ### Requirement: Redacting secrets
@@ -283,32 +283,32 @@ Redaction SHALL cover both the `--flag value` and the `--flag=value` forms. No p
 A secret option SHALL have only long names, so that the attached short form (`-tVALUE`) can never carry a secret. Registering a Command that declares a short name on an option that is secret on its own SHALL fail. An option that is secret through its setting SHALL be checked by a test over every registered Command, because registering a Command loads no settings table.
 
 #### Scenario: Secret option with a separate value
-- **WHEN** the command line `["spider","example-settings","--token","s3cret"]` is redacted
-- **THEN** the result is `["spider","example-settings","--token","***"]`
+- **WHEN** the command line `["linx","example-settings","--token","s3cret"]` is redacted
+- **THEN** the result is `["linx","example-settings","--token","***"]`
 
 #### Scenario: Secret option with a joined value
-- **WHEN** the command line `["spider","example-settings","--api-key=s3cret"]` is redacted
-- **THEN** the result is `["spider","example-settings","--api-key=***"]`
+- **WHEN** the command line `["linx","example-settings","--api-key=s3cret"]` is redacted
+- **THEN** the result is `["linx","example-settings","--api-key=***"]`
 
 #### Scenario: A URL keeps everything but its password
-- **WHEN** the command line `["spider","example-settings","--token","http://ann:s3cret@proxy.test:8080"]` is redacted
-- **THEN** the result is `["spider","example-settings","--token","http://ann:***@proxy.test:8080"]`
+- **WHEN** the command line `["linx","example-settings","--token","http://ann:s3cret@proxy.test:8080"]` is redacted
+- **THEN** the result is `["linx","example-settings","--token","http://ann:***@proxy.test:8080"]`
 
 #### Scenario: Secret setting
 - **WHEN** the config `{"example":{"level":"high","token":"s3cret"}}` is redacted
 - **THEN** the result is `{"example":{"level":"high","token":"***"}}`
 
 #### Scenario: Other values are kept
-- **WHEN** the command line `["spider","example-settings","--level","high"]` is redacted
-- **THEN** the result is `["spider","example-settings","--level","high"]`
+- **WHEN** the command line `["linx","example-settings","--level","high"]` is redacted
+- **THEN** the result is `["linx","example-settings","--level","high"]`
 
 #### Scenario: An unset secret stays null
 - **WHEN** the config `{"example":{"level":"high","token":null}}` is redacted
 - **THEN** the result is `{"example":{"level":"high","token":null}}`
 
 #### Scenario: A malformed secret URL
-- **WHEN** the command line `["spider","example-settings","--token","http://[ann:s3cret@proxy.test"]` is redacted
-- **THEN** the result is `["spider","example-settings","--token","***"]`
+- **WHEN** the command line `["linx","example-settings","--token","http://[ann:s3cret@proxy.test"]` is redacted
+- **THEN** the result is `["linx","example-settings","--token","***"]`
 
 #### Scenario: A secret setting that is not a string
 - **WHEN** the config `{"example":{"token":12345}}` is redacted
@@ -323,7 +323,7 @@ A secret option SHALL have only long names, so that the attached short form (`-t
 - **THEN** no option mapped to a secret setting has a short name
 
 #### Scenario: The secret is nowhere in the file
-- **WHEN** a Crawl is created with the command line `["spider","example-settings","--token","s3cret"]` and the config `{"example":{"token":"s3cret"}}`, and its writer is closed
+- **WHEN** a Crawl is created with the command line `["linx","example-settings","--token","s3cret"]` and the config `{"example":{"token":"s3cret"}}`, and its writer is closed
 - **THEN** the bytes of the crawl file and of its `-wal` file do not contain `s3cret`
 
 ### Requirement: Transactional writer
@@ -434,39 +434,39 @@ A new crawl file SHALL use the journal mode chosen from the setting `store.journ
 A UNC path is one that starts with `\\` or `//`, such as `\\host\share`, `//host/share` and the extended-length form `\\?\UNC\host\share`. The extended-length and device forms of a drive path, `\\?\C:\` and `\\.\C:\`, are local. `crawl.journal_mode` SHALL record the mode used. When SQLite does not grant the WAL mode it was asked for, the file SHALL use `delete` with the same warning.
 
 #### Scenario: UNC path
-- **WHEN** the journal mode is chosen for `"auto"` and the location `\\fileserver\share\site\.spider`
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\fileserver\share\site\.openlinx`
 - **THEN** it is `delete`, with the warning `store_wal_unavailable`
 
 #### Scenario: Local path
-- **WHEN** the journal mode is chosen for `"auto"` and the location `C:\site\.spider`
+- **WHEN** the journal mode is chosen for `"auto"` and the location `C:\site\.openlinx`
 - **THEN** it is `wal`, with no warning
 
 #### Scenario: Forced WAL on a UNC path
-- **WHEN** the journal mode is chosen for `"wal"` and the location `\\fileserver\share\site\.spider`
+- **WHEN** the journal mode is chosen for `"wal"` and the location `\\fileserver\share\site\.openlinx`
 - **THEN** it is `wal`, with no warning
 
 #### Scenario: Forced rollback journal on a local path
-- **WHEN** the journal mode is chosen for `"delete"` and the location `/home/ann/site/.spider`
+- **WHEN** the journal mode is chosen for `"delete"` and the location `/home/ann/site/.openlinx`
 - **THEN** it is `delete`, with no warning
 
 #### Scenario: WAL refused by SQLite
-- **WHEN** the journal mode `wal` was asked for in the location `C:\site\.spider`, and SQLite granted `memory`
+- **WHEN** the journal mode `wal` was asked for in the location `C:\site\.openlinx`, and SQLite granted `memory`
 - **THEN** it is `delete`, with the warning `store_wal_unavailable`
 
 #### Scenario: WAL granted by SQLite
-- **WHEN** the journal mode `wal` was asked for in the location `C:\site\.spider`, and SQLite granted `wal`
+- **WHEN** the journal mode `wal` was asked for in the location `C:\site\.openlinx`, and SQLite granted `wal`
 - **THEN** it is `wal`, with no warning
 
 #### Scenario: A local extended-length path
-- **WHEN** the journal mode is chosen for `"auto"` and the location `\\?\C:\site\.spider`
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\?\C:\site\.openlinx`
 - **THEN** it is `wal`, with no warning
 
 #### Scenario: A local device path
-- **WHEN** the journal mode is chosen for `"auto"` and the location `\\.\C:\site\.spider`
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\.\C:\site\.openlinx`
 - **THEN** it is `wal`, with no warning
 
 #### Scenario: An extended-length UNC path
-- **WHEN** the journal mode is chosen for `"auto"` and the location `\\?\UNC\fileserver\share\site\.spider`
+- **WHEN** the journal mode is chosen for `"auto"` and the location `\\?\UNC\fileserver\share\site\.openlinx`
 - **THEN** it is `delete`, with the warning `store_wal_unavailable`
 
 #### Scenario: Local disk
@@ -479,16 +479,16 @@ A UNC path is one that starts with `\\` or `//`, such as `\\host\share`, `//host
 
 ### Requirement: The store setting
 
-**In short:** `[store] journal_mode` in `spider.toml` chooses the journal mode, `"auto"` by default.
+**In short:** `[store] journal_mode` in `openlinx.toml` chooses the journal mode, `"auto"` by default.
 
-This change SHALL register the `spider.toml` table `[store]`, with the setting `journal_mode`: `"auto"`, `"wal"` or `"delete"`, with the default `"auto"`. It follows the settings rules of `010-add-workspace-and-cli-contract`.
+This change SHALL register the `openlinx.toml` table `[store]`, with the setting `journal_mode`: `"auto"`, `"wal"` or `"delete"`, with the default `"auto"`. It follows the settings rules of `010-add-workspace-and-cli-contract`.
 
 #### Scenario: The store setting in the template
-- **WHEN** `spider init` runs in the empty folder `H/work/shop`
-- **THEN** `H/work/shop/spider.toml` contains the line `[store]`, followed later by the line `# journal_mode = "auto"`
+- **WHEN** `linx init` runs in the empty folder `H/work/shop`
+- **THEN** `H/work/shop/openlinx.toml` contains the line `[store]`, followed later by the line `# journal_mode = "auto"`
 
 #### Scenario: An invalid store setting
-- **WHEN** `spider init` runs in `H/work/shop`, whose `spider.toml` contains `[store]\njournal_mode = "fast"\n`
+- **WHEN** `linx init` runs in `H/work/shop`, whose `openlinx.toml` contains `[store]\njournal_mode = "fast"\n`
 - **THEN** the exit code is 3, and the error has the code `settings_invalid` and `details.errors[0].key` `"store.journal_mode"`
 
 ### Requirement: Reading while a Crawl is written, and waiting for a lock
@@ -561,21 +561,21 @@ When an operation on a Crawl finishes, the process SHALL hold no open handle to 
 
 A crawl file whose schema version is newer than the tool's SHALL be refused with `crawl_schema_too_new`, without changing the file:
 - `details.file_schema_version` and `details.tool_schema_version` give the two versions
-- the hint says to upgrade the tool
+- the hint is `Upgrade OpenLinx to read it.`
 
 #### Scenario: File from a newer tool
 - **WHEN** a crawl file at schema version 99 is opened by a tool whose schema version is 1
-- **THEN** the open fails with the error code `crawl_schema_too_new` and `"details":{"file_schema_version":99,"tool_schema_version":1}`
+- **THEN** the open fails with the error code `crawl_schema_too_new` and `"details":{"file_schema_version":99,"tool_schema_version":1}`, and the hint `Upgrade OpenLinx to read it.`
 
 #### Scenario: A refused file is unchanged
 - **WHEN** a crawl file at schema version 99 is opened by a tool whose schema version is 1
 - **THEN** the SHA-256 of the crawl file is the same as before
 
-### Requirement: Listing the schema with spider schema
+### Requirement: Listing the schema with linx schema
 
-**In short:** `spider schema` lists the public tables of a crawl file with their columns and indexes, and needs no Workspace or Crawl.
+**In short:** `linx schema` lists the public tables of a crawl file with their columns and indexes, and needs no Workspace or Crawl.
 
-`spider schema [TABLE]` SHALL be a list Command that follows the paging and output rules of `010-add-workspace-and-cli-contract`, with the formats `json`, `jsonl` and `table`.
+`linx schema [TABLE]` SHALL be a list Command that follows the paging and output rules of `010-add-workspace-and-cli-contract`, with the formats `json`, `jsonl` and `table`.
 - Its JSON result SHALL start with the key `schema_version`, the tool's schema version, before `total`.
 - Its items are the public tables. They are ordered by the number of the change that added them, and within a change in the order it added them. So `crawl` and `seeds` (from `015`) come first.
 - With TABLE, it SHALL list only that table.
@@ -597,51 +597,51 @@ Each item SHALL have `name`, `kind` (`table` or `view`), `description`, `columns
 An unknown TABLE SHALL fail with `unknown_table`, whose `details.tables` lists the table names. Tables whose names start with `_` are internal and SHALL NOT be listed. The Command SHALL NOT need a Workspace or a Crawl.
 
 #### Scenario: One table
-- **WHEN** `spider schema seeds --fields name` runs
+- **WHEN** `linx schema seeds --fields name` runs
 - **THEN** stdout is exactly `{"schema_version":1,"total":1,"items":[{"name":"seeds"}],"next_cursor":null}` followed by `\n`
 
 #### Scenario: First tables
-- **WHEN** `spider schema --fields name,kind --limit 2` runs
+- **WHEN** `linx schema --fields name,kind --limit 2` runs
 - **THEN** `items` is `[{"name":"crawl","kind":"table"},{"name":"seeds","kind":"table"}]`
 
 #### Scenario: Columns of seeds
-- **WHEN** `spider schema seeds` runs
+- **WHEN** `linx schema seeds` runs
 - **THEN** the item's columns, reduced to `name`, `type`, `nullable` and `primary_key`, are `[{"name":"position","type":"INTEGER","nullable":false,"primary_key":true},{"name":"url","type":"TEXT","nullable":false,"primary_key":false}]`
 
 #### Scenario: Column formats
-- **WHEN** `spider schema crawl` runs
+- **WHEN** `linx schema crawl` runs
 - **THEN** the columns `started_at`, `section_crawl` and `config` have the formats `"timestamp"`, `"boolean"` and `"json"`, respectively
 
 #### Scenario: The next page
-- **WHEN** `spider schema --fields name --limit 1` runs, and then runs again with `--cursor` set to the first result's `next_cursor`
+- **WHEN** `linx schema --fields name --limit 1` runs, and then runs again with `--cursor` set to the first result's `next_cursor`
 - **THEN** the second result's `items` is `[{"name":"seeds"}]`
 
 #### Scenario: Unknown table
-- **WHEN** `spider schema nosuch` runs
+- **WHEN** `linx schema nosuch` runs
 - **THEN** the exit code is 2, and the error has the code `unknown_table` and a `details.tables` that contains `"crawl"` and `"seeds"`
 
 #### Scenario: Internal tables are hidden
-- **WHEN** `spider schema --fields name --limit 1000` runs
+- **WHEN** `linx schema --fields name --limit 1000` runs
 - **THEN** no listed name starts with `_`
 
 #### Scenario: No Workspace needed
-- **WHEN** `spider schema` runs in `H/work/notes`, which is not a Workspace, while `H/.spider` does not exist
-- **THEN** the exit code is 0, and `H/.spider` still does not exist
+- **WHEN** `linx schema` runs in `H/work/notes`, which is not a Workspace, while `H/.openlinx` does not exist
+- **THEN** the exit code is 0, and `H/.openlinx` still does not exist
 
 #### Scenario: Self-description of schema
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** the `schema` entry has `"output":"list"`, `"formats":["json","jsonl","table"]` and `"fields":{"available":["name","kind","description","columns","indexes"],"default":["name","kind","description","columns","indexes"]}`
 
 #### Scenario: Global flags of schema
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** the options of the `schema` entry include `--format` and do not include `--workspace` or `--crawl`
 
 #### Scenario: Default limit of schema
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** the `--limit` option of the `schema` entry has `"type":"integer"`, `"default":50` and `"global":false`
 
 #### Scenario: A table without secondary indexes lists none
-- **WHEN** `spider schema seeds --fields name,indexes` runs
+- **WHEN** `linx schema seeds --fields name,indexes` runs
 - **THEN** `items` is `[{"name":"seeds","indexes":[]}]`
 
 ### Requirement: The documented schema, the declared schema and the file agree
@@ -653,7 +653,7 @@ The public schema SHALL be declared once, as the store's table definitions, and 
 - **A new crawl file** SHALL have exactly the declared tables, columns and indexes, with the same types, nullability, primary keys, foreign keys, index columns, uniqueness and conditions, as SQLite reports them. Every public table SHALL be `STRICT`, and every table the schema declares `WITHOUT ROWID` SHALL be so in the file.
 
 #### Scenario: Documentation and declaration agree
-- **WHEN** the tables parsed from `docs/schema.md` are compared with the description of the declared schema, which `spider schema --limit 1000` prints
+- **WHEN** the tables parsed from `docs/schema.md` are compared with the description of the declared schema, which `linx schema --limit 1000` prints
 - **THEN** they are equal
 
 #### Scenario: A new file matches the declaration
@@ -682,19 +682,19 @@ Every public table, column and index SHALL follow these conventions (ADR-0005):
 - **Order:** a table whose rows have an order SHALL carry it in an INTEGER column that grows in insert order, such as `seeds.position`. Queries that list rows in order SHALL use that column, never a timestamp.
 
 #### Scenario: Names are snake_case
-- **WHEN** `spider schema --limit 1000` runs
+- **WHEN** `linx schema --limit 1000` runs
 - **THEN** every table name and column name matches `^[a-z][a-z0-9_]*$`
 
 #### Scenario: Descriptions are present
-- **WHEN** `spider schema --limit 1000` runs
+- **WHEN** `linx schema --limit 1000` runs
 - **THEN** every table description and every column description is a non-empty string
 
 #### Scenario: Booleans are integers
-- **WHEN** `spider schema --limit 1000` runs
+- **WHEN** `linx schema --limit 1000` runs
 - **THEN** every column with the format `"boolean"` has the type `"INTEGER"`
 
 #### Scenario: Enumeration values are snake_case
-- **WHEN** `spider schema --limit 1000` runs
+- **WHEN** `linx schema --limit 1000` runs
 - **THEN** every entry of every non-null `values` matches `^[a-z][a-z0-9_]*$`
 
 #### Scenario: Timestamp text
@@ -718,15 +718,15 @@ Every public table, column and index SHALL follow these conventions (ADR-0005):
 - **THEN** every public table has `strict` = `1`
 
 #### Scenario: Reference columns are declared
-- **WHEN** `spider schema --limit 1000` runs
+- **WHEN** `linx schema --limit 1000` runs
 - **THEN** every column whose name ends with `_id` has a non-null `references`
 
 #### Scenario: Index names start with their table
-- **WHEN** `spider schema --limit 1000` runs
+- **WHEN** `linx schema --limit 1000` runs
 - **THEN** every index name starts with its table's name followed by `_`, and every index has a non-empty `description`
 
 #### Scenario: Derived and later columns may hold NULL
-- **WHEN** `spider schema --limit 1000` runs
+- **WHEN** `linx schema --limit 1000` runs
 - **THEN** every column whose description starts with `Derived: ` or matches `^Filled from v[0-9]+\.[0-9]+\. ` has `nullable` `true`
 
 ### Requirement: Unmeasured values are NULL
@@ -740,14 +740,14 @@ A value that was not measured, or that does not apply, SHALL be stored as NULL. 
 - **THEN** `completed_at` is NULL
 
 #### Scenario: No settings file
-- **WHEN** the `crawl` row of a Crawl created in a Workspace without `spider.toml` is read
+- **WHEN** the `crawl` row of a Crawl created in a Workspace without `openlinx.toml` is read
 - **THEN** `settings_file` is NULL
 
 ### Requirement: Crawl store diagnostics
 
-**In short:** the crawl store's error and warning codes are declared with fixed levels and exit codes, so `spider commands` lists them.
+**In short:** the crawl store's error and warning codes are declared with fixed levels and exit codes, so `linx commands` lists them.
 
-This change's diagnostic codes SHALL be declared in the registry of `010-add-workspace-and-cli-contract`, with these levels and exit codes, so `spider commands` lists them:
+This change's diagnostic codes SHALL be declared in the registry of `010-add-workspace-and-cli-contract`, with these levels and exit codes, so `linx commands` lists them:
 
 | Code | Level | Exit code |
 |---|---|---|
@@ -759,7 +759,7 @@ This change's diagnostic codes SHALL be declared in the registry of `010-add-wor
 | `store_wal_unavailable` | warning | none |
 
 #### Scenario: Store codes are self-described
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** its `diagnostics` give these exit codes:
   - `no_crawls` 4, `crawl_not_found` 4
   - `crawl_busy` 5

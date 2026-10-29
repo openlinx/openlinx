@@ -6,7 +6,7 @@ from openlinx.crawl.engine.outcomes import RecordingFailedError
 from openlinx.crawl.engine.pause import pause_after
 from openlinx.crawl.settings import CrawlSettings
 from openlinx.crawl.urls import NormalizedUrl, url_origin
-from openlinx.naming import COMMAND_NAME
+from openlinx.naming import COMMAND_NAME, PRODUCT_NAME
 from openlinx.output.codes import (
     CRAWL_WRITE_FAILED,
     INTERRUPTED,
@@ -72,7 +72,7 @@ def write_failed(crawl_file: CrawlFile, cause: BaseException | None) -> OpenLinx
             CRAWL_WRITE_FAILED,
             f"{cause}, so the Crawl ended failed.",
             hint="Rows that fail for one URL after another come from a bug in a handler or in "
-            f"{COMMAND_NAME} itself: the record_failed warning names the first URL. Once it is "
+            f"{PRODUCT_NAME} itself: the record_failed warning names the first URL. Once it is "
             f"fixed, continue the Crawl with: {_resume(crawl_file)}",
             details=details,
         )

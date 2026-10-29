@@ -5,13 +5,8 @@ import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# History, the specs that only the archive of 021 changes, and the rename's own plan and guard.
-EXEMPT = (
-    "openspec/changes/archive/",
-    "openspec/specs/",
-    "openspec/changes/021-rename-to-openlinx/",
-    "tests/test_no_working_name.py",
-)
+# History, which the rename's own plan now is, and this guard.
+EXEMPT = ("openspec/changes/archive/", "tests/test_no_working_name.py")
 # spider as the Crawl Mode and as Spider mode, and ADR-0006's dated measurement, are not the
 # product's name (design D2).
 KEPT = re.compile(

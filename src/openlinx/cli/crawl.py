@@ -201,7 +201,7 @@ def crawl(
         cwd=Path.cwd(),
         home=Path.home(),
         workspace=workspace_dir,
-        command_argv=[COMMAND_NAME, *invocation.argv],
+        command_argv=[invocation.command, *invocation.argv],
         secret_names=secret_names(ctx.command, invocation.settings_tables),
         flags=_with_subdomains(setting_flags(ctx)) if subdomains else setting_flags(ctx),
     )
