@@ -111,6 +111,7 @@ Frontier ──► Engine ──► Requester ──► Fetcher ──► Page e
   - **Redaction:** `openlinx.store.redaction.redact`, with the secret names that the adapter creating a Crawl collects through `openlinx.cli.options.secret_names`, from the secret settings and options already declared.
   - After the exclusive create of a new file, `openlinx.store.connections` is the only code that opens a crawl file: one engine per operation, disposed after it, so no handle outlives the operation.
 - **Schema definition:** SQLAlchemy 2 Core tables in `openlinx.store.schema` are the single definition ([ADR-0003](adr/0003-sqlalchemy-core-not-orm.md)). They drive batched inserts, safe `--where` → SQL translation (only known columns), and the SQL reference (`linx schema`, the Skill).
+- **Where SQL is built:** every statement is built in `openlinx.store`, and a service calls store functions. The `--where` language is split the same way: its tokenizer, parser and syntax tree are in `openlinx.query`, pure and tested at seam 4, and its compiler to Core expressions is in `openlinx.store.query`. A guard refuses sqlalchemy outside the store and the schema service.
   - **The conventions** are [ADR-0005](adr/0005-crawl-file-schema-conventions.md): names, keys and references, units, flags, enumerations, errors, indexes, and derived and later columns.
   - **The one way to declare a public table** is `public_table(name, *columns, comment=..., change=<n>)` in `openlinx.store.schema`. It makes the table `STRICT` and adds a CHECK for every enumeration and flag column, so the file refuses a value of another type or outside its list, whatever writes it. No CHECK is written by hand.
   - Every table, column and index has a description, because the descriptions feed that reference.
@@ -180,11 +181,11 @@ src/openlinx/
   services/     workspace (init), query, crawl, report
   workspace/    Workspace discovery, settings (openlinx.toml)
   output/       JSON/table/CSV serialisation, the Reporter, paging, diagnostic codes, exit codes
-  store/        schema (Core tables), writer, migrations/, read-only access
+  store/        schema (Core tables), writer, query (the --where compiler), migrations/, read-only access
   crawl/        engine, requester, fetcher, robots and its loader, scope, pages, hooks
   extract/      Page data extractors, links, content, readability, pixel widths
   rules/        Rule registry, rule modules, thresholds, Health Score
-  query/        --where language, paging, Segments
+  query/        --where tokenizer, parser and syntax tree, paging, Segments (no SQL)
   report/       ReportModel, Section Briefs, templates/, charts
   skill/        Skill generator and templates
 tests/

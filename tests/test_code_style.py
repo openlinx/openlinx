@@ -291,7 +291,10 @@ def test_only_the_store_imports_sqlalchemy() -> None:
         for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
-    assert sqlalchemy_violations(sources) == []
+    assert sqlalchemy_violations(sources) == [], (
+        "SQL lives in openlinx.store: build the statement there (openlinx.store.query for "
+        "--where) and call it from your service"
+    )
 
 
 def test_an_import_of_sqlalchemy_outside_the_store_is_named() -> None:
