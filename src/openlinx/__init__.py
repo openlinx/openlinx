@@ -2,4 +2,6 @@
 
 from importlib.metadata import version
 
-__version__ = version("openlinx")
+from openlinx.naming import PACKAGE_NAME
+
+__version__ = version(PACKAGE_NAME)

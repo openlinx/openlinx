@@ -50,8 +50,9 @@ def test_unexpected_failure() -> None:
     assert (
         result.exit_code,
         error["code"],
+        error["message"].endswith("This is a bug in OpenLinx."),
         "RuntimeError: disk exploded" in error["details"]["traceback"],
-    ) == (70, "internal_error", True)
+    ) == (70, "internal_error", True, True)
 
 
 def test_a_warning_inside_a_result() -> None:
