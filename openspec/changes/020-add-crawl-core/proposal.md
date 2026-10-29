@@ -10,17 +10,6 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
 
 ## What Changes
 
-> **Re-grounded (2026-10-10)** against the code of `015-add-crawl-store` (groups 1–9 built, on its branch) and the archived `010-add-workspace-and-cli-contract`. It applies the ROADMAP decisions of 2026-10-05: no default `--max-urls`, the robustness rule, 060-min in v0.1, and the four design points of the architecture review (design D12–D15). It uses `015`'s groups 8 (the journal mode and `[store]`) and 9 (redaction) as built. The kill-then-continue scenarios moved to `060`, whose `interrupted` state and `resume` cover them.
-
-> **Re-grounded (2026-10-11)** against `017-speed-up-crawl-writer` and `018-add-schema-conventions`, which come before it in the build order (015 → 017 → 018 → 020), ADR-0005 and the rulings on the schema blueprint:
-> - the `urls`, `origins` and `crawl` columns, with their CHECKs and indexes (design D18)
-> - the URL's unit submitted with its outcome at the commit, and a fallback unit for a unit that fails (D2)
-> - frontier reads as writer units (D1)
-> - page preparation behind an executor seam, which `026`'s pool uses (D9)
-> - progress counts from counters (D10)
-
-> **Re-grounded again (2026-10-11)** on main after `017` (PR #4) and `018` (PR #5) were merged: their interfaces as built (`public_table()`, the guards that switch on with this change's first foreign key and first index, the Indexes table of `docs/schema.md`, the writer's own errors, and `run_async()` for reads), ADR-0006 (slots and `kw_only` on this change's records), and a guard test instead of a lint rule that keeps `sqlalchemy` in the store (design D14).
-
 - **New Command `spider crawl <url>`** in Spider mode, running in the foreground. A bare host such as `site.test` becomes `https://site.test/`.
 - **URL normalisation:**
   - It strips fragments and default ports.
@@ -115,8 +104,8 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
     - **the store:** `create_crawl` with `NewCrawl`, the crawl ids, the `crawl` and `seeds` tables, `set_state`, `CrawlWriter` (`run_async`, `on_commit`, `crawl_busy`, `CrawlWriterClosedError`), the shared column types, `docs/schema.md` and its contract test
     - **the journal mode:** `NewCrawl.journal_setting`, the `[store]` table (`StoreSettings.journal_mode`) and `store_wal_unavailable`; the Crawl Service sets the journal setting from `[store]` and reports the warning with the others
     - **redaction:** `NewCrawl.secret_names`, a required `SecretNames` that the `crawl` adapter gets from `spider.cli.options.secret_names`; `create_crawl` redacts the command line and config with it
-  - `017-speed-up-crawl-writer`, as merged (PR #4): `submit()` and `submit_async()` with their outcome at the commit and their window, reads through the writer that commit nothing, the optimistic batch with its unit contract and `CrawlWriterReplayError`, prebuilt statements, `ConnectionRole`, and the `replay_now` test helper.
-  - `018-add-schema-conventions`, as merged (PR #5): `public_table()` (STRICT, and CHECKs from `values` and `Flag`), `references` and `indexes` in `spider schema`, the Indexes table of `docs/schema.md`, and the contract test over indexes. Its guards' non-vacuity assertions switch on with this change's first index and foreign key, and its ADR-0006 guard covers this change's code.
+  - `017-speed-up-crawl-writer`, as merged: `submit()` and `submit_async()` with their outcome at the commit and their window, reads through the writer that commit nothing, the optimistic batch with its unit contract and `CrawlWriterReplayError`, prebuilt statements, `ConnectionRole`, and the `replay_now` test helper.
+  - `018-add-schema-conventions`, as merged: `public_table()` (STRICT, and CHECKs from `values` and `Flag`), `references` and `indexes` in `spider schema`, the Indexes table of `docs/schema.md`, and the contract test over indexes. Its guards' non-vacuity assertions switch on with this change's first index and foreign key, and its ADR-0006 guard covers this change's code.
 - **Used by:**
   - `022` (the engine, the Fetcher interface, the per-host gate, the fake Fetcher, the DNS resolver hook, `urls` and `origins`)
   - `030` (the per-response hook, the extractor registry, `DiscoveredLink`, the robots directives parser, the post-crawl passes, the decoding function)
