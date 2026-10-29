@@ -1186,3 +1186,20 @@ def test_a_virtual_clock_beside_real_io_is_named() -> None:
         "tests/crawl/test_timing.py:3 test_session pairs FakeClock with real I/O",
         "tests/crawl/test_timing.py:6 test_crawl pairs FakeClock with real I/O",
     ]
+
+
+# Click's internals have no public path, and the runner owns the raw streams (design D15 of 023).
+TID251_SUPPRESSIONS = {"openlinx/cli/click_compat.py": 2, "openlinx/cli/runner.py": 1}
+
+
+def test_only_the_streams_and_click_compat_suppress_tid251() -> None:
+    found: dict[str, int] = {}
+    for path, source in _src_sources().items():
+        count = sum("noqa: TID251" in line for line in source.splitlines())
+        if count:
+            found[path] = count
+
+    assert found == TID251_SUPPRESSIONS, (
+        "a banned API is suppressed outside openlinx.cli.click_compat and the runner's streams: "
+        "write output through openlinx.output, and import Click through openlinx.cli.click_compat"
+    )

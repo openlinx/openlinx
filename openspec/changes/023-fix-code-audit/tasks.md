@@ -2,7 +2,7 @@ Seams are those of docs/testing.md. A guard is proven red by a mutation, and the
 
 ## 1. Guards and small fixes
 
-- [ ] 1.1 ruff selects `PGH004`, and the guard `test_only_the_streams_and_click_compat_suppress_tid251` keeps the `noqa: TID251` lines in `src/` to those of `openlinx.cli.click_compat` and the runner's raw streams (design D15). Done when: ruff reports a bare `# noqa` on a probe file, and the guard is red with a fourth suppression.
+- [x] 1.1 ruff selects `PGH004`, and the guard `test_only_the_streams_and_click_compat_suppress_tid251` keeps the `noqa: TID251` lines in `src/` to those of `openlinx.cli.click_compat` and the runner's raw streams (design D15). Done when: ruff reports a bare `# noqa` on a probe file, and the guard is red with a fourth suppression.
 - [ ] 1.2 `_declare` refuses a repeated code and a code whose level and exit code disagree (design D15). Done when: a repeated declaration fails at import, naming the code, and so does an error code without an exit code.
 - [ ] 1.3 Drive "A hidden option is not described" at seam 1, with a hidden option on a fixture-app Command (design D14).
 - [ ] 1.4 Drive "No environment variable is honoured" at seam 1: `environment` is empty, and docs/workspace.md drops the proxy sentence (design D14).
