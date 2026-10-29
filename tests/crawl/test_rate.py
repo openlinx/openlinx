@@ -36,7 +36,7 @@ def test_crawl_delay_is_not_applied(temp_workspace: TempWorkspace) -> None:
 
     crawl_result("http://site.test/", clock=clock, fetcher=fetcher)
 
-    assert sorted(path for path, start in fetcher.starts if start < 1) == [
+    assert sorted(path for path, start in fetcher.path_starts if start < 1) == [
         "/",
         "/p1",
         "/p2",
@@ -84,7 +84,7 @@ def test_two_hosts_wait_for_their_turns_at_the_same_time(temp_workspace: TempWor
 
 
 def _starts(fetcher: FakeFetcher, prefix: str) -> list[float]:
-    return sorted(start for path, start in fetcher.starts if path.startswith(prefix))
+    return sorted(start for path, start in fetcher.path_starts if path.startswith(prefix))
 
 
 def test_a_request_waiting_for_its_turn_lets_another_host_start(

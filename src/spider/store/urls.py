@@ -4,11 +4,13 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import (
-    ColumnElement,
     Connection,
+    CursorResult,
     Insert,
+    and_,
     bindparam,
     case,
+    exists,
     func,
     literal_column,
     null,
@@ -25,25 +27,23 @@ from spider.store.records import (
     DiscoverySkipReason,
     ErroredUrl,
     FetchedUrl,
+    FetchState,
     NewUrl,
     Provenance,
     QueuedUrl,
     Reclassified,
+    Recording,
     SkippedUrl,
     UrlCounts,
+    UrlTally,
 )
 from spider.store.redirects import chain_via, link_redirect, past_the_hop_limit
 from spider.store.rows import write_rows
-from spider.store.schema import literal_values, urls
+from spider.store.schema import literal_values, one_of, origins, urls
 
 # True once it recorded the URL's outcome; a skip that a lowering or a raise overtook
 # records nothing, and the URL is decided again (design D5).
-type UrlUnit = Callable[[Connection], bool]
-
-
-def _literal_one_of(column: ColumnElement[str], values: Iterable[str]) -> ColumnElement[bool]:
-    # An OR chain, never IN (ADR-0005), of statement-level literals, as an executemany needs.
-    return or_(*(column == literal_column(f"'{value}'") for value in sorted(values)))
+type UrlUnit = Callable[[Connection], Recording]
 
 
 # A URL of a Seed's Redirect Chain: its id and URL, in the chain's order.
@@ -76,16 +76,17 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     },
     where=(
         or_(
-            _literal_one_of(urls.c.skip_reason, literal_values(DiscoverySkipReason)),
+            one_of(urls.c.skip_reason, sorted(literal_values(DiscoverySkipReason))),
             _DECIDED_AGAIN & (urls.c.crawl_depth > _INSERT.excluded.crawl_depth),
             _DECIDED_AGAIN
-            & _literal_one_of(_INSERT.excluded.discovered_via, RESOURCE_LINK_TYPES)
-            & ~_literal_one_of(urls.c.discovered_via, RESOURCE_LINK_TYPES)
+            & one_of(_INSERT.excluded.discovered_via, sorted(RESOURCE_LINK_TYPES))
+            & ~one_of(urls.c.discovered_via, sorted(RESOURCE_LINK_TYPES))
             & (urls.c.crawl_depth >= _INSERT.excluded.crawl_depth),
         )
     )
     & (_INSERT.excluded.fetch_state == literal_column("'queued'")),
 )
+_INSERT_DISCOVERED_RETURNING = _INSERT_DISCOVERED.returning(urls.c.url, urls.c.fetch_state)
 _URL_ID = select(urls.c.id).where(urls.c.url == bindparam("url"))
 _SEED_HOP = select(urls.c.id, urls.c.url, urls.c.redirect_url_id).where(
     urls.c.url == bindparam("url")
@@ -150,6 +151,38 @@ _UNWRITTEN = _URL_ROW.values(
     blocked_by_robots_txt=bindparam("robots_blocked"),
     **_WRITE_BACK,
 )
+# What a URL queued again no longer has: the outcome of its failed request.
+_OUTCOME_CLEARED = {
+    "fetch_state": "queued",
+    "fetch_error": null(),
+    "fetch_error_message": null(),
+    "fetched_at": null(),
+    "blocked_by_robots_txt": null(),
+}
+# An error URL that an outage re-queues; its depth and provenance stay (design D3, D16).
+_REQUEUED = (
+    update(urls)
+    .where(
+        urls.c.id.in_(bindparam("url_ids", expanding=True)),
+        urls.c.fetch_state == literal_column("'error'"),
+    )
+    .values(**_OUTCOME_CLEARED)
+)
+# What a continue requests again, over the whole table: outcomes that are usually transient,
+# which is what makes a failed Crawl resumable (design D1).
+_CONTINUE_REQUEUED = (
+    update(urls)
+    .where(
+        or_(
+            urls.c.fetch_state == literal_column("'error'"),
+            and_(
+                urls.c.fetch_state == literal_column("'skipped'"),
+                urls.c.skip_reason == literal_column("'robots_unreachable'"),
+            ),
+        )
+    )
+    .values(**_OUTCOME_CLEARED, skip_reason=null())
+)
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
 _IS_QUEUED = urls.c.fetch_state == literal_column("'queued'")
@@ -209,11 +242,11 @@ def record_seed(
 
 def insert_urls(
     connection: Connection, statement: Insert, rows: Sequence[Mapping[str, Any]]
-) -> None:
+) -> CursorResult[Any]:
     """The one way rows go into urls: each binds its origin, whose row is recorded first, or
     the insert fails on a NULL origin_id (design D18)."""
     record_origins(connection, origin_rows(rows))
-    connection.execute(statement, list(rows))
+    return connection.execute(statement, list(rows))
 
 
 def queued_batch(
@@ -261,6 +294,43 @@ def seed_chain_urls(
     return unit
 
 
+def requeue(url_ids: Sequence[int]) -> Callable[[Connection], UrlTally]:
+    """A unit that puts error URLs back in the queue, so they are requested again."""
+
+    def unit(connection: Connection) -> UrlTally:
+        count = 0
+        # In chunks, since one IN of every id would pass SQLite's limit on bound parameters.
+        for start in range(0, len(url_ids), _READ_CHUNK):
+            chunk = list(url_ids[start : start + _READ_CHUNK])
+            count += connection.execute(_REQUEUED, {"url_ids": chunk}).rowcount
+        return UrlTally(errors=-count, queued=count)
+
+    return unit
+
+
+def seed_answered(seed: NormalizedUrl) -> Callable[[Connection], bool]:
+    """A unit that only reads: whether the Seed, or its origin's robots.txt, got an HTTP
+    response in an earlier run of the Crawl (design D20)."""
+
+    def unit(connection: Connection) -> bool:
+        answered: bool = connection.execute(
+            select(
+                exists().where(urls.c.url == seed, urls.c.status_code.is_not(None))
+                | exists().where(
+                    origins.c.origin == url_origin(seed), origins.c.robots_status_code.is_not(None)
+                )
+            )
+        ).scalar_one()
+        return answered
+
+    return unit
+
+
+def requeue_for_a_continue(connection: Connection) -> None:
+    """Inside the continue's unit, before its counts are read."""
+    connection.execute(_CONTINUE_REQUEUED)
+
+
 def next_depth(depth: int) -> Callable[[Connection], int | None]:
     """A unit that only reads: the shallowest depth deeper than `depth` with a queued URL."""
 
@@ -269,6 +339,50 @@ def next_depth(depth: int) -> Callable[[Connection], int | None]:
         return deeper
 
     return unit
+
+
+_STATE_OF = select(urls.c.url, urls.c.fetch_state).where(
+    urls.c.url.in_(bindparam("urls", expanding=True))
+)
+# The bound parameters of one IN read, well below SQLite's limit.
+_READ_CHUNK = 500
+
+
+def _tally_of(state: FetchState) -> UrlTally:
+    return UrlTally(
+        fetched=int(state == "fetched"),
+        errors=int(state == "error"),
+        skipped=int(state == "skipped"),
+        queued=int(state == "queued"),
+    )
+
+
+_RECORDED_AS = {state: _tally_of(state) for state in ("fetched", "error", "skipped", "queued")}
+_FROM_QUEUED = {
+    state: _RECORDED_AS[state] - _RECORDED_AS["queued"] for state in ("fetched", "error", "skipped")
+}
+
+
+def _discovered_tally(
+    before: dict[str, FetchState], after: Iterable[tuple[str, FetchState]]
+) -> UrlTally:
+    """`after` holds the rows the upsert inserted or changed: a URL not in `before` is new."""
+    tally = UrlTally()
+    for url, state in after:
+        old = before.get(url)
+        if old is None:
+            tally += _RECORDED_AS[state] + UrlTally(discovered=1)
+        elif old != state:
+            tally += _RECORDED_AS[state] - _RECORDED_AS[old]
+    return tally
+
+
+def _states(connection: Connection, urls_: list[str]) -> dict[str, FetchState]:
+    states: dict[str, FetchState] = {}
+    for start in range(0, len(urls_), _READ_CHUNK):
+        chunk = urls_[start : start + _READ_CHUNK]
+        states.update((url, state) for url, state in connection.execute(_STATE_OF, {"urls": chunk}))
+    return states
 
 
 def record_fetched(fetched: FetchedUrl) -> UrlUnit:
@@ -295,35 +409,47 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
         **_provenance_values(fetched.provenance),
     }
     new_rows = [_new_row(new, url_id) for new in fetched.discovered]
-
     target = None if redirect is None else redirect.target
     redirect_row = None if target is None else _new_row(target, url_id)
     max_redirects = 0 if redirect is None else redirect.max_redirects
 
-    def unit(connection: Connection) -> bool:
+    def unit(connection: Connection) -> Recording:
         connection.execute(_FETCHED, values)
+        tally = _FROM_QUEUED["fetched"]
         if not new_rows and redirect_row is None:
             write_rows(connection, fetched.rows)
-            return True
+            return Recording(True, tally)
         # The stored depth, which a Checked URL answering late may have lowered while the URL
         # was in flight, so what it links to stays one deeper than it (design D3).
         depth: int = connection.execute(_DEPTH, {"url_id": url_id}).scalar_one()
         # The unique index urls_url is the only dedup: no URL map in memory (design D1).
         if new_rows:
-            rows = [{**row, "crawl_depth": depth + 1} for row in new_rows]
-            insert_urls(connection, _INSERT_DISCOVERED, rows)
+            tally += _discovered(
+                connection, [{**row, "crawl_depth": depth + 1} for row in new_rows]
+            )
         if redirect_row is not None:
             # A redirect is no Link: its target keeps the depth (022 design D2).
             row = {**redirect_row, "crawl_depth": depth}
             if past_the_hop_limit(connection, url_id, max_redirects):
                 row |= {"fetch_state": "skipped", "skip_reason": "max_redirects"}
-            insert_urls(connection, _INSERT_DISCOVERED, [row])
+            tally += _discovered(connection, [row])
             target_id: int = connection.execute(_URL_ID, {"url": row["url"]}).scalar_one()
             link_redirect(connection, url_id, target_id, max_redirects)
         write_rows(connection, fetched.rows)
-        return True
+        return Recording(True, tally)
 
     return unit
+
+
+def _discovered(connection: Connection, rows: list[dict[str, Any]]) -> UrlTally:
+    """Inserts discovered URLs' rows, and how they changed the counts."""
+    # What the rows were before: the upsert returns what it wrote, never what it found.
+    before = _states(connection, [row["url"] for row in rows])
+    written = [
+        (row.url, row.fetch_state)
+        for row in insert_urls(connection, _INSERT_DISCOVERED_RETURNING, rows)
+    ]
+    return _discovered_tally(before, written)
 
 
 def _new_row(new: NewUrl, found_on: int) -> dict[str, Any]:
@@ -341,16 +467,15 @@ def _new_row(new: NewUrl, found_on: int) -> dict[str, Any]:
     }
 
 
-def reclassify_urls(decisions: Sequence[Reclassified]) -> UrlUnit:
+def reclassify_urls(decisions: Sequence[Reclassified]) -> Callable[[Connection], None]:
     """A unit that writes is_internal and in_scope again, by URL id: the URLs of a Seed's
     Redirect Chain, against the Scope it ended in (022-add-fetch-policy D3)."""
     rows = [
         {"url_id": d.url_id, "internal": d.is_internal, "scoped": d.in_scope} for d in decisions
     ]
 
-    def unit(connection: Connection) -> bool:
+    def unit(connection: Connection) -> None:
         connection.execute(_RECLASSIFIED, rows)
-        return True
 
     return unit
 
@@ -365,11 +490,11 @@ def record_skipped(skipped: SkippedUrl) -> UrlUnit:
         **_provenance_values(skipped.provenance),
     }
 
-    def unit(connection: Connection) -> bool:
+    def unit(connection: Connection) -> Recording:
         if not connection.execute(_SKIPPED, values).rowcount:
-            return False
+            return Recording(False, UrlTally())
         write_rows(connection, skipped.rows)
-        return True
+        return Recording(True, _FROM_QUEUED["skipped"])
 
     return unit
 
@@ -386,10 +511,10 @@ def record_error(errored: ErroredUrl) -> UrlUnit:
         **_provenance_values(errored.provenance),
     }
 
-    def unit(connection: Connection) -> bool:
+    def unit(connection: Connection) -> Recording:
         connection.execute(_ERRORED, values)
         write_rows(connection, errored.rows)
-        return True
+        return Recording(True, _FROM_QUEUED["error"])
 
     return unit
 
@@ -412,9 +537,9 @@ def record_unwritten(
         **_provenance_values(provenance),
     }
 
-    def unit(connection: Connection) -> bool:
+    def unit(connection: Connection) -> Recording:
         connection.execute(_UNWRITTEN, values)
-        return True
+        return Recording(True, _FROM_QUEUED["error"])
 
     return unit
 

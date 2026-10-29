@@ -2,5 +2,5 @@
 
 fetcher: Fetcher, Request, FetchResult, FetchFailure, aiohttp_fetcher.
 politeness: RequestLimits, RateGate, BlockingRuns, BLOCKING_RUN.
-requester: Requester, UrlLimitRefused.
+requester: Requester, NotStarted.
 """

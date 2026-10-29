@@ -80,7 +80,7 @@ Every group ends with a docs task and a review task.
 - [ ] 4.3 Drive `Single URL detail › Issues of the URL` (Services). The Issues of the URL come through `040`'s Issues reader (design D14). Verify: red → green; one commit.
 - [ ] 4.4 Drive `Single URL detail › Link counts in a Section Crawl` (Services). Verify: red → green; one commit.
 - [ ] 4.5 Drive `Single URL detail › Fragment and host case are ignored` (Services). Verify: red → green; one commit.
-- [ ] 4.6 Drive the pair `Single URL detail › Unknown URL` and `Query error codes › Not-found class` (CLI): `url_not_found` with `details.suggestions` ranked from the `pages_address` neighbours (design D18). Verify: red → green; one commit.
+- [ ] 4.6 Drive the pair `Single URL detail › Unknown URL` and `Query error codes › Not-found class` (CLI): `url_not_found` with `details.suggestions` ranked from the `pages_address` neighbours of the argument's display form, `030`'s `display_address` (design D18). Verify: red → green; one commit.
 - [ ] 4.7 Drive `Response headers of a URL › Repeated headers are kept` (Services). Extend the factory with the documented `response_headers` table. Verify: red → green; one commit.
 - [ ] 4.8 Drive `Response headers of a URL › No headers member by default` (Services). Verify: red → green; one commit.
 - [ ] 4.9 Drive `Response headers of a URL › Headers not recorded` (CLI). Verify: red → green; one commit.

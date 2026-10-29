@@ -10,7 +10,7 @@ Decide how each request of a Crawl is made, and what is recorded about its respo
 Scenario conventions:
 - `{site}` is the origin of the local fixture site, for example `http://127.0.0.1:8765`.
 - A bare path such as `/about` means `{site}/about`.
-- `site.test`, `www.site.test`, `other.test` and `badcert.test` are virtual hosts of the fixture site, over http and https. The DNS resolver hook maps them to the fixture site, and every other name fails to resolve.
+- `site.test`, `www.site.test`, `en.site.test`, `other.test` and `badcert.test` are virtual hosts of the fixture site, over http and https. The DNS resolver hook maps them to the fixture site, and every other name fails to resolve.
 - The fixture's test CA is added to the crawler's trust anchors through the TLS setup.
 
 ## ADDED Requirements

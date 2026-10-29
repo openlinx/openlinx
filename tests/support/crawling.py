@@ -11,14 +11,24 @@ from aiohttp.abc import AbstractResolver
 from spider.cli.app import build_app
 from spider.clock import Clock, SystemClock
 from spider.crawl.engine.hooks import Hooks
+from spider.crawl.engine.stop import StopSignal
 from spider.crawl.fetch.fetcher import Fetcher, FetcherFactory, aiohttp_fetcher
 from spider.crawl.pages.preparation import PageExecutor
 from spider.output.reporter import Collected, Reporter
-from spider.services.crawling import CrawlRequest, CrawlResult, plan_crawl, start_crawl
+from spider.services.crawling import (
+    CrawlOverrides,
+    CrawlRequest,
+    CrawlResult,
+    continue_crawl,
+    plan_crawl,
+    start_crawl,
+)
 from spider.services.hooks import default_hooks
-from spider.store.records import SecretNames
+from spider.store.records import CrawlFile, SecretNames
 from tests.support.app import settings_tables
 from tests.support.cli import run_cli
+from tests.support.clock import FakeClock
+from tests.support.fetcher import FakeFetcher, FakePage
 
 
 def crawled(*args: str) -> Path:
@@ -40,6 +50,7 @@ def crawl_result(
     reporter: Reporter | None = None,
     clock: Clock | None = None,
     fetcher: Fetcher | None = None,
+    stop: StopSignal | None = None,
     **crawl: Any,
 ) -> CrawlResult:
     """Crawls through the Crawl Service, which alone takes test hooks, the DNS resolver hook,
@@ -67,6 +78,31 @@ def crawl_result(
         hooks or default_hooks(),
         pages=pages,
         fetchers=_fetchers(resolver, trust_anchors, fetcher),
+        stop=stop,
+    )
+
+
+def continued(
+    crawl: CrawlResult,
+    overrides: CrawlOverrides | None = None,
+    hooks: Hooks | None = None,
+    *,
+    resolver: AbstractResolver | None = None,
+    trust_anchors: str | None = None,
+    reporter: Reporter | None = None,
+    clock: Clock | None = None,
+    fetcher: Fetcher | None = None,
+    stop: StopSignal | None = None,
+) -> CrawlResult:
+    """Continues the Crawl that `crawl` ended, through the Crawl Service, as 060's resume does."""
+    return continue_crawl(
+        CrawlFile(crawl.crawl_id, crawl.crawl_file),
+        overrides or CrawlOverrides(),
+        clock or SystemClock(),
+        reporter or Collected(),
+        hooks or default_hooks(),
+        fetchers=_fetchers(resolver, trust_anchors, fetcher),
+        stop=stop,
     )
 
 
@@ -76,3 +112,14 @@ def _fetchers(
     if fetcher is None:
         return partial(aiohttp_fetcher, resolver=resolver, trust_anchors=trust_anchors)
     return lambda policy, clock: nullcontext(fetcher)
+
+
+def stopped_with_an_error() -> Path:
+    """A Crawl that its URL limit stopped after /a got no response, as a continue finds it."""
+    clock = FakeClock()
+    pages = {
+        "/": FakePage('<a href="/a">A</a><a href="/b">B</a>'),
+        "/a": FakePage("", fails="connection_refused"),
+    }
+    fetcher = FakeFetcher(clock, pages)
+    return crawl_result("http://site.test/", clock=clock, fetcher=fetcher, max_urls=2).crawl_file

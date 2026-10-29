@@ -1,5 +1,7 @@
 """Timeouts and retries with backoff (022-add-fetch-policy, fetching; seam 3+6)."""
 
+from pathlib import Path
+
 import pytest
 
 from spider.naming import SETTINGS_FILE_NAME
@@ -244,11 +246,14 @@ def test_a_robots_txt_that_times_out_gives_its_urls_timeout_without_a_request(
         )
     )
 
-    crawl_file = crawled(server.url("/"), "--timeout", "1", "--retries", "0")
+    # The Seed's origin never answered, so the Crawl would pause at once: it fails instead.
+    result = run_cli(
+        "crawl", server.url("/"), "--timeout", "1", "--retries", "0", "--network-wait", "0"
+    )
 
     assert (
         query(
-            crawl_file,
+            Path(result.json()["crawl_file"]),
             "SELECT fetch_state, fetch_error, fetched_at, attempt_count FROM urls WHERE url = ?",
             [server.url("/")],
         ),

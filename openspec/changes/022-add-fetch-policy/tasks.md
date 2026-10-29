@@ -8,7 +8,7 @@ A **Guard** is a test that may pass on its first run, since `020` already gives 
 
 A slice that needs a new column, index or table adds it through `018`'s `public_table()` (STRICT, and CHECKs from the declared values), with its description, and updates `docs/schema.md` in the same commit. A new table passes `change=22`; a column added to `urls` or `origins` carries no change tag, since `public_table()` tags tables only (design D10). The enumeration values this change writes are already listed by `020`.
 
-An option and its setting are declared by the task that applies them (`020` D11, no inert option), each with `OptionMeta(setting="crawl.<key>")` and its key in `CrawlSettings`: `--user-agent` in 1.2, `--retries` in 3.2, `--timeout` in 3.5 and `--max-redirects` in 4.10.
+An option and its setting are declared by the task that applies them (`020` D11, no inert option), each with `OptionMeta(setting="crawl.<key>")` and its key in `CrawlSettings`: `--user-agent` in 1.2, `--retries` in 3.2, `--timeout` in 3.5 and `--max-redirects` in 4.11.
 
 `response_headers` rows follow `020` D9 and D14: `handler("response_headers", handle, write)` in `default_hooks()` (`spider.services.hooks`), whose writer takes a URL's rows as one sequence and runs one `executemany` of a statement built once (`017` D9).
 

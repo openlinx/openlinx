@@ -54,7 +54,7 @@
 - **Connection pragmas:**
   - `foreign_keys=ON`
   - `busy_timeout`: 30 s for the writer, 5 s for readers, after which the error is `crawl_busy`
-  - **A `-shm` still held by a killed writer** (added after the archive, for PR #3's Windows CI): since SQLite 3.50.0 the Windows VFS truncates `-shm` with `winHandleTruncate`, which fails with `SQLITE_IOERR_TRUNCATE` while a just-killed process's mapped view of it is still being torn down (`ERROR_USER_MAPPED_FILE`); up to 3.49 `winTruncate` ignored that error. `spider.store.connections.connect` treats exactly that code, while opening, like a lock: it waits within the same busy timeout and then raises `crawl_busy`. Every other I/O error stays an error. It can go once SQLite fixes the regression.
+  - **A `-shm` still held by a killed writer** (added after the archive, for the Windows CI): since SQLite 3.50.0 the Windows VFS truncates `-shm` with `winHandleTruncate`, which fails with `SQLITE_IOERR_TRUNCATE` while a just-killed process's mapped view of it is still being torn down (`ERROR_USER_MAPPED_FILE`); up to 3.49 `winTruncate` ignored that error. `spider.store.connections.connect` treats exactly that code, while opening, like a lock: it waits within the same busy timeout and then raises `crawl_busy`. Every other I/O error stays an error. It can go once SQLite fixes the regression.
   - `synchronous`: `NORMAL` in WAL mode, `FULL` in delete mode
   - `cache_size` and `temp_store` keep SQLite's defaults until `026`'s benchmark shows a reason to change them.
 - **Alternatives:**
@@ -157,7 +157,7 @@
   - `NewCrawl.secret_names` has no default, so a creator that forgets its secrets fails at once instead of recording them.
   - The adapter calls `spider.cli.options.secret_names(command, tables)`: every name of the Command's secret options (long names only, see below), and every secret setting of every flat table, not only the Command's own, because `config` records every table.
   - An unset secret (`null`) stays `null`; a secret that is not a string, or a URL that cannot be parsed, becomes `***`.
-  - **Secret options have only long names,** so Click's attached short form (`-tVALUE`) never carries a secret (the manager's addition to group 10). `check_command` refuses a short name on an option that declares `secret` itself; options mapped to a secret setting are checked by a test over every registered Command, because `check_command` runs on the startup path, which loads no settings table.
+  - **Secret options have only long names,** so Click's attached short form (`-tVALUE`) never carries a secret (added in group 10). `check_command` refuses a short name on an option that declares `secret` itself; options mapped to a secret setting are checked by a test over every registered Command, because `check_command` runs on the startup path, which loads no settings table.
   - **Known limit:** keyed tables (`[rules.<id>]`) are skipped: no keyed setting is secret, and `SettingsTables.is_secret` cannot name one yet. The first change that needs one adds it.
 - **Later:** `022` (v0.2) adds the header shape for `--header`, which keeps the header name and redacts the value of sensitive headers only. `022` (v0.1) redacts the proxy passwords of the proxy variables it records, with the URL shape.
 - **Secrets in `spider.toml`** are allowed. They are redacted in `crawl.config` like any other secret.

@@ -110,5 +110,5 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 - [x] 5.1 Verify that every `#### Scenario:` in `specs/crawl-store/spec.md` has exactly one test named after it, with a small script over the test ids.
 - [x] 5.2 Docs: the writer bullet in the "Crawl store" section of `docs/architecture.md` describes the writer as built: one thread, the optimistic batch, `submit()` and its window, and the connection settings.
-- [x] 5.3 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate. Verified: run 38148135056 (pull_request, PR #4) on 0620d16, every job green (https://github.com/bogzak/seo_spider/actions/runs/38148135056).
+- [x] 5.3 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
 - [x] 5.4 Review: run the code-review skill on the whole change against `specs/crawl-store/spec.md`, then refactor with the whole suite green.

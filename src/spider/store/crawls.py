@@ -2,11 +2,13 @@
 
 import platform
 import sqlite3
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
+import orjson
 from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.exc import DBAPIError
 
@@ -16,16 +18,19 @@ from spider.output.diagnostics import SpiderError
 from spider.store.connections import connect, not_writable_name, opening
 from spider.store.ids import Choice, crawl_path, new_crawl_id
 from spider.store.journal import JournalChoice, confirm_journal_mode
+from spider.store.reading import reading
 from spider.store.records import (
     CrawlFile,
     CrawlState,
     CrawlSummary,
     NewCrawl,
+    RecordedCrawl,
     RecordedScope,
     StopReason,
 )
 from spider.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
 from spider.store.transitions import check_transition
+from spider.store.urls import requeue_for_a_continue
 from spider.workspace.creation import as_workspace_not_writable, create_data_folder
 
 _SUMMARY = select(
@@ -92,6 +97,53 @@ def record_scope(scope: RecordedScope) -> Callable[[Connection], None]:
     return unit
 
 
+def read_recorded(path: Path) -> RecordedCrawl:
+    with reading(path) as connection:
+        row = connection.execute(
+            select(
+                crawl.c.state,
+                crawl.c.crawl_mode,
+                crawl.c.config,
+                crawl.c.scope,
+                crawl.c.warnings,
+            )
+        ).one()
+        urls: list[str] = list(
+            connection.execute(select(seeds.c.url).order_by(seeds.c.position)).scalars()
+        )
+        return RecordedCrawl(
+            state=row.state,
+            crawl_mode=row.crawl_mode,
+            # The Json type writes JSON text and reads it back as written.
+            config=orjson.loads(row.config),
+            scope=orjson.loads(row.scope),
+            seeds=tuple(urls),
+            warnings=tuple(orjson.loads(row.warnings)),
+        )
+
+
+def record_continue(config: Mapping[str, Any], at: datetime) -> Callable[[Connection], None]:
+    """A unit that runs the Crawl again, with the settings it now runs with in crawl.config,
+    and queues again the URLs whose outcome is usually transient (020-add-crawl-core D1,
+    D20)."""
+
+    def unit(connection: Connection) -> None:
+        set_state(connection, "running", at)
+        connection.execute(update(crawl).values(config=dict(config)))
+        requeue_for_a_continue(connection)
+
+    return unit
+
+
+def record_warnings(warnings: Sequence[Mapping[str, Any]]) -> Callable[[Connection], None]:
+    """A unit that writes the Crawl's warnings, as JSON objects."""
+
+    def unit(connection: Connection) -> None:
+        connection.execute(update(crawl).values(warnings=list(warnings)))
+
+    return unit
+
+
 def crawl_summary() -> Callable[[Connection], CrawlSummary]:
     """A unit that only reads: the crawl and seeds values of a Crawl's result."""
 
@@ -149,6 +201,7 @@ def _write_new_file(
                 crawl_mode=request.crawl_mode,
                 section_crawl=request.section_crawl,
                 scope=dict(request.scope),
+                warnings=[],
                 state="running",
                 started_at=started_at,
                 command_argv=list(request.command_argv),

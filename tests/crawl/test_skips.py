@@ -35,6 +35,11 @@ def test_an_excluded_url_requests_no_robots_txt(
         Site(routes={"/logout": Page(body="<p>Bye</p>")}),
     )
 
-    crawl_result("http://site.test/", resolver=hosts.resolver, exclude=["/logout$"])
+    result = crawl_result("http://site.test/", resolver=hosts.resolver, exclude=["/logout$"])
 
-    assert hosts.other.requests == ()
+    assert (
+        hosts.other.requests,
+        query(
+            result.crawl_file, "SELECT skip_reason FROM urls WHERE url = 'http://other.test/logout'"
+        ),
+    ) == ((), [("excluded",)])

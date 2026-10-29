@@ -21,19 +21,17 @@ class RateGate:
         until = self._clock.monotonic() + seconds
         self._paused_until[host] = max(until, self._paused_until.get(host, until))
 
-    async def wait_turn(self, host: str) -> None:
+    def reserve_turn(self, host: str) -> float:
+        """The seconds until the host's next turn, which is the caller's from now on."""
         now = self._clock.monotonic()
         resume = max(now, self._paused_until.get(host, now))
         if self._interval is None:
-            if resume > now:
-                await self._clock.sleep(resume - now)
-            return
+            return resume - now
         start = max(resume, self._next_starts.get(host, now))
         # Reserved before the wait, so the host's waiters take turns in order, and hold no
         # lock that would make one host's wait another's.
         self._next_starts[host] = start + self._interval
-        if start > now:
-            await self._clock.sleep(start - now)
+        return start - now
 
     async def started(self, host: str) -> None:
         """With the global permit held: waits out what is left of the interval since the
@@ -88,10 +86,12 @@ class RequestLimits:
     preparation may fall behind the requests before fetching waits (design D7, 026 D2).
     """
 
-    def __init__(self, cap: int, backlog: int = 0, max_urls: int | None = None) -> None:
+    def __init__(
+        self, cap: int, backlog: int = 0, max_urls: int | None = None, *, started: int = 0
+    ) -> None:
         self._tasks = asyncio.Semaphore(cap + backlog)
         self._max_urls = max_urls
-        self._started = 0
+        self._started = started
         self._refused: int | None = None
 
     def start_request(self) -> bool:
@@ -101,6 +101,15 @@ class RequestLimits:
             return False
         self._started += 1
         return True
+
+    def give_back(self) -> None:
+        """Uncounts a request whose URL is requested again and counts then: one that ended
+        without a response during a network pause and was not recorded, or one that an outage
+        re-queues. Room it frees takes back a refusal, so a URL refused at the limit is
+        requested after all (design D16)."""
+        self._started -= 1
+        if self._refused is not None and self._started < self._refused:
+            self._refused = None
 
     def refuse_if_full(self) -> bool:
         """Refuses a new request at the URL limit, which marks the limit reached and leaves
@@ -115,7 +124,8 @@ class RequestLimits:
         return self._refused
 
     async def reserve_task(self) -> None:
-        """Waits for room under the global cap before a URL's task is created."""
+        """Waits for room under the task bound, the global cap plus the page executor's
+        backlog, before a URL's task is created."""
         await self._tasks.acquire()
 
     def task_ended(self) -> None:

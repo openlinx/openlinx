@@ -168,6 +168,43 @@ class ResponseHeaders:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class UrlTally:
+    """How a unit changed the urls counts of progress events (020-add-crawl-core D10)."""
+
+    discovered: int = 0
+    fetched: int = 0
+    errors: int = 0
+    skipped: int = 0
+    queued: int = 0
+
+    def __add__(self, other: "UrlTally") -> "UrlTally":
+        return UrlTally(
+            discovered=self.discovered + other.discovered,
+            fetched=self.fetched + other.fetched,
+            errors=self.errors + other.errors,
+            skipped=self.skipped + other.skipped,
+            queued=self.queued + other.queued,
+        )
+
+    def __sub__(self, other: "UrlTally") -> "UrlTally":
+        return UrlTally(
+            discovered=self.discovered - other.discovered,
+            fetched=self.fetched - other.fetched,
+            errors=self.errors - other.errors,
+            skipped=self.skipped - other.skipped,
+            queued=self.queued - other.queued,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Recording:
+    """What a URL's unit did: whether it recorded the URL, and how it changed the counts."""
+
+    recorded: bool
+    tally: UrlTally
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class UrlCounts:
     """The urls counts of a Crawl's result, by fetch_state, by parsed and by status class."""
 
@@ -182,6 +219,18 @@ class UrlCounts:
     status_4xx: int
     status_5xx: int
     status_other: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RecordedCrawl:
+    """What a continue builds its run from: the file alone (020-add-crawl-core D20)."""
+
+    state: CrawlState
+    crawl_mode: CrawlMode
+    config: dict[str, Any]
+    scope: RecordedScope
+    seeds: tuple[str, ...]
+    warnings: tuple[dict[str, Any], ...]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

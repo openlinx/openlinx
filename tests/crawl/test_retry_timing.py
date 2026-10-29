@@ -15,7 +15,7 @@ def test_retries_wait_one_and_then_two_seconds(temp_workspace: TempWorkspace) ->
 
     crawl_result("http://site.test/down", clock=clock, fetcher=fetcher)
 
-    assert [start for path, start in fetcher.starts if path == "/down"] == [0.0, 1.0, 3.0]
+    assert [start for path, start in fetcher.path_starts if path == "/down"] == [0.0, 1.0, 3.0]
 
 
 def test_the_backoff_doubles_with_each_retry(temp_workspace: TempWorkspace) -> None:
@@ -24,11 +24,11 @@ def test_the_backoff_doubles_with_each_retry(temp_workspace: TempWorkspace) -> N
 
     crawl_result("http://site.test/down", clock=clock, fetcher=fetcher, retries=3)
 
-    assert [start for path, start in fetcher.starts if path == "/down"] == [0.0, 1.0, 3.0, 7.0]
+    assert [start for path, start in fetcher.path_starts if path == "/down"] == [0.0, 1.0, 3.0, 7.0]
 
 
 def _starts(fetcher: FakeFetcher, path: str) -> list[float]:
-    return [start for requested, start in fetcher.starts if requested == path]
+    return [start for requested, start in fetcher.path_starts if requested == path]
 
 
 def test_retry_after_pauses_the_host(temp_workspace: TempWorkspace) -> None:
@@ -104,7 +104,7 @@ async def test_a_request_waiting_for_the_global_cap_when_its_host_pauses_starts_
     # Its turn came before the 429 arrived; the permit it waited for frees as the pause starts.
     clock = FakeClock()
     gate = RateGate(clock, None)
-    await gate.wait_turn("site.test")
+    assert gate.reserve_turn("site.test") == 0.0
 
     gate.pause("site.test", 7)
     await gate.started("site.test")

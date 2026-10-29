@@ -18,9 +18,11 @@ def test_robots_txt_is_fetched_once_per_origin(
 
     crawled(server.url("/"))
 
-    assert [request.path for request in server.requests if request.path == "/robots.txt"] == [
-        "/robots.txt"
-    ]
+    paths = [request.path for request in server.requests]
+    assert (paths.count("/robots.txt"), sorted(paths)) == (
+        1,
+        sorted(["/robots.txt", "/", *(f"/p{n}" for n in range(1, 10))]),
+    )
 
 
 # /robots.txt disallows /private/, which / links to.
@@ -40,7 +42,7 @@ def test_a_disallowed_url_is_not_requested(
 
     crawled(server.url("/"))
 
-    assert [request.path for request in server.requests if request.path == "/private/a"] == []
+    assert [request.path for request in server.requests] == ["/robots.txt", "/"]
 
 
 def test_a_disallowed_url_is_recorded_as_blocked(

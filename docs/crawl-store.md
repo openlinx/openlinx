@@ -72,7 +72,8 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 | Recorded | Columns |
 |---|---|
 | what was crawled, and how | `crawl_mode` (`spider`, `list` or `sitemap`), `section_crawl`, and the Seeds in `seeds`, in the order given (`position` 1, 2, …) |
-| where it stands | `state`, `started_at`, `completed_at` |
+| where it stands | `state`, `stop_reason` (why a `stopped` or `failed` Crawl ended), `started_at`, `completed_at`, and `warnings`, the Crawl's warnings over its whole life |
+| what it may crawl | `scope`, the resolved Scope |
 | how it was started | `command_argv`, `cwd`, `settings_file`, `config` |
 | what made the file | `tool_version`, `schema_version` (also SQLite's `user_version`), `journal_mode`, `python_version`, `platform` |
 
@@ -112,9 +113,10 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 | `failed` | it could not continue, resumable |
 | `interrupted` | its process died without recording an end, resumable |
 
-Resuming arrives with `060-add-crawl-control`.
+The Crawl Service continues a `stopped` or `failed` Crawl (see [Continuing a Crawl](crawling.md#continuing-a-crawl)); `060-add-crawl-control` gives it the `spider resume` Command.
 
 - A new Crawl starts as `running`.
+- `completed` is final. A continue takes a `stopped` or `failed` Crawl back to `running` and clears its `stop_reason`.
 - `completed_at` is set when the state becomes `completed`, and is NULL in every other state. A `stopped` or `failed` Crawl has no completion time.
 - A `running` state does not prove that a process is still crawling: a process that was killed leaves it behind. Telling the two apart is `060-add-crawl-control`'s job, which records such a Crawl as `interrupted`.
 

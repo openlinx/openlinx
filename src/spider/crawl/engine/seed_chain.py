@@ -60,7 +60,7 @@ async def close_seed_chain(context: CrawlContext, chain: SeedChain, *, responded
     )
     final_url = urls[-1][1]
     if chain.scope.is_out_of_scope(final_url):
-        context.reporter.warn(seed_redirected_out_of_scope(chain.seed, final_url))
+        context.warnings.warn(seed_redirected_out_of_scope(chain.seed, final_url))
     widened, decisions = chain.close(urls, responded=responded)
     await context.writer.run_async(reclassify_urls(decisions))
     if widened is not None:

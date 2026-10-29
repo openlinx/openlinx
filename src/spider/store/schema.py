@@ -1,5 +1,6 @@
 """The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2, D3)."""
 
+from collections.abc import Iterable
 from typing import Any, Literal, get_args, get_origin
 
 from sqlalchemy import (
@@ -12,6 +13,7 @@ from sqlalchemy import (
     MetaData,
     Table,
     Text,
+    literal_column,
     or_,
 )
 
@@ -54,7 +56,7 @@ def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckCons
         if "values" in column.info:
             checks.append(
                 CheckConstraint(
-                    _one_of(column, column.info["values"]),
+                    one_of(column, column.info["values"]),
                     name=f"{table_name}_{column.name}_values",
                 )
             )
@@ -65,10 +67,10 @@ def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckCons
     return checks
 
 
-def _one_of(column: Column[Any], values: list[str]) -> ColumnElement[bool]:
-    # Never IN: SQLite builds an ephemeral index for an IN list of more than two values again
-    # on every row of an executemany (ADR-0005).
-    return or_(*(column == value for value in values))
+def one_of(column: ColumnElement[Any], values: Iterable[str]) -> ColumnElement[bool]:
+    """An OR chain of statement literals, never IN: SQLite builds an ephemeral index for an IN
+    list of more than two values again on every row of an executemany (ADR-0005)."""
+    return or_(*(column == literal_column(f"'{value}'") for value in values))
 
 
 def public_tables() -> list[Table]:
@@ -134,6 +136,13 @@ crawl = public_table(
         "seed_unreachable, site_unreachable or write_failed for a failed one; NULL while it "
         "runs and when it is completed.",
         info={"values": literal_values(StopReason)},
+    ),
+    Column(
+        "warnings",
+        Json,
+        nullable=False,
+        comment="The Crawl's warnings, as an array of diagnostics of level, code, message, hint "
+        "and details; [] when the Crawl is created.",
     ),
     Column(
         "command_argv",

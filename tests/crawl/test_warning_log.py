@@ -1,10 +1,14 @@
-"""The Crawl's warning log (020-add-crawl-core D10; seams 2 and 3)."""
+"""The Crawl's warning log (020-add-crawl-core D10; seams 2, 3 and 3+6)."""
 
+import json
+from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
-from spider.crawl.engine.crawl_warnings import handler_failure
+from spider.crawl.engine.crawl_warnings import handler_failure, network_paused
 from spider.crawl.engine.hooks import UrlResult
 from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
+from spider.crawl.engine.progress import UrlCounters
 from spider.crawl.engine.stop import StopSignal
 from spider.crawl.engine.warning_log import WarningLog
 from spider.crawl.urls import NormalizedUrl
@@ -17,14 +21,21 @@ from spider.output.codes import (
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Collected
 from spider.store.records import FetchedUrl, LinkType, NewUrl, Provenance, QueuedUrl, SkippedUrl
-from spider.store.urls import queued_batch, record_fetched, record_seed, record_skipped
+from spider.store.urls import (
+    queued_batch,
+    record_fetched,
+    record_seed,
+    record_skipped,
+    url_counts,
+)
 from spider.store.writer import CrawlWriter
 from tests.fixture_site.hosts import StartHosts, StartNamedHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status
+from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
-from tests.support.crawling import crawl_result
-from tests.support.crawls import create_any_crawl, query
+from tests.support.crawling import crawl_result, crawled
+from tests.support.crawls import crawl_row, create_any_crawl, query
 from tests.support.workspace import TempWorkspace
 
 
@@ -221,7 +232,7 @@ async def test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_deci
         # The late check's image Link raises /x while its skip is on its way.
         image = _new("http://site.test/x", "image")
         writer.run(record_fetched(_fetched(seed_id + 2, late_at, image)))
-        outcomes = Outcomes(writer, log, StopSignal())
+        outcomes = Outcomes(writer, log, StopSignal(), UrlCounters(writer.run(url_counts())))
         failure = handler_failure(dispatched.url, [("pages", ValueError("no title"))])
         await outcomes.submit(_skipped(dispatched, failure))
         await outcomes.settled()
@@ -234,3 +245,58 @@ async def test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_deci
         [(warning.code, warning.details["count"]) for warning in log.warnings],
         query(crawl.path, "SELECT fetch_state, discovered_via FROM urls WHERE id = ?", [again.id]),
     ) == ([("handler_failed", 1)], [("skipped", "image")])
+
+
+_ROBOTS_DOWN = Site(
+    routes={
+        "/robots.txt": Status(503),
+        "/": Page(body='<a href="/a">A</a> <a href="/b">B</a>'),
+        "/a": Page(body="<p>A</p>"),
+        "/b": Page(body="<p>B</p>"),
+    }
+)
+
+
+def test_warnings_are_stored_as_diagnostics(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(_ROBOTS_DOWN)
+
+    stored = json.loads(crawl_row(crawled(server.url("/")))["warnings"])
+
+    assert [
+        (sorted(warning), warning["level"])
+        for warning in stored
+        if warning["code"] == "robots_unreachable"
+    ] == [(["code", "details", "hint", "level", "message"], "warning")]
+
+
+def test_the_crawl_file_keeps_every_warning_of_the_result(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(_ROBOTS_DOWN)
+
+    result = run_cli("crawl", server.url("/"), "--ignore-robots", "--max-urls", "1").json()
+    stored = json.loads(crawl_row(Path(result["crawl_file"]))["warnings"])
+
+    assert (stored, sorted(warning["code"] for warning in stored)) == (
+        result["warnings"],
+        ["max_urls_reached", "robots_unreachable"],
+    )
+
+
+def test_a_continuing_log_adds_its_pauses_to_the_stored_ones() -> None:
+    reporter = Collected()
+    stored = replace(
+        network_paused(NormalizedUrl("http://site.test/")),
+        details={"count": 1, "total_seconds": 30.0},
+    )
+    log = WarningLog(reporter, [stored])
+
+    log.pause_began(network_paused(NormalizedUrl("http://site.test/")))
+    log.pause_ended(5)
+
+    assert (
+        [(w.code, w.details["count"], w.details["total_seconds"]) for w in log.warnings],
+        reporter.warnings,
+    ) == ([("network_paused", 2, 35.0)], [])

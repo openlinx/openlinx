@@ -189,7 +189,7 @@ The meaning of a code never changes. Codes 9 to 63 are reserved.
 | 7 | `io` | reading or writing a file or folder failed |
 | 8 | `network` | the network or a required host cannot be reached |
 | 70 | `internal` | an unexpected failure, which is a bug in the tool |
-| 130 | `interrupted` | stopped with Ctrl+C |
+| 130 | `interrupted` | stopped by an interrupt, such as Ctrl+C |
 
 Every error code maps to exactly one exit code:
 - `usage_error`, and every code that starts with `invalid_` or `unknown_`, map to 2.
@@ -211,6 +211,6 @@ Every code is declared once, with its level, its exit code and a description, an
 | `workspace_not_found` | error | 4 | the `--workspace` folder does not exist |
 | `workspace_not_writable` | error | 7 | the Workspace folder or its data folder cannot be created or written |
 | `internal_error` | error | 70 | an unexpected failure, which is a bug |
-| `interrupted` | error | 130 | stopped with Ctrl+C |
+| `interrupted` | error | 130 | stopped by an interrupt: Ctrl+C, Ctrl+Break or a termination signal |
 | `workspace_nested` | warning | | the new Workspace is inside another Workspace |
 | `more_items` | info | | more items exist than were printed |

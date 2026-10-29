@@ -135,11 +135,12 @@ There is one `asyncio.open_connection(host, port, ssl=ctx, server_hostname=host)
 
 ### D9. Fixture site additions
 Each is added test-first in `tests/fixture_site/` or `tests/support/` by the first slice that needs it, and no existing route kind or option changes what it does:
-- **Named hosts:** `fixture_hosts` takes a site per name (`site.test`, `www.site.test`, `other.test`, `badcert.test`), so a host that redirects to another one is an instance of its own, and no route needs the `Host` header.
+- **Named hosts:** `fixture_hosts` takes a site per name (`site.test`, `www.site.test`, `en.site.test`, `other.test`, `badcert.test`), so a host that redirects to another one is an instance of its own, and no route needs the `Host` header.
 - **HTTPS listeners** with a `trustme` CA, which the DNS resolver hook maps from port 443 of a name:
   - one for `site.test`
   - one whose certificate names `other.test`, served as `badcert.test`
   - one with a certificate from a CA the test never trusts
+  - one with a self-signed certificate (no CA), served as `selfsigned.test`, made with `cryptography`, which `trustme` already brings
   - **(v0.2)** one that selects `h2`, and one that offers only `http/1.1`
 - **Response sequences,** a new route kind: for example 503 once and then 200.
 - **Stalled and trickling bodies,** a new route option: the hostile fixtures that `020` D16 leaves to this change, with the huge page (`LargeFile`) and the compressed one.

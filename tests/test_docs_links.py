@@ -1,4 +1,4 @@
-"""Relative links in the contributor docs resolve (task 8.1 of 000-scaffold-project)."""
+"""Relative links in the contributor docs resolve (000-scaffold-project)."""
 
 import re
 from pathlib import Path

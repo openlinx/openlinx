@@ -2,6 +2,7 @@
 
 import json
 import socket
+from pathlib import Path
 
 import pytest
 
@@ -9,6 +10,7 @@ from spider.crawl.fetch.proxy import ProxyVariables
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.support.cli import run_cli
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.proxy import StartProxy
@@ -172,8 +174,10 @@ def test_a_proxy_that_is_down_is_named_in_the_failure(
         port = probe.getsockname()[1]
     monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{port}")
 
+    # The Seed gets no response, so the Crawl would pause at once: it fails instead.
+    result = run_cli("crawl", "http://site.test/", "--retries", "0", "--network-wait", "0")
     [(fetch_error, message)] = query(
-        crawled("http://site.test/", "--retries", "0"),
+        Path(result.json()["crawl_file"]),
         "SELECT fetch_error, fetch_error_message FROM urls WHERE url = 'http://site.test/'",
     )
 

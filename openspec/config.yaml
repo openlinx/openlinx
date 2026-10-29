@@ -1,13 +1,14 @@
 schema: spec-driven
 
 context: |
-  Project: open-source, agent-first SEO crawler, equivalent to Screaming Frog SEO Spider but without a GUI.
-  Working name "spider" (CLI command, Python package, spider.toml, .spider/ workspace folder) until the product name is chosen.
+  Project: open-source, agent-first SEO crawler with no GUI: each Crawl is a SQLite file with a public, versioned schema, queried with read-only SQL, and every Issue is reproducible by a query. Local, with no telemetry.
+  Product name OpenLinx; working name "spider" (CLI command, Python package, spider.toml, .spider/ workspace folder) until the rename change.
   Primary users: AI agents (Claude Code, Codex; Claude Desktop through MCP) and the people who read the Reports they produce.
   Stack: Python >=3.12,<3.15; asyncio + aiohttp; selectolax (lxml only for XPath); SQLAlchemy 2 Core + Alembic on SQLite, one file per Crawl;
   Typer; pydantic-settings; msgspec/orjson; MCP Python SDK 2.x; pytest with a local fixture site. Must work on Windows, macOS and Linux.
   Read before planning: CONTEXT.md (glossary - use its terms exactly), ROADMAP.md (which change owns which capability and command),
-  docs/architecture.md (components, package layout), docs/adr/ (decisions that must not be re-litigated).
+  docs/architecture.md (components, package layout), docs/adr/ (decisions that must not be re-litigated),
+  AGENTS.md and CONTRIBUTING.md (the rules, the checks and the common changes), docs/testing.md (the agreed test seams).
   Principles: JSON output by default; the tool never calls an LLM; no telemetry; the crawl store schema is a public, versioned contract;
   a column that is not measured yet is null, never 0; crawled text is untrusted and always escaped.
 
@@ -20,20 +21,22 @@ rules:
     - Requirements describe observable behaviour (command output, exit codes, stored data, files written), not internal structure.
     - Write every scenario so it can become one automated test at an agreed seam (docs/testing.md) - concrete inputs, one observable outcome, expected values stated as literals.
     - Add a scenario for Windows behaviour whenever paths, processes, file locking or console output are involved.
+    - Follow "Writing specs, designs and commits" in CONTRIBUTING.md - open each requirement with a one-line **In short:**; state only what a test can check; no dates, rulings or task numbers.
   design:
+    - Follow "Writing specs, designs and commits" in CONTRIBUTING.md - open with a short overview and each decision with a one-line **In short:**; a decision states what was chosen, why, and the alternative that lost; no dates, rulings or task numbers.
     - Record only decisions local to this change; cross-cutting decisions belong in docs/adr/.
     - Name the seams (docs/testing.md) this change is tested at, and any new test seam it introduces (e.g. a fake Fetcher or clock).
   tasks:
     - Test-driven, in vertical slices - each task names the scenario(s) it drives and the seam it is tested at, and is done red -> green (failing test first, then only enough code to pass).
     - Never plan a "write all the tests" task or a "tests at the end" task; docs updates are their own small tasks.
     - Mock only system boundaries (network outside the local fixture site, clock, randomness); never mock our own modules.
-    - End every task group with a review task - run the code-review skill on the group's commits, then refactor with the whole suite green.
+    - End every task group with a review task - review the group's commits on the two axes of CONTRIBUTING.md (standards and spec), then refactor with the whole suite green.
     - Keep each task small enough for one agent session.
 
 operations:
   apply:
     guidance:
-      - Follow the tdd skill - one slice at a time - write the failing test at the agreed seam, watch it fail for the right reason, write the minimal code to pass, run the full suite.
+      - Follow the loop of docs/testing.md - one slice at a time - write the failing test at the agreed seam, watch it fail for the right reason, write the minimal code to pass, run the full suite.
       - Tests assert observable behaviour through public interfaces with independent literal expected values; no tautological or implementation-coupled tests.
       - Run ruff, the strict type checker and pytest (coverage gate 90% line+branch on src/) before marking a task done; refactor only in the review task.
       - Commit once per green slice (one task = one commit) with a message naming the scenario it implements.

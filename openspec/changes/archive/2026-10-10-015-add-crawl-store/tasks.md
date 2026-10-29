@@ -124,7 +124,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 6. `spider schema` and the conventions (widening, seams 1 and 6)
 
-Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions A–C) before group 6's own work.
+Tasks 6.1–6.3 close the open questions of group 5's review (the maintainer's decisions A–C) before group 6's own work.
 
 - [x] 6.1 **Guard:** "Companion files are not Crawls" at seam 2. It passed at once: only `<id>.sqlite` files are listed. Done when: `docs/crawl-store.md` says that selecting creates no folder and no crawl file, and that SQLite's `-wal` and `-shm` companions of an existing crawl file may appear (a WAL reader needs the shared-memory file; `immutable=1` stays rejected, D2). 7.7 still proves that a crawl file can be deleted after a read on Windows.
 - [x] 6.2 Drive "A missing crawl file path" at seam 2. Done when: a path is checked for existence before the read-only open, and gives `crawl_not_found` (exit 4) with `details.file`; a file that exists but is not a crawl file stays `crawl_file_invalid`.
@@ -165,7 +165,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 
 ## 8. Journal mode and the store setting (widening)
 
-- [x] 8.1 Drive "A busy writer on open" and "A busy writer in a unit" at seam 2, a trivial pair, with a real process that holds an exclusive lock on a `delete`-mode file (the manager's ruling on group 7's open question A). Mark the tests `slow`.
+- [x] 8.1 Drive "A busy writer on open" and "A busy writer in a unit" at seam 2, a trivial pair, with a real process that holds an exclusive lock on a `delete`-mode file (the maintainer's answer to group 7's open question A). Mark the tests `slow`.
 
   Done when: a writer that waits out its busy timeout, on opening, on `BEGIN IMMEDIATE` or in a unit, fails with `crawl_busy` (exit 5) and `details.file`, never a raw `DBAPIError` or `internal_error`. The timeout is a `CrawlWriter` constructor parameter, 30 s by default.
 - [x] 8.2 Drive "UNC path" at seam 4. Done when: the journal-mode choice is a pure function, and `store_wal_unavailable` is declared as a warning.
@@ -178,7 +178,7 @@ Tasks 6.1–6.3 close the open questions of group 5's review (manager decisions 
 - [x] 8.7 Docs: add the journal mode, the UNC fallback, the `store.journal_mode` override for other network folders, the v0.2 plan for the mount table, and the writer's `crawl_busy` after 30 s to `docs/crawl-store.md`.
 - [x] 8.8 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
-Tasks 8.9 and 8.10 are the manager's rulings A and C on group 8's review; group 9's review covers them.
+Tasks 8.9 and 8.10 are the maintainer's decisions A and C on group 8's review; group 9's review covers them.
 
 - [x] 8.9 Drive "WAL refused by SQLite" and "WAL granted by SQLite" at seam 4, a trivial pair.
 
@@ -205,7 +205,7 @@ Tasks 9.9 and 9.10 come from group 9's review, before its refactor commit closes
 
 ## 10. Wrap-up
 
-Tasks 10.1 and 10.2 are the manager's addition after group 9's review: the attached short form of a secret option is made impossible instead of documented.
+Tasks 10.1 and 10.2 were added by the maintainer after group 9's review: the attached short form of a secret option is made impossible instead of documented.
 
 - [x] 10.1 Drive "A secret option with a short name is refused" at seam 1. Done when: `check_command` refuses a short name on an option that declares `secret` itself, in its list of declaration problems.
 - [x] 10.2 **Guard:** "Options of secret settings have only long names", over `build_app` and the fixture app, next to the other registered-table guards. It passed at once: only `--token` maps to a secret setting.

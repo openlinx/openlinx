@@ -19,6 +19,8 @@ Conventions used in the scenarios:
 
 ### Requirement: JSON output by default
 
+**In short:** by default a Command prints its result as one compact JSON document, and a failing Command prints nothing unless its result describes the failure.
+
 Without `--format`, a Command SHALL write its result to stdout as one compact JSON document, with no whitespace between tokens, followed by `\n`.
 - Non-ASCII characters SHALL be written as UTF-8 characters, not as `\u` escapes.
 - JSON output SHALL contain no ANSI escape sequences.
@@ -37,6 +39,8 @@ Without `--format`, a Command SHALL write its result to stdout as one compact JS
 - **THEN** stdout is empty
 
 ### Requirement: Output formats
+
+**In short:** `--format` chooses `json`, `jsonl` or `table` among the formats a Command supports, and errors stay JSON whatever the format.
 
 `--format` SHALL accept `json`, `jsonl` and `table`. Each Command SHALL support the formats that `spider commands` lists for it:
 - document Commands: `json` (the default) and `table`
@@ -71,6 +75,8 @@ With `jsonl` or `table`, when more items exist than were printed, the Command SH
 
 ### Requirement: JSON Lines
 
+**In short:** `--format jsonl` prints one JSON object per item or row, and is the default for rows Commands.
+
 `--format jsonl` SHALL write one compact JSON object per line, each followed by `\n`: one line per item of a list Command, or one line per row of a rows Command. A rows Command SHALL use `jsonl` by default. Document Commands SHALL NOT support `jsonl`.
 
 #### Scenario: Items as lines
@@ -86,6 +92,8 @@ With `jsonl` or `table`, when more items exist than were printed, the Command SH
 - **THEN** the exit code is 2, and the error has the code `invalid_value`
 
 ### Requirement: UTF-8 output on every OS
+
+**In short:** output is UTF-8 with `\n` line endings on every OS, whatever the console or locale.
 
 stdout and stderr SHALL carry UTF-8 bytes on every OS, whatever the console code page, the locale or `PYTHONIOENCODING`. JSON documents, JSON Lines and stderr lines SHALL end with `\n` alone, on Windows too.
 
@@ -106,6 +114,8 @@ stdout and stderr SHALL carry UTF-8 bytes on every OS, whatever the console code
 - **THEN** stderr contains the bytes `D0 9F D1 80 D0 BE D0 B2 D0 B5 D1 80 D0 BA D0 B0`
 
 ### Requirement: Paging envelope for list Commands
+
+**In short:** a list Command returns a page of items with the total count and a cursor to the next page, and following the cursors returns every item once.
 
 With `--format json`, a list Command SHALL return a JSON object with these keys:
 - `total`: the number of matching items
@@ -156,6 +166,8 @@ Items SHALL come in a deterministic order, so the same request against unchanged
 
 ### Requirement: Choosing fields with --fields
 
+**In short:** `--fields` chooses which keys each item has, and in what order.
+
 `--fields` SHALL take a comma-separated list of field names. Each item then has exactly those keys, in that order. `--fields all` SHALL select every available field, in the Command's field order. Without `--fields`, the Command's default fields apply, as listed by `spider commands`.
 
 An unknown field name SHALL fail with `unknown_field`, with `details.field` and `details.available`.
@@ -188,6 +200,8 @@ Spaces around a name SHALL be ignored, and a name given twice SHALL count once, 
 
 ### Requirement: Cursors
 
+**In short:** a cursor is an opaque token, safe to pass unquoted, that continues only the request that produced it.
+
 A cursor SHALL be an opaque string, accepted only by the Command, arguments and filters that produced it. `--limit`, `--fields` and `--format` MAY change between pages. Any other cursor SHALL fail with `invalid_cursor`. That includes a cursor that was altered or truncated, or one produced by a different request.
 
 A cursor SHALL use only the URL-safe base64 characters `A`–`Z`, `a`–`z`, `0`–`9`, `-` and `_`, without `=` padding, so it can be passed on a command line without quoting.
@@ -218,6 +232,8 @@ A cursor SHALL use only the URL-safe base64 characters `A`–`Z`, `a`–`z`, `0`
 
 ### Requirement: Progress events on stderr
 
+**In short:** progress goes to stderr as JSON lines while a Command runs, and only the result goes to stdout.
+
 A Command that reports progress SHALL write each event to stderr as one compact JSON line, `{"event":<name>,"ts":<timestamp>,"data":<object>}`, written and flushed as it happens. Its result SHALL go to stdout once, when it ends, as for any other Command. No event SHALL be written to stdout, and there is no result event.
 
 #### Scenario: Event line
@@ -238,6 +254,8 @@ A Command that reports progress SHALL write each event to stderr as one compact 
 
 ### Requirement: Partial results
 
+**In short:** a failing Command prints nothing on stdout, except a document result that describes the failure or the rows written before it.
+
 A document Command whose result describes a failed outcome SHALL:
 - print that result on stdout
 - write exactly one error diagnostic, as its last line on stderr
@@ -254,6 +272,8 @@ Every other failing document or list Command SHALL write nothing to stdout. A ro
 - **THEN** the exit code is 1, and stderr has exactly one line with `"level":"error"`, which is its last line
 
 ### Requirement: Diagnostics on stderr
+
+**In short:** errors, warnings and notices go to stderr as JSON lines of one fixed shape, and a failing Command ends with exactly one error.
 
 Errors, warnings and notices SHALL be written to stderr, one compact JSON object per line. Each line, diagnostic or progress event, SHALL be written whole and flushed as it happens, and stderr lines SHALL appear in the order they were reported. Each object SHALL have exactly these keys:
 - `level`: `error`, `warning` or `info`
@@ -297,6 +317,8 @@ Nothing else SHALL appear on stderr apart from progress events: no raw traceback
 - **THEN** that entry's keys are exactly `level`, `code`, `message`, `hint` and `details`
 
 ### Requirement: Exit codes
+
+**In short:** every Command exits with one of a fixed set of documented codes, and every error code maps to exactly one of them.
 
 Every Command SHALL exit with one of these codes. The meaning of a code SHALL never change, and codes 9 to 63 are reserved:
 
@@ -344,6 +366,8 @@ Every diagnostic code SHALL be declared once, with its level, its exit code (non
 
 ### Requirement: Global flags
 
+**In short:** `--workspace`, `--crawl` and `--format` mean the same on every Command that takes them, and go after the Command name.
+
 `--workspace <dir>`, `--crawl <ref>` and `--format <format>` SHALL mean the same on every Command that accepts them. They SHALL be given after the Command name.
 - A Command SHALL reject a global flag it does not use with `usage_error`.
 - A global flag given before the Command name SHALL fail with `usage_error`, whose hint says to put it after the Command name.
@@ -367,6 +391,8 @@ Every diagnostic code SHALL be declared once, with its level, its exit code (non
 - **THEN** the options of the `init` entry include `--workspace` and `--format`, each with `"global":true`
 
 ### Requirement: Self-description with spider commands
+
+**In short:** `spider commands` describes every Command, exit code, diagnostic and honoured environment variable in one JSON document, the same on every OS.
 
 `spider commands` SHALL return one JSON document with these keys:
 
@@ -438,6 +464,8 @@ An option whose `setting` is not null SHALL take `secret` from that setting, so 
 
 ### Requirement: Light start
 
+**In short:** `spider --help` and `spider commands` load only a small, fixed set of modules, and a settings table loads only with the settings.
+
 `spider --help` and `spider commands` SHALL start without loading any module outside the standard library, Typer and the modules Typer itself depends on, orjson and `spider`. `spider commands` MAY also load pydantic when an option maps to a setting. A settings table SHALL be loaded only when settings load, or when the settings template is written.
 
 #### Scenario: Help starts light
@@ -453,6 +481,8 @@ An option whose `setting` is not null SHALL take `secret` from that setting, so 
 - **THEN** the module that defines the `example` table is not loaded
 
 ### Requirement: Help and version are plain text
+
+**In short:** `--help` and `--version` print plain text and exit 0, and are the only outputs that are not JSON.
 
 `--help`, on the tool or on any Command, SHALL print plain-text help to stdout and exit 0. `spider` with no arguments SHALL do the same as `spider --help`. `spider --version` SHALL print `spider <version>` followed by `\n`, and exit 0. These SHALL be the only outputs that are not JSON.
 

@@ -1,10 +1,14 @@
 """The rate limit at the CLI (020-add-crawl-core D7, crawling; seam 1)."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.cli import run_cli
+from tests.support.crawls import crawl_row
 from tests.support.workspace import TempWorkspace
 
 # 1e-310 is above 0, but its interval 1/rate is not finite.
@@ -51,4 +55,5 @@ def test_a_finite_rate_above_zero_is_taken(
 
     result = run_cli("crawl", server.url("/"), "--rate", rate)
 
-    assert (result.exit_code, result.errors()) == (0, [])
+    config = json.loads(crawl_row(Path(result.json()["crawl_file"]))["config"])
+    assert (result.exit_code, result.errors(), config["crawl"]["rate"]) == (0, [], float(rate))

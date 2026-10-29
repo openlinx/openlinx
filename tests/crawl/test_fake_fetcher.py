@@ -12,7 +12,12 @@ from tests.support.fetcher import FakeFetcher, FakePage
 def _answers(fetcher: FakeFetcher, path: str, times: int) -> list[FetchResult]:
     async def fetch_all() -> list[FetchResult]:
         url = NormalizedUrl(f"http://site.test{path}")
-        return [await fetcher.fetch(Request(url)) for _ in range(times)]
+        answers = []
+        for _ in range(times):
+            answer = await fetcher.fetch(Request(url))
+            assert isinstance(answer, FetchResult)
+            answers.append(answer)
+        return answers
 
     return asyncio.run(fetch_all(), loop_factory=loop_factory)
 

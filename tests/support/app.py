@@ -28,8 +28,15 @@ from spider.workspace.discovery import resolve_workspace
 from spider.workspace.tables import SettingsTables
 
 # Declared here, not in spider.output.codes: the tool never lists the fixture app's codes.
-EXAMPLE_FAILED = DiagnosticCode("example_failed", "error", ExitCode.FAILED, "The example failed.")
-EXAMPLE_WARNING_CODE = DiagnosticCode("example_warning", "warning", None, "An example warning.")
+EXAMPLE_FAILED = DiagnosticCode(
+    code="example_failed",
+    level="error",
+    exit_code=ExitCode.FAILED,
+    description="The example failed.",
+)
+EXAMPLE_WARNING_CODE = DiagnosticCode(
+    code="example_warning", level="warning", exit_code=None, description="An example warning."
+)
 EXAMPLE_WARNING = Diagnostic.of(EXAMPLE_WARNING_CODE, "An example warning.")
 # References, not imports: the tables load only with the settings.
 EXAMPLE_TABLE = "tests.support.settings:ExampleSettings"

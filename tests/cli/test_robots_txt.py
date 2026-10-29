@@ -1,11 +1,15 @@
 """What `spider crawl` reports about robots.txt (020-add-crawl-core D6, crawling; seam 1)."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from spider.naming import DEFAULT_ROBOTS_TOKEN
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site, Status
 from tests.support.cli import run_cli
+from tests.support.crawls import crawl_row
 from tests.support.workspace import TempWorkspace
 
 
@@ -87,7 +91,12 @@ def test_a_robots_user_agent_token_of_rfc_9309_is_taken(
 
     result = run_cli("crawl", server.url("/"), "--robots-user-agent", token)
 
-    assert (result.exit_code, result.errors()) == (0, [])
+    config = json.loads(crawl_row(Path(result.json()["crawl_file"]))["config"])
+    assert (result.exit_code, result.errors(), config["crawl"]["robots_user_agent"]) == (
+        0,
+        [],
+        token,
+    )
 
 
 @pytest.mark.parametrize("token", _TOKENS)
@@ -101,4 +110,9 @@ def test_a_robots_user_agent_token_of_rfc_9309_in_the_settings_file_is_taken(
 
     result = run_cli("crawl", server.url("/"))
 
-    assert (result.exit_code, result.errors()) == (0, [])
+    config = json.loads(crawl_row(Path(result.json()["crawl_file"]))["config"])
+    assert (result.exit_code, result.errors(), config["crawl"]["robots_user_agent"]) == (
+        0,
+        [],
+        token,
+    )

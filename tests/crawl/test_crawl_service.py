@@ -2,14 +2,12 @@
 
 import json
 import sys
-from collections.abc import Mapping
 from pathlib import Path, PureWindowsPath
 
 import pytest
 
 from spider.cli.app import build_app
 from spider.clock import SystemClock
-from spider.crawl.fetch.fetcher import FetchResult, Request
 from spider.output.reporter import Collected
 from spider.services.crawling import CrawlRequest, plan_crawl, start_crawl
 from spider.services.hooks import default_hooks
@@ -75,7 +73,7 @@ def test_a_secret_setting_is_redacted_in_the_recorded_config(
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="UNC paths are Windows paths")
-def test_a_journal_warning_reaches_the_result(
+def test_a_journal_warning_reaches_the_result_and_the_crawl_file(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(HOME_PAGE)
@@ -83,25 +81,13 @@ def test_a_journal_warning_reaches_the_result(
     # The machine's own administrative share: a real UNC path to the same folder.
     share = PureWindowsPath(f"//localhost/{local.drive[0]}$/", *local.parts[1:])
 
-    result = run_cli("crawl", server.url("/"), "--workspace", str(share))
+    result = run_cli("crawl", server.url("/"), "--workspace", str(share)).json()
+    stored = json.loads(crawl_row(Path(result["crawl_file"]))["warnings"])
 
-    assert [warning["code"] for warning in result.json()["warnings"]] == ["store_wal_unavailable"]
-
-
-class ReadingFetcher(FakeFetcher):
-    """Reads the crawl file as another reader would, when /probe answers."""
-
-    def __init__(self, clock: FakeClock, pages: Mapping[str, FakePage], home: Path) -> None:
-        super().__init__(clock, pages)
-        self._home = home
-        self.seen: list[tuple[str, str]] = []
-
-    async def fetch(self, request: Request) -> FetchResult:
-        result = await super().fetch(request)
-        if request.url.endswith("/probe"):
-            (crawl_file,) = self._home.rglob("*.sqlite")
-            self.seen = query(crawl_file, "SELECT url, fetch_state FROM urls ORDER BY id")
-        return result
+    assert (
+        [warning["code"] for warning in result["warnings"]],
+        [warning["code"] for warning in stored],
+    ) == (["store_wal_unavailable"], ["store_wal_unavailable"])
 
 
 def test_a_reader_sees_a_page_a_second_after_it_was_recorded_while_another_page_loads(
@@ -113,14 +99,35 @@ def test_a_reader_sees_a_page_a_second_after_it_was_recorded_while_another_page_
         "/probe": FakePage("<p>P</p>", delay=2),
         "/slow": FakePage("<p>S</p>", delay=10),
     }
-    fetcher = ReadingFetcher(clock, pages, temp_workspace.home)
+    seen: list[tuple[str, str]] = []
+
+    def read_as_another_reader() -> None:
+        (crawl_file,) = temp_workspace.home.rglob("*.sqlite")
+        seen.extend(query(crawl_file, "SELECT url, fetch_state FROM urls ORDER BY id"))
+
+    fetcher = FakeFetcher(clock, pages, on_answer={"/probe": read_as_another_reader})
 
     crawl_result("http://site.test/", clock=clock, fetcher=fetcher)
 
     # The Seed's unit commits one second of the loop's clock after it was submitted, as it
     # would in production, though /slow keeps the clock busy until 10 s.
-    assert fetcher.seen == [
+    assert seen == [
         ("http://site.test/", "fetched"),
         ("http://site.test/probe", "queued"),
         ("http://site.test/slow", "queued"),
     ]
+
+
+def test_the_result_times_the_crawl_on_its_clock(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    # /a is found only once / has answered, so the two waits add up.
+    pages = {"/": FakePage('<a href="/a">A</a>', delay=2), "/a": FakePage("<p>A</p>", delay=3)}
+
+    result = crawl_result("http://site.test/", clock=clock, fetcher=FakeFetcher(clock, pages))
+
+    document = result.to_json()
+    assert (document["started_at"], document["ended_at"], document["duration_s"]) == (
+        "2026-01-01T00:00:00.000Z",
+        "2026-01-01T00:00:05.000Z",
+        5.0,
+    )

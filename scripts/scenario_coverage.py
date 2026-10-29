@@ -5,9 +5,10 @@ A check that is run, never a test, since a scenario of a later version has no te
     uv run python scripts/scenario_coverage.py openspec/changes/<change>/specs/<capability>/spec.md
 
 A scenario's test is `test_` and its title in snake case, so "A cookie value is not stored" is
-`test_a_cookie_value_is_not_stored`; the tests are the ids of `pytest --collect-only`. A
-scenario is waiting, not missing, when its requirement opens with **(vX.Y)**, or when the
-change's tasks.md names it in a group whose heading carries (vX.Y). It prints each scenario as
+`test_a_cookie_value_is_not_stored`, without one trailing platform tag such as (Windows); the
+tests are the ids of `pytest --collect-only`. A scenario is waiting, not missing, when its
+requirement opens with **(vX.Y)**, or when the change's tasks.md names it in a group whose
+heading carries (vX.Y). It prints each scenario as
 `covered`, `waiting`, `missing` or `twice`, with the task of tasks.md that names it in quotes,
 or `-`; a missing one also gets any test whose name is close to it, as a renamed scenario leaves
 behind. Then a count of each. It exits 1 when a scenario is missing or has more than one test.
@@ -30,6 +31,8 @@ LATER_GROUP = re.compile(r"^## .*\(v\d+\.\d+\)")
 TASK_GROUP = re.compile(r"^## ")
 TASK = re.compile(r"^- \[[ x]\] (\d+\.\d+[a-z]?) ")
 QUOTED = re.compile(r'"([^"]+)"')
+# The title already says where a platform's scenario runs, as in "... on Windows (Windows)".
+PLATFORM_TAG = re.compile(r"\s*\((?:Windows|POSIX|macOS)\)$")
 CLOSE = 0.8
 
 
@@ -40,7 +43,7 @@ class Scenario:
 
     @property
     def test_name(self) -> str:
-        return "test_" + snake_case(self.title)
+        return "test_" + snake_case(PLATFORM_TAG.sub("", self.title))
 
 
 def snake_case(title: str) -> str:

@@ -1,7 +1,7 @@
 """`fixture_site` fixtures: start a site, stop it afterwards (design D9 of 000-scaffold-project)."""
 
 import ssl
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import ExitStack
 
 import pytest
@@ -21,14 +21,14 @@ from tests.fixture_site.server import RunningServer, Serve, ServerHandle
 from tests.fixture_site.tls import SiteOrBuilder, StartTlsHosts, TlsHosts, tls_hosts_for
 from tests.support.proxy import ForwardProxy, StartProxy
 
-StartSite = Callable[[Site], ServerHandle]
+StartSite = Serve
 
 
 def _serve_sites() -> Iterator[Serve]:
     with ExitStack() as running:
 
-        def start(site: Site, tls: ssl.SSLContext | None = None) -> ServerHandle:
-            server = RunningServer(site, tls=tls)
+        def start(site: Site, tls: ssl.SSLContext | None = None, *, port: int = 0) -> ServerHandle:
+            server = RunningServer(site, tls=tls, port=port)
             running.callback(server.stop)
             return server.handle
 

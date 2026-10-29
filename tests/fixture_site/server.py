@@ -269,9 +269,12 @@ def _build_app(
 
 
 class ThreadedApp:
-    """An aiohttp app on 127.0.0.1, served from a thread of its own."""
+    """An aiohttp app on 127.0.0.1, served from a thread of its own, on `port` when one is
+    given."""
 
-    def __init__(self, app: web.Application, name: str, tls: ssl.SSLContext | None = None) -> None:
+    def __init__(
+        self, app: web.Application, name: str, tls: ssl.SSLContext | None = None, port: int = 0
+    ) -> None:
         self._in_flight: set[asyncio.Task[Any]] = set()
         app.middlewares.append(self._track)
         self._loop = loop_factory()
@@ -280,7 +283,7 @@ class ThreadedApp:
         self._runner = web.AppRunner(app)
         try:
             self._call(self._runner.setup())
-            self._call(web.TCPSite(self._runner, "127.0.0.1", 0, ssl_context=tls).start())
+            self._call(web.TCPSite(self._runner, "127.0.0.1", port, ssl_context=tls).start())
         except BaseException:
             self._stop_loop()
             raise
@@ -321,20 +324,29 @@ class ThreadedApp:
 
 
 class Serve(Protocol):
-    """Starts a fixture instance for a site, over https when it is given a TLS context."""
+    """Starts a fixture instance for a site, over https when it is given a TLS context, and
+    on `port` when one is given, such as the one a failed Crawl could not reach."""
 
-    def __call__(self, site: Site, tls: ssl.SSLContext | None = None) -> ServerHandle: ...
+    def __call__(
+        self, site: Site, tls: ssl.SSLContext | None = None, *, port: int = 0
+    ) -> ServerHandle: ...
 
 
 class RunningServer:
     def __init__(
-        self, site: Site, after_seconds: float = AFTER_SECONDS, tls: ssl.SSLContext | None = None
+        self,
+        site: Site,
+        after_seconds: float = AFTER_SECONDS,
+        tls: ssl.SSLContext | None = None,
+        *,
+        port: int = 0,
     ) -> None:
         self._log = log = RequestLog()
         self._app = ThreadedApp(
             _build_app(site, lambda: self.handle.base_url, log, after_seconds),
             name="fixture-site",
             tls=tls,
+            port=port,
         )
         self.handle = ServerHandle(self._app.base_url, log)
 
