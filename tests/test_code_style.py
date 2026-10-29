@@ -175,7 +175,7 @@ class AppGroup(SpiderGroup): ...
 
 
 URL_MODULE = "spider/crawl/urls.py"
-# Group 4 adds each store module that casts urls.url to a NormalizedUrl (design D13).
+# Each store module that casts urls.url to a NormalizedUrl (design D13).
 NORMALIZED_URL_MAKERS = {URL_MODULE, "spider/store/urls.py"}
 
 

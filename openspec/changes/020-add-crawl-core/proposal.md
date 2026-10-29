@@ -2,7 +2,7 @@
 
 Everything after it reads what a Crawl records: page data (`030`), Rules (`040`) and queries (`050`) in v0.1, background Crawls and `resume` (`060`-min) in v0.1 too, then Segments (`050`) and the Report (`070`) in v0.2. ADR-0001 settles an own asyncio engine whose frontier lives in the crawl store.
 
-This change builds the core of that engine: a foreground Spider-mode Crawl with Screaming Frog's Scope, robots.txt and Link-following behaviour, politeness, the persistent frontier, and the hooks that later changes plug into. The product bets on full crawls of large sites (ROADMAP, Positioning), so the core is built for a 500k-URL Crawl from the start: no default URL limit, memory that does not grow with the site, and no single URL that can stop the Crawl. The rest of the crawler builds on this core, and those changes can then run in parallel:
+This change builds the core of that engine: a foreground Spider-mode Crawl with its Scope, robots.txt rules and Link following, politeness, the persistent frontier, and the hooks that later changes plug into. The product bets on full crawls of large sites (ROADMAP, Positioning), so the core is built for a 500k-URL Crawl from the start: no default URL limit, memory that does not grow with the site, and no single URL that can stop the Crawl. The rest of the crawler builds on this core, and those changes can then run in parallel:
 - fetch policy (`022`)
 - background Crawls, `status`, `stop` and `resume` (`060`-min)
 - the parse pool and the 500k-URL benchmark (`026`)
@@ -34,7 +34,7 @@ This change builds the core of that engine: a foreground Spider-mode Crawl with 
   - `--max-urls <n>`: **no limit by default**, and a value below 1 is rejected. Requests in flight and requests of earlier runs count. Reaching it leaves the Crawl `stopped` and resumable.
 - **Section Crawl:** `--scope subfolder` or any `--include` makes one. URLs outside the Scope are checked but not followed, and `crawl.section_crawl` is set.
 - **Link discovery:**
-  - The Link type table follows Screaming Frog's defaults. It includes `prev`/`previous` for pagination, HTTP `Link` and `Refresh` headers, `video` and `audio`, and `misc` for other `<link>` elements. The types that later releases discover (`xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`) are listed from v0.1.
+  - The Link type table says which types are followed by default. It includes `prev`/`previous` for pagination, HTTP `Link` and `Refresh` headers, `video` and `audio`, and `misc` for other `<link>` elements. The types that later releases discover (`xml_sitemap`, `sitemap_hreflang`, `javascript_redirect`) are listed from v0.1.
   - Link-level and page-level nofollow are honoured. `--follow-nofollow` overrides them, and `--check-external/--no-check-external` turns External URL checks on or off.
   - Resources are requested for their status, one Crawl Depth beyond `--max-depth`. Only a Resource that is in-Scope HTML is parsed.
 - **robots.txt:**
