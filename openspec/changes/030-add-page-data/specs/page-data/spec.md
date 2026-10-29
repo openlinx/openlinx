@@ -1,6 +1,6 @@
 ## Purpose
 
-Defines the Page data a Crawl stores. This covers the flat Page record that matches Screaming Frog's "Internal" tab, the attributes stored for every discovered Link, the cookies Pages set and the stored HTML. Rules, query Commands and Reports all read this one documented set of columns, and each column has an exact definition.
+Defines the Page data a Crawl stores. This covers the flat Page record, one row per Page under the column names SEO practitioners already use, the attributes stored for every discovered Link, the cookies Pages set and the stored HTML. Rules, query Commands and Reports all read this one documented set of columns, and each column has an exact definition.
 
 ## ADDED Requirements
 
@@ -84,7 +84,7 @@ The columns that a later release fills stay NULL in every Page until then (see "
 - **THEN** `title_1` is the empty string, `title_1_length` is 0 and `h1_1` is NULL
 
 ### Requirement: Page record columns
-The `pages` table SHALL have exactly the columns below, grouped as in the Screaming Frog "Internal" tab, with the types and nullability shown. A later requirement defines each column's value. Names, formats and allowed values SHALL follow the schema conventions of `018-add-schema-conventions` (ADR-0005): widths end in `_px`, percentages in `_pct`, times in `_ms` and sizes in `_bytes`, and every column keeps its Screaming Frog name.
+The `pages` table SHALL have exactly the columns below, grouped by what they describe, with the types and nullability shown. A later requirement defines each column's value. Names, formats and allowed values SHALL follow the schema conventions of `018-add-schema-conventions` (ADR-0005): widths end in `_px`, percentages in `_pct`, times in `_ms` and sizes in `_bytes`, and every column keeps the name SEO practitioners already use.
 
 The Kind column marks how a column is filled:
 
@@ -324,7 +324,7 @@ The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` 
 | `partitioned` | INTEGER | no | boolean | 1 when the `Partitioned` attribute is present |
 | `same_site` | TEXT | yes | `strict`, `lax`, `none` | the `SameSite` attribute, lowercased; NULL when absent or another value |
 
-`(url_id, ordinal)` SHALL be the primary key, and the table SHALL be `WITHOUT ROWID`. `expires` and `max_age` keep their Screaming Frog names; their descriptions give their units.
+`(url_id, ordinal)` SHALL be the primary key, and the table SHALL be `WITHOUT ROWID`. `expires` and `max_age` keep the names of their `Set-Cookie` attributes; their descriptions give their units.
 
 Attribute names SHALL be matched case-insensitively. When `Domain`, `Expires` or `Max-Age` is repeated, the last one whose value parses SHALL apply, as RFC 6265 section 5.2 ignores one whose value does not; when another attribute is repeated, the last one SHALL apply, as an unknown `SameSite` value is not ignored. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
 
@@ -919,7 +919,7 @@ The link count columns SHALL count only `hyperlink` Links whose source is a Page
 
 - `inlinks`: the Links from any Page to this Page
 - `unique_inlinks`: the distinct source Pages of those Links
-- `linking_pages_pct` (Screaming Frog's "% of Total"): 100 × (the number of distinct source Pages with status 200 that link to this Page) ÷ (the number of Pages with status 200 in the Crawl), rounded to 2 decimals, or NULL when there are no Pages with status 200
+- `linking_pages_pct`: 100 × (the number of distinct source Pages with status 200 that link to this Page) ÷ (the number of Pages with status 200 in the Crawl), rounded to 2 decimals, or NULL when there are no Pages with status 200
 
 **The post-crawl passes.** The inlink counts are computed in the post-crawl passes that `020-add-crawl-core` runs when a Crawl ends as `completed` or `stopped`. They run again when a resumed Crawl ends, and each run SHALL replace the earlier results. They run before the post-crawl passes of `040-add-rules`.
 

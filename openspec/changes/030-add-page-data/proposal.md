@@ -1,6 +1,6 @@
 ## Why
 
-`020-add-crawl-core` and `022-add-fetch-policy` fetch URLs, discover and follow Links and record how each URL responded, but nothing yet turns a fetched HTML document into the SEO data that agents, Rules and Reports work with. Screaming Frog's "Internal" tab is the record SEO people and agents already know. This change defines that record as stored, documented Page data, together with the attributes of every discovered Link. Rules (`040`), query Commands (`050`) and the Report (`070`) can then all read one set of columns with precise definitions.
+`020-add-crawl-core` and `022-add-fetch-policy` fetch URLs, discover and follow Links and record how each URL responded, but nothing yet turns a fetched HTML document into the SEO data that agents, Rules and Reports work with. SEO people and agents already know a flat record per Page under familiar column names. This change defines that record as stored, documented Page data, together with the attributes of every discovered Link. Rules (`040`), query Commands (`050`) and the Report (`070`) can then all read one set of columns with precise definitions.
 
 ## What Changes
 
@@ -22,7 +22,7 @@
 - **(v0.2) SERP pixel widths** for titles (Arial 20 px) and meta descriptions (Arial 14 px), from a bundled table of Arial-metric character widths.
 - **Structured data:** item counts and types for JSON-LD and Microdata, plus a count of JSON-LD blocks that fail to parse.
 - **Link data:**
-  - Inlink and outlink counts, including % of Total (`linking_pages_pct`). The inlink counts are computed in the post-crawl passes.
+  - Inlink and outlink counts, including the share of Pages that link to the Page (`linking_pages_pct`). The inlink counts are computed in the post-crawl passes.
   - Folder Depth
   - Crawl Depth, the shortest path over followed Links, which a post-crawl pass also writes to `urls`
 - **Small additions beyond the Internal-tab list,** needed by Rules and agents:
