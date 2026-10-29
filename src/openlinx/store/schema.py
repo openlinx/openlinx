@@ -1079,9 +1079,10 @@ links = public_table(
         "followed",
         Flag,
         nullable=False,
-        comment="1 when the Crawl requests the target through this Link, by the Crawl's rule "
-        "(the Link type, and the Link's and the Page's nofollow), a Resource such as an img "
-        "target included; 0 otherwise.",
+        comment="1 when the Crawl requests the target through this Link, by the Crawl's follow "
+        "rule (the Link type, and the Link's and the Page's nofollow, which --follow-nofollow "
+        "lifts), a Resource such as an img target included; robots.txt, the Scope and "
+        "--max-depth play no part. 0 otherwise.",
     ),
     Column(
         "hreflang",
