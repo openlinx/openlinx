@@ -21,7 +21,7 @@
       "global": true,
       "setting": null,
       "secret": false,
-      "description": "The Workspace folder. Without it, the nearest folder upwards that holds .spider/ or spider.toml, else the global Workspace ~/.spider."
+      "description": "The Workspace folder. Without it, the nearest folder upwards that holds .openlinx/ or openlinx.toml, else the global Workspace ~/.openlinx."
     },
     {
       "name": "--format",
@@ -43,11 +43,11 @@
   "fields": null,
   "examples": [
     {
-      "command": "spider init",
+      "command": "linx init",
       "description": "Make the current folder a Workspace."
     },
     {
-      "command": "spider init --workspace site",
+      "command": "linx init --workspace site",
       "description": "Create the folder site and make it a Workspace."
     }
   ]

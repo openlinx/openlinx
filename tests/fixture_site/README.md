@@ -1,6 +1,6 @@
 # The fixture site
 
-A local HTTP server that tests crawl instead of the internet (design D9 of `000-scaffold-project`). It runs aiohttp on `127.0.0.1`, on a free port, in a background thread with its own `spider.aio.loop_factory()` loop. In-process sync tests, async tests and child processes all reach it over TCP.
+A local HTTP server that tests crawl instead of the internet (design D9 of `000-scaffold-project`). It runs aiohttp on `127.0.0.1`, on a free port, in a background thread with its own `openlinx.aio.loop_factory()` loop. In-process sync tests, async tests and child processes all reach it over TCP.
 
 ## Declaring a site
 

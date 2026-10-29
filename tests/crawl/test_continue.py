@@ -9,12 +9,12 @@ import pytest
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, text
 
-from spider.crawl.engine.hooks import Pass, PassContext, UrlResult, handler
-from spider.crawl.pages.preparation import PageInput, extractor
-from spider.output.reporter import Collected
-from spider.services.crawling import CrawlOverrides
-from spider.services.hooks import default_hooks
-from spider.store.transitions import CrawlStateError
+from openlinx.crawl.engine.hooks import Pass, PassContext, UrlResult, handler
+from openlinx.crawl.pages.preparation import PageInput, extractor
+from openlinx.output.reporter import Collected
+from openlinx.services.crawling import CrawlOverrides
+from openlinx.services.hooks import default_hooks
+from openlinx.store.transitions import CrawlStateError
 from tests.fixture_site.hosts import FixtureResolver
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status

@@ -7,10 +7,10 @@ import pytest
 import typer
 from pydantic import BaseModel, ConfigDict, Field
 
-from spider.cli.app import build_app
-from spider.cli.options import options_with_meta
-from spider.cli.runner import SpiderGroup
-from spider.workspace.tables import SettingsTables, Table, check_table
+from openlinx.cli.app import build_app
+from openlinx.cli.options import options_with_meta
+from openlinx.cli.runner import OpenLinxGroup
+from openlinx.workspace.tables import SettingsTables, Table, check_table
 from tests.support.app import example_app
 
 
@@ -68,7 +68,7 @@ def test_a_table_with_toml_defaults_follows_the_rules() -> None:
 
 @pytest.mark.parametrize("app", [build_app, example_app])
 def test_every_registered_table_follows_the_rules(app: Callable[[], typer.Typer]) -> None:
-    tables = cast(SpiderGroup, typer.main.get_group(app())).settings_tables
+    tables = cast(OpenLinxGroup, typer.main.get_group(app())).settings_tables
 
     for name, table in tables.items():
         check_table(name, table)
@@ -78,7 +78,7 @@ def test_every_registered_table_follows_the_rules(app: Callable[[], typer.Typer]
 def test_every_option_setting_names_a_setting_of_a_registered_table(
     app: Callable[[], typer.Typer],
 ) -> None:
-    group = cast(SpiderGroup, typer.main.get_group(app()))
+    group = cast(OpenLinxGroup, typer.main.get_group(app()))
     tables = dict(group.settings_tables.items())
     settings = [
         extra.setting
@@ -96,7 +96,7 @@ def test_every_option_setting_names_a_setting_of_a_registered_table(
 
 @pytest.mark.parametrize("app", [build_app, example_app])
 def test_options_of_secret_settings_have_only_long_names(app: Callable[[], typer.Typer]) -> None:
-    group = cast(SpiderGroup, typer.main.get_group(app()))
+    group = cast(OpenLinxGroup, typer.main.get_group(app()))
     tables = group.settings_tables
 
     assert [

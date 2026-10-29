@@ -8,7 +8,7 @@ from hypothesis import given, reject
 from hypothesis import strategies as st
 from yarl import URL
 
-from spider.crawl.urls import (
+from openlinx.crawl.urls import (
     NORMAL_FORM,
     InvalidUrl,
     NormalizedUrl,

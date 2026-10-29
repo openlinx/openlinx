@@ -4,11 +4,11 @@ from typing import cast
 
 import typer
 
-from spider.cli.options import secret_names
-from spider.cli.runner import SpiderGroup
-from spider.store.records import SecretNames
-from spider.store.redaction import redact
-from spider.store.writer import CrawlWriter
+from openlinx.cli.options import secret_names
+from openlinx.cli.runner import OpenLinxGroup
+from openlinx.store.records import SecretNames
+from openlinx.store.redaction import redact
+from openlinx.store.writer import CrawlWriter
 from tests.support.app import example_app
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl
@@ -21,26 +21,26 @@ EXAMPLE_SECRETS = SecretNames(
 
 
 def test_secret_option_with_a_separate_value() -> None:
-    redacted = redact(["spider", "example-settings", "--token", "s3cret"], {}, EXAMPLE_SECRETS)
+    redacted = redact(["linx", "example-settings", "--token", "s3cret"], {}, EXAMPLE_SECRETS)
 
-    assert redacted.command_argv == ["spider", "example-settings", "--token", "***"]
+    assert redacted.command_argv == ["linx", "example-settings", "--token", "***"]
 
 
 def test_secret_option_with_a_joined_value() -> None:
-    redacted = redact(["spider", "example-settings", "--api-key=s3cret"], {}, EXAMPLE_SECRETS)
+    redacted = redact(["linx", "example-settings", "--api-key=s3cret"], {}, EXAMPLE_SECRETS)
 
-    assert redacted.command_argv == ["spider", "example-settings", "--api-key=***"]
+    assert redacted.command_argv == ["linx", "example-settings", "--api-key=***"]
 
 
 def test_a_url_keeps_everything_but_its_password() -> None:
     redacted = redact(
-        ["spider", "example-settings", "--token", "http://ann:s3cret@proxy.test:8080"],
+        ["linx", "example-settings", "--token", "http://ann:s3cret@proxy.test:8080"],
         {},
         EXAMPLE_SECRETS,
     )
 
     assert redacted.command_argv == [
-        "spider",
+        "linx",
         "example-settings",
         "--token",
         "http://ann:***@proxy.test:8080",
@@ -54,9 +54,9 @@ def test_secret_setting() -> None:
 
 
 def test_other_values_are_kept() -> None:
-    redacted = redact(["spider", "example-settings", "--level", "high"], {}, EXAMPLE_SECRETS)
+    redacted = redact(["linx", "example-settings", "--level", "high"], {}, EXAMPLE_SECRETS)
 
-    assert redacted.command_argv == ["spider", "example-settings", "--level", "high"]
+    assert redacted.command_argv == ["linx", "example-settings", "--level", "high"]
 
 
 def test_an_unset_secret_stays_null() -> None:
@@ -67,12 +67,12 @@ def test_an_unset_secret_stays_null() -> None:
 
 def test_a_malformed_secret_url() -> None:
     redacted = redact(
-        ["spider", "example-settings", "--token", "http://[ann:s3cret@proxy.test"],
+        ["linx", "example-settings", "--token", "http://[ann:s3cret@proxy.test"],
         {},
         EXAMPLE_SECRETS,
     )
 
-    assert redacted.command_argv == ["spider", "example-settings", "--token", "***"]
+    assert redacted.command_argv == ["linx", "example-settings", "--token", "***"]
 
 
 def test_a_secret_setting_that_is_not_a_string() -> None:
@@ -83,14 +83,14 @@ def test_a_secret_setting_that_is_not_a_string() -> None:
 
 def example_secret_names() -> SecretNames:
     """Read from the test app's declarations, as the adapter that creates a Crawl reads its own."""
-    group = cast(SpiderGroup, typer.main.get_group(example_app()))
+    group = cast(OpenLinxGroup, typer.main.get_group(example_app()))
     return secret_names(group.commands["example-settings"], group.settings_tables)
 
 
 def test_the_secret_is_nowhere_in_the_file(temp_workspace: TempWorkspace) -> None:
     crawl = create_any_crawl(
         temp_workspace,
-        command_argv=["spider", "example-settings", "--token", "s3cret"],
+        command_argv=["linx", "example-settings", "--token", "s3cret"],
         config={"example": {"token": "s3cret"}},
         secret_names=example_secret_names(),
     )

@@ -8,8 +8,8 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Connection
 
-from spider.clock import Clock, SystemClock
-from spider.store.writer import CrawlWriter
+from openlinx.clock import Clock, SystemClock
+from openlinx.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl
 from tests.support.workspace import TempWorkspace

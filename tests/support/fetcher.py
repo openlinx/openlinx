@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from urllib.parse import urlsplit
 
-from spider.clock import Clock
-from spider.crawl.fetch.fetcher import FetchFailure, FetchResult, Request
-from spider.store.records import FetchError
+from openlinx.clock import Clock
+from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult, Request
+from openlinx.store.records import FetchError
 
 
 @dataclass(frozen=True, slots=True)

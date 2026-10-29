@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from hypothesis import given
 from hypothesis import strategies as st
 
-from spider.store.ids import new_crawl_id
+from openlinx.store.ids import new_crawl_id
 from tests.support.randomness import scripted_choice
 
 

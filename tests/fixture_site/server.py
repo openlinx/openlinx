@@ -13,7 +13,7 @@ from xml.sax.saxutils import escape
 from aiohttp import web
 from multidict import CIMultiDict, CIMultiDictProxy
 
-from spider.aio import loop_factory
+from openlinx.aio import loop_factory
 from tests.fixture_site.routes import (
     CONTENT_TYPES,
     DEFAULT_CONTENT_TYPE,

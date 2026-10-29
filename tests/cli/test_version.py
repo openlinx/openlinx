@@ -1,11 +1,11 @@
-"""`spider --version` (000-scaffold-project)."""
+"""`linx --version` (000-scaffold-project)."""
 
 from tests.support.cli import run_cli, run_cli_process
 from tests.support.project import project_version
 
 
 def expected_version_line() -> bytes:
-    return b"spider " + project_version().encode() + b"\n"
+    return b"linx " + project_version().encode() + b"\n"
 
 
 def test_version_prints_the_app_name_and_the_project_version() -> None:

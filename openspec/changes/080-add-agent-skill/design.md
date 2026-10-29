@@ -5,7 +5,7 @@
 See proposal.md for the motivation. This change adds no crawl behaviour. It packages knowledge that other changes own:
 - the output contract, diagnostics and Command metadata: `010-add-workspace-and-cli-contract`
 - the crawl store schema and the journal-mode decision: `015-add-crawl-store`
-- the schema description that `spider schema` prints (nullability, keys, references, allowed values and indexes) and the schema conventions: `018-add-schema-conventions`
+- the schema description that `linx schema` prints (nullability, keys, references, allowed values and indexes) and the schema conventions: `018-add-schema-conventions`
 - the tables the recipes read: `urls` (`020-add-crawl-core`), `response_headers` (`022-add-fetch-policy`), `pages` and `links` (`030-add-page-data`)
 - the TLS setup and the HTTPS fixture site: `022-add-fetch-policy`
 - Rules, `rules.reproduce_sql` and the Issues reader: `040-add-rules`
@@ -21,7 +21,7 @@ The Skill is read in several places, and each reads it differently:
 - **Plugin marketplaces** (Claude Code and Codex) read `.claude-plugin/marketplace.json`. With `"source": "./"`, the repository root is the plugin root, so the plugin's Skill must sit at `skills/<name>/SKILL.md`.
 - **`npx skills add owner/repo`** searches the repository for `SKILL.md` files.
 
-Codex runs commands with network access switched off by default. It can write only inside the project, so `~/.spider/` and `~/.agents/skills/` are read-only there unless the user approves.
+Codex runs commands with network access switched off by default. It can write only inside the project, so `~/.openlinx/` and `~/.agents/skills/` are read-only there unless the user approves.
 
 Settings never come from environment variables (`010-add-workspace-and-cli-contract`). There are two exceptions this change relies on:
 - the standard proxy variables `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, which `022-add-fetch-policy` honours for fetching
@@ -35,22 +35,22 @@ Settings never come from environment variables (`010-add-workspace-and-cli-contr
 - `doctor` checks that work offline where they can, and that name the exact fix.
 
 **Non-Goals:**
-- Teaching SEO. The Skill teaches how to drive spider. Rule texts carry the SEO guidance, and the agent supplies the judgement (ADR-0004).
-- Detecting stale plugin-installed Skills from the CLI side. That would mean reading the plugin caches of Claude Code and Codex. SKILL.md asks the agent to compare its stamp with `spider --version` instead.
+- Teaching SEO. The Skill teaches how to drive OpenLinx. Rule texts carry the SEO guidance, and the agent supplies the judgement (ADR-0004).
+- Detecting stale plugin-installed Skills from the CLI side. That would mean reading the plugin caches of Claude Code and Codex. SKILL.md asks the agent to compare its stamp with `linx --version` instead.
 
 ## Decisions
 
 ### D1. One generator, two callers
-The generator module reads the same in-process metadata that `spider commands|schema|rules --format json` print, and renders Markdown templates that ship in the package. It has two callers:
-- `spider skill install`, which writes into the agents' skills folders
+The generator module reads the same in-process metadata that `linx commands|schema|rules --format json` print, and renders Markdown templates that ship in the package. It has two callers:
+- `linx skill install`, which writes into the agents' skills folders
 - `scripts/generate_skill.py <dir>`, a developer script that writes the repository copy and is used by the release check of `085-add-release`
 
 Alternatives considered:
-- *A `spider skill generate` Command.* The maintainer decided against it on 2026-09-27. Generating into an arbitrary folder is a developer need, not a user one, and it would widen the Command surface that the Skill itself must document.
+- *A `linx skill generate` Command.* The maintainer decided against it on 2026-09-27. Generating into an arbitrary folder is a developer need, not a user one, and it would widen the Command surface that the Skill itself must document.
 - *Static Markdown shipped in the wheel.* It would drift from the Commands.
 
 ### D2. Jinja2 Markdown templates with fixed placeholders
-- Templates live in `src/spider/skill/templates/` and render with `StrictUndefined`, no autoescaping (the output is Markdown) and sorted inputs.
+- Templates live in `src/openlinx/skill/templates/` and render with `StrictUndefined`, no autoescaping (the output is Markdown) and sorted inputs.
 - A single constants module holds:
   - the CLI name, the package name and the Skill name
   - the `OWNER/REPO` placeholder
@@ -62,12 +62,12 @@ Alternatives considered:
 - *Alternative:* `string.Template`. It uses `$` placeholders, which collide with the `$HOME` and `$env:Path` shell examples.
 
 ### D3. The stamp lives in the SKILL.md frontmatter `metadata`
-`metadata: {generator: spider, version: "X.Y.Z"}` is part of the open Agent Skills format, and it travels with every install channel: `skill install`, plugins, `npx skills add` and manual copies.
+`metadata: {generator: openlinx, version: "X.Y.Z"}` is part of the open Agent Skills format, and it travels with every install channel: `skill install`, plugins, `npx skills add` and manual copies.
 - The reader parses only the first 4 KiB, using a small line parser and no YAML library on the hot path.
-- *Alternative:* a sidecar `.spider-skill.json`. It is cheaper to parse, but `npx skills add` or a manual copy may drop it, and then the stamp is gone.
+- *Alternative:* a sidecar `.openlinx-skill.json`. It is cheaper to parse, but `npx skills add` or a manual copy may drop it, and then the stamp is gone.
 
 ### D4. The notice is one warning diagnostic on stderr
-- It uses the stderr diagnostic shape of `010-add-workspace-and-cli-contract`: `{"level": "warning", "code": "skill_outdated", "message", "hint", "details"}`. Agents already parse that shape. The level `warning`, together with an unchanged exit code, keeps it apart from errors. The code is registered in `spider commands`.
+- It uses the stderr diagnostic shape of `010-add-workspace-and-cli-contract`: `{"level": "warning", "code": "skill_outdated", "message", "hint", "details"}`. Agents already parse that shape. The level `warning`, together with an unchanged exit code, keeps it apart from errors. The code is registered in `linx commands`.
 - **Where it is not printed:**
   - `skill install`, which fixes it.
   - `doctor`, which reports the same thing as checks.
@@ -79,7 +79,7 @@ Alternatives considered:
 - *Alternative:* a field in the stdout JSON. That would change the output contract, and CSV and table output have no place for it.
 
 ### D5. Staged replacement for install
-1. The new Skill is rendered into a staging folder next to the skills folder (`~/.claude/.spider-staging-<random>/spider`), never inside it. Agents load any folder under `skills/` that holds a `SKILL.md`, so a stray copy there would be loaded as a second skill.
+1. The new Skill is rendered into a staging folder next to the skills folder (`~/.claude/.openlinx-staging-<random>/openlinx`), never inside it. Agents load any folder under `skills/` that holds a `SKILL.md`, so a stray copy there would be loaded as a second skill.
 2. The old folder is renamed to a backup next to the skills folder.
 3. The staging folder is renamed into place.
 4. The backup is deleted.
@@ -88,12 +88,12 @@ If any rename fails (for example, Windows refuses to rename a folder while a fil
 - *Alternative:* overwrite file by file. A failure then leaves a mix of versions and a misleading stamp.
 
 ### D6. Refusal rules
-- `skill install` refuses a newer stamp or an unstamped folder unless `--force` is given. An older CLI should not silently downgrade a Skill, and a hand-made `spider` Skill is the user's own work.
+- `skill install` refuses a newer stamp or an unstamped folder unless `--force` is given. An older CLI should not silently downgrade a Skill, and a hand-made `linx` Skill is the user's own work.
 - `scripts/generate_skill.py` refuses only a non-empty unstamped folder. It is a release tool, so downgrades are normal there, but a mistaken target must not wipe a folder.
 
 ### D7. The repository copy changes only in release commits
 The plugin marketplace and `npx skills add` read the default branch. If the copy were regenerated on every pull request, `main` would describe Commands that are not on PyPI yet.
-- The release commit regenerates `skills/spider/` and bumps `.claude-plugin/plugin.json`.
+- The release commit regenerates `skills/openlinx/` and bumps `.claude-plugin/plugin.json`.
 - The release workflow of `085-add-release` regenerates into a temporary folder with `scripts/generate_skill.py`, and fails if the committed copy differs.
 - A `.gitattributes` line `skills/** text eol=lf` keeps Windows checkouts byte-identical.
 
@@ -118,22 +118,22 @@ The agent guidance section is called Guardrails, because Rule is a glossary term
 - **Exit codes** follow `010-add-workspace-and-cli-contract`.
   - A failed check is a partial result: the report goes to stdout, and exactly one `doctor_checks_failed` error diagnostic goes to stderr, with exit code 1.
   - A bad `--url` is a usage error (2), with nothing on stdout.
-  - An invalid `spider.toml` is reported inside the `workspace` check, so doctor does not exit with code 3.
+  - An invalid `openlinx.toml` is reported inside the `workspace` check, so doctor does not exit with code 3.
 - **`network`:**
   - It opens a TCP connection through the network probe (DNS, then connect) to the target host, or to the proxy that a Crawl would use. It sends no HTTP request.
   - `tls` then performs the verified handshake. Keeping the two apart tells "cannot reach" from "cannot trust".
   - The default target is `https://example.com/`, which is IANA-reserved and neutral. No other host is contacted, so doctor sends no telemetry.
   - **The proxy in effect** is found with the proxy resolution of `022-add-fetch-policy`, so doctor tests what a Crawl would use:
-    - precedence: `--proxy`, then the proxy setting in `spider.toml`, then `HTTP_PROXY`/`HTTPS_PROXY` for the target's scheme unless `NO_PROXY` excludes the host
+    - precedence: `--proxy`, then the proxy setting in `openlinx.toml`, then `HTTP_PROXY`/`HTTPS_PROXY` for the target's scheme unless `NO_PROXY` excludes the host
     - it is reported as `details.proxy = {source, url}`, with the password redacted by the partial redaction of `015-add-crawl-store` (`user:***@host`)
-    - `--proxy` mirrors `spider crawl --proxy`, so a proxy can be tested before a Crawl
+    - `--proxy` mirrors `linx crawl --proxy`, so a proxy can be tested before a Crawl
 - **Codex's signal:** `CODEX_SANDBOX_NETWORK_DISABLED` is read-only. It only changes the message and hint, never a setting.
 - **Codex detection:** Codex's `CODEX_SANDBOX_NETWORK_DISABLED=1`, or a connect that fails with a permission error (EPERM or EACCES), leads the message with the sandbox cause. The hint always includes the Codex fix, so the check stays correct if Codex renames its variable.
 - **`tls`:**
   - It calls the TLS setup of `022-add-fetch-policy`, where truststore means `system` and the certifi fallback means `bundled`. It gets that setup's trust store through the trust-store probe, so doctor and a Crawl never disagree.
   - `error_kind` normalises OS-specific error messages. truststore's messages differ on Windows, macOS and Linux.
 - **`wal`** calls the journal-mode decision of `015-add-crawl-store`, which covers the `store.journal_mode` setting and network locations (UNC paths, mapped drives and network file systems). An explicit `delete` setting is the user's choice, so only the automatic fallback warns.
-- **`path`** runs the first `spider` on PATH with `--version`. Comparing versions works on every OS, including uv's Windows trampolines, where comparing file paths does not.
+- **`path`** runs the first `linx` on PATH with `--version`. Comparing versions works on every OS, including uv's Windows trampolines, where comparing file paths does not.
 - **`workspace`** uses a resolution mode that never creates the global Workspace. The creatability probe makes a temporary folder in the nearest existing ancestor and removes it.
 
 ### D11. PEP 440 comparison with `packaging`
@@ -141,25 +141,25 @@ Version comparison uses `packaging.version.Version`, so that `0.2.0.dev1 < 0.2.0
 - *Alternative:* comparing tuples by hand. It mishandles pre-releases and dev versions.
 
 ### D12. The SQL schema reference: generated lists, three written sections
-An agent that answers a long-tail question with `spider sql` reads only `references/sql-schema.md`; it may have no copy of `docs/schema.md`. The reference therefore carries what a query needs:
-- **Generated from `spider schema --limit 1000 --format json`** (`018-add-schema-conventions`), so it cannot drift. The table sections use the layout of `docs/schema.md`, so people and agents read one form:
-  - **One layout, one parser, one renderer:** this change adds `render_tables(items, compact=...)` to `spider.services.schema_doc`, next to `018`'s `parse_tables`. A round-trip test checks that `parse_tables(render_tables(items))` equals the `spider schema` items, in both modes. The reference tests read `sql-schema.md` back with `parse_tables` and compare it with `spider schema`.
+An agent that answers a long-tail question with `linx sql` reads only `references/sql-schema.md`; it may have no copy of `docs/schema.md`. The reference therefore carries what a query needs:
+- **Generated from `linx schema --limit 1000 --format json`** (`018-add-schema-conventions`), so it cannot drift. The table sections use the layout of `docs/schema.md`, so people and agents read one form:
+  - **One layout, one parser, one renderer:** this change adds `render_tables(items, compact=...)` to `openlinx.services.schema_doc`, next to `018`'s `parse_tables`. A round-trip test checks that `parse_tables(render_tables(items))` equals the `linx schema` items, in both modes. The reference tests read `sql-schema.md` back with `parse_tables` and compare it with `linx schema`.
   - **`compact=True`** is the same layout with less text around it: no alignment padding and no "How to read a table section" preamble. It never drops a heading or a column, so `parse_tables` reads both modes. `sql-schema.md` uses it only if the implementer measures that the full form costs too many tokens.
   - *Why here and not in `018`:* `018` is built right after `017`, and a renderer with no caller there would be speculative code. This change is its first user.
   - each table and view with its columns: type, nullability, primary key, reference, format, allowed values and description. Allowed values matter most: a query that filters on `fetch_state = 'error'` or `indexability = 'non_indexable'` needs the exact spelling.
   - each table's secondary indexes with their columns, uniqueness, condition and description, and `no secondary index` for a table without one, so the agent can tell which filters are served by an index and which scan.
   - **Joins:** one line `<table>.<column> -> <references>` per reference, grouped by the referring table. This is the join overview: a text list is what an agent reads, and it is complete by construction. A drawn diagram would cost tokens and add nothing that a query needs.
 - **Written in the template,** checked by text scenarios:
-  - *URL and address:* `urls.url` is the normalised form (non-ASCII percent-encoded as UTF-8 with uppercase hex, the host in IDNA form), and `pages.address` the display form (non-ASCII decoded, ASCII escapes kept). `pages.url_encoded_address` equals `urls.url`; `url_path` and `url_query` are cut from `address`. An agent that matches a URL typed by a user against `address` or `url` can miss it, so the section points to `spider page <url>`, which normalises its argument (`050` D18).
+  - *URL and address:* `urls.url` is the normalised form (non-ASCII percent-encoded as UTF-8 with uppercase hex, the host in IDNA form), and `pages.address` the display form (non-ASCII decoded, ASCII escapes kept). `pages.url_encoded_address` equals `urls.url`; `url_path` and `url_query` are cut from `address`. An agent that matches a URL typed by a user against `address` or `url` can miss it, so the section points to `linx page <url>`, which normalises its argument (`050` D18).
   - *Pages and Resources:* the CONTEXT.md terms, said in tables: a Page has a `pages` row, and a Resource is a `urls` row that is the target of an `image`, `css`, `javascript`, `video`, `audio` or `media` Link and has no `pages` row, as `050`'s summary and `resources` view define it.
   - *Cost of queries:*
-    - Materialised against live Issues, after `040` D16: `issues` and `affected_urls` hold the last pass's result, valid when `crawl.state` is `completed` or `stopped`; otherwise `spider issues` runs every Rule's query on each call, and SQL reruns `rules.reproduce_sql`.
-    - `spider status` against `spider summary` for polling, after `050` D17.
+    - Materialised against live Issues, after `040` D16: `issues` and `affected_urls` hold the last pass's result, valid when `crawl.state` is `completed` or `stopped`; otherwise `linx issues` runs every Rule's query on each call, and SQL reruns `rules.reproduce_sql`.
+    - `linx status` against `linx summary` for polling, after `050` D17.
     - The scan rule: a filter or sort on a column that no index of its table starts with scans the table, which takes seconds at about 500k URLs. The written text names no index: the generated lists name them. The layout and indexes of `links` wait for the links benchmark of `030`, so a written index name could go stale before the Skill ships.
 - **Readers need SQLite 3.37 or later** (`018` D3), stated at the top, because an agent may open the file with another tool.
 - *Alternative:* a hand-written `sql-schema.md`. It drifts from the schema, which the reference tests would then have to chase. Rejected.
 - *Alternative:* a layout of its own for `sql-schema.md`. Two layouts of one schema drift in form, and need two parsers. Rejected by the rulings of 2026-10-11.
-- *Alternative:* point the agent at `spider schema` instead of a reference file. It costs a Command call per question, and the written sections have no home there. Rejected.
+- *Alternative:* point the agent at `linx schema` instead of a reference file. It costs a Command call per question, and the written sections have no home there. Rejected.
 
 ### D13. Recipes are checked by their result
 The draft checked only that each recipe's SQL exits with code 0. A wrong join, a misspelt allowed value or a filter on the wrong form of a URL still exits with 0 and returns no rows, so an agent would copy a recipe that answers nothing.
@@ -172,7 +172,7 @@ The draft checked only that each recipe's SQL exits with code 0. A wrong join, a
   JOIN urls AS u ON u.id = r.url_id, json_each(r.headers) AS h
   WHERE lower(json_extract(h.value, '$[0]')) = 'x-robots-tag'
   ```
-- **The running-Crawl recipe** reads `rules.reproduce_sql` for one Rule and runs it with `spider sql`, as `050`'s `issues <rule-id>` suggests.
+- **The running-Crawl recipe** reads `rules.reproduce_sql` for one Rule and runs it with `linx sql`, as `050`'s `issues <rule-id>` suggests.
 - *Alternative:* exit code 0 only, as the draft had. Rejected for the reason above.
 
 ## Test seams
@@ -191,7 +191,7 @@ The seams are those of docs/testing.md:
   - the notice's hint builder
   - doctor's decision logic (D10)
 - **Install and packaging (8):** repository artefacts:
-  - `scripts/generate_skill.py` output compared with the installed Skill and with `skills/spider/`
+  - `scripts/generate_skill.py` output compared with the installed Skill and with `skills/openlinx/`
   - `.claude-plugin/plugin.json`
   - `.claude-plugin/marketplace.json`
 - **Boundary doubles:** only the two that docs/testing.md allows for `doctor`:
@@ -205,30 +205,30 @@ The seams are those of docs/testing.md:
 - **Agents change their skill folders.**
   - Mitigation: the paths live in one table in the code, and `doctor` shows where it looked.
 - **`npx skills add OWNER/REPO` also finds this repository's development skills in `.claude/skills/openspec-*` and `.agents/skills/openspec-*`.**
-  - Mitigation: the docs use `npx skills add OWNER/REPO --skill spider`.
+  - Mitigation: the docs use `npx skills add OWNER/REPO --skill openlinx`.
 - **Duplicate Skills when a user installs both the plugin and `skill install`.**
   - Mitigation: the install one-liners in SKILL.md pass `--no-skill`, and the docs recommend one channel per agent.
 - **Recipes or command examples rot as other changes evolve.**
-  - Mitigation: the recipe SQL runs against a fixture Crawl and its rows are compared with the expected rows (D13), and every `spider …` line is linted against the command metadata in CI.
+  - Mitigation: the recipe SQL runs against a fixture Crawl and its rows are compared with the expected rows (D13), and every `linx …` line is linted against the command metadata in CI.
 - **The written sections of `sql-schema.md` drift from the schema.**
   - Mitigation: they name no index and no column list; the generated lists carry those (D12).
 - **A notice on every Command is noisy, and there is no off switch.**
-  - Mitigation: it is one line on stderr, and it disappears after `spider skill install`.
+  - Mitigation: it is one line on stderr, and it disappears after `linx skill install`.
 - **Upstream metadata is not ready when this change starts.**
-  - Mitigation: this change is built after 070 in the build order. The reference tests compare against whatever `spider commands`, `schema` and `rules` list.
+  - Mitigation: this change is built after 070 in the build order. The reference tests compare against whatever `linx commands`, `schema` and `rules` list.
 
 ## Migration Plan
 
 This is new functionality with nothing to migrate. When the product name changes:
 1. Edit the constants module (D2).
-2. Regenerate `skills/spider/` with `scripts/generate_skill.py`.
+2. Regenerate `skills/openlinx/` with `scripts/generate_skill.py`.
 3. Rename the plugin.
 
-Users then reinstall the Skill with `spider skill install --force`, because the folder name changes.
+Users then reinstall the Skill with `linx skill install --force`, because the folder name changes.
 
 ## Open Questions
 
 - Should `skill install` follow `CLAUDE_CONFIG_DIR` when it is set, so that Claude Code reads the relocated folder? The default paths above do not change either way.
 - Does Codex need a `.codex-plugin/plugin.json` in addition to reading `.claude-plugin/`? Check with `codex plugin marketplace add` during implementation. It would be an extra file only.
-- Is a `spider skill uninstall` Command worth adding after v0.1? The uninstall instructions of `100-add-installers` delete the folders by hand for now.
-- Should the development-only OpenSpec skills move out of the repository root, so that `npx skills add` without `--skill` lists only the spider Skill?
+- Is a `linx skill uninstall` Command worth adding after v0.1? The uninstall instructions of `100-add-installers` delete the folders by hand for now.
+- Should the development-only OpenSpec skills move out of the repository root, so that `npx skills add` without `--skill` lists only the OpenLinx Skill?

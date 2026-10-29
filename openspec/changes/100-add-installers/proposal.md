@@ -19,10 +19,10 @@ Every release must also publish the same artifacts reproducibly: the PyPI packag
   - They are also available as raw files on the default branch.
   - The scripts:
     1. find uv, or install it with Astral's official installer. When uv is older than the declared minimum, they run `uv self update`.
-    2. run `uv tool install --python 3.14 spider` on first install, and `uv tool upgrade spider` when the script runs again.
+    2. run `uv tool install --python 3.14 openlinx` on first install, and `uv tool upgrade openlinx` when the script runs again.
     3. make sure the tool's bin folder is on PATH (`uv tool update-shell`), and print the command that adds it to PATH in the current terminal.
-    4. verify the install with `spider --version` and `spider doctor --format table`.
-    5. detect Claude Code and Codex, and ask before running `spider skill install --target claude|codex` for each.
+    4. verify the install with `linx --version` and `linx doctor --format table`.
+    5. detect Claude Code and Codex, and ask before running `linx skill install --target claude|codex` for each.
 - **Options, the same in both scripts:**
   - `--yes` / `-Yes`: no prompts, and install the Skill for every detected agent.
   - `--no-skill` / `-NoSkill`: skip the Skill step.
@@ -35,11 +35,11 @@ Every release must also publish the same artifacts reproducibly: the PyPI packag
   - 0: installed
   - 1: failed
   - 2: invalid options
-  - 10: installed, but `spider doctor` reported a failed check
+  - 10: installed, but `linx doctor` reported a failed check
 - **Release pipeline `.github/workflows/release.yml`,** triggered by `v*` tags:
   1. gates in `scripts/release_check.py` (a small addition):
      - the tag matches the package version.
-     - `scripts/generate_skill.py` from `080-add-agent-skill`, run into a temporary folder, produces exactly the committed `skills/spider/`.
+     - `scripts/generate_skill.py` from `080-add-agent-skill`, run into a temporary folder, produces exactly the committed `skills/openlinx/`.
      - the plugin version matches.
   2. the test suite.
   3. `uv build` (wheel and sdist).
@@ -52,7 +52,7 @@ Every release must also publish the same artifacts reproducibly: the PyPI packag
     - install and options
     - what changes on the machine
     - upgrade and uninstall
-    - the developer install with `uv tool install --python 3.14 spider` or `pipx install --python 3.14 spider`
+    - the developer install with `uv tool install --python 3.14 openlinx` or `pipx install --python 3.14 openlinx`
     - troubleshooting
   - `RELEASING.md` covers the release process.
 
@@ -68,7 +68,7 @@ Every release must also publish the same artifacts reproducibly: the PyPI packag
 
 - Signed standalone binaries and winget come **after v1.0** (Backlog: distribution).
 - A Homebrew tap, a Scoop bucket and a multi-arch Docker image on GHCR come in **v1.0**.
-- A short custom domain for the one-liners comes after the product name is chosen. Until then `OWNER/REPO` and `spider` are placeholders. Publishing is blocked until the name is free on PyPI and GitHub, but the specs are not.
+- A short custom domain for the one-liners comes after the product name is chosen. Until then `OWNER/REPO` and `linx` are placeholders. Publishing is blocked until the name is free on PyPI and GitHub, but the specs are not.
 - An `--uninstall` mode is not part of v0.1. The uninstall steps are documented only, and the mode is an open question.
 - Offline or air-gapped installation is not planned.
 - The `.mcpb` bundle is not a v0.1 release asset. It comes with the MCP server in **v0.1.1** (`090-add-mcp-server`).
@@ -83,7 +83,7 @@ Every release must also publish the same artifacts reproducibly: the PyPI packag
 - **Changed:** `pyproject.toml` gets the Python 3.12–3.14 classifiers. `000-scaffold-project` already sets `requires-python = ">=3.12,<3.15"`, and this change's consistency test guards it.
 - **Depends on:**
   - `000-scaffold-project`: pyproject, the CI workflow (which the release workflow reuses) and Node in CI
-  - `080-add-agent-skill`: the one-liners the scripts must serve, `spider doctor`, `spider skill install`, `scripts/generate_skill.py`, `skills/spider/` and `.claude-plugin/plugin.json`
+  - `080-add-agent-skill`: the one-liners the scripts must serve, `linx doctor`, `linx skill install`, `scripts/generate_skill.py`, `skills/openlinx/` and `.claude-plugin/plugin.json`
 - **Used by:** `090-add-mcp-server` in v0.1.1, which adds the `.mcpb` bundle to the `build` and `release` jobs and its `.python-version` to the pin test.
 - **External:**
   - Astral's installers at `astral.sh`

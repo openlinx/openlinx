@@ -1,6 +1,6 @@
 # The crawl file's schema conventions
 
-The crawl file is a public contract ([ADR-0002](0002-sqlite-crawl-store-public-schema.md)), and from v0.1 every change to it costs a migration. So its whole v0.1 shape is decided in one blueprint, before the changes that add tables are built, and every table follows the same rules. Agents read the schema through `spider schema` and `docs/schema.md`, and they learn one convention once rather than one per table.
+The crawl file is a public contract ([ADR-0002](0002-sqlite-crawl-store-public-schema.md)), and from v0.1 every change to it costs a migration. So its whole v0.1 shape is decided in one blueprint, before the changes that add tables are built, and every table follows the same rules. Agents read the schema through `linx schema` and `docs/schema.md`, and they learn one convention once rather than one per table.
 
 ## Decisions
 
@@ -61,7 +61,7 @@ The crawl file is a public contract ([ADR-0002](0002-sqlite-crawl-store-public-s
 
 ## Consequences
 
-- `spider schema` and `docs/schema.md` describe keys, references, allowed values, derived and later columns, and indexes. A test keeps them equal to the declaration and to a new file.
+- `linx schema` and `docs/schema.md` describe keys, references, allowed values, derived and later columns, and indexes. A test keeps them equal to the declaration and to a new file.
 - CHECKs and STRICT make the file refuse bad values, whatever writes them. A bug in a later change fails at its first write instead of leaving a wrong value for agents to read.
 - Every change that adds a table follows these rules from its first slice, and a review checks the rules a test cannot.
 - The value lists and the later columns are in the v0.1 file, so v0.2 fills them without a migration. Adding a value or a column that was not foreseen is a schema change: a version bump and a migration.

@@ -18,11 +18,11 @@ The Crawl SHALL run page preparation (parsing, the link extractor and every regi
 - **THEN** no recorded process id equals the crawl process's id
 
 #### Scenario: The number of parse workers is reported
-- **WHEN** `spider crawl {site}/` runs
+- **WHEN** `linx crawl {site}/` runs
 - **THEN** `data.parse_workers` of the `crawl_started` event is the number of physical cores available to the crawl process minus 2, and at least 1
 
 #### Scenario: Pages are parsed in worker processes on Windows (Windows)
-- **WHEN** `spider crawl {site}/` runs as a subprocess on Windows, and `/` links to `/about`
+- **WHEN** `linx crawl {site}/` runs as a subprocess on Windows, and `/` links to `/about`
 - **THEN** it exits with code 0, and `{site}/about` has `parsed` = 1
 
 ### Requirement: Bounded parse queue
@@ -68,16 +68,16 @@ When preparing one Page takes longer than 30 seconds from the moment a worker to
 Every worker process SHALL have ended within 10 seconds after the crawl process ends, whether the Crawl completed or was stopped by an interrupt. Workers SHALL ignore interrupts themselves, so that the crawl process shuts them down in order.
 
 #### Scenario: No parse worker outlives a completed Crawl
-- **WHEN** a `spider crawl {site}/` subprocess ends with the Crawl State `completed`
+- **WHEN** a `linx crawl {site}/` subprocess ends with the Crawl State `completed`
 - **THEN** 10 seconds later none of its child processes is still running
 
 #### Scenario: An interrupt ends the parse workers
-- **WHEN** a `spider crawl {site}/` subprocess is stopped by SIGINT (CTRL_BREAK_EVENT on Windows) while `/` links to 30 pages
+- **WHEN** a `linx crawl {site}/` subprocess is stopped by SIGINT (CTRL_BREAK_EVENT on Windows) while `/` links to 30 pages
 - **THEN** 10 seconds after it exits, none of its child processes is still running
 
 ### Requirement: No console windows on Windows
 On Windows, worker processes SHALL be created without a console window of their own, inheriting their parent's console. A Crawl running in a process that has no visible console, as `060-add-crawl-control`'s background process has, SHALL therefore open no window.
 
 #### Scenario: Parse workers open no console window (Windows)
-- **WHEN** `spider crawl {site}/` runs on Windows in a process created with CREATE_NO_WINDOW, and `/` links to 30 pages
+- **WHEN** `linx crawl {site}/` runs on Windows in a process created with CREATE_NO_WINDOW, and `/` links to 30 pages
 - **THEN** no visible top-level window belongs to any of its child processes while it runs

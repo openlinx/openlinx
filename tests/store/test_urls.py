@@ -1,4 +1,4 @@
-"""The units of spider.store.urls (020-add-crawl-core D1, D2, D14; seam 2)."""
+"""The units of openlinx.store.urls (020-add-crawl-core D1, D2, D14; seam 2)."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -8,10 +8,10 @@ from typing import Any, Literal
 import pytest
 from sqlalchemy import Connection, event, text
 
-from spider.crawl.urls import NormalizedUrl, parse_seed
-from spider.store.connections import opening
-from spider.store.origins import record_robots_txt
-from spider.store.records import (
+from openlinx.crawl.urls import NormalizedUrl, parse_seed
+from openlinx.store.connections import opening
+from openlinx.store.origins import record_robots_txt
+from openlinx.store.records import (
     DiscoveredVia,
     DiscoverySkipReason,
     ErroredUrl,
@@ -25,9 +25,9 @@ from spider.store.records import (
     UrlCounts,
     UrlTally,
 )
-from spider.store.rows import HandlerRows
-from spider.store.schema import literal_values
-from spider.store.urls import (
+from openlinx.store.rows import HandlerRows
+from openlinx.store.schema import literal_values
+from openlinx.store.urls import (
     next_depth,
     queued_batch,
     record_error,
@@ -39,7 +39,7 @@ from spider.store.urls import (
     seed_answered,
     url_counts,
 )
-from spider.store.writer import CrawlWriter
+from openlinx.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawling import stopped_with_an_error
 from tests.support.crawls import create_any_crawl, query

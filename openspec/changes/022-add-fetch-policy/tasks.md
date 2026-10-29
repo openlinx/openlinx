@@ -10,7 +10,7 @@ A slice that needs a new column, index or table adds it through `018`'s `public_
 
 An option and its setting are declared by the task that applies them (`020` D11, no inert option), each with `OptionMeta(setting="crawl.<key>")` and its key in `CrawlSettings`: `--user-agent` in 1.2, `--retries` in 3.2, `--timeout` in 3.5 and `--max-redirects` in 4.11.
 
-`response_headers` rows follow `020` D9 and D14: this change's handler returns them, and `spider.store.response_headers` writes them through the row writer it registers in `Hooks.row_writers`, with statements built once (`017` D9), both listed in `default_hooks()` (`spider.services.hooks`).
+`response_headers` rows follow `020` D9 and D14: this change's handler returns them, and `openlinx.store.response_headers` writes them through the row writer it registers in `Hooks.row_writers`, with statements built once (`017` D9), both listed in `default_hooks()` (`openlinx.services.hooks`).
 
 **v0.1 and v0.2:** groups 1–8 are 022-min, in v0.1 (ROADMAP). Groups 9–12 are marked (v0.2) and wait for v0.2.
 
@@ -27,7 +27,7 @@ Seams (docs/testing.md):
 
 ## 1. Request identity and cookies
 
-- [ ] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` in `aiohttp_fetcher`, built from `spider.naming` and the tool's version, with a `PROJECT_URL` constant next to `APP_NAME` (design D1).
+- [ ] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` in `aiohttp_fetcher`, built from `openlinx.naming` and the tool's version, with a `PROJECT_URL` constant next to `COMMAND_NAME` (design D1).
 - [ ] 1.2 [HTTP] Drive "A custom user agent is used on every request": `--user-agent` and `crawl.user_agent`. Its robots.txt half comes after `020` task 10.4.
 - [ ] 1.3 [HTTP] **Guard:** "Cookies set by the site are not sent back". `020`'s Fetcher already has a `DummyCookieJar`, so the test may pass on its first run; it then shows its red by a mutation. `/` sets the cookie through the route's `headers`, and the request log shows the request for `/check`.
 - [ ] 1.4 Docs: document the user agent and cookies in `docs/crawling.md`.
@@ -59,7 +59,7 @@ Seams (docs/testing.md):
 ## 4. Redirects
 
 - [ ] 4.1 [3+6] Drive "Every hop of a Redirect Chain is recorded", and [CLI] "Index of redirect targets", a pair: hops as URL rows recorded by the engine, the `redirect_location` column, `redirect_url_id` as a declared reference with the partial index `urls_redirect_url_id`, and writing the value `redirect`. Done when: `_crawl_depth` reads the open depth again after its tasks end, so a target recorded at the open depth is dispatched in the same run (design D2).
-- [ ] 4.2 [3+6] Drive "A relative Location is resolved": through a public function made of `_resolved` in `spider.crawl.links` (design D2).
+- [ ] 4.2 [3+6] Drive "A relative Location is resolved": through a public function made of `_resolved` in `openlinx.crawl.links` (design D2).
 - [ ] 4.3 [3+6] Drive "A redirect without Location has no target", with the fixture's `Status(302)`. Done when: a Location that gives no `NormalizedUrl` has no target either, by a [Pure] table (`test_a_location_that_is_no_http_url_has_no_target`, design Risks).
 - [ ] 4.4 [3+6] Drive "A redirect target keeps the depth".
 - [ ] 4.5 [3+6] Drive "A redirect to an excluded URL is not followed".
@@ -89,7 +89,7 @@ Seams (docs/testing.md):
 ## 6. TLS
 
 - [ ] 6.1 [Fixture] Add HTTPS listeners with a `trustme` CA to the fixture site, which the DNS resolver hook maps from port 443 of a name: one for `site.test`, one with a certificate for `other.test` served as `badcert.test`, one with a certificate from an untrusted CA, and one with a self-signed certificate served as `selfsigned.test`. The crawler's TLS setup takes extra trust anchors for the test CA through the context builder (design D5).
-- [ ] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback in `spider.crawl.tls`, and `aiohttp.ClientSSLError` → `tls_error`, before `020`'s `ClientConnectorError` branch, so `ClientConnectorCertificateError`, a subclass of both, is no longer `connection_error` (design D1). Done when: a [Pure] table maps each aiohttp exception class to its `fetch_error` (`test_each_request_error_has_its_fetch_error`, design Risks).
+- [ ] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback in `openlinx.crawl.tls`, and `aiohttp.ClientSSLError` → `tls_error`, before `020`'s `ClientConnectorError` branch, so `ClientConnectorCertificateError`, a subclass of both, is no longer `connection_error` (design D1). Done when: a [Pure] table maps each aiohttp exception class to its `fetch_error` (`test_each_request_error_has_its_fetch_error`, design Risks).
 - [ ] 6.3 [3+6] Drive "A certificate from an unknown CA is a TLS error". Done when: a self-signed certificate is `tls_error` too, through the OS trust store, on Windows, macOS and Linux in CI (`test_a_self_signed_certificate_is_a_tls_error`, design D5 and Risks).
 - [ ] 6.4 Speed test: measure TLS handshake time with truststore and with certifi on Windows, macOS and Linux. Record the results in `docs/crawling.md`, and change the default path only if truststore is measurably slower (design D5).
 - [ ] 6.5 [CLI] Drive "The HTTP version is a later column" (v0.1): `origins.http_version` declared NULL in every row, with its values and a description that starts with `Filled from v0.2. `. If it is the first later column in the schema, `018`'s guard over derived and later columns switches on its assertion that it saw one.
@@ -98,7 +98,7 @@ Seams (docs/testing.md):
 
 ## 7. Response headers
 
-- [ ] 7.1 [3+6] Drive "Response headers are stored as received", and [CLI] "Columns of response_headers", a pair: the `response_headers` table, declared through `018`'s `public_table()` with `url_id` as its primary key and a declared reference, and no secondary index; this change's handler and the row writer of `spider.store.response_headers`, listed in `default_hooks()`, with a [2] replay test of the writer (design Risks).
+- [ ] 7.1 [3+6] Drive "Response headers are stored as received", and [CLI] "Columns of response_headers", a pair: the `response_headers` table, declared through `018`'s `public_table()` with `url_id` as its primary key and a declared reference, and no secondary index; this change's handler and the row writer of `openlinx.store.response_headers`, listed in `default_hooks()`, with a [2] replay test of the writer (design Risks).
 - [ ] 7.2 [3+6] Drive "A cookie value is not stored": the Fetcher redacts `Set-Cookie` values in `FetchResult.headers` (design D7).
 - [ ] 7.3 [Pure] Drive "A Cookie header is redacted pair by pair".
 - [ ] 7.4 Docs: document `response_headers` and the cookie redaction format in `docs/crawling.md`.
@@ -108,7 +108,7 @@ Seams (docs/testing.md):
 
 - [ ] 8.1 Verify that every `#### Scenario:` in `specs/fetching/spec.md` that groups 1–7 drive has exactly one test named after it, with a small script over the test ids. The scenarios of groups 9–12 are checked when v0.2 builds them.
 - [ ] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
-- [ ] 8.3 **Guard:** every code this change declares (design D11) is listed by `spider commands` with its level and exit code [CLI].
+- [ ] 8.3 **Guard:** every code this change declares (design D11) is listed by `linx commands` with its level and exit code [CLI].
 - [ ] 8.4 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.
 
 ## 9. (v0.2) Custom headers and credentials
@@ -120,7 +120,7 @@ Seams (docs/testing.md):
 - [ ] 9.5 [HTTP] Drive "Credentials are sent to Internal URLs": `--auth`, marked secret.
 - [ ] 9.6 [HTTP] Drive "Credentials never go to External URLs".
 - [ ] 9.7 [3+6] Drive "The recorded command hides the password".
-- [ ] 9.8 [HTTP] Drive "Credentials in spider.toml are used".
+- [ ] 9.8 [HTTP] Drive "Credentials in openlinx.toml are used".
 - [ ] 9.9 Docs: document custom headers, basic auth and secrets in `docs/crawling.md`.
 - [ ] 9.10 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
 

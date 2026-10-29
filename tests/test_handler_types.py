@@ -10,8 +10,8 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection
 
-from spider.crawl.engine.hooks import Hooks, UrlResult, handler
-from spider.crawl.pages.preparation import PageInput, extractor
+from openlinx.crawl.engine.hooks import Hooks, UrlResult, handler
+from openlinx.crawl.pages.preparation import PageInput, extractor
 
 
 @dataclass(frozen=True, slots=True)

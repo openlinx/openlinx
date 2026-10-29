@@ -1,5 +1,5 @@
 [project]
-name = "spider"
+name = "openlinx"
 version = "0.1.0.dev0"
 description = "Agent-first SEO crawler: a CLI and a local MCP server driven by AI agents."
 readme = "README.md"
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-spider = "spider.cli.app:main"
+linx = "openlinx.cli.app:main"
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
@@ -52,29 +52,29 @@ select = [
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-"asyncio.set_event_loop_policy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.get_event_loop_policy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.WindowsSelectorEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.WindowsProactorEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.DefaultEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.AbstractEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.events.AbstractEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.windows_events.DefaultEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.unix_events.DefaultEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.events.set_event_loop_policy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.events.get_event_loop_policy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.windows_events.WindowsSelectorEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"asyncio.windows_events.WindowsProactorEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=spider.aio.loop_factory)."
-"sys.stdout".msg = "Write output through spider.output, which writes UTF-8 bytes."
-"sys.stderr".msg = "Write output through spider.output, which writes UTF-8 bytes."
-"typer.echo".msg = "Write output through spider.output, which writes UTF-8 bytes."
-"click.echo".msg = "Write output through spider.output, which writes UTF-8 bytes."
-"typer.secho".msg = "Write output through spider.output, which writes UTF-8 bytes."
-"typer._click.echo".msg = "Write output through spider.output, which writes UTF-8 bytes."
-"typer._click.secho".msg = "Write output through spider.output, which writes UTF-8 bytes."
-"typer._click.utils.echo".msg = "Write output through spider.output, which writes UTF-8 bytes."
-"typer._click.termui.secho".msg = "Write output through spider.output, which writes UTF-8 bytes."
-"typer._click".msg = "Import Typer's vendored Click through spider.cli.click_compat."
+"asyncio.set_event_loop_policy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.get_event_loop_policy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.WindowsSelectorEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.WindowsProactorEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.DefaultEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.AbstractEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.events.AbstractEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.windows_events.DefaultEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.unix_events.DefaultEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.events.set_event_loop_policy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.events.get_event_loop_policy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.windows_events.WindowsSelectorEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"asyncio.windows_events.WindowsProactorEventLoopPolicy".msg = "Use asyncio.run(..., loop_factory=openlinx.aio.loop_factory)."
+"sys.stdout".msg = "Write output through openlinx.output, which writes UTF-8 bytes."
+"sys.stderr".msg = "Write output through openlinx.output, which writes UTF-8 bytes."
+"typer.echo".msg = "Write output through openlinx.output, which writes UTF-8 bytes."
+"click.echo".msg = "Write output through openlinx.output, which writes UTF-8 bytes."
+"typer.secho".msg = "Write output through openlinx.output, which writes UTF-8 bytes."
+"typer._click.echo".msg = "Write output through openlinx.output, which writes UTF-8 bytes."
+"typer._click.secho".msg = "Write output through openlinx.output, which writes UTF-8 bytes."
+"typer._click.utils.echo".msg = "Write output through openlinx.output, which writes UTF-8 bytes."
+"typer._click.termui.secho".msg = "Write output through openlinx.output, which writes UTF-8 bytes."
+"typer._click".msg = "Import Typer's vendored Click through openlinx.cli.click_compat."
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "T20", "S603", "S607"]
@@ -90,7 +90,7 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool", "po
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-ra", "--strict-markers", "--strict-config", "--cov=spider"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--cov=openlinx"]
 xfail_strict = true
 filterwarnings = ["error"]
 asyncio_mode = "auto"
@@ -103,7 +103,7 @@ markers = [
 
 [tool.coverage.run]
 plugins = ["covdefaults"]
-source = ["spider"]
+source = ["openlinx"]
 branch = true
 patch = ["subprocess"]
 

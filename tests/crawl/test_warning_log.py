@@ -5,30 +5,30 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from spider.crawl.engine.crawl_warnings import handler_failure, network_paused
-from spider.crawl.engine.hooks import UrlResult
-from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
-from spider.crawl.engine.progress import UrlCounters
-from spider.crawl.engine.stop import StopSignal
-from spider.crawl.engine.warning_log import WarningLog
-from spider.crawl.urls import NormalizedUrl
-from spider.output.codes import (
+from openlinx.crawl.engine.crawl_warnings import handler_failure, network_paused
+from openlinx.crawl.engine.hooks import UrlResult
+from openlinx.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
+from openlinx.crawl.engine.progress import UrlCounters
+from openlinx.crawl.engine.stop import StopSignal
+from openlinx.crawl.engine.warning_log import WarningLog
+from openlinx.crawl.urls import NormalizedUrl
+from openlinx.output.codes import (
     DECLARED,
     MAX_URLS_REACHED,
     ROBOTS_UNREACHABLE,
     SEED_BLOCKED_BY_ROBOTS_TXT,
 )
-from spider.output.diagnostics import Diagnostic
-from spider.output.reporter import Collected
-from spider.store.records import FetchedUrl, LinkType, NewUrl, Provenance, QueuedUrl, SkippedUrl
-from spider.store.urls import (
+from openlinx.output.diagnostics import Diagnostic
+from openlinx.output.reporter import Collected
+from openlinx.store.records import FetchedUrl, LinkType, NewUrl, Provenance, QueuedUrl, SkippedUrl
+from openlinx.store.urls import (
     queued_batch,
     record_fetched,
     record_seed,
     record_skipped,
     url_counts,
 )
-from spider.store.writer import CrawlWriter
+from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status

@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 
 from hypothesis import settings
 
-from spider.aio import loop_factory
+from openlinx.aio import loop_factory
 
 pytest_plugins = [
     "pytester",

@@ -1,8 +1,8 @@
 # The CLI contract
 
-How every `spider` Command talks to agents and people. The spec is [openspec/specs/cli-contract/spec.md](../openspec/specs/cli-contract/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
+How every `linx` Command talks to agents and people. The spec is [openspec/specs/cli-contract/spec.md](../openspec/specs/cli-contract/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
-`spider commands` describes every Command, the exit codes and the diagnostic codes as one JSON document. Agents read it instead of this page.
+`linx commands` describes every Command, the exit codes and the diagnostic codes as one JSON document. Agents read it instead of this page.
 
 ## stdout and stderr
 
@@ -15,12 +15,12 @@ How every `spider` Command talks to agents and people. The spec is [openspec/spe
 - **Nothing on stdout when a document or list Command fails.** Its result is written only when the Command ends, so a failure leaves stdout empty. A rows Command is the exception by design: each row is written as it is made, so the rows before a failure stay on stdout and the error follows on stderr. So is a Command whose result describes the failed outcome: it prints that result, then the error.
 - **Plain text** appears in three places only, all on stdout with exit code 0:
   - `--help`, on the tool or on any Command
-  - `spider` with no arguments, which prints the same as `spider --help`
-  - `spider --version`, which prints `spider <version>`
-- **`--format`** chooses the format of the result. Each Command supports the formats that `spider commands` lists for it. Any other format fails with `invalid_value`, and the hint lists the Command's formats. Errors stay JSON whatever `--format` says.
+  - `linx` with no arguments, which prints the same as `linx --help`
+  - `linx --version`, which prints `linx <version>`
+- **`--format`** chooses the format of the result. Each Command supports the formats that `linx commands` lists for it. Any other format fails with `invalid_value`, and the hint lists the Command's formats. Errors stay JSON whatever `--format` says.
 
 ```
-spider commands --format jsonl
+linx commands --format jsonl
 ```
 
 stdout stays empty, the exit code is 2, and stderr has:
@@ -41,7 +41,7 @@ Every Command has an output kind, and the kind decides the formats the Command c
 | `list` | the paging envelope `{total, items, next_cursor}` | `json`, `jsonl`, `table` |
 | `rows` | a stream of rows, such as an export | `jsonl` |
 
-Some Commands offer fewer: `spider commands` itself is `json` or `table`. The `csv` format arrives with `050-add-query-and-segments`.
+Some Commands offer fewer: `linx commands` itself is `json` or `table`. The `csv` format arrives with `050-add-query-and-segments`.
 
 - **`json`:** compact JSON, no whitespace between tokens, then `\n`.
 - **`jsonl` (JSON Lines):** one compact JSON object per line, each followed by `\n`. For a list it is one line per item, without the envelope. For rows it is one line per row, written and flushed as soon as the row is made, so a reader can process a long export while it runs.
@@ -66,7 +66,7 @@ A list Command prints one page of its items. The examples use a list whose items
 - **Order:** items always come in the same order, so the same request on unchanged data prints the same bytes.
 
 ```
-spider <list Command> --limit 2
+linx <list Command> --limit 2
 ```
 
 ```json
@@ -95,7 +95,7 @@ With `jsonl` and `table` there is no envelope. When more items exist than were p
 - `--fields sq,n` gives each item exactly those keys, in that order: `{"sq":1,"n":1}`.
 - `--fields all` gives every available field, in the Command's order: `{"n":1,"sq":1}`.
 - Spaces around a name are ignored, and a name given twice counts once, at its first place: `--fields " sq , n,sq"` is `--fields sq,n`. An empty name, as in `--fields n,,sq`, is `invalid_value`.
-- Without `--fields`, the Command's default fields apply. `spider commands` lists the available and default fields of every list Command.
+- Without `--fields`, the Command's default fields apply. `linx commands` lists the available and default fields of every list Command.
 - An unknown field fails with `unknown_field`, which names the field and the available ones:
 
 ```json
@@ -122,7 +122,7 @@ Errors, warnings and info lines are JSON objects, one per line on stderr. Each h
 - **Written as they happen:** every stderr line, diagnostic or progress event, is written whole and flushed at once, so an agent reading a running Command sees a warning when it happens, not when the Command ends. Lines appear in the order they were reported.
 
 ```
-spider nosuchcommand
+linx nosuchcommand
 ```
 
 ```json
@@ -140,7 +140,7 @@ A Command that reports progress writes each event to stderr as one JSON line, fl
 - `event` names the event, `ts` is the UTC time with milliseconds, and `data` is an object.
 - Events and diagnostics share stderr. Tell them apart by the key: an event has `event`, a diagnostic has `level`.
 - stdout never carries events, and there is no result event: the result goes to stdout once, when the Command ends.
-- `spider commands` marks the Commands that report progress with `"events":true`.
+- `linx commands` marks the Commands that report progress with `"events":true`.
 
 ## Partial results
 
@@ -157,10 +157,10 @@ Every other failing document or list Command leaves stdout empty, so for those a
 
 ## The schema of a crawl file
 
-`spider schema [TABLE]` lists the public tables of a crawl file, with their columns. It is a list Command (`json`, `jsonl` and `table`, `--limit` 50 by default), and it needs no Workspace and no Crawl. Its JSON result starts with `schema_version`, the tool's schema version, before `total`:
+`linx schema [TABLE]` lists the public tables of a crawl file, with their columns. It is a list Command (`json`, `jsonl` and `table`, `--limit` 50 by default), and it needs no Workspace and no Crawl. Its JSON result starts with `schema_version`, the tool's schema version, before `total`:
 
 ```
-spider schema seeds --fields name
+linx schema seeds --fields name
 ```
 
 ```json
@@ -171,7 +171,7 @@ spider schema seeds --fields name
 
 ## Selecting a Crawl
 
-Every Command that reads a Crawl takes the global flag `--crawl latest|<id>|<path>`, with the default `latest`. `spider commands` describes it with `"global":true` and `"default":"latest"`. What each value selects, and its errors (`no_crawls`, `crawl_not_found`, `crawl_file_invalid` and `invalid_value`), are in [crawl-store.md](crawl-store.md). The first Commands that read a Crawl arrive with `050-add-query-and-segments`.
+Every Command that reads a Crawl takes the global flag `--crawl latest|<id>|<path>`, with the default `latest`. `linx commands` describes it with `"global":true` and `"default":"latest"`. What each value selects, and its errors (`no_crawls`, `crawl_not_found`, `crawl_file_invalid` and `invalid_value`), are in [crawl-store.md](crawl-store.md). The first Commands that read a Crawl arrive with `050-add-query-and-segments`.
 
 ## Exit codes
 
@@ -182,7 +182,7 @@ The meaning of a code never changes. Codes 9 to 63 are reserved.
 | 0 | `ok` | success |
 | 1 | `failed` | the Command ran but could not do everything asked; the error says what |
 | 2 | `usage` | the command line is wrong: an unknown Command, flag or name, or a missing or invalid value |
-| 3 | `config` | `spider.toml` or a setting is invalid |
+| 3 | `config` | `openlinx.toml` or a setting is invalid |
 | 4 | `not_found` | a Workspace, Crawl or item named on the command line does not exist |
 | 5 | `busy` | another process holds the Crawl |
 | 6 | `incompatible` | the crawl file cannot be used by this version |
@@ -199,7 +199,7 @@ An agent can branch on the exit code alone: 1 means the operation failed, 70 mea
 
 ### The diagnostic codes
 
-Every code is declared once, with its level, its exit code and a description, and `spider commands` lists them under `diagnostics`. A Command never reports a code that is not declared. The codes of this change:
+Every code is declared once, with its level, its exit code and a description, and `linx commands` lists them under `diagnostics`. A Command never reports a code that is not declared. The codes of this change:
 
 | Code | Level | Exit code | Meaning |
 |---|---|---|---|
@@ -207,7 +207,7 @@ Every code is declared once, with its level, its exit code and a description, an
 | `invalid_value` | error | 2 | a flag or argument value that is not allowed |
 | `unknown_field` | error | 2 | a `--fields` name the Command does not have |
 | `invalid_cursor` | error | 2 | a `--cursor` made by a different request, or altered |
-| `settings_invalid` | error | 3 | `spider.toml` cannot be read or breaks the settings rules |
+| `settings_invalid` | error | 3 | `openlinx.toml` cannot be read or breaks the settings rules |
 | `workspace_not_found` | error | 4 | the `--workspace` folder does not exist |
 | `workspace_not_writable` | error | 7 | the Workspace folder or its data folder cannot be created or written |
 | `internal_error` | error | 70 | an unexpected failure, which is a bug |

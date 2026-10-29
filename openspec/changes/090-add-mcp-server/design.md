@@ -44,20 +44,20 @@ Clients that ignore structured content still get the JSON as text. The paging en
 - CLI errors are returned as `isError: true` results whose structured content is the full diagnostic of `010-add-workspace-and-cli-contract`, `{level, code, message, hint, details}`. `details` is kept whole, including `suggestions` and `accepted`, so the model can read the hint and correct itself.
 - Input-schema violations are returned the same way.
 - JSON-RPC protocol errors remain only for unknown tools and malformed messages, which the SDK handles.
-- `mode_conflict` (`024-add-list-and-sitemap-modes`) is raised by the same validation that `spider crawl` uses, so its details match.
+- `mode_conflict` (`024-add-list-and-sitemap-modes`) is raised by the same validation that `linx crawl` uses, so its details match.
 - `doctor` is the one deliberate exception: a failing check is its normal output.
 
 ### D4. Crawls are always detached, and progress comes from polling
 - `crawl_start` and `crawl_resume` call the Crawl Service's detached start from `060-add-crawl-control`, so the Crawl is a separate OS process that owns its own store writer.
-  - 060 records a synthesised equivalent `spider crawl` argv as the Crawl's command, so `crawls show` works for Crawls started through MCP too.
+  - 060 records a synthesised equivalent `linx crawl` argv as the Crawl's command, so `crawls show` works for Crawls started through MCP too.
 - Progress comes from `crawl_status` over the control rows in the store.
 - *Alternative:* MCP progress notifications or the experimental Tasks. Client support is spotty, the tool call would have to stay open for minutes or hours, and a client restart would lose the link to the Crawl. Polling works in every client and survives restarts.
 
 ### D5. The Workspace is chosen once at startup, from `--workspace`
-- The order is `spider mcp --workspace <path>`, then the rules of `010-add-workspace-and-cli-contract` from the server's working folder: the nearest `.spider/` or `spider.toml` up to the home folder, otherwise the global Workspace.
+- The order is `linx mcp --workspace <path>`, then the rules of `010-add-workspace-and-cli-contract` from the server's working folder: the nearest `.openlinx/` or `openlinx.toml` up to the home folder, otherwise the global Workspace.
 - Client configs pass `--workspace` in their `args`, and the `.mcpb` maps its `workspace` setting to that argument (D9).
 - Each tool call opens its own read-only connection for queries, so the server keeps no state between calls, which fits the stateless protocol and cursor-based paging.
-- *Alternative:* an environment variable. The maintainer ruled these out on 2026-09-27: settings come only from flags and `spider.toml`.
+- *Alternative:* an environment variable. The maintainer ruled these out on 2026-09-27: settings come only from flags and `openlinx.toml`.
 - *Alternative:* a `workspace` input on every tool. It gives flexibility, but it would let a model point writes at any folder, which breaks write confinement.
 
 ### D6. Blocking service calls run in worker threads
@@ -76,38 +76,38 @@ Service calls are synchronous: SQLite queries and Report rendering. The server r
 
 ### D8. Inline Report Notes live in the Crawl's reports folder
 Claude Desktop has no file-writing tool by default, so `report` accepts `notes` as an object.
-- The server writes them as Report Notes files, following 070's contract, into `.spider/reports/<crawl-id>/notes/`, and passes that folder as `--notes`.
+- The server writes them as Report Notes files, following 070's contract, into `.openlinx/reports/<crawl-id>/notes/`, and passes that folder as `--notes`.
 - The folder is next to the Report's default location, so `crawls rm` (060) removes notes and Reports together.
 - Write confinement holds, and 070's merge path is reused unchanged.
 
 ### D9. `.mcpb` layout: a thin bundle that installs the released package
 ```
 manifest.json      (manifest_version 0.4, server.type "uv", user_config.workspace, tools, compatibility)
-pyproject.toml     (dependencies = ["spider==<version>"], requires-python ">=3.12,<3.15")
+pyproject.toml     (dependencies = ["openlinx==<version>"], requires-python ">=3.12,<3.15")
 uv.lock            (locked for all three platforms at build time)
 .python-version    (3.14)
-server.py          (entry point: runs the package's `spider mcp` entry with the given arguments)
+server.py          (entry point: runs the package's `linx mcp` entry with the given arguments)
 icon.png
 ```
 - `server.mcp_config.args` ends with `mcp --workspace ${user_config.workspace}`.
-- `user_config.workspace` is a required `directory` setting whose default is `${HOME}`. With that default, the Crawls go to `~/.spider/crawls/`, the same data folder as the global Workspace, and the bundle never passes an empty argument.
+- `user_config.workspace` is a required `directory` setting whose default is `${HOME}`. With that default, the Crawls go to `~/.openlinx/crawls/`, the same data folder as the global Workspace, and the bundle never passes an empty argument.
 - `scripts/build_mcpb.py` does the following:
   1. renders the manifest from the package version and the tool registry
   2. runs `uv lock`
-  3. zips the files into `dist/spider-<version>.mcpb`
+  3. zips the files into `dist/openlinx-<version>.mcpb`
 - CI validates the result with `npx @anthropic-ai/mcpb validate`.
-- This change adds the bundle to the release pipeline of `100-add-installers`: the `build` job runs `scripts/build_mcpb.py` before it writes `SHA256SUMS`, and the `release` job attaches `spider-<version>.mcpb`. The first release that carries it is v0.1.1.
+- This change adds the bundle to the release pipeline of `100-add-installers`: the `build` job runs `scripts/build_mcpb.py` before it writes `SHA256SUMS`, and the `release` job attaches `openlinx-<version>.mcpb`. The first release that carries it is v0.1.1.
 - The bundle's `.python-version` joins the pin test of `100-add-installers`, so the bundle, both install scripts and `requires-python` move together.
 - The exact `mcp_config` for the `uv` type follows the uv example in the MCPB repository. Implementation checks it with the validator and a manual install.
 - *Alternative:* server type `python` with vendored dependencies. It means a large archive and platform-specific wheels (aiohttp, selectolax, msgspec, zstandard) per OS, and it gets no uv-managed Python.
 
-### D10. The plugin `.mcp.json` runs `spider mcp` from PATH
+### D10. The plugin `.mcp.json` runs `linx mcp` from PATH
 The plugin's Skill drives the installed CLI, so the MCP server should be the same version. Without `--workspace`, the server finds the project's Workspace from the working folder, as the CLI does.
-- *Alternative:* `uvx --python 3.14 spider mcp`. It works without an installed CLI, but it can run a different version than the CLI and starts more slowly.
+- *Alternative:* `uvx --python 3.14 linx mcp`. It works without an installed CLI, but it can run a different version than the CLI and starts more slowly.
 - Side effect: a contributor who opens this repository in Claude Code sees the same file as a project MCP config. CONTRIBUTING says so.
 
 ### D11. `mcp` is a core dependency, imported lazily
-`spider mcp` works after a plain install. The import happens inside the `mcp` Command, so other Commands' startup time and the outdated-Skill check stay unaffected.
+`linx mcp` works after a plain install. The import happens inside the `mcp` Command, so other Commands' startup time and the outdated-Skill check stay unaffected.
 - *Alternative:* an optional `[mcp]` extra. It would complicate the installers, the plugin and the bundle for little gain.
 
 ## Test seams
@@ -137,7 +137,7 @@ The plugin's Skill drives the installed CLI, so the MCP server should be the sam
   - Mitigation: the detach of `060-add-crawl-control` breaks away from the job where it is allowed, and otherwise warns `job_may_end_crawl`.
   - Mitigation: `crawl_status` then shows the Crawl as interrupted, and `crawl_resume` continues it.
 - **GUI clients don't see PATH changes made after they started.**
-  - Mitigation: `docs/mcp.md` shows the absolute `spider.exe` path. The `.mcpb` does not depend on PATH.
+  - Mitigation: `docs/mcp.md` shows the absolute `linx.exe` path. The `.mcpb` does not depend on PATH.
 - **Large results fill the model's context.**
   - Mitigation: the CLI's default `limit`, the `fields` input, `LIMIT` in `sql`, and server instructions that push `summary` and `issues` first.
   - `page` with `html: true` returns what the agent asked for, and the instructions discourage it.
@@ -154,7 +154,7 @@ This is new functionality with nothing to migrate. When the product name changes
 
 ## Open Questions
 
-- When `--workspace` is the home folder (the bundle's default), should settings be read from `~/spider.toml` or `~/.spider/spider.toml`? That depends on how `010-add-workspace-and-cli-contract` treats a `--workspace` equal to the home folder. The data folder is `~/.spider/` either way.
-- Should there be a read-only server mode (`spider mcp --read-only`) that hides `crawl_start`, `crawl_stop`, `crawl_resume` and `report`, for cautious users? It would be an additive flag.
+- When `--workspace` is the home folder (the bundle's default), should settings be read from `~/openlinx.toml` or `~/.openlinx/openlinx.toml`? That depends on how `010-add-workspace-and-cli-contract` treats a `--workspace` equal to the home folder. The data folder is `~/.openlinx/` either way.
+- Should there be a read-only server mode (`linx mcp --read-only`) that hides `crawl_start`, `crawl_stop`, `crawl_resume` and `report`, for cautious users? It would be an additive flag.
 - Should `crawl_start` refuse, by itself, a Crawl above 5,000 estimated URLs unless the call confirms it? This would be a hard guard. For now the instructions hand such Crawls off.
 - Should polling move to MCP Tasks once Claude Desktop and Codex support them? That is a v1.0 decision.
