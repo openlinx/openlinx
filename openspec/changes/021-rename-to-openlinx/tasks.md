@@ -18,7 +18,7 @@ Seams are those of docs/testing.md: seam 1 is the CLI through `run_cli`, "seam 1
 ## 4. The second console script
 
 - [x] 4.1 Drive "Both console scripts run the same entry point": `openlinx = "openlinx.cli.app:main"` beside `linx`. The test reads the distribution's `console_scripts` entry points.
-- [ ] 4.2 The CI wheel smoke test runs `linx --version` and `openlinx --version` and compares their output.
+- [x] 4.2 The CI wheel smoke test runs `linx --version` and `openlinx --version` and compares their output.
 
 ## 5. Docs
 
