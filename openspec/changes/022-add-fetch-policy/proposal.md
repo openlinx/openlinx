@@ -37,7 +37,7 @@ The response headers must also be stored, without cookie values, because `page -
 - **Redirects:**
   - Followed hop by hop, by the engine. Every hop is a `urls` row with `redirect_location`/`redirect_url_id`, and a target keeps the Crawl Depth of its source.
   - `--max-redirects <n>` (default 10). Loops are marked with `in_redirect_loop`.
-  - A Seed that redirects within its registrable domain extends the Scope (whether v0.1 keeps it is the user's decision, still open in the design). An off-site Seed redirect is a warning.
+  - A Seed that redirects within its registrable domain extends the Scope, once, at the end of its Redirect Chain and before its final Page is prepared (the user's decision of 2026-10-14). An off-site Seed redirect is a warning.
   - A meta refresh stays a Link, never a redirect hop.
 - **Limits:** response bodies are read up to 20 MiB, before and after decoding (`body_truncated`, `parse_error = body_too_large`), and URLs longer than 2,000 characters are skipped (`url_too_long`).
 - **Compression:** gzip, deflate and br, decoded by the tool; zstd from v0.2, so v0.1 sends `Accept-Encoding: gzip, deflate, br`. The `content_encoding`, `size_bytes` and `transferred_bytes` columns record status and size checks for Resources.
