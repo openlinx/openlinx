@@ -20,7 +20,7 @@ from spider.services.hooks import default_hooks
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.server import ServerHandle
-from tests.support.cli import start_cli_process
+from tests.support.cli import await_event, start_cli_process
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
@@ -79,6 +79,54 @@ def test_ctrl_break_stops_a_crawl_on_windows(
     assert _how_it_ended(process) == (130, "stopped", "interrupt", ["interrupt"])
 
 
+class _StoppingTimed(Collected):
+    def __init__(self) -> None:
+        super().__init__()
+        self.stopping_at: float | None = None
+
+    def event(self, name: str, **data: Any) -> None:
+        super().event(name, **data)
+        if name == "stopping":
+            self.stopping_at = time.monotonic()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+def test_ctrl_c_stops_an_idle_crawl_whichever_thread_takes_the_signal(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # The only request answers late, so the loop waits in select() with no timer due before it.
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/slow">S</a>'),
+                "/slow": Page(body="<p>S</p>", delay=5),
+            }
+        )
+    )
+    reporter = _StoppingTimed()
+    sent: list[float] = []
+
+    def interrupt() -> None:
+        _await_request(server, "/slow")
+        started = next(data for name, data in reporter.events if name == "crawl_started")
+        # Once the writer has committed /'s Page, its commit deadline no longer wakes the loop.
+        _await_row(Path(started["crawl_file"]), server.url("/slow"))
+        sent.append(time.monotonic())
+        # POSIX hands a process's signal to any thread that does not block it, as macOS often
+        # does: its handler then runs in the main thread only once that thread wakes. The skip's
+        # condition again, which mypy reads only from an if.
+        if sys.platform != "win32":
+            signal.pthread_kill(threading.get_ident(), signal.SIGINT)
+
+    interrupter = threading.Thread(target=interrupt)
+    interrupter.start()
+    result = crawl_result(server.url("/"), reporter=reporter)
+    interrupter.join(timeout=30)
+
+    assert reporter.stopping_at is not None
+    assert (result.summary.stop_reason, reporter.stopping_at - sent[0] < 0.5) == ("interrupt", True)
+
+
 def test_an_interrupt_is_reported_by_one_error(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
@@ -127,12 +175,12 @@ def test_a_second_interrupt_ends_the_process_at_once(
         )
     )
     process = start_cli_process("crawl", server.url("/"))
-    crawl_file = Path(_await_event(process, "crawl_started")["crawl_file"])
+    crawl_file = Path(await_event(process, "crawl_started")["crawl_file"])
     _await_request(server, "/hang")
     # The writer commits each second: the row that the kill must leave queued is in the file.
     _await_row(crawl_file, server.url("/hang"))
     _interrupt(process)
-    _await_event(process, "stopping")
+    await_event(process, "stopping")
 
     second_at = time.monotonic()
     _interrupt(process)
@@ -193,7 +241,7 @@ def test_a_stop_ends_a_pause(temp_workspace: TempWorkspace, fixture_site: StartS
     process = start_cli_process(
         "crawl", server.url("/"), "--concurrency", "1", "--network-wait", "1800"
     )
-    _await_event(process, "crawl_paused")
+    await_event(process, "crawl_paused")
 
     interrupted_at = time.monotonic()
     _interrupt(process)
@@ -213,17 +261,6 @@ def test_a_stop_ends_a_pause(temp_workspace: TempWorkspace, fixture_site: StartS
     ) == (130, "stopped", "interrupt", 1, 0, [])
 
 
-def _await_event(process: subprocess.Popen[bytes], name: str) -> dict[str, Any]:
-    """The event's data, once stderr holds it."""
-    assert process.stderr is not None
-    for line in process.stderr:
-        event = json.loads(line)
-        if event.get("event") == name:
-            data: dict[str, Any] = event["data"]
-            return data
-    raise AssertionError(f"the Command ended without a {name} event")
-
-
 def _interrupt(process: subprocess.Popen[bytes]) -> None:
     """Ctrl+C, or on Windows Ctrl+Break, which a process group alone gets."""
     if sys.platform == "win32":
@@ -240,42 +277,19 @@ def _how_it_ended(process: subprocess.Popen[bytes]) -> tuple[int, str, str, list
     return process.returncode, result["state"], result["stop_reason"], stopping
 
 
-def test_a_stop_that_ends_a_depth_reads_no_deeper_one(temp_workspace: TempWorkspace) -> None:
+def test_a_crawl_puts_the_process_handlers_back(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
-    stop = StopSignal()
-    reporter = Collected()
-    before = signal.getsignal(signal.SIGINT)
-    pages = {
-        "/": FakePage('<a href="http://other.test/slow">S</a><a href="/a">A</a>'),
-        "http://other.test/slow": FakePage("<p>S</p>", delay=60),
-        "/a": FakePage('<a href="/b">B</a>'),
-    }
-    fetcher = FakeFetcher(clock, pages, on_start={"/a": lambda: stop.set("interrupt")})
+    before = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)}
 
-    result = crawl_result(
-        "http://site.test/", clock=clock, fetcher=fetcher, stop=stop, reporter=reporter
+    crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, {"/": FakePage("<p>/</p>")}),
     )
 
-    # The Checked URL still in flight at the stop is cancelled with the run, not waited for by a
-    # sweep of the frontier from the top.
-    assert (
-        result.summary.state,
-        result.summary.stop_reason,
-        query(result.crawl_file, "SELECT url, fetch_state FROM urls ORDER BY id"),
-        [data["reason"] for name, data in reporter.events if name == "stopping"],
-        signal.getsignal(signal.SIGINT) is before,
-    ) == (
-        "stopped",
-        "interrupt",
-        [
-            ("http://site.test/", "fetched"),
-            ("http://other.test/slow", "queued"),
-            ("http://site.test/a", "fetched"),
-            ("http://site.test/b", "queued"),
-        ],
-        ["interrupt"],
-        True,
-    )
+    # A later Ctrl+C in the same process, an embedding app's or a test runner's, reaches its own
+    # handler again, not a finished Crawl's stop flag.
+    assert {signum: signal.getsignal(signum) for signum in before} == before
 
 
 # An hour away: a request that hangs well past the grace, and the watchdog's 120 seconds.
@@ -355,14 +369,52 @@ def test_a_stop_during_the_post_crawl_passes_completes_the_crawl(
     hooks = default_hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("stop", stop_request_arrives)))
     fetcher = FakeFetcher(clock, {"/": FakePage("<p>/</p>")})
+    reporter = Collected()
 
-    result = crawl_result("http://site.test/", hooks, clock=clock, fetcher=fetcher, stop=stop)
+    result = crawl_result(
+        "http://site.test/", hooks, clock=clock, fetcher=fetcher, stop=stop, reporter=reporter
+    )
 
-    # Nothing was left queued when it came, so the Crawl has nothing to continue.
-    assert (result.summary.state, result.summary.stop_reason, result.failure) == (
-        "completed",
-        None,
-        None,
+    # Nothing was left queued when it came, so the Crawl has nothing to continue, and the stream
+    # says nothing of a stop the result does not report.
+    assert (
+        result.summary.state,
+        result.summary.stop_reason,
+        result.failure,
+        [data for name, data in reporter.events if name == "stopping"],
+    ) == ("completed", None, None, [])
+
+
+def test_a_stop_ends_the_waits_for_turns_under_rate(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    stop = StopSignal()
+    # At --rate 0.5 the host's turns come 2 seconds apart, robots.txt's and /'s first: as /p1
+    # starts at 4, /p2 to /p4 hold the host's other slots while they wait for theirs, and the rest
+    # wait for a slot.
+    paths = [f"/p{n}" for n in range(1, 9)]
+    pages = {
+        "/": FakePage("".join(f'<a href="{path}">P</a>' for path in paths)),
+        **{path: FakePage("<p>P</p>") for path in paths},
+    }
+    fetcher = FakeFetcher(clock, pages, on_start={"/p1": lambda: stop.set("interrupt")})
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, stop=stop, rate=0.5, concurrency=4
+    )
+
+    # It ends as /p1 answers, with nothing else started, not after the turns already reserved.
+    assert (
+        result.summary.stop_reason,
+        query(result.crawl_file, "SELECT url, fetch_state FROM urls ORDER BY id"),
+        clock.monotonic(),
+    ) == (
+        "interrupt",
+        [
+            ("http://site.test/", "fetched"),
+            ("http://site.test/p1", "fetched"),
+            *[(f"http://site.test{path}", "queued") for path in paths[1:]],
+        ],
+        4,
     )
 
 

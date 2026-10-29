@@ -5,8 +5,10 @@ from collections.abc import Callable, Iterable, Sequence
 from sqlalchemy import (
     ColumnElement,
     Connection,
+    and_,
     bindparam,
     case,
+    exists,
     func,
     literal_column,
     null,
@@ -32,7 +34,7 @@ from spider.store.records import (
     UrlTally,
 )
 from spider.store.rows import write_rows
-from spider.store.schema import literal_values, urls
+from spider.store.schema import literal_values, origins, urls
 
 # True once it recorded the URL's outcome; a skip that a lowering or a raise overtook
 # records nothing, and the URL is decided again (design D5).
@@ -132,6 +134,14 @@ _UNWRITTEN = _URL_ROW.values(
     blocked_by_robots_txt=bindparam("robots_blocked"),
     **_WRITE_BACK,
 )
+# What a URL queued again no longer has: the outcome of its failed request.
+_OUTCOME_CLEARED = {
+    "fetch_state": "queued",
+    "fetch_error": null(),
+    "fetch_error_message": null(),
+    "fetched_at": null(),
+    "blocked_by_robots_txt": null(),
+}
 # An error URL that an outage re-queues; its depth and provenance stay (design D3, D16).
 _REQUEUED = (
     update(urls)
@@ -139,13 +149,22 @@ _REQUEUED = (
         urls.c.id.in_(bindparam("url_ids", expanding=True)),
         urls.c.fetch_state == literal_column("'error'"),
     )
-    .values(
-        fetch_state="queued",
-        fetch_error=null(),
-        fetch_error_message=null(),
-        fetched_at=null(),
-        blocked_by_robots_txt=null(),
+    .values(**_OUTCOME_CLEARED)
+)
+# What a continue requests again, over the whole table: outcomes that are usually transient,
+# which is what makes a failed Crawl resumable (design D1).
+_CONTINUE_REQUEUED = (
+    update(urls)
+    .where(
+        or_(
+            urls.c.fetch_state == literal_column("'error'"),
+            and_(
+                urls.c.fetch_state == literal_column("'skipped'"),
+                urls.c.skip_reason == literal_column("'robots_unreachable'"),
+            ),
+        )
     )
+    .values(**_OUTCOME_CLEARED, skip_reason=null())
 )
 # A literal, as the partial index urls_crawl_depth_id is declared, so the frontier reads use it
 # without the plan depending on a bound value (design D1).
@@ -240,6 +259,29 @@ def requeue(url_ids: Sequence[int]) -> Callable[[Connection], UrlTally]:
         return UrlTally(errors=-count, queued=count)
 
     return unit
+
+
+def seed_answered(seed: NormalizedUrl) -> Callable[[Connection], bool]:
+    """A unit that only reads: whether the Seed, or its origin's robots.txt, got an HTTP
+    response in an earlier run of the Crawl (design D20)."""
+
+    def unit(connection: Connection) -> bool:
+        answered: bool = connection.execute(
+            select(
+                exists().where(urls.c.url == seed, urls.c.status_code.is_not(None))
+                | exists().where(
+                    origins.c.origin == url_origin(seed), origins.c.robots_status_code.is_not(None)
+                )
+            )
+        ).scalar_one()
+        return answered
+
+    return unit
+
+
+def requeue_for_a_continue(connection: Connection) -> None:
+    """Inside the continue's unit, before its counts are read."""
+    connection.execute(_CONTINUE_REQUEUED)
 
 
 def next_depth(depth: int) -> Callable[[Connection], int | None]:

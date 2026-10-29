@@ -1,11 +1,11 @@
 """The warning log: each warning kept once per what its code names (020-add-crawl-core D10)."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
 from spider.crawl.urls import NormalizedUrl
-from spider.output.codes import DECLARED
+from spider.output.codes import DECLARED, MAX_URLS_REACHED, NETWORK_PAUSED
 from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Reporter
 
@@ -25,15 +25,38 @@ class _Pauses:
 
 
 class WarningLog:
-    """The Crawl's Reporter: passes everything on, and keeps the warnings for the result."""
+    """The Crawl's Reporter: passes everything on, and keeps the warnings for the result.
 
-    def __init__(self, reporter: Reporter) -> None:
+    A continuing run's log starts from the warnings its earlier runs stored, without writing
+    them again: a warning kept once stays once over the Crawl's life, and a counted one adds
+    up (design D10)."""
+
+    def __init__(self, reporter: Reporter, earlier: Sequence[Diagnostic] = ()) -> None:
         self._reporter = reporter
         self._warnings: list[Diagnostic] = []
         self._written: dict[tuple[str, object], int] = {}
         # By code: where a counted warning is kept, and how many URLs it affected so far.
         self._counted: dict[str, tuple[int, int]] = {}
         self._pauses: _Pauses | None = None
+        for diagnostic in earlier:
+            self._restore(diagnostic)
+
+    def _restore(self, diagnostic: Diagnostic) -> None:
+        # How one run ended, not what the site did: a run that stops at the limit again
+        # writes it anew.
+        if diagnostic.code == MAX_URLS_REACHED.code:
+            return
+        index = len(self._warnings)
+        self._warnings.append(diagnostic)
+        details = diagnostic.details
+        detail = _ONCE_PER.get(diagnostic.code)
+        if diagnostic.code == NETWORK_PAUSED.code:
+            self._pauses = _Pauses(index, details["count"], details["total_seconds"])
+        # Only count() gives a warning its first URL.
+        elif "first_url" in details:
+            self._counted[diagnostic.code] = (index, details["count"])
+        elif detail is not None:
+            self._written[diagnostic.code, details.get(detail)] = index
 
     @property
     def warnings(self) -> tuple[Diagnostic, ...]:

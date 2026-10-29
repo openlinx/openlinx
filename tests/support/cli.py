@@ -113,6 +113,17 @@ def start_cli_process(*args: str) -> subprocess.Popen[bytes]:
     return process
 
 
+def await_event(process: subprocess.Popen[bytes], name: str) -> dict[str, Any]:
+    """The event's data, once the process's stderr holds it."""
+    assert process.stderr is not None
+    for line in process.stderr:
+        event = json.loads(line)
+        if event.get("event") == name:
+            data: dict[str, Any] = event["data"]
+            return data
+    raise AssertionError(f"the Command ended without a {name} event")
+
+
 def _is_event_or_diagnostic(line: bytes) -> bool:
     try:
         parsed = json.loads(line)

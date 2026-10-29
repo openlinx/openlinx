@@ -29,7 +29,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | `--include <regex>` | `include` | `[]` | When given, an Internal URL that matches no include pattern is checked but not followed; give the option once per pattern. |
 | `--exclude <regex>` | `exclude` | `[]` | A URL that the pattern matches is never requested; give the option once per pattern (see [Include and exclude patterns](#include-and-exclude-patterns)). |
 | `--max-depth <n>` | `max_depth` | none | The deepest Crawl Depth whose URLs are requested, 0 or more; Resources of followed Pages are requested one deeper (see [Crawl Depth](#crawl-depth)). |
-| `--max-urls <n>` | `max_urls` | none | The most URL requests the Crawl starts, 1 or more (see [The URL limit](#the-url-limit)). |
+| `--max-urls <n>` | `max_urls` | none | The most URL requests the Crawl starts over its whole life, 1 or more (see [The URL limit](#the-url-limit)). |
 | `--network-wait <seconds>` | `network_wait` | `1800` | How long a Crawl that lost the network waits for its Seed to answer before it fails, 0 or more; 0 fails at once (see [The network pause](#the-network-pause)). |
 | `--ignore-robots` | `ignore_robots` | `false` | Request URLs that robots.txt disallows; they are still recorded with `blocked_by_robots_txt` = 1 (see [`--ignore-robots`](#--ignore-robots)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `spider` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
@@ -70,8 +70,9 @@ http://site.test/a.png     depth 2, fetched (a Resource of /a)
 
 ### The URL limit
 
-There is no URL limit by default. With `--max-urls <n>`, the Crawl starts at most `n` URL requests:
+There is no URL limit by default. With `--max-urls <n>`, the Crawl starts at most `n` URL requests over its whole life:
 
+- A continued Crawl counts the URLs its earlier runs fetched: one stopped at 3 and continued with `--max-urls 5` requests 2 more. A URL that a continue requests again, such as an `error` one, counts again only when it is requested.
 - A request counts from the moment it starts, so requests in flight count. A URL recorded without a request, such as an excluded one, does not count, and neither do robots.txt requests.
 - At the first request the limit refuses, nothing new starts. The requests in flight get the grace of [Stopping a Crawl](#stopping-a-crawl), and every URL not requested stays `queued`. So a request that runs past the grace leaves its URL `queued`, and the Crawl may record fewer than `n` URLs; a continue requests it.
 - The Crawl ends `stopped` with `crawl.stop_reason` = `max_urls`, and exits with code 0. Its post-crawl passes have run, as for a `completed` Crawl.
@@ -94,7 +95,7 @@ While it runs, the Command writes events to stderr, one JSON object per line, as
 
 ### Warnings
 
-A warning is written to stderr as a diagnostic when it first occurs, and kept for the result's `warnings` and for `crawl.warnings` in the crawl file, which holds them as a JSON array once the Crawl ends (`[]` while it runs). A warning about a host, such as `robots_unreachable`, is written once per host; a warning about the tool's own code is counted (see [When one URL fails](#when-one-url-fails)), and so is `network_paused`, which counts pauses instead of URLs:
+A warning is written to stderr as a diagnostic when it first occurs, and kept for the result's `warnings` and for `crawl.warnings` in the crawl file, which holds them as a JSON array once the Crawl ends (`[]` while a new Crawl runs, and the earlier runs' list while a continue runs). Both hold the warnings of the Crawl's whole life: a continue keeps those of the earlier runs, writes a warning kept once per host no second time, adds to a counted one, and drops `max_urls_reached`, which says how one run ended. A warning about a host, such as `robots_unreachable`, is written once per host; a warning about the tool's own code is counted (see [When one URL fails](#when-one-url-fails)), and so is `network_paused`, which counts pauses instead of URLs:
 
 | Code | Counts | `details` |
 |---|---|---|
@@ -114,7 +115,7 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 | `seed_count` | The number of Seeds. |
 | `section_crawl` | Whether the Scope is one part of a site. |
 | `started_at`, `ended_at` | UTC timestamps, `YYYY-MM-DDTHH:MM:SS.sssZ`. |
-| `duration_s` | Seconds from `started_at` to `ended_at`. |
+| `duration_s` | Seconds from `started_at` to `ended_at`. A continued Crawl counts from its first start, so the time between its runs is included; `060`'s `crawl_runs` gives each run's. |
 | `urls` | The counts of `urls` rows: `discovered` (all of them), and by `fetch_state`: `fetched`, `errors`, `skipped`, `queued`. |
 | `pages` | URLs whose response was parsed (`parsed` = 1). |
 | `status_classes` | URLs by the class of their status code: `2xx`, `3xx`, `4xx`, `5xx`, `other`. |
@@ -187,6 +188,24 @@ The events `crawl_paused` and `crawl_resumed` mark a pause, `progress` events go
 
 - **The watchdog:** a request that has not ended 120 seconds after it started, or the Fetcher's whole request deadline plus 30 seconds when that is longer, is cancelled and recorded with `fetch_error` = `watchdog`. It counts as a request without a response for the network pause.
 - **Recording that keeps failing:** 100 URLs in a row whose rows could not be recorded end the Crawl with `write_failed`; a URL recorded in between starts the count again.
+
+### What a killed Crawl keeps
+
+The `urls` table is the queue, and nothing else is: a URL leaves `queued` only in the writer unit that records its response together with the URLs it found, and the writer commits about once a second. A Crawl killed at any moment, by SIGKILL, a power cut or a second interrupt, keeps every unit committed before it:
+
+- no Page is half-recorded: every URL that a Page with `parsed` = 1 links to has its row
+- every URL that was in flight, or not yet requested, is still `queued`
+- the crawl file stays `running`, which `060` reports as `interrupted`
+
+### Continuing a Crawl
+
+The Crawl Service continues a `stopped` or `failed` Crawl from its crawl file alone; `060`'s `spider resume` calls it, and adds `interrupted` Crawls. A continue:
+
+1. builds the Crawl from the file: the `[crawl]` settings from `crawl.config`, the Scope from `crawl.scope` and the Seed from `seeds`, none of them decided again
+2. in one unit, sets `crawl.state` back to `running` with `stop_reason` NULL, writes the settings it runs with into `crawl.config`, and queues again every `error` URL and every URL skipped as `robots_unreachable`, since those outcomes are usually transient
+3. runs as a new Crawl would: it requests only `queued` URLs, so no URL fetched before is requested again, and it runs the post-crawl passes again when it ends
+
+Of the settings on this page, a continue may change the URL limit, to a higher one or none, `--concurrency` and `--rate`, as `060`'s resume options allow. The URL limit counts over the Crawl's whole life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see [Warnings](#warnings)). A Seed still down when a failed Crawl is continued fails it as `seed_unreachable` again.
 
 ### When one URL fails
 

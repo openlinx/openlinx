@@ -1,10 +1,11 @@
 """The Crawl's warning log (020-add-crawl-core D10; seams 2, 3 and 3+6)."""
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from spider.crawl.engine.crawl_warnings import handler_failure
+from spider.crawl.engine.crawl_warnings import handler_failure, network_paused
 from spider.crawl.engine.hooks import UrlResult
 from spider.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
 from spider.crawl.engine.progress import UrlCounters
@@ -268,3 +269,20 @@ def test_the_crawl_file_keeps_every_warning_of_the_result(
         result["warnings"],
         ["max_urls_reached", "robots_unreachable"],
     )
+
+
+def test_a_continuing_log_adds_its_pauses_to_the_stored_ones() -> None:
+    reporter = Collected()
+    stored = replace(
+        network_paused(NormalizedUrl("http://site.test/")),
+        details={"count": 1, "total_seconds": 30.0},
+    )
+    log = WarningLog(reporter, [stored])
+
+    log.pause_began(network_paused(NormalizedUrl("http://site.test/")))
+    log.pause_ended(5)
+
+    assert (
+        [(w.code, w.details["count"], w.details["total_seconds"]) for w in log.warnings],
+        reporter.warnings,
+    ) == ([("network_paused", 2, 35.0)], [])

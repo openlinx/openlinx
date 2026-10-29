@@ -207,6 +207,18 @@ class UrlCounts:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class RecordedCrawl:
+    """What a continue builds its run from: the file alone (020-add-crawl-core D20)."""
+
+    state: CrawlState
+    crawl_mode: CrawlMode
+    config: dict[str, Any]
+    scope: RecordedScope
+    seeds: tuple[str, ...]
+    warnings: tuple[dict[str, Any], ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class CrawlSummary:
     """What a Crawl's result reports from its crawl and seeds rows."""
 

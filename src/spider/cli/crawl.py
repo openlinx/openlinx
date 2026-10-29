@@ -121,8 +121,8 @@ def crawl(
         typer.Option(
             "--max-urls",
             min=1,
-            help="The most URL requests the Crawl starts; robots.txt requests do not count. "
-            "No limit by default.",
+            help="The most URL requests the Crawl starts over its whole life, a continue's "
+            "included; robots.txt requests do not count. No limit by default.",
             show_default=False,
         ),
         OptionMeta(setting="crawl.max_urls"),

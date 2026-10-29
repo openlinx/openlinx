@@ -130,6 +130,7 @@ class NetworkPause:
         network_wait: int,
         seed: NormalizedUrl,
         crawl_id: str,
+        seed_answered: bool,
         stop: StopSignal,
         requester: Requester,
         clock: Clock,
@@ -138,7 +139,7 @@ class NetworkPause:
         track: Callable[[asyncio.Task[None]], None],
     ) -> None:
         """`track` hands the probing task to the run's TaskFailure, which ends the run on its
-        error."""
+        error; `seed_answered` is whether the Seed's origin answered in an earlier run."""
         self._limit = pause_after(concurrency)
         self._network_wait = network_wait
         self._seed = seed
@@ -152,8 +153,9 @@ class NetworkPause:
         # The URLs of the requests in a row without a response, which make up the next count.
         self._in_a_row: list[CountedUrl] = []
         self._paused: _Paused | None = None
-        # The Seed is requested first, so the first Internal answer is its origin's.
-        self._seed_answered = False
+        # The Seed is requested first, so the first Internal answer is its origin's; a
+        # continue that does not request it again takes the earlier runs' answer.
+        self._seed_answered = seed_answered
         # The origins that a dead section showed dead, which count no more (design D16).
         self._dead_origins: set[str] = set()
         self._probing: asyncio.Task[None] | None = None
