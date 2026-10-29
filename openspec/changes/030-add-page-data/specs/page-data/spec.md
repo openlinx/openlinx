@@ -944,21 +944,13 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 - **THEN** the descriptions of `inlinks`, `unique_inlinks` and `linking_pages_pct` start with `Derived: `
 
 ### Requirement: Crawl Depth and Folder Depth
-**In short:** `crawl_depth` is the shortest path of followed Links from a Seed once the post-crawl passes have run; `folder_depth` counts the path's segments.
+**In short:** `crawl_depth` repeats the Crawl Depth that the crawl engine records in `urls`; `folder_depth` counts the path's segments.
 
-`crawl_depth` SHALL equal `urls.crawl_depth` for the Page. Once the post-crawl passes have run, both SHALL be the number of Links on the shortest path of followed Links (`links.followed` = 1) from a Seed, for every URL that such a path reaches, where a redirect (`urls.redirect_url_id`) is a step that adds no Link; a URL that no such path reaches keeps the depth the crawl engine recorded. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, and a trailing slash does not add a segment.
+`crawl_depth` SHALL equal `urls.crawl_depth` for the Page. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, a trailing slash does not add a segment, and an escaped `/` (`%2F`) does not end one.
 
 #### Scenario: Folder depth
-- **WHEN** Pages have the paths `/`, `/blog/`, `/blog/post.html` and `/a//b/`
-- **THEN** their `folder_depth` values are 0, 1, 2 and 2
-
-#### Scenario: Crawl Depth is the shortest path over followed Links
-- **WHEN** the post-crawl passes run on a Crawl whose `urls` row for `{site}/p` has `crawl_depth` 3, while a path of 2 followed Links leads from the Seed to it
-- **THEN** `{site}/p` has `crawl_depth` 2 in `pages` and in `urls`
-
-#### Scenario: A redirect adds no Crawl Depth
-- **WHEN** the post-crawl passes run on a Crawl whose `urls` row for `{site}/p` has `crawl_depth` 3, while the Seed links to `{site}/old`, which redirects to `{site}/p`
-- **THEN** `{site}/p` has `crawl_depth` 1 in `pages` and in `urls`
+- **WHEN** Pages have the paths `/`, `/blog/`, `/blog/post.html`, `/a//b/` and `/a%2Fb/`
+- **THEN** their `folder_depth` values are 0, 1, 2, 2 and 1
 
 #### Scenario: Crawl Depth is copied from the crawl engine
 - **WHEN** the Seed `{site}/` links to `{site}/l1`, which links to `{site}/l2`
