@@ -1076,6 +1076,14 @@ links = public_table(
     Column("rel_ugc", Flag, nullable=False, comment="1 when rel holds ugc."),
     Column("rel_sponsored", Flag, nullable=False, comment="1 when rel holds sponsored."),
     Column(
+        "followed",
+        Flag,
+        nullable=False,
+        comment="1 when the Crawl requests the target through this Link, by the Crawl's rule "
+        "(the Link type, and the Link's and the Page's nofollow), a Resource such as an img "
+        "target included; 0 otherwise.",
+    ),
+    Column(
         "hreflang",
         Text,
         comment="For a hreflang Link, the trimmed hreflang of its element, or the hreflang "

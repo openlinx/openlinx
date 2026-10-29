@@ -286,6 +286,7 @@ One row for each Link the Crawl discovered in a response: in an analysed Page's 
 | `rel_nofollow` | INTEGER | no | | `boolean` | | 1 when rel holds nofollow. |
 | `rel_ugc` | INTEGER | no | | `boolean` | | 1 when rel holds ugc. |
 | `rel_sponsored` | INTEGER | no | | `boolean` | | 1 when rel holds sponsored. |
+| `followed` | INTEGER | no | | `boolean` | | 1 when the Crawl requests the target through this Link, by the Crawl's rule (the Link type, and the Link's and the Page's nofollow), a Resource such as an img target included; 0 otherwise. |
 | `hreflang` | TEXT | yes | | | | For a hreflang Link, the trimmed hreflang of its element, or the hreflang parameter of its Link header; NULL for other Links, and for a Link of the HTML when the Page's Link extractor failed. |
 | `media` | TEXT | yes | | | | For a mobile_alternate Link, the trimmed media of its element; NULL for other Links, or when the Page's Link extractor failed. |
 | `link_position` | TEXT | yes | | | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | Where on the Page the Link is: head for a Link the parser places in head; otherwise from the nearest enclosing nav (navigation), header, footer or aside (sidebar), and content without one, a Link from a noscript's content taking the noscript's place; NULL for a header Link, or when the Page's Link extractor failed. |

@@ -33,6 +33,12 @@ def test_hyperlink_with_rel_flags() -> None:
     )
 
 
+def test_a_nofollow_hyperlink_is_not_followed_and_an_image_is() -> None:
+    rows = page_link_rows('<a href="/a" rel="nofollow">A</a><img src="/i.png" alt="">')
+
+    assert [(row.type, row.followed) for row in rows] == [("hyperlink", False), ("image", True)]
+
+
 def test_image_alt_attribute_absent_or_empty() -> None:
     rows = page_link_rows('<img src="/a.png"><img src="/b.png" alt="">')
 
