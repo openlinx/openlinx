@@ -168,10 +168,8 @@ def test_naming_rule_for_input_errors() -> None:
     ] == []
 
 
-def test_the_proxy_variables_are_the_one_exception() -> None:
-    environment = run_cli("commands").json()["environment"]
-
-    assert [entry["names"] for entry in environment] == [["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]]
+def test_no_environment_variable_is_honoured() -> None:
+    assert run_cli("commands").json()["environment"] == []
 
 
 def test_detection_signals_change_nothing() -> None:
