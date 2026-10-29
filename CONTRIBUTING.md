@@ -65,7 +65,7 @@ A person or an agent can run it. The repository ships no review skill; an agent 
 
 - **One commit per green slice.** The subject starts with `feat:`, `fix:`, `test:`, `refactor:` or `docs:` (`docs(plan):` for planning documents, `docs(roadmap):` for ROADMAP.md) and says in one sentence what changed and why. A task of an OpenSpec change ends with its number, such as `(task 10.7)`.
 - **No attribution trailers:** no `Co-Authored-By` lines and no "generated with" footers, in commits or pull request descriptions.
-- **No competitor names** anywhere in the repository: code, tests, docs, plans, commits or pull requests. Screaming Frog is the one exception, as the parity reference. Describe a borrowed idea as our own requirement.
+- **No competitor names** anywhere in the repository: code, tests, docs, plans, commits or pull requests. Screaming Frog is the one exception, as a plain mention that helps a newcomer, never as a benchmark or a reference to match. Describe a borrowed idea as our own requirement.
 - **A pull request** goes into `main`, fills in the template's checklist, and is merged once CI is green on every OS and a maintainer has reviewed it.
 
 ## Checks
