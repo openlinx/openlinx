@@ -1020,7 +1020,8 @@ links = public_table(
     Column(
         "rel",
         Text,
-        comment="The Link's rel tokens, lowercased, joined with single spaces; NULL without any.",
+        comment="The Link's rel tokens, ASCII-lowercased, joined with single spaces; NULL without "
+        "any.",
     ),
     Column("rel_nofollow", Flag, nullable=False, comment="1 when rel holds nofollow."),
     Column("rel_ugc", Flag, nullable=False, comment="1 when rel holds ugc."),

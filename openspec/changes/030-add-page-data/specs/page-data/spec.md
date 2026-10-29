@@ -833,7 +833,7 @@ For an analysed Page, the structured-data columns SHALL be:
 
 The crawl store SHALL hold one row in the `links` table for each Link that the Link discovery of `020-add-crawl-core` finds. That requirement defines:
 
-- which responses are read (the HTML of parsed Pages, and the `Link` headers of in-Scope 2xx responses)
+- which responses are read (the HTML of parsed Pages, and the `Link` and `Refresh` headers of in-Scope 2xx responses)
 - the Link types
 - which references are ignored
 
@@ -848,7 +848,7 @@ This change stores each discovered Link together with the attributes that analys
 | `declared_in` | TEXT | no | `head`, `body`, `http_header` | where the Link was declared: in the document's `<head>` or `<body>` as the parser builds them, or in a response header |
 | `element` | TEXT | yes | `a`, `area`, `link`, `iframe`, `frame`, `meta`, `img`, `source`, `video`, `audio`, `track`, `embed`, `object`, `script` | the HTML element the Link came from; NULL for header Links |
 | `attribute` | TEXT | yes | `href`, `src`, `srcset`, `poster`, `data`, `content` | the attribute the Link came from (for example `img` and `srcset`); NULL for header Links |
-| `anchor_text` | TEXT | yes | | for `hyperlink`, the element text. When that is empty, the `alt` texts of the `<img>` elements inside, joined with a space. For `<area>`, its `alt`. NULL for other types. |
+| `anchor_text` | TEXT | yes | | for `hyperlink`, the normalised element text. When that is empty, the `alt` texts of the `<img>` elements inside, joined with a space. For `<area>`, its normalised `alt`, the empty string when it has none. NULL for other types. |
 | `alt_text` | TEXT | yes | | for `image` Links from an `<img>` element, the normalised `alt` attribute: NULL when absent, the empty string when empty. NULL otherwise. |
 | `rel` | TEXT | yes | | the Link's `rel` tokens as `020-add-crawl-core`'s Link discovery reads them (ASCII lower-cased), joined with single spaces, or NULL |
 | `rel_nofollow`, `rel_ugc`, `rel_sponsored` | INTEGER | no | boolean | 1 when `rel` contains that token, otherwise 0 |

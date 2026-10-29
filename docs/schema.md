@@ -274,7 +274,7 @@ One row for each Link the Crawl discovered in a response: in an analysed Page's 
 | `attribute` | TEXT | yes | | | `href`, `src`, `srcset`, `poster`, `data`, `content` | The attribute the Link came from, such as src or srcset of an img; NULL for a header Link. |
 | `anchor_text` | TEXT | yes | | | | For a hyperlink, the normalised text of its element, or when that is empty the alt texts of the img elements inside it, joined with a space; for an area, its alt; NULL for other types, or when the Page's Link extractor failed. |
 | `alt_text` | TEXT | yes | | | | For an image Link from an img element, its alt attribute, normalised: the empty string when it has no value; NULL when it is absent, for other Links, or when the Page's Link extractor failed. |
-| `rel` | TEXT | yes | | | | The Link's rel tokens, lowercased, joined with single spaces; NULL without any. |
+| `rel` | TEXT | yes | | | | The Link's rel tokens, ASCII-lowercased, joined with single spaces; NULL without any. |
 | `rel_nofollow` | INTEGER | no | | `boolean` | | 1 when rel holds nofollow. |
 | `rel_ugc` | INTEGER | no | | `boolean` | | 1 when rel holds ugc. |
 | `rel_sponsored` | INTEGER | no | | `boolean` | | 1 when rel holds sponsored. |
