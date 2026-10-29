@@ -1,6 +1,6 @@
 # Crawling
 
-How `spider crawl` decides what a URL is, which URLs it requests and how it records them. The spec is [openspec/changes/020-add-crawl-core/specs/crawling/spec.md](../openspec/changes/020-add-crawl-core/specs/crawling/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
+How `spider crawl` decides what a URL is, which URLs it requests and how it records them. The spec is [openspec/specs/crawling/spec.md](../openspec/specs/crawling/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
 ## The `spider crawl` Command
 

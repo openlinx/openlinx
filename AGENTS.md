@@ -62,4 +62,4 @@ Packages under `src/spider/`:
 
 `extract/`, `rules/`, `query/`, `report/`, `skill/` and `mcp/` stay empty until the change named in their docstring.
 
-**Reading a design citation.** A docstring may say "020-add-crawl-core D5", "(020 D5)" or "design D5 of 020-add-crawl-core". Each points to the heading `### D5.` in `openspec/changes/020-add-crawl-core/design.md`, or, once the change is archived, in `openspec/changes/archive/<date>-020-add-crawl-core/design.md`.
+**Reading a design citation.** A docstring may say "020-add-crawl-core D5", "(020 D5)" or "design D5 of 020-add-crawl-core". Each points to the heading `### D5.` in the change's `design.md`: for an archived change, such as this one, `openspec/changes/archive/2026-10-29-020-add-crawl-core/design.md`; for one in progress, `openspec/changes/<id>/design.md`.

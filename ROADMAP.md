@@ -38,7 +38,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | done |
 | 017 | `017-speed-up-crawl-writer` | `crawl-store` (modified) | none | done |
 | 018 | `018-add-schema-conventions` | `crawl-store` (modified) | `schema` (`indexes`) | done |
-| 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | first part done; the rest code-complete |
+| 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | done |
 | 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | done on its branch, min |
 | 030 | `030-add-page-data` | `page-data` | none (data only) | in progress, min |
 | 040 | `040-add-rules` | `rules` | `rules` | in progress, 15 Rules |
@@ -66,8 +66,8 @@ widen:                                        ├─► 022-min ─┐
 ```
 
 - **Where the build is:**
-  - **In main:** 000, 010, 015, 017, 018, and the first part of 020 (its groups 1–6), so `spider crawl <url>` crawls a site in the foreground.
-  - **On branches:** 020, the crawl core, is code-complete and reviewed; it merges into main once CI runs on the public repository. 022-min, the fetch policy, is done for v0.1 and merges after 020. 030-min, the page data, is in progress. 026 (the parse pool), 040 (the Rules) and 050 (the queries) are partly built and continue after 020 merges.
+  - **In main:** 000, 010, 015, 017, 018 and 020, the crawl core, so `spider crawl <url>` crawls a site in the foreground.
+  - **On branches:** 022-min, the fetch policy, is done for v0.1 and merges next. 030-min, the page data, is in progress. 026 (the parse pool), 040 (the Rules) and 050 (the queries) are partly built and continue on their branches.
   - **Not started:** 060-min (crawl control), 080 (the agent Skill) and 085 (the release).
 - **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `spider rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.
 - **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
@@ -147,7 +147,7 @@ If a change needs something another change owns, it depends on that change inste
   - `spider schema` fills `references` and gains `indexes`, each with the query it serves. `docs/schema.md` and the contract test cover indexes, STRICT and `WITHOUT ROWID`.
   - The conventions are revised. A derived column's description starts with `Derived: `, and a later column's with `Filled from v<major>.<minor>. `. The `crawl` row may hold a derived value that a post-crawl pass writes, such as 040's Health Score.
   - Not in 018: the other tables, which their owners add under these rules (020, 022, 030, 040, 060), and the links layout, which the links benchmark chooses for 030.
-- **020-add-crawl-core**:
+- **020-add-crawl-core** (v0.1; done):
   - Spider mode (`crawl <url>`) and URL normalisation, which keeps the trailing slash.
   - **Scope:** `--scope host|subdomains|subfolder`, `--subdomains`, `--include/--exclude`, `--max-depth`, `--max-urls` (no limit by default; reaching an explicit limit leaves the Crawl resumable), `--strip-params`. An apex Seed admits its `www.` host, never the reverse, and `seed_base_mismatch` warns when a `www.` Seed's site lives on the apex.
   - **Section Crawl**, and robots.txt (obeyed by default, `--ignore-robots`, `--robots-user-agent`).
