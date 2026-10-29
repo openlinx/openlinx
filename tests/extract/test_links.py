@@ -1,6 +1,6 @@
 """Link attributes (030-add-page-data, page-data; seam 4)."""
 
-from tests.support.page_data import page_link_rows
+from tests.support.page_data import page_link_rows, response_link_rows
 
 
 def test_hyperlink_with_rel_flags() -> None:
@@ -114,3 +114,20 @@ def test_links_declared_in_a_header() -> None:
         link.attribute,
         link.link_position,
     ) == ("pagination", "https://example.test/p3", 1, "http_header", None, None, None)
+
+
+def test_hreflang_from_a_link_header() -> None:
+    (link,) = response_link_rows(
+        "application/pdf",
+        headers=(("Link", '<https://example.test/de/guide.pdf>; rel="alternate"; hreflang="de"'),),
+        url="https://example.test/guide.pdf",
+    )
+
+    assert (
+        link.type,
+        link.target,
+        link.hreflang,
+        link.declared_in,
+        link.element,
+        link.link_position,
+    ) == ("hreflang", "https://example.test/de/guide.pdf", "de", "http_header", None, None)

@@ -1024,8 +1024,9 @@ links = public_table(
     Column(
         "hreflang",
         Text,
-        comment="For a hreflang Link, the trimmed hreflang of its element; NULL for other Links, "
-        "or when the Page's Link extractor failed.",
+        comment="For a hreflang Link, the trimmed hreflang of its element, or the hreflang "
+        "parameter of its Link header; NULL for other Links, and for a Link of the HTML when the "
+        "Page's Link extractor failed.",
     ),
     Column(
         "media",

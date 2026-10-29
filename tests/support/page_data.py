@@ -109,6 +109,44 @@ def page_result(
     )
 
 
+def response_link_rows(
+    content_type: str, headers: tuple[tuple[str, str], ...] = (), url: str = _URL
+) -> tuple[LinkRow, ...]:
+    """The Link rows of an in-Scope 200 response that is not HTML, such as a PDF, built as the
+    crawl engine builds its result: its header Links, and no extractor output."""
+    page_url = NormalizedUrl(url)
+    response = FetchResult(
+        status_code=200,
+        reason="OK",
+        headers=(("Content-Type", content_type), *headers),
+        body=b"%PDF-1.7",
+        fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
+        response_time_ms=1,
+    )
+    result = UrlResult(
+        url_id=1,
+        url=page_url,
+        crawl_depth=0,
+        discovered_via="seed",
+        found_on_url_id=None,
+        is_internal=True,
+        in_scope=True,
+        fetch_state="fetched",
+        blocked_by_robots_txt=False,
+        response=UrlResponse(
+            status_code=200,
+            reason="OK",
+            content_type=content_type,
+            headers=response.headers,
+            fetched_at=response.fetched_at,
+            response_time_ms=1,
+            directives=response_directives(response, DEFAULT_ROBOTS_TOKEN),
+        ),
+        links=response_links(page_url, response, scope_rules(page_url), None),
+    )
+    return tuple(link_rows(result))
+
+
 def unprepared_page_row(
     headers: tuple[tuple[str, str], ...] = (),
     url: str = _URL,
