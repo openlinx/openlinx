@@ -67,7 +67,7 @@ For an analysed Page, following the table conventions of `015-add-crawl-store`:
 - A text column SHALL be NULL when its element or header is absent, and the empty string when the element is present but empty.
 - A length column SHALL be NULL exactly when its text column is NULL, and so SHALL a width column from v0.2.
 
-When an extractor of this change, the Page extractor or the Link extractor, raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns that extractor derives from the HTML SHALL be NULL: the title and heading, content and structured-data columns and `meta_refresh` for the Page extractor, and the Link attributes this change adds for the Link extractor. The columns that come from the response, from `020-add-crawl-core`'s robots directives parser and discovered Links (the other directive columns and the canonical columns), the outlink counts and `indexability` SHALL be set as for any analysed Page.
+When an extractor of this change, the Page extractor or the Link extractor, raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns that extractor derives from the HTML SHALL be NULL: the title and heading, content and structured-data columns and `meta_refresh` for the Page extractor, and, for the Link extractor, `anchor_text`, `alt_text`, `link_position`, and the `hreflang` and `media` of the Links declared in the HTML. The columns a Link takes from the Link discovery of `020-add-crawl-core` (the target, `ordinal`, `type`, `declared_in`, `element`, `attribute`, `rel` and its flags) SHALL stay set. The columns that come from the response, from `020-add-crawl-core`'s robots directives parser and discovered Links (the other directive columns and the canonical columns), the outlink counts and `indexability` SHALL be set as for any analysed Page.
 
 The columns that a later release fills stay NULL in every Page until then (see "Columns measured by later releases stay NULL").
 
@@ -853,14 +853,14 @@ This change stores each discovered Link together with the attributes that analys
 | `rel` | TEXT | yes | | the Link's `rel` tokens as `020-add-crawl-core`'s Link discovery reads them (ASCII lower-cased), joined with single spaces, or NULL |
 | `rel_nofollow`, `rel_ugc`, `rel_sponsored` | INTEGER | no | boolean | 1 when `rel` contains that token, otherwise 0 |
 | `followed` | INTEGER | no | boolean | 1 when the Crawl requests the target through this Link, by `020-add-crawl-core`'s rule (its type, and the Link's and the Page's nofollow), otherwise 0; a Resource such as an `<img>` target is requested but not crawled further |
-| `hreflang` | TEXT | yes | | the trimmed `hreflang` value for `hreflang` Links, otherwise NULL |
+| `hreflang` | TEXT | yes | | for `hreflang` Links, the trimmed `hreflang` attribute of the element, or the `hreflang` parameter of the `Link` header; otherwise NULL |
 | `media` | TEXT | yes | | the trimmed `media` value for `mobile_alternate` Links, otherwise NULL |
 | `link_position` | TEXT | yes | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | where on the Page the Link is (see below) |
 | `html_source` | TEXT | yes | `raw`, `rendered` | whether the Link came from the raw or the rendered HTML; filled from v1.1, with JavaScript rendering, and NULL until then |
 
 `(source_url_id, ordinal)` SHALL be the primary key. How the rows are laid out on disk, and the indexes of `links`, are chosen by the links benchmark (ADR-0005); they change none of these columns.
 
-**Link position.** For a Link from an element that the HTML parser places inside `<head>`, `link_position` SHALL be `head`. For a Link from an element inside `<body>`, it SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element, and SHALL be `content` when there is none. It SHALL be NULL only for a Link declared in an HTTP header, and for every Link of a Page whose Link extractor failed. The `[content_area]` settings do not change it.
+**Link position.** For a Link from an element that the HTML parser places inside `<head>`, `link_position` SHALL be `head`. For a Link from an element inside `<body>`, it SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element, and SHALL be `content` when there is none. A Link from the content of a `noscript` element takes the position of that `noscript` element. It SHALL be NULL only for a Link declared in an HTTP header, and for every Link of a Page whose Link extractor failed. The `[content_area]` settings do not change it.
 
 #### Scenario: Hyperlink with rel flags
 - **WHEN** the analysed Page `https://example.test/a` contains `<main><a href="/b" rel="nofollow UGC">Read  more</a></main>`
@@ -879,8 +879,8 @@ This change stores each discovered Link together with the attributes that analys
 - **THEN** `links` holds 2 `hyperlink` rows from that Page to `/b`
 
 #### Scenario: Link positions come from the enclosing element
-- **WHEN** an analysed Page's HTML is `<head><link rel="canonical" href="/x"></head><body><header><a href="/h">H</a></header><nav><a href="/n">N</a></nav><main><a href="/c">C</a></main><aside><a href="/s">S</a></aside><footer><nav><a href="/f">F</a></nav></footer></body>`
-- **THEN** its `hyperlink` Links to `/h`, `/n`, `/c`, `/s` and `/f` have `link_position` `header`, `navigation`, `content`, `sidebar` and `navigation` respectively, and its `canonical` Link has `link_position` `head`
+- **WHEN** an analysed Page's HTML is `<head><link rel="canonical" href="/x"></head><body><header><a href="/h">H</a></header><nav><a href="/n">N</a></nav><main><a href="/c">C</a></main><aside><a href="/s">S</a></aside><footer><nav><a href="/f">F</a></nav><noscript><img src="/pixel.gif"></noscript></footer></body>`
+- **THEN** its `hyperlink` Links to `/h`, `/n`, `/c`, `/s` and `/f` have `link_position` `header`, `navigation`, `content`, `sidebar` and `navigation` respectively, its `canonical` Link has `link_position` `head`, and its `image` Link to `/pixel.gif` has `link_position` `footer`
 
 #### Scenario: Hreflang and mobile alternate Links
 - **WHEN** an analysed Page has `<link rel="alternate" hreflang="de" href="/de/">` and `<link rel="alternate" media="only screen and (max-width: 640px)" href="https://m.example.test/">` in its head
@@ -889,6 +889,10 @@ This change stores each discovered Link together with the attributes that analys
 #### Scenario: Links declared in a header
 - **WHEN** the analysed Page `https://example.test/p2` has the header `Link: </p3>; rel="next"`
 - **THEN** its `pagination` Link to `https://example.test/p3` has `ordinal` 1, `declared_in` `http_header`, and `element`, `attribute` and `link_position` NULL
+
+#### Scenario: Hreflang from a Link header
+- **WHEN** an in-Scope `200` response with `Content-Type: application/pdf` has the header `Link: <https://example.test/de/guide.pdf>; rel="alternate"; hreflang="de"`
+- **THEN** its `hreflang` Link to `https://example.test/de/guide.pdf` has `hreflang` `de`, `declared_in` `http_header`, and `element` and `link_position` NULL
 
 #### Scenario: Columns of links
 - **WHEN** `spider schema links` runs
