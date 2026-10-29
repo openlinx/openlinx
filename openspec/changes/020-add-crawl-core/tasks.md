@@ -297,19 +297,53 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
   - `CONTRIBUTING.md` allows a `# type: ignore[code]` for a deliberate type guard or a deliberately wrong call in a test.
   - A `robots_user_agent` in `spider.toml` that RFC 9309 refuses gives a `settings_invalid` message that names the allowed characters, from the same pattern.
   - `docs/architecture.md` says what mypy checks, and where.
+- [x] 10.23 Fix the review of the whole branch (main...7801901), each fix red first or red by mutation, each refactor with behaviour unchanged:
+  - A handler gets `blocked_by_robots_txt` in `UrlResult`, so under `--ignore-robots` it sees 1.
+  - A skip decided at dispatch reaches its handlers once, also when a late check lowers the URL's depth first; or, if that fix is out of proportion, a Risks line and a test that its rows are written once, by ruling.
+  - The warning log keys each code by its own identity: the host for `possible_blocking` and `robots_unreachable`. Where a code is kept once per code, D10 says so and a test pins it.
+  - The URL limit's refusal before robots.txt is one Requester method.
+  - `_result` takes typed keywords. `blocked_by_robots_txt` travels inside the unit, and the URL records stop repeating `UrlResult`'s fields.
+  - Refactor:
+    - Split the engine, keeping each module under about 300 lines: the unit building, the outcomes, and the warnings next to the warning log. `BlockingRuns` and the blocking warning move with them.
+    - The Crawl Service's parameters are one record, `fetcher` included.
+    - `CONTRIBUTING.md`'s size sentence is made true, with its `store/schema.py` clause compatible with `026`'s.
+  - Standards:
+    - one-line module docstrings in `tests/crawl/test_headers.py`, `tests/crawl/test_noscript.py` and `tests/test_handler_types.py`;
+    - the tag `020-add-crawl-core Dn`;
+    - a `CONTEXT.md` term for "check" as a noun;
+    - the robots user-agent rule out of `spider.naming`, into `spider.crawl.setting_rules` with the rate's, since `spider.crawl.robots` loads Protego, which `crawl --help` must not;
+    - no task numbers in code comments;
+    - `record_unwritten` shaped like the other `record_*`;
+    - one source for each crawl setting's help and default, or a backlog proposal;
+    - one validator with one message for the robots token and for `--rate`.
+  - Tests for the spec lines of this task's plan:
+    - `robots_unreachable` under `--ignore-robots`;
+    - a final 3xx robots.txt is `missing`;
+    - the skips at dispatch;
+    - a Resource of an in-Scope HTML Resource beyond the limit;
+    - the Provenance of one Page's Links;
+    - a Page's own `<template>`.
 
 ## 11. Politeness (widening)
 
-- [ ] 11.1 Drive "Requests to a host are spaced by the rate", fake timing.
+- [x] 11.1 Drive "Requests to a host are spaced by the rate", fake timing.
 
-  Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`. The spacing is the Requester's (design D7), so it holds for robots.txt requests too.
-- [ ] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
-- [ ] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared.
-- [ ] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
-- [ ] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+  Done when: `--rate` is declared with `OptionMeta(setting="crawl.rate")` and the default `None`, no limit; the fake Fetcher exists in `tests/support/` and goes into the Crawl through the context builder with `FakeClock`; and every wait of the engine goes through the context's `Clock`. The spacing is the Requester's `RateGate` (design D7), so it holds for robots.txt requests too; `--rate` and `crawl.rate` refuse a value that is not a finite number above 0, through one rule function; and a guard in `tests/test_code_style.py` names any wait outside the `Clock`, red by mutation.
+- [x] 11.2 **Guard:** "Crawl-delay is not applied", fake timing.
+- [x] 11.3 Drive "Many 403 responses raise one warning" at seam 1. Done when: `possible_blocking` is declared, and the run of consecutive 403 and 429 responses is kept per Internal host as the spec says.
+- [x] 11.4 Docs: document politeness defaults in `docs/crawling.md`.
+- [x] 11.5 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+- [x] 11.6 Fix the review of group 11, each fix red first or red by mutation:
+  - The robots.txt 403 of a second Internal origin of the host falls inside a run of the URLs' own 403s, so counting it once goes red.
+  - A request without a response counted as a 403 goes red.
+  - The wait guard resolves module aliases, covers `asyncio`'s submodules, `asyncio.as_completed` with a timeout and `reschedule`, and names its one exemption.
+  - A start that `RateGate.started` reserved is given back when its wait is cancelled.
+  - `--rate` and `crawl.rate` refuse a rate whose interval is not finite, and `crawl.rate` refuses a boolean.
+  - `possible_blocking`'s `details.count` is the length of the run that raises it.
 
 ## 12. Events, failures and backstops (widening)
 
+- [ ] 12.0 An auto-advancing virtual clock for the timing tests: `sleep(s)` waits on a future until virtual time reaches its wake time, and time jumps to the earliest wake once every task is idle, as trio's `MockClock(autojump_threshold=0)` does. The watchdog and the 10-second progress tests use it. Designed at this task, which also lifts task 11.1's serialization from the Risks. A test on it pins the Requester's order, the rate wait before the global cap: a request waiting for its turn on one host lets another host's request start, with a global cap of 1 and two hosts if `RequestLimits` can be built at the Requester's seam without the settings' validation, otherwise with 21 hosts, red by mutation of `wait_turn` moved inside the global cap. Another fills the cap and pins that one host's delayed requests start 1/rate apart, red by mutation of the Requester's `started` call removed. With it, `wait_turn` reserves `next_start` and sleeps without holding the host's lock.
 - [ ] 12.1 Drive "Every stderr line is an event or a diagnostic" at seam 1.
 - [ ] 12.2 **Guard:** "A warning is written as a diagnostic", at seam 1.
 - [ ] 12.3 Drive "Warnings are stored as diagnostics" at seam 3+6. Done when: `crawl.warnings` is declared NOT NULL, `[]` when the Crawl is created, and holds every warning of the result, `store_wal_unavailable` included.
@@ -322,7 +356,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 12.8 Drive "Post-crawl passes do not run for a failed Crawl" at seam 2.
 - [ ] 12.9 Drive "A write failure fails the Crawl" at seam 1, with SQLite's `max_page_count` set by a test-scoped connection listener so that SQLite reports a full disk.
 
-  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`.
+  Done when: `crawl_write_failed` is declared, the stop flag ends the Crawl with `write_failed`, the service records the end once through a fresh writer, and a writer's `crawl_busy` is reported as it is (exit 5). The full disk shows inside a unit as an `sqlite3.OperationalError`, which is not in design D2's allowlist, so it is `write_failed`, never `record_failed`. `docs/crawling.md` describes `crawl_write_failed` in place of "a later release".
 - [ ] 12.10 Drive "Recording that fails for every URL fails the Crawl" at seam 1, with a handler and its writer registered for the test. It comes after 12.9, which declares `crawl_write_failed`, and builds on task 5.13's fallback unit.
 
   Done when: the record-failure count of design D16 trips at `RECORD_FAILURE_LIMIT` (100) URL units in a row that failed on their first run, a URL unit that commits resets it, fallback units do not count, and the constant's comment says why.

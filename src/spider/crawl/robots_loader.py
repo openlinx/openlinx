@@ -1,4 +1,4 @@
-"""The robots.txt loader: each origin's robots.txt, requested once in a run (020 D6, D7)."""
+"""The robots.txt loader: each origin's robots.txt, once a run (020-add-crawl-core D6, D7)."""
 
 import asyncio
 from datetime import datetime

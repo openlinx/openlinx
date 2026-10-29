@@ -1,4 +1,4 @@
-"""The units of the urls table: the frontier and each URL's outcome (020 D1, D2, D14)."""
+"""The urls table's units: the frontier and each URL's outcome (020-add-crawl-core D1, D2, D14)."""
 
 from collections.abc import Callable
 
@@ -176,7 +176,7 @@ def next_depth(depth: int) -> Callable[[Connection], int | None]:
     return unit
 
 
-def record_fetched(fetched: FetchedUrl) -> Callable[[Connection], None]:
+def record_fetched(fetched: FetchedUrl) -> UrlUnit:
     """A unit that records the URL's response, the URLs discovered from it and its rows."""
     url_id = fetched.url_id
     values = {
@@ -222,7 +222,7 @@ def record_fetched(fetched: FetchedUrl) -> Callable[[Connection], None]:
     return unit
 
 
-def record_skipped(skipped: SkippedUrl) -> Callable[[Connection], None]:
+def record_skipped(skipped: SkippedUrl) -> UrlUnit:
     """A unit that records a URL as not requested, why, and its rows, unless a shorter path
     lowered its depth after the skip was decided: it then stays queued (design D5)."""
     values = {
@@ -239,7 +239,7 @@ def record_skipped(skipped: SkippedUrl) -> Callable[[Connection], None]:
     return unit
 
 
-def record_error(errored: ErroredUrl) -> Callable[[Connection], None]:
+def record_error(errored: ErroredUrl) -> UrlUnit:
     """A unit that records a URL whose request got no HTTP response, why, and its rows."""
     values = {
         "url_id": errored.url_id,

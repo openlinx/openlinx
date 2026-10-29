@@ -1,5 +1,4 @@
-"""The Links of the HTTP Link and Refresh headers, and the refresh parser (020-add-crawl-core D5;
-seam 4)."""
+"""The Link and Refresh headers' Links, and the refresh parser (020-add-crawl-core D5; seam 4)."""
 
 from datetime import UTC, datetime
 

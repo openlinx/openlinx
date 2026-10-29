@@ -1,10 +1,9 @@
 """The [crawl] settings table (020-add-crawl-core D11)."""
 
-import re
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from spider.naming import DEFAULT_ROBOTS_TOKEN, ROBOTS_USER_AGENT_PATTERN
+from spider.crawl.setting_rules import as_rate, as_robots_token
+from spider.naming import DEFAULT_ROBOTS_TOKEN
 from spider.store.records import ScopeKind
 
 
@@ -34,6 +33,12 @@ class CrawlSettings(BaseModel):
         ge=0,
         description="The deepest Crawl Depth whose URLs are requested, the Seed's being 0; "
         "Resources of followed Pages are requested one deeper. No limit when unset.",
+    )
+    rate: float | None = Field(
+        None,
+        strict=True,
+        description="The most requests per second that start to one host, robots.txt's "
+        "included: a finite number above 0. No limit when unset.",
     )
     max_urls: int | None = Field(
         None,
@@ -68,10 +73,12 @@ class CrawlSettings(BaseModel):
         "for in the normalised URL.",
     )
 
+    @field_validator("rate")
+    @classmethod
+    def _is_a_rate(cls, rate: float | None) -> float | None:
+        return None if rate is None else as_rate(rate)
+
     @field_validator("robots_user_agent")
     @classmethod
     def _is_a_robots_token(cls, token: str) -> str:
-        # The pattern the CLI checks too, with a message a person reads instead of the regex.
-        if re.fullmatch(ROBOTS_USER_AGENT_PATTERN, token) is None:
-            raise ValueError("a robots user-agent token has letters, '_' and '-' only (RFC 9309)")
-        return token
+        return as_robots_token(token)

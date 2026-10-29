@@ -20,6 +20,7 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 | Option | `[crawl]` key | Default | Meaning |
 |---|---|---|---|
 | `--concurrency <n>` | `concurrency` | `5` | The most requests in flight to one host, 1 to 50. |
+| `--rate <n>` | `rate` | none | The most requests per second that start to one host, robots.txt's included: a finite number above 0, such as `0.5` or `2` (see [Requests in flight](#requests-in-flight)). |
 | `--check-external` / `--no-check-external` | `check_external` | `true` | Request each External URL once to record its response; with `--no-check-external`, record it as skipped, unrequested (see [External URLs](#external-urls)). |
 | `--follow-nofollow` | `follow_nofollow` | `false` | Follow nofollow hyperlinks, and every hyperlink of a Page whose robots directives say nofollow, like any other hyperlink (see [Nofollow](#nofollow)). |
 | `--scope <kind>` | `scope` | `host` | Which Internal URLs are in the Scope: `host`, `subdomains` or `subfolder` (see [`--scope`](#--scope)). |
@@ -36,10 +37,15 @@ Every crawl setting is an option of `spider crawl` and a key of the `[crawl]` ta
 
 ### Requests in flight
 
-URLs are requested concurrently, and two limits bound them:
+URLs are requested concurrently, and three limits bound them:
 
 - **Per host:** at most `--concurrency` requests to one host at a time, 5 by default. The host is the URL's host, whatever its scheme or port.
 - **In all:** at most 4 × `--concurrency` URLs in progress at once, kept within 20 to 100, so a Page that links to many External hosts never opens hundreds of connections.
+- **Per host in time:** with `--rate <n>`, requests to one host start at least 1/n seconds apart, its robots.txt request included, so `--rate 2` starts at most two a second. Without `--rate`, only `--concurrency` holds requests back.
+
+So by default a Crawl sends at most 5 requests at once to a host, as fast as the host answers. robots.txt's `Crawl-delay` is not applied (see [robots.txt](#robotstxt)): give `--rate` to slow a Crawl down.
+
+When 10 responses in a row from one Internal host have status 403 or 429, the result holds a `possible_blocking` warning for that host, once in a Crawl, whose hint names `--rate` and `--concurrency`, and the Crawl goes on. Only a URL's own responses count, in the order they complete, not robots.txt's. A response with any other status ends the run, and a request without an HTTP response neither counts nor ends it.
 
 ### Crawl Depth
 
@@ -312,7 +318,7 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 - A robots.txt request goes through the same per-host limits as a URL's, but it is not recorded as a URL and does not count toward `--max-urls`.
 - A redirected robots.txt is followed for up to 5 hops; a longer chain counts as missing.
 - Only its first 512,000 bytes are parsed, without a line that this limit cuts, decoded as UTF-8 with replacement; a leading byte order mark is dropped. So a cut `Disallow: /private` never becomes the shorter `Disallow: /priv`.
-- `Crawl-delay` is recorded, not applied.
+- `Crawl-delay` is recorded, not applied; `--rate` spaces requests instead (see [Requests in flight](#requests-in-flight)).
 
 ### What the response means
 
@@ -331,7 +337,7 @@ A Seed that robots.txt disallows is reported as a `seed_blocked_by_robots_txt` w
 
 ### `--ignore-robots`
 
-With `--ignore-robots`, the Crawl requests the URLs that robots.txt disallows and still records `blocked_by_robots_txt` = 1 for them, since robots.txt is still read. It also requests the URLs of an origin whose robots.txt answered 5xx or 429, with `blocked_by_robots_txt` NULL. An origin whose robots.txt got no HTTP response still gives each of its URLs that error.
+With `--ignore-robots`, the Crawl requests the URLs that robots.txt disallows and still records `blocked_by_robots_txt` = 1 for them, since robots.txt is still read. It also requests the URLs of an origin whose robots.txt answered 5xx or 429, with `blocked_by_robots_txt` NULL, and an Internal origin still gives the `robots_unreachable` warning, which says its URLs were requested without its rules. An origin whose robots.txt got no HTTP response still gives each of its URLs that error.
 
 ### The robots user-agent token
 

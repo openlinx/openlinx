@@ -203,8 +203,17 @@ ROBOTS_UNREACHABLE = _declare(
     "warning",
     None,
     "The robots.txt of an Internal origin answered with a server error or 429, so none of its "
-    "URLs was requested; the hint names --ignore-robots, and details.origin, details.host and "
+    "URLs was requested, or under --ignore-robots all were, without its rules; the hint names "
+    "--ignore-robots unless it was given, and details.origin, details.host and "
     "details.status_code say which.",
+)
+POSSIBLE_BLOCKING = _declare(
+    "possible_blocking",
+    "warning",
+    None,
+    "10 responses in a row from an Internal host had status 403 or 429, so it may be "
+    "blocking the Crawl, which went on; the hint names --rate and --concurrency, and "
+    "details.host says which host, and details.count is the length of the run that raises it.",
 )
 PARSE_FAILED = _declare(
     "parse_failed",

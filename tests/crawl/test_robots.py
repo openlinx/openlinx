@@ -168,6 +168,8 @@ def test_the_crawl_delay_is_in_whole_milliseconds_that_fit_an_integer(
         (200, "ok"),
         (204, "ok"),
         (299, "ok"),
+        (300, "missing"),
+        (304, "missing"),
         (301, "missing"),
         (404, "missing"),
         (410, "missing"),

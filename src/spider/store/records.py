@@ -47,7 +47,7 @@ type SkipReason = Literal[
     "url_too_long",
 ]
 # The reasons a URL is recorded as skipped when it is discovered, never dispatched; a later
-# followed Link re-queues a URL skipped for one of them (020 D5).
+# followed Link re-queues a URL skipped for one of them (020-add-crawl-core D5).
 type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed"]
 type LinkType = Literal[
     "hyperlink",

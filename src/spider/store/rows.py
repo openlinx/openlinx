@@ -1,4 +1,4 @@
-"""Store rows that handlers return, each written by its table's store module (020 D9, D14)."""
+"""Handler rows, each written by its table's store module (020-add-crawl-core D9, D14)."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass

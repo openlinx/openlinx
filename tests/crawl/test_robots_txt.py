@@ -364,3 +364,20 @@ def test_an_unreachable_robots_txt_of_an_external_origin_raises_no_warning(
     assert [
         warning.code for warning in result.warnings if warning.code == "robots_unreachable"
     ] == []
+
+
+def test_an_unreachable_robots_txt_is_reported_under_ignore_robots(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/robots.txt": Status(503), "/": Page(body="<p>/</p>")}))
+
+    result = crawl_result(server.url("/"), ignore_robots=True)
+
+    assert (
+        query(
+            result.crawl_file,
+            "SELECT fetch_state, blocked_by_robots_txt FROM urls WHERE url = ?",
+            [server.url("/")],
+        ),
+        [(warning.code, "--ignore-robots" in (warning.hint or "")) for warning in result.warnings],
+    ) == ([("fetched", None)], [("robots_unreachable", False)])

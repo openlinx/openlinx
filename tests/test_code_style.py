@@ -542,3 +542,157 @@ def test_a_hook_built_outside_its_factory_is_named() -> None:
         "src/spider/services/hooks.py:1 builds Handler(...) outside its factory",
         "src/spider/services/pages.py:1 builds Extractor(...) outside its factory",
     ]
+
+
+# A Crawl waits only through its Clock, so a fake Clock drives every wait of a test (020 D7).
+WAITERS = ("spider/crawl/", "spider/services/crawling.py")
+# The one deadline outside the Clock bounds a real request, where timing tests put a fake Fetcher.
+FETCHER = "spider/crawl/fetcher.py"
+SLEEPS = {("asyncio", "sleep"), ("time", "sleep")}
+CALLBACKS = {"call_later", "call_at", "reschedule"}
+# Where each asyncio call that may wait takes its timeout as a positional argument, if it does.
+TIMEOUT_POSITIONS = {
+    "wait_for": 1,
+    "wait": None,
+    "as_completed": None,
+    "timeout": 0,
+    "timeout_at": 0,
+}
+TIMEOUT_KEYWORDS = {"timeout", "delay", "when"}
+
+
+def _package(module: str) -> str | None:
+    """`asyncio` for asyncio and its submodules, `time` for time."""
+    if module == "time":
+        return module
+    return "asyncio" if module.split(".")[0] == "asyncio" else None
+
+
+def _imported_names(tree: ast.AST) -> dict[str, str]:
+    """The module that each name an `import` binds stands for."""
+    names: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname is None:
+                    head = alias.name.split(".")[0]
+                    names[head] = head
+                else:
+                    names[alias.asname] = alias.name
+    return names
+
+
+def _has_timeout(call: ast.Call, position: int | None) -> bool:
+    given = [keyword.value for keyword in call.keywords if keyword.arg in TIMEOUT_KEYWORDS]
+    if position is not None and len(call.args) > position:
+        given.append(call.args[position])
+    return any(not (isinstance(value, ast.Constant) and value.value is None) for value in given)
+
+
+def _waits(call: ast.Call, names: Mapping[str, str]) -> bool:
+    if not isinstance(call.func, ast.Attribute):
+        return False
+    name = call.func.attr
+    head, dot, rest = ast.unparse(call.func.value).partition(".")
+    owner = _package(names.get(head, head) + dot + rest)
+    if name in CALLBACKS or (owner, name) in SLEEPS:
+        return True
+    return (
+        owner == "asyncio"
+        and name in TIMEOUT_POSITIONS
+        and _has_timeout(call, TIMEOUT_POSITIONS[name])
+    )
+
+
+def _sets_a_deadline(module: str, call: ast.Call) -> bool:
+    return module != FETCHER and _base_name(call.func) == "ClientTimeout"
+
+
+def wait_violations(sources: Mapping[str, str]) -> list[str]:
+    """Waits of a Crawl outside its Clock, given every module's source by its path."""
+    found: list[str] = []
+    for module, source in sources.items():
+        if not module.startswith(WAITERS):
+            continue
+        tree = ast.parse(source)
+        names = _imported_names(tree)
+        for node in sorted(ast.walk(tree), key=lambda node: getattr(node, "lineno", 0)):
+            if isinstance(node, ast.ImportFrom) and node.module is not None:
+                package = _package(node.module)
+                found.extend(
+                    f"{module}:{node.lineno} imports {node.module}.{alias.name} by name"
+                    for alias in node.names
+                    if (package, alias.name) in SLEEPS
+                    or (package == "asyncio" and alias.name in TIMEOUT_POSITIONS)
+                )
+            elif isinstance(node, ast.Call) and _waits(node, names):
+                found.append(f"{module}:{node.lineno} waits outside the Clock: {ast.unparse(node)}")
+            elif isinstance(node, ast.Call) and _sets_a_deadline(module, node):
+                where = f"{module}:{node.lineno}"
+                found.append(f"{where} sets a deadline outside the Fetcher: {ast.unparse(node)}")
+    return found
+
+
+def test_a_crawl_waits_only_through_its_clock() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "spider").rglob("*.py"))
+    }
+
+    assert wait_violations(sources) == []
+
+
+def test_a_wait_outside_the_clock_is_named() -> None:
+    sources = {
+        "spider/crawl/engine.py": "await asyncio.sleep(0)\n"
+        "time.sleep(1)\n"
+        "loop.call_later(1, f)\n"
+        "self._loop.call_at(t, f)\n"
+        "await asyncio.wait_for(task, 5)\n"
+        "await asyncio.wait_for(task, timeout=5)\n"
+        "await asyncio.wait(tasks, timeout=5)\n"
+        "async with asyncio.timeout(5): ...\n"
+        "async with asyncio.timeout_at(when=t): ...\n"
+        "import asyncio as aio\n"
+        "import time as t\n"
+        "await aio.sleep(1)\n"
+        "t.sleep(1)\n"
+        "await asyncio.tasks.sleep(1)\n"
+        "for done in asyncio.as_completed(tasks, timeout=5): ...\n"
+        "cm.reschedule(t)\n"
+        "timeout = aiohttp.ClientTimeout(total=5)\n",
+        "spider/crawl/politeness.py": "from asyncio import sleep, Lock\nfrom time import sleep\n"
+        "await self._clock.sleep(1)\n"
+        "await asyncio.wait_for(task, None)\n"
+        "await asyncio.wait(tasks)\n"
+        "async with asyncio.timeout(None): ...\n"
+        "from asyncio.tasks import sleep as nap\n"
+        "for done in asyncio.as_completed(tasks): ...\n",
+        "spider/crawl/fetcher.py": "timeout = aiohttp.ClientTimeout(total=20)\n",
+        "spider/services/crawling.py": "async with asyncio.timeout(delay=1): ...\n",
+        "spider/services/listing.py": "await asyncio.sleep(1)\n",
+        "spider/clock.py": "await asyncio.sleep(seconds)\n",
+    }
+
+    assert wait_violations(sources) == [
+        "spider/crawl/engine.py:1 waits outside the Clock: asyncio.sleep(0)",
+        "spider/crawl/engine.py:2 waits outside the Clock: time.sleep(1)",
+        "spider/crawl/engine.py:3 waits outside the Clock: loop.call_later(1, f)",
+        "spider/crawl/engine.py:4 waits outside the Clock: self._loop.call_at(t, f)",
+        "spider/crawl/engine.py:5 waits outside the Clock: asyncio.wait_for(task, 5)",
+        "spider/crawl/engine.py:6 waits outside the Clock: asyncio.wait_for(task, timeout=5)",
+        "spider/crawl/engine.py:7 waits outside the Clock: asyncio.wait(tasks, timeout=5)",
+        "spider/crawl/engine.py:8 waits outside the Clock: asyncio.timeout(5)",
+        "spider/crawl/engine.py:9 waits outside the Clock: asyncio.timeout_at(when=t)",
+        "spider/crawl/engine.py:12 waits outside the Clock: aio.sleep(1)",
+        "spider/crawl/engine.py:13 waits outside the Clock: t.sleep(1)",
+        "spider/crawl/engine.py:14 waits outside the Clock: asyncio.tasks.sleep(1)",
+        "spider/crawl/engine.py:15 waits outside the Clock: asyncio.as_completed(tasks, timeout=5)",
+        "spider/crawl/engine.py:16 waits outside the Clock: cm.reschedule(t)",
+        "spider/crawl/engine.py:17 sets a deadline outside the Fetcher: "
+        "aiohttp.ClientTimeout(total=5)",
+        "spider/crawl/politeness.py:1 imports asyncio.sleep by name",
+        "spider/crawl/politeness.py:2 imports time.sleep by name",
+        "spider/crawl/politeness.py:7 imports asyncio.tasks.sleep by name",
+        "spider/services/crawling.py:1 waits outside the Clock: asyncio.timeout(delay=1)",
+    ]

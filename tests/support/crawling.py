@@ -8,6 +8,7 @@ from aiohttp.abc import AbstractResolver
 
 from spider.cli.app import build_app
 from spider.clock import Clock, SystemClock
+from spider.crawl.fetcher import Fetcher
 from spider.crawl.hooks import Hooks
 from spider.crawl.pages import PageExecutor
 from spider.output.reporter import Collected, Reporter
@@ -35,6 +36,7 @@ def crawl_result(
     pages: Callable[[], PageExecutor] | None = None,
     reporter: Reporter | None = None,
     clock: Clock | None = None,
+    fetcher: Fetcher | None = None,
     **crawl: Any,
 ) -> CrawlResult:
     """Crawls through the Crawl Service, which alone takes test hooks, the DNS resolver hook
@@ -61,4 +63,5 @@ def crawl_result(
         hooks or default_hooks(),
         resolver=resolver,
         pages=pages,
+        fetcher=fetcher,
     )
