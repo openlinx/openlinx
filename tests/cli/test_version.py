@@ -8,7 +8,7 @@ def expected_version_line() -> bytes:
     return b"OpenLinx " + project_version().encode() + b"\n"
 
 
-def test_version_prints_the_app_name_and_the_project_version() -> None:
+def test_version() -> None:
     result = run_cli("--version")
 
     assert (result.exit_code, result.stdout) == (0, expected_version_line())

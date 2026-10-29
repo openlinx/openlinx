@@ -94,7 +94,7 @@ Only the Workspace's own settings file is read: `<root>/openlinx.toml` for a loc
 
 ### The template
 
-`linx init` writes a `openlinx.toml` that sets no value. It starts with the precedence, then lists every setting the tool knows, commented out with its default:
+`linx init` writes an `openlinx.toml` that sets no value. It starts with the precedence, then lists every setting the tool knows, commented out with its default:
 
 ```toml
 # OpenLinx settings. Each setting takes the first value it finds:

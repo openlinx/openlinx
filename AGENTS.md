@@ -24,7 +24,7 @@ OpenLinx is an open-source, agent-first SEO crawler, run as the `linx` command: 
 - **mypy:** strict mypy for 3.12. A `# type: ignore` must name its code.
 - **`tests/test_code_style.py`:** frozen records only, no class hierarchy of our own, a bound on every memo, sqlalchemy only in `openlinx.store` (and the schema service), and the crawl core never imports its plugins.
 - **`tests/cli/test_startup.py`:** `--help` loads only its allowlist, so heavy imports go inside the function body.
-- **`tests/test_naming.py`:** the settings file and data folder names come from `openlinx.naming`, never typed as literals in `src/`.
+- **`tests/test_naming.py`:** the three names, the settings file and the data folder come from `openlinx.naming`, never typed as literals in `src/`.
 - **`tests/test_dependencies.py`:** a new runtime dependency goes into `tests/dependency_allowlist.txt`. Telemetry and LLM SDKs are refused.
 - **Schema contract tests:** a table or column goes into `openlinx.store.schema` and `docs/schema.md` in the same commit.
 - **`tests/workspace/test_tables.py`:** settings tables follow the table rules, and every option's setting exists.

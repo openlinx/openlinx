@@ -40,9 +40,28 @@ def test_usage_names_the_script_that_ran() -> None:
     )
     module = run_cli_process("--help")
 
-    assert (script.stdout.split(b"[")[0], module.stdout.split(b"[")[0]) == (
-        b"Usage: openlinx ",
-        b"Usage: linx ",
+    assert (
+        script.returncode,
+        script.stdout.split(b"[")[0],
+        module.exit_code,
+        module.stdout.split(b"[")[0],
+    ) == (0, b"Usage: openlinx ", 0, b"Usage: linx ")
+
+
+def test_a_hint_names_linx_whichever_script_ran(temp_workspace: TempWorkspace) -> None:
+    missing = temp_workspace.root / "missing"
+
+    failed = subprocess.run(
+        [console_script("openlinx"), "crawl", "site.test", "--workspace", str(missing)],
+        capture_output=True,
+        timeout=PROCESS_TIMEOUT,
+        check=False,
+    )
+    error = json.loads(failed.stderr.splitlines()[-1])
+
+    assert (error["code"], error["hint"].startswith("Create it with: linx init")) == (
+        "workspace_not_found",
+        True,
     )
 
 
@@ -59,6 +78,7 @@ def test_the_recorded_command_line_starts_with_the_script_that_ran(
         timeout=CRAWL_PROCESS_TIMEOUT,
         check=False,
     )
+    assert crawled.returncode == 0, crawled.stderr.decode("utf-8", "replace")
     crawl_file = Path(json.loads(crawled.stdout)["crawl_file"])
 
     assert json.loads(crawl_row(crawl_file)["command_argv"])[:2] == ["openlinx", "crawl"]

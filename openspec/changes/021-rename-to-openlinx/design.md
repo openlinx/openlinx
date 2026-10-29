@@ -59,7 +59,7 @@ The working name `spider` is in the import package, `pyproject.toml`, `spider.na
 - [A user on the `openlinx` fallback reads hints that say `linx`, which may run the other package (D4)] → `--version` identifies ours (D5), and the warning that `080` still has to plan names `openlinx`.
 - [A branch's own new code uses the product name in prose, which the codemod maps to `COMMAND_NAME`] → `test_no_working_name` and the tests that pin hint text catch it, and the branch's review checks each prose use.
 - [Tests named after no scenario, which the scenario check does not count] → In `tests/cli/test_init.py`: `test_the_template_names_the_product`, which guards the settings template's first line, which no spec states. In `tests/cli/test_version.py`: `test_version_as_a_real_process_prints_the_same_bytes`, the scenario "Version" in a real process.
-- [Scenarios of earlier changes whose tests predate the naming rule, which the scenario check over this change's deltas reports as missing] → The 13 of `cli-contract` and the 2 of `workspace` keep their tests' names; each test still drives its scenario.
+- [Scenarios of earlier changes whose tests predate the naming rule, which the scenario check over this change's deltas reports as missing] → The 11 of `cli-contract` and the 2 of `workspace` keep their tests' names; each test still drives its scenario.
 - [Crawl files made under the working name keep `["spider", ...]` in `crawl.command_argv`] → It is what was run, and it stays.
 
 ## Migration Plan

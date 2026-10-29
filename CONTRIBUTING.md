@@ -110,7 +110,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 4. `ruff check .`, then `ruff format --check .`.
 5. `mypy` (strict).
 6. `pytest`, with the 90% coverage gate and the hypothesis `ci` profile.
-7. The wheel smoke test: `uv build`, then `linx --version` from the built wheel in an isolated environment.
+7. The wheel smoke test: `uv build`, then `linx --version` and `openlinx --version` from the built wheel in an isolated environment, which must print the same `OpenLinx <version>` line.
 8. Install Node (current LTS) and OpenSpec 1.13.0.
 9. `openspec validate --all --strict`, with telemetry off.
 10. `node --test "tests/js/**/*.test.mjs"`.
