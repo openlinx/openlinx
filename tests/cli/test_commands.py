@@ -191,3 +191,33 @@ def _entry(description: dict[str, Any], name: str) -> dict[str, Any]:
 
 def _options(description: dict[str, Any], name: str) -> dict[str, Any]:
     return {option["name"]: option for option in _entry(description, name)["options"]}
+
+
+def test_the_codes_of_this_change_are_self_described() -> None:
+    diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
+    expected = {
+        "invalid_url": ("error", 2),
+        "invalid_pattern": ("error", 2),
+        "option_conflict": ("error", 2),
+        "subfolder_is_root": ("error", 2),
+        "seed_out_of_scope": ("error", 2),
+        "crawl_write_failed": ("error", 7),
+        "seed_unreachable": ("error", 8),
+        "site_unreachable": ("error", 8),
+        "max_urls_reached": ("warning", None),
+        "seed_base_mismatch": ("warning", None),
+        "seed_blocked_by_robots_txt": ("warning", None),
+        "robots_unreachable": ("warning", None),
+        "robots_redirect_failed": ("warning", None),
+        "possible_blocking": ("warning", None),
+        "parse_failed": ("warning", None),
+        "handler_failed": ("warning", None),
+        "record_failed": ("warning", None),
+        "network_paused": ("warning", None),
+    }
+
+    assert {
+        code: (diagnostics[code]["level"], diagnostics[code]["exit_code"])
+        for code in expected
+        if code in diagnostics
+    } == expected

@@ -1,4 +1,5 @@
-"""A document's Links, as page preparation reads them from a 200 response (seam 4)."""
+"""A document's Links, as page preparation reads them from a 200 response (seam 4), and a page
+executor that holds Pages beyond the requests in flight, as 026's pool does."""
 
 from datetime import UTC, datetime
 

@@ -3,7 +3,6 @@
 from collections.abc import Callable, Iterable, Sequence
 
 from sqlalchemy import (
-    ColumnElement,
     Connection,
     and_,
     bindparam,
@@ -34,16 +33,11 @@ from spider.store.records import (
     UrlTally,
 )
 from spider.store.rows import write_rows
-from spider.store.schema import literal_values, origins, urls
+from spider.store.schema import literal_values, one_of, origins, urls
 
 # True once it recorded the URL's outcome; a skip that a lowering or a raise overtook
 # records nothing, and the URL is decided again (design D5).
 type UrlUnit = Callable[[Connection], Recording]
-
-
-def _literal_one_of(column: ColumnElement[str], values: Iterable[str]) -> ColumnElement[bool]:
-    # An OR chain, never IN (ADR-0005), of statement-level literals, as an executemany needs.
-    return or_(*(column == literal_column(f"'{value}'") for value in sorted(values)))
 
 
 # Built once: units run once per URL (017-speed-up-crawl-writer D9).
@@ -73,11 +67,11 @@ _INSERT_DISCOVERED = _INSERT.on_conflict_do_update(
     },
     where=(
         or_(
-            _literal_one_of(urls.c.skip_reason, literal_values(DiscoverySkipReason)),
+            one_of(urls.c.skip_reason, sorted(literal_values(DiscoverySkipReason))),
             _DECIDED_AGAIN & (urls.c.crawl_depth > _INSERT.excluded.crawl_depth),
             _DECIDED_AGAIN
-            & _literal_one_of(_INSERT.excluded.discovered_via, RESOURCE_LINK_TYPES)
-            & ~_literal_one_of(urls.c.discovered_via, RESOURCE_LINK_TYPES)
+            & one_of(_INSERT.excluded.discovered_via, sorted(RESOURCE_LINK_TYPES))
+            & ~one_of(urls.c.discovered_via, sorted(RESOURCE_LINK_TYPES))
             & (urls.c.crawl_depth >= _INSERT.excluded.crawl_depth),
         )
     )

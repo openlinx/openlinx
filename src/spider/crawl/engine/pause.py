@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from spider.aio import first_of
 from spider.clock import Clock
 from spider.crawl.engine.crawl_warnings import network_paused
 from spider.crawl.engine.stop import StopSignal
@@ -63,12 +64,10 @@ class CountedUrl:
 
 @dataclass(frozen=True, slots=True)
 class _Paused:
-    """A pause: why it began, when, and its own count, which a response while paused never
-    clears, since only the next count starts again (design D16)."""
+    """A pause: why it began, and when."""
 
     reason: _Reason
     began: float
-    count: list[CountedUrl]
 
 
 class Redispatch:
@@ -134,7 +133,7 @@ class NetworkPause:
         stop: StopSignal,
         requester: Requester,
         clock: Clock,
-        log: WarningLog,
+        warnings: WarningLog,
         resumed: Callable[[PauseEnd, Sequence[CountedUrl]], Awaitable[None]],
         track: Callable[[asyncio.Task[None]], None],
     ) -> None:
@@ -147,12 +146,15 @@ class NetworkPause:
         self._stop = stop
         self._requester = requester
         self._clock = clock
-        self._log = log
+        self._warnings = warnings
         self._resumed = resumed
         self._track = track
         # The URLs of the requests in a row without a response, which make up the next count.
         self._in_a_row: list[CountedUrl] = []
         self._paused: _Paused | None = None
+        # The pause's own count, which a response while paused never clears, since only the
+        # next count starts again (design D16).
+        self._count: list[CountedUrl] = []
         # The Seed is requested first, so the first Internal answer is its origin's; a
         # continue that does not request it again takes the earlier runs' answer.
         self._seed_answered = seed_answered
@@ -181,7 +183,7 @@ class NetworkPause:
             return
         counted = CountedUrl(queued, requested)
         if self._paused is not None:
-            self._paused.count.append(counted)
+            self._count.append(counted)
             return
         self._in_a_row.append(counted)
         # Until the Seed's origin answers, one failure pauses: a network may be coming up or
@@ -205,18 +207,19 @@ class NetworkPause:
         if self._network_wait == 0:
             self._stop.set(reason)
         elif self._probing is None:
-            paused = _Paused(reason, self._clock.monotonic(), list(self._in_a_row))
+            paused = _Paused(reason, self._clock.monotonic())
+            self._count = list(self._in_a_row)
             self._paused = paused
             self._in_a_row.clear()
             self._requester.close_gate()
-            self._log.event(
+            self._warnings.event(
                 "crawl_paused",
                 crawl_id=self._crawl_id,
                 reason=fetch_error,
-                urls=[counted.queued.url for counted in paused.count],
+                urls=[counted.queued.url for counted in self._count],
             )
             # As the pause begins, so a reader of stderr learns of it then.
-            self._log.pause_began(network_paused(self._seed))
+            self._warnings.pause_began(network_paused(self._seed))
             self._probing = asyncio.create_task(self._probe(paused))
             self._track(self._probing)
 
@@ -228,15 +231,15 @@ class NetworkPause:
                 # robots.txt and the Seed are requested again (design D16).
                 end = "outage"
             if end == "dead_section":
-                self._count_no_more(paused.count)
+                self._count_no_more(self._count)
             seconds = self._clock.monotonic() - paused.began
             if end is None:
                 # A stop that ended the wait keeps its reason; giving up sets the pause's.
                 if not self._stop.is_set:
                     self._stop.set(paused.reason)
             else:
-                await self._resumed(end, tuple(paused.count))
-                self._log.event(
+                await self._resumed(end, tuple(self._count))
+                self._warnings.event(
                     "crawl_resumed",
                     crawl_id=self._crawl_id,
                     duration_s=round(seconds, 3),
@@ -244,8 +247,9 @@ class NetworkPause:
                 )
         finally:
             # However the pause ends, a stop or the run's end included, its seconds count.
-            self._log.pause_ended(self._clock.monotonic() - paused.began)
+            self._warnings.pause_ended(self._clock.monotonic() - paused.began)
             self._paused = None
+            self._count = []
             self._probing = None
             # Open after giving up or failing too: the stop or the run's end then refuses the
             # requests that waited, where a closed gate would hold them for good.
@@ -291,15 +295,8 @@ class NetworkPause:
             delay = until - self._clock.monotonic()
             if delay <= 0 or self._stop.is_set:
                 return False
-            sleep = asyncio.ensure_future(self._clock.sleep(delay))
-            stopped = asyncio.ensure_future(self._stop.wait())
             waiting = {probe for probe in probes if not probe.done()}
-            try:
-                await asyncio.wait({sleep, stopped, *waiting}, return_when=asyncio.FIRST_COMPLETED)
-            finally:
-                sleep.cancel()
-                stopped.cancel()
-                await asyncio.wait({sleep, stopped})
+            await first_of(self._clock.sleep(delay), self._stop.wait(), wake_on=waiting)
         return True
 
     def _end(self, probes: list[asyncio.Task[bool]], dead_before: float) -> PauseEnd:

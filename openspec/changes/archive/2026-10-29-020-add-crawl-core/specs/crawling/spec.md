@@ -1,6 +1,12 @@
 ## Purpose
 
-Crawl a site in Spider mode. The capability decides which URLs are requested and which are followed, requests them politely, discovers Links, and records every URL in the crawl store, so agents can query a Crawl while it runs and after it ends. It also provides the hooks that later changes build on.
+Defines how `spider crawl` crawls a site in Spider mode and records every URL in the crawl store, so agents can query a Crawl while it runs and after it ends. It covers:
+- the Seed, URL normalisation, Internal and External URLs, and the Scope with its options and Section Crawls
+- Link discovery, the robots directives, nofollow, and which responses are parsed
+- robots.txt, politeness, and the depth and URL limits
+- the `urls` and `origins` tables, the crawl metadata and the Crawl State transitions
+- the hooks that later changes plug into, and how a failure of one URL is recorded
+- the backstops, progress events, the result and its exit codes, interrupts, and continuing a Crawl
 
 Scenario conventions:
 - `{site}` is the origin of the local fixture site, for example `http://127.0.0.1:8765`.
@@ -12,6 +18,9 @@ Scenario conventions:
 ## ADDED Requirements
 
 ### Requirement: Spider mode
+
+**In short:** `spider crawl <url>` crawls from one Seed in the foreground; a Seed without a scheme gets `https://`, and an invalid one is refused before any request.
+
 `spider crawl <url>` SHALL start a Crawl in Spider mode with the URL as its only Seed, written to `seeds` as given (`015-add-crawl-store`). It SHALL follow Links from the Seed within the Scope, and run in the foreground until the Crawl ends. A Seed given without a scheme SHALL get `https://`. A Seed has a scheme when it starts with a scheme name (RFC 3986) and `:`, unless what follows the `:` is a port number (digits, then `/`, `?`, `#` or the end), as in `site.test:8080/shop`; so `mailto:a@b.test` names the scheme `mailto`, and `localhost:8080` names none. A Seed that is not a valid http or https URL SHALL be rejected with exit code 2 and error code `invalid_url` before any request is made, and no Crawl SHALL be created.
 
 #### Scenario: The Seed is fetched and recorded
@@ -36,14 +45,17 @@ Scenario conventions:
 - **AND** the Workspace holds no new crawl file
 
 ### Requirement: URL normalisation
+
+**In short:** every URL is requested and recorded in one normal form; a trailing slash and the query's order are kept, and a URL with credentials is refused.
+
 The Crawl SHALL identify every URL by its normalised form, and SHALL request and record only that form. Normalisation SHALL:
-- write the scheme and host in lower case, and convert an internationalised host name to its ASCII (IDNA) form
+- write the scheme and host in lower case, convert an internationalised host name to its ASCII (IDNA) form, and write an IPv6 address in its short form
 - remove the fragment
 - remove the port when it is the scheme's default (80 for http, 443 for https)
 - resolve `.` and `..` path segments, and use `/` for an empty path
 - write percent-encodings with upper-case hex digits, and decode percent-encoded unreserved characters (letters, digits, `-`, `.`, `_`, `~`)
 - percent-encode as UTF-8 the characters that a URL may not contain
-- keep the letter case of the path, and keep the query and its parameter order unchanged
+- keep the letter case of the path, and keep the query and its parameter order unchanged; an empty query is removed with its `?`
 - keep a trailing slash: `/a` and `/a/` are two URLs, because which of them redirects to the other is itself a finding
 
 A URL with a user name or password (`user:pass@`) SHALL be rejected, not normalised, so that no credentials are recorded and no URL silently becomes another.
@@ -89,6 +101,9 @@ A URL with a user name or password (`user:pass@`) SHALL be rejected, not normali
 - **THEN** the second result equals the first
 
 ### Requirement: Stripping query parameters
+
+**In short:** query parameters are kept unless `--strip-params` names them, and those are removed before a URL is recorded.
+
 Query parameters SHALL be kept by default. `--strip-params <patterns>` SHALL remove every query parameter whose name matches one of the comma-separated glob patterns before the URL is recorded. In a pattern, `*` matches any run of characters and `?` matches one character, and matching is case-sensitive. The flag SHALL be accepted more than once. The remaining parameters SHALL keep their order. A query left empty SHALL be removed together with its `?`.
 
 #### Scenario: Matching parameters are removed
@@ -108,7 +123,10 @@ Query parameters SHALL be kept by default. `--strip-params <patterns>` SHALL rem
 - **THEN** the fixture site receives exactly one request for `/p`
 
 ### Requirement: Internal URLs
-A URL SHALL be an Internal URL when its scheme is http or https and its host equals a Seed host, whatever its scheme and port. In Spider mode, the Seed hosts are:
+
+**In short:** a URL is Internal when its host is a Seed host, the Seed's or `www.` of an apex Seed, or shares a Seed host's registrable domain under `--scope subdomains`; every other URL is External.
+
+A URL SHALL be an Internal URL when its scheme is http or https and its host equals a Seed host, whatever its scheme and port. Hosts SHALL be compared ignoring one trailing dot; an IP address SHALL equal a Seed host only when it is written the same way. In Spider mode, the Seed hosts are:
 - the Seed's host
 - when the Seed's host is a registrable domain (an apex, such as `site.test`), also `www.` followed by that host
 
@@ -141,6 +159,9 @@ With `--scope subdomains`, a URL SHALL also be internal when its registrable dom
 - **THEN** the URL is external
 
 ### Requirement: Seed host mismatch
+
+**In short:** a `www.` Seed whose Page names the apex, which is outside the Scope, gives one `seed_base_mismatch` warning, and the Scope stays.
+
 When the Seed's host is `www.` followed by a registrable domain, the Seed's parsed response names the apex (that registrable domain itself) as the site, and the Seed on the apex host is outside the Scope, the Crawl SHALL record one `seed_base_mismatch` warning, whose hint gives the Seed on the apex host. The response's first `canonical` Link to the apex or to the Seed's host decides: one to the apex names the apex, and one to the Seed's host names no apex. Without such a Link, the response names the apex when more of its `hyperlink` Links target the apex than the Seed's host. The Crawl SHALL go on in its Scope.
 
 #### Scenario: A www Seed whose canonical names the apex is reported
@@ -152,6 +173,9 @@ When the Seed's host is `www.` followed by a registrable domain, the Seed's pars
 - **THEN** the result's `warnings` hold no entry with code `seed_base_mismatch`
 
 ### Requirement: Scope option
+
+**In short:** `--scope` is `host`, `subdomains` or `subfolder`; `--subdomains` is its shorthand and conflicts with any other value.
+
 `--scope` SHALL accept `host` (the default), `subdomains` or `subfolder`. `--subdomains` SHALL mean the same as `--scope subdomains`. Combining `--subdomains` with another `--scope` value SHALL be rejected with exit code 2 and error code `option_conflict`.
 
 #### Scenario: The subdomains shorthand conflicts with a subfolder Scope
@@ -159,6 +183,9 @@ When the Seed's host is `www.` followed by a registrable domain, the Seed's pars
 - **THEN** the Command exits with code 2 and its only stderr error has `code` = `option_conflict`
 
 ### Requirement: Subfolder Scope
+
+**In short:** under `--scope subfolder` only the Seed's folder is in the Scope, and a Seed whose folder is the root is refused.
+
 With `--scope subfolder`, only Internal URLs whose path starts with the Seed's folder SHALL be in the Scope. The folder SHALL be the Seed's path up to and including its last `/`. A Seed whose folder would be `/` SHALL be rejected with exit code 2 and error code `subfolder_is_root`, with a hint that gives the Seed with a trailing `/`.
 
 #### Scenario: The folder of a Seed page is its parent folder
@@ -179,6 +206,9 @@ With `--scope subfolder`, only Internal URLs whose path starts with the Seed's f
 - **THEN** the Command exits with code 2, and its only stderr error has `code` = `subfolder_is_root` and a `hint` that contains `{site}/blog/`
 
 ### Requirement: Include and exclude patterns
+
+**In short:** an excluded URL is never requested, an Internal URL that no include pattern matches is outside the Scope, and an invalid pattern or a Seed outside its own Scope is refused.
+
 `--include <regex>` and `--exclude <regex>` SHALL take Python regular expressions, and each flag SHALL be accepted more than once. Each pattern SHALL be searched for anywhere in the normalised URL, case-sensitively.
 - **Exclude:** a URL that matches an `--exclude` pattern SHALL NOT be requested. It SHALL be recorded with `fetch_state` = `skipped`, `skip_reason` = `excluded` and `in_scope` = 0, unless only Links that are not followed reach it, which record it as `nofollow` or `link_type_not_followed` (see "Nofollow" and "Link discovery").
 - **Include:** when at least one `--include` pattern is given, an Internal URL that matches none of them SHALL be outside the Scope.
@@ -211,6 +241,9 @@ With `--scope subfolder`, only Internal URLs whose path starts with the Seed's f
 - **THEN** the Command exits with code 2 and its only stderr error has `code` = `seed_out_of_scope`
 
 ### Requirement: Section Crawl
+
+**In short:** a subfolder Scope or an include pattern makes a Section Crawl, recorded in `crawl.section_crawl` and the result.
+
 A Crawl SHALL be a Section Crawl when it uses `--scope subfolder` or at least one `--include` pattern. The Crawl SHALL set `crawl.section_crawl` (`015-add-crawl-store`) to 1 for a Section Crawl and to 0 otherwise. The result SHALL report it as `"section_crawl": true` or `false`. `--exclude` alone SHALL NOT make a Crawl a Section Crawl.
 
 #### Scenario: A subfolder Crawl is a Section Crawl
@@ -226,8 +259,11 @@ A Crawl SHALL be a Section Crawl when it uses `--scope subfolder` or at least on
 - **THEN** the result has `"section_crawl": false`
 
 ### Requirement: Recorded Scope
+
+**In short:** the resolved Scope is stored in `crawl.scope` when the Crawl is created.
+
 The Crawl SHALL record the resolved Scope in the column `crawl.scope`, which this change adds as TEXT in the `json` format and writes when the Crawl is created, as the object `{mode, hosts, folder, include, exclude}`:
-- `hosts` lists the Seed hosts in the order above, or the registrable domains with `--scope subdomains`.
+- `hosts` lists the Seed hosts in the order above, or the registrable domains with `--scope subdomains`, or the Seed host when it has none (an IP address or a single label).
 - `folder` is null unless the Scope is `subfolder`.
 
 #### Scenario: A subfolder Scope is recorded
@@ -235,8 +271,11 @@ The Crawl SHALL record the resolved Scope in the column `crawl.scope`, which thi
 - **THEN** `crawl.scope` is `{"mode": "subfolder", "hosts": ["site.test", "www.site.test"], "folder": "/blog/", "include": [], "exclude": ["/draft"]}`
 
 ### Requirement: Link discovery
+
+**In short:** every parsed response, and the `Link` and `Refresh` headers of every in-Scope 2xx response, give typed Links resolved as a browser resolves them, and a Page records each URL it links to once.
+
 The Crawl SHALL discover Links in every response it parses, and in the HTTP `Link` and `Refresh` headers of every in-Scope 2xx response.
-- **Resolution:** it SHALL resolve each relative reference against the Page's `<base href>` when there is one, and otherwise against the response URL. It SHALL then normalise the result, and SHALL ignore references whose scheme is not http or https, and references that cannot be resolved or normalised.
+- **Resolution:** it SHALL resolve each relative reference as the URL Standard does (a backslash counts as a slash), against the Page's `<base href>` when there is one, and otherwise against the response URL. A `<base href>` that is not http or https SHALL resolve no relative reference. On a Page decoded as neither UTF-8 nor UTF-16, a reference's query SHALL be percent-encoded in the Page's encoding, as browsers send it. It SHALL then normalise the result, and SHALL ignore references whose scheme is not http or https, and references that cannot be resolved or normalised. An empty `src`, `data` or `poster` SHALL give no Link, while an empty `href` links to the Page itself, and a `Link` header value with an `anchor` parameter SHALL give no Link, since it describes another resource.
 - **Link types:** each discovered Link SHALL have one of these Link types, and its target SHALL be requested by default as shown:
 
 | Link type | Found in | Requested by default |
@@ -264,7 +303,7 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 - **Link types that are not requested:** a URL reached only through them SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`.
 - **One row per URL of a Page:** a Page SHALL record each URL it links to once. The URL SHALL be followed when any of its Links on the Page is. Its `discovered_via` SHALL be the type of its first Resource Link on the Page, else of its first followed Link, else of its first Link. A URL that none of them follows SHALL have the `skip_reason` of its first Link.
 - **Templates:** the content of a Page's own `<template>` element SHALL give no Link.
-- **Provenance:** a URL's `discovered_via` SHALL say how it was found, `seed` or a Link type, and `found_on_url_id` SHALL point to the URL whose response gave that Link: the first Link that reached it, except as the rules below say. For a URL reached through a Link that is not followed and later through one that is, its `discovered_via`, `found_on_url_id` and `crawl_depth` SHALL come from the first Page that follows it. A Resource Link SHALL raise a URL that a Link of another type reached first, while the URL is `queued` or skipped as `max_depth`, when it reaches it at the same or a shorter depth: the URL's `discovered_via`, `found_on_url_id` and `crawl_depth` then come from the Resource Link, and a skipped one is queued again. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
+- **Provenance:** a URL's `discovered_via` SHALL say how it was found, `seed` or a Link type, and `found_on_url_id` SHALL point to the URL whose response gave that Link: the first Link that reached it, except as the rules below say. For a URL reached through a Link that is not followed and later through one that is, its `discovered_via`, `found_on_url_id` and `crawl_depth` SHALL come from the first Page that follows it. A Resource Link SHALL raise a URL that a Link of another type reached first, while the URL is `queued` or skipped as `max_depth`, when it reaches it at the same or a shorter depth: the URL's `discovered_via`, `found_on_url_id` and `crawl_depth` then come from the Resource Link, and a skipped one is queued again. A Link of any type that reaches a URL still `queued`, or skipped as `max_depth`, at a shorter depth SHALL give it that Link's `discovered_via`, `found_on_url_id` and `crawl_depth`. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
 
 #### Scenario: A relative link is resolved against the base href
 - **WHEN** the Links of `http://site.test/` are extracted from `<base href="http://site.test/docs/"><a href="guide">Guide</a>`
@@ -315,6 +354,9 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 - **THEN** `{site}/new` has `fetch_state` = `fetched` and `discovered_via` = `meta_refresh`
 
 ### Requirement: Robots directives
+
+**In short:** one parser reads the robots `<meta>` and the `X-Robots-Tag` values that apply to the robots user-agent token, as `030`'s column values.
+
 The Crawl SHALL read the robots directives of every parsed response with one parser, which `030-add-page-data` reuses for its directive columns. For a response, the parser SHALL give these values:
 - `meta_robots`: the whitespace-normalised `content` of every `<meta>` element whose `name` is `robots` (compared case-insensitively), joined with `, ` in document order, or null when there is none
 - `x_robots_tag`: the whitespace-normalised values of every `X-Robots-Tag` response header, joined with `, ` in the order received, or null when there is none
@@ -350,6 +392,9 @@ Directives SHALL be comma-separated tokens, compared case-insensitively. A heade
 - **THEN** `x_robots_tag_noindex` is true
 
 ### Requirement: Nofollow
+
+**In short:** a nofollow hyperlink, and every hyperlink of a nofollow Page, is not requested unless a followed Link also reaches its target or `--follow-nofollow` is given.
+
 The following SHALL NOT be requested unless the same target is also reached through a Link that is followed:
 - a `hyperlink` whose `rel` attribute contains the token `nofollow`
 - every `hyperlink` on a Page whose robots directives give `meta_robots_nofollow` or `x_robots_tag_nofollow`
@@ -373,6 +418,9 @@ Such a target SHALL be recorded with `fetch_state` = `skipped` and `skip_reason`
 - **THEN** `{site}/private` has `fetch_state` = `fetched`
 
 ### Requirement: Parsed responses
+
+**In short:** only in-Scope 2xx HTML responses are parsed.
+
 The Crawl SHALL parse a response only when all of these hold:
 - its URL is in the Scope
 - its status code is 2xx
@@ -385,6 +433,9 @@ It SHALL record `parsed` = 1 for such a URL once its document is parsed and its 
 - **THEN** `{site}/gone` has `parsed` = 0 and the `urls` table holds no row for `{site}/secret`
 
 ### Requirement: External URLs are checked, not followed
+
+**In short:** an External URL is requested once and never parsed, or not requested with `--no-check-external`.
+
 An External URL reached through a Link type that is requested SHALL be requested once to record its response, and SHALL NOT be parsed. With `--no-check-external`, External URLs SHALL NOT be requested, and SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `external_not_checked`.
 
 #### Scenario: An External URL is checked
@@ -397,6 +448,9 @@ An External URL reached through a Link type that is requested SHALL be requested
 - **THEN** the `other.test` fixture instance receives no request
 
 ### Requirement: Resources are requested, not parsed
+
+**In short:** a Resource of a followed Page is requested, beyond `--max-depth` too, and parsed only when it is HTML.
+
 URLs reached through `image`, `css`, `javascript`, `video`, `audio` or `media` Links SHALL be requested whenever the Page that references them is followed, even when their Crawl Depth exceeds `--max-depth`. A response that is not HTML SHALL NOT be parsed. `022-add-fetch-policy` adds their size measurements.
 
 #### Scenario: An image is checked but not parsed
@@ -420,12 +474,15 @@ URLs reached through `image`, `css`, `javascript`, `video`, `audio` or `media` L
 - **THEN** `{site}/photo.jpg` has `fetch_state` = `fetched` and `discovered_via` = `image`
 
 ### Requirement: robots.txt is obeyed by default
+
+**In short:** each origin's robots.txt is fetched once per run before its first URL, and the URLs it disallows are not requested.
+
 Before its first request to an origin (a scheme, host and port), the Crawl SHALL fetch that origin's `/robots.txt`, once per origin in each run. It SHALL NOT request URLs that robots.txt disallows for the robots user-agent token.
 - **Blocked URLs** SHALL be recorded with `fetch_state` = `skipped`, `skip_reason` = `blocked_by_robots_txt` and `blocked_by_robots_txt` = 1. Requested URLs SHALL have `blocked_by_robots_txt` = 0, and URLs not checked against robots.txt SHALL have NULL.
 - **Every origin:** this SHALL apply to every origin, including the origins of External URLs and Resources.
 - **robots.txt requests** SHALL NOT be recorded as URLs and SHALL NOT count toward `--max-urls`.
 - **Crawl-delay:** the `Crawl-delay` directive SHALL be recorded but not applied.
-- **A blocked Seed** SHALL produce a `seed_blocked_by_robots_txt` warning whose hint contains `--ignore-robots`.
+- **A blocked Seed** SHALL produce a `seed_blocked_by_robots_txt` warning whose hint contains `--ignore-robots`, unless `--ignore-robots` is given.
 
 #### Scenario: A disallowed URL is not requested
 - **WHEN** `/robots.txt` is `User-agent: *` LF `Disallow: /private/`, `/` links to `/private/a`, and `spider crawl {site}/` runs
@@ -452,6 +509,9 @@ Before its first request to an origin (a scheme, host and port), the Crawl SHALL
 - **THEN** the result's `warnings` hold an entry with code `seed_blocked_by_robots_txt` whose `hint` contains `--ignore-robots`
 
 ### Requirement: Ignoring robots.txt
+
+**In short:** `--ignore-robots` requests the URLs robots.txt disallows and still labels them blocked.
+
 With `--ignore-robots`, the Crawl SHALL request URLs that robots.txt disallows, and SHALL still record `blocked_by_robots_txt` = 1 for them. The URLs of an origin whose robots.txt is `unreachable` with an HTTP response SHALL be requested with `blocked_by_robots_txt` NULL, and an Internal origin SHALL still give the `robots_unreachable` warning, saying that its URLs were requested without rules.
 
 #### Scenario: Disallowed URLs are crawled and still labelled
@@ -463,13 +523,16 @@ With `--ignore-robots`, the Crawl SHALL request URLs that robots.txt disallows, 
 - **THEN** `{site}/` has `fetch_state` = `fetched` and `blocked_by_robots_txt` NULL, and the result's `warnings` hold one `robots_unreachable`
 
 ### Requirement: robots.txt fetch outcomes
+
+**In short:** robots.txt's response decides as RFC 9309 says: 2xx applies its rules, 4xx and a failed redirect allow everything, 5xx and 429 disallow everything, and no response makes each URL of the origin an error.
+
 The Crawl SHALL treat an origin's robots.txt by its response, as RFC 9309 describes:
 - **2xx:** its rules apply and `robots_state` = `ok`. Only its first 512,000 bytes SHALL be parsed, without a line that this limit cuts.
 - **4xx other than 429:** every URL on the origin is allowed, and `robots_state` = `missing`.
 - **A final 3xx**, one not followed as a redirect, such as 304: as 4xx, `robots_state` = `missing`.
 - **5xx (500 to 599), 429, or a status outside 200 to 599** (a 1xx final response, 600 or more): every URL on the origin is disallowed, and `robots_state` = `unreachable`. A status no HTTP server should send says the server is broken, so it is treated as cautiously as 5xx.
   - Its URLs SHALL be recorded with `skip_reason` = `robots_unreachable`.
-  - For an Internal origin, a `robots_unreachable` warning SHALL be recorded whose hint contains `--ignore-robots`, unless it was given (see "Ignoring robots.txt").
+  - For an Internal origin, a `robots_unreachable` warning SHALL be recorded once per host, whose hint contains `--ignore-robots`, unless it was given (see "Ignoring robots.txt").
 - **No HTTP response** (any `fetch_error` of "Requests without a response"): `robots_state` = `unreachable`, `robots_status_code` is NULL, and `robots_fetch_error` and `robots_fetch_error_message` hold the request's error.
   - Every URL on the origin SHALL be recorded with `fetch_state` = `error` and the `fetch_error` of the robots.txt request, without a request of its own, and with a `fetch_error_message` that says the error came from the origin's robots.txt request. A continue re-queues them with the other `error` URLs.
   - On an Internal origin, each such URL SHALL count toward the network pause as a request without an HTTP response (see "Backstops").
@@ -507,6 +570,9 @@ The Crawl SHALL treat an origin's robots.txt by its response, as RFC 9309 descri
 - **THEN** the `origins` row for `{site}` has `robots_state` = `missing`
 
 ### Requirement: Robots user-agent token
+
+**In short:** robots.txt groups and prefixed directives match the token `spider`, or the one `--robots-user-agent` gives, which must match RFC 9309.
+
 The Crawl SHALL select robots.txt groups, and user-agent-prefixed robots directives, with the token `spider` by default, or with the token given in `--robots-user-agent <token>`. The token is independent of the `User-Agent` request header. A token SHALL match RFC 9309's `[a-zA-Z_-]+`; any other value SHALL be rejected: as `--robots-user-agent` with exit code 2 and error code `invalid_value`, and in `spider.toml` with exit code 3 and `settings_invalid`, as any invalid setting is.
 
 #### Scenario: The group for the tool's token applies
@@ -518,6 +584,9 @@ The Crawl SHALL select robots.txt groups, and user-agent-prefixed robots directi
 - **THEN** `http://site.test/g` is disallowed
 
 ### Requirement: Per-host concurrency
+
+**In short:** at most `--concurrency` requests (default 5) are in flight to one host, and 4 times that over all hosts, kept within 20 to 100.
+
 The Crawl SHALL never have more than `--concurrency` requests in flight to one host. The default SHALL be 5. Over all hosts together, it SHALL never have more than 4 × `--concurrency` requests in flight, kept within 20 to 100. A value outside 1 to 50 SHALL be rejected: as `--concurrency` with exit code 2 and error code `invalid_value`, and in `spider.toml` with exit code 3 and `settings_invalid`, as any invalid setting is.
 
 #### Scenario: At most five requests to a host by default
@@ -537,6 +606,9 @@ The Crawl SHALL never have more than `--concurrency` requests in flight to one h
 - **THEN** the Command exits with code 2 and its only stderr error has `code` = `invalid_value`
 
 ### Requirement: Rate limit
+
+**In short:** with `--rate <n>`, one host's requests start at least 1/n seconds apart, robots.txt's included.
+
 With `--rate <n>`, where n is a positive number of requests per second, requests to one host SHALL start at least `1/n` seconds apart, and the robots.txt request SHALL count as one of them. Without `--rate`, no limit SHALL apply beyond `--concurrency`. A value that is not a finite number above 0, such as 0, -1, `nan` or `inf`, or whose interval `1/n` is not finite, such as `1e-310`, SHALL be rejected, and so SHALL a boolean in `spider.toml`: as `--rate` with exit code 2 and error code `invalid_value`, and in `spider.toml` with exit code 3 and `settings_invalid`, as any invalid setting is.
 
 #### Scenario: Requests to a host are spaced by the rate
@@ -544,6 +616,9 @@ With `--rate <n>`, where n is a positive number of requests per second, requests
 - **THEN** the six requests start at 0.0, 0.5, 1.0, 1.5, 2.0 and 2.5 seconds
 
 ### Requirement: Blocking warning
+
+**In short:** 10 responses in a row with status 403 or 429 from one Internal host give one `possible_blocking` warning, and the Crawl goes on.
+
 When 10 consecutive responses from one Internal host have status 403 or 429, the Crawl SHALL record one `possible_blocking` warning for that host, whose hint names `--rate` and `--concurrency`, and SHALL go on crawling. Only a URL's own responses count, not those of robots.txt, in the order they complete. A response with any other status ends the run of consecutive ones; a request without an HTTP response neither counts nor ends it. A host gets the warning once in a Crawl.
 
 #### Scenario: Many 403 responses raise one warning
@@ -551,6 +626,9 @@ When 10 consecutive responses from one Internal host have status 403 or 429, the
 - **THEN** the result's `warnings` hold exactly one entry with code `possible_blocking`
 
 ### Requirement: Requests without a response
+
+**In short:** a request without an HTTP response is recorded as `error`, with a `fetch_error` code and its message.
+
 A request that gets no HTTP response SHALL be recorded with:
 - `fetch_state` = `error` and `status_code` NULL
 - a `fetch_error` code
@@ -571,6 +649,9 @@ This capability SHALL use the codes `dns_error`, `connection_refused`, `connecti
 - **THEN** `{site}/reset` has `fetch_state` = `error` and `fetch_error` = `connection_error`, and `{site}/after` has `fetch_state` = `fetched`
 
 ### Requirement: Crawl Depth
+
+**In short:** a URL's Crawl Depth is the fewest followed Links from a Seed to it, whatever order responses arrive in.
+
 Every Seed SHALL have `crawl_depth` = 0. Every other URL SHALL have the smallest number of Links followed from a Seed to reach it, whatever order responses arrive in.
 
 #### Scenario: The shortest path wins over a faster, longer one
@@ -582,6 +663,9 @@ Every Seed SHALL have `crawl_depth` = 0. Every other URL SHALL have the smallest
 - **THEN** `{site}/i.png` has `crawl_depth` = 2
 
 ### Requirement: Depth limit
+
+**In short:** URLs beyond `--max-depth` are skipped as `max_depth`, except the Resources of followed Pages, one deeper.
+
 URLs whose Crawl Depth exceeds `--max-depth` SHALL NOT be requested, except Resources of followed Pages. They SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `max_depth`. A URL that a Resource Link reaches SHALL be requested up to one Crawl Depth beyond the limit, where a followed Page puts its Resources, so a Resource of a Resource that is in-Scope HTML, two beyond, is skipped. A URL skipped as `max_depth` SHALL be queued again when a Link found later reaches it within the limit. In Spider mode there SHALL be no limit by default.
 
 #### Scenario: Links beyond the limit are not requested
@@ -593,6 +677,7 @@ URLs whose Crawl Depth exceeds `--max-depth` SHALL NOT be requested, except Reso
 - **THEN** `{site}/pic` has `fetch_state` = `fetched` and `{site}/i.png` has `skip_reason` = `max_depth`
 
 ### Requirement: Skips at dispatch
+
 **In short:** a queued URL gets at most one skip reason, and robots.txt is asked only about a URL that nothing else skips.
 
 A dispatched URL SHALL be skipped as `excluded` when an exclude pattern matches it, else as `max_depth` when it is beyond `--max-depth`, else as `external_not_checked` when it is External under `--no-check-external`. Only a URL that none of these skips SHALL be checked against robots.txt, so these skips never request their origin's robots.txt.
@@ -606,9 +691,13 @@ A dispatched URL SHALL be skipped as `excluded` when an exclude pattern matches 
 - **THEN** `other.test` receives no request
 
 ### Requirement: URL limit
-The Crawl SHALL have no URL limit by default. With `--max-urls <n>`, the Crawl SHALL start at most n requests for URLs over its whole life:
-- every URL request SHALL count from the moment it starts, so requests in flight count too
-- the requests a continued Crawl recorded before SHALL count
+
+**In short:** `--max-urls <n>` bounds the URL requests over the Crawl's whole life; at the limit the Crawl stops, resumable, with exit code 0.
+
+The Crawl SHALL have no URL limit by default. With `--max-urls <n>`, the Crawl SHALL request at most n URLs over its whole life:
+- a URL SHALL count from the moment its request starts, so requests in flight count too
+- a continued Crawl SHALL count the URLs its earlier runs fetched; a URL that a continue requests again, such as an `error` one, SHALL count when it is requested
+- a URL that the Backstops request again within a run SHALL count once
 - robots.txt requests SHALL NOT count
 
 A value below 1 SHALL be rejected with exit code 2 and error code `invalid_value`. The limit is reached when it refuses a request: a Crawl that requests n URLs and has none left SHALL end `completed`, since `stopped` would promise a resume with nothing to do. When the limit is reached:
@@ -648,7 +737,10 @@ A value below 1 SHALL be rejected with exit code 2 and error code `invalid_value
 - **THEN** the Command exits with code 2 and its only stderr error has `code` = `invalid_value`
 
 ### Requirement: Each URL is requested once
-Within one run, the Crawl SHALL start at most one request for each URL, however many Links lead to it and however responses interleave. It SHALL end once every URL it may request has been processed, whatever cycles its Links form. Followed URLs of one Crawl Depth SHALL start in the order in which they were first recorded, which `urls.id` gives, never in an order taken from timestamps.
+
+**In short:** a URL is requested at most once a run, the Crawl ends whatever cycles its Links form, and a Crawl Depth's URLs start in discovery order.
+
+Within one run, the Crawl SHALL start at most one request for each URL, however many Links lead to it and however responses interleave, apart from the requests that the Backstops make again. It SHALL end once every URL it may request has been processed, whatever cycles its Links form. Followed URLs of one Crawl Depth SHALL start in the order in which they were first recorded, which `urls.id` gives, never in an order taken from timestamps; URLs that a network pause put back start before the next frontier read.
 
 #### Scenario: Each URL is requested once
 - **WHEN** each of `/p1` to `/p10` links to all of the others and to `/`, `/` links to `/p1`, and `spider crawl {site}/` runs
@@ -663,6 +755,9 @@ Within one run, the Crawl SHALL start at most one request for each URL, however 
 - **THEN** the fixture site receives the requests for `/c`, `/a` and `/b` in that order
 
 ### Requirement: The urls table
+
+**In short:** `urls` holds one row per normalised URL with its frontier state, outcome and provenance, and its value lists already hold later changes' values.
+
 The crawl store SHALL hold one row for each distinct normalised URL of the Crawl in a table `urls`, under the schema conventions of `018-add-schema-conventions` (ADR-0005): the table is `STRICT`, and the file SHALL refuse a value outside a column's listed values and a flag other than 0 and 1. This change SHALL add the following columns, each in the slice whose scenario first needs it. `022-add-fetch-policy` adds more columns.
 
 | Column | Type | Null | Format / values | Description |
@@ -723,6 +818,9 @@ This change SHALL add these indexes to `urls`, built while the Crawl writes:
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"urls_crawl_depth_id","columns":["crawl_depth","id"],"unique":false,"where":"fetch_state = 'queued'"}` and `{"name":"urls_url","columns":["url"],"unique":true,"where":null}`
 
 ### Requirement: The origins table
+
+**In short:** `origins` holds one row per origin with its robots.txt outcome, and every URL points to its origin.
+
 The crawl store SHALL hold one row for each origin of a URL that the Crawl recorded, in a table `origins`, under the same conventions. An origin's row SHALL be recorded in the writer unit that records the first URL on it, and every `urls` row SHALL point to its origin. This change SHALL add these columns. `022-add-fetch-policy` adds `http_version`.
 
 | Column | Type | Null | Format / values | Description |
@@ -755,6 +853,9 @@ This change SHALL add this index to `origins`, built while the Crawl writes:
 - **THEN** `http://other.test/page` has an `origin_id` that points to the `origins` row for `http://other.test`, whose `robots_state`, `robots_fetched_at` and `robots_sitemaps` are NULL
 
 ### Requirement: Crawl metadata written by the engine
+
+**In short:** the engine fills `015`'s crawl metadata and adds `crawl.scope`, `crawl.stop_reason` and `crawl.warnings`.
+
 The Crawl SHALL fill the crawl metadata of `015-add-crawl-store`:
 - `crawl.crawl_mode` (`spider` for this capability), `crawl.section_crawl`, `crawl.command_argv` (redacted by `015`) and `crawl.config`
 - the `seeds` table
@@ -763,7 +864,7 @@ The Crawl SHALL fill the crawl metadata of `015-add-crawl-store`:
 This change SHALL add three columns to `crawl`, under the conventions of `018-add-schema-conventions`:
 - `scope`: TEXT, `json`, not null, the resolved Scope, written with the `crawl` row when the Crawl is created
 - `stop_reason`: TEXT, nullable, why the Crawl ended early: `max_urls`, `interrupt` or `requested` for a `stopped` Crawl, and `seed_unreachable`, `site_unreachable` or `write_failed` for a `failed` one; NULL while it runs and when it is `completed`. These six values SHALL be the one value set of every column that records why a Crawl or one of its runs ended, including those of `060-add-crawl-control`.
-- `warnings`: TEXT, `json`, not null, a JSON array of diagnostics in the full shape of `010-add-workspace-and-cli-contract` (`{level, code, message, hint, details}`); `[]` when the Crawl is created. It SHALL hold the warnings of the Crawl's whole life: a continued Crawl SHALL keep those of its earlier runs, write a warning kept once per host, origin, Seed or code only when it is new to the Crawl, and add a counted warning's counts to the stored ones. `max_urls_reached` describes how one run ended, so a continue SHALL drop it.
+- `warnings`: TEXT, `json`, not null, a JSON array of diagnostics in the full shape of `010-add-workspace-and-cli-contract` (`{level, code, message, hint, details}`); `[]` when the Crawl is created, and written when a run ends, so a run whose process is killed leaves its warnings out. It SHALL hold the warnings of the Crawl's whole life: a continued Crawl SHALL keep those of its earlier runs, write a warning kept once per host, origin, Seed or code only when it is new to the Crawl, and add a counted warning's counts to the stored ones. `max_urls_reached` describes how one run ended, so a continue SHALL drop it.
 
 The `crawl` table of `crawl.config` SHALL hold every registered crawl setting, including those added by later changes, with secrets redacted by `015`.
 
@@ -784,6 +885,9 @@ The `crawl` table of `crawl.config` SHALL hold every registered crawl setting, i
 - **THEN** `crawl.warnings` and the result's `warnings` hold exactly two `robots_unreachable` warnings, one for `a.{host}` and one for `b.{host}`
 
 ### Requirement: Crawl State transitions
+
+**In short:** `crawl.state` changes only along the transitions of one table, each with its `stop_reason`.
+
 The Crawl SHALL change `crawl.state` (`015-add-crawl-store`) only along these transitions, each with the `stop_reason` shown, through one check that refuses every other change as a bug:
 
 | From | To | When | `stop_reason` |
@@ -808,6 +912,9 @@ The Crawl SHALL change `crawl.state` (`015-add-crawl-store`) only along these tr
 - **THEN** `crawl.state` is `running`, and `crawl.stop_reason` is NULL
 
 ### Requirement: Crawl settings in spider.toml
+
+**In short:** every crawl setting has a key in the `[crawl]` table of `spider.toml`, under `010`'s naming rule and precedence.
+
 Every crawl setting SHALL also be settable in the `[crawl]` table of `spider.toml`, which this change registers and later changes add keys to, under the naming rule of `010-add-workspace-and-cli-contract`: the flag's long name without the leading dashes, with `-` replaced by `_`. The Seed argument and `--subdomains` SHALL have no key, because `scope` covers `--subdomains`. `010`'s precedence SHALL apply: flag, then `spider.toml`, then the built-in default.
 
 Secret settings SHALL be allowed in `spider.toml`. `015-add-crawl-store` redacts them in the recorded config.
@@ -821,6 +928,9 @@ Secret settings SHALL be allowed in `spider.toml`. `015-add-crawl-store` redacts
 - **THEN** the `crawl` table of `crawl.config` has `concurrency` = 3
 
 ### Requirement: Persistent frontier
+
+**In short:** a URL is recorded `fetched` or `error` in one unit with everything found from it, so a `stopped` or `failed` Crawl continues from its file.
+
 The `urls` table SHALL be the Crawl's frontier:
 - A URL SHALL be recorded as `fetched` or `error` only in the writer unit (`015-add-crawl-store`) that also records its response data and every URL discovered from it, or as `error` by the fallback unit of a unit that failed (see "One URL never stops the Crawl").
 - URLs whose request has not completed SHALL stay `queued`.
@@ -828,7 +938,7 @@ The `urls` table SHALL be the Crawl's frontier:
 The Crawl Service SHALL be able to continue a Crawl from its store when its Crawl State is `stopped` or `failed`. `spider resume` in `060-add-crawl-control` exposes this operation, and adds `interrupted` Crawls, including those whose process was killed. Continuing SHALL:
 1. set the Crawl State back to `running`
 2. put back into `queued` every URL that ended as `error` or with `skip_reason` = `robots_unreachable`
-3. request only `queued` URLs, with the URL limit counted over the Crawl's whole life
+3. request only `queued` URLs, with the URL limit counted over the Crawl's whole life, and fetch each origin's robots.txt again, whose answer replaces the stored one; URLs that the earlier robots.txt blocked stay skipped
 4. end with the same URLs as an uninterrupted Crawl
 
 #### Scenario: A killed Crawl leaves no half-recorded Page
@@ -852,6 +962,7 @@ The Crawl Service SHALL be able to continue a Crawl from its store when its Craw
 - **THEN** `http://other.test/a` has `fetch_state` = `fetched`
 
 ### Requirement: Per-response hook
+
 **In short:** every registered handler's rows for a URL are written once per recorded outcome, with the URL's final state and row values.
 
 For each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`) when it is dispatched, the rows of every registered per-response handler SHALL be written exactly once per recorded outcome, with that state. A URL that a network pause re-queues (see "Backstops"), or that `060-add-crawl-control` continues, is recorded again, and its handlers' rows are written again with its new state, so a handler that writes rows for an outcome without a response SHALL key them by `url_id` and replace them. A URL that only Links that are not followed reach is recorded `skipped` when it is discovered, and reaches no handler, since a later followed Link may still queue it. A URL skipped as `max_depth` reaches no handler either, since a Link found later at a smaller depth re-queues it. A handler SHALL receive the URL's row values. For a URL with a response it SHALL also receive the status code, the reason phrase, the response headers, the robots directives (the `X-Robots-Tag` for the robots user-agent token, and the robots `<meta>` when the response was parsed) and, when the response was parsed, the extractor outputs. For an in-Scope 2xx response it SHALL receive the Links the Crawl read: those of the `Link` and `Refresh` headers, whatever became of the response's preparation, then those of the document when it was prepared. Each Link SHALL say where it was declared, `head` or `body` as the parser placed the element, or `http_header`, and whether the Crawl requests its target through it, which the Link type table and nofollow decide. A handler SHALL NOT write to the crawl store itself: it returns rows, and the crawl store writes them in the writer unit that records the URL's final state, so they are committed together. Later changes register handlers: `030-add-page-data` for Page data and cookies.
@@ -881,6 +992,9 @@ For each URL that reaches a final `fetch_state` (`fetched`, `error` or `skipped`
 - **THEN** the handler has received the reason phrase `Not Found` for `{site}/missing`
 
 ### Requirement: Post-crawl passes
+
+**In short:** registered passes run when a Crawl ends `completed` or `stopped`, again after a continue, and never for a `failed` Crawl.
+
 The Crawl SHALL run every registered post-crawl pass when it ends as `completed` or `stopped`, after its last URL is recorded and before its final Crawl State is written. It SHALL NOT run them for a Crawl that ends as `failed`. A continued Crawl SHALL run them again when it ends, so a pass registered by a later change can run more than once for the same Crawl. `030-add-page-data` and `040-add-rules` register passes.
 
 #### Scenario: Post-crawl passes run before a Crawl is completed
@@ -900,6 +1014,9 @@ The Crawl SHALL run every registered post-crawl pass when it ends as `completed`
 - **THEN** the pass has run twice
 
 ### Requirement: One URL never stops the Crawl
+
+**In short:** a failure of one URL becomes its recorded outcome, counted in one warning per kind, and only failures of the whole Crawl stop it.
+
 A failure while one URL is fetched, decoded, parsed, extracted or handled SHALL become that URL's recorded outcome, and the Crawl SHALL go on:
 - **Requests:** a request without a response is recorded as "Requests without a response" says.
 - **Decoding:** bytes that are invalid in the response's character encoding SHALL be decoded with replacement characters.
@@ -912,7 +1029,7 @@ A failure while one URL is fetched, decoded, parsed, extracted or handled SHALL 
   - 100 URL units in a row that fail on their first run, with no URL unit committed in between
 - **Counted warnings:** each kind of failure SHALL be reported by one warning, `parse_failed` for extractors and for a page preparation that gives nothing (`body_too_large`, `worker_crashed`, `parse_timeout`), `handler_failed` for handlers and `record_failed` for recording. It SHALL be written to stderr when it first occurs, and kept once in the result and `crawl.warnings`, with `details.count` (the number of URLs it affected) and `details.first_url`.
 
-Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, and a crawl file that cannot be written. Page preparation (decoding, parsing, the extractors and the robots directives) SHALL be one function of the response, called through an executor: in this change it runs in the crawl process, and `026-add-parse-pool` runs it in worker processes.
+Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, a crawl file that cannot be written, and a bug in the tool that escapes a URL's task, which ends it with `internal_error` (see "Result of a Crawl"). Page preparation (decoding, parsing, the extractors and the robots directives) SHALL be one function of the response, called through an executor: in this change it runs in the crawl process, and `026-add-parse-pool` runs it in worker processes.
 
 #### Scenario: An extractor error is recorded
 - **WHEN** an extractor registered for the test raises an error on `{site}/boom`, `/` links to `/boom` and `/ok`, and `spider crawl {site}/` runs
@@ -955,6 +1072,9 @@ Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, an
 - **THEN** `{site}/after` has `fetch_state` = `fetched`
 
 ### Requirement: Parsing never trusts its input
+
+**In short:** every parser of site input returns its result or a rejection of its own, never another error, which generated input checks.
+
 The Seed parser, URL normalisation, HTML decoding, the link extractor, the robots directives parser and the robots.txt reader SHALL accept any input. Each SHALL return its result, or a rejection of its own type that its caller records, and SHALL never raise any other error. Each SHALL be tested with generated input (hypothesis): arbitrary bytes, arbitrary text and malformed HTML.
 
 #### Scenario: The link extractor accepts any bytes
@@ -974,6 +1094,9 @@ The Seed parser, URL normalisation, HTML decoding, the link extractor, the robot
 - **THEN** the URL is allowed or disallowed, and no error is raised
 
 ### Requirement: Backstops
+
+**In short:** a run of Internal requests without a response pauses the Crawl and probes the Seed instead of recording the site as errors, and a watchdog cancels a request that hangs.
+
 - **The network pause:** when `max(8, 2 × --concurrency)` requests in a row for Internal URLs end without an HTTP response, the Crawl SHALL pause instead of recording the rest of the site as errors.
   - **Without an HTTP response** means the `fetch_error` `dns_error`, `connection_refused`, `connection_error`, `invalid_response` or `watchdog`, or `022-add-fetch-policy`'s `timeout`. `tls_error` SHALL NOT count: a certificate failure is an answer of sorts, and a site-wide one SHALL NOT wait `--network-wait` and then fail with a misleading `site_unreachable`. A response of any status SHALL reset the count, and requests for External URLs SHALL NOT count.
   - **While paused,** no new request SHALL start. Requests in flight SHALL finish: one that gets a response SHALL be recorded, and one that ends without a response SHALL NOT be recorded, so its URL stays `queued` and is requested again when the Crawl resumes.
@@ -1034,6 +1157,9 @@ The Seed parser, URL normalisation, HTML decoding, the link extractor, the robot
 - **THEN** `{site}/stuck` has `fetch_state` = `error` and `fetch_error` = `watchdog`, and the Crawl State is `completed`
 
 ### Requirement: Progress events
+
+**In short:** a foreground Crawl writes JSON events to stderr: its start, progress every 10 seconds, pauses and resumes, and its stop.
+
 While a foreground Crawl runs, the Command SHALL write progress events to stderr in the event shape of `010-add-workspace-and-cli-contract`: one JSON object per line, `{event, ts, data}`, encoded as UTF-8 and ending with LF on every OS. The events are:
 
 | `event` | When | `data` |
@@ -1069,7 +1195,10 @@ A warning SHALL be written to stderr when it first occurs for a host, as a diagn
 - **THEN** `data.crawl_file` of the `crawl_started` event, decoded from the UTF-8 bytes on stderr, contains `Ü`
 
 ### Requirement: Result of a Crawl
-Whenever a foreground Crawl ends, whatever its Crawl State, the Command SHALL print one JSON object on stdout with these fields:
+
+**In short:** a Crawl that records its end prints one JSON result, and its exit code says how it ended.
+
+Whenever a foreground Crawl ends with its Crawl State recorded, whatever that state, the Command SHALL print one JSON object on stdout with these fields:
 - `crawl_id`, `state`, `stop_reason`, `crawl_mode`, `seed` (the first Seed), `seed_count`, `section_crawl`
 - `started_at`, `ended_at`, `duration_s`
 - `urls`, with the counts `discovered`, `fetched`, `errors`, `skipped` and `queued`
@@ -1084,9 +1213,10 @@ Exit codes follow `010-add-workspace-and-cli-contract`:
 - 0 when the Crawl State is `completed`, or `stopped` with `stop_reason` `max_urls` or `requested`
 - 130 when the Crawl is `stopped` by an interrupt
 - 7 when the Crawl is `failed` because writing the crawl store failed (`crawl_write_failed`), or 5 when the crawl file stayed locked by another connection for longer than the writer waits (`crawl_busy`, `015-add-crawl-store`)
+- 70 when a bug in the tool ends the Crawl (`internal_error`): no result is printed, and the crawl file keeps the Crawl State `running`
 - 8 when the Crawl is `failed` because its Seed is unreachable (`seed_unreachable`) or the site stayed unreachable for `--network-wait` (`site_unreachable`)
 
-When writing fails, the Crawl Service SHALL try once more to record `failed` with `stop_reason` = `write_failed`. When that write fails too, the crawl file keeps the Crawl State `running`, which `060-add-crawl-control` reports as `interrupted`.
+When writing fails, the Crawl Service SHALL try once more to record `failed` with `stop_reason` = `write_failed`. When that write fails too, the crawl file keeps the Crawl State `running`, which `060-add-crawl-control` reports as `interrupted`, and the Command prints no result, only the error `crawl_write_failed`, and exits with code 7.
 
 For every non-zero exit, stderr SHALL hold exactly one error diagnostic, as its last line.
 
@@ -1107,6 +1237,9 @@ For every non-zero exit, stderr SHALL hold exactly one error diagnostic, as its 
 - **THEN** the Command exits with code 7, stdout holds the result with `"state": "failed"`, and the last stderr line is an error with `code` = `crawl_write_failed`
 
 ### Requirement: Unreachable Seed
+
+**In short:** a Seed whose origin never answers pauses the Crawl at once, and when `--network-wait` runs out the Crawl fails with `seed_unreachable`, exit code 8.
+
 Until the Seed's origin has given an HTTP response, a robots.txt or Seed request that gets none (see "Backstops" for what counts) SHALL pause the Crawl at once, with the probes, outcomes and `--network-wait` of the network pause, because a network may come up or switch just as a Crawl starts. When a probe answers, the Seed's robots.txt and the Seed SHALL be requested again. When no probe that starts within `--network-wait` answers, the Crawl SHALL end with the Crawl State `failed` and `stop_reason` = `seed_unreachable`, and it SHALL stay resumable. The Command SHALL:
 - print the result
 - write exactly one error diagnostic, with code `seed_unreachable` and a hint that mentions network access and sandboxed agents and says how long the Crawl waited
@@ -1131,6 +1264,9 @@ This lets an agent tell a site that is down, or a blocked network, from an empty
 - **THEN** the Seed is probed 3 times, the Crawl State is `completed`, and `{site}/` has `fetch_state` = `fetched`
 
 ### Requirement: Stopping with an interrupt
+
+**In short:** the first interrupt stops the Crawl gracefully, so it can be continued, with exit code 130; a second ends the process at once.
+
 The first interrupt SHALL stop a foreground Crawl gracefully. An interrupt is Ctrl+C; on Windows also Ctrl+Break; on macOS and Linux also SIGTERM and SIGHUP. After the first interrupt, the Command SHALL:
 1. write a `stopping` event and start no new request
 2. give requests in flight up to 10 seconds, then cancel those still running, whose URLs stay `queued`; a URL whose response was already handed to the writer SHALL still be recorded

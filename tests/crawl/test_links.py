@@ -4,6 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from spider.crawl.pages.links import links_in_tree, locate_links, parse_html
 from spider.crawl.references import DiscoveredLink
 from spider.crawl.urls import NormalizedUrl
 from tests.support.pages import page_links
@@ -33,6 +34,32 @@ def test_a_relative_link_is_resolved_against_the_base_href() -> None:
             is_internal=True,
         )
     ]
+
+
+def test_each_link_comes_with_its_element_and_the_element_that_places_it() -> None:
+    # A responsive image, a reference that resolves to nothing, and a tracking pixel in a
+    # footer's noscript, whose Link comes from the noscript's text.
+    html = (
+        '<main><img src="/a.png" srcset="/a-2x.png 2x" alt="A"><a href="http://[bad">x</a>'
+        '<a href="/b">B</a></main><footer><noscript><img src="/pixel.gif" alt=""></noscript>'
+        "</footer>"
+    )
+    located = locate_links(parse_html(html), _links(html))
+
+    assert [
+        (link.ordinal, element.attributes.get(link.attribute or ""), placing.tag)
+        for link, element, placing in located
+    ] == [
+        (1, "/a.png", "img"),
+        (2, "/a-2x.png 2x", "img"),
+        (3, "/b", "a"),
+        (4, "/pixel.gif", "noscript"),
+    ]
+
+
+def test_a_link_the_tree_does_not_hold_is_an_error() -> None:
+    with pytest.raises(RuntimeError, match="link 2 is not in the tree"):
+        locate_links(parse_html('<a href="/a">A</a>'), _links('<a href="/a">A</a><a href="/b">'))
 
 
 def _found(html: str, url: NormalizedUrl = SITE) -> list[tuple[str, str]]:
@@ -276,6 +303,36 @@ def test_the_link_extractor_accepts_any_bytes(body: bytes, content_type: str | N
     links = page_links(body, content_type, SITE)
 
     assert isinstance(links, tuple)
+
+
+_LOCATED_HTML = st.lists(
+    _FRAGMENTS
+    | st.sampled_from(["<noscript>", "</noscript>", "<footer>", '<img src="http://[" srcset="/s">'])
+    | st.text(max_size=8)
+).map("".join)
+
+
+@given(_LOCATED_HTML)
+def test_every_link_of_a_document_is_located_once(html: str) -> None:
+    tree = parse_html(html)
+    links = links_in_tree(
+        tree,
+        base=SITE,
+        encoding="utf-8",
+        is_internal=lambda url: True,
+        strip_params=None,
+        page_nofollow=False,
+        follow_nofollow=False,
+    )
+
+    located = locate_links(tree, links)
+
+    assert [link for link, _, _ in located] == links
+    # Each Link is paired with the element that holds its reference.
+    assert all(
+        link.raw.strip() in (element.attributes.get(link.attribute or "") or "")
+        for link, element, _ in located
+    )
 
 
 def test_deeply_nested_html_gives_its_links() -> None:

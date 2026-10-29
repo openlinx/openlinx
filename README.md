@@ -16,7 +16,7 @@ A Skill teaches the agent when and how to use each Command. The tool itself neve
 ## Status
 
 Pre-release: there is no release yet.
-- **Progress:** done and archived: the scaffold (`000`), Workspaces and the CLI contract (`010`), the crawl store (`015`), the faster crawl writer (`017`) and the schema conventions (`018`). That is `spider init`, `spider commands`, `spider schema`, `--crawl`, and one SQLite file per Crawl with a documented schema. `020-add-crawl-core` is in progress: its first part is merged, so `spider crawl <url>` crawls a site in the foreground. [ROADMAP.md](ROADMAP.md) says where the build is.
+- **Progress:** done and archived: the scaffold (`000`), Workspaces and the CLI contract (`010`), the crawl store (`015`), the faster crawl writer (`017`), the schema conventions (`018`) and the crawl core (`020`). That is `spider init`, `spider commands`, `spider schema`, `--crawl`, one SQLite file per Crawl with a documented schema, and `spider crawl <url>`, which crawls a site in the foreground. [ROADMAP.md](ROADMAP.md) says where the build is.
 - **Name:** the product is OpenLinx (PyPI `openlinx`, GitHub organisation `openlinx`). `spider` is the working name of the command, the Python package, `spider.toml` and the `.spider/` directory of each Workspace until the rename.
 
 ## Development quick start

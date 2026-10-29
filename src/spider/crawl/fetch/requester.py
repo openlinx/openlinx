@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Protocol
 
+from spider.aio import first_of
 from spider.clock import Clock
 from spider.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
 from spider.crawl.fetch.politeness import RateGate, RequestLimits
@@ -39,8 +40,9 @@ class Stop(Protocol):
 
 
 class Requester:
-    """The host's slot, its turn under --rate, the global cap and the URL limit for every
-    request; the watchdog, the network pause and 022's retries belong here, not in its callers."""
+    """The host's slot, its turn under --rate, the global cap, the URL limit and the watchdog
+    for every request, and the network pause's gate and probes; the engine decides from a
+    URL's outcome whether the pause retries it (design D7, D16)."""
 
     def __init__(
         self,
@@ -173,14 +175,7 @@ class Requester:
             return False
         if wait <= 0:
             return True
-        turn = asyncio.ensure_future(self._clock.sleep(wait))
-        stopped = asyncio.ensure_future(self._stop.wait())
-        try:
-            await asyncio.wait({turn, stopped}, return_when=asyncio.FIRST_COMPLETED)
-        finally:
-            turn.cancel()
-            stopped.cancel()
-            await asyncio.wait({turn, stopped})
+        turn = await first_of(self._clock.sleep(wait), self._stop.wait())
         return not turn.cancelled()
 
     def _host(self, host: str) -> asyncio.Semaphore:
@@ -193,15 +188,10 @@ class Requester:
         # Each attempt races its own watchdog on the Crawl's Clock, from when it started, which
         # its row keeps as the Fetcher's would.
         started_at = self._clock.now()
-        fetch = asyncio.ensure_future(self._fetcher.fetch(Request(url)))
-        watchdog = asyncio.ensure_future(self._clock.sleep(self._watchdog_seconds))
-        try:
-            await asyncio.wait((fetch, watchdog), return_when=asyncio.FIRST_COMPLETED)
-        finally:
-            fetch.cancel()
-            watchdog.cancel()
-            # Both have ended before the slots are given back.
-            await asyncio.wait((fetch, watchdog))
+        # Both have ended before the slots are given back.
+        fetch = await first_of(
+            self._fetcher.fetch(Request(url)), self._clock.sleep(self._watchdog_seconds)
+        )
         if not fetch.cancelled():
             return fetch.result()
         return FetchFailure(

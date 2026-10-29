@@ -25,6 +25,8 @@ from spider.services.hooks import default_hooks
 from spider.store.records import CrawlFile, SecretNames
 from tests.support.app import settings_tables
 from tests.support.cli import run_cli
+from tests.support.clock import FakeClock
+from tests.support.fetcher import FakeFetcher, FakePage
 
 
 def crawled(*args: str) -> Path:
@@ -100,3 +102,14 @@ def continued(
         fetcher=fetcher,
         stop=stop,
     )
+
+
+def stopped_with_an_error() -> Path:
+    """A Crawl that its URL limit stopped after /a got no response, as a continue finds it."""
+    clock = FakeClock()
+    pages = {
+        "/": FakePage('<a href="/a">A</a><a href="/b">B</a>'),
+        "/a": FakePage("", fails="connection_refused"),
+    }
+    fetcher = FakeFetcher(clock, pages)
+    return crawl_result("http://site.test/", clock=clock, fetcher=fetcher, max_urls=2).crawl_file

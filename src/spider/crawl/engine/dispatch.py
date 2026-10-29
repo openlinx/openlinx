@@ -4,13 +4,15 @@ import asyncio
 from collections.abc import Sequence
 from typing import Literal
 
+from spider.aio import first_of
 from spider.crawl.engine.context import CrawlContext
 from spider.crawl.engine.crawl_warnings import url_limit_reached
 from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.engine.pause import CountedUrl, NetworkPause, PauseEnd, Redispatch
 from spider.crawl.engine.progress import UrlCounters, report_progress
 from spider.crawl.engine.stop import StopGrace
-from spider.crawl.engine.units import Run, TaskFailure, unit_of, via_resource
+from spider.crawl.engine.tasks import Run, TaskFailure
+from spider.crawl.engine.units import unit_of, via_resource
 from spider.crawl.fetch.fetcher import REQUEST_DEADLINE_SECONDS
 from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
 from spider.crawl.fetch.requester import Requester, watchdog_seconds
@@ -90,18 +92,17 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         stop=context.stop,
         requester=requester,
         clock=context.clock,
-        log=context.reporter,
+        warnings=context.warnings,
         resumed=resumed,
         track=lambda task: task_failure.track(side_tasks, task),
     )
     run = Run(
         context=context,
-        outcomes=Outcomes(context.writer, context.reporter, context.stop, counters),
+        outcomes=Outcomes(context.writer, context.warnings, context.stop, counters),
         limits=limits,
         requester=requester,
         robots=robots,
         blocking=BlockingRuns(),
-        checked_urls=set(),
         task_failure=task_failure,
         pause=pause,
         redispatch=redispatch,
@@ -121,7 +122,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     progress = asyncio.create_task(
         report_progress(
             clock=context.clock,
-            log=context.reporter,
+            warnings=context.warnings,
             crawl_id=context.crawl_file.id,
             counters=counters,
             rate=requester.rate,
@@ -135,7 +136,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             await _crawl_depth(run, depth)
             # The checked URLs in flight get the grace too; the sweep below would wait for them.
             if _stopping(run):
-                await _wait_out(run, run.checked_urls)
+                await _wait_out(run, run.task_failure.checked_urls)
                 break
             # Read after every unit submitted so far, so it sees the URLs they discovered.
             depth = await context.writer.run_async(next_depth(depth))
@@ -144,7 +145,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
                 # to them, at a depth the frontier has passed: once every checked URL has ended,
                 # and every outcome, so that no URL whose unit failed is still queued, the queue
                 # is read from the top.
-                await _wait_out(run, run.checked_urls)
+                await _wait_out(run, run.task_failure.checked_urls)
                 if _stopping(run):
                     break
                 await run.outcomes.settled()
@@ -154,11 +155,11 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
                     # re-queues the URLs of its count.
                     await run.pause.ended()
                     depth = await context.writer.run_async(next_depth(_ABOVE_NO_DEPTH))
-    # An ended writer refuses every unit; its cause says why it ended (017 D6).
+    # An ended writer refuses every unit.
     except CrawlWriterClosedError as closed:
-        context.stop.set("write_failed", closed.__cause__ or closed)
+        context.stop.write_failed(closed)
     finally:
-        await _cancel_all(run.checked_urls)
+        await _cancel_all(run.task_failure.checked_urls)
         await run.pause.close()
         await _cancel_all(side_tasks)
         await run.robots.close()
@@ -168,7 +169,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     limit = limits.limit_reached()
     # Only once every outcome is in: a failure among them outranks the stop.
     if limit is not None and context.stop.reason == "max_urls":
-        context.reporter.warn(url_limit_reached(context.crawl_file.id, limit))
+        context.warnings.warn(url_limit_reached(context.crawl_file.id, limit))
 
 
 async def _crawl_depth(run: Run, depth: int) -> None:
@@ -214,22 +215,14 @@ async def _wait_out(run: Run, tasks: set[asyncio.Task[None]]) -> None:
     time at most, and a bug ends the wait at once. The caller cancels what is left, before its
     submit, so its URL stays queued (design D16)."""
     stop, failure = run.context.stop, run.task_failure
-    stopped = asyncio.ensure_future(stop.wait())
-    try:
-        while tasks and not stop.is_set and not failure.is_set:
-            await asyncio.wait({*tasks, stopped}, return_when=asyncio.FIRST_COMPLETED)
-    finally:
-        stopped.cancel()
-        await asyncio.wait({stopped})
+    while tasks and not stop.is_set and not failure.is_set:
+        await first_of(stop.wait(), wake_on=tasks)
     if not tasks or failure.is_set:
         return
-    grace = asyncio.ensure_future(run.context.clock.sleep(run.grace.remaining()))
-    try:
-        while tasks and not grace.done() and not failure.is_set:
-            await asyncio.wait({*tasks, grace}, return_when=asyncio.FIRST_COMPLETED)
-    finally:
-        grace.cancel()
-        await asyncio.wait({grace})
+    while tasks and not failure.is_set:
+        grace = await first_of(run.context.clock.sleep(run.grace.remaining()), wake_on=tasks)
+        if not grace.cancelled():
+            break
 
 
 type _Started = Literal["go_on", "stopped", "limit"]
@@ -261,7 +254,7 @@ async def _start(run: Run, queued: QueuedUrl, running: set[asyncio.Task[None]]) 
     task = asyncio.create_task(_crawl_url(run, queued, decision))
     # A checked URL never holds the barrier (design D3); the sweep in run_crawl reads what one
     # finds after its depth has closed.
-    tasks = run.checked_urls if _is_checked_url(queued, decision) else running
+    tasks = run.task_failure.checked_urls if _is_checked_url(queued, decision) else running
     run.task_failure.track(tasks, task)
     return "go_on"
 
@@ -270,14 +263,7 @@ async def _reserve_task(run: Run) -> bool:
     """Room for a URL's task, or False once the Crawl stops: the tasks that fill the bound may
     wait for a host's slot that a hanging request holds, and the grace must not wait for it
     (design D16)."""
-    reserved = asyncio.ensure_future(run.limits.reserve_task())
-    stopped = asyncio.ensure_future(run.context.stop.wait())
-    try:
-        await asyncio.wait({reserved, stopped}, return_when=asyncio.FIRST_COMPLETED)
-    finally:
-        stopped.cancel()
-        reserved.cancel()
-        await asyncio.wait({reserved, stopped})
+    reserved = await first_of(run.limits.reserve_task(), run.context.stop.wait())
     return not reserved.cancelled()
 
 

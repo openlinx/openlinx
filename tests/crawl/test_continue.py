@@ -1,7 +1,6 @@
 """Continuing a stopped or failed Crawl (020-add-crawl-core D20; seam 2)."""
 
 import json
-import socket
 from collections.abc import Sequence
 from dataclasses import replace
 
@@ -21,15 +20,11 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import continued, crawl_result
 from tests.support.crawls import query
+from tests.support.network import closed_port
+from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
 _PAGES = range(1, 10)
-NINE_PAGES = Site(
-    routes={
-        "/": Page(body="".join(f'<a href="/p{n}">P{n}</a>' for n in _PAGES)),
-        **{f"/p{n}": Page(body=f"<p>{n}</p>") for n in _PAGES},
-    }
-)
 
 
 def test_continuing_a_stopped_crawl_completes_it(
@@ -61,7 +56,7 @@ def test_a_continue_records_the_settings_it_runs_with(
     assert (recorded["max_urls"], recorded["rate"], recorded["concurrency"]) == (None, 50.0, 2)
 
 
-def test_the_url_limit_counts_over_the_crawls_whole_life(
+def test_the_url_limit_counts_over_the_crawl_s_whole_life(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(NINE_PAGES)
@@ -76,7 +71,7 @@ def test_the_url_limit_counts_over_the_crawls_whole_life(
     ) == ([(5,)], "stopped", "max_urls")
 
 
-def test_warnings_cover_the_crawls_whole_life(
+def test_warnings_cover_the_crawl_s_whole_life(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     # a.site.test and b.site.test share an instance whose robots.txt answers 503. / links to
@@ -190,18 +185,10 @@ def test_continuing_clears_how_the_crawl_ended(
     ) == ("stopped", [("running", None)])
 
 
-def _free_port() -> int:
-    """A port nothing listens on, until the test starts a site there."""
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port: int = probe.getsockname()[1]
-        return port
-
-
 def test_a_failed_crawl_is_continued_once_its_seed_answers(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
-    port = _free_port()
+    port = closed_port()
     seed = f"http://127.0.0.1:{port}/"
     failed = crawl_result(seed, network_wait=0)
     fixture_site(NINE_PAGES, port=port)
@@ -299,7 +286,7 @@ def test_a_continue_whose_seed_answered_before_pauses_for_no_other_origin(
 def test_a_seed_still_down_fails_a_continue_as_seed_unreachable_again(
     temp_workspace: TempWorkspace,
 ) -> None:
-    seed = f"http://127.0.0.1:{_free_port()}/"
+    seed = f"http://127.0.0.1:{closed_port()}/"
     failed = crawl_result(seed, network_wait=0)
 
     again = continued(failed)

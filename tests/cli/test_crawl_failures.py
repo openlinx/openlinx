@@ -6,7 +6,7 @@ from typing import Any
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Route, Site
 from tests.support.cli import run_cli
-from tests.support.crawls import query
+from tests.support.crawls import crawl_row, query
 from tests.support.network import closed_port
 from tests.support.sqlite_faults import disk_full_after
 from tests.support.workspace import TempWorkspace
@@ -35,7 +35,8 @@ def test_a_write_failure_fails_the_crawl(
         result.json()["stop_reason"],
         result.stderr_json_lines()[-1]["code"],
         result.stray_stderr_lines(),
-    ) == (7, "failed", "write_failed", "crawl_write_failed", [])
+        crawl_row(Path(result.json()["crawl_file"]))["state"],
+    ) == (7, "failed", "write_failed", "crawl_write_failed", [], "failed")
 
 
 _DOWN = range(1, 21)

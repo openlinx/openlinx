@@ -10,6 +10,7 @@ from sqlalchemy import Connection, event, text
 
 from spider.crawl.urls import NormalizedUrl, parse_seed
 from spider.store.connections import opening
+from spider.store.origins import record_robots_txt
 from spider.store.records import (
     DiscoveredVia,
     DiscoverySkipReason,
@@ -18,9 +19,11 @@ from spider.store.records import (
     NewUrl,
     Provenance,
     QueuedUrl,
+    RobotsTxtRecord,
     SkippedUrl,
     SkipReason,
     UrlCounts,
+    UrlTally,
 )
 from spider.store.rows import HandlerRows
 from spider.store.schema import literal_values
@@ -32,10 +35,13 @@ from spider.store.urls import (
     record_seed,
     record_skipped,
     record_unwritten,
+    requeue,
+    seed_answered,
     url_counts,
 )
 from spider.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
+from tests.support.crawling import stopped_with_an_error
 from tests.support.crawls import create_any_crawl, query
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing, replay_now
@@ -106,7 +112,6 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
     found = (
         _new("https://site.test/a"),
         _new("https://site.test/b"),
-        _new("https://site.test/a"),
         _new("https://site.test/c"),
     )
 
@@ -539,3 +544,37 @@ def test_the_frontier_read_uses_its_index(temp_workspace: TempWorkspace) -> None
         plan = _plan_of_first_statement(connection, queued_batch(1, 0, 10))
 
     assert ("USING INDEX urls_crawl_depth_id" in plan, "TEMP B-TREE" in plan) == (True, False), plan
+
+
+def test_the_units_of_an_outage_and_a_continue_run_again_the_same(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl_file = stopped_with_an_error()
+    (errored,) = query(crawl_file, "SELECT id FROM urls WHERE fetch_state = 'error'")
+    robots_txt = RobotsTxtRecord(
+        origin="http://site.test",
+        state="ok",
+        status_code=200,
+        fetched_at=datetime(2026, 9, 27, 15, 0, tzinfo=UTC),
+        text="User-agent: *\nDisallow: /private/",
+        crawl_delay_ms=None,
+        sitemaps=("http://site.test/sitemap.xml",),
+    )
+
+    with CrawlWriter(crawl_file, FakeClock()) as writer:
+        tally = writer.run(requeue([errored[0]]))
+        answered = writer.run(seed_answered(_url("http://site.test/")))
+        writer.run(record_robots_txt(robots_txt))
+        replay_now(writer)
+
+    assert (
+        tally,
+        answered,
+        query(crawl_file, "SELECT fetch_state FROM urls WHERE id = ?", [errored[0]]),
+        query(crawl_file, "SELECT robots_state, robots_txt, robots_sitemaps FROM origins"),
+    ) == (
+        UrlTally(errors=-1, queued=1),
+        True,
+        [("queued",)],
+        [("ok", "User-agent: *\nDisallow: /private/", '["http://site.test/sitemap.xml"]')],
+    )

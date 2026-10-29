@@ -5,10 +5,15 @@ import asyncio
 from collections.abc import Callable
 
 from spider.clock import Clock
+from spider.store.failures import write_failure_cause
 from spider.store.records import StopReason
 from spider.store.transitions import TRANSITIONS
 
-_FAILURES = TRANSITIONS["running", "failed"]
+
+def _rank(reason: StopReason) -> int:
+    if reason == "write_failed":
+        return 2
+    return 1 if reason in TRANSITIONS["running", "failed"] else 0
 
 
 class StopSignal:
@@ -37,18 +42,23 @@ class StopSignal:
         self._on_first_set.append(callback)
 
     def set(self, reason: StopReason, cause: BaseException | None = None) -> None:
-        """The first stop counts, but a failure outranks a stop: a Crawl that stopped at its
-        URL limit and then lost its file has failed (design D10)."""
+        """The first stop counts, but a failure outranks a stop and a write failure the
+        network failures: a Crawl that stopped at its URL limit and then lost its file has
+        failed (design D10, D16)."""
         if self._closed:
             return
         first = self._reason is None
-        if first or (reason in _FAILURES and self._reason not in _FAILURES):
+        if self._reason is None or _rank(reason) > _rank(self._reason):
             self._reason, self._cause = reason, cause
         # Before the callbacks, so a waiter wakes even if one of them raises.
         self._was_set.set()
         if first:
             for callback in self._on_first_set:
                 callback(reason)
+
+    def write_failed(self, error: BaseException) -> None:
+        """Writing the crawl file failed, wherever it was written."""
+        self.set("write_failed", write_failure_cause(error))
 
     def close(self) -> StopReason | None:
         """The end's one read of the reason: a stop set after it, during the passes or the

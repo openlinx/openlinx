@@ -25,6 +25,14 @@ def is_write_failure(error: BaseException) -> bool:
     return isinstance(cause, sqlite3.Error) and not isinstance(cause, _ONE_ROW)
 
 
+def write_failure_cause(error: BaseException) -> BaseException:
+    """The error the write failed on: an ended writer refuses with the error it ended on as
+    its cause (017 D6)."""
+    if isinstance(error, CrawlWriterClosedError) and error.__cause__ is not None:
+        return error.__cause__
+    return error
+
+
 def is_one_urls_failure(error: BaseException) -> bool:
     """True when the URL alone failed, so a fallback unit records it; else the file failed."""
     # A row the file refuses, or our own row code's error: one row's.
