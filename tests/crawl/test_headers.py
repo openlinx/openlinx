@@ -147,7 +147,7 @@ def test_the_engine_finds_the_links_that_the_extractors_see() -> None:
 
     # As the engine joins them: its own header Links, then the prepared document's.
     joined = response_links(SITE, _PAGE_WITH_A_CANONICAL_HEADER, _SEEING.scope, None)
-    assert joined + page.document_links == _seen(page)
+    assert joined + page.html_links == _seen(page)
 
 
 _HEADER_PIECES = st.sampled_from(
@@ -204,5 +204,5 @@ def test_stripped_parameters_leave_every_link_of_a_page() -> None:
     assert [
         link.target
         for link in response_links(SITE, response, settings.scope, settings.strip_params)
-        + page.document_links
+        + page.html_links
     ] == ["http://site.test/c", "http://site.test/a?x=1"]

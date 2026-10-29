@@ -1,6 +1,8 @@
 """The Crawl's warning log (020-add-crawl-core D10; seams 2 and 3)."""
 
+from spider.crawl.engine.crawl_warnings import handler_failure
 from spider.crawl.engine.warning_log import WarningLog
+from spider.crawl.urls import NormalizedUrl
 from spider.output.codes import (
     DECLARED,
     MAX_URLS_REACHED,
@@ -11,7 +13,7 @@ from spider.output.diagnostics import Diagnostic
 from spider.output.reporter import Collected
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Robots, Site, Status
+from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status
 from tests.support.crawling import crawl_result
 from tests.support.workspace import TempWorkspace
 
@@ -90,11 +92,22 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
         Site(routes={"/": Page(body='<link rel="canonical" href="http://site.test/">')}),
         Site(routes={}),
     )
+    moved = fixture_hosts(
+        Site(
+            routes={
+                "/robots.txt": Redirect("http://nowhere.test/robots.txt"),
+                "/": Page(body='<a href="/a">A</a>'),
+                "/a": Page(body="<p>A</p>"),
+            }
+        ),
+        Site(routes={}),
+    )
 
     results = [
         crawl_result(down.url("/"), ignore_robots=True),
         crawl_result(closed.url("/")),
         crawl_result("http://www.site.test/", resolver=www.resolver),
+        crawl_result("http://site.test/", resolver=moved.resolver),
     ]
 
     seen = sorted(
@@ -108,14 +121,29 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
     assert (seen, sorted(_ONCE_PER)) == (
         [
             ("possible_blocking", True),
+            ("robots_redirect_failed", True),
             ("robots_unreachable", True),
             ("seed_base_mismatch", True),
             ("seed_blocked_by_robots_txt", True),
         ],
         [
             "possible_blocking",
+            "robots_redirect_failed",
             "robots_unreachable",
             "seed_base_mismatch",
             "seed_blocked_by_robots_txt",
         ],
     )
+
+
+def test_a_url_that_fails_again_after_it_is_decided_again_is_counted_once() -> None:
+    log = WarningLog(Collected())
+    lowered, other = NormalizedUrl("http://site.test/x"), NormalizedUrl("http://site.test/y")
+
+    # A skip lost to a lowering leaves /x queued; decided again, its handlers fail again.
+    for url in (lowered, other, lowered):
+        log.count(handler_failure(url, [("pages", ValueError("no title"))]), url)
+
+    assert [(warning.code, warning.details["count"]) for warning in log.warnings] == [
+        ("handler_failed", 2)
+    ]

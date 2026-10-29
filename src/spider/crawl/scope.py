@@ -7,7 +7,7 @@ from functools import lru_cache
 from ipaddress import IPv4Address
 from typing import TYPE_CHECKING
 
-from spider.crawl.urls import NormalizedUrl, url_host, url_path, without_www
+from spider.crawl.urls import NormalizedUrl, host_key, url_path, without_www
 from spider.store.records import RecordedScope, ScopeKind, SkipReason
 
 if TYPE_CHECKING:
@@ -69,7 +69,7 @@ class ScopeRules:
         }
 
     def decide(self, url: NormalizedUrl) -> ScopeDecision:
-        host = _without_trailing_dot(url_host(url))
+        host = host_key(url)
         is_internal = host in self.seed_hosts or (
             bool(self.registrable_domains) and _registrable_domain(host) in self.registrable_domains
         )
@@ -89,7 +89,7 @@ def scope_rules(
     include: tuple[re.Pattern[str], ...] = (),
     exclude: tuple[re.Pattern[str], ...] = (),
 ) -> ScopeRules:
-    host = _without_trailing_dot(url_host(seed))
+    host = host_key(seed)
     domain = _registrable_domain(host)
     # One way only: a www Seed never admits the apex, which the user did not name.
     www = (f"www.{host}",) if domain == host else ()
@@ -124,10 +124,6 @@ def _public_suffixes() -> "PublicSuffixList":
     return PublicSuffixList()
 
 
-def _without_trailing_dot(host: str) -> str:
-    return host.removesuffix(".")
-
-
 def _is_ipv4(host: str) -> bool:
     try:
         IPv4Address(host)
@@ -142,7 +138,7 @@ def apex_seed_named_by_page(
     """The Seed on its apex host, when the Seed is www. plus a registrable domain, its Page names
     the apex by its first canonical to either host or by more hyperlinks than to the Seed's
     host, and the Scope leaves that Seed out (D4)."""
-    host = _without_trailing_dot(url_host(seed))
+    host = host_key(seed)
     apex = host.removeprefix("www.")
     if apex == host or _registrable_domain(apex) != apex:
         return None
@@ -156,7 +152,7 @@ def apex_seed_named_by_page(
 def _names_apex(links: Iterable["DiscoveredLink"], host: str, apex: str) -> bool:
     to_apex = to_seed_host = 0
     for link in links:
-        target_host = _without_trailing_dot(url_host(link.target))
+        target_host = host_key(link.target)
         # The first canonical to either host is the Page's own word on which one is the site.
         if link.type == "canonical" and target_host in (apex, host):
             return target_host == apex

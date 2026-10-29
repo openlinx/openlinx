@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from protego import Protego
 
+from spider.crawl.urls import NormalizedUrl
 from spider.store.records import FetchError, RobotsState
 
 # RFC 9309 2.5: a crawler parses at least the first 500 KiB of a robots.txt.
@@ -44,11 +45,18 @@ class OriginRobots:
     state: RobotsState
     # The rules of an ok robots.txt; without them every URL is allowed.
     rules: RobotsTxt | None = None
-    # Of the final robots.txt response; None without one.
+    # Of the last robots.txt response, a redirect's when a later hop got none; None without one.
     status_code: int | None = None
-    # Why the robots.txt request got no HTTP response: every URL of the origin gets it.
+    # Why the robots.txt request, or a redirect hop of it, got no HTTP response.
     fetch_error: FetchError | None = None
     fetch_error_message: str | None = None
+    # The redirect target that got no response; the origin itself answered.
+    failed_redirect: NormalizedUrl | None = None
+
+    @property
+    def origin_error(self) -> FetchError | None:
+        """Why the origin gave no response at all, so its URLs are errors (design D6)."""
+        return self.fetch_error if self.failed_redirect is None else None
 
     def allows(self, url: str) -> bool:
         return self.rules is None or self.rules.allows(url)

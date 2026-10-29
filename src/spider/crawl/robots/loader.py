@@ -45,29 +45,46 @@ class RobotsLoader:
     async def _load(self, robots_url: NormalizedUrl) -> OriginRobots:
         url = robots_url
         response = await self._requester.request_robots_txt(url)
+        redirect: FetchResult | None = None
         # Up to five hops, as RFC 9309 asks; a longer chain ends on a 3xx, which is missing.
         for _ in range(_REDIRECT_HOPS):
+            if isinstance(response, FetchFailure):
+                break
             target = _redirect_target(url, response)
             if target is None:
                 break
-            url = target
+            redirect, url = response, target
             response = await self._requester.request_robots_txt(url)
-        robots, text = _origin_robots(response, self._token)
+        if isinstance(response, FetchFailure) and redirect is not None:
+            # The origin answered; only where it sent the request failed (design D6).
+            robots, text = _failed_redirect(redirect, url, response), None
+        else:
+            robots, text = _origin_robots(response, self._token)
         # The URL's origin row exists: the URL that requests robots.txt was recorded first.
         record = _robots_txt_record(url_origin(robots_url), robots, text, response.fetched_at)
         await self._writer.run_async(record_robots_txt(record))
         return robots
 
 
-def _redirect_target(
-    url: NormalizedUrl, response: FetchResult | FetchFailure
-) -> NormalizedUrl | None:
-    if not isinstance(response, FetchResult) or response.status_code not in _REDIRECTS:
+def _redirect_target(url: NormalizedUrl, response: FetchResult) -> NormalizedUrl | None:
+    if response.status_code not in _REDIRECTS:
         return None
     location = response.header("Location")
     if location is None:
         return None
     return resolve_reference(url, location, codec=None, strip_params=None)
+
+
+def _failed_redirect(
+    redirect: FetchResult, target: NormalizedUrl, failure: FetchFailure
+) -> OriginRobots:
+    return OriginRobots(
+        state="missing",
+        status_code=redirect.status_code,
+        fetch_error=failure.fetch_error,
+        fetch_error_message=failure.message,
+        failed_redirect=target,
+    )
 
 
 def _origin_robots(

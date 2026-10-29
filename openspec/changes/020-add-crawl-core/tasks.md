@@ -450,3 +450,22 @@ Group 16 runs last, after this group.
 
 - [x] 17.1 Move `spider.crawl` into the subpackages of design D19, behaviour unchanged: a `git mv` per module, the imports rewritten by `scripts/crawl_layout_codemod.py`, `DiscoveredLink` and `resolve_reference` with its helpers split out of `links` into `references`, and in each package an `__init__.py` whose docstring lists its interface.
   Done when: every moved top-level function and class has the AST it had, except `_base` and `_from_attribute` of `links`, `_cleaned` and `C0_OR_SPACE` of `references`, the `TYPE_CHECKING` import of `scope`, and the new `resolve_base`; a second run of the codemod changes nothing; and the ast guard `test_the_crawl_imports_run_one_way`, with its breach cases red by mutation of a forbidden import, passes and fails on a path it names that does not exist.
+
+## 18. Review of the crawl core
+
+The fixes of the review of `spider.crawl` along both axes. Group 16 runs last, after this group, and task 12.0 after this group.
+
+- [x] 18.1 Drive "An image that another Page hyperlinked first is checked beyond the depth limit" at seam 3: a Resource Link raises a still-queued URL's `discovered_via` to its Resource kind (design D5).
+- [x] 18.2 Drive "A robots.txt redirect to a host that does not resolve counts as missing" at seam 3, with the `robots_redirect_failed` warning (design D6).
+- [x] 18.3 Drive "Two handlers that fail on one URL count it once" at seam 3.
+- [x] 18.4 Fix: one host key in `spider.crawl.urls`, without a trailing dot, for the Scope, the per-host slots, the rate turn and the blocking runs.
+  Done when: two URLs that differ only by a trailing dot on the host share one rate turn, red first.
+- [x] 18.5 Refactor: the tests of `extract_links` move to `prepare_page` at seam 4, the header-first order and `first_ordinal` included, and `extract_links` goes.
+- [x] 18.6 Refactor: one constructor builds a `DiscoveredLink` for the link extractor and the header Links, and one ordered table maps `rel` tokens to a Link type for both, the headers reading only their types, behaviour unchanged.
+- [x] 18.7 Refactor: the texts of `handler_failed`, `record_failed` and `parse_failed` move into `spider.crawl.engine.crawl_warnings`, and `_robots_verdict` returns its warnings for the caller to give, behaviour unchanged.
+- [x] 18.8 Refactor: `CrawlContext.reporter` is typed `WarningLog`, the one adapter, and the `CrawlReporter` Protocol goes; `document_links` is renamed `html_links`, and CONTEXT.md notes "reference" as the raw string before it resolves to a Link.
+- [x] 18.9 Refactor: the duplicate of `test_an_unreachable_robots_txt_is_reported_under_ignore_robots` goes, with its Risks entry.
+- [x] 18.10 Fix: the fixture site's `after` route option, and the two depth tests that order their events by delays wait on it instead, each red when the lowering happens before dispatch.
+- [x] 18.11 Docs: `docs/crawling.md` lists the final 3xx of robots.txt and drops the provenance acceptance; `docs/architecture.md` lists the rate turn between the host's slot and the global cap.
+- [x] 18.12 Review: run the code-review skill on group 18's commits, then refactor with the whole suite green.
+

@@ -3,7 +3,7 @@
 import asyncio
 
 from spider.crawl.engine.context import CrawlContext
-from spider.crawl.engine.crawl_warnings import warn_of_the_url_limit
+from spider.crawl.engine.crawl_warnings import url_limit_reached
 from spider.crawl.engine.outcomes import Outcomes
 from spider.crawl.engine.units import Run, unit_of, via_resource
 from spider.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits
@@ -82,7 +82,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     limit = limits.limit_reached()
     # Only once every outcome is in: a failure among them outranks the stop.
     if limit is not None and context.stop.reason == "max_urls":
-        warn_of_the_url_limit(context, limit)
+        context.reporter.warn(url_limit_reached(context.crawl_file.id, limit))
 
 
 async def _crawl_depth(run: Run, depth: int) -> None:

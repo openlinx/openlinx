@@ -3,10 +3,10 @@
 import pytest
 
 from spider.crawl.engine.discovery import discovered_urls
-from spider.crawl.pages.links import extract_links
 from spider.crawl.scope import scope_rules
 from spider.crawl.urls import NormalizedUrl
 from spider.store.records import NewUrl
+from tests.support.pages import page_links
 
 SITE = NormalizedUrl("http://site.test/")
 
@@ -16,7 +16,7 @@ def test_a_page_records_each_url_it_links_to_once() -> None:
         b'<a href="/a">A</a><img src="/logo.png"><a href="/b">B</a>'
         b'<a href="/a#top">A again</a><a href="http://other.test/">Other</a><a href="/b">B</a>'
     )
-    links = extract_links(body, "text/html", SITE, is_internal=lambda url: True, strip_params=None)
+    links = page_links(body, "text/html", SITE)
 
     assert discovered_urls(links, scope_rules(SITE)) == (
         NewUrl(
@@ -47,9 +47,7 @@ def test_a_page_records_each_url_it_links_to_once() -> None:
 
 
 def _recorded(html: str) -> list[tuple[str, str, str | None]]:
-    links = extract_links(
-        html.encode(), "text/html", SITE, is_internal=lambda url: True, strip_params=None
-    )
+    links = page_links(html.encode(), "text/html", SITE)
     return [
         (new.url, new.discovered_via, new.skip_reason)
         for new in discovered_urls(links, scope_rules(SITE))
@@ -124,16 +122,12 @@ def test_each_link_type_is_followed_or_recorded_as_not_followed(
 
 
 def _page_nofollow(follow_nofollow: bool) -> tuple[NewUrl, ...]:
-    body = b'<a rel="nofollow" href="/n">N</a><a href="/x">X</a><link rel="icon" href="/i">'
-    links = extract_links(
-        body,
-        "text/html",
-        SITE,
-        is_internal=lambda url: True,
-        strip_params=None,
-        page_nofollow=True,
-        follow_nofollow=follow_nofollow,
+    # A page-level nofollow, as a staging Page's robots meta gives it.
+    body = (
+        b'<meta name="robots" content="nofollow"><a rel="nofollow" href="/n">N</a>'
+        b'<a href="/x">X</a><link rel="icon" href="/i">'
     )
+    links = page_links(body, "text/html", SITE, follow_nofollow=follow_nofollow)
     return discovered_urls(links, scope_rules(SITE))
 
 

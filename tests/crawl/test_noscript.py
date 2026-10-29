@@ -119,13 +119,13 @@ def test_a_literal_noscript_start_tag_leaves_a_later_noscript_hidden() -> None:
 def test_a_noscript_in_a_template_of_the_page_gives_no_link() -> None:
     page, _ = _prepared('<template><noscript><a href="/t"></a></noscript></template>')
 
-    assert page.document_links == ()
+    assert page.html_links == ()
 
 
 def test_a_literal_noscript_tag_in_text_or_an_attribute_is_left_as_it_is() -> None:
     page, head = _prepared('<head><title>a<noscript>b</title></head><a href="/p<noscript>">x</a>')
 
-    assert (head.titles, [link.raw for link in page.document_links]) == (
+    assert (head.titles, [link.raw for link in page.html_links]) == (
         ("a<noscript>b",),
         ["/p<noscript>"],
     )
@@ -140,7 +140,7 @@ def test_a_noscript_s_links_are_placed_where_the_noscript_is() -> None:
         "</iframe></noscript><p>B</p></body>"
     )
 
-    assert [(link.target, link.declared_in) for link in page.document_links] == [
+    assert [(link.target, link.declared_in) for link in page.html_links] == [
         ("https://px.example/tr?id=1&noscript=1", "head"),
         ("https://tags.example/ns.html?id=2", "body"),
     ]

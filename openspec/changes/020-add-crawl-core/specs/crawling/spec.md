@@ -264,7 +264,7 @@ The Crawl SHALL discover Links in every response it parses, and in the HTTP `Lin
 - **Link types that are not requested:** a URL reached only through them SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`.
 - **One row per URL of a Page:** a Page SHALL record each URL it links to once. The URL SHALL be followed when any of its Links on the Page is. Its `discovered_via` SHALL be the type of its first Resource Link on the Page, else of its first followed Link, else of its first Link. A URL that none of them follows SHALL have the `skip_reason` of its first Link.
 - **Templates:** the content of a Page's own `<template>` element SHALL give no Link.
-- **Provenance:** a URL's `discovered_via` SHALL be how it was first found: `seed`, or the Link type. `found_on_url_id` SHALL point to the URL whose response revealed it. For a URL reached through a Link that is not followed and later through one that is, its `discovered_via`, `found_on_url_id` and `crawl_depth` SHALL come from the first Page that follows it. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
+- **Provenance:** a URL's `discovered_via` SHALL be how it was first found: `seed`, or the Link type. `found_on_url_id` SHALL point to the URL whose response revealed it. For a URL reached through a Link that is not followed and later through one that is, its `discovered_via`, `found_on_url_id` and `crawl_depth` SHALL come from the first Page that follows it. A Resource Link SHALL raise a URL that a Link of another type reached first, while the URL is `queued` or skipped as `max_depth`, when it reaches it at the same or a shorter depth: the URL's `discovered_via`, `found_on_url_id` and `crawl_depth` then come from the Resource Link, and a skipped one is queued again. Later changes find URLs in other ways, with values listed from v0.1 (see "The urls table"); a URL listed in a sitemap has the Link type `xml_sitemap`.
 
 #### Scenario: A relative link is resolved against the base href
 - **WHEN** the Links of `http://site.test/` are extracted from `<base href="http://site.test/docs/"><a href="guide">Guide</a>`
@@ -411,6 +411,14 @@ URLs reached through `image`, `css`, `javascript`, `video`, `audio` or `media` L
 - **WHEN** `/` holds `<img src="/logo.png">` and `<a href="/about">`, and `spider crawl {site}/ --max-depth 0` runs
 - **THEN** `{site}/logo.png` has `fetch_state` = `fetched`
 
+#### Scenario: An image skipped beyond the depth limit is checked once a Page shows it
+- **WHEN** `/` holds `<img src="/late.html">` and `<a href="/a">`, `/a` holds `<a href="/photo.jpg">`, `/late.html` holds `<img src="/photo.jpg">` and answers after `/photo.jpg` was skipped, and `spider crawl {site}/ --max-depth 1` runs
+- **THEN** `{site}/photo.jpg` has `fetch_state` = `fetched` and `discovered_via` = `image`
+
+#### Scenario: An image that another Page hyperlinked first is checked beyond the depth limit
+- **WHEN** `/` links to `/a` and `/b`, `/a` holds `<a href="/photo.jpg">` and `/b` holds `<img src="/photo.jpg">`, and `spider crawl {site}/ --max-depth 1` runs
+- **THEN** `{site}/photo.jpg` has `fetch_state` = `fetched` and `discovered_via` = `image`
+
 ### Requirement: robots.txt is obeyed by default
 Before its first request to an origin (a scheme, host and port), the Crawl SHALL fetch that origin's `/robots.txt`, once per origin in each run. It SHALL NOT request URLs that robots.txt disallows for the robots user-agent token.
 - **Blocked URLs** SHALL be recorded with `fetch_state` = `skipped`, `skip_reason` = `blocked_by_robots_txt` and `blocked_by_robots_txt` = 1. Requested URLs SHALL have `blocked_by_robots_txt` = 0, and URLs not checked against robots.txt SHALL have NULL.
@@ -467,6 +475,8 @@ The Crawl SHALL treat an origin's robots.txt by its response, as RFC 9309 descri
   - On an Internal origin, each such URL SHALL count toward the network pause as a request without an HTTP response (see "Backstops").
   - The Seed's origin is the exception: until it has given an HTTP response, its robots.txt request without one pauses the Crawl (see "Unreachable Seed").
 - **Redirects:** the robots.txt request SHALL follow up to 5 redirect hops. A longer chain SHALL be treated as `missing`.
+  - A redirect hop that gets no HTTP response SHALL be treated as `missing` too: every URL on the origin is allowed, `robots_status_code` holds the last status received, and `robots_fetch_error` and `robots_fetch_error_message` hold the hop's error.
+  - For an Internal origin, a `robots_redirect_failed` warning SHALL be recorded, once per origin.
 
 #### Scenario: A missing robots.txt allows everything
 - **WHEN** `/robots.txt` returns 404, and `spider crawl {site}/` runs
@@ -488,6 +498,10 @@ The Crawl SHALL treat an origin's robots.txt by its response, as RFC 9309 descri
 - **WHEN** `/robots.txt` redirects with 301 to `/robots-real.txt`, which disallows `/private/`, and `/` links to `/private/a`
 - **THEN** `{site}/private/a` has `skip_reason` = `blocked_by_robots_txt`
 
+#### Scenario: A robots.txt redirect to a host that does not resolve counts as missing
+- **WHEN** `/robots.txt` redirects with 301 to `http://nowhere.test/robots.txt`, a host that does not resolve, `/` links to `/a`, and `spider crawl {site}/` runs
+- **THEN** `{site}/a` has `fetch_state` = `fetched`, the `origins` row for `{site}` has `robots_state` = `missing`, `robots_status_code` = 301 and `robots_fetch_error` = `dns_error`, and the result's `warnings` hold one `robots_redirect_failed`
+
 #### Scenario: More than five robots.txt redirects count as missing
 - **WHEN** `/robots.txt` starts a chain of 6 redirects, and `spider crawl {site}/` runs
 - **THEN** the `origins` row for `{site}` has `robots_state` = `missing`
@@ -504,7 +518,7 @@ The Crawl SHALL select robots.txt groups, and user-agent-prefixed robots directi
 - **THEN** `http://site.test/g` is disallowed
 
 ### Requirement: Per-host concurrency
-The Crawl SHALL never have more than `--concurrency` requests in flight to one host. The default SHALL be 5. A value outside 1 to 50 SHALL be rejected: as `--concurrency` with exit code 2 and error code `invalid_value`, and in `spider.toml` with exit code 3 and `settings_invalid`, as any invalid setting is.
+The Crawl SHALL never have more than `--concurrency` requests in flight to one host. The default SHALL be 5. Over all hosts together, it SHALL never have more than 4 × `--concurrency` requests in flight, kept within 20 to 100. A value outside 1 to 50 SHALL be rejected: as `--concurrency` with exit code 2 and error code `invalid_value`, and in `spider.toml` with exit code 3 and `settings_invalid`, as any invalid setting is.
 
 #### Scenario: At most five requests to a host by default
 - **WHEN** `/` links to `/slow/1` to `/slow/20`, each answering after 500 ms, and `spider crawl {site}/` runs
@@ -713,8 +727,8 @@ The crawl store SHALL hold one row for each origin of a URL that the Crawl recor
 | `host` | TEXT | no | | The origin's host in lower-case ASCII (IDNA) form |
 | `is_internal` | INTEGER | no | boolean | 1 when the origin's URLs are Internal URLs |
 | `robots_state` | TEXT | yes | `ok`, `missing`, `unreachable` | Rules applied, everything allowed, or everything disallowed or unanswered; NULL while robots.txt has not been fetched, which happens before the first URL of the origin that the Scope does not skip and the URL limit does not refuse |
-| `robots_status_code` | INTEGER | yes | | Status code of the final robots.txt response; NULL without a response |
-| `robots_fetch_error` | TEXT | yes | the values of `urls.fetch_error` | Why the robots.txt request got no HTTP response; NULL when it got one, or while robots.txt has not been fetched |
+| `robots_status_code` | INTEGER | yes | | Status code of the last robots.txt response; NULL without a response |
+| `robots_fetch_error` | TEXT | yes | the values of `urls.fetch_error` | Why the robots.txt request, or a redirect hop of it, got no HTTP response; NULL when its last request got one, or while robots.txt has not been fetched |
 | `robots_fetch_error_message` | TEXT | yes | | Human-readable detail of `robots_fetch_error` |
 | `robots_fetched_at` | TEXT | yes | timestamp | UTC time robots.txt was last fetched |
 | `robots_txt` | TEXT | yes | | The robots.txt body as parsed, up to 512,000 bytes |
@@ -898,6 +912,10 @@ Only failures of the whole Crawl stop it: an unreachable Seed, the Backstops, an
 #### Scenario: Parse failures are counted in one warning
 - **WHEN** an extractor registered for the test raises an error on `{site}/boom1` and `{site}/boom2`, `/` links to both, and `spider crawl {site}/` ends
 - **THEN** the result's `warnings` hold exactly one entry with code `parse_failed`, and its `details.count` is 2
+
+#### Scenario: Two handlers that fail on one URL count it once
+- **WHEN** two handlers registered for the test raise an error on `{site}/boom`, `/` links to `/boom` and `/ok`, and `spider crawl {site}/` ends
+- **THEN** the result's `warnings` hold one entry with code `handler_failed` whose `details.count` is 1
 
 #### Scenario: A failing handler does not stop the Crawl
 - **WHEN** a handler registered for the test raises an error on `{site}/boom`, `/` links to `/boom` and `/ok`, and `spider crawl {site}/` ends

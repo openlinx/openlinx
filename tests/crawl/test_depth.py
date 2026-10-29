@@ -124,10 +124,13 @@ def test_a_late_check_lowers_the_depth_of_a_url_still_queued(
         Site(
             routes={
                 "/": Page(body='<img src="/late.html"><a href="/a">A</a>'),
-                # Ends at depth 1's check time, while /hold keeps depth 3 from opening.
-                "/late.html": Page(body='<a href="/x">X</a>', delay=SLOW / 2),
+                # The check answers once depth 2 has started, after /b's unit, while /hold
+                # keeps depth 3 from opening; no unit is visible to the site, so a delay.
+                "/late.html": Page(body='<a href="/x">X</a>', after="/b", delay=SLOW / 2),
                 "/a": Page(body='<a href="/b">B</a><a href="/hold">H</a>'),
-                "/b": Page(body='<a href="/x">X</a>'),
+                "/b": Page(body='<a href="/b2">B2</a><a href="/x">X</a>'),
+                # Slow, so the lowered /x, read once depth 3 has ended, starts well after it.
+                "/b2": Page(body="<p>B2</p>", delay=SLOW / 4),
                 "/hold": Page(body="<p>H</p>", delay=SLOW),
                 "/x": Page(body="<p>X</p>"),
             }
@@ -136,9 +139,15 @@ def test_a_late_check_lowers_the_depth_of_a_url_still_queued(
 
     crawl_file = crawled(server.url("/"))
 
+    # /b recorded /x after /b2, so /x was queued at depth 3 before the check lowered it.
     assert query(
-        crawl_file, "SELECT fetch_state, crawl_depth FROM urls WHERE url = ?", [server.url("/x")]
-    ) == [("fetched", 2)]
+        crawl_file,
+        "SELECT url, fetch_state, crawl_depth FROM urls WHERE url IN (?, ?) ORDER BY id",
+        [server.url("/b2"), server.url("/x")],
+    ) == [(server.url("/b2"), "fetched", 3), (server.url("/x"), "fetched", 2)]
+    # Not dispatched at depth 3 beside /b2, so the check lowered it while it was queued.
+    started = {request.path: request.received_at for request in server.requests}
+    assert started["/x"] - started["/b2"] >= SLOW / 4
 
 
 @pytest.mark.slow
@@ -182,9 +191,11 @@ def test_the_urls_found_on_a_url_lowered_in_flight_are_one_deeper_than_it(
         Site(
             routes={
                 "/": Page(body='<img src="/late.html"><a href="/a">A</a>'),
-                "/late.html": Page(body='<a href="/x">X</a>', delay=SLOW / 2),
+                # Answers only once /x is requested, so it can lower /x only in flight.
+                "/late.html": Page(body='<a href="/x">X</a>', after="/x"),
                 "/a": Page(body='<a href="/b">B</a>'),
-                "/b": Page(body='<a href="/x">X</a>'),
+                "/b": Page(body='<a href="/b2">B2</a><a href="/x">X</a>'),
+                "/b2": Page(body="<p>B2</p>"),
                 # In flight at depth 3 when the late check lowers it to 2.
                 "/x": Page(body='<a href="/y">Y</a>', delay=SLOW),
                 "/y": Page(body="<p>Y</p>"),
@@ -194,11 +205,19 @@ def test_the_urls_found_on_a_url_lowered_in_flight_are_one_deeper_than_it(
 
     crawl_file = crawled(server.url("/"))
 
+    # /b recorded /x after /b2, so /x was queued at depth 3 before the check lowered it.
     assert query(
         crawl_file,
-        "SELECT url, crawl_depth FROM urls WHERE url IN (?, ?) ORDER BY id",
-        [server.url("/x"), server.url("/y")],
-    ) == [(server.url("/x"), 2), (server.url("/y"), 3)]
+        "SELECT url, crawl_depth FROM urls WHERE url IN (?, ?, ?) ORDER BY id",
+        [server.url("/b2"), server.url("/x"), server.url("/y")],
+    ) == [(server.url("/b2"), 3), (server.url("/x"), 2), (server.url("/y"), 3)]
+    # The lowered /x keeps the late check's provenance, which its depth agrees with.
+    assert query(
+        crawl_file,
+        "SELECT page.url FROM urls AS x JOIN urls AS page ON page.id = x.found_on_url_id "
+        "WHERE x.url = ?",
+        [server.url("/x")],
+    ) == [(server.url("/late.html"),)]
 
 
 def test_a_resource_of_an_html_resource_is_beyond_the_limit(
