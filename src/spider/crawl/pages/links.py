@@ -1,7 +1,8 @@
 """The link extractor (020-add-crawl-core D5)."""
 
 import re
-from collections.abc import Callable, Container, Iterator, Mapping
+from collections.abc import Callable, Container, Iterable, Iterator, Mapping
+from typing import NamedTuple
 
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
@@ -141,32 +142,79 @@ def links_in_tree(
     """The Links of a parsed document, for page preparation, which parses once (design D9)."""
     codec = query_codec(encoding)
     links: list[DiscoveredLink] = []
-    for node, declared_in in _link_nodes(tree):
-        attributes = node.attributes
-        rel = rel_tokens(attributes.get("rel") or "")
-        for link_type, attribute, raw in _references(node.tag or "", attributes, rel, node.parent):
-            target = resolve_reference(base, raw, codec, strip_params)
-            if target is None:
-                continue
-            links.append(
-                discovered_link(
-                    link_type,
-                    target,
-                    raw,
-                    element=node.tag,
-                    attribute=attribute,
-                    rel=rel,
-                    declared_in=declared_in,
-                    ordinal=first_ordinal + len(links),
-                    is_internal=is_internal(target),
-                    page_nofollow=page_nofollow,
-                    follow_nofollow=follow_nofollow,
-                )
+    for reference in link_references(tree):
+        target = resolve_reference(base, reference.raw, codec, strip_params)
+        if target is None:
+            continue
+        links.append(
+            discovered_link(
+                reference.type,
+                target,
+                reference.raw,
+                element=reference.element.tag,
+                attribute=reference.attribute,
+                rel=reference.rel,
+                declared_in=reference.declared_in,
+                ordinal=first_ordinal + len(links),
+                is_internal=is_internal(target),
+                page_nofollow=page_nofollow,
+                follow_nofollow=follow_nofollow,
             )
+        )
     return links
 
 
-def _link_nodes(tree: LexborHTMLParser) -> Iterator[tuple[LexborNode, DeclaredIn]]:
+class LinkReference(NamedTuple):
+    """A reference of a document before it is resolved, with the element it came from and
+    the element of the document that places it: the element itself, or the <noscript> whose
+    text held it."""
+
+    element: LexborNode
+    placing: LexborNode
+    declared_in: DeclaredIn
+    type: LinkType
+    attribute: str
+    raw: str
+    rel: tuple[str, ...]
+
+
+def link_references(tree: LexborHTMLParser) -> Iterator[LinkReference]:
+    """In the order that links_in_tree numbers the Links it resolves from them."""
+    for node, placing, declared_in in _link_nodes(tree):
+        attributes = node.attributes
+        rel = rel_tokens(attributes.get("rel") or "")
+        for link_type, attribute, raw in _references(node.tag or "", attributes, rel, node.parent):
+            yield LinkReference(node, placing, declared_in, link_type, attribute, raw, rel)
+
+
+def locate_links(
+    tree: LexborHTMLParser, links: Iterable[DiscoveredLink]
+) -> list[tuple[DiscoveredLink, LexborNode, LexborNode]]:
+    """Each HTML Link that links_in_tree found in the tree, with the element it came from and
+    the element that places it; header Links are left out. Raises ValueError for a Link the
+    tree does not hold."""
+    pending = [link for link in links if link.declared_in != "http_header"]
+    located: list[tuple[DiscoveredLink, LexborNode, LexborNode]] = []
+    # Resolution reads only a reference and the document's base and encoding, so a reference
+    # that matches the next Link is the one that gave it, and one that does not resolved to
+    # nothing.
+    for reference in link_references(tree):
+        if len(located) == len(pending):
+            break
+        link = pending[len(located)]
+        if (link.element, link.attribute, link.type, link.raw) == (
+            reference.element.tag,
+            reference.attribute,
+            reference.type,
+            reference.raw,
+        ):
+            located.append((link, reference.element, reference.placing))
+    if len(located) != len(pending):
+        raise ValueError(f"link {pending[len(located)].ordinal} is not in the tree")
+    return located
+
+
+def _link_nodes(tree: LexborHTMLParser) -> Iterator[tuple[LexborNode, LexborNode, DeclaredIn]]:
     # A foreign <noscript>'s text is decoded markup, and its child elements are in the tree.
     foreign = {node.mem_id for node in tree.css("svg noscript, math noscript") if _is_foreign(node)}
     # Where the parser placed the element: what it moved out of <head> is in <body>.
@@ -175,11 +223,11 @@ def _link_nodes(tree: LexborHTMLParser) -> Iterator[tuple[LexborNode, DeclaredIn
     for node in tree.css(_ELEMENTS):
         declared_in: DeclaredIn = "head" if node.mem_id in in_head else "body"
         if node.tag != "noscript":
-            yield node, declared_in
+            yield node, node, declared_in
         elif node.mem_id not in foreign:
             # Its fragment's Links take the <noscript>'s place.
             for found in _noscript_links(node.text()):
-                yield found, declared_in
+                yield found, node, declared_in
 
 
 def _is_foreign(noscript: LexborNode) -> bool:

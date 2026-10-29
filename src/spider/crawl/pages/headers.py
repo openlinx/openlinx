@@ -1,7 +1,7 @@
 """The Links of the HTTP Link and Refresh headers (020-add-crawl-core D5; RFC 8288)."""
 
 import re
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 
 from spider.crawl.pages.links import discovered_link, rel_link_type, rel_tokens
 from spider.crawl.pages.refresh import refresh_url
@@ -28,37 +28,55 @@ def header_links(
     strip_params: re.Pattern[str] | None,
 ) -> list[DiscoveredLink]:
     """In the order received, numbered from 1: they come before the document's (design D5)."""
-    links: list[DiscoveredLink] = []
+    return [
+        link
+        for link, _ in header_links_with_parameters(
+            headers, url, is_internal=is_internal, strip_params=strip_params
+        )
+    ]
+
+
+def header_links_with_parameters(
+    headers: Iterable[tuple[str, str]],
+    url: NormalizedUrl,
+    *,
+    is_internal: Callable[[NormalizedUrl], bool],
+    strip_params: re.Pattern[str] | None,
+) -> Iterator[tuple[DiscoveredLink, Mapping[str, str]]]:
+    """Each header Link with the parameters of its link-value, by lower-cased name; a Refresh
+    Link has none."""
+    ordinal = 1
     for name, value in headers:
-        for link_type, raw, rel in _header_references(name.lower(), value):
+        for link_type, raw, rel, parameters in _header_references(name.lower(), value):
             # Against the response URL: a header knows no base href.
             target = resolve_reference(url, raw, None, strip_params)
             if target is None:
                 continue
-            links.append(
-                discovered_link(
-                    link_type,
-                    target,
-                    raw,
-                    element=None,
-                    attribute=None,
-                    rel=rel,
-                    declared_in="http_header",
-                    ordinal=len(links) + 1,
-                    is_internal=is_internal(target),
-                    # A header gives no hyperlink, the one type nofollow applies to.
-                    page_nofollow=False,
-                    follow_nofollow=False,
-                )
+            link = discovered_link(
+                link_type,
+                target,
+                raw,
+                element=None,
+                attribute=None,
+                rel=rel,
+                declared_in="http_header",
+                ordinal=ordinal,
+                is_internal=is_internal(target),
+                # A header gives no hyperlink, the one type nofollow applies to.
+                page_nofollow=False,
+                follow_nofollow=False,
             )
-    return links
+            ordinal += 1
+            yield link, parameters
 
 
-def _header_references(name: str, value: str) -> Iterator[tuple[LinkType, str, tuple[str, ...]]]:
+def _header_references(
+    name: str, value: str
+) -> Iterator[tuple[LinkType, str, tuple[str, ...], Mapping[str, str]]]:
     if name == "refresh":
         raw = refresh_url(value)
         if raw is not None:
-            yield "http_refresh", raw, ()
+            yield "http_refresh", raw, (), {}
     elif name == "link":
         for link_value in _LINK_VALUE.finditer(value):
             params: dict[str, str] = {}
@@ -71,7 +89,7 @@ def _header_references(name: str, value: str) -> Iterator[tuple[LinkType, str, t
             rel = rel_tokens(params.get("rel", ""))
             link_type = rel_link_type(rel, params, _HEADER_TYPES)
             if link_type is not None:
-                yield link_type, link_value[1], rel
+                yield link_type, link_value[1], rel, params
 
 
 def _unquoted(value: str) -> str:
