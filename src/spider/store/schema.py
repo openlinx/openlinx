@@ -5,12 +5,14 @@ from typing import Any, Literal, get_args, get_origin
 from sqlalchemy import (
     CheckConstraint,
     Column,
+    ColumnElement,
     ForeignKey,
     Index,
     Integer,
     MetaData,
     Table,
     Text,
+    or_,
 )
 
 from spider.store.records import (
@@ -50,7 +52,8 @@ def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckCons
         if "values" in column.info:
             checks.append(
                 CheckConstraint(
-                    column.in_(column.info["values"]), name=f"{table_name}_{column.name}_values"
+                    _one_of(column, column.info["values"]),
+                    name=f"{table_name}_{column.name}_values",
                 )
             )
         if isinstance(column.type, Flag):
@@ -58,6 +61,12 @@ def _checks(table_name: str, columns: tuple[Column[Any], ...]) -> list[CheckCons
                 CheckConstraint(column.in_([0, 1]), name=f"{table_name}_{column.name}_flag")
             )
     return checks
+
+
+def _one_of(column: Column[Any], values: list[str]) -> ColumnElement[bool]:
+    # Never IN: SQLite builds an ephemeral index for an IN list of more than two values again
+    # on every row of an executemany (ADR-0005).
+    return or_(*(column == value for value in values))
 
 
 def public_tables() -> list[Table]:
@@ -226,14 +235,16 @@ urls = public_table(
         "discovered_via",
         Text,
         nullable=False,
-        comment="How the URL was first found: seed, or the Link type.",
+        comment="How the URL was first found: seed, or the Link type; through a followed Link "
+        "once one has reached it.",
         info={"values": literal_values(DiscoveredVia)},
     ),
     Column(
         "found_on_url_id",
         Integer,
         ForeignKey("urls.id"),
-        comment="The URL whose response first revealed this one; NULL for Seeds.",
+        comment="The URL whose response first revealed this one, through a followed Link once "
+        "one has reached it; NULL for Seeds.",
     ),
     Column(
         "fetch_state",

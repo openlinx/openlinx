@@ -66,3 +66,4 @@ The crawl file is a public contract ([ADR-0002](0002-sqlite-crawl-store-public-s
 - Every change that adds a table follows these rules from its first slice, and a review checks the rules a test cannot.
 - The value lists and the later columns are in the v0.1 file, so v0.2 fills them without a migration. Adding a value or a column that was not foreseen is a schema change: a version bump and a migration.
 - Tools built on SQLite older than 3.37 cannot open crawl files.
+- An enumeration's CHECK lists its values as equalities joined by OR, never as an `IN (...)` list: SQLite builds an ephemeral index for an IN list of more than two values on every row of an executemany, which made the `urls` insert about 6 times slower (diagnosis of 2026-10-14). The meaning is the same, NULL included.

@@ -9,13 +9,17 @@ from sqlalchemy import Connection, event, text
 from spider.crawl.urls import NormalizedUrl, parse_seed
 from spider.store.connections import opening
 from spider.store.records import (
+    DiscoveredVia,
+    DiscoverySkipReason,
     ErroredUrl,
     FetchedUrl,
     NewUrl,
     QueuedUrl,
     SkippedUrl,
+    SkipReason,
     UrlCounts,
 )
+from spider.store.schema import literal_values
 from spider.store.urls import (
     next_depth,
     queued_batch,
@@ -39,13 +43,32 @@ def _url(text: str) -> NormalizedUrl:
     return url
 
 
-def _new(text: str) -> NewUrl:
+def _new(
+    text: str,
+    *,
+    crawl_depth: int = 1,
+    discovered_via: DiscoveredVia = "hyperlink",
+    skip_reason: DiscoverySkipReason | None = None,
+) -> NewUrl:
     return NewUrl(
         url=_url(text),
-        crawl_depth=1,
-        discovered_via="hyperlink",
+        crawl_depth=crawl_depth,
+        discovered_via=discovered_via,
         is_internal=True,
         in_scope=True,
+        skip_reason=skip_reason,
+    )
+
+
+def _fetched(url_id: int, *discovered: NewUrl) -> FetchedUrl:
+    return FetchedUrl(
+        url_id=url_id,
+        status_code=200,
+        content_type="text/html",
+        fetched_at=datetime(2026, 10, 14, 9, 0, tzinfo=UTC),
+        response_time_ms=10,
+        parsed=True,
+        discovered=discovered,
     )
 
 
@@ -173,6 +196,72 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             ("https://site.test/c", 1, "error", None, "record_failed", None, None, None, None),
         ],
         [(seed_id,)],
+    )
+
+
+def test_a_followed_link_requeues_a_url_that_only_unfollowed_links_reached(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        seed_id = writer.run(
+            record_seed(_url("https://site.test/"), is_internal=True, in_scope=True)
+        )
+        writer.run(
+            record_fetched(
+                _fetched(
+                    seed_id,
+                    _new(
+                        "https://site.test/amp",
+                        discovered_via="amphtml",
+                        skip_reason="link_type_not_followed",
+                    ),
+                    _new("https://site.test/p", skip_reason="nofollow"),
+                    _new("https://site.test/q", skip_reason="nofollow"),
+                    _new("https://site.test/out"),
+                    _new("https://site.test/about"),
+                ),
+                {},
+            )
+        )
+        writer.run(record_skipped(SkippedUrl(seed_id + 4, "excluded"), {}))
+        about_id = seed_id + 5
+        writer.run(
+            record_fetched(
+                _fetched(
+                    about_id,
+                    _new("https://site.test/amp", crawl_depth=2),
+                    _new("https://site.test/p", crawl_depth=2, discovered_via="meta_refresh"),
+                    _new("https://site.test/q", crawl_depth=2, skip_reason="nofollow"),
+                    _new("https://site.test/out", crawl_depth=2),
+                    _new("https://site.test/", crawl_depth=2),
+                ),
+                {},
+            )
+        )
+        replay_now(writer)
+
+    assert query(
+        crawl.path,
+        "SELECT url, crawl_depth, discovered_via, found_on_url_id, fetch_state, skip_reason "
+        "FROM urls ORDER BY id",
+    ) == [
+        ("https://site.test/", 0, "seed", None, "fetched", None),
+        ("https://site.test/amp", 2, "hyperlink", about_id, "queued", None),
+        ("https://site.test/p", 2, "meta_refresh", about_id, "queued", None),
+        ("https://site.test/q", 1, "hyperlink", seed_id, "skipped", "nofollow"),
+        ("https://site.test/out", 1, "hyperlink", seed_id, "skipped", "excluded"),
+        ("https://site.test/about", 1, "hyperlink", seed_id, "fetched", None),
+    ]
+
+
+def test_each_reason_of_a_skip_at_discovery_is_a_skip_reason() -> None:
+    discovery = literal_values(DiscoverySkipReason)
+
+    assert (discovery, set(discovery) <= set(literal_values(SkipReason))) == (
+        ["nofollow", "link_type_not_followed"],
+        True,
     )
 
 

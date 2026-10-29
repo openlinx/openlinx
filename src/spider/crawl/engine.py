@@ -5,11 +5,12 @@ from contextlib import suppress
 from typing import Any
 
 from spider.crawl.context import CrawlContext
+from spider.crawl.discovery import discovered_urls
 from spider.crawl.fetcher import FetchFailure, FetchResult, Request
 from spider.crawl.hooks import UrlResult
-from spider.crawl.pages import PreparedPage, is_html_type
+from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
-from spider.crawl.scope import ScopeDecision, ScopeRules
+from spider.crawl.scope import ScopeDecision
 from spider.crawl.urls import NormalizedUrl, url_host
 from spider.output.codes import HANDLER_FAILED, PARSE_FAILED, RECORD_FAILED
 from spider.output.diagnostics import Diagnostic
@@ -17,7 +18,7 @@ from spider.store.failures import is_one_urls_failure
 from spider.store.records import (
     ErroredUrl,
     FetchedUrl,
-    NewUrl,
+    ParseError,
     QueuedUrl,
     SkippedUrl,
     SkipReason,
@@ -92,11 +93,13 @@ class _Outcomes:
 
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     outcomes = _Outcomes(context)
-    limits = RequestLimits(context.settings.concurrency)
+    limits = RequestLimits(context.settings.concurrency, context.pages.backlog)
     decision = context.scope.decide(seed)
     await context.writer.run_async(
         record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
     )
+    # Once, with the final Scope: 022 moves this to the end of the Seed's Redirect Chain.
+    await context.pages.start(PageSettings(context.scope, context.hooks.extractors))
     depth: int | None = 0
     try:
         while depth is not None and not context.stop.is_set:
@@ -157,7 +160,7 @@ async def _unit_of(context: CrawlContext, limits: RequestLimits, queued: QueuedU
         return record_skipped(
             SkippedUrl(queued.id, skip_reason, _handler_rows(context, skipped)), row_writers
         )
-    async with limits.host(url_host(queued.url)):
+    async with limits.host(url_host(queued.url)), limits.request():
         response = await context.fetcher.fetch(Request(queued.url))
     if isinstance(response, FetchFailure):
         failed = _result(
@@ -192,20 +195,28 @@ async def _fetched(
 ) -> FetchedUrl:
     content_type = response.header("Content-Type")
     # An External URL or one outside the Scope is checked, never parsed (design D5).
-    parsed = decision.in_scope and 200 <= response.status_code < 300 and is_html_type(content_type)
-    page = await context.pages.prepare(queued.url, response) if parsed else None
-    discovered = () if page is None else _discovered(page, context.scope, queued.crawl_depth + 1)
+    followed = decision.in_scope and 200 <= response.status_code < 300
+    prepared = followed and is_html_type(content_type)
+    page = await context.pages.prepare(queued.url, response) if prepared else None
+    parsed = page is not None and page.parsed
+    # The Link and Refresh headers of an in-Scope 2xx response count, whatever became of its
+    # preparation (design D9).
+    links = response_links(queued.url, response, context.scope) if followed else ()
+    if page is not None:
+        links += page.document_links
+    nofollow = page is not None and page.directives.nofollow
+    discovered = discovered_urls(
+        links,
+        context.scope,
+        queued.crawl_depth + 1,
+        nofollow=nofollow,
+        follow_nofollow=context.settings.follow_nofollow,
+    )
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
-        context.reporter.count(
-            Diagnostic.of(
-                PARSE_FAILED,
-                f"An extractor failed on {queued.url} ({parse_error_message}); the Page was "
-                "recorded without its output, and its Links were followed.",
-            ),
-            queued.url,
-        )
+        failure = _parse_failure(queued.url, parse_error, parse_error_message)
+        context.reporter.count(Diagnostic.of(PARSE_FAILED, failure), queued.url)
     result = _result(
         queued,
         decision,
@@ -231,6 +242,19 @@ async def _fetched(
         parse_error_message=parse_error_message,
         discovered=discovered,
         rows=_handler_rows(context, result),
+    )
+
+
+def _parse_failure(url: NormalizedUrl, parse_error: ParseError, message: str | None) -> str:
+    if parse_error == "extractor_error":
+        return (
+            f"An extractor failed on {url} ({message}); the Page was recorded without its "
+            "output, and its Links were followed."
+        )
+    detail = parse_error if message is None else f"{parse_error}: {message}"
+    return (
+        f"Preparing {url} gave nothing ({detail}); it was recorded unparsed, with only the "
+        "Links of its headers."
     )
 
 
@@ -264,22 +288,3 @@ def _handler_rows(context: CrawlContext, result: UrlResult) -> tuple[object, ...
                 result.url,
             )
     return tuple(rows)
-
-
-def _discovered(page: PreparedPage, scope: ScopeRules, depth: int) -> tuple[NewUrl, ...]:
-    # Every hyperlink is recorded: one in the Scope is followed, any other checked or skipped.
-    return tuple(
-        _new_url(link.target, scope.decide(link.target), depth)
-        for link in page.links
-        if link.type == "hyperlink"
-    )
-
-
-def _new_url(url: NormalizedUrl, decision: ScopeDecision, depth: int) -> NewUrl:
-    return NewUrl(
-        url=url,
-        crawl_depth=depth,
-        discovered_via="hyperlink",
-        is_internal=decision.is_internal,
-        in_scope=decision.in_scope,
-    )

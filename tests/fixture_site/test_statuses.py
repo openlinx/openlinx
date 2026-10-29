@@ -3,6 +3,7 @@
 import http.client
 from urllib.parse import urlsplit
 
+import aiohttp
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -34,3 +35,16 @@ def status_of(server: ServerHandle, path: str) -> int:
 @given(code=st.integers(min_value=200, max_value=599))
 def test_a_status_route_answers_with_its_status(statuses: ServerHandle, code: int) -> None:
     assert status_of(statuses, f"/s/{code}") == code
+
+
+async def test_a_status_route_may_answer_with_an_html_body(fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/gone": Status(404, body='<a href="/x">X</a>')}))
+
+    async with aiohttp.ClientSession() as session, session.get(server.url("/gone")) as response:
+        body = await response.read()
+
+    assert (response.status, response.headers["Content-Type"], body) == (
+        404,
+        "text/html; charset=utf-8",
+        b'<a href="/x">X</a>',
+    )

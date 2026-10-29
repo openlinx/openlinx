@@ -282,3 +282,25 @@ def test_deeply_nested_html_gives_its_links() -> None:
     found = _found("<span>" * depth + '<a href="/after">x</a>' + "</span>" * depth)
 
     assert found == [("hyperlink", "http://site.test/after")]
+
+
+@pytest.mark.parametrize(
+    ("html", "found"),
+    [
+        ('<head><link rel="icon" href="/i.ico"></head>', [("misc", "http://site.test/i.ico")]),
+        ('<head><noscript><link rel="icon" href="/i.ico"></noscript></head>', []),
+        (
+            '<head><noscript><meta http-equiv="refresh" content="0; url=/no-js"></noscript></head>',
+            [],
+        ),
+        # The user's decision: a crawler without rendering finds every URL the raw HTML holds.
+        (
+            '<body><noscript><a href="/a">A</a><img src="/pixel.gif"></noscript></body>',
+            [("hyperlink", "http://site.test/a"), ("image", "http://site.test/pixel.gif")],
+        ),
+    ],
+)
+def test_noscript_hides_head_metadata_but_not_the_links_of_the_body(
+    html: str, found: list[tuple[str, str]]
+) -> None:
+    assert _found(html) == found

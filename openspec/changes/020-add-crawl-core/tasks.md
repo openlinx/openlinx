@@ -181,26 +181,39 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [x] 6.5 Drive "An unknown host is a DNS error" at seam 3+6.
 - [x] 6.6 Docs: document External URL checks and the `fetch_error` codes in `docs/crawling.md`.
 - [x] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
-- [ ] 6.8 PR #1 (design, Migration Plan): verify that the whole suite passes in CI on Windows, macOS and Linux with the coverage gate on the branch, then hand over to the manager, who pushes and opens PR #1. The change stays open, with groups 7–15 unticked. No option of `spider crawl` is inert at PR #1: each declared option has a test of its effect.
+- [x] 6.8 PR #1 (design, Migration Plan): verify that the whole suite passes in CI on Windows, macOS and Linux with the coverage gate on the branch, then hand over to the manager, who pushes and opens PR #1. The change stays open, with groups 7–16 unticked. No option of `spider crawl` is inert at PR #1: each declared option has a test of its effect.
 
 ## 7. Robots directives and Link following (widening)
 
-- [ ] 7.1 Drive "Meta robots directives are read case-insensitively" at seam 4. Done when: the robots directives parser is a pure function that `030` imports, whose fields carry `030`'s column names (design D6).
-- [ ] 7.2 Drive "A header for another crawler does not apply" at seam 4.
-- [ ] 7.3 Drive "A header for the robots user-agent token applies" at seam 4.
-- [ ] 7.4 Drive "none means noindex and nofollow" at seam 4.
-- [ ] 7.5 Drive "A directive with a value is not a user-agent prefix" at seam 4.
-- [ ] 7.6 **Guard:** "The robots directives parser accepts any values", as a hypothesis property at seam 4.
-- [ ] 7.7 Drive "A meta refresh target is followed" at seam 3.
-- [ ] 7.8 Drive "amphtml targets are not requested" at seam 3+6.
-- [ ] 7.9 Drive "A canonical in an HTTP header is followed" and "An HTTP Refresh target is followed" at seam 3, a pair. Done when: the HTTP `Link` and `Refresh` headers of in-Scope 2xx responses are read, parsed or not.
-- [ ] 7.10 Drive "Links on an error page are not followed" at seam 3+6. Done when: only in-Scope 2xx HTML responses are parsed. The 2xx and HTML checks exist since group 4's review, so this may pass on its first run; then it shows its red by a mutation, as a guard does.
-- [ ] 7.11 Drive "A nofollow link is not requested" at seam 3+6.
-- [ ] 7.12 Drive "A page-level nofollow applies to every hyperlink" at seam 3+6.
-- [ ] 7.13 Drive "A nofollow target reached through a followed Link is fetched" at seam 3+6.
-- [ ] 7.14 Drive "Nofollow Links are followed on request" at seam 3+6.
-- [ ] 7.15 Docs: add the robots directives rules, nofollow handling and which responses are parsed to `docs/crawling.md`.
-- [ ] 7.16 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [x] 7.1 Drive "Meta robots directives are read case-insensitively" at seam 4. Done when: the robots directives parser is a pure function that `030` imports, whose fields carry `030`'s column names (design D6).
+- [x] 7.2 Drive "A header for another crawler does not apply" at seam 4.
+- [x] 7.3 Drive "A header for the robots user-agent token applies" at seam 4.
+- [x] 7.4 Drive "none means noindex and nofollow" at seam 4.
+- [x] 7.5 Drive "A directive with a value is not a user-agent prefix" at seam 4.
+- [x] 7.6 **Guard:** "The robots directives parser accepts any values", as a hypothesis property at seam 4.
+- [x] 7.7 Drive "A meta refresh target is followed" at seam 3.
+- [x] 7.8 Drive "amphtml targets are not requested" at seam 3+6.
+- [x] 7.9 Drive "A canonical in an HTTP header is followed" and "An HTTP Refresh target is followed" at seam 3, a pair. Done when: the HTTP `Link` and `Refresh` headers of in-Scope 2xx responses are read, parsed or not.
+- [x] 7.10 Drive "Links on an error page are not followed" at seam 3+6. Done when: only in-Scope 2xx HTML responses are parsed. The 2xx and HTML checks exist since group 4's review, so this may pass on its first run; then it shows its red by a mutation, as a guard does.
+- [x] 7.11 Drive "A nofollow link is not requested" at seam 3+6.
+- [x] 7.12 Drive "A page-level nofollow applies to every hyperlink" at seam 3+6.
+- [x] 7.13 Drive "A nofollow target reached through a followed Link is fetched" at seam 3+6. Done when: the re-queue takes the followed Link's `crawl_depth`, `discovered_via` and `found_on_url_id` (design D5), the replay test of `spider.store.urls` covers a re-queue, and the descriptions of `discovered_via` and `found_on_url_id` in `docs/schema.md` say so.
+- [x] 7.14 Drive "Nofollow Links are followed on request" at seam 3+6.
+- [x] 7.15 Perf: record each URL that a Page links to once. A Page of about 390 hyperlinks names about 310 distinct URLs, and the executemany of their `INSERT … ON CONFLICT` rows is about 80% of its unit in 026's direct-mode benchmark (about 24 URLs/s). The engine collapses a Page's Links to one row per URL after the follow decision: the URL is followed when any of its occurrences is, and its `discovered_via` is that of its first followed occurrence in document order, or of its first occurrence when none is followed (design D5), so 7.11–7.13 never let a nofollow Link hide a followed one. Done when: a test at seam 4 on the discovered-URL function pins it, and the commit gives the numbers before and after.
+- [x] 7.16 Perf: an enumeration's CHECK lists its values as equalities joined by OR. SQLite compiles an `IN` list of more than two values into an ephemeral index, which an executemany builds again for every row: five for each `urls` row, about 118 µs per row through SQLAlchemy, and slower after about 70,000 rows (026's diagnosis of 2026-10-14). Done when: a guard refuses an `IN` list of more than two values in the CHECKs of a new crawl file, `public_table` writes the OR chain (a flag keeps `IN (0, 1)`), ADR-0005's consequences state the rule, and the commit gives the µs per row before and after.
+- [x] 7.17 Seam: the page executor's lifecycle and its backlog, for `026`'s parse pool (design D7, D9, D15; the rulings). `PageExecutor` gains `async start(settings)`, `async close()` and `backlog`; the engine calls `start` once, with the final Scope, right after the Seed is recorded (`022` moves that one call to the end of the Seed's Redirect Chain); `default_page_executor()` in `spider.services.hooks` selects the in-process executor, `start_crawl` takes `pages=` as it takes `resolver=`, and `_crawl_context` closes the executor, also when the Crawl fails. `RequestLimits` holds the global request cap around each request, after the host's slot, and bounds the URL tasks in flight by the cap plus the executor's backlog. Done when: a fake executor passed as `pages=` gets `start` once, before the Seed's preparation, and `close` at the end, also when the Crawl fails; the two caps are table-tested at seam 4; the concurrency scenarios stay green.
+- [x] 7.18 Fix: a certificate failure is `tls_error`, not `connection_error`. aiohttp's `ClientConnectorCertificateError` is both a `ClientSSLError` and a `ClientConnectorError`, and the Fetcher's mapping met only the second, so an Internal HTTPS site with a bad certificate would count toward the network pause (D16) and end `site_unreachable`, the case its `tls_error` exclusion was ruled for. Done when: a `ClientSSLError` branch comes first, and a seam-4 table maps every aiohttp error the Fetcher can meet to its `fetch_error`, so a subclass caught by an earlier branch fails a test (`022` task 6.2 extends the table).
+- [x] 7.19 Drive "A robots meta inside noscript does not apply" at seam 4. lexbor parses with scripting off, so a `<meta>` inside `<noscript>` is an element of its tree; browsers and Google's renderer parse with scripting on, where the content of `<noscript>` is text. Head metadata inside `<noscript>` is ignored: a robots meta, a meta refresh and a `<link>` give nothing. Done when: a test pins the user's decision that the Links of a body `<noscript>` are discovered and followed (design D5).
+- [x] 7.20 Seam: the page executor's `workers`, reported by `crawl_started` as `parse_workers`, for `026`'s pool (design D9; the rulings). `workers` is the number of processes that prepare Pages besides the crawl process: 0 for the in-process executor. `start_crawl` builds the executor before it reports `crawl_started` (nothing spawns before `start`), and hands it to the context builder, which closes it. Done when: `crawl_started` carries `parse_workers` 0 with the in-process executor, and a fake executor's count when one is passed as `pages=`; `docs/crawling.md` lists the field.
+- [x] 7.21 Docs: add the robots directives rules, nofollow handling and which responses are parsed to `docs/crawling.md`.
+- [x] 7.22 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [x] 7.23 Review fixes of group 7 (the rulings on the 7.22 review), each test first, with its cause in its commit:
+  - An `X-Robots-Tag` nofollow alone applies to every hyperlink of the Page: no test failed when the page-level nofollow read the meta alone. Done when: a test with the header only fails under that mutation, in `RobotsDirectives.nofollow` or in the engine.
+  - Response-level Links never depend on the body parse (design D9): the engine derives the Links of the `Link` and `Refresh` headers from the response for every in-Scope 2xx response, and `PreparedPage` carries only the document's Links, numbered after them. A preparation that gives nothing (`worker_crashed`, `parse_timeout`, `body_too_large`) records `parsed` = 0 and keeps the header Links; `extractor_error` keeps `parsed` = 1. A failed `PreparedPage` needs no tree: its fields have defaults. Done when: an engine-seam test with an executor that returns `PreparedPage(parse_error="worker_crashed")` finds `parsed` = 0, the header canonical and Refresh target discovered and the `parse_failed` text for the kind, and a test pins that the engine's header Links and those of `PageInput` have the same ordinals.
+  - RFC 8288's `anchor` parameter makes a link-value describe another resource, so such a link-value gives no Link. Done when: a case of the header Links table pins it.
+  - An excluded URL that only unfollowed Links reach is recorded `nofollow`, not `excluded` (the spec's Exclude rule). Done when: a test pins it, and `docs/crawling.md` states the exception where it describes `--exclude`.
+  - The noscript ancestor walk of `<link>` and `<meta>` is measured on a deep page: it matters (2,000 of them at depth 3,000 cost 472 ms, one selector pass 16 ms, the parse 4.9 ms), and task 15.1's noscript pre-pass deletes it, since it leaves no `<noscript>` element in the tree (the rulings).
+  - Comments and docstrings say what is true: `_FOLLOWED` in `spider.crawl.discovery`, `response_links`, and no docstring that restates its function's name.
 
 ## 8. Scope over HTTP and Section Crawls (widening)
 
@@ -244,7 +257,7 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 ## 10. robots.txt (widening)
 
 - [ ] 10.1 Drive "The group for the tool's token applies" at seam 4. Done when: the robots.txt reader is on Protego and reads at most 512,000 bytes, decoded with replacement.
-- [ ] 10.2 Drive "Another token can be chosen" at seam 4.
+- [ ] 10.2 Drive "Another token can be chosen" at seam 4. Done when: `--robots-user-agent` also sets `PageSettings.robots_token` in the snapshot the engine starts the page executor with, so the prefixes of `X-Robots-Tag` follow the chosen token, and a test pins it.
 - [ ] 10.3 **Guard:** "Any robots.txt gives a decision", as a hypothesis property at seam 4.
 - [ ] 10.4 Drive "robots.txt is fetched once per origin" at seam 3.
 - [ ] 10.5 Drive "A disallowed URL is not requested" (seam 3) and "A disallowed URL is recorded as blocked" (seam 3+6), a trivial pair. Done when: `blocked_by_robots_txt` is declared.
@@ -339,10 +352,14 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 14.7 Docs: document the frontier, what a killed Crawl keeps, and the continue operation for `060` in `docs/crawling.md`.
 - [ ] 14.8 Review: run the code-review skill on group 14's commits, then refactor with the whole suite green.
 
-## 15. Change check
+## 15. Parsing with scripting on (waiting for selectolax)
 
-- [ ] 15.1 Verify that every `#### Scenario:` in `specs/crawling/spec.md` has exactly one test named after it, with a small script over the test ids.
-- [ ] 15.2 **Guard:** every code this change declares is listed by `spider commands` with its level and exit code, at seam 1.
-- [ ] 15.3 Docs: the crawl pipeline section of `docs/architecture.md` says what is built (the context, the hooks, store-only units, page preparation behind the in-process executor), and `docs/schema.md` documents `urls`, `origins` and the new `crawl` columns, with their indexes and the values listed for later changes.
-- [ ] 15.4 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
-- [ ] 15.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md` and ADR-0006, then refactor with the whole suite green.
+- [ ] 15.1 Waits for the selectolax release that offers lexbor's scripting flag (an upstream pull request is being prepared). Page preparation parses with scripting on, as browsers and Google's renderer do, so a head `<noscript><img>` no longer ends `<head>`, and a head-noscript `<title>` stays inside its `<noscript>`. The Links of a body `<noscript>` are then found by fragment-parsing the text of each `<noscript>` (the user's ruling of 2026-10-14). Done when: the scripting-off cases of design Risks have scenarios that pass, and the body `<noscript>` Links of task 7.19 are still found.
+
+## 16. Change check
+
+- [ ] 16.1 Verify that every `#### Scenario:` in `specs/crawling/spec.md` has exactly one test named after it, with a small script over the test ids.
+- [ ] 16.2 **Guard:** every code this change declares is listed by `spider commands` with its level and exit code, at seam 1.
+- [ ] 16.3 Docs: the crawl pipeline section of `docs/architecture.md` says what is built (the context, the hooks, store-only units, page preparation behind the in-process executor), and `docs/schema.md` documents `urls`, `origins` and the new `crawl` columns, with their indexes and the values listed for later changes.
+- [ ] 16.4 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
+- [ ] 16.5 Review: run the code-review skill on the whole change against `specs/crawling/spec.md` and ADR-0006, then refactor with the whole suite green.

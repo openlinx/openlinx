@@ -180,6 +180,7 @@ def test_the_first_event_line_is_the_start_event(
             "crawl_mode": "spider",
             "seed_count": 1,
             "crawl_file": result.json()["crawl_file"],
+            "parse_workers": 0,
         },
     )
 

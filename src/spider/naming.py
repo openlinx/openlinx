@@ -4,5 +4,7 @@
 APP_NAME = "spider"
 DATA_DIR_NAME = f".{APP_NAME}"
 SETTINGS_FILE_NAME = f"{APP_NAME}.toml"
+# Selects robots.txt groups and prefixed robots directives unless --robots-user-agent is given.
+DEFAULT_ROBOTS_TOKEN = APP_NAME
 # As users see it: symbolic, so text that names it is the same on every OS.
 GLOBAL_DATA_DIR = f"~/{DATA_DIR_NAME}"
