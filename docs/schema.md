@@ -231,6 +231,13 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `content_hash` | TEXT | yes | | | | The SHA-256, as lowercase hex, of the normalised Content Area text as UTF-8, with no Unicode normalisation: Pages with the same value are Exact Duplicates; NULL when word_count is 0, or the Page is not analysed or its Page extractor failed. |
 | `crawl_depth` | INTEGER | no | | | | Crawl Depth, equal to urls.crawl_depth: 0 for Seeds. |
 | `folder_depth` | INTEGER | no | | | | The number of non-empty segments in the path of address; the query is ignored, and an escaped / (%2F) stays inside its segment. |
+| `inlinks` | INTEGER | yes | | | | Derived: the hyperlinks from Pages to this Page, self-links left out; NULL until the post-crawl passes have run. |
+| `unique_inlinks` | INTEGER | yes | | | | Derived: the distinct Pages whose hyperlinks reach this Page, itself left out; NULL until the post-crawl passes have run. |
+| `linking_pages_pct` | REAL | yes | | | | Derived: 100 times the distinct Pages with status 200 that link to this Page, divided by the Pages with status 200, rounded half up to 2 decimals; NULL until the post-crawl passes have run, or when no Page has status 200. |
+| `outlinks` | INTEGER | yes | | | | The Page's hyperlinks to Internal URLs, self-links left out; NULL when the Page is not analysed. |
+| `unique_outlinks` | INTEGER | yes | | | | The distinct Internal targets of the Page's hyperlinks, itself left out; NULL when the Page is not analysed. |
+| `external_outlinks` | INTEGER | yes | | | | The Page's hyperlinks to External URLs; NULL when the Page is not analysed. |
+| `unique_external_outlinks` | INTEGER | yes | | | | The distinct External targets of the Page's hyperlinks; NULL when the Page is not analysed. |
 | `jsonld_item_count` | INTEGER | yes | | | | The number of JSON-LD items in the application/ld+json scripts: each top-level object, of a script or of a top-level array, or instead the content of its @graph, an array of objects or one object; NULL when the Page is not analysed or its Page extractor failed. |
 | `microdata_item_count` | INTEGER | yes | | | | The number of top-level Microdata items: elements with itemscope and no itemprop; NULL when the Page is not analysed or its Page extractor failed. |
 | `jsonld_parse_error_count` | INTEGER | yes | | | | The number of application/ld+json scripts that are not valid JSON, or nest more than 1024 levels deep; NULL when the Page is not analysed or its Page extractor failed. |

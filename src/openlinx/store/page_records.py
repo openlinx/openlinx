@@ -110,6 +110,14 @@ class PageRow:
     declared_language: str | None = None
     content_hash: str | None = None
     folder_depth: int
+    # The inlink pass writes these three; the Page's unit leaves them NULL.
+    inlinks: int | None = None
+    unique_inlinks: int | None = None
+    linking_pages_pct: float | None = None
+    outlinks: int | None = None
+    unique_outlinks: int | None = None
+    external_outlinks: int | None = None
+    unique_external_outlinks: int | None = None
     jsonld_item_count: int | None = None
     microdata_item_count: int | None = None
     jsonld_parse_error_count: int | None = None

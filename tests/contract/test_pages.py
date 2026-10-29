@@ -12,3 +12,13 @@ def test_indexes_of_pages() -> None:
     assert {"name": "pages_address", "columns": ["address"], "unique": True, "where": None} in (
         reduced
     )
+
+
+def test_inlink_columns_are_derived() -> None:
+    columns = run_cli("schema", "pages").json()["items"][0]["columns"]
+    descriptions = {column["name"]: column["description"] for column in columns}
+
+    assert [
+        descriptions[name].startswith("Derived: ")
+        for name in ("inlinks", "unique_inlinks", "linking_pages_pct")
+    ] == [True, True, True]
