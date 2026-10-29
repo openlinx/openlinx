@@ -34,7 +34,11 @@ def test_the_default_user_agent_identifies_the_tool(
     assert [
         path
         for path, agent in agents.items()
-        if not re.fullmatch(r"linx/\d+\.\d+\.\d+\S* \(\+https://\S+\)", agent)
+        if not re.fullmatch(
+            r"OpenLinx/\d+\.\d+\.\d+\S* "
+            r"\(\+https://github\.com/openlinx/openlinx/blob/main/docs/crawler\.md\)",
+            agent,
+        )
     ] == []
 
 

@@ -7,9 +7,9 @@ COMMAND_NAME = "linx"
 PACKAGE_NAME = "openlinx"
 # The product in prose, in --version and in the User-Agent's product token.
 PRODUCT_NAME = "OpenLinx"
-# Named in every request's User-Agent: the repository until the product is named, and public
-# before the release (ROADMAP, Release).
-PROJECT_URL = "https://github.com/openlinx/openlinx"
+# Named in every request's User-Agent: the page that tells a site owner what the crawler does
+# and how to limit it.
+CRAWLER_PAGE_URL = "https://github.com/openlinx/openlinx/blob/main/docs/crawler.md"
 DATA_DIR_NAME = f".{PACKAGE_NAME}"
 SETTINGS_FILE_NAME = f"{PACKAGE_NAME}.toml"
 # Selects robots.txt groups and prefixed robots directives unless --robots-user-agent is given.

@@ -74,7 +74,7 @@ widen:                                        ├─► 022-min ─┐
 - **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts its synthetic site alongside 020 and the rest once 020's slice is in (its first pull request), and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
 - **HTML parser:** selectolax 1.0.1 or later, parsing with scripting on, as a browser that runs scripts does. A head `<noscript>` therefore keeps the later head elements (canonical, meta description, robots, hreflang) in `<head>`, and a body `<noscript>` gives its Links.
-- **Release:** 085 comes last, before the v0.1 tag, and publishes under the product name, OpenLinx. `PROJECT_URL`, which 022's user agent names, must point to a public page by then.
+- **Release:** 085 comes last, before the v0.1 tag, and publishes under the product name, OpenLinx. `docs/crawler.md`, the page that 022's User-Agent names, must exist by then.
 - **v0.1.1** comes after the v0.1 release: 090. The v0.2 changes come after that.
 
 ### The v0.1 Rules

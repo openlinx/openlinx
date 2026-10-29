@@ -17,7 +17,7 @@ from openlinx.crawl.fetch.cookies import redacted_header
 from openlinx.crawl.fetch.proxy import ProxyVariables
 from openlinx.crawl.fetch.tls import tls_context
 from openlinx.crawl.urls import NormalizedUrl
-from openlinx.naming import COMMAND_NAME, PROJECT_URL
+from openlinx.naming import CRAWLER_PAGE_URL, PRODUCT_NAME
 from openlinx.store.records import FetchError
 
 
@@ -82,7 +82,7 @@ class Fetcher(Protocol):
 
 _CHUNK_BYTES = 64 * 1024
 ACCEPT_ENCODING = ", ".join(OFFERED_CODINGS)
-DEFAULT_USER_AGENT = f"{COMMAND_NAME}/{__version__} (+{PROJECT_URL})"
+DEFAULT_USER_AGENT = f"{PRODUCT_NAME}/{__version__} (+{CRAWLER_PAGE_URL})"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
