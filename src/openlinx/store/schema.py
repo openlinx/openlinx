@@ -842,6 +842,13 @@ pages = public_table(
         comment="Crawl Depth, equal to urls.crawl_depth: 0 for Seeds.",
     ),
     Column(
+        "folder_depth",
+        Integer,
+        nullable=False,
+        comment="The number of non-empty segments in the path of address; the query is "
+        "ignored, and an escaped / (%2F) stays inside its segment.",
+    ),
+    Column(
         "jsonld_item_count",
         Integer,
         comment="The number of JSON-LD items in the application/ld+json scripts: each top-level "

@@ -109,6 +109,7 @@ class PageRow:
     text_ratio_pct: float | None = None
     declared_language: str | None = None
     content_hash: str | None = None
+    folder_depth: int
     jsonld_item_count: int | None = None
     microdata_item_count: int | None = None
     jsonld_parse_error_count: int | None = None

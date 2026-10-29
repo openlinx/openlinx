@@ -12,7 +12,7 @@ from openlinx.crawl.pages.directives import RobotsDirectives
 from openlinx.crawl.pages.preparation import is_html_type
 from openlinx.crawl.pages.refresh import refresh_url
 from openlinx.crawl.references import C0_OR_SPACE, DiscoveredLink
-from openlinx.extract.addresses import display_address, path_and_query
+from openlinx.extract.addresses import display_address, folder_depth, path_and_query
 from openlinx.extract.cookies import cookie_row
 from openlinx.extract.dates import internet_date
 from openlinx.extract.page_data import PAGE_DATA, PageData
@@ -47,6 +47,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             url_encoded_address=result.url,
             url_path=url_path,
             url_query=url_query,
+            folder_depth=folder_depth(url_path),
             content_type=content_type,
             status_code=response.status_code,
             # The fetcher records "" for a status line without a phrase.
