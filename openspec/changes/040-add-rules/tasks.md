@@ -9,40 +9,40 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - **Tables and columns.** There are no schema-first slices. A table or column is added in the slice whose scenario first needs it, with its `docs/schema.md` entry in the same commit, so `015-add-crawl-store`'s contract test is never red between commits.
 - **Rules.** Each Rule is registered, with its final `description`, `why_it_matters` and `how_to_fix` texts, in the slice that first needs it.
 
-**The thin slice** (ROADMAP, Build order) is groups 1–4: the Rule model and `spider rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and the slice's five Rules, `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`, which `050`'s group 1 (`issues` and `issues <rule-id>`) reads. They need no redirects. Groups 5–10 widen.
+**The thin slice** (ROADMAP, Build order) is groups 1–4: the Rule model and `linx rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and the slice's five Rules, `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`, which `050`'s group 1 (`issues` and `issues <rule-id>`) reads. They need no redirects. Groups 5–10 widen.
 
 **Order against `020` and `030`:** the slice starts once `020`'s first pull request (its groups 1–6: `urls` with `is_internal`, `in_scope`, `fetch_state`, `status_code`, `fetch_error`, `parsed` and `parse_error`) and `030`'s slice (its groups 1–3: `pages` with the title and heading columns) are on main. A Rule whose columns come later (`020`'s `blocked_by_robots_txt` in task 10.5; `022`-min's redirect and size columns; `030`'s Indexability, canonical, directive, link and content columns) is registered with a query that returns no rows until its own task, which names what it waits for where it is not obvious.
 
 ## 1. Rule model and the rules Command (slice)
 
-- [ ] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. This is a trivial pair: both fail until the registry and the Command exist. Add the Rule model, the registry, `internal-4xx` with its guidance texts and a query that returns no rows until task 4.1, and `spider rules list` on `010`'s output contract.
-- [ ] 1.2 Drive "Show a Rule with thresholds" at seam 1. Register `title-too-long` with its thresholds and texts, and add `spider rules show <id>`.
+- [ ] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. This is a trivial pair: both fail until the registry and the Command exist. Add the Rule model, the registry, `internal-4xx` with its guidance texts and a query that returns no rows until task 4.1, and `linx rules list` on `010`'s output contract.
+- [ ] 1.2 Drive "Show a Rule with thresholds" at seam 1. Register `title-too-long` with its thresholds and texts, and add `linx rules show <id>`.
 - [ ] 1.3 Drive "Rule without thresholds" at seam 1, and register `title-missing`.
-- [ ] 1.4 Drive "Unknown Rule id" at seam 1: `rule_not_found`, exit code 4, and a hint naming `spider rules list`.
+- [ ] 1.4 Drive "Unknown Rule id" at seam 1: `rule_not_found`, exit code 4, and a hint naming `linx rules list`.
 - [ ] 1.5 Drive "Windows console output" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
-- [ ] 1.6 Docs: create `docs/rules.md` covering the Rule model, what Issue Type and Priority mean, the Issue-type principle with `http-url` as Warning/High (design D3), category and id naming (D12) and how to read `spider rules` output.
-- [ ] 1.7 **Guard:** every code this change declares (design D17) is listed by `spider commands` with its level and exit code, at seam 1.
+- [ ] 1.6 Docs: create `docs/rules.md` covering the Rule model, what Issue Type and Priority mean, the Issue-type principle with `http-url` as Warning/High (design D3), category and id naming (D12) and how to read `linx rules` output.
+- [ ] 1.7 **Guard:** every code this change declares (design D17) is listed by `linx commands` with its level and exit code, at seam 1.
 - [ ] 1.8 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
-## 2. Configuration in spider.toml (slice)
+## 2. Configuration in openlinx.toml (slice)
 
 - [ ] 2.1 Drive "Override shown by the rules Command" at seam 1, and add `[rules.<id>]` thresholds to `010`'s settings model.
 - [ ] 2.2 Drive "Disabled Rule is listed" at seam 1 (`enabled = false`), and register `url-parameters`.
 - [ ] 2.3 Drive "Misspelt Rule id" at seam 1: `settings_invalid` with a dotted key and a closest-id hint.
 - [ ] 2.4 Drive "Unknown key" at seam 1, and register `h2-missing`.
-- [ ] 2.5 Drive "Negative threshold" at seam 1. `spider crawl` exits 3, and the fixture site receives 0 requests. Register `low-word-count`.
+- [ ] 2.5 Drive "Negative threshold" at seam 1. `linx crawl` exits 3, and the fixture site receives 0 requests. Register `low-word-count`.
 - [ ] 2.6 Docs: add `[rules.<id>]` examples to `docs/rules.md`: raising a limit, disabling a Rule, and the error for a misspelt id.
 - [ ] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. Rules as queries, stored Issues and live Issues (slice)
 
-- [ ] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Create the `rules` table in `spider.store.issues` through `018`'s `public_table()` (`STRICT`, `WITHOUT ROWID`, keyed by the Rule id), and write the configuration snapshot in the transaction that creates the `crawl` row, through a new `NewCrawl.rules` (design D14).
+- [ ] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Create the `rules` table in `openlinx.store.issues` through `018`'s `public_table()` (`STRICT`, `WITHOUT ROWID`, keyed by the Rule id), and write the configuration snapshot in the transaction that creates the `crawl` row, through a new `NewCrawl.rules` (design D14).
 - [ ] 3.2 Drive "Categories are an enumeration" at seam 6 (`values` on `rules.category`).
 - [ ] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Add `reproduce_sql` to the Rule model, the `rules` table and the Command's items (design D15). A Rule registered before the slice of its condition carries a query that returns no rows until that slice.
-- [ ] 3.4 Drive "Missing title" at seam 2, through the evaluation entry point, which runs one Rule's query over a crawl file. The query reads `030`'s `title_count` and `title_1` (its group 2) from `pages`, joined to `urls` for `parsed` = 1 (design D2). The test writes `urls` rows through `020`'s store units and `pages` rows through `030`'s `write_page` (`spider.store.pages`) with a `PageRow` (`spider.store.page_records`), only for a URL that is a Page by `030`'s predicate, as builders, after `030` task 2.3.
+- [ ] 3.4 Drive "Missing title" at seam 2, through the evaluation entry point, which runs one Rule's query over a crawl file. The query reads `030`'s `title_count` and `title_1` (its group 2) from `pages`, joined to `urls` for `parsed` = 1 (design D2). The test writes `urls` rows through `020`'s store units and `pages` rows through `030`'s `write_page` (`openlinx.store.pages`) with a `PageRow` (`openlinx.store.page_records`), only for a URL that is a Page by `030`'s predicate, as builders, after `030` task 2.3.
 - [ ] 3.5 Drive "Empty title counts as missing" at seam 2.
 - [ ] 3.6 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2.
-- [ ] 3.7 Drive "Issue row counts its Affected URLs" at seam 3+6. Create `affected_urls` and the `issues` view in `spider.store.issues`, and add the post-crawl pass to `020`'s `default_hooks()` in `spider.services.hooks`: one unit per enabled Rule that replaces its rows with `INSERT … SELECT` from its query (design D5, D15). Check the units with `017`'s `replay_now(writer)`.
+- [ ] 3.7 Drive "Issue row counts its Affected URLs" at seam 3+6. Create `affected_urls` and the `issues` view in `openlinx.store.issues`, and add the post-crawl pass to `020`'s `default_hooks()` in `openlinx.services.hooks`: one unit per enabled Rule that replaces its rows with `INSERT … SELECT` from its query (design D5, D15). Check the units with `017`'s `replay_now(writer)`.
 - [ ] 3.8 Drive "A Rule's query returns its stored Affected URLs" at seam 3+6, over every enabled Rule. From here on it checks every Rule registered later.
 - [ ] 3.9 Drive "Keys of the Rule tables" at seam 6.
 - [ ] 3.10 Drive "Issues is a view" at seam 6. It is the schema's first view, so extend `018`'s declaration and contract test to views (design D7).
@@ -144,7 +144,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 9.13 Drive "Image over the size limit" and "Image at the size limit" at seam 2. This is a trivial pair: one boundary. Register `image-too-large`.
 - [ ] 9.14 Drive "Broken external image" at seam 2 by registering `image-broken`, the 42nd Rule. In the same red step, write "Catalogue size" and "Rule ids are unique kebab-case" at seam 1, which fail until this Rule exists.
 - [ ] 9.15 Drive "An image that failed to be recorded is not broken" at seam 2, with the reason in the query's SQL comment.
-- [ ] 9.16 Docs: add the 2 content Rules, 5 URL Rules and 3 image Rules to the catalogue in `docs/rules.md`, and check that the catalogue lists exactly the 42 ids that `spider rules list` returns.
+- [ ] 9.16 Docs: add the 2 content Rules, 5 URL Rules and 3 image Rules to the catalogue in `docs/rules.md`, and check that the catalogue lists exactly the 42 ids that `linx rules list` returns.
 - [ ] 9.17 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
 
 ## 10. Health Score and per-Crawl configuration

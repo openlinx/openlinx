@@ -9,12 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from spider.output.reporter import Collected
-from spider.services.crawls import create_crawl
-from spider.store.crawls import set_state
-from spider.store.records import NewCrawl, SecretNames
-from spider.store.writer import CrawlWriter
-from spider.workspace.discovery import resolve_workspace
+from openlinx.output.reporter import Collected
+from openlinx.services.crawls import create_crawl
+from openlinx.store.crawls import set_state
+from openlinx.store.records import NewCrawl, SecretNames
+from openlinx.store.writer import CrawlWriter
+from openlinx.workspace.discovery import resolve_workspace
 from tests.support.clock import FakeClock
 from tests.support.crawls import STARTED_AT, crawl_row, create_any_crawl, new_crawl, query
 from tests.support.project import project_version
@@ -24,13 +24,13 @@ from tests.support.workspace import TempWorkspace
 
 def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
     shop = temp_workspace.root / "shop"
-    (shop / ".spider").mkdir(parents=True)
+    (shop / ".openlinx").mkdir(parents=True)
     workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
     request = NewCrawl(
         workspace=workspace,
         crawl_mode="spider",
         seeds=["https://example.com/"],
-        command_argv=["spider", "crawl", "https://example.com/"],
+        command_argv=["linx", "crawl", "https://example.com/"],
         cwd=shop,
         config={"store": {"journal_mode": "auto"}},
         scope={
@@ -60,7 +60,7 @@ def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
         "state": "running",
         "started_at": "2026-09-27T14:03:12.345Z",
         "completed_at": None,
-        "command_argv": ["spider", "crawl", "https://example.com/"],
+        "command_argv": ["linx", "crawl", "https://example.com/"],
         "cwd": str(shop),
         "settings_file": None,
         "config": {"store": {"journal_mode": "auto"}},

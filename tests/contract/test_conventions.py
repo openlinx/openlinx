@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy import UniqueConstraint
 
-from spider.store.schema import public_tables as declared_tables
+from openlinx.store.schema import public_tables as declared_tables
 from tests.support.cli import run_cli
 
 SNAKE_CASE = re.compile(r"[a-z][a-z0-9_]*")
@@ -61,7 +61,7 @@ def test_enumeration_values_are_snake_case() -> None:
 
 
 def test_every_declared_table_names_its_change_and_describes_itself() -> None:
-    # Over the declaration, so a later table that forgets one fails here, not inside spider schema.
+    # Over the declaration, so a later table that forgets one fails here, not inside linx schema.
     missing = []
     for table in declared_tables():
         if type(table.info.get("change")) is not int:
@@ -116,7 +116,7 @@ def test_derived_and_later_columns_may_hold_null() -> None:
 
 
 def test_every_unique_rule_is_an_index_and_every_reference_one_key() -> None:
-    # SQLite names a UNIQUE constraint's index itself, and spider schema lists only declared ones.
+    # SQLite names a UNIQUE constraint's index itself, and linx schema lists only declared ones.
     problems = []
     for table in declared_tables():
         problems += [
@@ -124,7 +124,7 @@ def test_every_unique_rule_is_an_index_and_every_reference_one_key() -> None:
             for constraint in table.constraints
             if isinstance(constraint, UniqueConstraint)
         ]
-        # spider schema's references names one target, the first of a column's foreign keys.
+        # linx schema's references names one target, the first of a column's foreign keys.
         problems += [
             f"{table.name}.{column.name}: {len(column.foreign_keys)} foreign keys"
             for column in table.columns

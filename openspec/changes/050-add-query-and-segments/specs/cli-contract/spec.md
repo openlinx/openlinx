@@ -16,7 +16,7 @@ Conventions used in the scenarios: the **example list Command**, `H` and the way
 - list Commands: `json` (the default), `jsonl`, `table` and `csv`
 - rows Commands: `jsonl` (the default) and `csv`
 
-Each Command SHALL support the formats that `spider commands` lists for it, and a Command MAY support fewer. `spider init` SHALL support `csv`. `spider commands` keeps `json` and `table`, so `--format csv` on it SHALL fail with `invalid_value`. CSV output SHALL follow the requirement "CSV policy".
+Each Command SHALL support the formats that `linx commands` lists for it, and a Command MAY support fewer. `linx init` SHALL support `csv`. `linx commands` keeps `json` and `table`, so `--format csv` on it SHALL fail with `invalid_value`. CSV output SHALL follow the requirement "CSV policy".
 
 With `csv`, as with `jsonl` and `table`, when more items exist than were printed, the Command SHALL write the info line `more_items` to stderr, with `details.total` and `details.next_cursor`.
 
@@ -29,15 +29,15 @@ With `csv`, as with `jsonl` and `table`, when more items exist than were printed
 - **THEN** stdout is exactly `n\r\n1\r\n2\r\n`
 
 #### Scenario: Formats of a document Command
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** the `init` entry has `"formats":["json","table","csv"]`
 
 #### Scenario: Formats of a list Command
-- **WHEN** `spider commands` runs in a tool that includes the example list Command
+- **WHEN** `linx commands` runs in a tool that includes the example list Command
 - **THEN** its entry has `"formats":["json","jsonl","table","csv"]`
 
-#### Scenario: spider commands refuses CSV
-- **WHEN** `spider commands --format csv` runs
+#### Scenario: linx commands refuses CSV
+- **WHEN** `linx commands --format csv` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value` and a hint that contains `json` and `table`
 
 ### Requirement: CSV policy
@@ -74,11 +74,11 @@ Every CSV output SHALL follow one policy:
 - **THEN** stdout is exactly `a,b\r\n"[1,2]",\r\n`
 
 #### Scenario: A document is one CSV row
-- **WHEN** `spider init --format csv --no-bom` runs in the empty folder `H/work/shop`
+- **WHEN** `linx init --format csv --no-bom` runs in the empty folder `H/work/shop`
 - **THEN** stdout has exactly two rows, and the first is `workspace,data_dir,settings_file,global,created`
 
 #### Scenario: The byte-order mark flag needs CSV
-- **WHEN** `spider init --no-bom` runs
+- **WHEN** `linx init --no-bom` runs
 - **THEN** the exit code is 2, and the error has the code `invalid_value`
 
 ### Requirement: Writing output to a file with -o
@@ -104,19 +104,19 @@ A target that cannot be written SHALL fail with `output_not_writable`, and the m
 - **THEN** stderr has a line with `"level":"info"`, `"code":"output_written"` and `"details":{"path":"H/work/out.json"}`
 
 #### Scenario: Parent folders are created
-- **WHEN** `spider init -o H/work/new/deeper/init.json` runs in the empty folder `H/work/shop`, and `H/work/new` does not exist
+- **WHEN** `linx init -o H/work/new/deeper/init.json` runs in the empty folder `H/work/shop`, and `H/work/new` does not exist
 - **THEN** `H/work/new/deeper/init.json` exists
 
 #### Scenario: A failing Command keeps the old file
-- **WHEN** `spider init --workspace H/work/notes.txt/site -o out.json` runs in `H/work`, where `notes.txt` is a file and `out.json` contains `old`
+- **WHEN** `linx init --workspace H/work/notes.txt/site -o out.json` runs in `H/work`, where `notes.txt` is a file and `out.json` contains `old`
 - **THEN** `H/work/out.json` still contains exactly `old`
 
 #### Scenario: A failing Command creates no file
-- **WHEN** `spider init --workspace H/work/notes.txt/site -o fresh.json` runs in `H/work`, where `notes.txt` is a file
+- **WHEN** `linx init --workspace H/work/notes.txt/site -o fresh.json` runs in `H/work`, where `notes.txt` is a file
 - **THEN** `H/work/fresh.json` does not exist
 
 #### Scenario: Target held open on Windows
-- **WHEN** on Windows another process holds `H\work\out.json` open without sharing, as Excel does, and `spider commands -o H\work\out.json` runs
+- **WHEN** on Windows another process holds `H\work\out.json` open without sharing, as Excel does, and `linx commands -o H\work\out.json` runs
 - **THEN** the exit code is 7, and the error has the code `output_not_writable` and a message that contains `H\work\out.json`
 
 ### Requirement: Global flags --no-bom and -o
@@ -124,37 +124,37 @@ A target that cannot be written SHALL fail with `output_not_writable`, and the m
 `--no-bom` and `-o/--output <file>` SHALL be global flags, as the requirement "Global flags" of the `cli-contract` spec defines them:
 - They SHALL mean the same on every Command that accepts them, and SHALL be given after the Command name.
 - A global flag given before the Command name SHALL fail with `usage_error`, whose hint says to put it after the Command name.
-- Every Command that supports `csv` SHALL accept `--no-bom`. `spider init` and `spider commands` SHALL accept `-o/--output`.
-- They SHALL have no `spider.toml` key.
+- Every Command that supports `csv` SHALL accept `--no-bom`. `linx init` and `linx commands` SHALL accept `-o/--output`.
+- They SHALL have no `openlinx.toml` key.
 
-`spider commands` SHALL list both in the `options` of every Command that accepts them, with `"global":true` and `"setting":null`.
+`linx commands` SHALL list both in the `options` of every Command that accepts them, with `"global":true` and `"setting":null`.
 
 #### Scenario: -o after the Command name
-- **WHEN** `spider init --format csv --no-bom -o H/work/init.csv` runs in the empty folder `H/work/shop`
+- **WHEN** `linx init --format csv --no-bom -o H/work/init.csv` runs in the empty folder `H/work/shop`
 - **THEN** the exit code is 0, and `H/work/init.csv` exists
 
 #### Scenario: -o before the Command name
-- **WHEN** `spider -o out.json init` runs
+- **WHEN** `linx -o out.json init` runs
 - **THEN** the exit code is 2, and the error has the code `usage_error` and a hint that contains `after the Command name`
 
 #### Scenario: Global output flags of init
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** the options of the `init` entry include `--no-bom` and `--output`, each with `"global":true`
 
 #### Scenario: Output-file flags have no settings key
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** the `--no-bom` and `--output` options of the `init` entry each have `"setting":null`
 
 ### Requirement: Diagnostic codes of output files
 
-`spider commands` SHALL list in its `diagnostics` the codes that this change adds to the CLI contract:
+`linx commands` SHALL list in its `diagnostics` the codes that this change adds to the CLI contract:
 - `output_not_writable`: an error, with exit code 7 (`io`)
 - `output_written`: an info line, with `exit_code` null
 
 #### Scenario: Error code of output files
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** its `diagnostics` give `output_not_writable` the level `error` and the exit code 7
 
 #### Scenario: Info line of output files
-- **WHEN** `spider commands` runs
+- **WHEN** `linx commands` runs
 - **THEN** its `diagnostics` give `output_written` the level `info` and `"exit_code":null`

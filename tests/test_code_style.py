@@ -7,7 +7,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 # Typer takes a class, not an instance, so build_app makes one per app (ADR-0006).
-ALLOWED_SUBCLASSES = {("AppGroup", "SpiderGroup")}
+ALLOWED_SUBCLASSES = {("AppGroup", "OpenLinxGroup")}
 
 
 def _is_dataclass(decorator: ast.expr) -> bool:
@@ -94,10 +94,10 @@ def violations(sources: Mapping[str, str]) -> list[str]:
     return found
 
 
-def test_the_decidable_rules_of_adr_0006_hold_over_src_spider() -> None:
+def test_the_decidable_rules_of_adr_0006_hold_over_src_openlinx() -> None:
     sources = {
         path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((SRC / "spider").rglob("*.py"))
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
     assert violations(sources) == []
@@ -156,7 +156,7 @@ class Other(Exception, frozen=False): ...
 
 
 def test_a_subclass_of_an_own_class_is_named() -> None:
-    base = "class Base: ...\nclass SpiderGroup: ...\n"
+    base = "class Base: ...\nclass OpenLinxGroup: ...\n"
     derived = """
 import base
 
@@ -164,7 +164,7 @@ class Plain(Base): ...
 class Subscripted(Base[int]): ...
 class Qualified(base.Base): ...
 class Framework(Exception): ...
-class AppGroup(SpiderGroup): ...
+class AppGroup(OpenLinxGroup): ...
 """
 
     assert violations({"base.py": base, "derived.py": derived}) == [
@@ -174,9 +174,9 @@ class AppGroup(SpiderGroup): ...
     ]
 
 
-URL_MODULE = "spider/crawl/urls.py"
+URL_MODULE = "openlinx/crawl/urls.py"
 # Each store module that casts urls.url to a NormalizedUrl (design D13).
-NORMALIZED_URL_MAKERS = {URL_MODULE, "spider/store/urls.py"}
+NORMALIZED_URL_MAKERS = {URL_MODULE, "openlinx/store/urls.py"}
 
 
 def _imported_modules(tree: ast.AST) -> list[str]:
@@ -209,63 +209,63 @@ def url_type_violations(sources: Mapping[str, str]) -> list[str]:
             found += [
                 f"{module} imports {name}"
                 for name in _imported_modules(tree)
-                if name == "spider" or name.startswith(("spider.", "."))
+                if name == "openlinx" or name.startswith(("openlinx.", "."))
             ]
         if module not in NORMALIZED_URL_MAKERS and any(map(_makes_normalized_url, ast.walk(tree))):
             found.append(f"{module} makes a NormalizedUrl")
     return found
 
 
-def test_the_rules_of_design_d13_of_020_hold_over_src_spider() -> None:
+def test_the_rules_of_design_d13_of_020_hold_over_src_openlinx() -> None:
     sources = {
         path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((SRC / "spider").rglob("*.py"))
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
     assert url_type_violations(sources) == []
 
 
-def test_an_import_of_spider_in_the_url_module_is_named() -> None:
+def test_an_import_of_openlinx_in_the_url_module_is_named() -> None:
     source = """
 import re
-import spider.output
-from spider.store.records import LinkType
+import openlinx.output
+from openlinx.store.records import LinkType
 from . import scope
 
 def late():
-    import spider
+    import openlinx
 """
 
     assert url_type_violations({URL_MODULE: source}) == [
-        f"{URL_MODULE} imports spider.output",
-        f"{URL_MODULE} imports spider.store.records",
+        f"{URL_MODULE} imports openlinx.output",
+        f"{URL_MODULE} imports openlinx.store.records",
         f"{URL_MODULE} imports .",
-        f"{URL_MODULE} imports spider",
+        f"{URL_MODULE} imports openlinx",
     ]
 
 
 def test_a_normalized_url_made_outside_its_makers_is_named() -> None:
     sources = {
         URL_MODULE: "NormalizedUrl('http://site.test/')\n",
-        "spider/crawl/scope.py": "urls.NormalizedUrl('http://site.test/')\n",
-        "spider/crawl/engine/dispatch.py": "url = NormalizedUrl('http://site.test/')\n",
-        "spider/store/pages.py": "url = cast(NormalizedUrl, row.url)\n",
-        "spider/store/urls.py": "url = NormalizedUrl(row.url)\n",
-        "spider/store/origins.py": "url = typing.cast('NormalizedUrl', row.url)\n",
-        "spider/crawl/frontier.py": "def f(url: NormalizedUrl) -> None: ...\n",
-        "spider/crawl/pages/links.py": "n = cast(int, row.n)\n",
+        "openlinx/crawl/scope.py": "urls.NormalizedUrl('http://site.test/')\n",
+        "openlinx/crawl/engine/dispatch.py": "url = NormalizedUrl('http://site.test/')\n",
+        "openlinx/store/pages.py": "url = cast(NormalizedUrl, row.url)\n",
+        "openlinx/store/urls.py": "url = NormalizedUrl(row.url)\n",
+        "openlinx/store/origins.py": "url = typing.cast('NormalizedUrl', row.url)\n",
+        "openlinx/crawl/frontier.py": "def f(url: NormalizedUrl) -> None: ...\n",
+        "openlinx/crawl/pages/links.py": "n = cast(int, row.n)\n",
     }
 
     assert url_type_violations(sources) == [
-        "spider/crawl/scope.py makes a NormalizedUrl",
-        "spider/crawl/engine/dispatch.py makes a NormalizedUrl",
-        "spider/store/pages.py makes a NormalizedUrl",
-        "spider/store/origins.py makes a NormalizedUrl",
+        "openlinx/crawl/scope.py makes a NormalizedUrl",
+        "openlinx/crawl/engine/dispatch.py makes a NormalizedUrl",
+        "openlinx/store/pages.py makes a NormalizedUrl",
+        "openlinx/store/origins.py makes a NormalizedUrl",
     ]
 
 
 # Only the store writes SQL; the schema service loads sqlalchemy lazily (020-add-crawl-core D14).
-SQLALCHEMY_IMPORTERS = ("spider/store/", "spider/services/schema.py")
+SQLALCHEMY_IMPORTERS = ("openlinx/store/", "openlinx/services/schema.py")
 
 
 def sqlalchemy_violations(sources: Mapping[str, str]) -> list[str]:
@@ -282,7 +282,7 @@ def sqlalchemy_violations(sources: Mapping[str, str]) -> list[str]:
 def test_only_the_store_imports_sqlalchemy() -> None:
     sources = {
         path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((SRC / "spider").rglob("*.py"))
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
     assert sqlalchemy_violations(sources) == []
@@ -290,18 +290,19 @@ def test_only_the_store_imports_sqlalchemy() -> None:
 
 def test_an_import_of_sqlalchemy_outside_the_store_is_named() -> None:
     sources = {
-        "spider/crawl/engine/dispatch.py": "import sqlalchemy\n",
-        "spider/crawl/frontier.py": "from sqlalchemy.dialects.sqlite import insert\n",
-        "spider/services/crawling.py": "def late():\n    from sqlalchemy import select\n",
-        "spider/crawl/pages/links.py": "import sqlalchemy_utils\nfrom spider.store import urls\n",
-        "spider/store/urls.py": "from sqlalchemy import insert\n",
-        "spider/services/schema.py": "def late():\n    from sqlalchemy.dialects import sqlite\n",
+        "openlinx/crawl/engine/dispatch.py": "import sqlalchemy\n",
+        "openlinx/crawl/frontier.py": "from sqlalchemy.dialects.sqlite import insert\n",
+        "openlinx/services/crawling.py": "def late():\n    from sqlalchemy import select\n",
+        "openlinx/crawl/pages/links.py": "import sqlalchemy_utils\n"
+        "from openlinx.store import urls\n",
+        "openlinx/store/urls.py": "from sqlalchemy import insert\n",
+        "openlinx/services/schema.py": "def late():\n    from sqlalchemy.dialects import sqlite\n",
     }
 
     assert sqlalchemy_violations(sources) == [
-        "spider/crawl/engine/dispatch.py imports sqlalchemy",
-        "spider/crawl/frontier.py imports sqlalchemy.dialects.sqlite",
-        "spider/services/crawling.py imports sqlalchemy",
+        "openlinx/crawl/engine/dispatch.py imports sqlalchemy",
+        "openlinx/crawl/frontier.py imports sqlalchemy.dialects.sqlite",
+        "openlinx/services/crawling.py imports sqlalchemy",
     ]
 
 
@@ -346,7 +347,7 @@ def positional_bound(x): ...
 
 
 # The crawl core never imports the layers that wire it or plug into it (020-add-crawl-core D9).
-PLUGIN_LAYERS = ("spider.services", "spider.extract", "spider.rules", "spider.cli")
+PLUGIN_LAYERS = ("openlinx.services", "openlinx.extract", "openlinx.rules", "openlinx.cli")
 
 
 def _absolute(module: str, level: int, name: str | None) -> str:
@@ -364,9 +365,9 @@ def _plugin_imports(module: str, tree: ast.AST) -> list[str]:
             found += [alias.name for alias in node.names]
         elif isinstance(node, ast.ImportFrom):
             base = _absolute(module, node.level, node.module)
-            # `from spider import rules` names the layer in the alias.
+            # `from openlinx import rules` names the layer in the alias.
             found += (
-                [f"{base}.{alias.name}" for alias in node.names] if base == "spider" else [base]
+                [f"{base}.{alias.name}" for alias in node.names] if base == "openlinx" else [base]
             )
     return [
         name
@@ -376,11 +377,11 @@ def _plugin_imports(module: str, tree: ast.AST) -> list[str]:
 
 
 def plugin_import_violations(sources: Mapping[str, str]) -> list[str]:
-    """Modules of spider.crawl that import a plugin layer, given every module's source by path."""
+    """Modules of openlinx.crawl that import a plugin layer, given every module's source by path."""
     return [
         f"{module} imports {name}"
         for module, source in sources.items()
-        if module.startswith("spider/crawl/")
+        if module.startswith("openlinx/crawl/")
         for name in _plugin_imports(module, ast.parse(source))
     ]
 
@@ -388,7 +389,7 @@ def plugin_import_violations(sources: Mapping[str, str]) -> list[str]:
 def test_the_crawl_core_imports_no_plugin_layer() -> None:
     sources = {
         path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((SRC / "spider").rglob("*.py"))
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
     assert plugin_import_violations(sources) == []
@@ -396,19 +397,20 @@ def test_the_crawl_core_imports_no_plugin_layer() -> None:
 
 def test_an_import_of_a_plugin_layer_in_the_crawl_core_is_named() -> None:
     sources = {
-        "spider/crawl/engine/dispatch.py": "from spider.services.hooks import default_hooks\n",
-        "spider/crawl/pages/preparation.py": "def late():\n    import spider.extract.page\n",
-        "spider/crawl/scope.py": "from spider import rules, store\n",
-        "spider/crawl/pages/links.py": "from ...cli import app\n",
-        "spider/crawl/engine/hooks.py": "from spider.store import rows\nimport spider.servicesx\n",
-        "spider/services/crawling.py": "from spider.services.hooks import default_hooks\n",
+        "openlinx/crawl/engine/dispatch.py": "from openlinx.services.hooks import default_hooks\n",
+        "openlinx/crawl/pages/preparation.py": "def late():\n    import openlinx.extract.page\n",
+        "openlinx/crawl/scope.py": "from openlinx import rules, store\n",
+        "openlinx/crawl/pages/links.py": "from ...cli import app\n",
+        "openlinx/crawl/engine/hooks.py": "from openlinx.store import rows\n"
+        "import openlinx.servicesx\n",
+        "openlinx/services/crawling.py": "from openlinx.services.hooks import default_hooks\n",
     }
 
     assert plugin_import_violations(sources) == [
-        "spider/crawl/engine/dispatch.py imports spider.services.hooks",
-        "spider/crawl/pages/preparation.py imports spider.extract.page",
-        "spider/crawl/scope.py imports spider.rules",
-        "spider/crawl/pages/links.py imports spider.cli",
+        "openlinx/crawl/engine/dispatch.py imports openlinx.services.hooks",
+        "openlinx/crawl/pages/preparation.py imports openlinx.extract.page",
+        "openlinx/crawl/scope.py imports openlinx.rules",
+        "openlinx/crawl/pages/links.py imports openlinx.cli",
     ]
 
 
@@ -424,22 +426,28 @@ class ImportRule:
     allowed: tuple[str, ...] = ()
 
 
-# Inside spider.crawl, imports run one way: top-level modules, fetch, then pages and robots, which
+# Inside openlinx.crawl, imports run one way: top-level modules, fetch, then pages and robots, which
 # are peers, then engine (020-add-crawl-core design D19).
 IMPORT_RULES = (
     ImportRule(
-        "spider.crawl.*",
-        ("spider.crawl.fetch", "spider.crawl.pages", "spider.crawl.robots", "spider.crawl.engine"),
+        "openlinx.crawl.*",
+        (
+            "openlinx.crawl.fetch",
+            "openlinx.crawl.pages",
+            "openlinx.crawl.robots",
+            "openlinx.crawl.engine",
+        ),
     ),
     ImportRule(
-        "spider.crawl.fetch", ("spider.crawl.pages", "spider.crawl.robots", "spider.crawl.engine")
+        "openlinx.crawl.fetch",
+        ("openlinx.crawl.pages", "openlinx.crawl.robots", "openlinx.crawl.engine"),
     ),
-    ImportRule("spider.crawl.pages", ("spider.crawl.robots", "spider.crawl.engine")),
-    ImportRule("spider.crawl.robots", ("spider.crawl.pages", "spider.crawl.engine")),
+    ImportRule("openlinx.crawl.pages", ("openlinx.crawl.robots", "openlinx.crawl.engine")),
+    ImportRule("openlinx.crawl.robots", ("openlinx.crawl.pages", "openlinx.crawl.engine")),
     # The one cycle between the crawl core and the store runs through urls, which imports nothing.
-    ImportRule("spider.store", ("spider.crawl",), allowed=("spider.crawl.urls",)),
+    ImportRule("openlinx.store", ("openlinx.crawl",), allowed=("openlinx.crawl.urls",)),
     # The parse pool's workers import pages, so they never load the writer.
-    ImportRule("spider.crawl.pages", ("spider.store",), allowed=("spider.store.records",)),
+    ImportRule("openlinx.crawl.pages", ("openlinx.store",), allowed=("openlinx.store.records",)),
 )
 
 
@@ -461,7 +469,7 @@ def _imported(path: str, tree: ast.AST) -> list[str]:
             found += [alias.name for alias in node.names]
         elif isinstance(node, ast.ImportFrom):
             base = _absolute(path, node.level, node.module)
-            # `from spider.crawl import pages` names the module in the alias.
+            # `from openlinx.crawl import pages` names the module in the alias.
             found += [f"{base}.{alias.name}" for alias in node.names]
     return found
 
@@ -482,7 +490,7 @@ def import_rule_violations(
 
 
 def unnamed_modules(rules: Sequence[ImportRule], paths: Iterable[str]) -> list[str]:
-    """Names of the rules that name no module, and the packages of spider.crawl they leave out."""
+    """Names of the rules that name no module, and the packages of openlinx.crawl they leave out."""
     modules = {_module_name(path) for path in paths}
     named = {
         name.removesuffix(".*")
@@ -492,20 +500,20 @@ def unnamed_modules(rules: Sequence[ImportRule], paths: Iterable[str]) -> list[s
     packages = {
         _module_name(path)
         for path in paths
-        if path.startswith("spider/crawl/")
+        if path.startswith("openlinx/crawl/")
         and path.endswith("/__init__.py")
         and path.count("/") == 3
     }
     return [f"{name} names no module" for name in sorted(named - modules)] + [
-        f"{package} is a package of spider.crawl that no import rule names"
-        for package in sorted(packages - named - {"spider.crawl"})
+        f"{package} is a package of openlinx.crawl that no import rule names"
+        for package in sorted(packages - named - {"openlinx.crawl"})
     ]
 
 
 def _src_sources() -> dict[str, str]:
     return {
         path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((SRC / "spider").rglob("*.py"))
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
 
@@ -515,33 +523,34 @@ def test_the_crawl_imports_run_one_way() -> None:
 
 def test_an_import_against_an_import_rule_is_named() -> None:
     sources = {
-        "spider/crawl/fetch/requester.py": "from spider.crawl.pages.preparation import x\n",
-        "spider/crawl/pages/links.py": "from ..robots.reader import OriginRobots\n",
-        "spider/crawl/robots/loader.py": "def late():\n    from spider.crawl import engine\n",
-        "spider/crawl/scope.py": "if TYPE_CHECKING:\n    from spider.crawl.pages import links\n",
-        "spider/store/urls.py": (
-            "from spider.crawl.scope import ScopeRules\n"
-            "from spider.crawl.urls import NormalizedUrl\n"
+        "openlinx/crawl/fetch/requester.py": "from openlinx.crawl.pages.preparation import x\n",
+        "openlinx/crawl/pages/links.py": "from ..robots.reader import OriginRobots\n",
+        "openlinx/crawl/robots/loader.py": "def late():\n    from openlinx.crawl import engine\n",
+        "openlinx/crawl/scope.py": "if TYPE_CHECKING:\n"
+        "    from openlinx.crawl.pages import links\n",
+        "openlinx/store/urls.py": (
+            "from openlinx.crawl.scope import ScopeRules\n"
+            "from openlinx.crawl.urls import NormalizedUrl\n"
         ),
-        "spider/crawl/pages/preparation.py": (
-            "import spider.store.writer\nfrom spider.store.records import ParseError\n"
+        "openlinx/crawl/pages/preparation.py": (
+            "import openlinx.store.writer\nfrom openlinx.store.records import ParseError\n"
         ),
-        "spider/crawl/engine/units.py": (
-            "from spider.crawl.pages.preparation import x\nfrom spider.store.writer import y\n"
+        "openlinx/crawl/engine/units.py": (
+            "from openlinx.crawl.pages.preparation import x\nfrom openlinx.store.writer import y\n"
         ),
-        "spider/crawl/pages/headers.py": (
-            "from .links import rel_tokens\nfrom spider.crawl.fetch.fetcher import FetchResult\n"
+        "openlinx/crawl/pages/headers.py": (
+            "from .links import rel_tokens\nfrom openlinx.crawl.fetch.fetcher import FetchResult\n"
         ),
-        "spider/crawl/references.py": "from spider.crawl.urls import NormalizedUrl\n",
+        "openlinx/crawl/references.py": "from openlinx.crawl.urls import NormalizedUrl\n",
     }
 
     assert import_rule_violations(sources) == [
-        "spider/crawl/fetch/requester.py imports spider.crawl.pages.preparation.x",
-        "spider/crawl/pages/links.py imports spider.crawl.robots.reader.OriginRobots",
-        "spider/crawl/robots/loader.py imports spider.crawl.engine",
-        "spider/crawl/scope.py imports spider.crawl.pages.links",
-        "spider/store/urls.py imports spider.crawl.scope.ScopeRules",
-        "spider/crawl/pages/preparation.py imports spider.store.writer",
+        "openlinx/crawl/fetch/requester.py imports openlinx.crawl.pages.preparation.x",
+        "openlinx/crawl/pages/links.py imports openlinx.crawl.robots.reader.OriginRobots",
+        "openlinx/crawl/robots/loader.py imports openlinx.crawl.engine",
+        "openlinx/crawl/scope.py imports openlinx.crawl.pages.links",
+        "openlinx/store/urls.py imports openlinx.crawl.scope.ScopeRules",
+        "openlinx/crawl/pages/preparation.py imports openlinx.store.writer",
     ]
 
 
@@ -551,28 +560,30 @@ def test_the_import_rules_name_each_crawl_package_and_no_missing_module() -> Non
 
 def test_a_module_that_an_import_rule_names_and_that_does_not_exist_is_named() -> None:
     rules = (
-        ImportRule("spider.crawl.frontier", ("spider.crawl.pages",)),
-        ImportRule("spider.store", ("spider.crawl",), allowed=("spider.crawl.fetch.retries",)),
+        ImportRule("openlinx.crawl.frontier", ("openlinx.crawl.pages",)),
+        ImportRule(
+            "openlinx.store", ("openlinx.crawl",), allowed=("openlinx.crawl.fetch.retries",)
+        ),
     )
     paths = (
-        "spider/crawl/__init__.py",
-        "spider/crawl/pages/__init__.py",
-        "spider/crawl/pages/links.py",
-        "spider/crawl/redirects/__init__.py",
-        "spider/store/__init__.py",
+        "openlinx/crawl/__init__.py",
+        "openlinx/crawl/pages/__init__.py",
+        "openlinx/crawl/pages/links.py",
+        "openlinx/crawl/redirects/__init__.py",
+        "openlinx/store/__init__.py",
     )
 
     assert unnamed_modules(rules, paths) == [
-        "spider.crawl.fetch.retries names no module",
-        "spider.crawl.frontier names no module",
-        "spider.crawl.redirects is a package of spider.crawl that no import rule names",
+        "openlinx.crawl.fetch.retries names no module",
+        "openlinx.crawl.frontier names no module",
+        "openlinx.crawl.redirects is a package of openlinx.crawl that no import rule names",
     ]
 
 
 # lexbor's serializer recurses into template content: `.html` of a <template> nested 20,000
 # deep ends the process with a native stack overflow (020-add-crawl-core design Risks).
 SERIALIZERS = frozenset({"html", "inner_html", "html_pretty", "inner_html_pretty"})
-PAGE_READERS = ("spider/crawl/", "spider/extract/")
+PAGE_READERS = ("openlinx/crawl/", "openlinx/extract/")
 
 
 def serializer_violations(sources: Mapping[str, str]) -> list[str]:
@@ -590,7 +601,7 @@ def serializer_violations(sources: Mapping[str, str]) -> list[str]:
 def test_no_module_that_reads_pages_serializes_a_node() -> None:
     sources = {
         path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((SRC / "spider").rglob("*.py"))
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
     assert serializer_violations(sources) == []
@@ -598,23 +609,24 @@ def test_no_module_that_reads_pages_serializes_a_node() -> None:
 
 def test_a_serialization_of_a_node_is_named() -> None:
     sources = {
-        "spider/crawl/pages/links.py": "def f(node):\n    return node.html\n",
-        "spider/extract/page_data.py": "text = tree.body.inner_html\n",
-        "spider/crawl/pages/preparation.py": "x = node.css('a')\ny = node.attributes\n",
-        "spider/report/html.py": "page = node.html\n",
+        "openlinx/crawl/pages/links.py": "def f(node):\n    return node.html\n",
+        "openlinx/extract/page_data.py": "text = tree.body.inner_html\n",
+        "openlinx/crawl/pages/preparation.py": "x = node.css('a')\ny = node.attributes\n",
+        "openlinx/report/html.py": "page = node.html\n",
     }
 
     assert serializer_violations(sources) == [
-        "spider/crawl/pages/links.py:2 serializes a node with .html, which overflows the stack on "
+        "openlinx/crawl/pages/links.py:2 serializes a node with .html, "
+        "which overflows the stack on "
         "deeply nested templates",
-        "spider/extract/page_data.py:1 serializes a node with .inner_html, which overflows the "
+        "openlinx/extract/page_data.py:1 serializes a node with .inner_html, which overflows the "
         "stack on deeply nested templates",
     ]
 
 
 # With scripting off, a head <noscript><img> ends <head> (020-add-crawl-core design D5). The one
 # fragment parse reads an HTML <noscript>'s text as markup.
-FRAGMENT_PARSE = ("spider/crawl/pages/links.py", "_noscript_links")
+FRAGMENT_PARSE = ("openlinx/crawl/pages/links.py", "_noscript_links")
 
 
 def _calls_in_functions(
@@ -672,7 +684,7 @@ def parse_violations(sources: Mapping[str, str]) -> list[str]:
 def test_every_page_is_parsed_with_scripting_on() -> None:
     sources = {
         path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((SRC / "spider").rglob("*.py"))
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
     assert (parse_violations(sources), bool(_parses(sources))) == ([], True)
@@ -680,34 +692,34 @@ def test_every_page_is_parsed_with_scripting_on() -> None:
 
 def test_a_parse_with_scripting_off_is_named() -> None:
     sources = {
-        "spider/crawl/pages/links.py": (
+        "openlinx/crawl/pages/links.py": (
             "tree = LexborHTMLParser(text)\n"
             "def _noscript_links(text):\n"
             "    return LexborHTMLParser(text, is_fragment=True)\n"
         ),
-        "spider/extract/page_data.py": "tree = lexbor.LexborHTMLParser(text, scripting=False)\n",
-        "spider/crawl/pages/preparation.py": (
+        "openlinx/extract/page_data.py": "tree = lexbor.LexborHTMLParser(text, scripting=False)\n",
+        "openlinx/crawl/pages/preparation.py": (
             "a = LexborHTMLParser(text, scripting=True)\n"
             "def prepare(text):\n"
             "    return LexborHTMLParser(text, is_fragment=True)\n"
         ),
-        "spider/crawl/pages/headers.py": (
+        "openlinx/crawl/pages/headers.py": (
             "from selectolax.lexbor import LexborHTMLParser as Parser\ntree = Parser(text)\n"
         ),
-        "spider/report/html.py": "tree = LexborHTMLParser(text)\n",
+        "openlinx/report/html.py": "tree = LexborHTMLParser(text)\n",
     }
 
     assert parse_violations(sources) == [
-        "spider/crawl/pages/links.py:1 parses a document with scripting off",
-        "spider/extract/page_data.py:1 parses a document with scripting off",
-        "spider/crawl/pages/preparation.py:3 parses a fragment outside the noscript re-parse",
-        "spider/crawl/pages/headers.py:2 parses a document with scripting off",
+        "openlinx/crawl/pages/links.py:1 parses a document with scripting off",
+        "openlinx/extract/page_data.py:1 parses a document with scripting off",
+        "openlinx/crawl/pages/preparation.py:3 parses a fragment outside the noscript re-parse",
+        "openlinx/crawl/pages/headers.py:2 parses a document with scripting off",
     ]
 
 
 # Every request of a Crawl goes through the Requester, which owns its politeness
 # (020-add-crawl-core D7).
-REQUESTER = "spider/crawl/fetch/requester.py"
+REQUESTER = "openlinx/crawl/fetch/requester.py"
 
 
 def request_violations(sources: Mapping[str, str]) -> list[str]:
@@ -727,7 +739,7 @@ def request_violations(sources: Mapping[str, str]) -> list[str]:
 def test_every_request_goes_through_the_requester() -> None:
     sources = {
         path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((SRC / "spider").rglob("*.py"))
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
     assert request_violations(sources) == []
@@ -735,29 +747,29 @@ def test_every_request_goes_through_the_requester() -> None:
 
 def test_a_request_outside_the_requester_is_named() -> None:
     sources = {
-        "spider/crawl/robots/loader.py": "async def f(self, url):\n"
+        "openlinx/crawl/robots/loader.py": "async def f(self, url):\n"
         "    return await self._fetcher.fetch(Request(url))\n",
-        "spider/crawl/engine/dispatch.py": (
+        "openlinx/crawl/engine/dispatch.py": (
             "fetch = context.fetcher.fetch\nrequest = fetcher.Request(u)\n"
         ),
         REQUESTER: "async def f(self, url):\n    return await self._fetcher.fetch(Request(url))\n",
-        "spider/crawl/fetch/fetcher.py": "class AiohttpFetcher:\n"
+        "openlinx/crawl/fetch/fetcher.py": "class AiohttpFetcher:\n"
         "    async def fetch(self, request): ...\n",
     }
 
     assert request_violations(sources) == [
-        "spider/crawl/robots/loader.py:2 calls a Fetcher outside the Requester",
-        "spider/crawl/robots/loader.py:2 makes a Request outside the Requester",
-        "spider/crawl/engine/dispatch.py:1 calls a Fetcher outside the Requester",
-        "spider/crawl/engine/dispatch.py:2 makes a Request outside the Requester",
+        "openlinx/crawl/robots/loader.py:2 calls a Fetcher outside the Requester",
+        "openlinx/crawl/robots/loader.py:2 makes a Request outside the Requester",
+        "openlinx/crawl/engine/dispatch.py:1 calls a Fetcher outside the Requester",
+        "openlinx/crawl/engine/dispatch.py:2 makes a Request outside the Requester",
     ]
 
 
 # Built only through their generic factories, which check the type parameter where the hooks are
 # registered: one built in place inside Hooks(...) takes it as Any (020-add-crawl-core D9).
 FACTORIES = {
-    "Handler": "src/spider/crawl/engine/hooks.py",
-    "Extractor": "src/spider/crawl/pages/preparation.py",
+    "Handler": "src/openlinx/crawl/engine/hooks.py",
+    "Extractor": "src/openlinx/crawl/pages/preparation.py",
 }
 
 
@@ -778,7 +790,7 @@ def test_hooks_are_built_only_through_their_factories() -> None:
     root = SRC.parent
     sources = {
         path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
-        for folder in (SRC / "spider", root / "tests")
+        for folder in (SRC / "openlinx", root / "tests")
         for path in sorted(folder.rglob("*.py"))
     }
 
@@ -788,26 +800,27 @@ def test_hooks_are_built_only_through_their_factories() -> None:
 def test_a_hook_built_outside_its_factory_is_named() -> None:
     sources = {
         "tests/crawl/test_hooks.py": "hooks = Hooks(handlers=(Handler('x', rows, write),))\n",
-        "src/spider/services/hooks.py": "h = hooks.Handler('x', rows, write)\n",
-        "src/spider/crawl/engine/hooks.py": "def handler(n, h, w):\n    return Handler(n, h, w)\n",
-        "src/spider/services/pages.py": "e = pages.Extractor('x', extract, None)\n",
-        "src/spider/crawl/pages/preparation.py": (
+        "src/openlinx/services/hooks.py": "h = hooks.Handler('x', rows, write)\n",
+        "src/openlinx/crawl/engine/hooks.py": "def handler(n, h, w):\n"
+        "    return Handler(n, h, w)\n",
+        "src/openlinx/services/pages.py": "e = pages.Extractor('x', extract, None)\n",
+        "src/openlinx/crawl/pages/preparation.py": (
             "def extractor(n, e, c):\n    return Extractor(n, e, c)\n"
         ),
     }
 
     assert factory_violations(sources) == [
         "tests/crawl/test_hooks.py:1 builds Handler(...) outside its factory",
-        "src/spider/services/hooks.py:1 builds Handler(...) outside its factory",
-        "src/spider/services/pages.py:1 builds Extractor(...) outside its factory",
+        "src/openlinx/services/hooks.py:1 builds Handler(...) outside its factory",
+        "src/openlinx/services/pages.py:1 builds Extractor(...) outside its factory",
     ]
 
 
 # A Crawl waits only through its Clock, so a fake Clock drives every wait of a test
 # (020-add-crawl-core D7).
-WAITERS = ("spider/crawl/", "spider/services/crawling.py")
+WAITERS = ("openlinx/crawl/", "openlinx/services/crawling.py")
 # The one deadline outside the Clock bounds a real request, where timing tests put a fake Fetcher.
-FETCHER = "spider/crawl/fetch/fetcher.py"
+FETCHER = "openlinx/crawl/fetch/fetcher.py"
 SLEEPS = {("asyncio", "sleep"), ("time", "sleep")}
 CALLBACKS = {"call_later", "call_at", "reschedule"}
 # Where each asyncio call that may wait takes its timeout as a positional argument, if it does.
@@ -896,7 +909,7 @@ def wait_violations(sources: Mapping[str, str]) -> list[str]:
 def test_a_crawl_waits_only_through_its_clock() -> None:
     sources = {
         path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((SRC / "spider").rglob("*.py"))
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
     assert wait_violations(sources) == []
@@ -904,7 +917,7 @@ def test_a_crawl_waits_only_through_its_clock() -> None:
 
 def test_a_wait_outside_the_clock_is_named() -> None:
     sources = {
-        "spider/crawl/engine/dispatch.py": "await asyncio.sleep(0)\n"
+        "openlinx/crawl/engine/dispatch.py": "await asyncio.sleep(0)\n"
         "time.sleep(1)\n"
         "loop.call_later(1, f)\n"
         "self._loop.call_at(t, f)\n"
@@ -921,7 +934,7 @@ def test_a_wait_outside_the_clock_is_named() -> None:
         "for done in asyncio.as_completed(tasks, timeout=5): ...\n"
         "cm.reschedule(t)\n"
         "timeout = aiohttp.ClientTimeout(total=5)\n",
-        "spider/crawl/fetch/politeness.py": "from asyncio import sleep, Lock\n"
+        "openlinx/crawl/fetch/politeness.py": "from asyncio import sleep, Lock\n"
         "from time import sleep\n"
         "await self._clock.sleep(1)\n"
         "await asyncio.wait_for(task, None)\n"
@@ -929,35 +942,36 @@ def test_a_wait_outside_the_clock_is_named() -> None:
         "async with asyncio.timeout(None): ...\n"
         "from asyncio.tasks import sleep as nap\n"
         "for done in asyncio.as_completed(tasks): ...\n",
-        "spider/crawl/fetch/fetcher.py": "timeout = aiohttp.ClientTimeout(total=20)\n",
-        "spider/services/crawling.py": "async with asyncio.timeout(delay=1): ...\n",
-        "spider/services/listing.py": "await asyncio.sleep(1)\n",
-        "spider/clock.py": "await asyncio.sleep(seconds)\n",
+        "openlinx/crawl/fetch/fetcher.py": "timeout = aiohttp.ClientTimeout(total=20)\n",
+        "openlinx/services/crawling.py": "async with asyncio.timeout(delay=1): ...\n",
+        "openlinx/services/listing.py": "await asyncio.sleep(1)\n",
+        "openlinx/clock.py": "await asyncio.sleep(seconds)\n",
     }
 
     assert wait_violations(sources) == [
-        "spider/crawl/engine/dispatch.py:1 waits outside the Clock: asyncio.sleep(0)",
-        "spider/crawl/engine/dispatch.py:2 waits outside the Clock: time.sleep(1)",
-        "spider/crawl/engine/dispatch.py:3 waits outside the Clock: loop.call_later(1, f)",
-        "spider/crawl/engine/dispatch.py:4 waits outside the Clock: self._loop.call_at(t, f)",
-        "spider/crawl/engine/dispatch.py:5 waits outside the Clock: asyncio.wait_for(task, 5)",
-        "spider/crawl/engine/dispatch.py:6 waits outside the Clock: "
+        "openlinx/crawl/engine/dispatch.py:1 waits outside the Clock: asyncio.sleep(0)",
+        "openlinx/crawl/engine/dispatch.py:2 waits outside the Clock: time.sleep(1)",
+        "openlinx/crawl/engine/dispatch.py:3 waits outside the Clock: loop.call_later(1, f)",
+        "openlinx/crawl/engine/dispatch.py:4 waits outside the Clock: self._loop.call_at(t, f)",
+        "openlinx/crawl/engine/dispatch.py:5 waits outside the Clock: asyncio.wait_for(task, 5)",
+        "openlinx/crawl/engine/dispatch.py:6 waits outside the Clock: "
         "asyncio.wait_for(task, timeout=5)",
-        "spider/crawl/engine/dispatch.py:7 waits outside the Clock: asyncio.wait(tasks, timeout=5)",
-        "spider/crawl/engine/dispatch.py:8 waits outside the Clock: asyncio.timeout(5)",
-        "spider/crawl/engine/dispatch.py:9 waits outside the Clock: asyncio.timeout_at(when=t)",
-        "spider/crawl/engine/dispatch.py:12 waits outside the Clock: aio.sleep(1)",
-        "spider/crawl/engine/dispatch.py:13 waits outside the Clock: t.sleep(1)",
-        "spider/crawl/engine/dispatch.py:14 waits outside the Clock: asyncio.tasks.sleep(1)",
-        "spider/crawl/engine/dispatch.py:15 waits outside the Clock: "
+        "openlinx/crawl/engine/dispatch.py:7 waits outside the Clock: "
+        "asyncio.wait(tasks, timeout=5)",
+        "openlinx/crawl/engine/dispatch.py:8 waits outside the Clock: asyncio.timeout(5)",
+        "openlinx/crawl/engine/dispatch.py:9 waits outside the Clock: asyncio.timeout_at(when=t)",
+        "openlinx/crawl/engine/dispatch.py:12 waits outside the Clock: aio.sleep(1)",
+        "openlinx/crawl/engine/dispatch.py:13 waits outside the Clock: t.sleep(1)",
+        "openlinx/crawl/engine/dispatch.py:14 waits outside the Clock: asyncio.tasks.sleep(1)",
+        "openlinx/crawl/engine/dispatch.py:15 waits outside the Clock: "
         "asyncio.as_completed(tasks, timeout=5)",
-        "spider/crawl/engine/dispatch.py:16 waits outside the Clock: cm.reschedule(t)",
-        "spider/crawl/engine/dispatch.py:17 sets a deadline outside the Fetcher: "
+        "openlinx/crawl/engine/dispatch.py:16 waits outside the Clock: cm.reschedule(t)",
+        "openlinx/crawl/engine/dispatch.py:17 sets a deadline outside the Fetcher: "
         "aiohttp.ClientTimeout(total=5)",
-        "spider/crawl/fetch/politeness.py:1 imports asyncio.sleep by name",
-        "spider/crawl/fetch/politeness.py:2 imports time.sleep by name",
-        "spider/crawl/fetch/politeness.py:7 imports asyncio.tasks.sleep by name",
-        "spider/services/crawling.py:1 waits outside the Clock: asyncio.timeout(delay=1)",
+        "openlinx/crawl/fetch/politeness.py:1 imports asyncio.sleep by name",
+        "openlinx/crawl/fetch/politeness.py:2 imports time.sleep by name",
+        "openlinx/crawl/fetch/politeness.py:7 imports asyncio.tasks.sleep by name",
+        "openlinx/services/crawling.py:1 waits outside the Clock: asyncio.timeout(delay=1)",
     ]
 
 
@@ -972,11 +986,15 @@ HANDOFFS = {
 }
 # A submitted unit's Future resolves at its commit, which comes at the loop's commit deadline
 # and so waits for clock time: a hold would stop the time it waits for. This one call only.
-WAITS_FOR_CLOCK_TIME = {("spider/store/writer.py", "submit_async", "asyncio.wrap_future(done)")}
+WAITS_FOR_CLOCK_TIME = {("openlinx/store/writer.py", "submit_async", "asyncio.wrap_future(done)")}
 # A signal handler schedules the stop from the loop's own thread, between two bytecodes; the
 # loop waits for nothing it hands over, so no hold is needed. This one call only.
 FROM_A_SIGNAL_HANDLER = {
-    ("spider/services/interrupts.py", "handler", "loop.call_soon_threadsafe(stop.set, 'interrupt')")
+    (
+        "openlinx/services/interrupts.py",
+        "handler",
+        "loop.call_soon_threadsafe(stop.set, 'interrupt')",
+    )
 }
 
 
@@ -1056,7 +1074,7 @@ def handoff_violations(sources: Mapping[str, str]) -> list[str]:
 def test_every_hand_off_to_another_thread_holds_the_clock() -> None:
     sources = {
         path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((SRC / "spider").rglob("*.py"))
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
     assert handoff_violations(sources) == []
@@ -1064,17 +1082,17 @@ def test_every_hand_off_to_another_thread_holds_the_clock() -> None:
 
 def test_a_hand_off_outside_the_hold_is_named() -> None:
     sources = {
-        "spider/services/crawling.py": "async def open():\n"
+        "openlinx/services/crawling.py": "async def open():\n"
         "    writer = await asyncio.to_thread(CrawlWriter, path)\n"
         "    with clock.off_loop():\n"
         "        await asyncio.to_thread(writer.close)\n"
         "    await loop.run_in_executor(None, work)\n",
-        "spider/store/writer.py": "async def submit_async(self):\n"
+        "openlinx/store/writer.py": "async def submit_async(self):\n"
         "    asyncio.wrap_future(other)\n"
         "    return asyncio.wrap_future(done)\n"
         "async def run_async(self):\n"
         "    return await asyncio.wrap_future(done)\n",
-        "spider/pool.py": "from asyncio import run_coroutine_threadsafe\n"
+        "openlinx/pool.py": "from asyncio import run_coroutine_threadsafe\n"
         "from asyncio import to_thread as off\n"
         "async def prepare():\n"
         "    with clock.off_loop():\n"
@@ -1086,13 +1104,13 @@ def test_a_hand_off_outside_the_hold_is_named() -> None:
     }
 
     assert handoff_violations(sources) == [
-        "spider/pool.py:6 hands off outside clock.off_loop(): loop.call_soon_threadsafe",
-        "spider/pool.py:8 hands off outside clock.off_loop(): off",
-        "spider/pool.py:9 hands off outside clock.off_loop(): run_coroutine_threadsafe",
-        "spider/services/crawling.py:2 hands off outside clock.off_loop(): asyncio.to_thread",
-        "spider/services/crawling.py:5 hands off outside clock.off_loop(): loop.run_in_executor",
-        "spider/store/writer.py:2 hands off outside clock.off_loop(): asyncio.wrap_future",
-        "spider/store/writer.py:5 hands off outside clock.off_loop(): asyncio.wrap_future",
+        "openlinx/pool.py:6 hands off outside clock.off_loop(): loop.call_soon_threadsafe",
+        "openlinx/pool.py:8 hands off outside clock.off_loop(): off",
+        "openlinx/pool.py:9 hands off outside clock.off_loop(): run_coroutine_threadsafe",
+        "openlinx/services/crawling.py:2 hands off outside clock.off_loop(): asyncio.to_thread",
+        "openlinx/services/crawling.py:5 hands off outside clock.off_loop(): loop.run_in_executor",
+        "openlinx/store/writer.py:2 hands off outside clock.off_loop(): asyncio.wrap_future",
+        "openlinx/store/writer.py:5 hands off outside clock.off_loop(): asyncio.wrap_future",
     ]
 
 

@@ -10,9 +10,9 @@ from aiohttp.client_reqrep import ConnectionKey
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
-from spider.clock import SystemClock
-from spider.crawl.fetch.fetcher import AiohttpFetcher, FetchFailure, Request, fetch_error_of
-from spider.crawl.urls import parse_seed
+from openlinx.clock import SystemClock
+from openlinx.crawl.fetch.fetcher import AiohttpFetcher, FetchFailure, Request, fetch_error_of
+from openlinx.crawl.urls import parse_seed
 
 
 class _Unencodable(AbstractResolver):

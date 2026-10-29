@@ -37,7 +37,7 @@ STARTUP_ALLOWLIST = {
     "colorama",
     "shellingham",
     "orjson",
-    "spider",
+    "openlinx",
 }
 
 
@@ -183,7 +183,7 @@ def test_dot_dot_segments_name_the_folder_they_resolve_to() -> None:
     assert outside_the_standard_library(loaded, stdlib) == {"pkg"}
 
 
-# spider commands reads the inherited secret flag of an option's setting from the table's model,
+# linx commands reads the inherited secret flag of an option's setting from the table's model,
 # so it may load pydantic and pydantic's own dependencies (design D10 of 010).
 SETTINGS_MODELS = {
     "pydantic",
@@ -208,7 +208,7 @@ def test_startup_loads_only_the_allowlist(command: list[str], allowed: set[str])
     startup = interpreter_startup_modules()
     loaded = {
         name: origin
-        for name, origin in modules_loaded("spider.cli.app", "build_app", *command).items()
+        for name, origin in modules_loaded("openlinx.cli.app", "build_app", *command).items()
         if name not in startup
     }
 

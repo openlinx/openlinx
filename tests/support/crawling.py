@@ -6,14 +6,14 @@ from typing import Any
 
 from aiohttp.abc import AbstractResolver
 
-from spider.cli.app import build_app
-from spider.clock import Clock, SystemClock
-from spider.crawl.engine.hooks import Hooks
-from spider.crawl.engine.stop import StopSignal
-from spider.crawl.fetch.fetcher import Fetcher
-from spider.crawl.pages.preparation import PageExecutor
-from spider.output.reporter import Collected, Reporter
-from spider.services.crawling import (
+from openlinx.cli.app import build_app
+from openlinx.clock import Clock, SystemClock
+from openlinx.crawl.engine.hooks import Hooks
+from openlinx.crawl.engine.stop import StopSignal
+from openlinx.crawl.fetch.fetcher import Fetcher
+from openlinx.crawl.pages.preparation import PageExecutor
+from openlinx.output.reporter import Collected, Reporter
+from openlinx.services.crawling import (
     CrawlOverrides,
     CrawlRequest,
     CrawlResult,
@@ -21,8 +21,8 @@ from spider.services.crawling import (
     plan_crawl,
     start_crawl,
 )
-from spider.services.hooks import default_hooks
-from spider.store.records import CrawlFile, SecretNames
+from openlinx.services.hooks import default_hooks
+from openlinx.store.records import CrawlFile, SecretNames
 from tests.support.app import settings_tables
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
@@ -30,11 +30,11 @@ from tests.support.fetcher import FakeFetcher, FakePage
 
 
 def crawled(*args: str) -> Path:
-    """Runs `spider crawl` with `args` and returns the crawl file its result names."""
+    """Runs `linx crawl` with `args` and returns the crawl file its result names."""
     result = run_cli("crawl", *args)
     if result.exit_code != 0:
         last = result.stderr.splitlines()[-1:] or [b""]
-        raise AssertionError(f"spider crawl exited {result.exit_code}: {last[0][:2000]!r}")
+        raise AssertionError(f"linx crawl exited {result.exit_code}: {last[0][:2000]!r}")
     return Path(result.json()["crawl_file"])
 
 
@@ -63,7 +63,7 @@ def crawl_result(
         cwd=Path.cwd(),
         home=Path.home(),
         workspace=None,
-        command_argv=["spider", "crawl", seed],
+        command_argv=["linx", "crawl", seed],
         secret_names=SecretNames(),
         flags={"crawl": crawl},
     )

@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Name:** the product is OpenLinx (PyPI `openlinx`, GitHub organisation `openlinx`). The code still uses the working name `spider` for the command, the Python package, `spider.toml` and the `.spider/` Workspace folder, until a rename change moves them to the product name.
+> **Name:** OpenLinx: the command `linx`, the PyPI and import package `openlinx`, the GitHub organisation `openlinx`, `openlinx.toml` and the `.openlinx/` Workspace folder.
 
 Terms follow [CONTEXT.md](CONTEXT.md). How the pieces fit together is in [docs/architecture.md](docs/architecture.md), the decisions behind them are in [docs/adr/](docs/adr/), and how everything is tested is in [docs/testing.md](docs/testing.md).
 
@@ -10,7 +10,7 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 
 **060-min joins v0.1 (2026-10-05).** An agent runs Commands through its shell tool, which times out after minutes, so a foreground Crawl caps what an agent can crawl. With `crawl --detach`, `status` and `stop` in v0.1, an agent crawls a large site in the background and queries the crawl file while the Crawl is still writing.
 
-**Large sites first (2026-10-05).** The product bets on full crawls of large sites (see Positioning), so three more things join v0.1: 060's `resume`, no default `--max-urls` limit, and 026's ~500k-URL benchmark. Hostile sites wait until after the v0.1 release: anti-bot and WAF challenges, adaptive throttling. The first users' sites are friendly to crawl. The standard proxy variables stay in v0.1 (022-min): corporate networks need them, and 010's `spider commands` already lists them under `environment`.
+**Large sites first (2026-10-05).** The product bets on full crawls of large sites (see Positioning), so three more things join v0.1: 060's `resume`, no default `--max-urls` limit, and 026's ~500k-URL benchmark. Hostile sites wait until after the v0.1 release: anti-bot and WAF challenges, adaptive throttling. The first users' sites are friendly to crawl. The standard proxy variables stay in v0.1 (022-min): corporate networks need them, and 010's `linx commands` already lists them under `environment`.
 
 **Robustness rule (2026-10-05), for every change from 020 on.** On a 500k-URL Crawl every rare failure happens, so:
 - **One URL never stops the Crawl.** A failure in fetching, decoding, parsing, extraction or Rule evaluation becomes that URL's recorded outcome (`fetch_state`, its error kind, `parse_error`) plus a counted warning, and the Crawl moves on. Only failures of the whole Crawl stop it, each with a `stop_reason`, and leave it resumable: an unreachable Seed, a crawl file that cannot be written (disk full included), and the zero-success breaker.
@@ -21,7 +21,7 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 ## Positioning
 
 A deep, local technical crawler for agents. Other tools already ship a crawler with a CLI, an MCP server and a Skill, and a SQLite store or no telemetry alone sets none apart; the open all-in-one SEO suites offer the audit as one capped module on top of a paid data API. This one leads with:
-- **Your crawl is a database:** arbitrary read-only SQL over a public, versioned schema, with every Issue reproducible by a query. Each Crawl is a SQLite file with a documented schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)), and `spider sql` works while a background Crawl is still writing.
+- **Your crawl is a database:** arbitrary read-only SQL over a public, versioned schema, with every Issue reproducible by a query. Each Crawl is a SQLite file with a documented schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)), and `linx sql` works while a background Crawl is still writing.
 - **A contract-tested CLI for agents:** one JSON result per Command, a registry of diagnostics and error codes, and cursor paging.
 - **Local diff and crawl continue:** a stopped or interrupted Crawl continues where it ended, and Crawl Diff (v0.2) compares two crawl files on your machine, with no cloud.
 - **Built for large sites, with no page cap:** a full crawl of every URL in Scope, never a sample, at the scale target of about 500k URLs. Checking 50 pages is a commodity; a complete crawl of a large site, run in the background for hours and queried while it runs, is the job. The frontier lives in the crawl file, so memory stays flat.
@@ -33,7 +33,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 
 | # | Change | Capabilities (specs) | Commands | Status |
 |---|---|---|---|---|
-| 000 | `000-scaffold-project` | none (tooling only) | `spider --version` | done |
+| 000 | `000-scaffold-project` | none (tooling only) | `linx --version` | done |
 | 010 | `010-add-workspace-and-cli-contract` | `workspace`, `cli-contract` | `init`, `commands` | done |
 | 015 | `015-add-crawl-store` | `crawl-store` | `schema`; `--crawl` | done |
 | 017 | `017-speed-up-crawl-writer` | `crawl-store` (modified) | none | done |
@@ -66,10 +66,10 @@ widen:                                        ├─► 022-min ─┐
 ```
 
 - **Where the build is:**
-  - **In main:** 000, 010, 015, 017, 018 and 020, the crawl core, so `spider crawl <url>` crawls a site in the foreground.
+  - **In main:** 000, 010, 015, 017, 018 and 020, the crawl core, so `linx crawl <url>` crawls a site in the foreground.
   - **On branches:** 022-min, the fetch policy, is done for v0.1 and merges next. 030-min, the page data, is in progress. 026 (the parse pool), 040 (the Rules) and 050 (the queries) are partly built and continue on their branches.
   - **Not started:** 060-min (crawl control), 080 (the agent Skill) and 085 (the release).
-- **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `spider rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.
+- **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `linx rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.
 - **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts its synthetic site alongside 020 and the rest once 020's slice is in (its first pull request), and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
 - **HTML parser:** selectolax 1.0.1 or later, parsing with scripting on, as a browser that runs scripts does. A head `<noscript>` therefore keeps the later head elements (canonical, meta description, robots, hreflang) in `<head>`, and a body `<noscript>` gives its Links.
@@ -105,15 +105,15 @@ If a change needs something another change owns, it depends on that change inste
   - The Typer skeleton with `--version`; LICENSE (Apache-2.0), README, CONTRIBUTING (the TDD loop and the OpenSpec workflow).
 - **010-add-workspace-and-cli-contract**:
   - **Workspace:**
-    - `spider init`; discovery order: `--workspace`, then the nearest `.spider/` or `spider.toml` going upward, then `~/.spider/`.
-    - `spider.toml` and settings precedence: flag > `spider.toml` > default. **No environment variables** are settings.
+    - `linx init`; discovery order: `--workspace`, then the nearest `.openlinx/` or `openlinx.toml` going upward, then `~/.openlinx/`.
+    - `openlinx.toml` and settings precedence: flag > `openlinx.toml` > default. **No environment variables** are settings.
     - `settings_invalid` (exit 3), which also covers `[segments]` checked at load time.
   - **CLI contract:**
     - **stdout** carries the Command's single JSON result, or NDJSON rows for data streams (`--format jsonl`).
     - **stderr** carries JSON lines: diagnostics `{level, code, message, hint, details}` and progress events `{event, ts, data}`.
     - **Partial results:** a Command whose result describes a failed outcome prints it and exits non-zero with exactly one error diagnostic.
     - Formats are `json|jsonl|table`. The `csv` format, the CSV policy and `-o` belong to 050.
-    - Also: the paging envelope, exit codes, `spider commands --format json` (including each Command's output kind), and the global flags.
+    - Also: the paging envelope, exit codes, `linx commands --format json` (including each Command's output kind), and the global flags.
 - **015-add-crawl-store**:
   - One SQLite file per Crawl, and crawl ids.
   - The `crawl` and `seeds` tables. Counts are derived from tables, never stored on `crawl`.
@@ -121,7 +121,7 @@ If a change needs something another change owns, it depends on that change inste
   - WAL with `synchronous=NORMAL`, a rollback journal on UNC paths, and a `store.journal_mode` override. **(v0.2)** network-drive detection from the mount table.
   - Read-only access that releases the file after each operation, and `crawl_schema_too_new` for files from a newer tool.
   - Schema versioning. No migrations before v0.1; the first schema change after v0.1 brings them, with a migration test from every published schema version.
-  - `spider schema [TABLE]`, with table order fixed by change number.
+  - `linx schema [TABLE]`, with table order fixed by change number.
   - The `--crawl latest|<id>|<path>` option used by every query Command.
   - Redaction of secrets in recorded commands and config: whole values (`***`) and URL passwords (`user:***@proxy`). 022 adds the header shape (`Cookie: ***`) in v0.2.
   - Table conventions, and `docs/schema.md` as the contract: the public schema reference of [ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md), in v0.1. It is checked against the declared schema, and a new crawl file against both through `PRAGMA table_info`.
@@ -144,7 +144,7 @@ If a change needs something another change owns, it depends on that change inste
     - STRICT tables
     - 15 naming rules
   - The file refuses bad values: every public table is `STRICT`, and the CHECKs of enumerations and flags come from the declaration. 015's `crawl` and `seeds` follow at once.
-  - `spider schema` fills `references` and gains `indexes`, each with the query it serves. `docs/schema.md` and the contract test cover indexes, STRICT and `WITHOUT ROWID`.
+  - `linx schema` fills `references` and gains `indexes`, each with the query it serves. `docs/schema.md` and the contract test cover indexes, STRICT and `WITHOUT ROWID`.
   - The conventions are revised. A derived column's description starts with `Derived: `, and a later column's with `Filled from v<major>.<minor>. `. The `crawl` row may hold a derived value that a post-crawl pass writes, such as 040's Health Score.
   - Not in 018: the other tables, which their owners add under these rules (020, 022, 030, 040, 060), and the links layout, which the links benchmark chooses for 030.
 - **020-add-crawl-core** (v0.1; done):
@@ -157,7 +157,7 @@ If a change needs something another change owns, it depends on that change inste
   - **Link discovery and the Link type table**, with `--follow-nofollow` and `--check-external`.
   - Crawl Depth.
   - **Hooks:** a per-response hook for every URL that reaches a final state when it is dispatched (a URL that only Links that are not followed reach is recorded `skipped` at discovery and reaches no handler, since a later followed Link may still queue it), whose handlers return rows that the store writes in the URL's unit, and the **post-crawl passes** hook, which runs for `completed` or `stopped` Crawls and is safe to re-run.
-  - **Design points of 2026-10-05:** guarded Crawl State transitions (one table and check; 060 adds `interrupted`), a `NormalizedUrl` type, writer units defined only in `spider.store.*`, and one Crawl context object.
+  - **Design points of 2026-10-05:** guarded Crawl State transitions (one table and check; 060 adds `interrupted`), a `NormalizedUrl` type, writer units defined only in `openlinx.store.*`, and one Crawl context object.
   - The `[crawl]` settings table, which 022 and 030 extend.
   - Progress events and the result.
   - **Ctrl+C:** the Crawl becomes `stopped` with `stop_reason: interrupt`, and the command exits 130.
@@ -195,14 +195,14 @@ If a change needs something another change owns, it depends on that change inste
   - **(v0.2)** Flesch Reading Ease and the Readability band, language detection (`--detect-language`, py3langid), SERP pixel widths, and **raw HTML storage** (zstd). HTML is not stored by default; storing it is opt-in by `--store-html` (`[crawl] store_html`) (decided 2026-10-11: in the store benchmark, HTML was about 70% of the crawl file). The `page_sources` table and the v0.2 columns exist, empty, in v0.1.
 - **040-add-rules** (15 Rules in v0.1):
   - The Rule model and the 15 Rules listed above; `http-url` is a Warning with High Priority. **(v0.2)** the other 27 Rules of the 42-Rule catalogue.
-  - Thresholds and disabling in `spider.toml`.
+  - Thresholds and disabling in `openlinx.toml`.
   - **Every Rule is one reproducing SQL query** over the public schema, the foundation of v0.3's User SQL Rules, and it is the Rule's only form:
     - a running Crawl writes no Issue; while a Crawl has no final pass (`running`, `failed` or `interrupted`), the Issues reader runs the queries live, read-only, and returns the shape of the stored Issues
     - when a Crawl ends as `completed` or `stopped`, the post-crawl pass materialises each Rule's rows into `affected_urls`, then the Health Score; 050's Commands read Issues through the same reader
-    - `rules show <id>` prints the query, and an Issue can point to it ("reproduce with `spider sql`")
+    - `rules show <id>` prints the query, and an Issue can point to it ("reproduce with `linx sql`")
   - Issues and Affected URLs. `issues` is a view whose `affected_count` counts each Rule's Affected URLs, so no count is stored (decided 2026-10-11).
   - The Health Score.
-  - `spider rules [list|show <id>]` and `rule_not_found` (exit 4).
+  - `linx rules [list|show <id>]` and `rule_not_found` (exit 4).
   - **(v0.2)** A new Rule category `ai_search`, for AI-search readiness. The exact Rule set is decided when it is drafted. Candidates:
     - AI crawlers blocked in robots.txt (GPTBot, ClaudeBot, PerplexityBot, Google-Extended, CCBot and others; the list is kept as data)
     - `/llms.txt` missing or invalid
@@ -237,14 +237,14 @@ If a change needs something another change owns, it depends on that change inste
   - **(v0.2)** `crawl --dry-run`: the checked config, the equivalent command, and a URL estimate that may be `null`.
   - **(v0.2)** `crawls list|show|rm`, where `rm` also deletes that Crawl's reports and notes.
 - **070-add-html-report** (v0.2):
-  - `report`: a self-contained offline HTML file plus CSV files. It is written to `--dest <dir>` (default `.spider/reports/<crawl-id>/`), and a JSON receipt goes to stdout.
+  - `report`: a self-contained offline HTML file plus CSV files. It is written to `--dest <dir>` (default `.openlinx/reports/<crawl-id>/`), and a JSON receipt goes to stdout.
   - Report Sections, and `report brief --section <id>` / `--list`.
   - Report Notes, SVG charts, Health Score per Segment, and escaping.
   - The table script, tested at seam 9.
   - To weigh at its re-grounding, not decided: a polished, terminal-style look with switchable dark palettes and a light one, a monospace and sans-serif pairing, block-character bars, terse copy, and charts richer than a minimal SVG builder; it meets the draft's no-web-fonts rule, its own SVG builder and its offline CSP (070 design, Open Questions).
   - The **end-to-end CI test** on all three OSes: `crawl --detach` → `status` → `issues` → `report`.
 - **080-add-agent-skill** (min in v0.1):
-  - **The Skill** (workflows, install instructions and one-liners), generated from `spider commands` by a developer script (`scripts/generate_skill.py`). In v0.1 the one-liner is `uv tool install`, and the workflows use only v0.1 Commands.
+  - **The Skill** (workflows, install instructions and one-liners), generated from `linx commands` by a developer script (`scripts/generate_skill.py`). In v0.1 the one-liner is `uv tool install`, and the workflows use only v0.1 Commands.
   - `skill install`, and the outdated-Skill notice.
   - Large Crawls in v0.1: the Skill starts a Crawl with `crawl --detach`, follows it with `status`, queries it with `issues` and `sql` while it runs, ends it with `stop`, and continues an interrupted one with `resume`. Whether it also passes `--max-urls` is decided when 080 is re-grounded.
   - `doctor`, whose TLS check uses 022's TLS setup.
@@ -259,7 +259,7 @@ If a change needs something another change owns, it depends on that change inste
   - A GitHub Actions workflow triggered by `v*` tags: the test suite, the sdist and wheel built with `uv build`, publishing to PyPI through trusted publishing, and a GitHub release with them.
   - The release gates: the tag matches the package version, and the committed Skill copy matches the generator's output (moved from 100).
   - The documented install with `uv tool install` or `pipx` (moved from 100).
-  - An install smoke check instead of a pin test: on Windows, macOS and Linux, the workflow installs the built wheel with uv on the Python version from `.python-version` (3.14), then runs `spider --version` and `spider doctor`.
+  - An install smoke check instead of a pin test: on Windows, macOS and Linux, the workflow installs the built wheel with uv on the Python version from `.python-version` (3.14), then runs `linx --version` and `linx doctor`.
   - **(v0.1.1)** The `.mcpb` bundle that 090 builds, attached to every GitHub release.
 - **100-add-installers** (v0.2):
   - `install.sh` and `install.ps1`: pin Python 3.14, run `doctor`, and ask before installing the Skill. They are attached to 085's GitHub release.
@@ -268,7 +268,7 @@ If a change needs something another change owns, it depends on that change inste
   - Crawl Diff (`diff A B`), pulled forward from v0.3. The diff Report stays in v0.3.
   - `--fail-on <issue|warning|opportunity>`: a non-zero exit when the new Crawl has new Issues of that Issue Type or a more severe one, compared with a baseline Crawl. The exit code is decided when 110 is drafted.
   - CI output formats besides the exit code: SARIF, JUnit XML and GitHub Actions annotations.
-  - A composite GitHub Action: install spider, crawl a staging site or localhost, diff against a baseline crawl file kept as a CI artifact, and fail the job.
+  - A composite GitHub Action: install OpenLinx, crawl a staging site or localhost, diff against a baseline crawl file kept as a CI artifact, and fail the job.
   - Depends on 024 (List mode, to re-crawl a URL list) and on 040's Issues.
 
 ### Columns that stay null until they are measured
@@ -289,7 +289,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 | 090 | `090-add-mcp-server` | `mcp-server`; modifies `agent-skill` and 085's release capability | `mcp` (+ MCP tools) | planned |
 
 - **090-add-mcp-server**:
-  - `spider mcp --workspace <path>`.
+  - `linx mcp --workspace <path>`.
   - **Tools:** the foreground and the detached crawl, `status` and `stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues`, `sql` and `rules`, plus `schema` and `doctor`.
   - `resume`. **(v0.2)** the tools of the v0.2 Commands: the dry run, `crawls list`, List and Sitemap modes, and the `report` and `report_brief` tools with inline Report Notes, which come with 070.
   - Errors use 010's full diagnostic shape.
@@ -354,8 +354,8 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 ## v0.3: comparison and content
 
 - The diff Report. Crawl Diff itself (`diff A B`) moved to v0.2 with 110.
-- Custom Extraction (CSS, XPath, regex; configured in `spider.toml`).
-- **User SQL Rules**, stage 1: user Rules written as read-only SQL over the public schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)), with Rule metadata (Issue Type, Priority, description, how to fix). They are kept in `spider.toml` or in rule files, and can be shared as Rule packs. Stage 1 reuses 040's mechanism, where every built-in Rule already ships its SQL query. Stage 2, Python plugins, comes only after v1.0 (see Backlog).
+- Custom Extraction (CSS, XPath, regex; configured in `openlinx.toml`).
+- **User SQL Rules**, stage 1: user Rules written as read-only SQL over the public schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)), with Rule metadata (Issue Type, Priority, description, how to fix). They are kept in `openlinx.toml` or in rule files, and can be shared as Rule packs. Stage 1 reuses 040's mechanism, where every built-in Rule already ships its SQL query. Stage 2, Python plugins, comes only after v1.0 (see Backlog).
 - Near-Duplicates (our own MinHash) with `duplicates [--exact|--near]`.
 - Offline structured-data validation (schema.org plus Google's rules for about 10 types, stored as YAML) with `structured-data`. v0.2's Rules pack checks only the required fields.
 
@@ -374,14 +374,14 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 - **Test names that call a Checked URL a check:** in `tests/crawl/test_depth.py` and `tests/crawl/test_hooks.py`, rename them with the glossary term.
 - **More site metrics:** after v0.1, decide which site-level measurements to add beyond the standard technical-audit columns. Nothing is chosen yet.
 
-- **Data import (high priority, before Integrations):** `spider import <file> --as <table>` loads a CSV, such as a Search Console or a backlink tool export, into the crawl file as an extra table. Agents can then join it with crawl data in SQL and rank Issues by traffic. It is a cheap, agent-first alternative to OAuth integrations, and suits agents that already have Search Console or backlink data through MCP servers.
+- **Data import (high priority, before Integrations):** `linx import <file> --as <table>` loads a CSV, such as a Search Console or a backlink tool export, into the crawl file as an extra table. Agents can then join it with crawl data in SQL and rank Issues by traffic. It is a cheap, agent-first alternative to OAuth integrations, and suits agents that already have Search Console or backlink data through MCP servers.
 - **Report formats:** PDF, report translations.
 - **Integrations:** Google Search Console (including URL Inspection), GA4, PageSpeed Insights / Core Web Vitals, a backlink data provider. Data import comes first.
 - **New interfaces:** REST API and web UI.
 - **More analysis:** RDFa, accessibility beyond v0.2's Rules pack, spelling, screenshots, more rich-result types.
 - **Rule plugins (after v1.0 only):** stage 2 of User SQL Rules (v0.3): Rules as Python entry-point plugins, once the internal APIs are stable.
 - **Crawl operation:** scheduled or distributed Crawls.
-- **One source for each crawl setting:** generate `spider crawl`'s options from `CrawlSettings`' fields, so help and default are stated once.
+- **One source for each crawl setting:** generate `linx crawl`'s options from `CrawlSettings`' fields, so help and default are stated once.
 - **Community Skill workflow packs:** workflows such as an e-commerce audit or a migration check, contributed as Markdown through the plugin marketplace.
 - **Distribution:** signed standalone binaries and winget.
 - **Code quality checks (to weigh, nothing decided):** the aim is to stop agent-written functions and modules from growing, without a second linter as a gate.

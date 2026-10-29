@@ -16,14 +16,14 @@ Scenario conventions:
 ## ADDED Requirements
 
 ### Requirement: User agent
-Every request, including robots.txt, SHALL carry the `User-Agent` header `spider/<version> (+<project URL>)` by default, where `<version>` is the tool's version. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request.
+Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLinx/<version> (+<project URL>)` by default, where `<version>` is the tool's version. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request.
 
 #### Scenario: The default user agent identifies the tool
-- **WHEN** `spider crawl {site}/` runs
-- **THEN** every request the fixture site receives has a `User-Agent` that matches `^spider/\d+\.\d+\.\d+\S* \(\+https://\S+\)$`
+- **WHEN** `linx crawl {site}/` runs
+- **THEN** every request the fixture site receives has a `User-Agent` that matches `^OpenLinx/\d+\.\d+\.\d+\S* \(\+https://\S+\)$`
 
 #### Scenario: A custom user agent is used on every request
-- **WHEN** `spider crawl {site}/ --user-agent "AuditBot/1.0"` runs
+- **WHEN** `linx crawl {site}/ --user-agent "AuditBot/1.0"` runs
 - **THEN** every request the fixture site receives, including the one for `/robots.txt`, has `User-Agent` = `AuditBot/1.0`
 
 ### Requirement: Custom headers
@@ -32,38 +32,38 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `spider
 `--header` and `crawl.header` SHALL be declared a header secret. `015-add-crawl-store` then records the value of every sensitive header as `Name: ***`: `Cookie`, and every header whose name contains `auth`, `token`, `secret`, `key` or `password`.
 
 #### Scenario: A custom header is sent to Internal URLs
-- **WHEN** `spider crawl {site}/ --header "X-Env: staging"` runs
+- **WHEN** `linx crawl {site}/ --header "X-Env: staging"` runs
 - **THEN** the request for `/` has the header `X-Env` = `staging`
 
 #### Scenario: A custom header never goes to External URLs
-- **WHEN** `http://site.test/` links to `http://other.test/page`, and `spider crawl http://site.test/ --header "X-Env: staging"` runs
+- **WHEN** `http://site.test/` links to `http://other.test/page`, and `linx crawl http://site.test/ --header "X-Env: staging"` runs
 - **THEN** the request for `http://other.test/page` has no `X-Env` header
 
 #### Scenario: A malformed header is rejected
-- **WHEN** `spider crawl {site}/ --header "NoColon"` runs
+- **WHEN** `linx crawl {site}/ --header "NoColon"` runs
 - **THEN** the Command exits with code 2 and its only stderr error has `code` = `invalid_value`
 
 #### Scenario: A cookie header keeps its name and hides its value
-- **WHEN** `spider crawl {site}/ --header "Cookie: session=abc123"` ends
+- **WHEN** `linx crawl {site}/ --header "Cookie: session=abc123"` ends
 - **THEN** the `crawl` table of `crawl.config` has `"header": ["Cookie: ***"]`
 
 ### Requirement: HTTP basic authentication
-**(v0.2)** `--auth <user:password>` (setting `crawl.auth`, marked secret) SHALL send HTTP basic authentication preemptively with every request for an Internal URL and its robots.txt, never with requests for External URLs. The setting SHALL also be accepted from `spider.toml`. `015-add-crawl-store` records it as `***`.
+**(v0.2)** `--auth <user:password>` (setting `crawl.auth`, marked secret) SHALL send HTTP basic authentication preemptively with every request for an Internal URL and its robots.txt, never with requests for External URLs. The setting SHALL also be accepted from `openlinx.toml`. `015-add-crawl-store` records it as `***`.
 
 #### Scenario: Credentials are sent to Internal URLs
-- **WHEN** `spider crawl http://site.test/ --auth "alice:s3cret"` runs
+- **WHEN** `linx crawl http://site.test/ --auth "alice:s3cret"` runs
 - **THEN** the request for `http://site.test/` has `Authorization` = `Basic YWxpY2U6czNjcmV0`
 
 #### Scenario: Credentials never go to External URLs
-- **WHEN** `http://site.test/` links to `http://other.test/page`, and `spider crawl http://site.test/ --auth "alice:s3cret"` runs
+- **WHEN** `http://site.test/` links to `http://other.test/page`, and `linx crawl http://site.test/ --auth "alice:s3cret"` runs
 - **THEN** the request for `http://other.test/page` has no `Authorization` header
 
 #### Scenario: The recorded command hides the password
-- **WHEN** `spider crawl {site}/ --auth "alice:s3cret"` ends
-- **THEN** `crawl.command_argv` is `["spider", "crawl", "{site}/", "--auth", "***"]`
+- **WHEN** `linx crawl {site}/ --auth "alice:s3cret"` ends
+- **THEN** `crawl.command_argv` is `["linx", "crawl", "{site}/", "--auth", "***"]`
 
-#### Scenario: Credentials in spider.toml are used
-- **WHEN** `spider.toml` holds `[crawl]` with `auth = "alice:s3cret"`, and `spider crawl http://site.test/` runs
+#### Scenario: Credentials in openlinx.toml are used
+- **WHEN** `openlinx.toml` holds `[crawl]` with `auth = "alice:s3cret"`, and `linx crawl http://site.test/` runs
 - **THEN** the request for `http://site.test/` has `Authorization` = `Basic YWxpY2U6czNjcmV0`
 
 ### Requirement: Proxy
@@ -79,38 +79,38 @@ The proxy variables are honoured from v0.1. This is the exception to the no-envi
 The password in a proxy URL SHALL be marked partly secret, whether it comes from `--proxy` or from a variable, and `015-add-crawl-store` records it as `http://<user>:***@<host>:<port>`. The proxy variables in use SHALL be recorded, set ones only, in the `environment` table of `crawl.config` under the lower-case keys `http_proxy`, `https_proxy` and `no_proxy`.
 
 #### Scenario: Requests go through the proxy
-- **WHEN** a test proxy listens on `127.0.0.1:{proxy_port}`, and `spider crawl http://site.test/ --proxy http://127.0.0.1:{proxy_port}` runs
+- **WHEN** a test proxy listens on `127.0.0.1:{proxy_port}`, and `linx crawl http://site.test/ --proxy http://127.0.0.1:{proxy_port}` runs
 - **THEN** the test proxy receives a request for `http://site.test/`
 
 #### Scenario: The HTTP_PROXY variable is honoured
-- **WHEN** `HTTP_PROXY` is `http://127.0.0.1:{proxy_port}`, and `spider crawl http://site.test/` runs
+- **WHEN** `HTTP_PROXY` is `http://127.0.0.1:{proxy_port}`, and `linx crawl http://site.test/` runs
 - **THEN** the test proxy receives a request for `http://site.test/`
 
 #### Scenario: A lower-case proxy variable is honoured
-- **WHEN** `http_proxy` is `http://127.0.0.1:{proxy_port}`, and `spider crawl http://site.test/` runs
+- **WHEN** `http_proxy` is `http://127.0.0.1:{proxy_port}`, and `linx crawl http://site.test/` runs
 - **THEN** the test proxy receives a request for `http://site.test/`
 
 #### Scenario: NO_PROXY bypasses the proxy
-- **WHEN** `HTTP_PROXY` is `http://127.0.0.1:{proxy_port}`, `NO_PROXY` is `site.test`, and `spider crawl http://site.test/` runs
+- **WHEN** `HTTP_PROXY` is `http://127.0.0.1:{proxy_port}`, `NO_PROXY` is `site.test`, and `linx crawl http://site.test/` runs
 - **THEN** the test proxy receives no request, and the fixture site receives the request for `/`
 
 #### Scenario: The proxy flag overrides the proxy variables
-- **WHEN** `HTTP_PROXY` is `http://127.0.0.1:{proxy_port_a}`, and `spider crawl http://site.test/ --proxy http://127.0.0.1:{proxy_port_b}` runs
+- **WHEN** `HTTP_PROXY` is `http://127.0.0.1:{proxy_port_a}`, and `linx crawl http://site.test/ --proxy http://127.0.0.1:{proxy_port_b}` runs
 - **THEN** the test proxy on `{proxy_port_b}` receives a request for `http://site.test/`, and the one on `{proxy_port_a}` receives none
 
 #### Scenario: A proxy password is redacted
-- **WHEN** `spider crawl {site}/ --proxy http://u:pw@127.0.0.1:{proxy_port}` ends
+- **WHEN** `linx crawl {site}/ --proxy http://u:pw@127.0.0.1:{proxy_port}` ends
 - **THEN** `crawl.command_argv` contains `http://u:***@127.0.0.1:{proxy_port}`
 
 #### Scenario: A proxy password from a variable is redacted
-- **WHEN** `HTTP_PROXY` is `http://u:pw@127.0.0.1:{proxy_port}`, and `spider crawl http://site.test/` ends
+- **WHEN** `HTTP_PROXY` is `http://u:pw@127.0.0.1:{proxy_port}`, and `linx crawl http://site.test/` ends
 - **THEN** the `environment` table of `crawl.config` has `http_proxy` = `http://u:***@127.0.0.1:{proxy_port}`
 
 ### Requirement: No cookies are sent
 The Crawl SHALL NOT send cookies that responses set. After a response with `Set-Cookie`, no later request SHALL carry a `Cookie` header unless `--header "Cookie: …"` asks for one.
 
 #### Scenario: Cookies set by the site are not sent back
-- **WHEN** `/` answers with `Set-Cookie: sid=abc123` and links to `/check`, and `spider crawl {site}/` runs
+- **WHEN** `/` answers with `Set-Cookie: sid=abc123` and links to `/check`, and `linx crawl {site}/` runs
 - **THEN** the request for `/check` has no `Cookie` header
 
 ### Requirement: Timeouts
@@ -119,7 +119,7 @@ A request attempt that has not completed within `--timeout` seconds (default 20,
 A timeout is a request without an HTTP response, so it counts towards the network pause of `020-add-crawl-core`. When every attempt at an origin's robots.txt times out, the origin's URLs SHALL be recorded with `fetch_error` = `timeout` without a request, as `020-add-crawl-core` records the URLs behind a robots.txt that got no HTTP response; a robots.txt that answers 5xx or 429 after the retries stays `robots_unreachable`.
 
 #### Scenario: A hanging response times out
-- **WHEN** `/` links to `/hang`, which never answers, and `spider crawl {site}/ --timeout 1 --retries 0` runs
+- **WHEN** `/` links to `/hang`, which never answers, and `linx crawl {site}/ --timeout 1 --retries 0` runs
 - **THEN** `{site}/hang` has `fetch_state` = `error` and `fetch_error` = `timeout`
 
 ### Requirement: Retries with backoff
@@ -196,7 +196,7 @@ It also adds this index to `urls`, built while the Crawl writes:
 - **THEN** `{site}/new` has `crawl_depth` = 1 and `discovered_via` = `redirect`
 
 #### Scenario: A redirect to an excluded URL is not followed
-- **WHEN** `/` links to `/go`, `/go` returns 302 to `/logout`, and `spider crawl {site}/ --exclude "/logout"` runs
+- **WHEN** `/` links to `/go`, `/go` returns 302 to `/logout`, and `linx crawl {site}/ --exclude "/logout"` runs
 - **THEN** `{site}/logout` has `skip_reason` = `excluded`
 
 #### Scenario: A redirect to an External URL is checked
@@ -204,22 +204,22 @@ It also adds this index to `urls`, built while the Crawl writes:
 - **THEN** `http://other.test/landing` has `fetch_state` = `fetched` and `parsed` = 0
 
 #### Scenario: Index of redirect targets
-- **WHEN** `spider schema urls --fields indexes` runs
+- **WHEN** `linx schema urls --fields indexes` runs
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"urls_redirect_url_id","columns":["redirect_url_id"],"unique":false,"where":"redirect_url_id IS NOT NULL"}`
 
 ### Requirement: A Seed that redirects within its site extends the Scope
 When a Seed's Redirect Chain ends on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. When the chain ends on another registrable domain, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_off_site` warning whose hint contains the final URL of the chain.
 
 #### Scenario: A www Seed that redirects to its apex keeps the apex inside the Scope
-- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `spider crawl http://www.site.test/` runs
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `linx crawl http://www.site.test/` runs
 - **THEN** `http://site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1
 
 #### Scenario: A redirect to another subdomain stays inside the Scope
-- **WHEN** `http://site.test/` redirects with 301 to `http://en.site.test/`, which links to `/a`, and `spider crawl http://site.test/` runs
+- **WHEN** `http://site.test/` redirects with 301 to `http://en.site.test/`, which links to `/a`, and `linx crawl http://site.test/` runs
 - **THEN** `http://en.site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1, and `crawl.scope` lists `en.site.test` among its hosts
 
 #### Scenario: A redirect to another site is reported
-- **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `spider crawl http://site.test/` runs
+- **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `linx crawl http://site.test/` runs
 - **THEN** the result's `warnings` hold an entry with code `seed_redirected_off_site` whose `hint` contains `http://other.test/`
 
 ### Requirement: Redirect hop limit
@@ -286,7 +286,7 @@ Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Ac
 | `transferred_bytes` | INTEGER | yes | | The body size as transferred, before decoding |
 
 #### Scenario: Requests accept compressed bodies
-- **WHEN** `spider crawl {site}/` runs
+- **WHEN** `linx crawl {site}/` runs
 - **THEN** the request for `/` has `Accept-Encoding` = `gzip, deflate, br`
 
 #### Scenario: A compressed Resource records both sizes
@@ -321,19 +321,19 @@ This change adds this column to `origins` in v0.1. Its description SHALL start w
 From v0.2, for every https origin it requests, the Crawl SHALL make one TLS handshake that offers the ALPN protocols `h2` and `http/1.1`. It SHALL record `origins.http_version` as `http_2` when `h2` is selected, and `http_1_1` otherwise. For http origins it SHALL record `http_1_1`. When the handshake fails, `http_version` SHALL be NULL and the Crawl SHALL go on.
 
 #### Scenario: The HTTP version is a later column
-- **WHEN** `spider schema origins` runs
+- **WHEN** `linx schema origins` runs
 - **THEN** the column `http_version` has `nullable` `true`, `values` `["http_2","http_1_1"]`, and a `description` that starts with `Filled from v0.2. `
 
 #### Scenario: An origin that selects HTTP/2
-- **WHEN** `https://site.test` is served by a TLS listener that selects `h2`, and `spider crawl https://site.test/` runs
+- **WHEN** `https://site.test` is served by a TLS listener that selects `h2`, and `linx crawl https://site.test/` runs
 - **THEN** the `origins` row for `https://site.test` has `http_version` = `http_2`
 
 #### Scenario: An origin that offers only HTTP/1.1
-- **WHEN** `https://site.test` is served by a TLS listener that offers only `http/1.1`, and `spider crawl https://site.test/` runs
+- **WHEN** `https://site.test` is served by a TLS listener that offers only `http/1.1`, and `linx crawl https://site.test/` runs
 - **THEN** the `origins` row for `https://site.test` has `http_version` = `http_1_1`
 
 #### Scenario: A plain http origin
-- **WHEN** `spider crawl {site}/` runs
+- **WHEN** `linx crawl {site}/` runs
 - **THEN** the `origins` row for `{site}` has `http_version` = `http_1_1`
 
 ### Requirement: The response_headers table
@@ -353,15 +353,15 @@ Cookie values SHALL never be stored. They SHALL be redacted in this exact format
 Header names, cookie names, attributes, and the order of the headers SHALL be kept.
 
 #### Scenario: Columns of response_headers
-- **WHEN** `spider schema response_headers` runs
+- **WHEN** `linx schema response_headers` runs
 - **THEN** the item's columns, reduced to `name`, `type`, `nullable`, `primary_key` and `references`, are `[{"name":"url_id","type":"INTEGER","nullable":false,"primary_key":true,"references":"urls.id"},{"name":"headers","type":"TEXT","nullable":false,"primary_key":false,"references":null}]`, and its `indexes` are `[]`
 
 #### Scenario: Response headers are stored as received
-- **WHEN** `/` returns the header `X-Robots-Tag: noindex`, and `spider crawl {site}/` runs
+- **WHEN** `/` returns the header `X-Robots-Tag: noindex`, and `linx crawl {site}/` runs
 - **THEN** the `headers` of `{site}/` in `response_headers` contain the pair `["X-Robots-Tag", "noindex"]`
 
 #### Scenario: A cookie value is not stored
-- **WHEN** `/` returns the header `Set-Cookie: sid=abc123; Path=/; HttpOnly`, and `spider crawl {site}/` ends
+- **WHEN** `/` returns the header `Set-Cookie: sid=abc123; Path=/; HttpOnly`, and `linx crawl {site}/` ends
 - **THEN** the `headers` of `{site}/` contain the pair `["Set-Cookie", "sid=***; Path=/; HttpOnly"]`, and the bytes of the Crawl's files do not contain `abc123`
 
 #### Scenario: A Cookie header is redacted pair by pair

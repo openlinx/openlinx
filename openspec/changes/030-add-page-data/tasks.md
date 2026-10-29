@@ -10,11 +10,11 @@ There are no schema-first slices. A table or column is added in the slice whose 
 
 **The thin slice** (ROADMAP, Build order) is groups 1–3: the Page rows, titles, meta descriptions and headings that `040`-min's first Rules read (`title-missing` and `h1-missing`; its response-code Rules read only `urls`). None of them reads Indexability, so group 7 widens with the rest. Groups 4–12 widen the change after `022`-min, whose size and redirect columns group 4 copies.
 
-Rows and units follow `020` D9 and D14: the handler returns frozen row values declared in `spider.store`, all or none, and `spider.store.pages` and `spider.store.links` write them through the row writers they register in `020`'s `Hooks.row_writers` with statements built once (`017` D9). Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
+Rows and units follow `020` D9 and D14: the handler returns frozen row values declared in `openlinx.store`, all or none, and `openlinx.store.pages` and `openlinx.store.links` write them through the row writers they register in `020`'s `Hooks.row_writers` with statements built once (`017` D9). Each new writer, and the inlink pass, gets a seam-2 test that forces a replay with `replay_now(writer)` (`017` D7).
 
 ## 1. Page rows end to end (slice)
 
-- [ ] 1.1 Drive "HTML response becomes a Page" at seam 3+6. Add the Page handler to `default_hooks()`: a pure function from `020-add-crawl-core`'s `UrlResult` to a Page row. Create `spider.store.pages`, which declares `pages` with `url_id` (references `urls.id`) and `address`, and registers the Page row's writer.
+- [ ] 1.1 Drive "HTML response becomes a Page" at seam 3+6. Add the Page handler to `default_hooks()`: a pure function from `020-add-crawl-core`'s `UrlResult` to a Page row. Create `openlinx.store.pages`, which declares `pages` with `url_id` (references `urls.id`) and `address`, and registers the Page row's writer.
 - [ ] 1.2 Drive "Indexes of pages" at seam 6, and add the unique index `pages_address` with the query it serves.
 - [ ] 1.3 Drive "Image response is not a Page" at seam 3+6.
 - [ ] 1.4 Drive "URL blocked by robots.txt is not a Page" and "URL without a response is not a Page" at seam 3+6. This is a trivial pair: both expect no row.
@@ -23,7 +23,7 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 
 ## 2. Decoding, text and titles (slice)
 
-- [ ] 2.1 Drive "Charset declared in a meta element" at seam 4. Create the Page extractor entry point, registered on `020-add-crawl-core`'s extractor seam, with charset decoding through `020`'s `decode_html` (`spider.crawl.decoding`), never a decoder of its own. Add `title_1`.
+- [ ] 2.1 Drive "Charset declared in a meta element" at seam 4. Create the Page extractor entry point, registered on `020-add-crawl-core`'s extractor seam, with charset decoding through `020`'s `decode_html` (`openlinx.crawl.decoding`), never a decoder of its own. Add `title_1`.
 - [ ] 2.2 Drive "Whitespace is collapsed before measuring" at seam 4. Add the element-text algorithm and whitespace normalisation, and `title_1_length`.
 - [ ] 2.3 Drive "Title in SVG is ignored" at seam 4, and add `title_count` and `title_2`.
 - [ ] 2.4 Drive "Second title element" at seam 4, and add `title_2_length`.
@@ -124,7 +124,7 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 ## 10. Link attributes
 
 - [ ] 10.1 Check: the links benchmark, before `links` is declared. If `026` has already run this benchmark and rule (ROADMAP, 026), take its recorded choice instead, and only check that `docs/benchmarks.md` records it and that D4's Storage bullet names it. Otherwise run four layouts at 20,000 Pages, interleaved A B C D D C B A: A, a rowid table with indexes on `target_url_id` and `(type, target_url_id)`; B, `WITHOUT ROWID` with the same indexes; C, `WITHOUT ROWID` with one index on `(target_url_id, type)`; D, narrow rows with a `link_attributes` dictionary keyed by a 64-bit blake2b hash, read through a `links` view. Choose by the rule recorded before the runs: D wins only with at least 30% fewer link bytes, at most 10% fewer Pages/s, and an inlink query p95 under 100 ms while the Crawl writes; otherwise the fastest of A, B and C within 5% wins, and the smaller file on a tie. Done when: the "Links layout" section of `docs/benchmarks.md` records the machine, the runs and the choice, and design D4's Storage bullet names the chosen layout. If D wins, 10.2 also verifies the 8-byte key on insert and clears D's attribute cache on rollback, through a writer hook that this change adds to `017`'s writer.
-- [ ] 10.2 Drive "Hyperlink with rel flags" at seam 4. Enrich `020-add-crawl-core`'s `DiscoveredLink` values. Create `spider.store.links` with the Link row's writer, and `links` with `source_url_id`, `ordinal`, `target_url_id`, `type`, `declared_in`, `anchor_text`, `rel` and the three `rel_*` flags, keyed by `(source_url_id, ordinal)`, with `ordinal` and the `rel` tokens taken from `DiscoveredLink` as `020` gives them. Its layout and secondary indexes follow the links benchmark (task 10.1).
+- [ ] 10.2 Drive "Hyperlink with rel flags" at seam 4. Enrich `020-add-crawl-core`'s `DiscoveredLink` values. Create `openlinx.store.links` with the Link row's writer, and `links` with `source_url_id`, `ordinal`, `target_url_id`, `type`, `declared_in`, `anchor_text`, `rel` and the three `rel_*` flags, keyed by `(source_url_id, ordinal)`, with `ordinal` and the `rel` tokens taken from `DiscoveredLink` as `020` gives them. Its layout and secondary indexes follow the links benchmark (task 10.1).
 - [ ] 10.3 Drive "Image alt attribute absent or empty" at seam 4, and add `element`, `attribute` and `alt_text`.
 - [ ] 10.4 Drive "Image-only anchor takes the alt text" at seam 4.
 - [ ] 10.5 Drive "Every occurrence is stored" at seam 4.
@@ -133,14 +133,14 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 - [ ] 10.8 Drive "Links declared in a header" at seam 4.
 - [ ] 10.9 Drive "Discovered URLs are the stored Link targets" at seam 3+6. Write Links from analysed Pages, and return the header Links of other responses from the handler.
 - [ ] 10.10 Drive "Link types are an enumeration" at seam 6 (`values` on `links.type`).
-- [ ] 10.11 Check: the writer's capacity on the chosen `links` layout (`017` D11, moved here from `017`, which records only a 5k-Page smoke run; decided 2026-10-11). Switch `scripts/writer_throughput.py` from its provisional `links` table to the declaration in `spider.store.links`, imported with its key, layout and secondary indexes and never copied into the script, so the check cannot drift from the declared layout; run it at 20,000 Pages on the maintainer's machine, and restate D11's floor (Pages/s, WAL peak, RSS) from that run, in the script and in the "Writer capacity" section of `docs/benchmarks.md`. Done when: the run passes the restated floor, and the section records the machine, the numbers and the layout. If Pages/s falls well below `017`'s 17.2–18.0 on the provisional layout, the work stops and is reported before the floor is lowered.
+- [ ] 10.11 Check: the writer's capacity on the chosen `links` layout (`017` D11, moved here from `017`, which records only a 5k-Page smoke run; decided 2026-10-11). Switch `scripts/writer_throughput.py` from its provisional `links` table to the declaration in `openlinx.store.links`, imported with its key, layout and secondary indexes and never copied into the script, so the check cannot drift from the declared layout; run it at 20,000 Pages on the maintainer's machine, and restate D11's floor (Pages/s, WAL peak, RSS) from that run, in the script and in the "Writer capacity" section of `docs/benchmarks.md`. Done when: the run passes the restated floor, and the section records the machine, the numbers and the layout. If Pages/s falls well below `017`'s 17.2–18.0 on the provisional layout, the work stops and is reported before the floor is lowered.
 - [ ] 10.12 Drive "A Page whose Page extractor failed keeps its response data and Links" at seam 3+6, through the Crawl Service with a raising extractor under the Page extractor's name in `default_hooks()`: the handler writes the `pages` row with the extractor's HTML-derived columns NULL, takes the directive verdicts, the canonical and `indexability`'s other inputs from `PageInput` and the prepared record, and writes the `links` rows from `DiscoveredLink` (design D2).
 - [ ] 10.13 Docs: add the Link columns, the boundary with `020`'s Link discovery, and what a failed Page extractor leaves (`parse_error` = `extractor_error`) to `docs/page-data.md`.
 - [ ] 10.14 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
 
 ## 11. Link counts and Folder Depth
 
-- [ ] 11.1 Drive "Counts for a linked Page" at seam 3+6 on a four-Page fixture site. Add the outlink columns (written with each Page), and the inlink columns with `linking_pages_pct`, computed by the inlink pass, a store function in `spider.store.links` that `default_hooks()` lists before `040`'s pass. The inlink columns get `Derived: ` descriptions, which "Inlink columns are derived" checks at seam 6 in the same slice.
+- [ ] 11.1 Drive "Counts for a linked Page" at seam 3+6 on a four-Page fixture site. Add the outlink columns (written with each Page), and the inlink columns with `linking_pages_pct`, computed by the inlink pass, a store function in `openlinx.store.links` that `default_hooks()` lists before `040`'s pass. The inlink columns get `Derived: ` descriptions, which "Inlink columns are derived" checks at seam 6 in the same slice.
 - [ ] 11.2 Drive "Repeated inlinks from one source" at seam 3+6.
 - [ ] 11.3 Drive "Inlinks are NULL while the Crawl runs" at seam 3+6.
 - [ ] 11.4 Drive "Folder depth" at seam 4, and add `folder_depth`.
@@ -188,7 +188,7 @@ Rows and units follow `020` D9 and D14: the handler returns frozen row values de
 - [ ] 15.3 (v0.2) Drive "The flag stores every Page's HTML" at seam 3+6. Add `--store-html`, store zstd frames with `zstandard`, and record the decision as `store_html`.
 - [ ] 15.4 (v0.2) Drive "Stored HTML is byte-identical" at seam 3+6.
 - [ ] 15.5 (v0.2) Drive "HTML storage turned off" at seam 1 plus a store-contract read, and add `--no-store-html`.
-- [ ] 15.6 (v0.2) Drive "Flag overrides spider.toml" at seam 1 plus a store-contract read, and add `[crawl] store_html`.
+- [ ] 15.6 (v0.2) Drive "Flag overrides openlinx.toml" at seam 1 plus a store-contract read, and add `[crawl] store_html`.
 - [ ] 15.7 (v0.2) Drive "Encoding of stored HTML" at seam 3+6.
 - [ ] 15.8 (v0.2) Docs: add the storage decision, what `resume` keeps, and how to decompress a stored frame to `docs/page-data.md`. Drop the `Filled from v0.2. ` prefix from the descriptions of `page_sources` and `pages.http_version`, and take `http_version` out of the list of later columns in the spec.
 - [ ] 15.9 (v0.2) Review: run the code-review skill on group 15's commits, then refactor with the whole suite green.

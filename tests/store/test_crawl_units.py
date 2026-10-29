@@ -1,14 +1,14 @@
-"""The units of spider.store.crawls that a Crawl runs (020-add-crawl-core D10, D14; seam 2)."""
+"""The units of openlinx.store.crawls that a Crawl runs (020-add-crawl-core D10, D14; seam 2)."""
 
 import json
 from datetime import UTC, datetime
 
 import pytest
 
-from spider.store.crawls import crawl_summary, record_continue, record_state, record_warnings
-from spider.store.records import CrawlSummary
-from spider.store.transitions import CrawlStateError
-from spider.store.writer import CrawlWriter
+from openlinx.store.crawls import crawl_summary, record_continue, record_state, record_warnings
+from openlinx.store.records import CrawlSummary
+from openlinx.store.transitions import CrawlStateError
+from openlinx.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
 from tests.support.crawling import stopped_with_an_error
 from tests.support.crawls import crawl_row, create_any_crawl, query

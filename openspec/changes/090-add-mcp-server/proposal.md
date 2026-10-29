@@ -8,7 +8,7 @@ This change is **v0.1.1**, the first change after v0.1, as the maintainer decide
 
 > **v0.1.1 scope (2026-10-05, see ROADMAP.md):** the tools for the foreground and the detached crawl in Spider mode, `crawl_status`, `crawl_stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues`, `sql` and `rules`, plus `schema` and `doctor`. **Deferred to v0.2:** `crawl_resume`, `crawls_list`, `dry_run`, the `urls` and `sitemap` inputs (`024`), `page`'s `html`, the `report` and `report_brief` tools with inline Report Notes (`070`), and the dry-run and Hand-off guardrails in the server instructions.
 
-- **New Command `spider mcp [--workspace <path>]`.** It runs a local stdio MCP server built on the MCP Python SDK `mcp` 2.x (`MCPServer`). Its tools mirror the crawl-control, query and report Commands:
+- **New Command `linx mcp [--workspace <path>]`.** It runs a local stdio MCP server built on the MCP Python SDK `mcp` 2.x (`MCPServer`). Its tools mirror the crawl-control, query and report Commands:
 
   | Tool | Equivalent Command |
   |---|---|
@@ -37,20 +37,20 @@ This change is **v0.1.1**, the first change after v0.1, as the maintainer decide
   - **Long Crawls** run detached, and the agent polls `crawl_status`.
   - **`sql`** is read-only.
   - **Writes:** no tool writes outside the Workspace, except the Report's `dest` folder.
-- **The Workspace** is fixed when the server starts. It is the `--workspace` argument, or else the one that the rules of `010-add-workspace-and-cli-contract` find from the server's working folder, ending at the global Workspace `~/.spider/`. No environment variable is read.
-- **Inline Report Notes.** `report` accepts `notes` inline, because Claude Desktop cannot write files. The notes are stored in the Crawl's reports folder (`.spider/reports/<crawl-id>/notes/`), so `crawls rm` removes them along with the Report.
+- **The Workspace** is fixed when the server starts. It is the `--workspace` argument, or else the one that the rules of `010-add-workspace-and-cli-contract` find from the server's working folder, ending at the global Workspace `~/.openlinx/`. No environment variable is read.
+- **Inline Report Notes.** `report` accepts `notes` inline, because Claude Desktop cannot write files. The notes are stored in the Crawl's reports folder (`.openlinx/reports/<crawl-id>/notes/`), so `crawls rm` removes them along with the Report.
 - **Server instructions** carry the agent guardrails for clients that have no Skill:
   - dry run first
   - Hand-off for estimates above 5,000 URLs or `null`
   - polling
   - untrusted crawled text
-- **A Claude Desktop bundle, `spider-<version>.mcpb`.**
-  - It uses manifest version 0.4 and server type `uv`, and runs `spider mcp --workspace <folder>` on Python 3.14.
+- **A Claude Desktop bundle, `openlinx-<version>.mcpb`.**
+  - It uses manifest version 0.4 and server type `uv`, and runs `linx mcp --workspace <folder>` on Python 3.14.
   - The folder comes from the bundle's `workspace` setting, which defaults to the home folder.
   - `scripts/build_mcpb.py` builds it.
-- **The `.mcpb` in the release workflow of `085-add-release`:** the workflow runs `scripts/build_mcpb.py` and attaches `spider-<version>.mcpb` to the GitHub release, from v0.1.1 on.
+- **The `.mcpb` in the release workflow of `085-add-release`:** the workflow runs `scripts/build_mcpb.py` and attaches `openlinx-<version>.mcpb` to the GitHub release, from v0.1.1 on.
 - **No plugin config in this change.** The plugin `.mcp.json` comes with the plugin marketplace of `080-add-agent-skill` in v0.2.
-- **Outdated-Skill notice.** `spider mcp` joins the Commands that skip the notice of `080-add-agent-skill`, because its stderr is a client log.
+- **Outdated-Skill notice.** `linx mcp` joins the Commands that skip the notice of `080-add-agent-skill`, because its stderr is a client log.
 - **`docs/mcp.md`** gives a `.mcp.json` example and configuration snippets for Codex (`~/.codex/config.toml`), Cursor (`.cursor/mcp.json`), VS Code (`.vscode/mcp.json`), Gemini CLI (`~/.gemini/settings.json`) and Claude Code (`claude mcp add`).
 - **Small additions, confirmed by the maintainer:**
   - the `schema`, `rules` and `doctor` tools. Without the Skill, an agent needs `schema` to write SQL, `rules` for how-to-fix texts, and `doctor` to diagnose the server's own environment.
@@ -59,11 +59,11 @@ This change is **v0.1.1**, the first change after v0.1, as the maintainer decide
 ## Capabilities
 
 ### New Capabilities
-- `mcp-server`: `spider mcp`, its tools and their inputs and outputs, error mapping, Workspace selection, write confinement, server instructions, the `.mcpb` bundle, and the documented client configurations with the `.mcp.json` example.
+- `mcp-server`: `linx mcp`, its tools and their inputs and outputs, error mapping, Workspace selection, write confinement, server instructions, the `.mcpb` bundle, and the documented client configurations with the `.mcp.json` example.
 
 ### Modified Capabilities
 - The release capability of `085-add-release`, named when 085 is drafted: its workflow builds the `.mcpb` and attaches it to each GitHub release. The delta in `specs/installation/` moves there when this change is re-grounded.
-- `agent-skill`: `spider mcp` does not print the outdated-Skill notice.
+- `agent-skill`: `linx mcp` does not print the outdated-Skill notice.
 
 ## Non-goals
 
@@ -78,11 +78,11 @@ This change is **v0.1.1**, the first change after v0.1, as the maintainer decide
 
 ## Impact
 
-- **Code:** `src/spider/mcp/` (server, tool registry, schema derivation, error mapping) and `src/spider/cli/mcp.py`.
+- **Code:** `src/openlinx/mcp/` (server, tool registry, schema derivation, error mapping) and `src/openlinx/cli/mcp.py`.
 - **Packaging:** `packaging/mcpb/` (manifest template, bundle `pyproject.toml`, `.python-version`, entry script, icon) and `scripts/build_mcpb.py`.
 - **Repository files:** `docs/mcp.md`, with the `.mcp.json` example.
 - **Changed:** `085-add-release`'s release workflow and its list of release assets (the bundle), and the skip list of the outdated-Skill notice.
-- **Dependencies:** `mcp>=2.2,<3`, imported only by `spider mcp`. CI also runs `npx @anthropic-ai/mcpb` to validate the bundle manifest.
+- **Dependencies:** `mcp>=2.2,<3`, imported only by `linx mcp`. CI also runs `npx @anthropic-ai/mcpb` to validate the bundle manifest.
 - **Depends on:**
   - `010-add-workspace-and-cli-contract`: Workspace resolution, the diagnostic shape, exit codes and command metadata
   - `015-add-crawl-store`: `--crawl` and `schema`

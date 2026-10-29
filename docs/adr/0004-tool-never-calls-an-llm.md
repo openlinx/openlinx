@@ -6,7 +6,7 @@ In a Report, the numbers, charts and fix guidance come from the Crawl. The execu
 
 ## Considered Options
 
-- **Built-in LLM calls with a user-supplied API key** (such as a `spider ai …` command): rejected. It duplicates what the agent already does and brings in API keys, cost and non-determinism.
+- **Built-in LLM calls with a user-supplied API key** (such as a `linx ai …` command): rejected. It duplicates what the agent already does and brings in API keys, cost and non-determinism.
 
 ## Consequences
 

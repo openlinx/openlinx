@@ -23,19 +23,19 @@
   - The maintainer approved keeping all 42 Rules on 2026-09-27.
   - `http-url` is a Warning with High Priority, so it never lowers the Health Score.
   - Categories are snake_case enumeration values; Rule ids stay kebab-case.
-- **Configuration in `spider.toml`.** `[rules.<id>]` tables override thresholds (for example `max_chars = 70`) and disable Rules (`enabled = false`). An unknown Rule id, an unknown key or an invalid value is a `settings_invalid` error of `010-add-workspace-and-cli-contract` (exit code 3), checked when the settings load and reported with its dotted key.
+- **Configuration in `openlinx.toml`.** `[rules.<id>]` tables override thresholds (for example `max_chars = 70`) and disable Rules (`enabled = false`). An unknown Rule id, an unknown key or an invalid value is a `settings_invalid` error of `010-add-workspace-and-cli-contract` (exit code 3), checked when the settings load and reported with its dotted key.
 - **Evaluation.**
   - Every Rule is evaluated by its query; no Rule runs while a URL is recorded.
   - While a Crawl has no final pass (it is `running`, `failed` or `interrupted`), the Issues reader runs the queries live, read-only, and returns the shape of the stored Issues.
   - When a Crawl ends as `completed` or `stopped`, the post-crawl pass, after `030`'s link counts, writes each Rule's rows into `affected_urls` and then the Health Score. It runs again when a resumed Crawl ends.
   - The Rule configuration is fixed when a Crawl starts and recorded in the Crawl.
-- **New crawl-store tables and a view,** each with column descriptions shown by `spider schema` and documented in `docs/schema.md`:
+- **New crawl-store tables and a view,** each with column descriptions shown by `linx schema` and documented in `docs/schema.md`:
   - `rules`: the Rules as configured for this Crawl, including their guidance and reproducing queries, so a crawl file stays self-contained
   - `affected_urls`: one row per Rule and URL, with a JSON `detail` of the measured values
   - `issues`: a view with one row per Rule that fired and its `affected_count`, counted from `affected_urls`
 - **New derived fields** on the `crawl` row of `015-add-crawl-store`, written only by the post-crawl pass: `health_score`, `health_internal_page_count`, `health_affected_page_count` and `health_calculated_at`.
 - **The Health Score.** `floor(100 × (Internal Pages − affected Internal Pages) ÷ Internal Pages)` is calculated at the end of the post-crawl passes. A Page counts as affected when it is an Affected URL of any Rule whose Issue Type is `issue`. `050` and `070` call the same function for Segments.
-- **New Command `spider rules [list | show <id>]`.**
+- **New Command `linx rules [list | show <id>]`.**
   - It prints JSON with each Rule's id, category, Issue Type, Priority, what it applies to, enabled state, effective thresholds (value, default, unit), guidance texts and reproducing query.
   - It follows `010`'s output contract (paging envelope, `--fields`, `--limit`, `--cursor`, `--format`).
   - An unknown id fails with `rule_not_found` (exit code 4).
@@ -44,7 +44,7 @@
 ## Capabilities
 
 ### New Capabilities
-- `rules`: the Rule model, the v0.1 catalogue, threshold overrides and disabling, Rules as SQL queries, live Issues during a Crawl and their materialisation by the post-crawl pass, stored Issues and Affected URLs, the Health Score and the `spider rules` Command.
+- `rules`: the Rule model, the v0.1 catalogue, threshold overrides and disabling, Rules as SQL queries, live Issues during a Crawl and their materialisation by the post-crawl pass, stored Issues and Affected URLs, the Health Score and the `linx rules` Command.
 
 ### Modified Capabilities
 _None._ No specs exist yet. This change builds on requirements of `010`, `015`, `020`, `022` and `030` and does not modify them.
@@ -56,24 +56,24 @@ _None._ No specs exist yet. This change builds on requirements of `010`, `015`, 
 - Structured-data validation Rules: v0.3.
 - Near-Duplicate Rules: v0.3.
 - The full Rule set, and Rules for directives found outside `<head>`: v1.0.
-- Overriding a Rule's Issue Type or Priority in `spider.toml`: not planned for v0.1. See design.md, Open Questions.
+- Overriding a Rule's Issue Type or Priority in `openlinx.toml`: not planned for v0.1. See design.md, Open Questions.
 - Third-party Rule plugins and translated guidance: backlog.
 - `issues`, `summary` and per-Segment Issue counts, which belong to `050-add-query-and-segments`. The Report, which belongs to `070-add-html-report`.
 
 ## Impact
 
 - **Depends on:**
-  - `010-add-workspace-and-cli-contract` for `spider.toml` validation (`settings_invalid`), the output contract, error codes and exit codes
+  - `010-add-workspace-and-cli-contract` for `openlinx.toml` validation (`settings_invalid`), the output contract, error codes and exit codes
   - `015-add-crawl-store` for `docs/schema.md`, the `crawl` row, `NewCrawl` and the writer
   - `017-speed-up-crawl-writer` for the contract of a unit that may run again, and `replay_now(writer)`
   - `018-add-schema-conventions` for the schema conventions (ADR-0005), `public_table()` and the contract test
-  - `020-add-crawl-core` for the `urls` table (`is_internal`, `status_code`, `fetch_state`, `fetch_error`, `blocked_by_robots_txt`, `parsed`), the post-crawl passes hook, `default_hooks()` in `spider.services.hooks`, the injectable clock and resuming through the Crawl Service
+  - `020-add-crawl-core` for the `urls` table (`is_internal`, `status_code`, `fetch_state`, `fetch_error`, `blocked_by_robots_txt`, `parsed`), the post-crawl passes hook, `default_hooks()` in `openlinx.services.hooks`, the injectable clock and resuming through the Crawl Service
   - `022-add-fetch-policy` for `redirect_url_id`, `in_redirect_loop`, `size_bytes` and the Resource checks
   - `030-add-page-data` for `pages`, `links`, the stored Indexability and the link counts
 - **Consumers:**
   - `050`: `issues`, `summary`, `page <url>` and the per-Segment Health Score, all reading Issues through this change's Issues reader
   - `070`: the Health Score, Issues, how-to-fix text, and the mapping from categories to Report Sections
-  - `080`: the Skill's Rules reference, generated from `spider rules list`, and the cost of live Issues during a Crawl against materialised ones
+  - `080`: the Skill's Rules reference, generated from `linx rules list`, and the cost of live Issues during a Crawl against materialised ones
   - `090`: the `rules` MCP tool
-- **Code:** `src/spider/rules/` (registry, Rule modules with their queries, thresholds, Health Score), `src/spider/cli/rules.py`, `spider.store.issues` (the tables, the view, the Issues reader and the post-crawl pass), `docs/schema.md`, `docs/rules.md`, and the pass's entry in `020`'s `default_hooks()`.
+- **Code:** `src/openlinx/rules/` (registry, Rule modules with their queries, thresholds, Health Score), `src/openlinx/cli/rules.py`, `openlinx.store.issues` (the tables, the view, the Issues reader and the post-crawl pass), `docs/schema.md`, `docs/rules.md`, and the pass's entry in `020`'s `default_hooks()`.
 - **Dependencies:** none new.

@@ -1,4 +1,4 @@
-"""`spider schema` (015-add-crawl-store, 018-add-schema-conventions, crawl-store)."""
+"""`linx schema` (015-add-crawl-store, 018-add-schema-conventions, crawl-store)."""
 
 from collections.abc import Iterator
 from typing import Any
@@ -101,7 +101,7 @@ def test_no_workspace_needed(
 
     result = run_cli("schema")
 
-    assert (result.exit_code, (temp_workspace.home / ".spider").exists()) == (0, False)
+    assert (result.exit_code, (temp_workspace.home / ".openlinx").exists()) == (0, False)
 
 
 def test_a_table_without_secondary_indexes_lists_none() -> None:

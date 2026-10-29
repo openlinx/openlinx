@@ -1,4 +1,4 @@
-"""`spider commands` (010-add-workspace-and-cli-contract, cli-contract)."""
+"""`linx commands` (010-add-workspace-and-cli-contract, cli-contract)."""
 
 import json
 import os
@@ -20,10 +20,10 @@ def test_the_command_lists_itself() -> None:
     assert "commands" in names
 
 
-def test_tool_is_spider_with_the_project_version() -> None:
+def test_tool_is_openlinx_with_the_project_version() -> None:
     tool = run_cli("commands").json()["tool"]
 
-    assert tool == {"name": "spider", "version": project_version()}
+    assert tool == {"name": "openlinx", "version": project_version()}
 
 
 def test_the_exit_code_table_is_self_described() -> None:

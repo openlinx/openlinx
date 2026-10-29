@@ -2,7 +2,7 @@
 
 Read this first if you are about to change this repository, whether you are a coding agent or a person. It holds the rules and points to the rest.
 
-`spider` (a working name) is an open-source, agent-first SEO crawler: a Python CLI now, plus an MCP server later. [README.md](README.md) says what works today, and [ROADMAP.md](ROADMAP.md) says what is being built.
+OpenLinx is an open-source, agent-first SEO crawler, run as the `linx` command: a Python CLI now, plus an MCP server later. [README.md](README.md) says what works today, and [ROADMAP.md](ROADMAP.md) says what is being built.
 
 ## Before you start
 
@@ -20,13 +20,13 @@ Read this first if you are about to change this repository, whether you are a co
 
 ## Rules a check enforces (its message says the fix)
 
-- **ruff:** no `print`, `sys.stdout`, `sys.stderr` or echo outside `spider.output`. No event-loop policies. `typer._click` only in `spider.cli.click_compat`. Lines of at most 100 characters.
+- **ruff:** no `print`, `sys.stdout`, `sys.stderr` or echo outside `openlinx.output`. No event-loop policies. `typer._click` only in `openlinx.cli.click_compat`. Lines of at most 100 characters.
 - **mypy:** strict mypy for 3.12. A `# type: ignore` must name its code.
-- **`tests/test_code_style.py`:** frozen records only, no class hierarchy of our own, a bound on every memo, sqlalchemy only in `spider.store` (and the schema service), and the crawl core never imports its plugins.
+- **`tests/test_code_style.py`:** frozen records only, no class hierarchy of our own, a bound on every memo, sqlalchemy only in `openlinx.store` (and the schema service), and the crawl core never imports its plugins.
 - **`tests/cli/test_startup.py`:** `--help` loads only its allowlist, so heavy imports go inside the function body.
-- **`tests/test_naming.py`:** the settings file and data folder names come from `spider.naming`, never typed as literals in `src/`.
+- **`tests/test_naming.py`:** the settings file and data folder names come from `openlinx.naming`, never typed as literals in `src/`.
 - **`tests/test_dependencies.py`:** a new runtime dependency goes into `tests/dependency_allowlist.txt`. Telemetry and LLM SDKs are refused.
-- **Schema contract tests:** a table or column goes into `spider.store.schema` and `docs/schema.md` in the same commit.
+- **Schema contract tests:** a table or column goes into `openlinx.store.schema` and `docs/schema.md` in the same commit.
 - **`tests/workspace/test_tables.py`:** settings tables follow the table rules, and every option's setting exists.
 
 ## Rules only review catches (follow them without being asked)
@@ -35,7 +35,7 @@ Read this first if you are about to change this repository, whether you are a co
 - **A guard test that passes at once is proven by a mutation.** If a guard test never went red, break the code on purpose and show the test fails. The commit says which mutation it used.
 - **Comments:** only for a non-obvious *why*. No docstring that repeats a name and its types. Every module starts with a one-line docstring that names the design decision it implements.
 - **[ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md):** logic in pure functions. Data in frozen records, with `slots=True` for records made per URL or Page and `kw_only=True` above three fields. Dependencies passed in, typed by a Protocol. pydantic only at the boundary.
-- **Errors:** an error a user sees is a `SpiderError` with a code from `spider.output.codes`. A broken internal contract raises `TypeError` or `RuntimeError`.
+- **Errors:** an error a user sees is a `OpenLinxError` with a code from `openlinx.output.codes`. A broken internal contract raises `TypeError` or `RuntimeError`.
 - **Tests:** only the boundary doubles listed in docs/testing.md, never a mock of our own modules. Expected values are literals taken from the spec. Use `127.0.0.1`, never `localhost`.
 - **Store:** a unit that runs once per URL or Page executes a statement built at import. A unit may run twice, so it has no effect outside its connection.
 - **Docs in the same slice:** new codes, settings, options and Commands are documented where their area is.
@@ -46,13 +46,13 @@ Read this first if you are about to change this repository, whether you are a co
 | You are changing | Read |
 |---|---|
 | a common change: a code, setting, option, Command, column or hook | [CONTRIBUTING.md "Common changes"](CONTRIBUTING.md#common-changes) |
-| URLs, Scope, Links, `spider crawl` | [docs/crawling.md](docs/crawling.md) |
-| output, paging, diagnostics, exit codes | [docs/cli.md](docs/cli.md), or run `spider commands` |
-| settings, `spider init`, Workspaces | [docs/workspace.md](docs/workspace.md), [architecture "Settings"](docs/architecture.md#settings) |
+| URLs, Scope, Links, `linx crawl` | [docs/crawling.md](docs/crawling.md) |
+| output, paging, diagnostics, exit codes | [docs/cli.md](docs/cli.md), or run `linx commands` |
+| settings, `linx init`, Workspaces | [docs/workspace.md](docs/workspace.md), [architecture "Settings"](docs/architecture.md#settings) |
 | the crawl file: tables, writing, reading | [docs/schema.md](docs/schema.md), [docs/crawl-store.md](docs/crawl-store.md) |
 | tests: seams, helpers, the fixture site | [docs/testing.md](docs/testing.md), [tests/fixture_site/README.md](tests/fixture_site/README.md) |
 
-Packages under `src/spider/`:
+Packages under `src/openlinx/`:
 - `cli/`: the Command adapters.
 - `services/`: the logic behind them.
 - `crawl/`: the engine, Fetcher, Scope, Links and robots.txt.

@@ -2,7 +2,7 @@
 
 import pytest
 
-from spider.crawl.fetch.politeness import BlockingRuns
+from openlinx.crawl.fetch.politeness import BlockingRuns
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawl_result

@@ -8,9 +8,9 @@ from hypothesis import given
 from hypothesis import strategies as st
 from selectolax.lexbor import LexborHTMLParser
 
-from spider.crawl.fetch.fetcher import FetchResult
-from spider.crawl.pages.headers import header_links, header_links_with_parameters
-from spider.crawl.pages.preparation import (
+from openlinx.crawl.fetch.fetcher import FetchResult
+from openlinx.crawl.pages.headers import header_links, header_links_with_parameters
+from openlinx.crawl.pages.preparation import (
     PageInput,
     PageSettings,
     PreparedPage,
@@ -18,10 +18,10 @@ from spider.crawl.pages.preparation import (
     prepare_page,
     response_links,
 )
-from spider.crawl.pages.refresh import refresh_url
-from spider.crawl.references import DiscoveredLink
-from spider.crawl.scope import scope_rules
-from spider.crawl.urls import NormalizedUrl, strip_params_pattern, url_host
+from openlinx.crawl.pages.refresh import refresh_url
+from openlinx.crawl.references import DiscoveredLink
+from openlinx.crawl.scope import scope_rules
+from openlinx.crawl.urls import NormalizedUrl, strip_params_pattern, url_host
 
 SITE = NormalizedUrl("http://site.test/")
 
