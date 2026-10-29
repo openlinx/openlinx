@@ -55,3 +55,12 @@ def test_an_image_map_area_takes_its_alt_text() -> None:
         ("https://site.test/north", "North office"),
         ("https://site.test/south", ""),
     ]
+
+
+def test_every_occurrence_is_stored() -> None:
+    rows = page_link_rows('<a href="/b">1</a><a href="/b">2</a>')
+
+    assert [(row.type, row.target, row.anchor_text) for row in rows] == [
+        ("hyperlink", "https://site.test/b", "1"),
+        ("hyperlink", "https://site.test/b", "2"),
+    ]

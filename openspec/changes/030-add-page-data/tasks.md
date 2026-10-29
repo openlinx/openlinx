@@ -143,7 +143,7 @@ Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code,
 - [x] 10.2 Drive "Hyperlink with rel flags" at seam 4. Add the Link extractor `PAGE_LINKS` in a module of its own, `spider.extract.page_links`, which returns one attribute record per HTML Link, keyed by `ordinal`, from `located_links`; the `links` handler joins the records with the URL's result's Links. Create `spider.store.links` with the Link row's writer, the `links` handler, and `links` with `source_url_id`, `ordinal`, `target_url_id`, `type`, `declared_in`, `anchor_text`, `rel` and the three `rel_*` flags, keyed by `(source_url_id, ordinal)`, with `ordinal` and the `rel` tokens taken from `DiscoveredLink` as `020` gives them. Its layout and secondary indexes are D4's provisional ones until the links benchmark (task 10.1).
 - [x] 10.3 Drive "Image alt attribute absent or empty" at seam 4, and add `element` and `attribute`, which the Link gives, and `alt_text`.
 - [x] 10.4 Drive "Image-only anchor takes the alt text" at seam 4.
-- [ ] 10.5 Drive "Every occurrence is stored" at seam 4.
+- [x] 10.5 Drive "Every occurrence is stored" at seam 4.
 - [ ] 10.6 Drive "Link positions come from the enclosing element" at seam 4, and add `link_position`, from the element that places the Link, a `noscript` for a Link from its content.
 - [ ] 10.7 Drive "Hreflang and mobile alternate Links" at seam 4, and add `hreflang` and `media`.
 - [ ] 10.8 Drive "Links declared in a header" at seam 4.
