@@ -151,18 +151,46 @@ INVALID_URL = _declare(
     ExitCode.USAGE,
     "A Seed that is not a valid http or https URL; details.reason says why.",
 )
+OPTION_CONFLICT = _declare(
+    "option_conflict",
+    "error",
+    ExitCode.USAGE,
+    "Two flags that cannot be given together, such as --subdomains with another --scope.",
+)
+SUBFOLDER_IS_ROOT = _declare(
+    "subfolder_is_root",
+    "error",
+    ExitCode.USAGE,
+    "--scope subfolder with a Seed whose folder is the root, such as a folder's URL without its "
+    "trailing slash; the hint gives the Seed with it.",
+)
 INVALID_PATTERN = _declare(
     "invalid_pattern",
     "error",
     ExitCode.USAGE,
     "A URL pattern that is not a valid Python regular expression; details.pattern holds it.",
 )
+SEED_OUT_OF_SCOPE = _declare(
+    "seed_out_of_scope",
+    "error",
+    ExitCode.USAGE,
+    "The Seed is outside its own Scope: it matches an --exclude pattern, or no --include "
+    "pattern; details.seed holds it.",
+)
+SEED_BASE_MISMATCH = _declare(
+    "seed_base_mismatch",
+    "warning",
+    None,
+    "A www Seed whose Page names its apex host as the site; the hint gives the Seed on the apex "
+    "host, and the Crawl went on in its Scope.",
+)
 PARSE_FAILED = _declare(
     "parse_failed",
     "warning",
     None,
-    "A registered extractor raised an error, so a Page was recorded without its output; "
-    "details.count says for how many URLs, details.first_url for which first.",
+    "A registered extractor raised an error, or a Page's preparation gave nothing "
+    "(body_too_large, worker_crashed, parse_timeout), so a Page was recorded without its "
+    "output; details.count says for how many URLs, details.first_url for which first.",
 )
 HANDLER_FAILED = _declare(
     "handler_failed",

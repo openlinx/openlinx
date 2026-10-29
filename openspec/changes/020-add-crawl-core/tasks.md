@@ -217,25 +217,26 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 
 ## 8. Scope over HTTP and Section Crawls (widening)
 
-- [ ] 8.1 Drive "URLs that differ only in stripped parameters are fetched once" at seam 3.
-- [ ] 8.2 Drive "The subdomains shorthand conflicts with a subfolder Scope" at seam 1. Done when: `option_conflict` is declared.
-- [ ] 8.3 Drive "A Seed without its trailing slash is rejected" at seam 1. Done when: `subfolder_is_root` is declared, with a hint built from the Seed.
-- [ ] 8.4 Drive "Pages inside the folder are followed" at seam 3+6.
-- [ ] 8.5 Drive "Pages outside the folder are checked but not followed" at seam 3+6.
-- [ ] 8.6 Drive "A URL that matches no include pattern is checked but not followed" at seam 3+6.
-- [ ] 8.7 Drive "An invalid pattern is rejected" at seam 1. Done when: an invalid `--include` pattern is `invalid_pattern`, which task 5.1 declared for `--exclude`, before any crawl file is created.
-- [ ] 8.8 Drive "A Seed outside the Scope is rejected" at seam 1. Done when: `seed_out_of_scope` is declared.
-- [ ] 8.9 Drive "A subfolder Crawl is a Section Crawl" at seam 1.
-- [ ] 8.10 Drive "An include pattern makes a Section Crawl" and "Exclude patterns alone do not make a Section Crawl" at seam 3+6, a trivial pair.
-- [ ] 8.11 Drive "A subfolder Scope is recorded" at seam 3+6. Done when: `crawl.scope` is declared NOT NULL, with the Seed hosts in order, and `create_crawl` writes it with the `crawl` row from a `scope` field added to `NewCrawl` (design D18).
-- [ ] 8.12 Drive "A www Seed whose canonical names the apex is reported" at seam 1. Done when: `seed_base_mismatch` is declared, and the Scope is unchanged.
-- [ ] 8.13 **Guard:** "A www Seed whose Links stay on www is not reported", at seam 1.
-- [ ] 8.14 Docs: document Section Crawls, the recorded Scope and `seed_base_mismatch` in `docs/crawling.md`.
-- [ ] 8.15 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [x] 8.1 Drive "URLs that differ only in stripped parameters are fetched once" at seam 3.
+- [x] 8.2 Drive "The subdomains shorthand conflicts with a subfolder Scope" at seam 1. Done when: `option_conflict` is declared.
+- [x] 8.3 Drive "A Seed without its trailing slash is rejected" at seam 1. Done when: `subfolder_is_root` is declared, with a hint built from the Seed.
+- [x] 8.4 Drive "Pages inside the folder are followed" at seam 3+6.
+- [x] 8.5 Drive "Pages outside the folder are checked but not followed" at seam 3+6.
+- [x] 8.6 Drive "A URL that matches no include pattern is checked but not followed" at seam 3+6.
+- [x] 8.7 Drive "An invalid pattern is rejected" at seam 1. Done when: an invalid `--include` pattern is `invalid_pattern`, which task 5.1 declared for `--exclude`, before any crawl file is created.
+- [x] 8.8 Drive "A Seed outside the Scope is rejected" at seam 1. Done when: `seed_out_of_scope` is declared.
+- [x] 8.9 Drive "A subfolder Crawl is a Section Crawl" at seam 1.
+- [x] 8.10 Drive "An include pattern makes a Section Crawl" and "Exclude patterns alone do not make a Section Crawl" at seam 3+6, a trivial pair.
+- [x] 8.11 Drive "A subfolder Scope is recorded" at seam 3+6. Done when: `crawl.scope` is declared NOT NULL, with the Seed hosts in order, and `create_crawl` writes it with the `crawl` row from a `scope` field added to `NewCrawl` (design D18).
+- [x] 8.12 Drive "A www Seed whose canonical names the apex is reported" at seam 1, run at seam 2 through the Crawl Service, since `www.site.test` needs the DNS resolver hook, which the CLI cannot take. Done when: `seed_base_mismatch` is declared, and the Scope is unchanged.
+- [x] 8.13 **Guard:** "A www Seed whose Links stay on www is not reported", at seam 1, run at seam 2 for the same reason as 8.12.
+- [x] 8.14 Docs: document Section Crawls, the recorded Scope and `seed_base_mismatch` in `docs/crawling.md`.
+- [x] 8.15 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [ ] 8.16 Review fixes of group 8 (rulings of 2026-10-14). Done when: `ScopeRules.from_json` rebuilds every decision from `crawl.scope`, which a round-trip test over a URL table proves, and `NewCrawl.scope` is a `RecordedScope`; the 8.13 guard proves the Seed was parsed; `seed_base_mismatch` decides on the Seed on the apex host, and a canonical to the Seed's own host ends the check; `NewCrawl.section_crawl` is required; `subfolder_is_root` gives `details.suggested_seed`, and no hint ends with a URL that a period sticks to.
 
 ## 9. Resources, Crawl Depth, limits and invariants (widening)
 
-- [ ] 9.1 Drive "An image is checked but not parsed" at seam 3+6. Group 4's review parses only HTML, so the parse half may pass at once; its red then comes from a mutation.
+- [x] 9.1 Drive "An image is checked but not parsed" at seam 3+6. Group 4's review parses only HTML, so the parse half may pass at once; its red then comes from a mutation.
 - [ ] 9.2 **Guard:** "A broken image is recorded", at seam 3+6.
 - [ ] 9.3 Drive "The shortest path wins over a faster, longer one" at seam 3+6. Done when: followed URLs of depth d+1 wait for every followed URL of depth d, and checks never wait (design D3).
 - [ ] 9.4 Drive "A Resource is one deeper than its Page" at seam 3+6.
@@ -352,9 +353,10 @@ A **guard** is a test for a scenario that earlier code already satisfies. It pas
 - [ ] 14.7 Docs: document the frontier, what a killed Crawl keeps, and the continue operation for `060` in `docs/crawling.md`.
 - [ ] 14.8 Review: run the code-review skill on group 14's commits, then refactor with the whole suite green.
 
-## 15. Parsing with scripting on (waiting for selectolax)
+## 15. Reading `<noscript>` as browsers that run scripts do
 
-- [ ] 15.1 Waits for the selectolax release that offers lexbor's scripting flag (an upstream pull request is being prepared). Page preparation parses with scripting on, as browsers and Google's renderer do, so a head `<noscript><img>` no longer ends `<head>`, and a head-noscript `<title>` stays inside its `<noscript>`. The Links of a body `<noscript>` are then found by fragment-parsing the text of each `<noscript>` (the user's ruling of 2026-10-14). Done when: the scripting-off cases of design Risks have scenarios that pass, and the body `<noscript>` Links of task 7.19 are still found.
+- [x] 15.1 Fix: page preparation reads `<noscript>` as a browser that runs scripts does, before selectolax offers lexbor's scripting flag (the user's decision of 2026-10-14; design D5). lexbor parses with scripting off, so a head `<noscript><img>`, the common tracking pixel, ends `<head>` and every later head element (canonical, meta description, robots, hreflang) lands in `<body>`, and a head-noscript `<title>` moves out of its `<noscript>`. Before lexbor parses the decoded text, every `<noscript>` start and end tag becomes a `<template>` tag, whose start tag carries the `data-<APP_NAME>-noscript` attribute with the index of the `<noscript>`'s text; HTML allows `<template>` in `<head>`, and its content stays out of the tree. The text of each `<noscript>`, up to the next `</noscript>`, as a browser that runs scripts reads it, is fragment-parsed for its Links: a `<link>` or `<meta>` gives nothing, the other elements give theirs in document order (task 7.19), a head-noscript pixel's `src` included. A page's own `<template>` gives no Link, as before. The noscript ancestor walk goes (task 7.23). Done when: tests at seam 4 pin that a head-noscript pixel keeps the canonical, hreflang and metas in `<head>`, that a head-noscript title and robots meta are ignored, that body-noscript Links are found in document order, that HTML without a `<noscript>` tag is left as it is, that a literal `<noscript` is renamed wherever it stands, and the edges of design Risks; a never-raises property runs over text with noscript tags; and the commit shows each existing noscript test red with the renaming disabled, as the guard of the walk's removal.
+- [ ] 15.2 Waits for the selectolax release that offers lexbor's scripting flag (the upstream draft pull request rushter/selectolax#228). Page preparation then parses with scripting on and fragment-parses the text of each `<noscript>`, which replaces 15.1's renaming; 15.1's tests stay. Done when: the renaming is gone, and 15.1's tests pass.
 
 ## 16. Change check
 

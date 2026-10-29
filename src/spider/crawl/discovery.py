@@ -8,11 +8,14 @@ from spider.crawl.urls import NormalizedUrl
 from spider.store.records import DiscoverySkipReason, LinkType, NewUrl
 
 # The spec's Link type table: through these a URL in the Scope is followed, through
-# _NOT_FOLLOWED it is recorded skipped, and Resources wait for group 9.
+# _RESOURCES it is requested as a Resource, and through any other type it is recorded skipped.
 _FOLLOWED: frozenset[LinkType] = frozenset(
     {"hyperlink", "canonical", "pagination", "hreflang", "iframe", "meta_refresh", "http_refresh"}
 )
-_NOT_FOLLOWED: frozenset[LinkType] = frozenset({"amphtml", "mobile_alternate", "misc"})
+_RESOURCES: frozenset[LinkType] = frozenset(
+    {"image", "css", "javascript", "video", "audio", "media"}
+)
+_REQUESTED = _FOLLOWED | _RESOURCES
 
 
 def discovered_urls(
@@ -31,9 +34,6 @@ def discovered_urls(
     # A Page names most URLs several times, and each row costs its unit an insert.
     chosen: dict[NormalizedUrl, tuple[DiscoveredLink, DiscoverySkipReason | None]] = {}
     for link in links:
-        # Resources are requested with group 9; until then they are not recorded.
-        if link.type not in _FOLLOWED and link.type not in _NOT_FOLLOWED:
-            continue
         reason = _skip_reason(link, nofollow, follow_nofollow)
         known = chosen.get(link.target)
         # A followed Link gives the URL's provenance; it keeps its first place in the order.
@@ -45,7 +45,7 @@ def discovered_urls(
 def _skip_reason(
     link: DiscoveredLink, nofollow: bool, follow_nofollow: bool
 ) -> DiscoverySkipReason | None:
-    if link.type not in _FOLLOWED:
+    if link.type not in _REQUESTED:
         return "link_type_not_followed"
     if link.type == "hyperlink" and (link.nofollow or nofollow) and not follow_nofollow:
         return "nofollow"

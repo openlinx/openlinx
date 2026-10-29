@@ -1,6 +1,7 @@
 """The engine: the frontier depth by depth, and each URL's unit (020-add-crawl-core D1, D2, D3)."""
 
 import asyncio
+from collections.abc import Iterable
 from contextlib import suppress
 from typing import Any
 
@@ -8,11 +9,17 @@ from spider.crawl.context import CrawlContext
 from spider.crawl.discovery import discovered_urls
 from spider.crawl.fetcher import FetchFailure, FetchResult, Request
 from spider.crawl.hooks import UrlResult
+from spider.crawl.links import DiscoveredLink
 from spider.crawl.pages import PageSettings, is_html_type, response_links
 from spider.crawl.politeness import RequestLimits
-from spider.crawl.scope import ScopeDecision
+from spider.crawl.scope import ScopeDecision, apex_seed_named_by_page
 from spider.crawl.urls import NormalizedUrl, url_host
-from spider.output.codes import HANDLER_FAILED, PARSE_FAILED, RECORD_FAILED
+from spider.output.codes import (
+    HANDLER_FAILED,
+    PARSE_FAILED,
+    RECORD_FAILED,
+    SEED_BASE_MISMATCH,
+)
 from spider.output.diagnostics import Diagnostic
 from spider.store.failures import is_one_urls_failure
 from spider.store.records import (
@@ -99,7 +106,13 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
     )
     # Once, with the final Scope: 022 moves this to the end of the Seed's Redirect Chain.
-    await context.pages.start(PageSettings(context.scope, context.hooks.extractors))
+    await context.pages.start(
+        PageSettings(
+            scope=context.scope,
+            extractors=context.hooks.extractors,
+            strip_params=context.strip_params,
+        )
+    )
     depth: int | None = 0
     try:
         while depth is not None and not context.stop.is_set:
@@ -201,7 +214,11 @@ async def _fetched(
     parsed = page is not None and page.parsed
     # The Link and Refresh headers of an in-Scope 2xx response count, whatever became of its
     # preparation (design D9).
-    links = response_links(queued.url, response, context.scope) if followed else ()
+    links = (
+        response_links(queued.url, response, context.scope, context.strip_params)
+        if followed
+        else ()
+    )
     if page is not None:
         links += page.document_links
     nofollow = page is not None and page.directives.nofollow
@@ -212,6 +229,8 @@ async def _fetched(
         nofollow=nofollow,
         follow_nofollow=context.settings.follow_nofollow,
     )
+    if parsed and queued.discovered_via == "seed":
+        _warn_of_seed_base_mismatch(context, queued.url, links)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
@@ -243,6 +262,22 @@ async def _fetched(
         discovered=discovered,
         rows=_handler_rows(context, result),
     )
+
+
+def _warn_of_seed_base_mismatch(
+    context: CrawlContext, seed: NormalizedUrl, links: Iterable[DiscoveredLink]
+) -> None:
+    apex_seed = apex_seed_named_by_page(seed, links, context.scope)
+    if apex_seed is not None:
+        context.reporter.warn(
+            Diagnostic.of(
+                SEED_BASE_MISMATCH,
+                f"The Seed {seed} names its apex host as the site: its Page links there by its "
+                "canonical or by most of its hyperlinks, so the Crawl may miss most of the site.",
+                hint=f"To crawl the site the Seed names, give the Seed {apex_seed}.",
+                details={"seed": seed, "apex_seed": apex_seed},
+            )
+        )
 
 
 def _parse_failure(url: NormalizedUrl, parse_error: ParseError, message: str | None) -> str:

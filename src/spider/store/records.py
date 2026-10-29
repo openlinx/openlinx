@@ -82,7 +82,7 @@ class SecretNames:
     settings: frozenset[str] = frozenset()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class NewCrawl:
     workspace: Workspace
     crawl_mode: CrawlMode
@@ -90,6 +90,8 @@ class NewCrawl:
     command_argv: Sequence[str]
     cwd: Path
     config: Mapping[str, Any]
+    # The recorded Scope, {mode, hosts, folder, include, exclude} (020-add-crawl-core D18).
+    scope: Mapping[str, Any]
     # No defaults: a creator that forgot its secrets would record them, and one that forgot the
     # store.journal_mode setting would silently ignore it.
     secret_names: SecretNames

@@ -18,12 +18,25 @@ from spider.crawl.engine import run_crawl
 from spider.crawl.fetcher import aiohttp_fetcher
 from spider.crawl.hooks import Hooks
 from spider.crawl.pages import PageExecutor
-from spider.crawl.scope import ScopeRules, scope_rules
+from spider.crawl.scope import ScopeDecision, ScopeRules, scope_rules
 from spider.crawl.settings import CrawlSettings
 from spider.crawl.stop import StopSignal
-from spider.crawl.urls import InvalidUrl, InvalidUrlReason, NormalizedUrl, parse_seed
+from spider.crawl.urls import (
+    InvalidUrl,
+    InvalidUrlReason,
+    NormalizedUrl,
+    parse_seed,
+    strip_params_pattern,
+    url_origin,
+    url_path,
+)
 from spider.crawl.warning_log import WarningLog
-from spider.output.codes import INVALID_PATTERN, INVALID_URL
+from spider.output.codes import (
+    INVALID_PATTERN,
+    INVALID_URL,
+    SEED_OUT_OF_SCOPE,
+    SUBFOLDER_IS_ROOT,
+)
 from spider.output.diagnostics import Diagnostic, SpiderError
 from spider.output.events import timestamp_text
 from spider.output.reporter import Reporter
@@ -63,6 +76,7 @@ class CrawlPlan:
     seed: NormalizedUrl
     settings: CrawlSettings
     scope: ScopeRules
+    strip_params: re.Pattern[str] | None
     new_crawl: NewCrawl
 
 
@@ -113,11 +127,24 @@ class CrawlResult:
 
 def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
     """Validation and config resolution, before anything is created (design D11)."""
-    seed = parse_seed(request.seed)
-    if isinstance(seed, InvalidUrl):
-        raise _invalid_seed(request.seed, seed.reason)
+    # Checked before the Workspace is resolved, and stripped once the settings are read.
+    _seed(request.seed, None)
     workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
     settings = load_settings(workspace, tables, request.flags)
+    crawl_settings = settings.table(CrawlSettings)
+    strip_params = strip_params_pattern(crawl_settings.strip_params)
+    seed = _seed(request.seed, strip_params)
+    scope = scope_rules(
+        seed,
+        scope=crawl_settings.scope,
+        include=_patterns(crawl_settings.include, "include"),
+        exclude=_patterns(crawl_settings.exclude, "exclude"),
+    )
+    if scope.folder == "/":
+        raise _subfolder_is_root(seed)
+    decision = scope.decide(seed)
+    if not decision.in_scope:
+        raise _seed_out_of_scope(seed, decision)
     settings_file = workspace.settings_file if workspace.settings_file.is_file() else None
     new_crawl = NewCrawl(
         workspace=workspace,
@@ -128,16 +155,29 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         cwd=request.cwd,
         # Every registered table, resolved (design D11).
         config=settings.root.model_dump(mode="json"),
+        scope=scope.to_json(),
         secret_names=request.secret_names,
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
+        section_crawl=scope.section_crawl,
     )
-    crawl_settings = settings.table(CrawlSettings)
-    scope = scope_rules(seed, exclude=_patterns(crawl_settings.exclude))
-    return CrawlPlan(seed=seed, settings=crawl_settings, scope=scope, new_crawl=new_crawl)
+    return CrawlPlan(
+        seed=seed,
+        settings=crawl_settings,
+        scope=scope,
+        strip_params=strip_params,
+        new_crawl=new_crawl,
+    )
 
 
-def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
+def _seed(text: str, strip_params: re.Pattern[str] | None) -> NormalizedUrl:
+    seed = parse_seed(text, strip_params)
+    if isinstance(seed, InvalidUrl):
+        raise _invalid_seed(text, seed.reason)
+    return seed
+
+
+def _patterns(texts: Sequence[str], key: str) -> tuple[re.Pattern[str], ...]:
     patterns = []
     for text in texts:
         try:
@@ -146,7 +186,7 @@ def _patterns(texts: Sequence[str]) -> tuple[re.Pattern[str], ...]:
             raise SpiderError(
                 INVALID_PATTERN,
                 f"The pattern {text} is not a valid regular expression: {error}.",
-                hint="Fix it in --exclude or in exclude of the settings file's [crawl] table: "
+                hint=f"Fix it in --{key} or in {key} of the settings file's [crawl] table: "
                 "a Python regular expression, with a literal character such as ( or ? escaped.",
                 details={"pattern": text},
             ) from None
@@ -236,6 +276,7 @@ async def _crawl_context(
                     crawl_file=crawl_file,
                     settings=plan.settings,
                     scope=plan.scope,
+                    strip_params=plan.strip_params,
                     clock=clock,
                     reporter=reporter,
                     writer=writer,
@@ -253,6 +294,39 @@ async def _crawl_context(
     finally:
         # 026's pool shuts its workers down here, however the Crawl ended.
         await executor.close()
+
+
+def _seed_out_of_scope(seed: NormalizedUrl, decision: ScopeDecision) -> SpiderError:
+    # A Seed is always internal and inside its own folder: only the patterns leave it out.
+    why = (
+        "it matches an --exclude pattern"
+        if decision.skip_reason == "excluded"
+        else "it matches no --include pattern"
+    )
+    return SpiderError(
+        SEED_OUT_OF_SCOPE,
+        f"The Seed {seed} is outside the Scope: {why}, so nothing would be crawled.",
+        hint="Change the patterns, or give a Seed that the Scope holds.",
+        details={"seed": seed},
+    )
+
+
+def _subfolder_is_root(seed: NormalizedUrl) -> SpiderError:
+    path = url_path(seed)
+    if path == "/":
+        hint = (
+            f"Give a Seed inside a folder, such as {url_origin(seed)}/blog/, or leave out "
+            "--scope subfolder to crawl the whole site."
+        )
+    else:
+        hint = f"Give the folder's URL with its trailing slash: {url_origin(seed)}{path}/."
+    return SpiderError(
+        SUBFOLDER_IS_ROOT,
+        f"The folder of the Seed {seed} is the root, so --scope subfolder would crawl the "
+        "whole site.",
+        hint=hint,
+        details={"seed": seed},
+    )
 
 
 def _invalid_seed(text: str, reason: InvalidUrlReason) -> SpiderError:

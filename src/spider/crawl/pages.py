@@ -1,5 +1,6 @@
 """Page preparation: one pure function of a response, behind an executor (020-add-crawl-core D9)."""
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -18,6 +19,7 @@ from spider.crawl.directives import (
 from spider.crawl.fetcher import FetchResult
 from spider.crawl.headers import header_links
 from spider.crawl.links import DiscoveredLink, base_url, links_in_tree
+from spider.crawl.noscript import parse_html
 from spider.crawl.scope import ScopeRules
 from spider.crawl.urls import NormalizedUrl
 from spider.naming import DEFAULT_ROBOTS_TOKEN
@@ -55,13 +57,14 @@ class Extractor:
     extract: Callable[[LexborHTMLParser, PageInput], msgspec.Struct]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PageSettings:
     """The settings snapshot: built once per Crawl, and given to each 026 worker once."""
 
     scope: ScopeRules
     extractors: tuple[Extractor, ...] = ()
     robots_token: str = DEFAULT_ROBOTS_TOKEN
+    strip_params: re.Pattern[str] | None
 
 
 class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
@@ -82,16 +85,18 @@ class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
 def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettings) -> PreparedPage:
     """Decodes and parses once; the link extractor and later extractors share the tree."""
     decoded = decode_html(response.body, response.header("Content-Type"))
-    tree = LexborHTMLParser(decoded.text)
+    html = parse_html(decoded.text)
+    tree = html.tree
     is_internal = partial(_is_internal, settings.scope)
     # The header Links come first, as 030's ordinals count them (design D5).
-    from_headers = response_links(url, response, settings.scope)
+    from_headers = response_links(url, response, settings.scope, settings.strip_params)
     from_document = tuple(
         links_in_tree(
-            tree,
+            html,
             base=base_url(tree, url, decoded.encoding),
             encoding=decoded.encoding,
             is_internal=is_internal,
+            strip_params=settings.strip_params,
             first_ordinal=len(from_headers) + 1,
         )
     )
@@ -131,11 +136,21 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
 
 
 def response_links(
-    url: NormalizedUrl, response: FetchResult, scope: ScopeRules
+    url: NormalizedUrl,
+    response: FetchResult,
+    scope: ScopeRules,
+    strip_params: re.Pattern[str] | None,
 ) -> tuple[DiscoveredLink, ...]:
     """The engine reads them whatever became of the preparation, which reads them for
     `PageInput`, so both number them alike (design D9)."""
-    return tuple(header_links(response.headers, url, is_internal=partial(_is_internal, scope)))
+    return tuple(
+        header_links(
+            response.headers,
+            url,
+            is_internal=partial(_is_internal, scope),
+            strip_params=strip_params,
+        )
+    )
 
 
 def _is_internal(scope: ScopeRules, url: NormalizedUrl) -> bool:

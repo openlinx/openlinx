@@ -41,6 +41,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from spider.clock import SystemClock
+from spider.crawl.scope import scope_rules
+from spider.crawl.urls import NormalizedUrl
 from spider.output.codes import CRAWL_BUSY
 from spider.output.diagnostics import SpiderError
 from spider.output.reporter import Collected
@@ -403,6 +405,7 @@ def measure(folder: Path, page_count: int) -> dict[str, Any]:
             command_argv=["spider", "crawl", f"{HOST}/"],
             cwd=folder,
             config={},
+            scope=scope_rules(NormalizedUrl(f"{HOST}/")).to_json(),
             secret_names=SecretNames(),
             journal_setting="auto",
         ),
