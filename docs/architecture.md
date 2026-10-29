@@ -123,7 +123,7 @@ Frontier ──► Engine ──► Requester ──► Fetcher ──► Page e
 - **Read-only access:** `spider sql` opens the file with a read-only URI plus the SQLite authorizer.
 - **Missing values:** a value that is not measured yet is `NULL`, never 0 ("not measured" differs from "zero"). A derived column is `NULL` until its post-crawl pass, and a later column until its release.
 
-## Page data (Screaming Frog "Internal" tab parity)
+## Page data
 
 | Group | Columns |
 |---|---|

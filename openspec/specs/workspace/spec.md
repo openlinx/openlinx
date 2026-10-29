@@ -15,6 +15,8 @@ Conventions used in the scenarios:
 
 ### Requirement: Workspace layout
 
+**In short:** a Workspace is a folder with a data folder, a settings file or both; the global one lives in the home folder.
+
 A local Workspace SHALL be a folder, its root, that contains a `.spider/` data folder, a `spider.toml` settings file, or both. Its Crawls SHALL be stored in `<root>/.spider/crawls/`, and its settings SHALL be read from `<root>/spider.toml`.
 
 The global Workspace SHALL keep its Crawls in `H/.spider/crawls/` and read its settings from `H/.spider/spider.toml`.
@@ -34,6 +36,8 @@ Every data folder SHALL contain a `.gitignore` file whose content is exactly `# 
 - **THEN** its data folder is `H/.spider` and its settings file is `H/.spider/spider.toml`
 
 ### Requirement: Finding the Workspace
+
+**In short:** a Command uses the `--workspace` folder, else the nearest Workspace above the current folder, else the global Workspace, and never searches past the home folder.
 
 A Command that uses a Workspace SHALL take the first of these that applies:
 1. the folder given with `--workspace`
@@ -96,6 +100,8 @@ When the `--workspace` folder does not exist, the Command SHALL fail with the er
 
 ### Requirement: No environment variables
 
+**In short:** environment variables never select the Workspace, change a setting or change a result, apart from the standard proxy variables.
+
 Environment variables SHALL NOT select the Workspace, SHALL NOT be a source of settings, and SHALL NOT change a Command's behaviour or output. The only inputs are flags and `spider.toml`, plus the operating system's own notion of the home folder and the current folder. There are two exceptions:
 
 - **Proxy variables.** The standard proxy variables `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, in any letter case, SHALL be honoured for fetching. `--proxy` or `[crawl] proxy` overrides them, and `022-add-fetch-policy` owns this behaviour. They are the only variables that `spider commands` lists under `environment`.
@@ -118,6 +124,8 @@ Environment variables SHALL NOT select the Workspace, SHALL NOT be a source of s
 - **THEN** `example.level` is `"low"`
 
 ### Requirement: Initialising a Workspace with spider init
+
+**In short:** `spider init` makes a folder a local Workspace, creating only what is missing and never modifying an existing file.
 
 `spider init` SHALL make its target folder a local Workspace. The target is the current folder, or the folder given with `--workspace`; `spider init` creates that folder and any missing parents.
 
@@ -162,6 +170,8 @@ When the target or its data folder cannot be created or written, `spider init` S
 
 ### Requirement: Initialising without the CLI
 
+**In short:** callers other than the CLI, such as the MCP server, can initialise a Workspace and get the same files, result and diagnostics as `spider init`.
+
 What `spider init` does SHALL be available as a service call that takes typed inputs and a reporter for warnings and events, and returns the same result as the Command's JSON. A caller other than the CLI, such as the MCP server of `090-add-mcp-server`, SHALL get the same files, result and diagnostics.
 
 #### Scenario: Initialising without the CLI
@@ -169,6 +179,8 @@ What `spider init` does SHALL be available as a service call that takes typed in
 - **THEN** the result's `created` lists the four created paths, and the reporter holds exactly one warning, `workspace_nested`, whose `details.parent` is `H/work/shop`
 
 ### Requirement: Commented settings template
+
+**In short:** the `spider.toml` that `spider init` writes lists every setting with its default, commented out, so it changes nothing.
 
 The `spider.toml` written by `spider init` SHALL be valid TOML that sets no value. It SHALL start with a comment that names the precedence (flag, then `spider.toml`, then default). For every setting the tool knows, it SHALL contain:
 - the setting's table header, uncommented
@@ -196,6 +208,8 @@ Loading this file SHALL give the same settings as having no settings file.
 - **THEN** they are equal to the settings resolved for the Workspace `H/work/empty`, which has `.spider/` but no `spider.toml`
 
 ### Requirement: Settings precedence
+
+**In short:** each setting takes its value from its flag, else from `spider.toml`, else from its default.
 
 Settings SHALL be grouped in `spider.toml` tables that each change registers. A keyed table SHALL hold entries named by the user, each written `[<table>.<name>]` with the same settings. Each setting SHALL take its value from the first source that sets it:
 1. its Command flag
@@ -227,6 +241,8 @@ A setting that mirrors a flag SHALL live in a table the Command reads, usually n
 - **THEN** the exit code is 3, and the error has the code `settings_invalid` and `details.errors[0].key` `"output"`
 
 ### Requirement: Invalid settings name the offending key
+
+**In short:** an invalid `spider.toml` stops any Command that loads it, with exit code 3 and every bad key listed.
 
 `spider.toml` SHALL be checked completely whenever settings load, including every table that a later change registers. When it is invalid, a Command that loads it SHALL fail and do nothing else. It SHALL exit with code 3 and the error code `settings_invalid`, whose details are:
 - `details.file`: the file's absolute path
