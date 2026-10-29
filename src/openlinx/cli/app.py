@@ -47,6 +47,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
     tables = SettingsTables()
     tables.register("crawl", "openlinx.crawl.settings:CrawlSettings")
     tables.register("store", "openlinx.store.settings:StoreSettings")
+    tables.register("content_area", "openlinx.extract.settings:ContentAreaSettings")
     for name, reference in extra.settings_tables.items():
         tables.register(name, reference)
 

@@ -68,7 +68,7 @@ from openlinx.store.transitions import check_transition
 from openlinx.store.urls import url_counts
 from openlinx.store.writer import CrawlWriter
 from openlinx.workspace.discovery import resolve_workspace
-from openlinx.workspace.settings import load_settings
+from openlinx.workspace.settings import Settings, load_settings
 from openlinx.workspace.tables import SettingsTables
 
 _SEED_PROBLEMS: Mapping[InvalidUrlReason, str] = {
@@ -98,6 +98,8 @@ class CrawlPlan:
     scope: ScopeRules
     strip_params: re.Pattern[str] | None
     new_crawl: NewCrawl
+    # Every table as loaded, from which default_hooks takes the configs of 030's hooks.
+    loaded: Settings
 
 
 class _Override(Enum):
@@ -211,6 +213,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         scope=scope,
         strip_params=strip_params,
         new_crawl=new_crawl,
+        loaded=settings,
     )
 
 

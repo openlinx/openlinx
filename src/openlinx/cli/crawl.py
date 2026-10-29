@@ -206,7 +206,7 @@ def crawl(
         flags=_with_subdomains(setting_flags(ctx)) if subdomains else setting_flags(ctx),
     )
     plan = plan_crawl(request, invocation.settings_tables)
-    result = start_crawl(plan, SystemClock(), invocation.reporter, default_hooks())
+    result = start_crawl(plan, SystemClock(), invocation.reporter, default_hooks(plan.loaded))
     if result.failure is not None:
         return Outcome(result.to_json(), result.failure)
     return result.to_json()

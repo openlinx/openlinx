@@ -29,7 +29,6 @@ from openlinx.crawl.engine.hooks import (
 from openlinx.crawl.pages.preparation import Extractor, PageInput, extractor
 from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlResult
-from openlinx.services.hooks import default_hooks
 from openlinx.store.connections import connect
 from openlinx.store.crawls import crawl_summary
 from openlinx.store.records import CrawlState, ErroredUrl, FetchedUrl, Provenance, SkippedUrl
@@ -80,7 +79,7 @@ def test_a_registered_handler_sees_each_recorded_outcome_once(
             }
         )
     )
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)),
@@ -107,7 +106,7 @@ def test_a_url_skipped_beyond_the_depth_limit_reaches_its_handlers_once_requeued
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(LATE_SHORTER_PATH)
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)),
@@ -132,7 +131,7 @@ def test_post_crawl_passes_run_before_a_crawl_is_completed(
     async def record_state(context: PassContext) -> None:
         seen.append((await context.writer.run_async(crawl_summary())).state)
 
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("state", record_state)))
 
     crawl_result(server.url("/"), hooks)
@@ -152,7 +151,7 @@ def test_post_crawl_passes_run_in_the_order_the_hooks_declare(
     async def second(context: PassContext) -> None:
         ran.append("second")
 
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("first", first), Pass("second", second)))
 
     crawl_result(server.url("/"), hooks)
@@ -168,7 +167,7 @@ def test_a_post_crawl_pass_gets_the_clock_of_the_crawl(temp_workspace: TempWorks
     async def record_the_clock(context: PassContext) -> None:
         clocks.append(context.clock)
 
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("clock", record_the_clock)))
 
     crawl_result("http://site.test/", hooks, clock=clock, fetcher=fetcher)
@@ -185,7 +184,7 @@ def test_post_crawl_passes_run_when_the_url_limit_stops_a_crawl(
     async def count_runs(context: PassContext) -> None:
         runs.append("run")
 
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
 
     crawl_result(server.url("/"), hooks, max_urls=3)
@@ -220,7 +219,7 @@ def test_a_full_disk_in_a_post_crawl_pass_fails_the_crawl(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(_articles(120))
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("issues", _materialise_issues)))
 
     with disk_full_after(pages=24):
@@ -239,7 +238,7 @@ def test_post_crawl_passes_do_not_run_for_a_failed_crawl(temp_workspace: TempWor
     async def count_runs(context: PassContext) -> None:
         runs.append("run")
 
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
 
     result = crawl_result(f"http://127.0.0.1:{closed_port()}/", hooks, network_wait=0)
@@ -279,7 +278,7 @@ def test_two_extractors_of_one_name_are_refused_when_the_hooks_are_built() -> No
 
 
 def test_two_handlers_of_one_name_are_refused_when_the_hooks_are_built() -> None:
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(hooks, handlers=(*hooks.handlers, handler("seen", _seen, _write_seen)))
 
     with pytest.raises(TypeError, match="two handlers named seen"):
@@ -297,7 +296,7 @@ BOOM_SITE = Site(
 
 
 def _with_extractors(*extractors: Extractor[Any, Any]) -> Hooks:
-    hooks = default_hooks()
+    hooks = Hooks()
     return replace(hooks, extractors=(*hooks.extractors, *extractors))
 
 
@@ -439,7 +438,7 @@ def test_two_handlers_that_fail_on_one_url_count_it_once(
             }
         )
     )
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(
@@ -475,7 +474,7 @@ def test_a_failing_handler_does_not_stop_the_crawl(
             }
         )
     )
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, handler("boom", _boom, _write_seen)),
@@ -499,7 +498,7 @@ def test_only_the_failing_handlers_rows_are_dropped(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(
@@ -537,7 +536,7 @@ def _refuse_with_the_file(connection: Connection, rows: Sequence[Unwritable]) ->
 
 
 def _with_row_writer(writer: Callable[[Connection, Sequence[Unwritable]], None]) -> Hooks:
-    hooks = default_hooks()
+    hooks = Hooks()
     return replace(
         hooks,
         handlers=(*hooks.handlers, handler("unwritable", _unwritable, writer)),
@@ -591,7 +590,7 @@ def test_recording_that_fails_for_every_url_fails_the_crawl(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(_articles(120))
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks, handlers=(*hooks.handlers, handler("unwritable", _unwritable_but_the_seed, _refuse))
     )
@@ -616,7 +615,7 @@ def test_recording_fails_the_crawl_at_100_urls_in_a_row(
     temp_workspace: TempWorkspace, fixture_site: StartSite, articles: int, state: str
 ) -> None:
     server = fixture_site(_articles(articles))
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks, handlers=(*hooks.handlers, handler("unwritable", _unwritable_but_the_seed, _refuse))
     )
@@ -631,7 +630,7 @@ def test_recording_that_fails_for_half_the_urls_does_not_fail_the_crawl(
 ) -> None:
     # More failures than the limit, but a recorded URL between any two.
     server = fixture_site(_articles(220))
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks, handlers=(*hooks.handlers, handler("unwritable", _unwritable_odd_articles, _refuse))
     )
@@ -690,7 +689,7 @@ def test_a_handler_that_fails_midway_keeps_none_of_its_rows(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, handler("halfway", _seen_then_boom, _write_seen)),
@@ -780,7 +779,7 @@ def test_a_writer_that_ends_reports_why_it_ended(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(
@@ -802,7 +801,7 @@ def test_a_url_that_meets_an_ended_writer_reports_why_the_writer_ended(
     server = fixture_site(
         Site(routes={**BOOM_SITE.routes, "/ok": Page(body="<p>OK</p>", delay=0.3)})
     )
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(
@@ -862,7 +861,7 @@ def test_a_handler_gets_the_row_values_of_the_url(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(BOOM_SITE)
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(
         hooks,
         handlers=(*hooks.handlers, handler("values", _row_values, _write_row_values)),
@@ -1009,7 +1008,7 @@ def test_a_handler_gets_the_robots_txt_verdict_of_the_url(
             }
         )
     )
-    hooks = replace(default_hooks(), handlers=(handler("verdict", _verdict, _write_seen),))
+    hooks = replace(Hooks(), handlers=(handler("verdict", _verdict, _write_seen),))
 
     result = crawl_result(server.url("/"), hooks, ignore_robots=True)
 
@@ -1096,7 +1095,7 @@ def test_each_url_is_recorded_with_the_values_its_handlers_saw(
             }
         )
     )
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(hooks, handlers=(*hooks.handlers, handler("values", _values, _write_values)))
 
     crawl_file = crawl_result(server.url("/"), hooks, exclude=["/logout$"]).crawl_file
@@ -1146,7 +1145,7 @@ def test_a_handler_s_rows_for_a_url_are_written_in_one_statement(
     server = fixture_site(
         Site(routes={"/": Page(body='<a href="/a">A</a>'), "/a": Page(body="<p>A</p>")})
     )
-    hooks = default_hooks()
+    hooks = Hooks()
     hooks = replace(hooks, handlers=(*hooks.handlers, handler("headers", _headers, _write_headers)))
     inserts: list[str] = []
 
@@ -1190,7 +1189,7 @@ def test_a_handler_sees_the_x_robots_tag_of_a_pdf(
             }
         )
     )
-    hooks = replace(default_hooks(), handlers=(handler("directives", _x_robots_tag, _write_seen),))
+    hooks = replace(Hooks(), handlers=(handler("directives", _x_robots_tag, _write_seen),))
 
     crawl_file = crawl_result(server.url("/"), hooks).crawl_file
 
@@ -1254,7 +1253,7 @@ def test_a_handler_sees_the_header_links_before_the_document_links(
             }
         )
     )
-    hooks = replace(default_hooks(), handlers=(handler("links", _links, _write_seen),))
+    hooks = replace(Hooks(), handlers=(handler("links", _links, _write_seen),))
 
     crawl_file = crawl_result(server.url("/"), hooks).crawl_file
 
@@ -1280,7 +1279,7 @@ def test_a_canonical_in_the_body_is_placed_in_the_body(
             }
         )
     )
-    hooks = replace(default_hooks(), handlers=(handler("links", _links, _write_seen),))
+    hooks = replace(Hooks(), handlers=(handler("links", _links, _write_seen),))
 
     crawl_file = crawl_result(server.url("/"), hooks).crawl_file
 
@@ -1309,7 +1308,7 @@ def test_a_nofollow_link_does_not_request_its_target(
             }
         )
     )
-    hooks = replace(default_hooks(), handlers=(handler("requested", _requested, _write_seen),))
+    hooks = replace(Hooks(), handlers=(handler("requested", _requested, _write_seen),))
 
     crawl_file = crawl_result(server.url("/"), hooks).crawl_file
 
@@ -1336,7 +1335,7 @@ def test_a_handler_sees_the_reason_phrase(
             }
         )
     )
-    hooks = replace(default_hooks(), handlers=(handler("reason", _reason, _write_seen),))
+    hooks = replace(Hooks(), handlers=(handler("reason", _reason, _write_seen),))
 
     crawl_file = crawl_result(server.url("/"), hooks).crawl_file
 
@@ -1370,7 +1369,7 @@ def test_a_handler_sees_the_robots_meta_of_a_parsed_page(
             }
         )
     )
-    hooks = replace(default_hooks(), handlers=(handler("meta", _meta_robots, _write_seen),))
+    hooks = replace(Hooks(), handlers=(handler("meta", _meta_robots, _write_seen),))
 
     crawl_file = crawl_result(server.url("/"), hooks).crawl_file
 

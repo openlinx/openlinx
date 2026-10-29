@@ -41,7 +41,7 @@ Every public table, column and index follows the conventions of [ADR-0005](adr/0
 - **Keys and references:**
   - An entity's own key is `id`, INTEGER. Only the public identifiers that a user types, the crawl id and Rule ids, are TEXT. A table with a natural key uses it.
   - A column that refers to another table is named `<table singular>_id`, with a role prefix when a table refers to the same table twice, such as `source_url_id` and `target_url_id`. It is declared as a foreign key.
-- **Timestamps:** TEXT in the form `YYYY-MM-DDTHH:MM:SS.sssZ`, in UTC, with the format `timestamp`, in a column whose name ends with `_at`. They sort as text. A header's raw value keeps the header's name and its text.
+- **Timestamps:** TEXT in the form `YYYY-MM-DDTHH:MM:SS.sssZ`, in UTC, with the format `timestamp`, in a column whose name ends with `_at`. They sort as text. A time read from a header keeps the header's name, such as `last_modified`, and so does a header's raw value, which keeps its text, such as `content_type`.
 - **Booleans:** INTEGER `0` or `1`, with the format `boolean`. The file refuses any other value, through a CHECK named `<table>_<column>_flag`. The name reads as yes or no, such as `is_*` or `has_*`, and is never negated.
 - **JSON:** TEXT holding valid JSON, with the format `json`, only for recorded inputs and for lists without a fixed shape. A value that queries filter, sort or count by is a column of its own.
 - **Enumerations:** TEXT whose allowed values are lowercase snake_case, listed under Values. The file refuses any other value, through a CHECK named `<table>_<column>_values`. A CHECK passes on NULL: `NOT NULL` is what refuses NULL. Values that a later release adds are listed from v0.1, and one enumeration has one value set in every table that holds it.
@@ -159,3 +159,132 @@ One row for each origin of a URL that the Crawl recorded.
 | Name | Columns | Unique | Where | Description |
 |---|---|---|---|---|
 | `origins_origin` | `origin` | yes | | Recording an origin once (ON CONFLICT (origin)), and finding an origin's row. |
+
+## Table `pages`
+
+One row for each Page of the Crawl: an Internal URL in the Scope whose response is an HTML document, whatever its status code.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | PK, → `urls.id` | | | The Page's URL. |
+| `address` | TEXT | no | | | | The Page's URL for display: url_encoded_address with the host in Unicode and every percent-encoded UTF-8 sequence of a non-ASCII character decoded; percent-encoded ASCII characters stay encoded, and so do characters of the Unicode categories Cc, Cf, Zs, Zl and Zp. |
+| `url_encoded_address` | TEXT | no | | | | The Page's URL as the Crawl requested it, equal to urls.url: the host in IDNA (punycode) form and every non-ASCII character percent-encoded as UTF-8. |
+| `url_path` | TEXT | no | | | | The path of address: from the first / after the host up to the first ?, or to the end. |
+| `url_query` | TEXT | yes | | | | The query of address: the text after the first ?; NULL when address has no ?, and the empty string when nothing follows it. |
+| `content_type` | TEXT | no | | | | The Content-Type response header as received, equal to urls.content_type. |
+| `status_code` | INTEGER | no | | | | The HTTP status code of the Page's own response, equal to urls.status_code. |
+| `status` | TEXT | yes | | | | The reason phrase the server sent; when it sent none, the phrase that the IANA HTTP Status Code Registry gives the status code; NULL when the registry gives none. |
+| `indexability` | TEXT | no | | | `indexable`, `non_indexable` | Whether a search engine may index the Page, by the first reason in the Indexability order that applies. |
+| `indexability_status` | TEXT | yes | | | `blocked_by_robots_txt`, `redirected`, `client_error`, `server_error`, `noindex`, `canonicalised` | The first reason in the Indexability order that makes the Page non_indexable: robots.txt, then the status class, then noindex, then a refresh redirect, then a canonical to another URL; NULL when the Page is indexable. |
+| `response_time_ms` | INTEGER | no | | | | Time from sending the request to receiving the whole body, equal to urls.response_time_ms. |
+| `last_modified` | TEXT | yes | | `timestamp` | | The first Last-Modified response header as a UTC time, read as an HTTP-date or another Internet Message Format date; NULL when absent, another text or a leap second. |
+| `redirect_url` | TEXT | yes | | | | The URL the Page redirects to: the target of its 3xx response, of its HTTP Refresh header, or of its first meta refresh; NULL when it does not redirect, or when the target is its own URL. |
+| `redirect_type` | TEXT | yes | | | `http_redirect`, `http_refresh`, `meta_refresh`, `javascript_redirect` | How the Page redirects to redirect_url; NULL when it does not redirect. javascript_redirect is filled from v1.1. |
+| `set_cookie_count` | INTEGER | no | | | | The number of Set-Cookie headers of the Page's response, equal to its rows in cookies. |
+| `crawl_timestamp` | TEXT | no | | `timestamp` | | The UTC time of the Page's request, equal to urls.fetched_at. |
+| `title_1` | TEXT | yes | | | | The text of the Page's first title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `title_1_length` | INTEGER | yes | | | | The length of title_1 in Unicode code points; NULL exactly when title_1 is. |
+| `title_2` | TEXT | yes | | | | The text of the Page's second title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `title_2_length` | INTEGER | yes | | | | The length of title_2 in Unicode code points; NULL exactly when title_2 is. |
+| `title_count` | INTEGER | yes | | | | The number of title elements without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
+| `meta_description_1` | TEXT | yes | | | | The content of the Page's first meta description, whitespace-normalised, the empty string for one without content; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `meta_description_1_length` | INTEGER | yes | | | | The length of meta_description_1 in Unicode code points; NULL exactly when meta_description_1 is. |
+| `meta_description_2` | TEXT | yes | | | | The content of the Page's second meta description, whitespace-normalised, the empty string for one without content; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `meta_description_2_length` | INTEGER | yes | | | | The length of meta_description_2 in Unicode code points; NULL exactly when meta_description_2 is. |
+| `meta_description_count` | INTEGER | yes | | | | The number of meta elements named description without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
+| `meta_keywords_1` | TEXT | yes | | | | The content of the Page's first meta keywords element, whitespace-normalised, the empty string for one without content; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `meta_keywords_1_length` | INTEGER | yes | | | | The length of meta_keywords_1 in Unicode code points; NULL exactly when meta_keywords_1 is. |
+| `h1_1` | TEXT | yes | | | | The text of the Page's first h1 element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `h1_1_length` | INTEGER | yes | | | | The length of h1_1 in Unicode code points; NULL exactly when h1_1 is. |
+| `h1_2` | TEXT | yes | | | | The text of the Page's second h1 element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `h1_2_length` | INTEGER | yes | | | | The length of h1_2 in Unicode code points; NULL exactly when h1_2 is. |
+| `h1_count` | INTEGER | yes | | | | The number of h1 elements without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
+| `h2_1` | TEXT | yes | | | | The text of the Page's first h2 element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `h2_1_length` | INTEGER | yes | | | | The length of h2_1 in Unicode code points; NULL exactly when h2_1 is. |
+| `h2_2` | TEXT | yes | | | | The text of the Page's second h2 element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `h2_2_length` | INTEGER | yes | | | | The length of h2_2 in Unicode code points; NULL exactly when h2_2 is. |
+| `h2_count` | INTEGER | yes | | | | The number of h2 elements without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
+| `meta_robots` | TEXT | yes | | | | The content of every meta element named robots, in document order, as the robots directives parser normalises and joins them; NULL without one, or when the Page is not analysed. |
+| `meta_robots_noindex` | INTEGER | yes | | `boolean` | | 1 when the robots directives parser reads noindex in meta_robots; NULL when the Page is not analysed. |
+| `meta_robots_nofollow` | INTEGER | yes | | `boolean` | | 1 when the robots directives parser reads nofollow in meta_robots; NULL when the Page is not analysed. |
+| `x_robots_tag` | TEXT | yes | | | | The values of every X-Robots-Tag response header, in the order received, as the robots directives parser normalises and joins them; NULL without one. |
+| `x_robots_tag_noindex` | INTEGER | yes | | `boolean` | | 1 when the robots directives parser reads noindex in x_robots_tag for the robots user-agent token. |
+| `x_robots_tag_nofollow` | INTEGER | yes | | `boolean` | | 1 when the robots directives parser reads nofollow in x_robots_tag for the robots user-agent token. |
+| `meta_refresh` | TEXT | yes | | | | The content of the first meta element whose http-equiv is refresh, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
+| `canonical_url` | TEXT | yes | | | | The URL that every canonical declaration resolves to, when they resolve to one URL; NULL without a declaration, when they disagree, or when the Page is not analysed. |
+| `canonical_link_element_1` | TEXT | yes | | | | The resolved URL of the first canonical link element in head; NULL without one, or when the Page is not analysed. |
+| `canonical_link_element_2` | TEXT | yes | | | | The resolved URL of the second canonical link element in head; NULL without one, or when the Page is not analysed. |
+| `http_canonical` | TEXT | yes | | | | The resolved URL of the first canonical Link header entry; NULL without one, or when the Page is not analysed. |
+| `canonical_count` | INTEGER | yes | | | | The number of canonical declarations: canonical link elements in head and canonical Link header entries; NULL when the Page is not analysed. |
+| `canonical_relative` | INTEGER | yes | | `boolean` | | 1 when the href of a canonical link element in head, after the leading control characters and spaces that the URL parser removes, does not start with http: or https:, compared case-insensitively; NULL when the Page is not analysed. |
+| `rel_next_1` | TEXT | yes | | | | The target of the first pagination link element of the HTML whose rel names next; NULL without one, or when the Page is not analysed. |
+| `rel_prev_1` | TEXT | yes | | | | The target of the first pagination link element of the HTML whose rel names prev or previous; NULL without one, or when the Page is not analysed. |
+| `http_rel_next_1` | TEXT | yes | | | | The target of the first pagination Link header entry whose rel names next; NULL without one, or when the Page is not analysed. |
+| `http_rel_prev_1` | TEXT | yes | | | | The target of the first pagination Link header entry whose rel names prev or previous; NULL without one, or when the Page is not analysed. |
+| `amphtml_link_element` | TEXT | yes | | | | The target of the first amphtml link element; NULL without one, or when the Page is not analysed. |
+| `mobile_alternate_link` | TEXT | yes | | | | The target of the first link element whose rel is alternate with a media attribute and no hreflang; NULL without one, or when the Page is not analysed. |
+| `word_count` | INTEGER | yes | | | | The number of words in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
+| `sentence_count` | INTEGER | yes | | | | The number of sentences in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
+| `average_words_per_sentence` | REAL | yes | | | | word_count divided by sentence_count, rounded half up to 2 decimals; NULL when sentence_count is 0, or the Page is not analysed or its Page extractor failed. |
+| `text_ratio_pct` | REAL | yes | | | | 100 times the length of the normalised text of body, without Content Area exclusions, divided by the decoded HTML document's length in characters, rounded half up to 2 decimals; NULL when the document is empty, or the Page is not analysed or its Page extractor failed. |
+| `declared_language` | TEXT | yes | | | | The lang attribute of the root html element, trimmed: the empty string when it has no value; NULL when it is absent, or the Page is not analysed or its Page extractor failed. |
+| `content_hash` | TEXT | yes | | | | The SHA-256, as lowercase hex, of the normalised Content Area text as UTF-8, with no Unicode normalisation: Pages with the same value are Exact Duplicates; NULL when word_count is 0, or the Page is not analysed or its Page extractor failed. |
+| `crawl_depth` | INTEGER | no | | | | Crawl Depth, equal to urls.crawl_depth: 0 for Seeds. |
+| `jsonld_item_count` | INTEGER | yes | | | | The number of JSON-LD items in the application/ld+json scripts: each top-level object, of a script or of a top-level array, or instead the content of its @graph, an array of objects or one object; NULL when the Page is not analysed or its Page extractor failed. |
+| `microdata_item_count` | INTEGER | yes | | | | The number of top-level Microdata items: elements with itemscope and no itemprop; NULL when the Page is not analysed or its Page extractor failed. |
+| `jsonld_parse_error_count` | INTEGER | yes | | | | The number of application/ld+json scripts that are not valid JSON, or nest more than 1024 levels deep; NULL when the Page is not analysed or its Page extractor failed. |
+| `structured_data_types` | TEXT | yes | | `json` | | JSON array of the distinct types of the counted items, from @type and itemtype without a leading http://schema.org/ or https://schema.org/, sorted by code point: [] when there are none; NULL when the Page is not analysed or its Page extractor failed. |
+
+### Indexes
+
+| Name | Columns | Unique | Where | Description |
+|---|---|---|---|---|
+| `pages_address` | `address` | yes | | Finding a Page by its display address, and the tie-breaker of keyset paging over Pages. |
+
+## Table `cookies`
+
+One row for each Set-Cookie header of a Page's response, with the cookie's name and attributes, never its value.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | PK, → `urls.id` | | | The Page whose response set the cookie. |
+| `ordinal` | INTEGER | no | PK | | | The header's position among the response's Set-Cookie headers, from 1. |
+| `name` | TEXT | no | | | | The text before the header's first =, trimmed; the empty string when its first part has no =. |
+| `domain` | TEXT | yes | | | | The Domain attribute, lowercased, without a leading dot; NULL when absent, empty, or neither a host name nor an IP address. |
+| `path` | TEXT | yes | | | | The Path attribute, trimmed, as sent; NULL when absent, when it does not start with /, which RFC 6265 reads as the default path, or when it holds a comma, which only a header that a proxy folded gives it. |
+| `expires` | TEXT | yes | | `timestamp` | | The Expires attribute as a UTC time, a two-digit year read as RFC 6265 reads it; NULL when absent or invalid. |
+| `max_age` | INTEGER | yes | | | | The Max-Age attribute, in seconds; NULL when absent or not an optional - followed by digits; a value beyond a 64-bit INTEGER is clamped to its bound. |
+| `secure` | INTEGER | no | | `boolean` | | 1 when the Secure attribute is present. |
+| `http_only` | INTEGER | no | | `boolean` | | 1 when the HttpOnly attribute is present. |
+| `partitioned` | INTEGER | no | | `boolean` | | 1 when the Partitioned attribute is present. |
+| `same_site` | TEXT | yes | | | `strict`, `lax`, `none` | The SameSite attribute, lowercased; NULL when absent or another value. |
+
+## Table `links`
+
+One row for each Link the Crawl discovered in a response: in an analysed Page's HTML, or in the Link and Refresh headers of an in-Scope 2xx response.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `source_url_id` | INTEGER | no | PK, → `urls.id` | | | The URL whose response contains the Link. |
+| `ordinal` | INTEGER | no | PK | | | The Link's position in that response, from 1: header Links first in the order received, then the document's in document order, as the Crawl's Link discovery numbers them. |
+| `target_url_id` | INTEGER | no | → `urls.id` | | | The URL of the Link's normalised target. |
+| `type` | TEXT | no | | | `hyperlink`, `canonical`, `pagination`, `hreflang`, `iframe`, `meta_refresh`, `http_refresh`, `image`, `css`, `javascript`, `video`, `audio`, `media`, `amphtml`, `mobile_alternate`, `misc`, `xml_sitemap`, `sitemap_hreflang`, `javascript_redirect` | The Link type. |
+| `declared_in` | TEXT | no | | | `head`, `body`, `http_header` | Where the Link was declared: in the document's head or body as the parser builds them, or in a response header. |
+| `element` | TEXT | yes | | | `a`, `area`, `link`, `iframe`, `frame`, `meta`, `img`, `source`, `video`, `audio`, `track`, `embed`, `object`, `script` | The HTML element the Link came from; NULL for a header Link. |
+| `attribute` | TEXT | yes | | | `href`, `src`, `srcset`, `poster`, `data`, `content` | The attribute the Link came from, such as src or srcset of an img; NULL for a header Link. |
+| `anchor_text` | TEXT | yes | | | | For a hyperlink, the normalised text of its element, or when that is empty the alt texts of the img elements inside it, joined with a space; for an area, its alt; NULL for other types, or when the Page's Link extractor failed. |
+| `alt_text` | TEXT | yes | | | | For an image Link from an img element, its alt attribute, normalised: the empty string when it has no value; NULL when it is absent, for other Links, or when the Page's Link extractor failed. |
+| `rel` | TEXT | yes | | | | The Link's rel tokens, lowercased, joined with single spaces; NULL without any. |
+| `rel_nofollow` | INTEGER | no | | `boolean` | | 1 when rel holds nofollow. |
+| `rel_ugc` | INTEGER | no | | `boolean` | | 1 when rel holds ugc. |
+| `rel_sponsored` | INTEGER | no | | `boolean` | | 1 when rel holds sponsored. |
+| `hreflang` | TEXT | yes | | | | For a hreflang Link, the trimmed hreflang of its element, or the hreflang parameter of its Link header; NULL for other Links, and for a Link of the HTML when the Page's Link extractor failed. |
+| `media` | TEXT | yes | | | | For a mobile_alternate Link, the trimmed media of its element; NULL for other Links, or when the Page's Link extractor failed. |
+| `link_position` | TEXT | yes | | | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | Where on the Page the Link is: head for a Link the parser places in head; otherwise from the nearest enclosing nav (navigation), header, footer or aside (sidebar), and content without one, a Link from a noscript's content taking the noscript's place; NULL for a header Link, or when the Page's Link extractor failed. |
+
+### Indexes
+
+| Name | Columns | Unique | Where | Description |
+|---|---|---|---|---|
+| `links_target` | `target_url_id` | no | | The inlinks of a URL: every Link that points at it. |
+| `links_type_target` | `type`, `target_url_id` | no | | The inlinks of a URL of one Link type, such as its hyperlink inlinks. |

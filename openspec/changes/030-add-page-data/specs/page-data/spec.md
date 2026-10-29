@@ -1,6 +1,6 @@
 ## Purpose
 
-Defines the Page data a Crawl stores. This covers the flat Page record that matches Screaming Frog's "Internal" tab, the attributes stored for every discovered Link, the cookies Pages set and the stored HTML. Rules, query Commands and Reports all read this one documented set of columns, and each column has an exact definition.
+Defines the Page data a Crawl stores. This covers the flat Page record, one row per Page under the column names SEO practitioners already use, the attributes stored for every discovered Link, the cookies Pages set and the stored HTML. Rules, query Commands and Reports all read this one documented set of columns, and each column has an exact definition.
 
 ## ADDED Requirements
 
@@ -18,7 +18,7 @@ The crawl store SHALL hold one row in the `pages` table for every Page of a Craw
 - **When it is written.** The row SHALL be written in the same transaction as the URL's response data.
 - **What gets no row.** There SHALL be no `pages` row for any other URL.
 
-In the scenarios, `{site}` is the origin of the local fixture site.
+In the scenarios, `{site}` is the origin of the local fixture site. In scenarios that use host names, the DNS resolver hook of `020-add-crawl-core` maps `site.test` to one fixture site instance and `other.test` to a second one.
 
 #### Scenario: HTML response becomes a Page
 - **WHEN** a Crawl of the fixture site fetches `{site}/about`, which responds 200 with `Content-Type: text/html; charset=utf-8`
@@ -36,19 +36,26 @@ In the scenarios, `{site}` is the origin of the local fixture site.
 - **WHEN** `{site}/timeout` never answers within the Crawl's timeout
 - **THEN** `pages` holds 0 rows whose `address` is `{site}/timeout`
 
+#### Scenario: External HTML response is not a Page
+- **WHEN** `http://site.test/` links to `http://other.test/page`, which responds 200 with `Content-Type: text/html`, and the Crawl of `http://site.test/` runs
+- **THEN** `pages` holds 0 rows whose `address` is `http://other.test/page`
+
 ### Requirement: Analysed and non-analysed Pages
+**In short:** a Page is analysed when `020-add-crawl-core` parsed it; one that is not analysed keeps its response columns, and its HTML columns are NULL.
+
 A Page SHALL be *analysed* exactly when `020-add-crawl-core` parsed it (`urls.parsed` = 1), meaning it had a 2xx status and a body that was read in full. For every Page, analysed or not, these columns SHALL be set as their own requirements define:
 
 - the identity and response columns
 - the size columns
 - `set_cookie_count`
+- `x_robots_tag`, `x_robots_tag_noindex` and `x_robots_tag_nofollow`
 - `crawl_depth` and `folder_depth`
 - the inlink columns, once the post-crawl passes have run
 
 For a Page that is not analysed, these columns SHALL be NULL:
 
 - every title and heading column
-- every directive column
+- every other directive column
 - every content column
 - the outlink columns (`outlinks`, `unique_outlinks`, `external_outlinks`, `unique_external_outlinks`)
 - the structured-data columns
@@ -60,12 +67,12 @@ For an analysed Page, following the table conventions of `015-add-crawl-store`:
 - A text column SHALL be NULL when its element or header is absent, and the empty string when the element is present but empty.
 - A length column SHALL be NULL exactly when its text column is NULL, and so SHALL a width column from v0.2.
 
-When the Page extractor of this change raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns the Page extractor derives from the HTML (the title and heading, content and structured-data columns, and the Link attributes it adds) SHALL be NULL. The columns that come from the response, from `020-add-crawl-core`'s robots directives parser and discovered Links (the directive and canonical columns), the outlink counts and `indexability` SHALL be set as for any analysed Page.
+When an extractor of this change, the Page extractor or the Link extractor, raised on an analysed Page, `020-add-crawl-core` records `urls.parse_error` = `extractor_error`, with `parse_error_message` naming the extractor, and still follows the Page's Links. That Page SHALL still have its `pages` row and its `links` rows. The columns that extractor derives from the HTML SHALL be NULL: the title and heading, content and structured-data columns and `meta_refresh` for the Page extractor, and, for the Link extractor, `anchor_text`, `alt_text`, `link_position`, and the `hreflang` and `media` of the Links declared in the HTML. The columns a Link takes from the Link discovery of `020-add-crawl-core` (the target, `ordinal`, `type`, `declared_in`, `element`, `attribute`, `rel` and its flags) SHALL stay set. The columns that come from the response, from `020-add-crawl-core`'s robots directives parser and discovered Links (the other directive columns and the canonical columns), the outlink counts and `indexability` SHALL be set as for any analysed Page.
 
 The columns that a later release fills stay NULL in every Page until then (see "Columns measured by later releases stay NULL").
 
 #### Scenario: A Page whose Page extractor failed keeps its response data and Links
-- **WHEN** the Page extractor raises on `{site}/broken` (a test puts a raising extractor under its name in `default_hooks()`), which responds 200 with `<title>T</title><meta name="robots" content="noindex"><a href="/a">A</a>`
+- **WHEN** the Page extractor and the Link extractor raise on `{site}/broken` (a test puts raising extractors under their names in `default_hooks()` in `openlinx.services.hooks`, the composition root), which responds 200 with `<title>T</title><meta name="robots" content="noindex"><a href="/a">A</a>`
 - **THEN** `{site}/broken` has `parsed` = 1 and `parse_error` = `extractor_error`, its `pages` row has `status_code` 200, `title_1` NULL, `meta_robots_noindex` 1 and `indexability` `non_indexable`, and its `links` row to `{site}/a` has `type` `hyperlink` and `anchor_text` NULL
 
 #### Scenario: Error Page keeps response data
@@ -77,7 +84,7 @@ The columns that a later release fills stay NULL in every Page until then (see "
 - **THEN** `title_1` is the empty string, `title_1_length` is 0 and `h1_1` is NULL
 
 ### Requirement: Page record columns
-The `pages` table SHALL have exactly the columns below, grouped as in the Screaming Frog "Internal" tab, with the types and nullability shown. A later requirement defines each column's value. Names, formats and allowed values SHALL follow the schema conventions of `018-add-schema-conventions` (ADR-0005): widths end in `_px`, percentages in `_pct`, times in `_ms` and sizes in `_bytes`, and every column keeps its Screaming Frog name.
+The `pages` table SHALL have exactly the columns below, grouped by what they describe, with the types and nullability shown. A later requirement defines each column's value. Names, formats and allowed values SHALL follow the schema conventions of `018-add-schema-conventions` (ADR-0005): widths end in `_px`, percentages in `_pct`, times in `_ms` and sizes in `_bytes`, and every column keeps the name SEO practitioners already use.
 
 The Kind column marks how a column is filled:
 
@@ -85,6 +92,8 @@ The Kind column marks how a column is filled:
 - **N2, N3, N11:** filled from v0.2, v0.3 or v1.1, and NULL until then. Its description starts with `Filled from v0.2. `, `Filled from v0.3. ` or `Filled from v1.1. `.
 - **W (written with the Page):** a value that other stored rows already determine: a copy of a `urls` or `origins` value, or a value computed from them, from the Page's other columns, its Links or its cookies. It is written in the Page's unit, from the same response.
 - No mark: measured from the Page's response.
+
+A value *rounded to 2 decimals* SHALL be its exact quotient rounded half up, so 1 ÷ 8 is 0.13.
 
 | Group | Column | Type | Null | Kind | Format / values |
 |---|---|---|---|---|---|
@@ -178,9 +187,9 @@ The Kind column marks how a column is filled:
 | Links | `unique_js_outlinks` | INTEGER | yes | N11 |  |
 | Links | `external_outlinks` | INTEGER | yes | W |  |
 | Links | `unique_external_outlinks` | INTEGER | yes | W |  |
-| Structured data | `jsonld_items` | INTEGER | yes |  |  |
-| Structured data | `microdata_items` | INTEGER | yes |  |  |
-| Structured data | `jsonld_parse_errors` | INTEGER | yes |  |  |
+| Structured data | `jsonld_item_count` | INTEGER | yes |  |  |
+| Structured data | `microdata_item_count` | INTEGER | yes |  |  |
+| Structured data | `jsonld_parse_error_count` | INTEGER | yes |  |  |
 | Structured data | `structured_data_types` | TEXT | yes |  | json |
 | Structured data | `structured_data_errors` | INTEGER | yes | N3 |  |
 | Structured data | `structured_data_warnings` | INTEGER | yes | N3 |  |
@@ -196,14 +205,16 @@ The Kind column marks how a column is filled:
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"pages_address","columns":["address"],"unique":true,"where":null}`
 
 ### Requirement: Address columns
+**In short:** a Page row stores its URL as requested and as people read it, with the path and query of the readable form.
+
 Each Page row SHALL store two forms of the Page's URL, and the path and query of the display form:
 
 - **`url_encoded_address`** is the URL as the Crawl requested it, equal to `urls.url`. The host is in IDNA (punycode) form, and every non-ASCII character is percent-encoded as UTF-8.
 - **`address`** is `url_encoded_address` with two changes:
   - the host is converted to Unicode
-  - every percent-encoded byte sequence that decodes as UTF-8 to a non-ASCII character is replaced by that character
+  - every percent-encoded byte sequence that decodes as UTF-8 to a non-ASCII character is replaced by that character, unless the character's Unicode general category is `Cc`, `Cf`, `Zs`, `Zl` or `Zp`: a control, a format character such as a bidi override, or a space or separator
   
-  Percent-encoded ASCII characters SHALL stay encoded.
+  Percent-encoded ASCII characters, and characters of those five categories, SHALL stay encoded, so that nothing in an address hides or spoofs what was requested.
 - **`url_path`** is the path of `address`: from the first `/` after the host up to the first `?`, or to the end.
 - **`url_query`** is the query of `address`: the text after the first `?`. It is NULL when `address` has no `?`, and the empty string when nothing follows it.
 
@@ -215,20 +226,26 @@ Each Page row SHALL store two forms of the Page's URL, and the path and query of
 - **WHEN** the Page's `url_encoded_address` is `https://xn--bcher-kva.test/`
 - **THEN** its `address` is `https://bücher.test/`
 
+#### Scenario: Invisible and control characters stay encoded
+- **WHEN** the Page's `url_encoded_address` is `https://example.test/a%C2%A0b%E2%80%AEc%C2%9Bd%C3%BC`
+- **THEN** its `address` is `https://example.test/a%C2%A0b%E2%80%AEc%C2%9Bdü`: the no-break space, the right-to-left override and the C1 control stay encoded
+
 #### Scenario: Path and query of the address
 - **WHEN** Pages have the `url_encoded_address` values `https://example.test/%D0%9A%D0%B0%D1%82/a%2Fb?x=1&y=%C3%BC`, `https://example.test/a?` and `https://example.test/a`
 - **THEN** the first has `url_path` `/Кат/a%2Fb` and `url_query` `x=1&y=ü`, the second has `url_path` `/a` and `url_query` equal to the empty string, and the third has `url_query` NULL
 
 ### Requirement: Response columns
+**In short:** every Page stores its own response's values; those that `urls` holds too are equal to it.
+
 Each Page row SHALL store these columns. All of them come from the Page's own response, never from a redirect target. Where a column repeats a value of the `urls` table (`020-add-crawl-core`, including the columns that `022-add-fetch-policy` adds) or of the `origins` table, it SHALL be equal to that value.
 
 | Column | Value |
 |---|---|
 | `content_type` | `urls.content_type` |
 | `status_code` | `urls.status_code` |
-| `status` | the reason phrase the server sent; when it sent none, the standard reason phrase for the status code from RFC 9110; NULL when neither exists |
+| `status` | the reason phrase the server sent; when it sent none or an empty one, the phrase that the IANA HTTP Status Code Registry gives the status code; NULL when the registry gives none, as for 418, which it lists as unused |
 | `response_time_ms` | `urls.response_time_ms` |
-| `last_modified` | the `Last-Modified` header parsed as an HTTP-date, as a `timestamp` (`YYYY-MM-DDTHH:MM:SS.sssZ`); NULL when absent or invalid |
+| `last_modified` | the first `Last-Modified` header, parsed as an HTTP-date or as another Internet Message Format date, as RFC 9110 allows, with its offset converted to UTC, as a `timestamp` (`YYYY-MM-DDTHH:MM:SS.sssZ`); NULL when absent, another text or a leap second |
 | `http_version` | `origins.http_version` for the Page's origin (`http_1_1` or `http_2`); filled from v0.2, as the origin's column is, and NULL until then |
 | `crawl_timestamp` | `urls.fetched_at` |
 
@@ -275,8 +292,8 @@ Each Page row SHALL store these size columns, repeating the values that `022-add
 A Page SHALL have `redirect_url` and `redirect_type` set in these cases:
 
 - **HTTP redirect.** A Page with a 3xx status code has `redirect_type` `http_redirect`. Its `redirect_url` is the URL that `urls.redirect_url_id` (`022-add-fetch-policy`) points to, or NULL when that is null.
-- **HTTP Refresh.** A Page with a 2xx status code whose `Refresh` header names a URL different from its own `address`, the target of the `http_refresh` Link that `020-add-crawl-core` discovers, has `redirect_type` `http_refresh` and `redirect_url` set to that URL.
-- **Meta refresh.** An analysed Page without an HTTP Refresh redirect, whose meta refresh names a URL different from its own `address`, has `redirect_type` `meta_refresh` and `redirect_url` set to that URL (see "Meta refresh").
+- **HTTP Refresh.** A Page with a 2xx status code whose `Refresh` header names a URL different from its own URL, the target of the `http_refresh` Link that `020-add-crawl-core` discovers, has `redirect_type` `http_refresh` and `redirect_url` set to that URL.
+- **Meta refresh.** An analysed Page without an HTTP Refresh redirect, whose meta refresh names a URL different from its own URL, has `redirect_type` `meta_refresh` and `redirect_url` set to that URL (see "Meta refresh").
 
 In every other case both columns SHALL be NULL. `redirect_type` also lists `javascript_redirect`, which JavaScript rendering fills from v1.1.
 
@@ -289,27 +306,29 @@ In every other case both columns SHALL be NULL. `redirect_type` also lists `java
 - **THEN** its row has `redirect_type` `http_refresh` and `redirect_url` `https://example.test/new`
 
 ### Requirement: Cookies from Set-Cookie headers
+**In short:** one `cookies` row per `Set-Cookie` header of a Page, with the cookie's name and attributes, never its value.
+
 The crawl store SHALL hold one row in the `cookies` table for each `Set-Cookie` header on a Page's response, whatever the Page's status code. Its columns are:
 
 | Column | Type | Null | Format / values | Value |
 |---|---|---|---|---|
 | `url_id` | INTEGER, references `urls.id` | no | | the Page |
 | `ordinal` | INTEGER | no | | the header's position among the response's `Set-Cookie` headers, from 1 |
-| `name` | TEXT | no | | the text before the first `=`, trimmed |
-| `domain` | TEXT | yes | | the `Domain` attribute, lowercased with any leading dot removed |
-| `path` | TEXT | yes | | the `Path` attribute |
-| `expires` | TEXT | yes | timestamp | the `Expires` attribute as a timestamp; NULL when absent or invalid |
-| `max_age` | INTEGER | yes | | the `Max-Age` attribute, in seconds |
+| `name` | TEXT | no | | the text before the first `=`, trimmed; the empty string when the header's first part has no `=`, or when that text holds a comma, which only a header that a proxy folded gives it |
+| `domain` | TEXT | yes | | the `Domain` attribute, lowercased with any leading dot removed; NULL when absent, empty, or neither a host name nor an IP address |
+| `path` | TEXT | yes | | the `Path` attribute, trimmed, as sent rather than the path a browser would default to; NULL when absent, when it does not start with `/`, which RFC 6265 section 5.2.4 reads as the default path, or when it holds a comma, which only a header that a proxy folded gives it |
+| `expires` | TEXT | yes | timestamp | the `Expires` attribute as a timestamp, a two-digit year read as RFC 6265 reads it (70–99 as 19xx, 0–69 as 20xx); NULL when absent or invalid |
+| `max_age` | INTEGER | yes | | the `Max-Age` attribute, in seconds; NULL when it is not an optional `-` followed by digits; a value beyond a 64-bit INTEGER is clamped to its bound |
 | `secure` | INTEGER | no | boolean | 1 when the `Secure` attribute is present |
 | `http_only` | INTEGER | no | boolean | 1 when the `HttpOnly` attribute is present |
 | `partitioned` | INTEGER | no | boolean | 1 when the `Partitioned` attribute is present |
 | `same_site` | TEXT | yes | `strict`, `lax`, `none` | the `SameSite` attribute, lowercased; NULL when absent or another value |
 
-`(url_id, ordinal)` SHALL be the primary key, and the table SHALL be `WITHOUT ROWID`. `expires` and `max_age` keep their Screaming Frog names; their descriptions give their units.
+`(url_id, ordinal)` SHALL be the primary key, and the table SHALL be `WITHOUT ROWID`. `expires` and `max_age` keep the names of their `Set-Cookie` attributes; their descriptions give their units.
 
-Attribute names SHALL be matched case-insensitively. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
+Attribute names SHALL be matched case-insensitively. When `Domain`, `Expires` or `Max-Age` is repeated, the last one whose value parses SHALL apply, as RFC 6265 section 5.2 ignores one whose value does not; when another attribute is repeated, the last one SHALL apply, as an unknown `SameSite` value is not ignored. The Page's `set_cookie_count` SHALL equal its number of `cookies` rows. `js_cookie_count` SHALL be NULL, because cookies set by scripts are measured from v1.1.
 
-The cookie value SHALL NOT be stored in any table this change adds. Together with `022-add-fetch-policy`, which stores `Set-Cookie` values as `***` in `response_headers`, no cookie value is stored anywhere in a crawl file.
+The cookie value SHALL NOT be stored in any table this change adds, also when a proxy folds several `Set-Cookie` headers into one.
 
 #### Scenario: Cookie attributes are stored
 - **WHEN** a Page's response has `Set-Cookie: sid=abc123; Path=/; Secure; HttpOnly; SameSite=Lax`
@@ -320,12 +339,12 @@ The cookie value SHALL NOT be stored in any table this change adds. Together wit
 - **THEN** the Page has `set_cookie_count` 2, the first cookie has `max_age` 3600 and the second has `domain` `example.test`
 
 #### Scenario: Cookies of a redirect are stored
-- **WHEN** `{site}/login` responds 302 with `Content-Type: text/html`, `Location: /` and `Set-Cookie: s=1; Path=/`
-- **THEN** its Page row has `set_cookie_count` 1
+- **WHEN** `{site}/login` responds 302 with `Content-Type: text/html`, `Location: /` and `Set-Cookie: session=eyJ1c2VyX2lkIjo0Mn0.Zx8kVQ.q3Jt0mXb; Path=/; HttpOnly; Secure; SameSite=Lax`
+- **THEN** its Page row has `set_cookie_count` 1, and its `cookies` row has `name` `session`, `http_only` 1 and `same_site` `lax`
 
 #### Scenario: Cookie values are not stored in Page data
-- **WHEN** a Crawl stores the cookie `sid=abc123` from `{site}/cookie`, whose body does not contain `abc123`
-- **THEN** 0 rows of `cookies`, `pages`, `links` and `page_sources` (decompressed) contain the text `abc123`
+- **WHEN** a Crawl stores the cookie `PHPSESSID=9c7f3b2e1d4a8f6e0b5c3a7d9e1f2b4c; path=/; HttpOnly` from `{site}/cookie`, whose body does not contain `9c7f3b2e1d4a8f6e0b5c3a7d9e1f2b4c`
+- **THEN** its `cookies` row has `name` `PHPSESSID`, and 0 rows of `cookies`, `pages`, `links` and `page_sources` (decompressed) contain the text `9c7f3b2e1d4a8f6e0b5c3a7d9e1f2b4c`
 
 ### Requirement: Decoding, text and URL resolution
 Analysed Pages SHALL be decoded to text using the first source that applies, in this order:
@@ -370,7 +389,7 @@ Encoding labels SHALL be those of the WHATWG Encoding Standard, and a label outs
 - **THEN** its `canonical_link_element_1` is `https://example.test/docs/page`
 
 ### Requirement: Titles
-Titles SHALL be extracted from HTML-namespace `<title>` elements anywhere in the document. `<title>` elements inside SVG or MathML content SHALL be ignored.
+Titles SHALL be extracted from `<title>` elements anywhere in the document that have no `svg`, `math` or `noscript` ancestor. A `<title>` inside SVG or MathML content names a picture or a formula, and nothing inside `noscript` is an element to a browser that runs scripts, as a search engine's renderer does.
 
 - `title_count` is the number of such elements.
 - `title_1` and `title_2` are the texts of the first and second, in document order.
@@ -379,6 +398,14 @@ Titles SHALL be extracted from HTML-namespace `<title>` elements anywhere in the
 #### Scenario: Title in SVG is ignored
 - **WHEN** an analysed Page's HTML is `<head><title>Main</title></head><body><svg><title>Icon</title></svg></body>`
 - **THEN** `title_count` is 1 and `title_2` is NULL
+
+#### Scenario: Title in noscript is ignored
+- **WHEN** an analysed Page's HTML is `<head><title>Main</title></head><body><noscript><title>Enable JavaScript</title></noscript></body>`
+- **THEN** `title_1` is `Main` and `title_count` is 1
+
+#### Scenario: Title in head noscript is ignored
+- **WHEN** an analysed Page's HTML is `<head><noscript><title>Enable JavaScript</title></noscript><title>Main</title></head>`
+- **THEN** `title_1` is `Main` and `title_count` is 1
 
 #### Scenario: Second title element
 - **WHEN** an analysed Page's HTML is `<head><title>One</title><title>Two</title></head>`
@@ -389,7 +416,7 @@ Titles SHALL be extracted from HTML-namespace `<title>` elements anywhere in the
 - **THEN** `title_count` is 0 and `title_1` and `title_1_length` are NULL
 
 ### Requirement: Meta description and meta keywords
-Meta descriptions SHALL be extracted from `<meta>` elements anywhere in the document whose trimmed `name` equals `description`, compared case-insensitively.
+Meta descriptions SHALL be extracted from `<meta>` elements anywhere in the document that have no `svg`, `math` or `noscript` ancestor, as titles are, and whose trimmed `name` equals `description`, compared ASCII case-insensitively.
 
 - `meta_description_count` is the number of such elements.
 - `meta_description_1` and `meta_description_2` are the normalised `content` values of the first two. An element without `content` gives the empty string.
@@ -410,18 +437,18 @@ Meta descriptions SHALL be extracted from `<meta>` elements anywhere in the docu
 - **THEN** `meta_keywords_1` is `shoes, boots` and `meta_keywords_1_length` is 12
 
 ### Requirement: Headings
-Headings SHALL be extracted from `<h1>` and `<h2>` elements anywhere in the document.
+Headings SHALL be extracted from `<h1>` and `<h2>` elements anywhere in the document that have no `svg`, `math` or `noscript` ancestor, as titles are.
 
 - `h1_count` and `h2_count` are the numbers of such elements.
 - `h1_1`, `h1_2`, `h2_1` and `h2_2` are the texts of the first and second of each, in document order.
 - Each has a matching `_length` column.
 
 #### Scenario: Heading text includes nested elements
-- **WHEN** an analysed Page's HTML is `<body><h1>Main <span>Title</span></h1><h1>Second</h1><h2>Sub</h2></body>`
+- **WHEN** an analysed Page's HTML is `<body><h1>Main <span>Title</span></h1><h1>Second</h1><h1>Third</h1><h2>Sub</h2></body>`
 - **THEN** these values are stored:
   - `h1_1` is `Main Title` and `h1_1_length` is 10
   - `h1_2` is `Second` and `h1_2_length` is 6
-  - `h1_count` is 2
+  - `h1_count` is 3
   - `h2_1` is `Sub` and `h2_1_length` is 3
   - `h2_count` is 1
   - `h2_2` and `h2_2_length` are NULL
@@ -462,22 +489,28 @@ The result SHALL NOT depend on the fonts installed on the machine.
 - **THEN** `title_2_width_px` is 38 and `meta_description_2_width_px` is 9
 
 ### Requirement: Meta robots and X-Robots-Tag
-An analysed Page SHALL store the robots directives found in its HTML and in its headers:
+**In short:** the raw directive text and `020-add-crawl-core`'s noindex and nofollow verdicts, from the HTML of an analysed Page and from the headers of every Page.
 
-- **`meta_robots`**: the normalised `content` values of all `<meta>` elements whose `name` is `robots` (compared case-insensitively), joined with `, ` in document order. It is NULL when there are none.
-- **`x_robots_tag`**: the normalised values of all `X-Robots-Tag` response headers, joined with `, ` in the order received. It is NULL when there are none.
+An analysed Page SHALL store the robots directives found in its HTML, and every Page those found in its headers:
+
+- **`meta_robots`**: the `content` values of all `<meta>` elements whose `name` is `robots` (compared case-insensitively), in document order, normalised and joined as the robots directives parser of `020-add-crawl-core` gives them. It is NULL when there are none.
+- **`x_robots_tag`**: the values of all `X-Robots-Tag` response headers, in the order received, normalised and joined by the same parser. It is NULL when there are none.
 - **`meta_robots_noindex`, `meta_robots_nofollow`, `x_robots_tag_noindex` and `x_robots_tag_nofollow`**: the noindex and nofollow verdicts, as 0 or 1, that the robots directives parser of `020-add-crawl-core` gives for each source. That parser defines which tokens count (such as `none`) and which header values apply only to a named crawler.
 
 #### Scenario: Meta robots keeps case but reads directives
 - **WHEN** an analysed Page's HTML contains `<meta name="ROBOTS" content="NOINDEX, follow">`
 - **THEN** `meta_robots` is `NOINDEX, follow`, `meta_robots_noindex` is 1 and `meta_robots_nofollow` is 0
 
+#### Scenario: X-Robots-Tag is kept when page preparation fails
+- **WHEN** a Page responds 200 with `Content-Type: text/html` and `X-Robots-Tag: noindex`, and its preparation failed (`parsed` = 0)
+- **THEN** `x_robots_tag` is `noindex`, `x_robots_tag_noindex` is 1 and `meta_robots` is NULL
+
 #### Scenario: X-Robots-Tag is stored with the parser's verdict
 - **WHEN** an analysed Page's response has `X-Robots-Tag: noindex` and its HTML has no robots `<meta>`
 - **THEN** `x_robots_tag` is `noindex`, `x_robots_tag_noindex` is 1, `x_robots_tag_nofollow` is 0 and `meta_robots` is NULL
 
 ### Requirement: Meta refresh
-`meta_refresh` SHALL be the normalised `content` of the first `<meta>` element whose `http-equiv` is `refresh` (compared case-insensitively). It is NULL when there is none. The refresh target is the target of the `meta_refresh` Link that `020-add-crawl-core` discovers.
+`meta_refresh` SHALL be the normalised `content` of the first `<meta>` element whose `http-equiv` is `refresh` (compared case-insensitively). It is NULL when there is none. Only that first element can redirect: when its `content` names a URL, the refresh target is the target of the first `meta_refresh` Link that `020-add-crawl-core` discovers, and otherwise there is none.
 
 #### Scenario: Meta refresh with a quoted target
 - **WHEN** the analysed Page `https://example.test/old` contains `<meta http-equiv="Refresh" content="5; URL='/new'">`
@@ -487,11 +520,17 @@ An analysed Page SHALL store the robots directives found in its HTML and in its 
 - **WHEN** an analysed Page contains `<meta http-equiv="refresh" content="30">`
 - **THEN** `meta_refresh` is `30` and `redirect_type` is NULL
 
-### Requirement: Canonicals
-The canonical columns of an analysed Page SHALL be computed from its *canonical declarations*. A canonical declaration is either of these:
+#### Scenario: Only the first meta refresh redirects
+- **WHEN** an analysed Page's head contains `<meta http-equiv="refresh" content="300">` and then `<meta http-equiv="refresh" content="0; url=/new">`
+- **THEN** `meta_refresh` is `300`, and `redirect_type` and `redirect_url` are NULL
 
-- a `<link>` element that the HTML parser places inside `<head>`, whose `rel` tokens include `canonical` (compared case-insensitively), and which has an `href`
-- a `Link` response header entry with `rel="canonical"`
+### Requirement: Canonicals
+The canonical columns of an analysed Page SHALL be computed from its *canonical declarations*. A canonical declaration is a `canonical` Link that `020-add-crawl-core` discovers in the Page's response and that is declared in one of two places:
+
+- *HTML*: a `<link>` element whose `rel` tokens include `canonical` (compared case-insensitively) and that the HTML parser places inside `<head>`
+- *header*: a `Link` response header entry with `rel="canonical"`
+
+An `href` that resolves to no URL gives no Link, and so no declaration.
 
 The canonical columns SHALL be:
 
@@ -499,7 +538,7 @@ The canonical columns SHALL be:
 - `http_canonical`: the resolved URL of the first header declaration.
 - `canonical_count`: the number of declarations.
 - `canonical_url`: the URL that all declarations resolve to, when they resolve to exactly one distinct URL. It is NULL when there are no declarations or when they disagree.
-- `canonical_relative`: 1 when the `href` of any HTML declaration does not start with `http:` or `https:`, compared case-insensitively.
+- `canonical_relative`: 1 when the `href` of any HTML declaration does not start with `http:` or `https:`, compared case-insensitively after the leading C0 controls and spaces that the URL parser removes.
 
 A `canonical` Link that `020-add-crawl-core` discovers outside `<head>` is still stored as a Link, but SHALL NOT be a canonical declaration.
 
@@ -536,8 +575,8 @@ Every Page SHALL have `indexability` set to `indexable` or `non_indexable`. When
 
 1. `blocked_by_robots_txt`: `urls.blocked_by_robots_txt` is 1. This applies to a Page fetched under `--ignore-robots`.
 2. `redirected`: the status code is 3xx.
-3. `client_error`: the status code is 4xx.
-4. `server_error`: the status code is 5xx.
+3. `client_error`: the status code is 400-499, or 600 or more. A bot-block code such as 999 means the Page is withheld from crawlers.
+4. `server_error`: the status code is 500-599.
 5. `noindex`: `meta_robots_noindex` or `x_robots_tag_noindex` is 1.
 6. `redirected`: `redirect_type` is `meta_refresh` or `http_refresh`.
 7. `canonicalised`: `canonical_url` is not NULL and differs from the Page's URL after normalisation.
@@ -587,7 +626,7 @@ A value set in `openlinx.toml` replaces the default list.
 - **Roots.** When `include` is empty, the only root is `<body>`. Otherwise the roots are the elements that match an `include` selector and have no ancestor that also matches one.
 - **Membership.** A node is in the Content Area when it is a root or inside a root, and neither the node nor any of its ancestors matches an `exclude` selector.
 
-The *Content Area text* is the text of the nodes in the Content Area, in document order, with block breaks kept.
+The *Content Area text* is the text of the nodes in the Content Area, in document order, with block breaks kept. Each root's text is a block of its own.
 
 An invalid selector SHALL make `linx crawl` fail before any URL is requested, with the error code `settings_invalid` of `010-add-workspace-and-cli-contract`. The effective settings SHALL be recorded in the Crawl's recorded config under `content_area`.
 
@@ -621,12 +660,12 @@ Fixture A below is referred to by later scenarios:
 ### Requirement: Word, sentence and syllable counts
 These counts SHALL be taken over the Content Area text.
 
-**Words.** A word is a maximal sequence of letters, marks and digits (Unicode categories L, M and N). A single apostrophe (`'` or `’`), hyphen (`-` or U+2010), full stop or comma between two such characters does not end the sequence. There is one exception: each Han, Hiragana or Katakana character is a word on its own. `word_count` is the number of words.
+**Words.** A word is a maximal sequence of letters, marks and digits (Unicode categories L, M and N). A single apostrophe (`'` or `’`), hyphen (`-` or U+2010), full stop or comma between two such characters does not end the sequence. There is one exception: each Han, Hiragana or Katakana character, with the marks that follow it, is a word on its own, and so is the prolonged sound mark `ー` (U+30FC), so `カード` is 3 words. `word_count` is the number of words.
 
 **Sentences.** A sentence is a part of a text block that contains at least one word and ends in one of two ways:
 
 - at the end of the block
-- after a run of the terminators `.`, `!`, `?`, `…`, `。`, `！` or `？`, when the run is followed by whitespace or the end of the block, or when it contains `。`, `！` or `？`
+- after a run of the terminators `.`, `!`, `?`, `…`, `。`, `！` or `？`, when the run is followed by Unicode whitespace, such as a space, a no-break space or U+3000, or by the end of the block, or when it contains `。`, `！` or `？`
 
 `sentence_count` is the number of sentences.
 
@@ -716,7 +755,7 @@ The detected language SHALL NOT be used.
 - **THEN** `flesch_reading_ease` is NULL
 
 ### Requirement: Text Ratio
-`text_ratio_pct` SHALL be 100 × (the length of the normalised text of `<body>`) ÷ (the length in characters of the decoded HTML document), rounded to 2 decimals. The text of `<body>` is taken without Content Area exclusions.
+`text_ratio_pct` SHALL be 100 × (the length of the normalised text of `<body>`) ÷ (the length in characters of the decoded HTML document), rounded to 2 decimals, or NULL when the decoded document is empty. The text of `<body>` is taken without Content Area exclusions.
 
 #### Scenario: Text ratio of a small document
 - **WHEN** an analysed Page's decoded HTML is exactly `<html><body><p>Hello world</p></body></html>`
@@ -725,7 +764,7 @@ The detected language SHALL NOT be used.
 ### Requirement: Declared and detected language
 The two languages SHALL be stored separately:
 
-- **`declared_language`** is the trimmed `lang` attribute of the root `<html>` element. It is the empty string when the attribute is present but empty, and NULL when it is absent.
+- **`declared_language`** is the trimmed `lang` attribute of the root `<html>` element. It is the empty string when the attribute is present but empty or has no value, as in `<html lang>`, and NULL when it is absent.
 - **`detected_language`** is filled from v0.2, and SHALL be NULL in every Page in v0.1. From v0.2 it SHALL be NULL unless the Crawl was started with `--detect-language`, or with `detect_language = true` under `[crawl]` in `openlinx.toml`. In that case it is the ISO 639-1 code of the language detected offline from the Content Area text. It is NULL when that text has no words.
 
 #### Scenario: Declared language is trimmed, not normalised
@@ -741,12 +780,9 @@ The two languages SHALL be stored separately:
 - **THEN** that Page's `detected_language` is `ru`
 
 ### Requirement: Exact Duplicate hash
-`content_hash` SHALL be the lowercase hexadecimal SHA-256 of the UTF-8 encoding of the Content Area text after these steps:
+**In short:** `content_hash` is the SHA-256 of the normalised Content Area text, so two Pages are Exact Duplicates when that text is the same.
 
-1. whitespace normalisation, with block breaks turned into spaces
-2. Unicode NFC normalisation
-
-Letter case SHALL be kept. `content_hash` SHALL be NULL when `word_count` is 0. Two Pages are Exact Duplicates exactly when both have the same non-NULL `content_hash`.
+`content_hash` SHALL be the lowercase hexadecimal SHA-256 of the UTF-8 encoding of the Content Area text, normalised by the Text normalisation rule of "Decoding, text and URL resolution". No Unicode normalisation SHALL be applied, and letter case SHALL be kept. `content_hash` SHALL be NULL when `word_count` is 0. Two Pages are Exact Duplicates exactly when both have the same non-NULL `content_hash`.
 
 #### Scenario: Hash of a simple Content Area
 - **WHEN** an analysed Page's Content Area is `<p>Hello   world</p>`
@@ -756,36 +792,45 @@ Letter case SHALL be kept. `content_hash` SHALL be NULL when `word_count` is 0. 
 - **WHEN** an analysed Page's Content Area is `<div><p>Hello</p><p>world</p></div>`
 - **THEN** `content_hash` is `64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c`
 
-#### Scenario: Composed and decomposed accents hash the same
+#### Scenario: Composed and decomposed accents hash differently
 - **WHEN** one Page's Content Area is `<p>Caf&#233;</p>` and another's is `<p>Cafe&#769;</p>`
-- **THEN** both have `content_hash` `73473dcc12b763085904a5279d048c4d5b3b008c46f1f32443b99de04aa83a14`
+- **THEN** the first has `content_hash` `73473dcc12b763085904a5279d048c4d5b3b008c46f1f32443b99de04aa83a14` and the second `c42cc7a1ca08364b6fd859fa50d2454730a8236290a423373cc630da77c6d711`
 
 #### Scenario: Empty Content Area has no hash
 - **WHEN** an analysed Page's body is `<body><nav><a href="/">Home</a></nav></body>`, with the default settings
 - **THEN** `content_hash` is NULL
 
 ### Requirement: Structured-data counts and types
+**In short:** an analysed Page counts its top-level JSON-LD and Microdata items and the JSON-LD blocks that do not parse, and lists the distinct types of the counted items.
+
 For an analysed Page, the structured-data columns SHALL be:
 
-- **`jsonld_items`**: the number of JSON-LD items. Each `<script>` whose `type` is `application/ld+json` (compared case-insensitively) is parsed as JSON:
-  - A top-level array contributes each of its object elements.
-  - An object with an `@graph` array contributes the objects in `@graph`.
+- **`jsonld_item_count`**: the number of JSON-LD items. Each `<script>` whose `type`, without leading and trailing ASCII whitespace, is `application/ld+json` (compared ASCII case-insensitively) is parsed as JSON:
+  - An object whose `@graph` is an array contributes the objects in that array, and one whose `@graph` is an object contributes that object.
   - Any other object is one item.
-- **`jsonld_parse_errors`**: the number of such scripts that are not valid JSON.
-- **`microdata_items`**: the number of elements that have `itemscope` and no `itemprop`.
-- **`structured_data_types`**: a JSON array of the distinct types of all counted items, sorted by code point. Types come from `@type` or `itemtype`, which can hold several values. A leading `http://schema.org/` or `https://schema.org/` is removed from each type. The array is `[]` when there are none.
+  - A top-level array contributes what each of its objects contributes.
+  - Any other value, at the top level or in a top-level array, contributes nothing.
+- **`jsonld_parse_error_count`**: the number of such scripts that are not valid JSON (RFC 8259), or that nest arrays and objects more than 1024 levels deep. Within the limits that RFC 8259 section 9 allows a parser, a number beyond the range of a double, such as `1e400`, and an unpaired surrogate escape, such as `"\ud800"`, make a script invalid.
+- **`microdata_item_count`**: the number of elements that have `itemscope` and no `itemprop`.
+- **`structured_data_types`**: a JSON array of the distinct types of all counted items, sorted by code point. Types come from `@type`, a string or an array of them, and from `itemtype`, split at ASCII whitespace. A value of `@type` that is not a string, or is empty, is skipped. A leading `http://schema.org/` or `https://schema.org/` is removed from each type, and a type that is empty once it is removed is skipped. The array is `[]` when there are none.
 
 `structured_data_errors` and `structured_data_warnings` SHALL be NULL, because validation is measured from v0.3.
 
 #### Scenario: JSON-LD graph, a broken block and nested Microdata
 - **WHEN** an analysed Page contains the script `{"@context":"https://schema.org","@graph":[{"@type":"Organization"},{"@type":"WebSite"}]}`, the script `{bad json`, and `<div itemscope itemtype="https://schema.org/Product"><span itemprop="offers" itemscope itemtype="https://schema.org/Offer"></span></div>`
-- **THEN** `jsonld_items` is 2, `jsonld_parse_errors` is 1, `microdata_items` is 1 and `structured_data_types` is `["Organization","Product","WebSite"]`
+- **THEN** `jsonld_item_count` is 2, `jsonld_parse_error_count` is 1, `microdata_item_count` is 1 and `structured_data_types` is `["Organization","Product","WebSite"]`
+
+#### Scenario: JSON-LD array, type lists and an http type
+- **WHEN** an analysed Page contains a script whose `type` is ` Application/LD+JSON ` holding `[{"@type":["Article","NewsArticle"]},{"@graph":[{"@type":"http://schema.org/Person"},{"@type":"Article"}]},"note"]`, the script `{"@context":"https://schema.org","@graph":{"@type":"BreadcrumbList"}}`, the script `{"@context":"https://schema.org","@type":""}`, and `<article itemscope itemtype="https://schema.org/Article https://schema.org/BlogPosting"></article>`
+- **THEN** `jsonld_item_count` is 5, `jsonld_parse_error_count` is 0, `microdata_item_count` is 1 and `structured_data_types` is `["Article","BlogPosting","BreadcrumbList","NewsArticle","Person"]`
 
 #### Scenario: Page without structured data
 - **WHEN** an analysed Page contains no JSON-LD script and no `itemscope` element
-- **THEN** `jsonld_items` is 0, `microdata_items` is 0 and `structured_data_types` is `[]`
+- **THEN** `jsonld_item_count` is 0, `microdata_item_count` is 0 and `structured_data_types` is `[]`
 
 ### Requirement: Link attributes
+**In short:** one `links` row per Link that `020-add-crawl-core` discovers, with the attributes analysis needs.
+
 The crawl store SHALL hold one row in the `links` table for each Link that the Link discovery of `020-add-crawl-core` finds. That requirement defines:
 
 - which responses are read (the HTML of parsed Pages, and the `Link` headers of in-Scope 2xx responses)
@@ -800,25 +845,26 @@ This change stores each discovered Link together with the attributes that analys
 | `ordinal` | INTEGER | no | | the Link's position in that response, from 1: header Links first in the order received, then HTML Links in document order; the `ordinal` that `020-add-crawl-core`'s Link discovery gives it, never renumbered |
 | `target_url_id` | INTEGER, references `urls.id` | no | | the URL of the Link's normalised target |
 | `type` | TEXT | no | the Link types of `020-add-crawl-core` | the Link type |
-| `declared_in` | TEXT | no | `html`, `http_header` | where the Link was declared |
+| `declared_in` | TEXT | no | `head`, `body`, `http_header` | where the Link was declared: in the document's `<head>` or `<body>` as the parser builds them, or in a response header |
 | `element` | TEXT | yes | `a`, `area`, `link`, `iframe`, `frame`, `meta`, `img`, `source`, `video`, `audio`, `track`, `embed`, `object`, `script` | the HTML element the Link came from; NULL for header Links |
 | `attribute` | TEXT | yes | `href`, `src`, `srcset`, `poster`, `data`, `content` | the attribute the Link came from (for example `img` and `srcset`); NULL for header Links |
 | `anchor_text` | TEXT | yes | | for `hyperlink`, the element text. When that is empty, the `alt` texts of the `<img>` elements inside, joined with a space. For `<area>`, its `alt`. NULL for other types. |
 | `alt_text` | TEXT | yes | | for `image` Links from an `<img>` element, the normalised `alt` attribute: NULL when absent, the empty string when empty. NULL otherwise. |
 | `rel` | TEXT | yes | | the Link's `rel` tokens as `020-add-crawl-core`'s Link discovery reads them (ASCII lower-cased), joined with single spaces, or NULL |
 | `rel_nofollow`, `rel_ugc`, `rel_sponsored` | INTEGER | no | boolean | 1 when `rel` contains that token, otherwise 0 |
-| `hreflang` | TEXT | yes | | the trimmed `hreflang` value for `hreflang` Links, otherwise NULL |
+| `followed` | INTEGER | no | boolean | 1 when the Crawl requests the target through this Link, by `020-add-crawl-core`'s rule (its type, and the Link's and the Page's nofollow), otherwise 0; a Resource such as an `<img>` target is requested but not crawled further |
+| `hreflang` | TEXT | yes | | for `hreflang` Links, the trimmed `hreflang` attribute of the element, or the `hreflang` parameter of the `Link` header; otherwise NULL |
 | `media` | TEXT | yes | | the trimmed `media` value for `mobile_alternate` Links, otherwise NULL |
 | `link_position` | TEXT | yes | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | where on the Page the Link is (see below) |
 | `html_source` | TEXT | yes | `raw`, `rendered` | whether the Link came from the raw or the rendered HTML; filled from v1.1, with JavaScript rendering, and NULL until then |
 
 `(source_url_id, ordinal)` SHALL be the primary key. How the rows are laid out on disk, and the indexes of `links`, are chosen by the links benchmark (ADR-0005); they change none of these columns.
 
-**Link position.** For a Link from an element that the HTML parser places inside `<head>`, `link_position` SHALL be `head`. For a Link from an element inside `<body>`, it SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element, and SHALL be `content` when there is none. It SHALL be NULL only for a Link declared in an HTTP header, and for every Link of a Page whose Page extractor failed. The `[content_area]` settings do not change it.
+**Link position.** For a Link from an element that the HTML parser places inside `<head>`, `link_position` SHALL be `head`. For a Link from an element inside `<body>`, it SHALL come from the nearest enclosing `nav` (`navigation`), `header` (`header`), `footer` (`footer`) or `aside` (`sidebar`) element, and SHALL be `content` when there is none. A Link from the content of a `noscript` element takes the position of that `noscript` element. It SHALL be NULL only for a Link declared in an HTTP header, and for every Link of a Page whose Link extractor failed. The `[content_area]` settings do not change it.
 
 #### Scenario: Hyperlink with rel flags
 - **WHEN** the analysed Page `https://example.test/a` contains `<main><a href="/b" rel="nofollow UGC">Read  more</a></main>`
-- **THEN** one `links` row has `type` `hyperlink`, `anchor_text` `Read more`, `rel` `nofollow ugc`, `rel_nofollow` 1, `rel_ugc` 1, `rel_sponsored` 0, `declared_in` `html` and `link_position` `content`
+- **THEN** one `links` row has `type` `hyperlink`, `anchor_text` `Read more`, `rel` `nofollow ugc`, `rel_nofollow` 1, `rel_ugc` 1, `rel_sponsored` 0, `declared_in` `body` and `link_position` `content`
 
 #### Scenario: Image alt attribute absent or empty
 - **WHEN** an analysed Page contains `<img src="/a.png">` and `<img src="/b.png" alt="">`
@@ -833,8 +879,8 @@ This change stores each discovered Link together with the attributes that analys
 - **THEN** `links` holds 2 `hyperlink` rows from that Page to `/b`
 
 #### Scenario: Link positions come from the enclosing element
-- **WHEN** an analysed Page's HTML is `<head><link rel="canonical" href="/x"></head><body><header><a href="/h">H</a></header><nav><a href="/n">N</a></nav><main><a href="/c">C</a></main><aside><a href="/s">S</a></aside><footer><nav><a href="/f">F</a></nav></footer></body>`
-- **THEN** its `hyperlink` Links to `/h`, `/n`, `/c`, `/s` and `/f` have `link_position` `header`, `navigation`, `content`, `sidebar` and `navigation` respectively, and its `canonical` Link has `link_position` `head`
+- **WHEN** an analysed Page's HTML is `<head><link rel="canonical" href="/x"></head><body><header><a href="/h">H</a></header><nav><a href="/n">N</a></nav><main><a href="/c">C</a></main><aside><a href="/s">S</a></aside><footer><nav><a href="/f">F</a></nav><noscript><img src="/pixel.gif"></noscript></footer></body>`
+- **THEN** its `hyperlink` Links to `/h`, `/n`, `/c`, `/s` and `/f` have `link_position` `header`, `navigation`, `content`, `sidebar` and `navigation` respectively, its `canonical` Link has `link_position` `head`, and its `image` Link to `/pixel.gif` has `link_position` `footer`
 
 #### Scenario: Hreflang and mobile alternate Links
 - **WHEN** an analysed Page has `<link rel="alternate" hreflang="de" href="/de/">` and `<link rel="alternate" media="only screen and (max-width: 640px)" href="https://m.example.test/">` in its head
@@ -843,6 +889,10 @@ This change stores each discovered Link together with the attributes that analys
 #### Scenario: Links declared in a header
 - **WHEN** the analysed Page `https://example.test/p2` has the header `Link: </p3>; rel="next"`
 - **THEN** its `pagination` Link to `https://example.test/p3` has `ordinal` 1, `declared_in` `http_header`, and `element`, `attribute` and `link_position` NULL
+
+#### Scenario: Hreflang from a Link header
+- **WHEN** an in-Scope `200` response with `Content-Type: application/pdf` has the header `Link: <https://example.test/de/guide.pdf>; rel="alternate"; hreflang="de"`
+- **THEN** its `hreflang` Link to `https://example.test/de/guide.pdf` has `hreflang` `de`, `declared_in` `http_header`, and `element` and `link_position` NULL
 
 #### Scenario: Columns of links
 - **WHEN** `linx schema links` runs
@@ -869,7 +919,7 @@ The link count columns SHALL count only `hyperlink` Links whose source is a Page
 
 - `inlinks`: the Links from any Page to this Page
 - `unique_inlinks`: the distinct source Pages of those Links
-- `linking_pages_pct` (Screaming Frog's "% of Total"): 100 × (the number of distinct source Pages with status 200 that link to this Page) ÷ (the number of Pages with status 200 in the Crawl), rounded to 2 decimals, or NULL when there are no Pages with status 200
+- `linking_pages_pct`: 100 × (the number of distinct source Pages with status 200 that link to this Page) ÷ (the number of Pages with status 200 in the Crawl), rounded to 2 decimals, or NULL when there are no Pages with status 200
 
 **The post-crawl passes.** The inlink counts are computed in the post-crawl passes that `020-add-crawl-core` runs when a Crawl ends as `completed` or `stopped`. They run again when a resumed Crawl ends, and each run SHALL replace the earlier results. They run before the post-crawl passes of `040-add-rules`.
 
@@ -894,11 +944,21 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 - **THEN** the descriptions of `inlinks`, `unique_inlinks` and `linking_pages_pct` start with `Derived: `
 
 ### Requirement: Crawl Depth and Folder Depth
-`crawl_depth` SHALL equal `urls.crawl_depth` for the Page. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, and a trailing slash does not add a segment.
+**In short:** `crawl_depth` is the shortest path of followed Links from a Seed once the post-crawl passes have run; `folder_depth` counts the path's segments.
+
+`crawl_depth` SHALL equal `urls.crawl_depth` for the Page. Once the post-crawl passes have run, both SHALL be the number of Links on the shortest path of followed Links (`links.followed` = 1) from a Seed, for every URL that such a path reaches, where a redirect (`urls.redirect_url_id`) is a step that adds no Link; a URL that no such path reaches keeps the depth the crawl engine recorded. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, and a trailing slash does not add a segment.
 
 #### Scenario: Folder depth
 - **WHEN** Pages have the paths `/`, `/blog/`, `/blog/post.html` and `/a//b/`
 - **THEN** their `folder_depth` values are 0, 1, 2 and 2
+
+#### Scenario: Crawl Depth is the shortest path over followed Links
+- **WHEN** the post-crawl passes run on a Crawl whose `urls` row for `{site}/p` has `crawl_depth` 3, while a path of 2 followed Links leads from the Seed to it
+- **THEN** `{site}/p` has `crawl_depth` 2 in `pages` and in `urls`
+
+#### Scenario: A redirect adds no Crawl Depth
+- **WHEN** the post-crawl passes run on a Crawl whose `urls` row for `{site}/p` has `crawl_depth` 3, while the Seed links to `{site}/old`, which redirects to `{site}/p`
+- **THEN** `{site}/p` has `crawl_depth` 1 in `pages` and in `urls`
 
 #### Scenario: Crawl Depth is copied from the crawl engine
 - **WHEN** the Seed `{site}/` links to `{site}/l1`, which links to `{site}/l2`
