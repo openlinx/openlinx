@@ -26,7 +26,7 @@ Seams are those of docs/testing.md: seam 1 is the CLI through `run_cli`, "seam 1
 
 ## 6. Guards
 
-- [ ] 6.1 `tests/test_naming.py` refuses the literals `openlinx.toml`, `.openlinx`, `"linx"`, `"openlinx"` and `"OpenLinx"` in `src/` outside `openlinx.naming`, red by a planted literal.
+- [x] 6.1 `tests/test_naming.py` refuses the literals `openlinx.toml`, `.openlinx`, `"linx"`, `"openlinx"` and `"OpenLinx"` in `src/` outside `openlinx.naming`, red by a planted literal.
 
 ## 7. Review and archive
 

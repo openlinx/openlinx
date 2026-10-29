@@ -178,7 +178,7 @@ Plug it into `default_hooks()` in `openlinx/services/hooks.py`, as [How 030 and 
 
 - **Terms:** use the terms of [CONTEXT.md](CONTEXT.md) exactly, capitalised as defined there, such as Workspace, Crawl, Page, Issue and Command. This applies in code, tests, docs and commit messages. Test names use them too.
 - **Decisions:** a settled architectural decision is an ADR in [docs/adr/](docs/adr/). Don't reopen a decision that has one. Write a new ADR instead of quietly working around it.
-- **Names:** the module `openlinx.naming` holds every name users see: `COMMAND_NAME` (`linx`), `PACKAGE_NAME` (`openlinx`), `PRODUCT_NAME` (`OpenLinx`), the settings file name, the data folder and the global Workspace folder. Use those constants rather than typing a name in `src/`, and say "the settings file" or "the data folder" in comments. `tests/test_naming.py` fails on the literals `openlinx.toml` and `.openlinx` anywhere else in `src/`; tests keep the literals.
+- **Names:** the module `openlinx.naming` holds every name users see: `COMMAND_NAME` (`linx`), `PACKAGE_NAME` (`openlinx`), `PRODUCT_NAME` (`OpenLinx`), the settings file name, the data folder and the global Workspace folder. Use those constants rather than typing a name in `src/`, and say "the settings file" or "the data folder" in comments. `tests/test_naming.py` fails on the literals `openlinx.toml`, `.openlinx`, `"linx"`, `"openlinx"` and `"OpenLinx"` anywhere else in `src/`; tests keep the literals.
 
 ## Code style
 
