@@ -14,7 +14,7 @@ How every `linx` Command talks to agents and people. The spec is [openspec/specs
 - **UTF-8 bytes and `\n`** on every OS, whatever the console code page or `PYTHONIOENCODING`. Non-ASCII characters are written as themselves, never as `\u` escapes.
 - **Nothing on stdout when a document or list Command fails.** Its result is written only when the Command ends, so a failure leaves stdout empty. A rows Command is the exception by design: each row is written as it is made, so the rows before a failure stay on stdout and the error follows on stderr. So is a Command whose result describes the failed outcome: it prints that result, then the error.
 - **Plain text** appears in three places only, all on stdout with exit code 0:
-  - `--help`, on the tool or on any Command
+  - `--help`, on the tool or on any Command. Its usage line names the script that ran, `linx` or `openlinx`, and `linx` under `python -m openlinx`; a Crawl records the same name first in `command_argv`. Hints always name `linx`.
   - `linx` with no arguments, which prints the same as `linx --help`
   - `linx --version`, which prints `OpenLinx <version>`
 - **`--format`** chooses the format of the result. Each Command supports the formats that `linx commands` lists for it. Any other format fails with `invalid_value`, and the hint lists the Command's formats. Errors stay JSON whatever `--format` says.

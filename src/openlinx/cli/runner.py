@@ -15,7 +15,7 @@ from openlinx.cli.click_compat import UsageError as ClickUsageError
 from openlinx.cli.meta import formats_hint, meta_of
 from openlinx.cli.options import FORMAT_PARAMETER, options_with_meta
 from openlinx.clock import SystemClock
-from openlinx.naming import COMMAND_NAME, PRODUCT_NAME
+from openlinx.naming import COMMAND_NAME, PRODUCT_NAME, invoked_command
 from openlinx.output.codes import INTERNAL_ERROR, INTERRUPTED, INVALID_VALUE, USAGE_ERROR, ExitCode
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.reporter import CliReporter, Reporter
@@ -30,6 +30,8 @@ class Invocation:
     settings_tables: SettingsTables
     # The command line after the program name, which a Crawl records.
     argv: tuple[str, ...] = ()
+    # The console script that ran, which the usage line names and a Crawl records first.
+    command: str = COMMAND_NAME
 
 
 class OpenLinxGroup(TyperGroup):
@@ -47,6 +49,8 @@ class OpenLinxGroup(TyperGroup):
     ) -> NoReturn:
         # Not no_args_is_help: from Click 8.2 on it raises a usage error, which exits 2.
         args = list(sys.argv[1:] if args is None else args) or ["--help"]
+        # Click's own guess from argv[0] reads "python -m openlinx" or "openlinx.EXE".
+        prog_name = invoked_command(sys.argv[0]) if prog_name is None else prog_name
         # The one place the process streams are read; openlinx.output only takes them.
         output = Output(sys.stdout.buffer, sys.stderr.buffer)  # noqa: TID251
         try:
@@ -62,6 +66,7 @@ class OpenLinxGroup(TyperGroup):
                     reporter=CliReporter(output, SystemClock()),
                     settings_tables=self.settings_tables,
                     argv=tuple(args),
+                    command=prog_name,
                 ),
                 **extra,
             )
