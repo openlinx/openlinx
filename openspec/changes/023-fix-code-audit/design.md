@@ -40,20 +40,22 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - *Alternative:* a traceback in the details. It is long, holds absolute paths, and differs by OS. Rejected.
 
 ### D4. Every table is declared in `openlinx.store.schema`
-- **In short:** a guard in a fresh process compares the tables, indexes and views on `metadata` after `import openlinx.store.schema` with those after importing every `openlinx` module, and names any extra one with "declare it in openlinx.store.schema".
+- **In short:** a guard in a fresh process compares the tables and indexes on `metadata` after `import openlinx.store.schema` with those after importing every `openlinx` module but `openlinx.__main__`, which runs the CLI, and names any extra one with "declare it in openlinx.store.schema".
+- SQLAlchemy's `MetaData` holds no views, and none is declared; the change that declares the first view (`040`) extends the guard to it.
 - **Why:** `linx schema` and the docs test read only that module, while `create_all` builds whatever was imported. A table declared beside its units would be in the crawl file and missing from the contract, and the contract test would pass or fail by test order.
 - *Alternative:* `linx schema` imports every store module. The schema would then depend on import side effects, and the first change to declare a view elsewhere (`040`) would still pass. Rejected.
 
 ### D5. A pass gets the writer's async calls only
-- **In short:** `PassContext.writer` is a Protocol with `run_async`, `submit_async` and `flush_async`, and under `loop_deadline()` the writer's sync `submit` and `run` raise `RuntimeError("inside a Crawl use submit_async / run_async")`.
+- **In short:** `PassContext.writer` is `PassWriter`, a Protocol in `openlinx.crawl.engine.hooks` with `run_async`, `submit_async` and `flush_async`, and under `loop_deadline()` the writer's sync `submit` and `run` raise `RuntimeError("inside a Crawl use submit_async / run_async")`.
+- Leaving `loop_deadline()` gives the writer back its own 1-second timer and its sync calls, so the refusal holds only while the deadline is held.
 - **Why:** under a loop's commit deadline the writer's thread does not commit on its own timer; only the async calls wake the loop's deadline. A sync `submit` therefore waits for 500 units, a flush or the close, which under `FakeClock` hangs the test and in a Crawl delays the pass's units to the end. A pass has no use for `close`.
 - `docs/crawl-store.md` "When it commits" states both regimes.
 - *Alternative:* the sync `submit` wakes the loop's deadline through `call_soon_threadsafe`. It keeps a call that blocks the loop when the window is full. Rejected.
 
 ### D6. The writer refuses a unit it could not replay
 - **In short:** at a unit's first run the writer refuses a result that compares by identity, and a unit that commits ends the writer; both errors name the unit's `__qualname__` and the fix ("return values, such as .all() rows or a record"; "never commit").
-- **Identity equality:** `type(result).__eq__ is object.__eq__`. For a tuple, list or frozenset, the same check runs over the set of its element types, and for a dict over the set of its key types and its value types, so a tuple of 500 records costs one check per type. An `enum.Enum` member passes: it is a singleton, so identity is its value. A `CursorResult`, a connection-bound object or a plain class is refused; `Row`, records, numbers and strings pass. A refused result leaves no change, as a failing unit does.
-- **A commit:** a SQLAlchemy `commit` event listener on the writer's connection, armed while a unit runs, sees a commit wherever the unit makes it. `in_transaction()` after the unit would miss a unit that commits and then executes again, since the connection begins a new transaction by itself. The commit has already written the unit's changes before it and the batch before them, so the writer cannot undo it: it ends, as a failed replay ends it, and later units fail with the writer-closed error.
+- **Identity equality:** `type(result).__eq__ is object.__eq__`, refused with a `TypeError`, since it is a broken contract inside the code. For a tuple, list, set or frozenset, the same check runs over the set of its element types, and for a dict over the set of its key types and its value types, so a tuple of 500 records costs one check per type. An `enum.Enum` member passes: it is a singleton, so identity is its value. A `CursorResult`, a connection-bound object or a plain class is refused; `Row`, records, numbers and strings pass. A refused result leaves no change, as a failing unit does.
+- **A commit:** a SQLAlchemy `commit` event listener on the writer's connection, armed while a unit runs, sees a commit wherever the unit makes it. `in_transaction()` after the unit would miss a unit that commits and then executes again, since the connection begins a new transaction by itself. The commit has already written the unit's changes before it and the batch before them, so the writer cannot undo it: the batch's Futures resolve with their results, since their rows are in the file, and the writer ends, as a failed replay ends it, and later units fail with the writer-closed error. A unit that commits and then raises counts as one that commits.
 - **Why:** a replayed unit is compared with its first result by `!=`. A unit that returns a cursor or commits works until a later unit of its batch fails, which is rare in tests and normal in a Crawl, and the Crawl then ends `write_failed`.
 - *Alternative:* an allowlist of value types walked recursively. It refuses every new record type until it is listed, and costs a walk per unit. Rejected.
 
@@ -126,6 +128,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - **The value-equality check misses a nested identity field:** a frozen dataclass compares by value even when a field holds a cursor. → The replay comparison still catches it, as today; the check targets the common shapes.
 - **A NaN result** compares unequal to itself, so its replay fails. → A unit that returns a float is rare; the replay error names the unit.
 - **Two bounds per option** (Click and the field). → D10's guard keeps them equal.
+- **A commit through the driver** (`connection.connection.commit()`, `exec_driver_sql("COMMIT")`) is not seen by SQLAlchemy's `commit` event. → The natural mistake is `connection.commit()`, which it sees; a replay still fails on a unit whose changes the commit made permanent.
 - Guards named after no scenario, and the failure class each guards:
   - `test_a_stop_flag_set_off_its_loop_is_refused`: an off-loop set that wakes no waiter.
   - `test_the_default_page_settings_pickle`: an extractor or config that `026`'s workers cannot load.
