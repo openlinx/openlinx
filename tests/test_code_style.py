@@ -2,9 +2,12 @@
 
 import ast
 import re
+import tomllib
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+import pytest
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 # Typer takes a class, not an instance, so build_app makes one per app (ADR-0006).
@@ -1230,14 +1233,38 @@ def test_a_virtual_clock_beside_real_io_is_named() -> None:
 
 # Click's internals have no public path, and the runner owns the raw streams (design D15 of 023).
 TID251_SUPPRESSIONS = {"openlinx/cli/click_compat.py": 2, "openlinx/cli/runner.py": 1}
-# Every spelling ruff honours: with or without a space, alone or among other codes.
-TID251_NOQA = re.compile(r"#\s*noqa:[^#\n]*\bTID251\b")
+# Every spelling that may silence it, a line's or a file's (ruff: or flake8:), in any case and
+# with or without spaces, alone or among other codes; matching more is only stricter.
+TID251_NOQA = re.compile(r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\s*:[^#\n]*\bTID251\b", re.IGNORECASE)
+PYPROJECT = SRC.parent / "pyproject.toml"
+
+
+def tid251_suppressions(source: str) -> int:
+    return len(TID251_NOQA.findall(source))
+
+
+@pytest.mark.parametrize(
+    ("line", "count"),
+    [
+        ('sys.stdout.write("y")  # noqa: TID251', 1),
+        ('sys.stdout.write("y")  # noqa:TID251', 1),
+        ('sys.stdout.write("y")  #noqa : TID251', 1),
+        ('sys.stdout.write("y")  # NOQA: TID251', 1),
+        ('sys.stdout.write("y")  # noqa: E501, TID251', 1),
+        ("# ruff: noqa: TID251", 1),
+        ("# flake8: noqa: TID251", 1),
+        ('sys.stdout.write("y")  # noqa: E501', 0),
+        ('sys.stdout.write("y")  # noqa: TID2510', 0),
+    ],
+)
+def test_every_spelling_of_a_tid251_suppression_is_counted(line: str, count: int) -> None:
+    assert tid251_suppressions(line) == count
 
 
 def test_only_the_streams_and_click_compat_suppress_tid251() -> None:
     found: dict[str, int] = {}
     for path, source in _src_sources().items():
-        count = len(TID251_NOQA.findall(source))
+        count = tid251_suppressions(source)
         if count:
             found[path] = count
 
@@ -1245,4 +1272,20 @@ def test_only_the_streams_and_click_compat_suppress_tid251() -> None:
         "TID251 is suppressed beyond its three lines in openlinx.cli.click_compat and the runner's "
         "streams: write output through openlinx.output, and import Click through "
         "openlinx.cli.click_compat"
+    )
+
+
+def test_no_per_file_ignore_silences_tid251_in_src() -> None:
+    lint = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["tool"]["ruff"]["lint"]
+    ignores = {**lint.get("per-file-ignores", {}), **lint.get("extend-per-file-ignores", {})}
+
+    # A prefix such as TID or ALL selects TID251 too.
+    assert [
+        pattern
+        for pattern, codes in ignores.items()
+        if not pattern.startswith(("tests/", "scripts/"))
+        and any("TID251".startswith(code) or code == "ALL" for code in codes)
+    ] == [], (
+        "a per-file-ignore silences TID251 in src: remove it, and suppress only the lines "
+        "in openlinx.cli.click_compat and the runner's streams"
     )

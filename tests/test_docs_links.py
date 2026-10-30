@@ -114,6 +114,19 @@ def test_a_target_resolves_relative_to_its_doc_or_the_repo_root(target: str, exi
     assert resolves(REPO_ROOT / "README.md", target) is exists
 
 
+@pytest.mark.parametrize(
+    ("markdown", "anchors"),
+    [
+        ("# A\n## A\n", {"a", "a-1"}),
+        ("## `x` & y?\n", {"x--y"}),
+        ("### [l](p) t\n", {"l-t"}),
+        ("```\n# Not a heading\n```\n", set()),
+    ],
+)
+def test_headings_give_the_anchors_github_gives_them(markdown: str, anchors: set[str]) -> None:
+    assert anchors_in(markdown) == anchors
+
+
 def test_relative_links_in_the_contributor_docs_point_to_existing_files() -> None:
     assert broken_links() == [], (
         "a relative link or its #anchor resolves to nothing: fix the path, or the anchor to the "

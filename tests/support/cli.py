@@ -47,7 +47,7 @@ def run_cli(
 def run_cli_process(
     *args: str, env: Mapping[str, str] | None = None, timeout: float | None = None
 ) -> CliResult:
-    """`timeout` is PROCESS_TIMEOUT unless given, such as CRAWL_PROCESS_TIMEOUT for a Crawl."""
+    """`timeout` is CLI_PROCESS_TIMEOUT unless given, such as CRAWL_PROCESS_TIMEOUT for a Crawl."""
     command = python_command("-m", "openlinx", *args)
     environment = command.env if env is None else dict(env)
     if env is not None and command.env is not None:
@@ -58,7 +58,7 @@ def run_cli_process(
         capture_output=True,
         env=environment,
         check=False,
-        timeout=PROCESS_TIMEOUT if timeout is None else timeout,
+        timeout=CLI_PROCESS_TIMEOUT if timeout is None else timeout,
     )
     return CliResult(completed.returncode, completed.stdout, completed.stderr)
 
@@ -71,6 +71,8 @@ RUN_EXAMPLE_APP = (
 PROCESS_TIMEOUT = 10
 # A Crawl of the fixture site takes longer to start and to end.
 CRAWL_PROCESS_TIMEOUT = 45
+# Bounds a hang, not a slow run: a cold linx under coverage on a loaded machine takes seconds.
+CLI_PROCESS_TIMEOUT = 30
 LAUNCHER = "__PYVENV_LAUNCHER__"
 
 
