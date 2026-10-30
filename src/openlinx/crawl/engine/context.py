@@ -7,7 +7,7 @@ from openlinx.clock import Clock
 from openlinx.crawl.engine.hooks import Hooks
 from openlinx.crawl.engine.stop import StopSignal
 from openlinx.crawl.engine.warning_log import WarningLog
-from openlinx.crawl.fetch.fetcher import Fetcher
+from openlinx.crawl.fetch.fetcher import Fetcher, FetchPolicy
 from openlinx.crawl.pages.preparation import PageExecutor
 from openlinx.crawl.scope import ScopeRules
 from openlinx.crawl.settings import CrawlSettings
@@ -27,6 +27,8 @@ class CrawlContext:
     warnings: WarningLog
     writer: CrawlWriter
     fetcher: Fetcher
+    # The Fetcher's settings, whose timeout the watchdog outlasts (022 D1).
+    fetch_policy: FetchPolicy
     pages: PageExecutor
     hooks: Hooks
     stop: StopSignal

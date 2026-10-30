@@ -519,6 +519,7 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
                     warnings=crawl.log,
                     writer=writer,
                     fetcher=fetcher,
+                    fetch_policy=plan.fetch_policy,
                     pages=executor,
                     hooks=crawl.hooks,
                     stop=crawl.stop,

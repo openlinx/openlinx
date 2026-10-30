@@ -63,8 +63,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         cap=cap,
         clock=context.clock,
         retries=context.settings.retries,
-        # The Fetcher's own deadline is the timeout setting, as its policy takes it.
-        watchdog_seconds=watchdog_seconds(context.settings.timeout),
+        watchdog_seconds=watchdog_seconds(context.fetch_policy.timeout_seconds),
         stop=context.stop,
     )
     redispatch = Redispatch()
