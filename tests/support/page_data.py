@@ -186,3 +186,26 @@ def _url_result(
         links=links,
         outputs={} if outputs is None else outputs,
     )
+
+
+# The columns that later releases fill, with the release that fills them (page-data, "Columns
+# measured by later releases stay NULL").
+LATER_PAGE_COLUMNS = {
+    "js_cookie_count": "v1.1",
+    "http_version": "v0.2",
+    "title_1_width_px": "v0.2",
+    "title_2_width_px": "v0.2",
+    "meta_description_1_width_px": "v0.2",
+    "meta_description_2_width_px": "v0.2",
+    "syllable_count": "v0.2",
+    "flesch_reading_ease": "v0.2",
+    "readability": "v0.2",
+    "detected_language": "v0.2",
+    "closest_similarity_pct": "v0.3",
+    "near_duplicate_count": "v0.3",
+    "link_score": "v0.2",
+    "unique_js_inlinks": "v1.1",
+    "unique_js_outlinks": "v1.1",
+    "structured_data_errors": "v0.3",
+    "structured_data_warnings": "v0.3",
+}

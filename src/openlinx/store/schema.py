@@ -19,11 +19,13 @@ from sqlalchemy import (
 )
 
 from openlinx.store.page_records import (
+    HtmlSource,
     Indexability,
     IndexabilityStatus,
     LinkAttribute,
     LinkElement,
     LinkPosition,
+    Readability,
     RedirectType,
     SameSite,
 )
@@ -34,6 +36,7 @@ from openlinx.store.records import (
     DiscoveredVia,
     FetchError,
     FetchState,
+    HttpVersion,
     JournalMode,
     LinkType,
     ParseError,
@@ -537,6 +540,18 @@ pages = public_table(
         "cookies.",
     ),
     Column(
+        "js_cookie_count",
+        Integer,
+        comment="Filled from v1.1. The number of cookies the Page's scripts set, measured with "
+        "JavaScript rendering.",
+    ),
+    Column(
+        "http_version",
+        Text,
+        comment="Filled from v0.2. origins.http_version for the Page's origin.",
+        info={"values": literal_values(HttpVersion)},
+    ),
+    Column(
         "crawl_timestamp",
         Timestamp,
         nullable=False,
@@ -555,6 +570,11 @@ pages = public_table(
         comment="The length of title_1 in Unicode code points; NULL exactly when title_1 is.",
     ),
     Column(
+        "title_1_width_px",
+        Integer,
+        comment="Filled from v0.2. The width of title_1 in Arial regular at 20 px, in pixels.",
+    ),
+    Column(
         "title_2",
         Text,
         comment="The text of the Page's second title element without an svg, math or noscript "
@@ -565,6 +585,11 @@ pages = public_table(
         "title_2_length",
         Integer,
         comment="The length of title_2 in Unicode code points; NULL exactly when title_2 is.",
+    ),
+    Column(
+        "title_2_width_px",
+        Integer,
+        comment="Filled from v0.2. The width of title_2 in Arial regular at 20 px, in pixels.",
     ),
     Column(
         "title_count",
@@ -586,6 +611,12 @@ pages = public_table(
         "meta_description_1 is.",
     ),
     Column(
+        "meta_description_1_width_px",
+        Integer,
+        comment="Filled from v0.2. The width of meta_description_1 in Arial regular at 14 px, in "
+        "pixels.",
+    ),
+    Column(
         "meta_description_2",
         Text,
         comment="The content of the Page's second meta description, whitespace-normalised, the "
@@ -597,6 +628,12 @@ pages = public_table(
         Integer,
         comment="The length of meta_description_2 in Unicode code points; NULL exactly when "
         "meta_description_2 is.",
+    ),
+    Column(
+        "meta_description_2_width_px",
+        Integer,
+        comment="Filled from v0.2. The width of meta_description_2 in Arial regular at 14 px, in "
+        "pixels.",
     ),
     Column(
         "meta_description_count",
@@ -814,6 +851,24 @@ pages = public_table(
         "sentence_count is 0, or the Page is not analysed or its Page extractor failed.",
     ),
     Column(
+        "syllable_count",
+        Integer,
+        comment="Filled from v0.2. The syllables of the Content Area's words, counted by the "
+        "rules of the Page's readability language.",
+    ),
+    Column(
+        "flesch_reading_ease",
+        REAL,
+        comment="Filled from v0.2. The Flesch Reading Ease of the Content Area text, by the "
+        "formula of the Page's readability language, rounded to 1 decimal.",
+    ),
+    Column(
+        "readability",
+        Text,
+        comment="Filled from v0.2. The band of flesch_reading_ease.",
+        info={"values": literal_values(Readability)},
+    ),
+    Column(
         "text_ratio_pct",
         REAL,
         comment="100 times the length of the normalised text of body, without Content Area "
@@ -829,11 +884,29 @@ pages = public_table(
         "extractor failed.",
     ),
     Column(
+        "detected_language",
+        Text,
+        comment="Filled from v0.2. The ISO 639-1 code of the language detected from the Content "
+        "Area text, when the Crawl detects languages.",
+    ),
+    Column(
         "content_hash",
         Text,
         comment="The SHA-256, as lowercase hex, of the normalised Content Area text as UTF-8, "
         "with no Unicode normalisation: Pages with the same value are Exact Duplicates; NULL "
         "when word_count is 0, or the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "closest_similarity_pct",
+        REAL,
+        comment="Filled from v0.3. The similarity of the Page's Content Area to that of the most "
+        "similar other Page, in percent.",
+    ),
+    Column(
+        "near_duplicate_count",
+        Integer,
+        comment="Filled from v0.3. The number of other Pages that are Near-Duplicates of this "
+        "Page.",
     ),
     Column(
         "crawl_depth",
@@ -849,6 +922,12 @@ pages = public_table(
         "ignored, and an escaped / (%2F) stays inside its segment.",
     ),
     Column(
+        "link_score",
+        REAL,
+        comment="Filled from v0.2. The Link Score: a 0 to 100 measure of the Page's internal link "
+        "authority, from the Links between Internal URLs.",
+    ),
+    Column(
         "inlinks",
         Integer,
         comment="Derived: the hyperlinks from Pages to this Page, self-links left out; NULL "
@@ -859,6 +938,12 @@ pages = public_table(
         Integer,
         comment="Derived: the distinct Pages whose hyperlinks reach this Page, itself left out; "
         "NULL until the post-crawl passes have run.",
+    ),
+    Column(
+        "unique_js_inlinks",
+        Integer,
+        comment="Filled from v1.1. The distinct source Pages whose hyperlinks to this Page come "
+        "from rendered HTML, measured with JavaScript rendering.",
     ),
     Column(
         "linking_pages_pct",
@@ -878,6 +963,12 @@ pages = public_table(
         Integer,
         comment="The distinct Internal targets of the Page's hyperlinks, itself left out; NULL "
         "when the Page is not analysed.",
+    ),
+    Column(
+        "unique_js_outlinks",
+        Integer,
+        comment="Filled from v1.1. The distinct Internal targets of the Page's hyperlinks that "
+        "come from its rendered HTML, measured with JavaScript rendering.",
     ),
     Column(
         "external_outlinks",
@@ -917,6 +1008,17 @@ pages = public_table(
         comment="JSON array of the distinct types of the counted items, from @type and itemtype "
         "without a leading http://schema.org/ or https://schema.org/, sorted by code point: [] "
         "when there are none; NULL when the Page is not analysed or its Page extractor failed.",
+    ),
+    Column(
+        "structured_data_errors",
+        Integer,
+        comment="Filled from v0.3. The number of validation errors in the Page's structured data.",
+    ),
+    Column(
+        "structured_data_warnings",
+        Integer,
+        comment="Filled from v0.3. The number of validation warnings in the Page's structured "
+        "data.",
     ),
     comment="One row for each Page of the Crawl: an Internal URL in the Scope whose response is "
     "an HTML document, whatever its status code.",
@@ -1105,6 +1207,13 @@ links = public_table(
         "(sidebar), and content without one, a Link from a noscript's content taking the "
         "noscript's place; NULL for a header Link, or when the Page's Link extractor failed.",
         info={"values": literal_values(LinkPosition)},
+    ),
+    Column(
+        "html_source",
+        Text,
+        comment="Filled from v1.1. Whether the Link came from the raw or the rendered HTML, "
+        "measured with JavaScript rendering.",
+        info={"values": literal_values(HtmlSource)},
     ),
     comment="One row for each Link the Crawl discovered in a response: in an analysed Page's "
     "HTML, or in the Link and Refresh headers of an in-Scope 2xx response.",
