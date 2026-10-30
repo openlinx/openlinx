@@ -90,6 +90,8 @@ The unit that records a 3xx response records its target as a URL discovered from
 - **The Seed's checks:** `020`'s `seed_base_mismatch` and `seed_blocked_by_robots_txt` read the URL that the Seed's chain ends on, since the Seed itself answered with a redirect.
 
 ### D4. Retries and backoff
+**In short:** one retry loop in the Requester serves a URL and robots.txt; a retry is the same URL to the URL limit, a stop other than the limit's ends it unrecorded, a host's 429 or `Retry-After` pauses that host, and `020`'s network pause counts a URL at its first attempt and ends its retries at the closed gate.
+
 - **Where:** one retry loop in `020`'s Requester (`020` D7), around the Fetcher, so a URL's own request and a robots.txt request both get it. Each attempt is one `fetch` that takes the host's slot and its `--rate` turn again, raced by `020`'s watchdog on its own. Backoff waits on the context's `Clock` outside the slot, so a waiting retry holds none of the host's `--concurrency` slots.
 - **`--max-urls`:** a retry is the same URL, so only the first attempt counts towards the limit, and a retry is never refused by it. `020`'s fake Fetcher then drives the retries in the timing scenarios; a retry loop inside the Fetcher would bypass it. The limit's stop refuses new URLs only, so a retry already under way goes on within the stop's grace, as any request in flight does. After any other stop, such as an interrupt, a retry that is due does not start, and its URL is given back unrecorded, as a request the stop kept from starting is (`NotStarted`), so a continue requests it.
   - *Alternative: record the last attempt on any stop.* A first attempt's 503 or 429 would then stand as the URL's final answer, and a continue never re-queues a 5xx. Rejected.
@@ -108,7 +110,8 @@ The unit that records a 3xx response records its target as a URL discovered from
     - *Alternative: decide the stop whenever the dispatcher next looks, as `020` did.* Whether counts came back first then depends on where the dispatcher waits: retries hold task permits, the dispatcher looks at once, and the URLs refused just before a pause are never requested. Rejected.
     - *Alternative: wait for every request in flight before any URL-limit stop.* It drops `020`'s grace for the limit, so a hanging request would hold the Crawl up to the watchdog. Rejected.
   - An outage re-queues only the count's URLs recorded as errors: since a URL counts at its first attempt, one of the count may still be in its retries, or fetched, when the pause ends, and it is its own request's then.
-  - The pause owns its bookkeeping: `outcome(queued, decision, attempted)` says whether a URL is recorded or re-queued, and gives back its URL-limit count and re-dispatches it, and `verdict(...)` does the same for robots.txt. The engine calls one of them per URL, in no order it must keep. The pause's own word is `requeues`, so "retries" names only this decision's loop.
+  - The pause owns its bookkeeping: `outcome(queued, decision, attempted)` says whether a URL is recorded or re-queued, and gives back its URL-limit count and re-dispatches it, and `verdict(...)` does the same for robots.txt. The engine calls one of them per URL, in no order it must keep.
+  - A robots.txt retry that falls in a pause waits at the gate instead: robots.txt is no URL of the count, nothing re-queues it, and its origin's URLs wait for its verdict, so a 503 met just before a pause is asked again after it rather than standing as `robots_unreachable`.
 - **robots.txt without a response:** after its retries, a robots.txt that timed out or failed TLS gives its origin's URLs the same `fetch_error` without a request (`020` D6); one that answered 5xx or 429 stays `robots_unreachable`.
 
 ### D5. TLS trust
@@ -232,6 +235,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_the_backoff_doubles_with_each_retry`, since two retries cannot tell a doubling backoff from one that grows by a second.
   - `test_a_retry_after_or_a_429_sets_the_wait_before_the_retry`, since the spec's 10-second 429 wait, a 503's Retry-After, an HTTP-date Retry-After and the 120-second cap have no scenario of their own.
   - `test_a_request_waiting_for_the_global_cap_when_its_host_pauses_starts_after_it`, since a request whose turn came before the pause must still not start during it.
+  - `test_a_robots_txt_retry_due_during_a_network_pause_waits_for_it`, since robots.txt's 503 must not stand as its verdict when the pause's gate kept its retry (D4).
   - `test_a_stop_ends_the_wait_for_a_host_pause`, since a request must wait out its host's pause without the global permit, and leave it at a stop rather than sleep out a `Retry-After` (D4).
   - `test_a_request_without_a_response_is_retried`, `test_robots_txt_is_retried`, `test_a_robots_txt_that_times_out_gives_its_urls_timeout_without_a_request` and `test_only_the_first_attempt_counts_towards_the_url_limit`, since the spec's retry rules for a request without a response, for robots.txt and for `--max-urls` have no scenario of their own.
   - `test_a_proxy_that_is_down_is_named_in_the_failure`, since a proxy that is down makes every URL fail as though the site were.

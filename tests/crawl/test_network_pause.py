@@ -566,7 +566,7 @@ def test_a_crawl_that_reaches_its_url_limit_during_a_network_pause_waits_for_the
     )
 
 
-def test_the_url_limits_stop_does_not_end_a_network_pause(temp_workspace: TempWorkspace) -> None:
+def test_the_url_limit_s_stop_does_not_end_a_network_pause(temp_workspace: TempWorkspace) -> None:
     clock, reporter = FakeClock(), Collected()
     hosts = ("http://site.test", "http://blog.site.test", "http://shop.site.test")
     # The first URL of site.test answers at once and the others time out at 2 seconds: the limit

@@ -210,29 +210,28 @@ class NetworkPause:
         """Whether a URL's request is recorded. One that ended without a response while paused
         is not, nor one whose due retry the closed gate ended, whatever its last answer, so its
         URL stays queued, is dispatched again, and counts toward the URL limit only then (design
-        D16). A URL of the count is recorded, so the pause's end decides on
-        it: an outage re-queues it, once a run, and a dead section keeps its error
+        D16). A URL of the count that failed is recorded, so the pause's end decides on it: an
+        outage re-queues it, once a run, and a dead section keeps its error
         (022-add-fetch-policy D4)."""
         response = attempted.outcome
-        failed = isinstance(response, FetchFailure)
-        if failed and any(counted.queued.id == queued.id for counted in self._count):
+        if not isinstance(response, FetchFailure):
+            if attempted.gated:
+                self._requeue(queued)
+                return False
+            return True
+        if _holds(self._count, queued):
             self._recorded.add(queued.id)
             return True
-        if attempted.gated or (
-            isinstance(response, FetchFailure)
-            and self.paused
-            and response.fetch_error in _NO_RESPONSE
-        ):
-            self._requester.give_back()
-            self._redispatch.add(queued)
+        if attempted.gated or (self.paused and response.fetch_error in _NO_RESPONSE):
+            self._requeue(queued)
             return False
-        if (
-            failed
-            and decision.is_internal
-            and any(counted.queued.id == queued.id for counted in self._in_a_row)
-        ):
+        if decision.is_internal and _holds(self._in_a_row, queued):
             self._recorded.add(queued.id)
         return True
+
+    def _requeue(self, queued: QueuedUrl) -> None:
+        self._requester.give_back()
+        self._redispatch.add(queued)
 
     def verdict(
         self, queued: QueuedUrl, decision: ScopeDecision, origin_error: FetchError | None
@@ -306,7 +305,11 @@ class NetworkPause:
                 if not self._stop.ends_under_way:
                     self._stop.set(paused.reason)
             else:
-                count = (c for c in self._count if not c.requested or c.queued.id in self._recorded)
+                count = (
+                    counted
+                    for counted in self._count
+                    if not counted.requested or counted.queued.id in self._recorded
+                )
                 await self._resumed(end, tuple(count))
                 self._warnings.event(
                     "crawl_resumed",
@@ -383,3 +386,7 @@ class NetworkPause:
 
 def _answered(probe: asyncio.Task[bool]) -> bool:
     return probe.done() and not probe.cancelled() and probe.result()
+
+
+def _holds(count: Sequence[CountedUrl], queued: QueuedUrl) -> bool:
+    return any(counted.queued.id == queued.id for counted in count)

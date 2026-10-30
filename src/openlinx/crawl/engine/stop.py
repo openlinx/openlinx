@@ -16,6 +16,11 @@ def _rank(reason: StopReason) -> int:
     return 1 if reason in TRANSITIONS["running", "failed"] else 0
 
 
+def _ends_under_way(reason: StopReason) -> bool:
+    """Every stop but the URL limit's, which refuses new URLs only (022-add-fetch-policy D4)."""
+    return reason != "max_urls"
+
+
 class StopSignal:
     def __init__(self) -> None:
         self._reason: StopReason | None = None
@@ -54,7 +59,7 @@ class StopSignal:
         failed (design D10, D16)."""
         if self._closed:
             return
-        if reason != "max_urls":
+        if _ends_under_way(reason):
             self._ends_under_way.set()
         first = self._reason is None
         if self._reason is None or _rank(reason) > _rank(self._reason):

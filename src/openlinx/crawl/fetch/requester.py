@@ -123,7 +123,7 @@ class Requester:
             self._starts.append(self._clock.monotonic())
             outcome = await self._send(url)
             on_attempt(outcome)
-        retried = await self._retried(url, outcome, on_attempt)
+        retried = await self._retried(url, outcome, on_attempt, ends_at_gate=True)
         if isinstance(retried, NotStarted):
             # Given back unrecorded, so a continue requests it (022 design D4).
             self.give_back()
@@ -148,12 +148,14 @@ class Requester:
         self, url: NormalizedUrl
     ) -> FetchResult | FetchFailure | NotStarted:
         """One hop of an origin's robots.txt, with its retries, which the URL limit never
-        counts (design D6). After a stop, none starts (design D16)."""
+        counts (design D6). After a stop, none starts (design D16). A retry waits at the network
+        pause's gate: robots.txt is no URL of the pause's count, and its origin's URLs wait for
+        its verdict (022 design D4)."""
         async with self._gated_slots(url):
             if self._stop.is_set:
                 return NotStarted()
             outcome = await self._send(url)
-        retried = await self._retried(url, outcome, _unheard)
+        retried = await self._retried(url, outcome, _unheard, ends_at_gate=False)
         return retried if isinstance(retried, NotStarted) else retried.outcome
 
     async def request_probe(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
@@ -167,6 +169,8 @@ class Requester:
         url: NormalizedUrl,
         outcome: FetchResult | FetchFailure,
         on_attempt: Callable[[FetchResult | FetchFailure], None],
+        *,
+        ends_at_gate: bool,
     ) -> Attempted | NotStarted:
         """The URL limit's stop refuses new URLs only, so the retries go on within its grace;
         any other stop ends a due retry, and the URL is not recorded (022 design D4)."""
@@ -181,9 +185,9 @@ class Requester:
             # Outside the slots: a waiting retry holds none of the host's --concurrency.
             if not await self._turn_before_stop(wait, retry=True):
                 return NotStarted()
-            # A closed gate ends the retries: an outage spends none, and the network pause
+            # A closed gate ends a URL's retries: an outage spends none, and the network pause
             # decides on the URL from its last outcome (022 design D4).
-            async with self._gated_slots(url, retry=True) as passed:
+            async with self._gated_slots(url, retry=True, waits=not ends_at_gate) as passed:
                 if self._stop.ends_under_way:
                     return NotStarted()
                 if not passed:
@@ -194,11 +198,14 @@ class Requester:
         return Attempted(outcome, attempts)
 
     @asynccontextmanager
-    async def _gated_slots(self, url: NormalizedUrl, *, retry: bool = False) -> AsyncIterator[bool]:
-        """Whether the request passed the gate: a retry ends at a closed one."""
+    async def _gated_slots(
+        self, url: NormalizedUrl, *, waits: bool = True, retry: bool = False
+    ) -> AsyncIterator[bool]:
+        """Whether the request passed the gate: one that `waits` not ends at a closed one; a
+        `retry` meets only a stop that ends what is under way."""
         # Waited before any slot, so a paused request leaves the host's slots to the probes; one
         # that took them as the pause began gives them back and its turn goes unused.
-        while await self._past_gate(waits=not retry):
+        while await self._past_gate(waits=waits):
             async with self._slots(url, stops=True, retry=retry):
                 if self._open.is_set():
                     yield True
