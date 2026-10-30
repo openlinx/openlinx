@@ -78,10 +78,10 @@ def test_invisible_and_control_characters_stay_encoded() -> None:
 def test_folder_depth() -> None:
     rows = [
         _page(_fetched(f"https://example.test{path}"))
-        for path in ("/", "/blog/", "/blog/post.html", "/a//b/", "/a%2Fb/")
+        for path in ("/", "/blog/", "/blog/post.html", "/a//b/", "/a%2Fb/", "/blog/?a/b")
     ]
 
-    assert [row.folder_depth for row in rows] == [0, 1, 2, 2, 1]
+    assert [row.folder_depth for row in rows] == [0, 1, 2, 2, 1, 1]
 
 
 def test_path_and_query_of_the_address() -> None:

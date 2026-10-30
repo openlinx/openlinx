@@ -33,10 +33,24 @@ def test_hyperlink_with_rel_flags() -> None:
     )
 
 
-def test_a_nofollow_hyperlink_is_not_followed_and_an_image_is() -> None:
-    rows = page_link_rows('<a href="/a" rel="nofollow">A</a><img src="/i.png" alt="">')
+def test_followed_is_the_crawls_follow_rule() -> None:
+    page = page_link_rows(
+        '<html><head><link rel="amphtml" href="/a.amp"></head><body>'
+        '<a href="/a" rel="nofollow">A</a><a href="/b">B</a><img src="/i.png" alt=""></body></html>'
+    )
+    # The Page's own nofollow stops a hyperlink whose rel says nothing.
+    nofollow_page = page_link_rows(
+        '<html><head><meta name="robots" content="nofollow"></head>'
+        '<body><a href="/c">C</a></body></html>'
+    )
 
-    assert [(row.type, row.followed) for row in rows] == [("hyperlink", False), ("image", True)]
+    assert [(row.type, row.rel_nofollow, row.followed) for row in page + nofollow_page] == [
+        ("amphtml", False, False),
+        ("hyperlink", True, False),
+        ("hyperlink", False, True),
+        ("image", False, True),
+        ("hyperlink", False, False),
+    ]
 
 
 def test_image_alt_attribute_absent_or_empty() -> None:
