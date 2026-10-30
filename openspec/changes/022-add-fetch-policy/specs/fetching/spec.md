@@ -134,7 +134,7 @@ The Crawl SHALL retry a request attempt, robots.txt included, that ends with the
 - **429 without Retry-After:** the wait SHALL be 10 seconds.
 - **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start. A 429 or a `Retry-After` SHALL pause the host even when the URL is not retried, with `--retries 0` or on its last attempt.
 - **Other 4xx statuses** SHALL NOT be retried.
-- **URL limit:** a retry is the same URL, so only a URL's first attempt SHALL count towards `--max-urls`, and the URL limit SHALL NOT end the retries of a URL already requested: they go on within the stop's grace, as any request in flight does.
+- **URL limit:** a retry is the same URL, so only a URL's first attempt SHALL count towards `--max-urls`, and the URL limit SHALL NOT end the retries of a URL already requested: they go on within the stop's grace, as any request in flight does. When the URL limit refuses a URL while the network pause of `020-add-crawl-core` is on, or while Internal requests in a row without an HTTP response count towards one, the Crawl SHALL NOT stop yet: it SHALL wait while those requests end and, when a pause is on, for the pause to end, at most `--network-wait`. A URL given back meanwhile frees room under the limit, and the Crawl SHALL then request the URLs the limit refused, up to the limit; otherwise it stops.
 - **Stop:** after any other stop, such as an interrupt, a retry that is due SHALL NOT start, and its URL SHALL NOT be recorded: it stays `queued`, so a continue requests it.
 - **Network pause:** a URL SHALL count once towards the network pause of `020-add-crawl-core`, at its first attempt that gets no HTTP response while the Crawl is not paused; its later attempts SHALL NOT count again. While the Crawl is paused waiting for the network, a request attempt that fails SHALL NOT be retried, and a URL whose retry is due SHALL make no further attempt. A URL of the pause's count SHALL be recorded with its last failure, and the pause's end decides on it as on the rest of its count; any other such URL SHALL NOT be recorded: it stays `queued` and is requested after the pause. When the pause ends in an outage, only the URLs of its count recorded as errors SHALL be re-queued.
 
@@ -175,6 +175,10 @@ The URL SHALL record the last attempt's response. This change adds this column t
 #### Scenario: A retry under way outlasts the URL limit
 - **WHEN** `http://site.test/` links to `/a`, `/b` and `/c`, a fake Fetcher answers `/a` with 503 once and with 200 after that, and the Crawl runs with `--max-urls 3` and a fake clock
 - **THEN** `http://site.test/a` has `status_code` = 200 and `attempt_count` = 2
+
+#### Scenario: A Crawl that reaches its URL limit during a network pause waits for the pause to end
+- **WHEN** `http://site.test/` links to `/p1` to `/p30`, each `/pN` answers after 0.5 + N/100 seconds, a fake Fetcher gets no response for any request started from 1 to 30 seconds of clock time, and the Crawl runs with `--concurrency 4`, `--max-urls 19` and a fake clock
+- **THEN** the `crawl_resumed` event, with `data.outcome` = `outage`, comes before the `stopping` event, whose reason is `max_urls`, and 19 URLs have `fetch_state` = `fetched`
 
 #### Scenario: A stop cuts a pending retry and keeps its URL queued
 - **WHEN** a fake Fetcher answers `http://site.test/` with 503 once and with 200 after that, and the Crawl is interrupted as that 503 arrives, with a fake clock
