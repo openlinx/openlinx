@@ -271,15 +271,24 @@ def test_a_retry_the_closed_gate_ends_outside_the_count_is_requested_after_the_p
 ) -> None:
     clock = FakeClock()
     external = "http://cdn.test/app.js"
-    # The External script answers 503 at once, and its retry is due a second later, when
-    # /p1 to /p8 have paused the Crawl; the Seed answers the first probe, at 5 seconds.
+    # The External script, requested first, answers 503 asking for 30 seconds; /p1 to /p8 fail
+    # half a second in and pause the Crawl, whose probes of the Seed fail until 60 seconds, so
+    # the script's retry falls well inside the pause, however the clock runs.
+    retry_after = FakePage("", status=503, headers=(("Retry-After", "30"),))
+    down_until_60 = FakePage("", fails="connection_refused", until=60)
     pages: dict[str, FakePage | list[FakePage]] = {
-        "/": FakePage(
-            f'<script src="{external}"></script>'
-            + "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 9))
-        ),
-        **{f"/p{n}": FakePage("", fails="connection_refused") for n in range(1, 9)},
-        external: [FakePage("", status=503), FakePage("", content_type="text/javascript")],
+        "/": [
+            FakePage(
+                f'<script src="{external}"></script>'
+                + "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 9))
+            ),
+            down_until_60,
+        ],
+        **{
+            f"/p{n}": FakePage("", fails="connection_refused", until=60, delay=0.5)
+            for n in range(1, 9)
+        },
+        external: [retry_after, FakePage("", content_type="text/javascript")],
     }
 
     result = crawl_result(
