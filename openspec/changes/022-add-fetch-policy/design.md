@@ -229,6 +229,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_the_backoff_doubles_with_each_retry`, since two retries cannot tell a doubling backoff from one that grows by a second.
   - `test_a_retry_after_or_a_429_sets_the_wait_before_the_retry`, since the spec's 10-second 429 wait, a 503's Retry-After, an HTTP-date Retry-After and the 120-second cap have no scenario of their own.
   - `test_a_request_waiting_for_the_global_cap_when_its_host_pauses_starts_after_it`, since a request whose turn came before the pause must still not start during it.
+  - `test_a_stop_ends_the_wait_for_a_host_pause`, since a request must wait out its host's pause without the global permit, and leave it at a stop rather than sleep out a `Retry-After` (D4).
   - `test_a_request_without_a_response_is_retried`, `test_robots_txt_is_retried`, `test_a_robots_txt_that_times_out_gives_its_urls_timeout_without_a_request` and `test_only_the_first_attempt_counts_towards_the_url_limit`, since the spec's retry rules for a request without a response, for robots.txt and for `--max-urls` have no scenario of their own.
   - `test_a_proxy_that_is_down_is_named_in_the_failure`, since a proxy that is down makes every URL fail as though the site were.
   - `test_every_fetch_error_is_classified`, `test_a_failure_is_retried_only_when_it_may_pass` and `test_a_response_is_retried_only_on_a_server_error_or_a_429`, since a new `fetch_error` value must be classified as retried or not, and only a 5xx or a 429 status is retried, not a 999.

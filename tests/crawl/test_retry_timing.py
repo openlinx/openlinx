@@ -1,12 +1,16 @@
 """Retries in time: the backoff between attempts (022-add-fetch-policy, fetching; fake timing)."""
 
+import asyncio
 from functools import partial
 from typing import Any
 
 import pytest
 
 from openlinx.crawl.engine.stop import StopSignal
-from openlinx.crawl.fetch.politeness import RateGate
+from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult
+from openlinx.crawl.fetch.politeness import RateGate, RequestLimits
+from openlinx.crawl.fetch.requester import NotStarted, Requester
+from openlinx.crawl.urls import NormalizedUrl
 from openlinx.output.reporter import Collected
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
@@ -106,16 +110,57 @@ def test_a_retry_after_or_a_429_sets_the_wait_before_the_retry(
     assert _starts(fetcher, "/a") == [0.0, wait]
 
 
+def _one_permit(clock: FakeClock, stop: StopSignal) -> tuple[Requester, FakeFetcher]:
+    """A Requester with one global permit: /a holds it until its 429 arrives at one second,
+    asking for 60, while /b, whose turn came at once, waits for the permit."""
+    retry_after = FakePage("", status=429, headers=(("Retry-After", "60"),), delay=1)
+    fetcher = FakeFetcher(clock, {"/a": retry_after, "/b": FakePage("<p>B</p>")})
+    requester = Requester(
+        fetcher,
+        RequestLimits(1),
+        RateGate(clock, None),
+        concurrency=2,
+        cap=1,
+        clock=clock,
+        retries=0,
+        watchdog_seconds=120,
+        stop=stop,
+    )
+    return requester, fetcher
+
+
+def _unheard(outcome: FetchResult | FetchFailure) -> None:
+    pass
+
+
 async def test_a_request_waiting_for_the_global_cap_when_its_host_pauses_starts_after_it() -> None:
-    # Its turn came before the 429 arrived; the permit it waited for frees as the pause starts.
     clock = FakeClock()
-    gate = RateGate(clock, None)
-    assert gate.reserve_turn("site.test") == 0.0
+    requester, fetcher = _one_permit(clock, StopSignal())
 
-    gate.pause("site.test", 7)
-    await gate.started("site.test")
+    await asyncio.gather(
+        requester.request_url(NormalizedUrl("http://site.test/a"), _unheard),
+        requester.request_url(NormalizedUrl("http://site.test/b"), _unheard),
+    )
 
-    assert clock.monotonic() == 7.0
+    assert fetcher.path_starts == [("/a", 0.0), ("/b", 61.0)]
+
+
+async def test_a_stop_ends_the_wait_for_a_host_pause() -> None:
+    clock, stop = FakeClock(), StopSignal()
+    requester, fetcher = _one_permit(clock, stop)
+
+    async def interrupt() -> None:
+        await clock.sleep(3)
+        stop.set("interrupt")
+
+    _, b, _ = await asyncio.gather(
+        requester.request_url(NormalizedUrl("http://site.test/a"), _unheard),
+        requester.request_url(NormalizedUrl("http://site.test/b"), _unheard),
+        interrupt(),
+    )
+
+    # /b leaves at the stop, without sleeping out the pause, and holds no permit meanwhile.
+    assert (b, clock.monotonic(), fetcher.path_starts) == (NotStarted(), 3.0, [("/a", 0.0)])
 
 
 class _Timeline(Collected):

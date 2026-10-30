@@ -242,9 +242,22 @@ class Requester:
                     return
             elif wait > 0:
                 await self._clock.sleep(wait)
-            async with self._requests:
-                await self._gate.started(host)
-                yield
+            while True:
+                async with self._requests:
+                    paused = self._gate.pause_left(host)
+                    if not paused:
+                        await self._gate.started(host)
+                        yield
+                        return
+                # A pause that began while it waited for the permit is waited out without it,
+                # so no request sleeps on a permit and a stop never waits out a Retry-After
+                # (022 design D4).
+                if stops:
+                    if not await self._turn_before_stop(paused, retry=retry):
+                        yield
+                        return
+                else:
+                    await self._clock.sleep(paused)
 
     async def _turn_before_stop(self, wait: float, *, retry: bool = False) -> bool:
         """Whether the turn came before the stop flag: a request that has not started does not

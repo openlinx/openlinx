@@ -33,18 +33,18 @@ class RateGate:
         self._next_starts[host] = start + self._interval
         return start - now
 
+    def pause_left(self, host: str) -> float:
+        """The seconds left of the host's pause."""
+        return max(0.0, self._paused_until.get(host, 0.0) - self._clock.monotonic())
+
     async def started(self, host: str) -> None:
-        """With the global permit held: waits out what is left of the interval since the
-        host's last start, which only a wait for the permit leaves, and of a pause that began
-        while it waited."""
-        now = self._clock.monotonic()
-        resume = max(now, self._paused_until.get(host, now))
+        """With the global permit held and the host's pause over: waits out what is left of the
+        interval since the host's last start, which only a wait for the permit leaves."""
         if self._interval is None:
-            if resume > now:
-                await self._clock.sleep(resume - now)
             return
+        now = self._clock.monotonic()
         last = self._last_starts.get(host)
-        start = resume if last is None else max(resume, last + self._interval)
+        start = now if last is None else max(now, last + self._interval)
         # Taken before the wait, so the next caller counts from this start.
         self._last_starts[host] = start
         if start > now:
