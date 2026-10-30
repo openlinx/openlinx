@@ -10,7 +10,7 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser
 
 from openlinx.crawl.fetch.fetcher import FetchResult, header_values
-from openlinx.crawl.hook_errors import HookError, hook_error
+from openlinx.crawl.hook_failures import HookFailure, hook_failure
 from openlinx.crawl.pages.decoding import decode_html
 from openlinx.crawl.pages.directives import (
     NO_DIRECTIVES,
@@ -68,8 +68,6 @@ class Extractor[C: msgspec.Struct | None, O: msgspec.Struct]:
         return output if isinstance(output, self.output_type) else None
 
     def __post_init__(self) -> None:
-        # A callable without a qualname, such as a partial of a module-level function, pickles
-        # by reference (023-fix-code-audit D2).
         qualname = getattr(self.extract, "__qualname__", "")
         if "<locals>" in qualname or qualname.endswith("<lambda>"):
             raise TypeError(
@@ -120,7 +118,7 @@ class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
     directives: RobotsDirectives = NO_DIRECTIVES
     # By extractor name, without the outputs of extractors that failed.
     outputs: tuple[tuple[str, msgspec.Struct], ...] = ()
-    extractor_errors: tuple[HookError, ...] = ()
+    extractor_failures: tuple[HookFailure, ...] = ()
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
 
@@ -166,7 +164,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
         settings=settings,
     )
     outputs: list[tuple[str, msgspec.Struct]] = []
-    failures: list[HookError] = []
+    failures: list[HookFailure] = []
     for extractor in settings.extractors:
         try:
             output = extractor.extract(tree, page, extractor.config)
@@ -177,12 +175,12 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
             outputs.append((extractor.name, output))
         # An extractor is later changes' code: its failure costs only its output (design D16).
         except Exception as error:
-            failures.append(hook_error(extractor.name, extractor.extract, error))
+            failures.append(hook_failure(extractor.name, extractor.extract, error))
     return PreparedPage(
         html_links=from_html,
         directives=directives,
         outputs=tuple(outputs),
-        extractor_errors=tuple(failures),
+        extractor_failures=tuple(failures),
         parse_error="extractor_error" if failures else None,
         # A public column of every Page: the text of one error belongs to the warning.
         parse_error_message="; ".join(f"{failed.hook}: {failed.error_type}" for failed in failures)

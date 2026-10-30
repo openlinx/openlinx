@@ -19,7 +19,7 @@ Seams are those of docs/testing.md. A guard is proven red by a mutation, and the
 - [x] 2.2 An extractor whose function is nested or a lambda is refused when it is built, at seam 4; and the guard `test_the_default_page_settings_pickle` (design D2). Done when: the refusal is red first, and the guard is red with a closure-built extractor in `default_hooks()`.
 - [x] 2.3 Drive "A failing handler names its error", "A failing extractor names its error" and "A preparation that gave nothing names no error" at seam 3+6 (design D3): `PreparedPage` carries the extractor failures, the warnings' details, their codes' descriptions and docs/crawling.md's warning table gain `error` and `at`, and `page_result` prints them; the guard `test_an_error_raised_in_a_library_points_at_the_extractor_s_line`. Done when: the commit body shows `page_result`'s message for an extractor broken on purpose.
 - [x] 2.4 The race of a skip that a raise overtook, in `tests/crawl/test_warning_log.py`, is driven through `crawl_result` and `FakeFetcher`'s page delays (design D16). Done when: the test is red with the double count put back into `Outcomes`; if the race cannot be staged there, docs/testing.md names `Outcomes` an internal seam and the test stays.
-- [ ] 2.5 Review.
+- [x] 2.5 Review.
 
 ## 3. Store
 

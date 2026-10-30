@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing
 from dataclasses import dataclass, fields, replace
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -1432,4 +1433,25 @@ def test_a_failing_extractor_names_its_error(
         "no body",
         f"tests/crawl/test_hooks.py:{_no_body.__code__.co_firstlineno + 2}",
         [("body: ValueError",)],
+    )
+
+
+def _missing(key: str, result: UrlResult) -> tuple[Seen, ...]:
+    if result.url.endswith("/boom"):
+        raise KeyError(key)
+    return ()
+
+
+def test_a_failing_handler_names_its_error_through_a_partial(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = replace(Hooks(), handlers=(handler("titles", partial(_missing, "title"), _write_seen),))
+
+    result = crawl_result(server.url("/"), hooks)
+
+    ((details,),) = [[warning["details"] for warning in result.to_json()["warnings"]]]
+    assert (details["error"], details["at"]) == (
+        "'title'",
+        f"tests/crawl/test_hooks.py:{_missing.__code__.co_firstlineno + 2}",
     )

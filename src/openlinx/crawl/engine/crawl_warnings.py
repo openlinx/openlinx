@@ -4,7 +4,8 @@ per what its code names (020-add-crawl-core D10)."""
 from collections.abc import Iterable, Sequence
 
 from openlinx.crawl.fetch.politeness import BLOCKING_RUN
-from openlinx.crawl.hook_errors import HookError
+from openlinx.crawl.hook_failures import HookFailure
+from openlinx.crawl.pages.preparation import PreparedPage
 from openlinx.crawl.references import DiscoveredLink
 from openlinx.crawl.scope import ScopeRules, apex_seed_named_by_page
 from openlinx.crawl.urls import NormalizedUrl, url_host, url_origin
@@ -22,7 +23,7 @@ from openlinx.output.codes import (
     SEED_BLOCKED_BY_ROBOTS_TXT,
 )
 from openlinx.output.diagnostics import Diagnostic
-from openlinx.store.records import FetchError, ParseError
+from openlinx.store.records import FetchError
 
 
 def url_limit_reached(crawl_id: str, limit: int) -> Diagnostic:
@@ -110,7 +111,7 @@ def seed_base_mismatch(
     )
 
 
-def handler_failure(url: NormalizedUrl, failed: Sequence[HookError]) -> Diagnostic:
+def handler_failure(url: NormalizedUrl, failed: Sequence[HookFailure]) -> Diagnostic:
     names = [f"{error.hook} ({error.error_type})" for error in failed]
     if len(names) == 1:
         message = f"The handler {names[0]} raised on {url}; the URL was recorded without its rows."
@@ -121,12 +122,12 @@ def handler_failure(url: NormalizedUrl, failed: Sequence[HookError]) -> Diagnost
     return Diagnostic.of(HANDLER_FAILED, message, details=failed[0].details)
 
 
-def parse_failure(
-    url: NormalizedUrl,
-    parse_error: ParseError,
-    message: str | None,
-    failed: Sequence[HookError] = (),
-) -> Diagnostic:
+def parse_failure(url: NormalizedUrl, page: PreparedPage) -> Diagnostic:
+    parse_error, message, failed = (
+        page.parse_error,
+        page.parse_error_message,
+        page.extractor_failures,
+    )
     if parse_error == "extractor_error":
         return Diagnostic.of(
             PARSE_FAILED,

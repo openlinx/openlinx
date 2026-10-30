@@ -2,10 +2,10 @@
 
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection
 
 from openlinx.crawl.engine.crawl_warnings import network_paused
 from openlinx.crawl.engine.hooks import Hooks, UrlResult, handler
@@ -148,22 +148,8 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
     )
 
 
-@dataclass(frozen=True, slots=True)
-class Seen:
-    url_id: int
-
-
-def _write_seen(connection: Connection, rows: Sequence[Seen]) -> None:
-    connection.execute(text("CREATE TABLE IF NOT EXISTS test_seen (url_id INTEGER)"))
-    connection.execute(
-        text("INSERT INTO test_seen VALUES (:url_id)"), [{"url_id": row.url_id} for row in rows]
-    )
-
-
-def _fails_on_x(result: UrlResult) -> tuple[Seen, ...]:
-    if result.url == _RAISED:
-        raise ValueError("no title")
-    return ()
+def _no_rows(connection: Connection, rows: Sequence[object]) -> None:
+    """The writer of a handler that only fails."""
 
 
 _RAISED = "http://other.test/x"
@@ -183,20 +169,34 @@ def test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_decided_ag
             "User-agent: *\nDisallow: /\n", content_type="text/plain", delay=3
         ),
     }
-    hooks = replace(Hooks(), handlers=(handler("titles", _fails_on_x, _write_seen),))
+    seen_via: list[str] = []
+
+    def fails_on_x(result: UrlResult) -> tuple[object, ...]:
+        if result.url == _RAISED:
+            seen_via.append(result.discovered_via)
+            raise ValueError("no title")
+        return ()
+
+    hooks = replace(Hooks(), handlers=(handler("titles", fails_on_x, _no_rows),))
 
     result = crawl_result(
         "http://site.test/", hooks, clock=clock, fetcher=FakeFetcher(clock, pages)
     )
 
+    # Decided on its hyperlink row that the raise overtook, then again on its raised row.
     assert (
+        seen_via,
         [(warning.code, warning.details["count"]) for warning in result.warnings],
         query(
             result.crawl_file,
             "SELECT fetch_state, skip_reason, discovered_via FROM urls WHERE url = ?",
             [_RAISED],
         ),
-    ) == ([("handler_failed", 1)], [("skipped", "blocked_by_robots_txt", "image")])
+    ) == (
+        ["hyperlink", "image"],
+        [("handler_failed", 1)],
+        [("skipped", "blocked_by_robots_txt", "image")],
+    )
 
 
 _ROBOTS_DOWN = Site(

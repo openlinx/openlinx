@@ -51,7 +51,7 @@ Shared helpers are in `tests/support/` and the fixture site in `tests/fixture_si
 ### Boundary doubles
 
 These fakes stand in for things outside our code. They are the only test doubles allowed:
-- **Fetcher:** a fake Fetcher (for deterministic politeness, rate and retry-timing tests only)
+- **Fetcher:** a fake Fetcher (for deterministic timing tests only: politeness, rate, retries, stops and the races between outcomes)
 - **Clock:** an injectable clock
 - **Randomness:** an injectable random source (e.g. for crawl id collisions)
 - **DNS:** a DNS resolver hook

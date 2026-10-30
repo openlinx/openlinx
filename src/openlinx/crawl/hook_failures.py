@@ -4,9 +4,8 @@
 import sys
 import traceback
 from collections.abc import Callable
-from functools import partial
+from functools import lru_cache, partial
 from pathlib import Path
-from types import ModuleType
 
 import msgspec
 
@@ -14,7 +13,7 @@ import msgspec
 TEXT_LIMIT = 300
 
 
-class HookError(msgspec.Struct, frozen=True, kw_only=True):
+class HookFailure(msgspec.Struct, frozen=True, kw_only=True):
     """One hook's failure: a struct, so an extractor's crosses 026's process boundary."""
 
     hook: str
@@ -29,12 +28,16 @@ class HookError(msgspec.Struct, frozen=True, kw_only=True):
         return {"error": self.text} | ({} if self.at is None else {"at": self.at})
 
 
-def hook_error(hook: str, function: Callable[..., object], error: BaseException) -> HookError:
-    return HookError(
-        hook=hook,
-        error_type=type(error).__name__,
-        text=str(error)[:TEXT_LIMIT],
-        at=_raised_at(function, error),
+def hook_failure(hook: str, function: Callable[..., object], error: BaseException) -> HookFailure:
+    """Called inside the hook's except clause, so reading the error must never raise: a hook's
+    failure costs only its rows or output (020-add-crawl-core D16)."""
+    error_type = type(error).__name__
+    try:
+        text = str(error)
+    except Exception:
+        text = f"<{error_type} that cannot be printed>"
+    return HookFailure(
+        hook=hook, error_type=error_type, text=text[:TEXT_LIMIT], at=_raised_at(function, error)
     )
 
 
@@ -53,27 +56,21 @@ def _raised_at(function: Callable[..., object], error: BaseException) -> str | N
     ]
     if not lines:
         return None
-    return f"{_shown_file(function.__module__, Path(code.co_filename))}:{lines[-1]}"
+    return f"{_shown_file(function.__module__, code.co_filename)}:{lines[-1]}"
 
 
-def _shown_file(module: str, file: Path) -> str:
+# A handler that fails on every URL asks for one file again and again, on the loop's thread.
+@lru_cache(maxsize=256)
+def _shown_file(module: str, filename: str) -> str:
     """Relative to the folder that holds the module's top-level package, with `/` on every OS,
     so the warning reads the same on every machine; the module's name outside it."""
     top = sys.modules.get(module.partition(".")[0])
-    root = _root_of(top)
-    if root is None:
+    package_path = getattr(top, "__path__", None)
+    top_file = package_path[0] if package_path else getattr(top, "__file__", None)
+    if top_file is None:
         return module
     try:
-        return file.resolve().relative_to(root).as_posix()
-    except ValueError:
+        return Path(filename).resolve().relative_to(Path(top_file).resolve().parent).as_posix()
+    # Another drive, or a path the file system cannot resolve.
+    except (OSError, ValueError):
         return module
-
-
-def _root_of(top: ModuleType | None) -> Path | None:
-    if top is None:
-        return None
-    package_path = getattr(top, "__path__", None)
-    if package_path:
-        return Path(next(iter(package_path))).resolve().parent
-    module_file = getattr(top, "__file__", None)
-    return None if module_file is None else Path(module_file).resolve().parent

@@ -148,9 +148,41 @@ def test_an_error_raised_in_a_library_points_at_the_extractor_s_line() -> None:
 
     ((at, error_type),) = [
         (failed.at, failed.error_type)
-        for failed in prepare_page(SITE, _PAGE, settings).extractor_errors
+        for failed in prepare_page(SITE, _PAGE, settings).extractor_failures
     ]
     assert (at, error_type) == (
         f"tests/crawl/test_extractors.py:{_settings_from_the_body.__code__.co_firstlineno + 2}",
         "JSONDecodeError",
+    )
+
+
+class _Misformatted(Exception):
+    """A library error whose message is formatted when it is printed, from too few args."""
+
+    def __str__(self) -> str:
+        return "%s at %s" % self.args  # noqa: UP031
+
+
+def _misformatted(tree: LexborHTMLParser, page: PageInput, config: None) -> Greeted:
+    raise _Misformatted("no body")
+
+
+def test_an_error_that_cannot_be_printed_costs_only_the_extractor_s_output() -> None:
+    settings = PageSettings(
+        scope=scope_rules(SITE),
+        extractors=(
+            extractor("greeting", _greet, Greeting("hi")),
+            extractor("misformatted", _misformatted, None),
+        ),
+        strip_params=None,
+    )
+
+    prepared = prepare_page(SITE, _PAGE, settings)
+
+    assert (
+        prepared.outputs,
+        [(failed.hook, failed.text) for failed in prepared.extractor_failures],
+    ) == (
+        (("greeting", Greeted("hi")),),
+        [("misformatted", "<_Misformatted that cannot be printed>")],
     )
