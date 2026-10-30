@@ -6,11 +6,13 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
+from enum import Enum
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import Connection, func, select, update
+from sqlalchemy import Connection, func, insert, select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 
 from openlinx.output.diagnostics import OpenLinxError
@@ -1021,3 +1023,97 @@ async def test_a_unit_submitted_under_a_loop_s_commit_deadline_commits_at_the_de
         await writer.close_async()
 
     assert (before, seen) == ([(0,)], ([(1,)], 1.0))
+
+
+def _inserted_cursor(connection: Connection) -> object:
+    # Returns what execute returned, a CursorResult bound to this connection.
+    return connection.execute(insert(seeds).values(position=1, url="https://example.com/a"))
+
+
+def _inserted_cursors(connection: Connection) -> object:
+    return [connection.execute(insert(seeds).values(position=1, url="https://example.com/a"))]
+
+
+@pytest.mark.parametrize("unit", [_inserted_cursor, _inserted_cursors], ids=["cursor", "in a list"])
+def test_a_unit_that_returns_a_cursor_is_refused(
+    temp_workspace: TempWorkspace, unit: Callable[[Connection], object]
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        with pytest.raises(TypeError) as refused:
+            writer.run(unit)
+        writer.run(insert_seed(2, "https://example.com/b"))
+
+    assert (str(refused.value), query(crawl.path, SEEDS)) == (
+        f"the unit {unit.__qualname__} returned a CursorResult, which compares by identity, so "
+        "a replay cannot check it: return values, such as .all() rows or a record",
+        [(2, "https://example.com/b")],
+    )
+
+
+def _commits(connection: Connection) -> None:
+    insert_seed(2, "https://example.com/b")(connection)
+    connection.commit()
+    insert_seed(3, "https://example.com/c")(connection)
+
+
+def _commits_then_raises(connection: Connection) -> None:
+    insert_seed(2, "https://example.com/b")(connection)
+    connection.commit()
+    raise ValueError("bad")
+
+
+@pytest.mark.parametrize("unit", [_commits, _commits_then_raises], ids=["commits", "then raises"])
+def test_a_unit_that_commits_ends_the_writer(
+    temp_workspace: TempWorkspace, unit: Callable[[Connection], None]
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    writer = CrawlWriter(crawl.path, FakeClock())
+    first = writer.submit(insert_seed(1, "https://example.com/a"))
+
+    with pytest.raises(RuntimeError) as committed:
+        writer.run(unit)
+    with pytest.raises(CrawlWriterClosedError) as later:
+        writer.run(insert_seed(4, "https://example.com/d"))
+    with pytest.raises(CrawlWriterClosedError):
+        writer.close()
+
+    assert (
+        str(committed.value),
+        first.result(timeout=10),
+        str(later.value),
+        query(crawl.path, "SELECT position FROM seeds ORDER BY position"),
+    ) == (
+        f"the unit {unit.__qualname__} committed the writer's transaction: never commit in a "
+        "unit; the writer commits its batches",
+        None,
+        "The crawl writer is closed.",
+        [(1,), (2,)],
+    )
+
+
+class _Seeded(Enum):
+    NEW = "new"
+    KNOWN = "known"
+
+
+def _seeded(connection: Connection) -> _Seeded:
+    inserted = connection.execute(
+        sqlite_insert(seeds)
+        .values(position=1, url="https://example.com/a")
+        .on_conflict_do_nothing()
+    )
+    return _Seeded.NEW if inserted.rowcount else _Seeded.KNOWN
+
+
+def test_a_unit_that_returns_an_enumeration_member_is_kept(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        first = writer.run(_seeded)
+        # The replay compares the member with itself, which an Enum compares by identity.
+        replay_now(writer)
+        again = writer.run(_seeded)
+
+    assert (first, again, query(crawl.path, COUNT)) == (_Seeded.NEW, _Seeded.KNOWN, [(1,)])

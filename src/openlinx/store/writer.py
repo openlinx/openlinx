@@ -13,7 +13,7 @@ from queue import Empty, Full, Queue
 from types import TracebackType
 from typing import Any, Self, cast
 
-from sqlalchemy import Connection, update
+from sqlalchemy import Connection, event, update
 
 from openlinx.clock import Clock
 from openlinx.output.codes import CRAWL_NOT_WRITABLE
@@ -102,6 +102,9 @@ class CrawlWriter:
         self._first_uncommitted_at = 0.0
         self._loop_deadline = False
         self._unflushed: asyncio.Event | None = None
+        # Armed while a unit runs, so the writer's own commits are not counted (design D6).
+        self._in_unit = False
+        self._unit_committed = False
         started: Future[None] = Future()
         self._thread = threading.Thread(
             target=self._serve, args=(started,), name=f"crawl writer {path.name}", daemon=True
@@ -273,6 +276,7 @@ class CrawlWriter:
                 engine.connect() as connection,
             ):
                 _check_writable(connection)
+                event.listen(connection, "commit", self._seen_commit)
                 started.set_result(None)
                 self._work(connection)
         except BaseException as error:
@@ -331,11 +335,23 @@ class CrawlWriter:
         if not connection.in_transaction():
             self._begin(connection)
         # No savepoint: one per unit costs more than replaying the batch when a unit fails.
+        self._in_unit, self._unit_committed = True, False
         try:
             result, changes = _run_counted(job.work, connection)
         # KeyboardInterrupt too: it rolls back like any failure and reaches the unit's caller.
         except BaseException as error:
+            if self._unit_committed:
+                raise self._committed(job, connection) from error
             self._replay(job, self._busy_error(error), connection)
+            return True
+        finally:
+            self._in_unit = False
+        if self._unit_committed:
+            raise self._committed(job, connection)
+        identity = _compared_by_identity(result)
+        if identity is not None:
+            # Refused as a failing unit is: it leaves no change, and the batch runs again.
+            self._replay(job, _identity_error(job.work, identity), connection)
             return True
         # Only units that succeeded run again, so a failing unit never does.
         self._batch.append(_Ran(job.work, result, changes, job.done if job.submitted else None))
@@ -344,6 +360,23 @@ class CrawlWriter:
             # Only now: a caller that reads after its unit returns sees the commit.
             job.done.set_result(result)
         return True
+
+    def _seen_commit(self, connection: Connection) -> None:
+        if self._in_unit:
+            self._unit_committed = True
+
+    def _committed(self, job: _Job, connection: Connection) -> RuntimeError:
+        """A unit committed: its changes after the commit go, and the batch before it, which the
+        commit made permanent, resolves; the writer then ends, since a replay could no longer
+        undo the batch (design D6)."""
+        connection.rollback()
+        self._settle(self._batch)
+        self._batch = []
+        name = getattr(job.work, "__qualname__", repr(job.work))
+        return RuntimeError(
+            f"the unit {name} committed the writer's transaction: never commit in a unit; the "
+            "writer commits its batches"
+        )
 
     def _begin(self, connection: Connection) -> None:
         connection.begin()
@@ -385,6 +418,10 @@ class CrawlWriter:
             return
         connection.commit()
         batch, self._batch = self._batch, []
+        self._settle(batch)
+
+    def _settle(self, batch: list[_Ran]) -> None:
+        """Resolves the committed batch's Futures with their results."""
         resolved = 0
         for ran in batch:
             if ran.future is not None:
@@ -462,6 +499,30 @@ def _run_again(ran: _Ran, connection: Connection) -> None:
         raise _replay_error(ran, "returned a different result")
     if changes != ran.changes:
         raise _replay_error(ran, f"changed {changes} rows instead of {ran.changes}")
+
+
+def _compared_by_identity(result: object) -> str | None:
+    """The name of a type in the result that compares by identity, which a replay's != could not
+    check; per type, not per element, so a tuple of 500 records costs one check (design D6)."""
+    kinds = {type(result)}
+    if isinstance(result, tuple | list | set | frozenset):
+        kinds.update(type(element) for element in result)
+    elif isinstance(result, dict):
+        kinds.update(type(key) for key in result)
+        kinds.update(type(value) for value in result.values())
+    for kind in kinds:
+        # An enumeration member is a singleton: identity is its value.
+        if kind.__eq__ is object.__eq__ and not issubclass(kind, Enum):
+            return kind.__name__
+    return None
+
+
+def _identity_error(unit: Callable[[Connection], Any], kind: str) -> TypeError:
+    name = getattr(unit, "__qualname__", repr(unit))
+    return TypeError(
+        f"the unit {name} returned a {kind}, which compares by identity, so a replay cannot "
+        "check it: return values, such as .all() rows or a record"
+    )
 
 
 def _replay_error(ran: _Ran, what: str) -> CrawlWriterReplayError:
