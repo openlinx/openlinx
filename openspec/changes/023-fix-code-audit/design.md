@@ -144,6 +144,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
   - `test_every_table_is_declared_in_the_schema_module`: a table missing from the contract.
   - `test_a_column_named_at_is_a_timestamp`: a time column without its CHECK and its Format.
   - `test_a_message_column_explains_a_code_column`: an error message without its listed code.
+  - `test_a_unit_whose_commit_fails_ends_the_writer_with_nothing_committed`: a batch resolved as durable that its unit's failed commit lost.
   - `test_a_pass_that_closes_the_crawl_s_writer_fails_mypy`: a pass that closes the Crawl's writer or calls its sync calls.
   - `test_a_unit_that_returns_an_enumeration_member_is_kept`: an enumeration result refused as an identity one.
   - `test_every_name_used_across_a_package_is_listed`: a hidden package interface.

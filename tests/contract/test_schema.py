@@ -226,7 +226,9 @@ def test_a_documented_indexes_table_is_parsed() -> None:
 
 
 # Imports every module of the tool, but the one that runs the CLI, and prints the tables and
-# indexes that their imports declared besides those of openlinx.store.schema.
+# indexes that their imports declared besides those of openlinx.store.schema. The modules that
+# the schema module imports run before it creates its MetaData, so none of them can be among
+# those it declares.
 _DECLARED_ELSEWHERE = """
 import importlib, json, pkgutil
 import openlinx
@@ -251,9 +253,10 @@ def test_every_table_is_declared_in_the_schema_module() -> None:
         command.argv,
         capture_output=True,
         env=command.env,
-        check=True,
+        check=False,
         timeout=CLI_PROCESS_TIMEOUT,
     )
+    assert completed.returncode == 0, completed.stderr.decode(errors="replace")
 
     elsewhere = json.loads(completed.stdout)
     assert elsewhere == [], (

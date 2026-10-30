@@ -985,7 +985,7 @@ async def test_a_sync_submit_under_a_loop_s_commit_deadline_is_refused(
     crawl = crawl_without_seeds(temp_workspace)
     ran: list[str] = []
 
-    def insert(connection: Connection) -> None:
+    def inserting(connection: Connection) -> None:
         ran.append("insert")
         insert_seed(1, "https://example.com/a")(connection)
 
@@ -993,12 +993,12 @@ async def test_a_sync_submit_under_a_loop_s_commit_deadline_is_refused(
     try:
         async with writer.loop_deadline():
             with pytest.raises(RuntimeError, match="inside a Crawl use submit_async / run_async"):
-                writer.submit(insert)
+                writer.submit(inserting)
             with pytest.raises(RuntimeError, match="inside a Crawl use submit_async / run_async"):
-                writer.run(insert)
+                writer.run(inserting)
         refused = list(ran)
         # Released: the writer is a sync one again.
-        writer.run(insert)
+        writer.run(inserting)
     finally:
         await writer.close_async()
 
@@ -1034,7 +1034,19 @@ def _inserted_cursors(connection: Connection) -> object:
     return [connection.execute(insert(seeds).values(position=1, url="https://example.com/a"))]
 
 
-@pytest.mark.parametrize("unit", [_inserted_cursor, _inserted_cursors], ids=["cursor", "in a list"])
+def _cursors_by_name(connection: Connection) -> object:
+    return {"inserted": _inserted_cursor(connection)}
+
+
+def _set_of_cursors(connection: Connection) -> object:
+    return {_inserted_cursor(connection)}
+
+
+@pytest.mark.parametrize(
+    "unit",
+    [_inserted_cursor, _inserted_cursors, _cursors_by_name, _set_of_cursors],
+    ids=["cursor", "in a list", "a dict's value", "in a set"],
+)
 def test_a_unit_that_returns_a_cursor_is_refused(
     temp_workspace: TempWorkspace, unit: Callable[[Connection], object]
 ) -> None:
@@ -1070,14 +1082,15 @@ def test_a_unit_that_commits_ends_the_writer(
 ) -> None:
     crawl = crawl_without_seeds(temp_workspace)
     writer = CrawlWriter(crawl.path, FakeClock())
-    first = writer.submit(insert_seed(1, "https://example.com/a"))
-
-    with pytest.raises(RuntimeError) as committed:
-        writer.run(unit)
-    with pytest.raises(CrawlWriterClosedError) as later:
-        writer.run(insert_seed(4, "https://example.com/d"))
-    with pytest.raises(CrawlWriterClosedError):
-        writer.close()
+    try:
+        first = writer.submit(insert_seed(1, "https://example.com/a"))
+        with pytest.raises(RuntimeError) as committed:
+            writer.run(unit)
+        with pytest.raises(CrawlWriterClosedError) as later:
+            writer.run(insert_seed(4, "https://example.com/d"))
+    finally:
+        with pytest.raises(CrawlWriterClosedError):
+            writer.close()
 
     assert (
         str(committed.value),
@@ -1117,3 +1130,56 @@ def test_a_unit_that_returns_an_enumeration_member_is_kept(temp_workspace: TempW
         again = writer.run(_seeded)
 
     assert (first, again, query(crawl.path, COUNT)) == (_Seeded.NEW, _Seeded.KNOWN, [(1,)])
+
+
+def _rolls_back(connection: Connection) -> None:
+    insert_seed(2, "https://example.com/b")(connection)
+    connection.rollback()
+
+
+def test_a_unit_that_rolls_back_fails_as_a_failing_unit(temp_workspace: TempWorkspace) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        first = writer.submit(insert_seed(1, "https://example.com/a"))
+        with pytest.raises(RuntimeError) as rolled_back:
+            writer.run(_rolls_back)
+        writer.run(insert_seed(3, "https://example.com/c"))
+
+    assert (
+        str(rolled_back.value),
+        first.result(timeout=10),
+        query(crawl.path, "SELECT position FROM seeds ORDER BY position"),
+    ) == (
+        "the unit _rolls_back rolled back the writer's transaction: never roll back in a unit; "
+        "raise instead, and the writer rolls back the unit alone",
+        None,
+        [(1,), (3,)],
+    )
+
+
+def _commits_a_broken_reference(connection: Connection) -> None:
+    breaks_a_deferred_reference(connection)
+    connection.commit()
+
+
+def test_a_unit_whose_commit_fails_ends_the_writer_with_nothing_committed(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    add_a_deferred_reference(crawl.path)
+    writer = CrawlWriter(crawl.path, FakeClock())
+    try:
+        first = writer.submit(insert_seed(1, "https://example.com/a"))
+        with pytest.raises(RuntimeError, match="_commits_a_broken_reference committed"):
+            writer.run(_commits_a_broken_reference)
+    finally:
+        with pytest.raises(CrawlWriterClosedError):
+            writer.close()
+
+    with pytest.raises(RuntimeError, match="_commits_a_broken_reference committed"):
+        first.result(timeout=10)
+    assert (query(crawl.path, COUNT), query(crawl.path, "SELECT count(*) FROM children")) == (
+        [(0,)],
+        [(0,)],
+    )

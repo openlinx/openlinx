@@ -27,7 +27,7 @@ Seams are those of docs/testing.md. A guard is proven red by a mutation, and the
 - [x] 3.2 Drive "A sync submit under a loop's commit deadline is refused" and "A unit submitted under a loop's commit deadline commits at the deadline" at seam 2, on `FakeClock` (design D5), the deadline's scenario a guard proven by mutation; leaving `loop_deadline()` gives back the writer's own timer and its sync calls; `PassContext.writer` is the `PassWriter` Protocol, proven by a mypy-checked call of `close()` in `tests/test_handler_types.py`; docs/crawl-store.md "When it commits" states both regimes.
 - [x] 3.3 Drive "A unit that returns a cursor is refused" and "A unit that commits ends the writer" at seam 2 (design D6), the earlier units' Futures resolving.
 - [x] 3.4 The guards `_at` → `timestamp` and `<x>_message` → `<x>` with values over `linx schema` (design D7), and CONTRIBUTING's schema section names what tests check. Done when: each is red with one bad column.
-- [ ] 3.5 Review.
+- [x] 3.5 Review.
 
 ## 4. The Crawl's input (design D9, D10)
 
