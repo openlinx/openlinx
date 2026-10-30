@@ -105,8 +105,8 @@ class CrawlWriter:
         # Armed only while a unit runs, so the writer's own commits and rollbacks, a replay's
         # included, are not counted (design D6).
         self._in_unit = False
-        self._unit_committed = False
-        self._unit_rolled_back = False
+        # What the unit did to the transaction, in order: "commit" and "rollback".
+        self._unit_ended: list[str] = []
         started: Future[None] = Future()
         self._thread = threading.Thread(
             target=self._serve, args=(started,), name=f"crawl writer {path.name}", daemon=True
@@ -339,7 +339,7 @@ class CrawlWriter:
             self._begin(connection)
         # No savepoint: one per unit costs more than replaying the batch when a unit fails.
         begun = connection.get_transaction()
-        self._in_unit, self._unit_committed, self._unit_rolled_back = True, False, False
+        self._in_unit, self._unit_ended = True, []
         try:
             result, changes = _run_counted(job.work, connection)
         # KeyboardInterrupt too: it rolls back like any failure and reaches the unit's caller.
@@ -366,11 +366,11 @@ class CrawlWriter:
 
     def _seen_commit(self, connection: Connection) -> None:
         if self._in_unit:
-            self._unit_committed = True
+            self._unit_ended.append("commit")
 
     def _seen_rollback(self, connection: Connection) -> None:
         if self._in_unit:
-            self._unit_rolled_back = True
+            self._unit_ended.append("rollback")
 
     def _kept_its_transaction(
         self,
@@ -382,14 +382,19 @@ class CrawlWriter:
     ) -> bool:
         """False, or the writer ends, when the unit committed or rolled back the batch's
         transaction itself (design D6)."""
-        if self._unit_committed:
-            # The commit event fires before the commit runs: one that failed leaves the unit's
-            # transaction in place, and one after a rollback committed none of the batch.
-            durable = not self._unit_rolled_back and connection.get_transaction() is not begun
+        ended = self._unit_ended
+        if "commit" in ended:
+            durable = ended[0] == "commit" and _batch_committed(connection, begun)
             raise self._committed(unit, connection, durable=durable) from error
-        if self._unit_rolled_back:
-            # The batch is gone, so it runs again, as after a failing unit.
-            self._replay(job, _rolled_back_error(unit), connection)
+        if ended:
+            # The batch is gone, so it runs again, as after a failing unit; a busy file stays
+            # crawl_busy, whatever the unit did after it.
+            if error is not None and is_busy(error):
+                failure = self._busy_error(error)
+            else:
+                failure = _rolled_back_error(unit)
+                failure.__cause__ = error
+            self._replay(job, failure, connection)
             return False
         return True
 
@@ -402,8 +407,8 @@ class CrawlWriter:
             self._settle(self._batch)
             self._batch = []
         return RuntimeError(
-            f"the unit {_unit_name(unit)} committed the writer's transaction: never commit "
-            "in a unit; the writer commits its batches"
+            f"the unit {_unit_name(unit)} committed, or tried to commit, the writer's "
+            "transaction: never commit in a unit; the writer commits its batches"
         )
 
     def _begin(self, connection: Connection) -> None:
@@ -543,6 +548,18 @@ def _compared_by_identity(result: object) -> str | None:
         if kind.__eq__ is object.__eq__ and not issubclass(kind, Enum):
             return kind.__name__
     return None
+
+
+def _batch_committed(connection: Connection, begun: object) -> bool:
+    """Whether the unit's first commit, which came before any rollback of it, wrote the batch.
+
+    SQLAlchemy fires its commit event before the commit runs. A commit that failed leaves the
+    unit's transaction in place; one that the unit then rolled back leaves SQLAlchemy with no
+    transaction, but SQLite still in the old one, since the rollback of a failed transaction
+    reaches no driver (design D6)."""
+    if connection.get_transaction() is begun:
+        return False
+    return connection.in_transaction() or not _driver(connection).in_transaction
 
 
 def _unit_name(unit: Unit[Any]) -> str:

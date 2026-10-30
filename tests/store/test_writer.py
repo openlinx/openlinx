@@ -1076,7 +1076,18 @@ def _commits_then_raises(connection: Connection) -> None:
     raise ValueError("bad")
 
 
-@pytest.mark.parametrize("unit", [_commits, _commits_then_raises], ids=["commits", "then raises"])
+def _commits_then_rolls_back(connection: Connection) -> None:
+    insert_seed(2, "https://example.com/b")(connection)
+    connection.commit()
+    insert_seed(3, "https://example.com/c")(connection)
+    connection.rollback()
+
+
+@pytest.mark.parametrize(
+    "unit",
+    [_commits, _commits_then_raises, _commits_then_rolls_back],
+    ids=["commits", "then raises", "then rolls back"],
+)
 def test_a_unit_that_commits_ends_the_writer(
     temp_workspace: TempWorkspace, unit: Callable[[Connection], None]
 ) -> None:
@@ -1098,8 +1109,8 @@ def test_a_unit_that_commits_ends_the_writer(
         str(later.value),
         query(crawl.path, "SELECT position FROM seeds ORDER BY position"),
     ) == (
-        f"the unit {unit.__qualname__} committed the writer's transaction: never commit in a "
-        "unit; the writer commits its batches",
+        f"the unit {unit.__qualname__} committed, or tried to commit, the writer's transaction: "
+        "never commit in a unit; the writer commits its batches",
         None,
         "The crawl writer is closed.",
         [(1,), (2,)],
@@ -1137,22 +1148,42 @@ def _rolls_back(connection: Connection) -> None:
     connection.rollback()
 
 
-def test_a_unit_that_rolls_back_fails_as_a_failing_unit(temp_workspace: TempWorkspace) -> None:
+def _rolls_back_and_raises(connection: Connection) -> None:
+    # A cleanup handler: it rolls back what it did, then re-raises.
+    try:
+        insert_seed(2, "https://example.com/b")(connection)
+        raise ValueError("no title")
+    except ValueError:
+        connection.rollback()
+        raise
+
+
+@pytest.mark.parametrize(
+    ("unit", "cause"),
+    [(_rolls_back, None), (_rolls_back_and_raises, "ValueError")],
+    ids=["rolls back", "then raises"],
+)
+def test_a_unit_that_rolls_back_fails_as_a_failing_unit(
+    temp_workspace: TempWorkspace, unit: Callable[[Connection], None], cause: str | None
+) -> None:
     crawl = crawl_without_seeds(temp_workspace)
 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         first = writer.submit(insert_seed(1, "https://example.com/a"))
         with pytest.raises(RuntimeError) as rolled_back:
-            writer.run(_rolls_back)
+            writer.run(unit)
         writer.run(insert_seed(3, "https://example.com/c"))
 
+    raised_from = rolled_back.value.__cause__
     assert (
         str(rolled_back.value),
+        None if raised_from is None else type(raised_from).__name__,
         first.result(timeout=10),
         query(crawl.path, "SELECT position FROM seeds ORDER BY position"),
     ) == (
-        "the unit _rolls_back rolled back the writer's transaction: never roll back in a unit; "
-        "raise instead, and the writer rolls back the unit alone",
+        f"the unit {unit.__qualname__} rolled back the writer's transaction: never roll back in "
+        "a unit; raise instead, and the writer rolls back the unit alone",
+        cause,
         None,
         [(1,), (3,)],
     )
@@ -1163,21 +1194,36 @@ def _commits_a_broken_reference(connection: Connection) -> None:
     connection.commit()
 
 
+def _rolls_back_its_failed_commit(connection: Connection) -> None:
+    breaks_a_deferred_reference(connection)
+    # A unit that cleans up after its own failed commit, as a try/except around commit() does.
+    try:
+        connection.commit()
+    except IntegrityError:
+        connection.rollback()
+        raise
+
+
+@pytest.mark.parametrize(
+    "unit",
+    [_commits_a_broken_reference, _rolls_back_its_failed_commit],
+    ids=["raises", "rolls back first"],
+)
 def test_a_unit_whose_commit_fails_ends_the_writer_with_nothing_committed(
-    temp_workspace: TempWorkspace,
+    temp_workspace: TempWorkspace, unit: Callable[[Connection], None]
 ) -> None:
     crawl = crawl_without_seeds(temp_workspace)
     add_a_deferred_reference(crawl.path)
     writer = CrawlWriter(crawl.path, FakeClock())
     try:
         first = writer.submit(insert_seed(1, "https://example.com/a"))
-        with pytest.raises(RuntimeError, match="_commits_a_broken_reference committed"):
-            writer.run(_commits_a_broken_reference)
+        with pytest.raises(RuntimeError, match=f"{unit.__qualname__} committed, or tried to"):
+            writer.run(unit)
     finally:
         with pytest.raises(CrawlWriterClosedError):
             writer.close()
 
-    with pytest.raises(RuntimeError, match="_commits_a_broken_reference committed"):
+    with pytest.raises(RuntimeError, match=f"{unit.__qualname__} committed, or tried to"):
         first.result(timeout=10)
     assert (query(crawl.path, COUNT), query(crawl.path, "SELECT count(*) FROM children")) == (
         [(0,)],
