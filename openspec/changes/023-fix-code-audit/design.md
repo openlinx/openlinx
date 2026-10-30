@@ -77,15 +77,19 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - **In short:** `plan_crawl(request, tables=None)` checks everything a caller gives it, so the CLI adapter only maps flags and a service call without the CLI validates the same way.
 - **The module:** its interface is `CrawlRequest` (the Seed, the Workspace inputs, the settings given by table, `subdomains`, the command line and `secret_flags`, the argv tokens to redact) and the codes it raises. Behind it: the settings tables, precedence (a given value beats the file), the `subdomains` alias and its `option_conflict`, the fields' bounds, the secret settings, and which input a refused value came from.
 - **Adapters:** the Typer adapter, which passes the values given on the command line; the test helper `crawl_result`, which passes plain values and builds no app; later the MCP server. Removing the module would put the registry, the conflict and the error mapping back into each adapter.
-- **The tables:** `default_tables()` in `openlinx.services.settings` lists every built-in table by its `"module:Class"` reference, so `build_app` stays light; `plan_crawl` and `init_workspace` default to it. A change that adds a table registers it there.
-- **A refused given value:** `load_settings` splits a validation error by its key: an error at a key the caller gave is that value's, raised as `invalid_value` (exit 2) with `details.key`; the others stay `settings_invalid` with `details.file`. Continuing a Crawl maps a refused override the same way. `Settings.table` names a table that is not registered instead of raising `StopIteration`.
-- An import rule keeps `typer` and `openlinx.cli` out of `openlinx.services`, `.workspace`, `.store`, `.crawl`, `.extract` and `.output`.
+- **The tables:** `default_tables()` in `openlinx.services.settings` lists every built-in table by its `"module:Class"` reference, so `build_app` stays light; `plan_crawl` and `init_workspace` default to it. A change that adds a table registers it there. Each call returns a new registry, since `build_app` registers its extra tables on it. The module imports only the registry, so `--help` loads nothing more.
+- **A refused given value:** `load_settings` splits a validation error by its key: an error at a value the caller gave, a key whose value is not a table, is that value's, and an error located at a table the caller gave values in, such as a table that is not registered, is the caller's, keyed by the table's name. Both are raised as `invalid_value` (exit 2) with `details.key`; the others stay `settings_invalid` with `details.file`, also in a table where the caller gave another key. When both a given value and the file are refused, the given value's error is raised, the first in the tables' field order: the call's own input is checked first, as Click checks flags before a Command runs, and the file's error shows on the next call. One mapper in `openlinx.workspace.settings`, from a validation error and the given keys, serves `load_settings` and a continued Crawl's overrides, which `CrawlSettings` refuses as pydantic errors otherwise. `Settings.table` raises a `TypeError` that names a table that is not registered and where to register it, `default_tables()` or `AppExtra.settings_tables`.
+- Input conflicts that need no file, such as `--subdomains` with another `--scope`, are checked before the Workspace is resolved.
+- **Secrets:** `plan_crawl` builds the secret names from `secret_flags` and the tables' secret settings. `secret_flags` has no default, so a caller that forgot it fails to build its request instead of recording a `--token` in the clear.
+- An import rule keeps `typer` and `openlinx.cli` out of every module but those of `openlinx.cli` and `openlinx.__main__`, the MCP server, the query and the report included; ruff's `TID252` bans relative imports, so every import names its module.
 - *Alternative:* a separate `build_crawl_request(given, tables)` that each adapter calls before `plan_crawl`. It is a second call to make in the right order, with no behaviour of its own. Rejected.
 - *Alternative:* `default_tables()` in `openlinx.services.hooks`, beside `default_hooks()`. That module imports the extractors and the store, so `--help` would load them. Rejected.
 
 ### D10. An option that mirrors a setting matches its field
 - **In short:** a guard over every Command checks that an option with a setting has the key's name (`-` for `_`), the field's default and the field's bounds as Click's `min` and `max`, and that every `[crawl]` field has an option; its message names where to add the option.
-- Click keeps its own `min` and `max`, so `--help` loads no pydantic. Click refuses a bad flag as `invalid_value`, and the runner adds `details.key` from the option's setting, so a refused flag and a refused value given to a service have one shape.
+- Click keeps its own `min` and `max`, so `--help` loads no pydantic. Click refuses a bad flag as `invalid_value`, and the runner adds `details.key` from the option's setting, when it has one, so a refused flag and a refused value given to a service have one shape. The value callbacks, such as `--rate`'s, refuse through Click too, so they get the same key.
+- The guard compares `ge` and `le`, the bounds Click's `min` and `max` can carry. A field bounded by `gt` or `lt`, such as `rate`, has no Click bounds: its option checks it with the same callback the field's validator uses. No option uses an open or clamped Click range.
+- The guard compares defaults as `linx commands` shows them: a repeatable option given no value is `[]`, as its field's default is. The recorded-config test then compares the recorded `[crawl]` table with `CrawlSettings()`, which is what a Crawl with no flags and no file records.
 - *Alternative:* build Click's bounds from the fields when the app is built. It loads pydantic on `--help`. Rejected.
 
 ### D11. A Page's Link elements are located by ordinal
@@ -148,6 +152,11 @@ The hooks seam, the writer and the settings loader work, but several of their ru
   - `test_a_pass_that_closes_the_crawl_s_writer_fails_mypy`: a pass that closes the Crawl's writer or calls its sync calls.
   - `test_a_unit_that_returns_an_enumeration_member_is_kept`: an enumeration result refused as an identity one.
   - `test_every_name_used_across_a_package_is_listed`: a hidden package interface.
+  - `test_a_table_that_is_not_registered_is_named`: a table read that fails with a bare StopIteration.
+  - `test_no_service_imports_the_cli`: a service that only works under the CLI.
+  - `test_an_import_of_the_cli_under_it_is_named`: the import rule's own cases, reported and ignored.
+  - `test_a_secret_given_to_the_service_is_nowhere_in_the_crawl_file`: a service caller's secret recorded in the clear.
+  - `test_a_crawl_request_names_its_secret_flags`: a request built without the tokens its file must redact.
   - `test_mirrored_options_match_their_fields`: a flag whose default or bounds differ from its setting.
   - `test_only_the_streams_and_click_compat_suppress_tid251`: a banned API silenced.
   - `test_link_type_table_matches_the_docs`: the docs' Requested column out of step.

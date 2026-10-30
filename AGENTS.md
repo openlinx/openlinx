@@ -22,7 +22,8 @@ OpenLinx is an open-source, agent-first SEO crawler, run as the `linx` command: 
 
 - **ruff:** no `print`, `sys.stdout`, `sys.stderr` or echo outside `openlinx.output`. No event-loop policies. `typer._click` only in `openlinx.cli.click_compat`. A `# noqa` names its rule. Lines of at most 100 characters.
 - **mypy:** strict mypy for 3.12. A `# type: ignore` must name its code.
-- **`tests/test_code_style.py`:** frozen records only, no class hierarchy of our own, a bound on every memo, sqlalchemy only in `openlinx.store` (and the schema service), and the crawl core never imports its plugins.
+- **`tests/test_code_style.py`:** frozen records only, no class hierarchy of our own, a bound on every memo, sqlalchemy only in `openlinx.store` (and the schema service), no typer or `openlinx.cli` outside `openlinx.cli`, no relative import (ruff's `TID252`), and the crawl core never imports its plugins.
+- **`tests/cli/test_commands.py`:** an option that mirrors a setting has the setting's name, default and bounds, and every `[crawl]` field has an option.
 - **`tests/cli/test_startup.py`:** `--help` loads only its allowlist, so heavy imports go inside the function body.
 - **`tests/test_naming.py`:** the three names, the settings file and the data folder come from `openlinx.naming`, never typed as literals in `src/`.
 - **`tests/test_dependencies.py`:** a new runtime dependency goes into `tests/dependency_allowlist.txt`. Telemetry and LLM SDKs are refused.

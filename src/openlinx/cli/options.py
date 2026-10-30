@@ -14,7 +14,7 @@ from typer.models import OptionInfo
 from openlinx.cli.click_compat import Command, Context, ParameterSource
 from openlinx.naming import DATA_DIR_NAME, GLOBAL_DATA_DIR, SETTINGS_FILE_NAME
 from openlinx.output.writer import Format
-from openlinx.store.records import LATEST, SecretNames
+from openlinx.store.records import LATEST
 from openlinx.workspace.tables import SettingsTables
 
 
@@ -90,15 +90,14 @@ def is_secret_option(extra: OptionMeta, tables: SettingsTables) -> bool:
     return extra.secret if extra.setting is None else tables.is_secret(extra.setting)
 
 
-def secret_names(command: Command, tables: SettingsTables) -> SecretNames:
-    flags = frozenset(
+def secret_flags(command: Command, tables: SettingsTables) -> frozenset[str]:
+    """The Command's option names that take a secret; the service adds every secret setting."""
+    return frozenset(
         name
         for param, extra in options_with_meta(command)
         if is_secret_option(extra, tables)
         for name in param.opts
     )
-    # Every secret setting, not only this Command's: crawl.config records every table.
-    return SecretNames(flags, tables.secret_settings())
 
 
 def setting_flags(ctx: Context) -> dict[str, dict[str, Any]]:

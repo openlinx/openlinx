@@ -16,7 +16,8 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
-from openlinx.output.codes import SETTINGS_INVALID
+from openlinx.naming import COMMAND_NAME
+from openlinx.output.codes import INVALID_VALUE, SETTINGS_INVALID
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.workspace.discovery import Workspace
 from openlinx.workspace.tables import SettingsTables, keyed_entry
@@ -27,7 +28,14 @@ class Settings:
     root: BaseSettings
 
     def table[M: BaseModel](self, model: type[M]) -> M:
-        return next(value for value in vars(self.root).values() if isinstance(value, model))
+        for value in vars(self.root).values():
+            if isinstance(value, model):
+                return value
+        raise TypeError(
+            f"the settings table {model.__name__} is not registered: register it in "
+            "openlinx.services.settings.default_tables(), or an extra table in "
+            "AppExtra.settings_tables"
+        )
 
 
 def load_settings(
@@ -55,6 +63,9 @@ def load_settings(
         problem = {"key": None, "message": str(error), "line": _line(error)}
         raise _invalid(settings_file, "is not valid TOML", [problem]) from error
     except ValidationError as error:
+        refused = refused_given_value(error, values)
+        if refused is not None:
+            raise refused from error
         problems: list[dict[str, Any]] = [
             {"key": ".".join(str(part) for part in problem["loc"]), "message": problem["msg"]}
             for problem in error.errors()
@@ -65,6 +76,54 @@ def load_settings(
             _in_file_order(problems, settings_file),
             hint=_suggestion(error, root_model),
         ) from error
+
+
+def refused_given_value(
+    error: ValidationError, given: Mapping[str, Mapping[str, Any]], table: str | None = None
+) -> OpenLinxError | None:
+    """invalid_value for the first error at a key the caller gave, or None when the file's
+    values alone are refused: the call's own input is checked first, as Click checks flags
+    (023-fix-code-audit D9). `table` names the table of an error from one table's model."""
+    values = _given_values(given)
+    keys = set(values)
+    # A table the caller gave values in: an error located at the table itself, such as a table
+    # that is not registered or a check of the whole table, is the caller's too.
+    tables = {
+        ".".join(names[:size])
+        for names in (key.split(".") for key in values)
+        for size in range(1, len(names))
+    }
+    for problem in error.errors():
+        parts = ([] if table is None else [table]) + [str(part) for part in problem["loc"]]
+        # A list's item is located below its key, as crawl.exclude.1.
+        prefixes = (".".join(parts[:size]) for size in range(len(parts), 0, -1))
+        key = next((prefix for prefix in prefixes if prefix in keys), None)
+        located = ".".join(parts)
+        if key is None and located in tables:
+            key = located
+        if key is not None:
+            # pydantic words a validator's ValueError as "Value error, <its text>".
+            reason = problem["msg"].removeprefix("Value error, ")
+            return OpenLinxError(
+                INVALID_VALUE,
+                f"Invalid value for {key}: {reason}.",
+                hint=f"Change the value given for {key}; {COMMAND_NAME} commands lists the "
+                "type and bounds of each option that gives a setting.",
+                details={"key": key},
+            )
+    return None
+
+
+def _given_values(given: Mapping[str, Any], prefix: str = "") -> list[str]:
+    """The dotted keys of the values given: a table, or a keyed table's entry, is not one."""
+    keys = []
+    for name, value in given.items():
+        key = f"{prefix}{name}"
+        if isinstance(value, Mapping):
+            keys += _given_values(value, f"{key}.")
+        else:
+            keys.append(key)
+    return keys
 
 
 def _invalid(

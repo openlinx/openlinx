@@ -1,26 +1,28 @@
 """The Crawl Service wires 015's journal mode and redaction (020-add-crawl-core D11; seams 1, 2)."""
 
 import json
+import re
 import sys
+from dataclasses import replace
 from pathlib import Path, PureWindowsPath
 
 import pytest
 
-from openlinx.cli.app import build_app
 from openlinx.clock import SystemClock
+from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlRequest, plan_crawl, start_crawl
 from openlinx.services.hooks import default_hooks
-from openlinx.store.records import SecretNames
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
-from tests.support.app import example_app, settings_tables
+from tests.support.app import example_app, tables_with_example
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
 from tests.support.fetcher import FakeFetcher, FakePage
+from tests.support.settings import ExampleSettings
 from tests.support.workspace import TempWorkspace
 
 HOME_PAGE = Site(routes={"/": Page(body="<p>Home</p>")})
@@ -31,18 +33,17 @@ def test_the_journal_mode_setting_reaches_the_crawl_file(
 ) -> None:
     server = fixture_site(HOME_PAGE)
     (temp_workspace.root / "openlinx.toml").write_bytes(b'[store]\njournal_mode = "delete"\n')
-    tables = settings_tables(build_app())
     request = CrawlRequest(
         seed=server.url("/"),
         cwd=temp_workspace.root,
         home=temp_workspace.home,
         workspace=None,
         command_argv=["linx", "crawl", server.url("/")],
-        secret_names=SecretNames(),
         flags={},
+        secret_flags=frozenset(),
     )
 
-    result = start_crawl(plan_crawl(request, tables), SystemClock(), Collected(), default_hooks())
+    result = start_crawl(plan_crawl(request), SystemClock(), Collected(), default_hooks())
 
     assert crawl_row(result.crawl_file)["journal_mode"] == "delete"
 
@@ -131,3 +132,160 @@ def test_the_result_times_the_crawl_on_its_clock(temp_workspace: TempWorkspace) 
         "2026-01-01T00:00:05.000Z",
         5.0,
     )
+
+
+def _given(
+    temp_workspace: TempWorkspace,
+    flags: dict[str, dict[str, object]],
+    *,
+    seed: str = "http://site.test/",
+    subdomains: bool = False,
+    secret_flags: frozenset[str] = frozenset(),
+) -> CrawlRequest:
+    return CrawlRequest(
+        seed=seed,
+        cwd=temp_workspace.root,
+        home=temp_workspace.home,
+        workspace=None,
+        command_argv=["linx", "crawl", seed],
+        subdomains=subdomains,
+        secret_flags=secret_flags,
+        flags=flags,
+    )
+
+
+def test_a_refused_value_given_with_the_settings_names_its_key(
+    temp_workspace: TempWorkspace,
+) -> None:
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, {"example": {"level": "medium"}}), tables_with_example())
+
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        refused.value.diagnostic.details.get("key"),
+        "file" in refused.value.diagnostic.details,
+    ) == ("invalid_value", 2, "example.level", False)
+
+
+def test_a_refused_given_value_is_reported_before_a_refused_file_value(
+    temp_workspace: TempWorkspace,
+) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(b'[example]\nlevel = "medium"\n')
+
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, {"crawl": {"concurrency": 0}}), tables_with_example())
+
+    assert (refused.value.code, refused.value.diagnostic.details.get("key")) == (
+        "invalid_value",
+        "crawl.concurrency",
+    )
+
+
+def test_a_table_that_is_not_registered_is_named(temp_workspace: TempWorkspace) -> None:
+    plan = plan_crawl(_given(temp_workspace, {}))
+
+    with pytest.raises(
+        TypeError,
+        match=re.escape(
+            "the settings table ExampleSettings is not registered: register it in "
+            "openlinx.services.settings.default_tables()"
+        ),
+    ):
+        plan.loaded.table(ExampleSettings)
+
+
+def test_the_subdomains_shorthand_is_the_subdomains_scope(
+    temp_workspace: TempWorkspace,
+) -> None:
+    plan = plan_crawl(_given(temp_workspace, {}, subdomains=True))
+
+    assert plan.scope.mode == "subdomains"
+
+
+def test_the_subdomains_shorthand_conflicts_with_a_subfolder_scope(
+    temp_workspace: TempWorkspace,
+) -> None:
+    request = _given(
+        temp_workspace,
+        {"crawl": {"scope": "subfolder"}},
+        seed="http://site.test/blog/",
+        subdomains=True,
+    )
+
+    with pytest.raises(OpenLinxError) as conflict:
+        plan_crawl(request)
+
+    assert (conflict.value.code, conflict.value.diagnostic.details) == (
+        "option_conflict",
+        {"options": ["--subdomains", "--scope"]},
+    )
+
+
+def test_a_secret_given_to_the_service_is_nowhere_in_the_crawl_file(
+    temp_workspace: TempWorkspace,
+) -> None:
+    seed = "http://site.test/"
+    request = replace(
+        _given(
+            temp_workspace, {"example": {"token": "s3cret"}}, secret_flags=frozenset({"--token"})
+        ),
+        command_argv=["linx", "crawl", seed, "--token", "s3cret"],
+    )
+    clock = FakeClock()
+    fetcher = FakeFetcher(clock, {"/": FakePage("<p>Home</p>")})
+
+    result = start_crawl(
+        plan_crawl(request, tables_with_example()),
+        clock,
+        Collected(),
+        default_hooks(),
+        fetcher=fetcher,
+    )
+    row = crawl_row(result.crawl_file)
+
+    assert ("s3cret" in row["command_argv"], "s3cret" in row["config"]) == (False, False)
+
+
+def test_a_refused_file_value_beside_a_given_value_stays_a_settings_file_error(
+    temp_workspace: TempWorkspace,
+) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[crawl]\nmax_depth = -1\n")
+
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, {"crawl": {"concurrency": 5}}))
+
+    details = refused.value.diagnostic.details
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        "file" in details,
+        [error["key"] for error in details.get("errors", [])],
+    ) == ("settings_invalid", 3, True, ["crawl.max_depth"])
+
+
+def test_a_crawl_request_names_its_secret_flags(temp_workspace: TempWorkspace) -> None:
+    # A caller that forgot them would record a --token given on its command line in the clear.
+    with pytest.raises(TypeError, match="secret_flags"):
+        CrawlRequest(  # type: ignore[call-arg]
+            seed="http://site.test/",
+            cwd=temp_workspace.root,
+            home=temp_workspace.home,
+            workspace=None,
+            command_argv=["linx", "crawl", "http://site.test/", "--token", "s3cret"],
+            flags={},
+        )
+
+
+def test_a_table_given_with_the_settings_that_is_not_registered_names_it(
+    temp_workspace: TempWorkspace,
+) -> None:
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, {"crawl_rules": {"level": "high"}}))
+
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        refused.value.diagnostic.details.get("key"),
+        "file" in refused.value.diagnostic.details,
+    ) == ("invalid_value", 2, "crawl_rules", False)

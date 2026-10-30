@@ -2,7 +2,7 @@
 
 How every `linx` Command talks to agents and people. The spec is [openspec/specs/cli-contract/spec.md](../openspec/specs/cli-contract/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
-`linx commands` describes every Command, the exit codes and the diagnostic codes as one JSON document. Agents read it instead of this page. It leaves out hidden options, which the tool passes to itself.
+`linx commands` describes every Command, the exit codes and the diagnostic codes as one JSON document. Agents read it instead of this page. It gives each option's bounds as `min` and `max`, null where there is none, and leaves out hidden options, which the tool passes to itself.
 
 ## stdout and stderr
 
@@ -204,7 +204,7 @@ Every code is declared once, with its level, its exit code and a description, an
 | Code | Level | Exit code | Meaning |
 |---|---|---|---|
 | `usage_error` | error | 2 | an unknown Command or flag, a missing argument, or a global flag before the Command name |
-| `invalid_value` | error | 2 | a flag or argument value that is not allowed |
+| `invalid_value` | error | 2 | a flag or argument value that is not allowed, or a value given with the settings that its setting refuses; `details.key` names the setting |
 | `unknown_field` | error | 2 | a `--fields` name the Command does not have |
 | `invalid_cursor` | error | 2 | a `--cursor` made by a different request, or altered |
 | `settings_invalid` | error | 3 | `openlinx.toml` cannot be read or breaks the settings rules |

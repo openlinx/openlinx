@@ -97,7 +97,11 @@ USAGE_ERROR = _declare(
     "An unknown Command or flag, a missing argument, or a global flag before the Command name.",
 )
 INVALID_VALUE = _declare(
-    "invalid_value", "error", ExitCode.USAGE, "A flag or argument value that is not allowed."
+    "invalid_value",
+    "error",
+    ExitCode.USAGE,
+    "A flag or argument value that is not allowed, or a value given with the settings that its "
+    "setting refuses; details.key names the setting, when there is one.",
 )
 UNKNOWN_FIELD = _declare(
     "unknown_field", "error", ExitCode.USAGE, "A --fields name the Command does not have."

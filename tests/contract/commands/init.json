@@ -16,6 +16,8 @@
       "type": "path",
       "choices": null,
       "default": null,
+      "min": null,
+      "max": null,
       "required": false,
       "multiple": false,
       "global": true,
@@ -32,6 +34,8 @@
         "table"
       ],
       "default": "json",
+      "min": null,
+      "max": null,
       "required": false,
       "multiple": false,
       "global": true,
