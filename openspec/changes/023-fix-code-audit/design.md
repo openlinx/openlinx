@@ -40,8 +40,9 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - *Alternative:* a traceback in the details. It is long, holds absolute paths, and differs by OS. Rejected.
 
 ### D4. Every table is declared in `openlinx.store.schema`
-- **In short:** a guard in a fresh process compares the tables and indexes on `metadata` after `import openlinx.store.schema` with those after importing every `openlinx` module but `openlinx.__main__`, which runs the CLI, and names any extra one with "declare it in openlinx.store.schema".
-- SQLAlchemy's `MetaData` holds no views, and none is declared; the change that declares the first view (`040`) extends the guard to it.
+- **In short:** a guard in a fresh process compares the tables bound in `openlinx.store.schema`'s own names, and their indexes, with what is on `metadata` after importing every `openlinx` module but `openlinx.__main__`, which runs the CLI, and names any extra one with "declare them in openlinx.store.schema".
+- The schema module's own names, not `metadata` after its import: that import loads the record modules too, and a table declared in one of them would count as declared.
+- SQLAlchemy's `MetaData` holds no views, and none is declared; the change that declares the first view extends the guard to it.
 - **Why:** `linx schema` and the docs test read only that module, while `create_all` builds whatever was imported. A table declared beside its units would be in the crawl file and missing from the contract, and the contract test would pass or fail by test order.
 - *Alternative:* `linx schema` imports every store module. The schema would then depend on import side effects, and the first change to declare a view elsewhere (`040`) would still pass. Rejected.
 
@@ -55,14 +56,15 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 ### D6. The writer refuses a unit it could not replay
 - **In short:** at a unit's first run the writer refuses a result that compares by identity, and a unit that commits ends the writer; both errors name the unit's `__qualname__` and the fix ("return values, such as .all() rows or a record"; "never commit").
 - **Identity equality:** `type(result).__eq__ is object.__eq__`, refused with a `TypeError`, since it is a broken contract inside the code. For a tuple, list, set or frozenset, the same check runs over the set of its element types, and for a dict over the set of its key types and its value types, so a tuple of 500 records costs one check per type. An `enum.Enum` member passes: it is a singleton, so identity is its value. A `CursorResult`, a connection-bound object or a plain class is refused; `Row`, records, numbers and strings pass. A refused result leaves no change, as a failing unit does.
-- **A commit:** a SQLAlchemy `commit` event listener on the writer's connection, armed while a unit runs, sees a commit wherever the unit makes it. `in_transaction()` after the unit would miss a unit that commits and then executes again, since the connection begins a new transaction by itself. The commit has already written the unit's changes before it and the batch before them, so the writer cannot undo it: the batch's Futures resolve with their results, since their rows are in the file, and the writer ends, as a failed replay ends it, and later units fail with the writer-closed error. A unit that commits and then raises counts as one that commits.
+- **A commit:** SQLAlchemy `commit` and `rollback` event listeners on the writer's connection, armed only while a unit runs and never during a replay, see what the unit does to the transaction wherever it does it. The `commit` event fires before the commit runs, so the writer counts the commit as done only when the unit's transaction has ended; a commit that fails leaves it in place, and the writer ends with nothing of the batch committed. `in_transaction()` after the unit would miss a unit that commits and then executes again, since the connection begins a new transaction by itself. The commit has already written the unit's changes before it and the batch before them, so the writer cannot undo it: the batch's Futures resolve with their results, since their rows are in the file, and the writer ends, as a failed replay ends it, and later units fail with the writer-closed error. A unit that commits and then raises counts as one that commits.
+- **A rollback:** a unit that rolls back has dropped the batch before it, whose units would otherwise resolve as committed or never resolve. It is handled as a failing unit: the batch runs again and is committed, and the unit's caller gets a `RuntimeError` that names it and says to raise instead.
 - **Why:** a replayed unit is compared with its first result by `!=`. A unit that returns a cursor or commits works until a later unit of its batch fails, which is rare in tests and normal in a Crawl, and the Crawl then ends `write_failed`.
 - *Alternative:* an allowlist of value types walked recursively. It refuses every new record type until it is listed, and costs a walk per unit. Rejected.
 
 ### D7. Schema conventions that a test checks
 - **In short:** two guards over `linx schema`: a column whose name ends in `_at` has the format `timestamp`, and a column `<x>_message` has a column `<x>` with values.
 - Only one direction for `_at`: a timestamp may have another name, such as `pages.last_modified`, which is named after its header.
-- CONTRIBUTING says which conventions tests check and which only review checks, as `docs/schema.md` does.
+- `docs/schema.md` says which conventions tests check and which only review checks, and CONTRIBUTING points to it.
 - **Why:** each mistake passes every test today and leaves the column without its CHECK and its Format or Values cell, so an agent that queries it with SQL loses the format. Both rules read only the declared schema, so the guards are cheap and cannot drift.
 - *Alternative:* guard every ADR-0005 naming rule, such as `is_` for booleans and the unit suffixes. Those rules have exceptions a test cannot tell from mistakes, so review keeps them. Rejected.
 
@@ -128,7 +130,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - **The value-equality check misses a nested identity field:** a frozen dataclass compares by value even when a field holds a cursor. → The replay comparison still catches it, as today; the check targets the common shapes.
 - **A NaN result** compares unequal to itself, so its replay fails. → A unit that returns a float is rare; the replay error names the unit.
 - **Two bounds per option** (Click and the field). → D10's guard keeps them equal.
-- **A commit through the driver** (`connection.connection.commit()`, `exec_driver_sql("COMMIT")`) is not seen by SQLAlchemy's `commit` event. → The natural mistake is `connection.commit()`, which it sees; a replay still fails on a unit whose changes the commit made permanent.
+- **A commit through the driver** (`connection.connection.commit()`, `exec_driver_sql("COMMIT")`) is not seen by SQLAlchemy's `commit` event. → The natural mistake is `connection.commit()`, which it sees; a replay usually fails then, as on a unit whose inserts the commit made permanent, and review checks the rest.
 - Guards named after no scenario, and the failure class each guards:
   - `test_a_stop_flag_set_off_its_loop_is_refused`: an off-loop set that wakes no waiter.
   - `test_the_default_page_settings_pickle`: an extractor or config that `026`'s workers cannot load.
@@ -142,6 +144,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
   - `test_every_table_is_declared_in_the_schema_module`: a table missing from the contract.
   - `test_a_column_named_at_is_a_timestamp`: a time column without its CHECK and its Format.
   - `test_a_message_column_explains_a_code_column`: an error message without its listed code.
+  - `test_a_pass_that_closes_the_crawl_s_writer_fails_mypy`: a pass that closes the Crawl's writer or calls its sync calls.
   - `test_a_unit_that_returns_an_enumeration_member_is_kept`: an enumeration result refused as an identity one.
   - `test_every_name_used_across_a_package_is_listed`: a hidden package interface.
   - `test_mirrored_options_match_their_fields`: a flag whose default or bounds differ from its setting.
