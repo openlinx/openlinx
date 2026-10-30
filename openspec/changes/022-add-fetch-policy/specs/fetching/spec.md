@@ -136,7 +136,7 @@ The Crawl SHALL retry a request attempt, robots.txt included, that ends with the
 - **Other 4xx statuses** SHALL NOT be retried.
 - **URL limit:** a retry is the same URL, so only a URL's first attempt SHALL count towards `--max-urls`, and the URL limit SHALL NOT end the retries of a URL already requested: they go on within the stop's grace, as any request in flight does.
 - **Stop:** after any other stop, such as an interrupt, a retry that is due SHALL NOT start, and its URL SHALL NOT be recorded: it stays `queued`, so a continue requests it.
-- **Network pause:** a URL SHALL count once towards the network pause of `020-add-crawl-core`, at its first attempt that gets no HTTP response; its later attempts SHALL NOT count again. While the Crawl is paused waiting for the network, a request attempt that fails SHALL be neither retried nor recorded, and a URL whose retry is due SHALL make no further attempt; its URL stays `queued` and is requested after the pause.
+- **Network pause:** a URL SHALL count once towards the network pause of `020-add-crawl-core`, at its first attempt that gets no HTTP response while the Crawl is not paused; its later attempts SHALL NOT count again. While the Crawl is paused waiting for the network, a request attempt that fails SHALL NOT be retried, and a URL whose retry is due SHALL make no further attempt. A URL of the pause's count SHALL be recorded with its last failure, and the pause's end decides on it as on the rest of its count; any other such URL SHALL NOT be recorded: it stays `queued` and is requested after the pause. When the pause ends in an outage, only the URLs of its count recorded as errors SHALL be re-queued.
 
 The URL SHALL record the last attempt's response. This change adds this column to `urls`, under the conventions of `018-add-schema-conventions`:
 
@@ -182,7 +182,7 @@ The URL SHALL record the last attempt's response. This change adds this column t
 
 #### Scenario: A request that fails during a network pause is not retried
 - **WHEN** `http://site.test/` links to `/p1` to `/p20`, a fake Fetcher answers `/` and gets no response for any later request, and the Crawl runs with `--concurrency 1`, `--network-wait 30` and a fake clock
-- **THEN** no request for a `/pN` URL starts after the pause began, and every `/pN` URL is `queued` when the Crawl ends
+- **THEN** no request for a `/pN` URL starts after the pause began; `/p1` to `/p8`, the pause's count, are `error` with `attempt_count` = 1, and every later `/pN` URL is `queued` when the Crawl ends
 
 #### Scenario: A network that goes down pauses the Crawl before the retries
 - **WHEN** `http://site.test/` links to `/p1` to `/p20`, a fake Fetcher answers `/` and refuses every later connection at once, and the Crawl runs with `--concurrency 1`, the default `--retries` and a fake clock
