@@ -28,8 +28,14 @@ TYPE_NAMES = {
     "float range": "number",
 }
 
-# The variables the tool honours: none yet, since no fetch reads the proxy variables.
-ENVIRONMENT: list[dict[str, Any]] = []
+# The only variables the tool honours: the OS's proxy settings, which 022 applies to fetching.
+ENVIRONMENT: list[dict[str, Any]] = [
+    {
+        "names": ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"],
+        "description": "The proxy for fetching, read when a run starts, in lower or upper case; "
+        "the lower-case one wins. NO_PROXY lists hosts and domain suffixes that go direct.",
+    }
+]
 
 
 @command_meta(

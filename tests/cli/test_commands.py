@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from openlinx.crawl.fetch.proxy import ProxyVariables
 from tests.support.app import example_app
 from tests.support.cli import run_cli, run_cli_process
 from tests.support.project import project_version
@@ -181,8 +182,14 @@ def test_naming_rule_for_input_errors() -> None:
     )
 
 
-def test_no_environment_variable_is_honoured() -> None:
-    assert run_cli("commands").json()["environment"] == []
+def test_the_proxy_variables_are_the_one_exception() -> None:
+    environment = run_cli("commands").json()["environment"]
+    # Every variable a run reads, as one with all of them set records them.
+    read = ProxyVariables(http="http://proxy.test", https="http://proxy.test", no_proxy="x")
+
+    assert [[name.lower() for name in entry["names"]] for entry in environment] == [
+        list(read.recorded())
+    ]
 
 
 def test_detection_signals_change_nothing() -> None:
