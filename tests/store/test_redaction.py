@@ -6,6 +6,7 @@ import typer
 
 from openlinx.cli.options import secret_flags
 from openlinx.cli.runner import OpenLinxGroup
+from openlinx.services.crawling import CrawlRequest, plan_crawl
 from openlinx.store.records import SecretNames
 from openlinx.store.redaction import redact
 from openlinx.store.writer import CrawlWriter
@@ -81,13 +82,19 @@ def test_a_secret_setting_that_is_not_a_string() -> None:
     assert redacted.config == {"example": {"token": "***"}}
 
 
-def example_secret_names() -> SecretNames:
-    """Read from the test app's declarations, as the adapter that creates a Crawl reads its own."""
+def example_secret_names(temp_workspace: TempWorkspace) -> SecretNames:
+    """As plan_crawl builds them from the test app's secret options, which its adapter reads."""
     group = cast(OpenLinxGroup, typer.main.get_group(example_app()))
-    tables = group.settings_tables
-    return SecretNames(
-        secret_flags(group.commands["example-settings"], tables), tables.secret_settings()
+    request = CrawlRequest(
+        seed="http://site.test/",
+        cwd=temp_workspace.root,
+        home=temp_workspace.home,
+        workspace=None,
+        command_argv=["linx", "crawl", "http://site.test/"],
+        flags={},
+        secret_flags=secret_flags(group.commands["example-settings"], group.settings_tables),
     )
+    return plan_crawl(request, group.settings_tables).new_crawl.secret_names
 
 
 def test_the_secret_is_nowhere_in_the_file(temp_workspace: TempWorkspace) -> None:
@@ -95,7 +102,7 @@ def test_the_secret_is_nowhere_in_the_file(temp_workspace: TempWorkspace) -> Non
         temp_workspace,
         command_argv=["linx", "example-settings", "--token", "s3cret"],
         config={"example": {"token": "s3cret"}},
-        secret_names=example_secret_names(),
+        secret_names=example_secret_names(temp_workspace),
     )
     # The scenario's closed writer: closing checkpoints the WAL into the file.
     with CrawlWriter(crawl.path, FakeClock()):

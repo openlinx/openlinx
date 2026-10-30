@@ -315,11 +315,20 @@ def cli_import_violations(sources: Mapping[str, str]) -> list[str]:
         f"{module} imports {name}"
         for module, source in sources.items()
         if module.startswith(UNDER_THE_CLI)
-        for name in _imported_modules(ast.parse(source))
+        for name in _modules_and_submodules(ast.parse(source))
         if name.partition(".")[0] == "typer"
         or name == "openlinx.cli"
         or name.startswith("openlinx.cli.")
     ]
+
+
+def _modules_and_submodules(tree: ast.AST) -> list[str]:
+    """The modules imported, and for `from openlinx import cli` the submodule too."""
+    found = _imported_modules(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "openlinx" and not node.level:
+            found += [f"openlinx.{alias.name}" for alias in node.names]
+    return found
 
 
 def test_no_service_imports_the_cli() -> None:
@@ -339,6 +348,7 @@ def test_an_import_of_the_cli_under_it_is_named() -> None:
         "openlinx/services/crawling.py": "def late():\n    import typer\n",
         "openlinx/workspace/settings.py": "from openlinx.cli.options import OptionMeta\n",
         "openlinx/output/writer.py": "from typer.testing import CliRunner\n",
+        "openlinx/extract/page_data.py": "from openlinx import cli\n",
         "openlinx/store/urls.py": "import typing\nfrom openlinx.clock import Clock\n",
         "openlinx/cli/crawl.py": "import typer\n",
         "openlinx/naming.py": "import typer\n",
@@ -348,6 +358,7 @@ def test_an_import_of_the_cli_under_it_is_named() -> None:
         "openlinx/services/crawling.py imports typer",
         "openlinx/workspace/settings.py imports openlinx.cli.options",
         "openlinx/output/writer.py imports typer.testing",
+        "openlinx/extract/page_data.py imports openlinx.cli",
     ]
 
 

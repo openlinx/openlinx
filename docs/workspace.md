@@ -119,3 +119,5 @@ An invalid file fails with `settings_invalid`, exit code 3, and the Command does
 - `details.errors` lists every problem as `{key, message}`, in file order. `key` is the dotted key.
 - Unknown tables and keys are problems. The hint names the closest known key when there is one.
 - A TOML syntax error has `"key": null` and the `line` it was found on.
+
+A value given with the settings, as a flag, by a service's caller or as an override of a continued Crawl, that its setting refuses fails with `invalid_value`, exit code 2, its dotted key in `details.key`, and no `file`. When a given value and the file are both refused, the given value's error comes first; a refused file value stays `settings_invalid`, also in a table where a value was given.

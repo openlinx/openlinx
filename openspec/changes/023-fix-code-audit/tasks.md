@@ -38,7 +38,7 @@ Seams are those of docs/testing.md. A guard is proven red by a mutation, and the
 - [x] 4.5 Drive "Bounds of an option" at seam 1: `min` and `max` in `linx commands` and docs/cli.md.
 - [x] 4.6 The import rule: `openlinx.services`, `.workspace`, `.store`, `.crawl`, `.extract` and `.output` import no `typer` and no `openlinx.cli`. Done when: it is red with a `typer` import in a service.
 - [x] 4.7 Guard `test_mirrored_options_match_their_fields` over every Command (design D10), replacing the hidden rule in the recorded-config test, which compares with `CrawlSettings()`. Done when: it is red with Click's `max` changed and with a `[crawl]` field that has no option.
-- [ ] 4.8 Review.
+- [x] 4.8 Review.
 
 ## 5. Link reading and the Link type table
 

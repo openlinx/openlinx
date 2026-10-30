@@ -23,6 +23,7 @@ from openlinx.output.codes import DiagnosticCode, ExitCode
 from openlinx.output.diagnostics import Diagnostic, OpenLinxError, Outcome
 from openlinx.output.paging import Fields, Page, fingerprint, paginate, select_fields
 from openlinx.output.writer import Format
+from openlinx.services.settings import default_tables
 from openlinx.store.records import LATEST
 from openlinx.workspace.discovery import resolve_workspace
 from openlinx.workspace.tables import SettingsTables
@@ -249,6 +250,13 @@ def example_app() -> typer.Typer:
             ],
         )
     )
+
+
+def tables_with_example() -> SettingsTables:
+    """The services' own tables with the example table, for a seam-2 call that builds no app."""
+    tables = default_tables()
+    tables.register("example", EXAMPLE_TABLE)
+    return tables
 
 
 def settings_tables(app: typer.Typer) -> SettingsTables:

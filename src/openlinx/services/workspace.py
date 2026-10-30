@@ -43,7 +43,8 @@ def init_workspace(
     # Imported here: pydantic is too heavy for the CLI's startup path.
     from openlinx.workspace.settings import load_settings
 
-    tables = tables or default_tables()
+    if tables is None:
+        tables = default_tables()
     workspace = target_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
     # Loaded only to validate the settings file, before anything is created.
     load_settings(workspace, tables)

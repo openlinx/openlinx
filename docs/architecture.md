@@ -47,7 +47,7 @@ A short map for contributors and coding agents. Terms follow [CONTEXT.md](../CON
 
 Settings come only from a Command's flag, then the Workspace's `openlinx.toml`, then the default. Each change registers its own tables:
 - **Ownership:** one table has one owning change, the one that registers it. A later change adds fields to that table's model and never registers a second table for the same concern.
-- **Lazy references:** a table is registered in `build_app` by its `"module:Class"` reference and imported only when settings load or the template is written, so `--help` loads no table and no pydantic.
+- **Lazy references:** a table is registered in `default_tables()` of `openlinx.services.settings` by its `"module:Class"` reference, `build_app` adding only the `AppExtra` tables, and imported only when settings load or the template is written, so `--help` loads no table and no pydantic.
 - **Table rules,** checked by a test on every registered table, because the commented template and the error hints rely on them:
   - `extra="forbid"`, and a one-line description on every setting
   - a default TOML can write: a string, a finite number, a boolean or a list of those
@@ -108,7 +108,7 @@ Frontier ──► Engine ──► Requester ──► Fetcher ──► Page e
     - **Its connection settings:** temporary tables in memory, a 64 MiB page cache and, in WAL mode, 256 MiB of memory-mapped I/O. Creating a file and reading it keep SQLite's defaults.
   - **`--crawl` resolution:** `openlinx.store.selection.resolve_crawl` turns `latest`, an id or a path into a crawl file, and `openlinx.store.reading.reading` opens one read-only for a single operation, refusing a file from a newer tool.
   - **The schema service:** `openlinx.services.schema.describe_schema` describes the public tables for `linx schema` and the MCP server: columns with their references, and secondary indexes. `openlinx.services.schema_doc.parse_tables` reads the table sections of `docs/schema.md` back.
-  - **Redaction:** `openlinx.store.redaction.redact`, with the secret names that the adapter creating a Crawl collects through `openlinx.cli.options.secret_names`, from the secret settings and options already declared.
+  - **Redaction:** `openlinx.store.redaction.redact`, with the secret names that `plan_crawl` builds from the tables' secret settings and the request's `secret_flags`, which the CLI adapter collects through `openlinx.cli.options.secret_flags` from the secret options already declared.
   - After the exclusive create of a new file, `openlinx.store.connections` is the only code that opens a crawl file: one engine per operation, disposed after it, so no handle outlives the operation.
 - **Schema definition:** SQLAlchemy 2 Core tables in `openlinx.store.schema` are the single definition ([ADR-0003](adr/0003-sqlalchemy-core-not-orm.md)). They drive batched inserts, safe `--where` → SQL translation (only known columns), and the SQL reference (`linx schema`, the Skill).
   - **The conventions** are [ADR-0005](adr/0005-crawl-file-schema-conventions.md): names, keys and references, units, flags, enumerations, errors, indexes, and derived and later columns.

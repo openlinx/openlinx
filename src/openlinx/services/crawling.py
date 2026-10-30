@@ -181,11 +181,13 @@ class CrawlResult:
 def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> CrawlPlan:
     """Validation and config resolution, before anything is created (design D11); `tables`
     are the built-in ones unless given."""
-    # Checked before the Workspace is resolved, and stripped once the settings are read.
+    # The call's own input first: the Seed, stripped once the settings are read, and the
+    # flags that conflict.
     _seed(request.seed, None)
-    workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
-    tables = tables or default_tables()
     flags = _with_subdomains(request.flags) if request.subdomains else request.flags
+    workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
+    if tables is None:
+        tables = default_tables()
     settings = load_settings(workspace, tables, flags)
     crawl_settings = settings.table(CrawlSettings)
     strip_params = strip_params_pattern(crawl_settings.strip_params)

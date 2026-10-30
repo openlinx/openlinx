@@ -16,6 +16,7 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
+from openlinx.naming import COMMAND_NAME
 from openlinx.output.codes import INVALID_VALUE, SETTINGS_INVALID
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.workspace.discovery import Workspace
@@ -32,7 +33,8 @@ class Settings:
                 return value
         raise TypeError(
             f"the settings table {model.__name__} is not registered: register it in "
-            "openlinx.services.settings.default_tables()"
+            "openlinx.services.settings.default_tables(), or an extra table in "
+            "AppExtra.settings_tables"
         )
 
 
@@ -82,29 +84,34 @@ def refused_given_value(
     """invalid_value for the first error at a key the caller gave, or None when the file's
     values alone are refused: the call's own input is checked first, as Click checks flags
     (023-fix-code-audit D9). `table` names the table of an error from one table's model."""
-    keys = set(_given_keys(given))
+    keys = set(_given_values(given))
     for problem in error.errors():
         parts = ([] if table is None else [table]) + [str(part) for part in problem["loc"]]
-        prefixes = {".".join(parts[:size]) for size in range(1, len(parts) + 1)}
-        # The deepest given key: a table's name is given too, with its keys.
-        key = next((p for p in sorted(prefixes, key=len, reverse=True) if p in keys), None)
+        # A list's item is located below its key, as crawl.exclude.1.
+        prefixes = (".".join(parts[:size]) for size in range(len(parts), 0, -1))
+        key = next((prefix for prefix in prefixes if prefix in keys), None)
         if key is not None:
+            # pydantic words a validator's ValueError as "Value error, <its text>".
+            reason = problem["msg"].removeprefix("Value error, ")
             return OpenLinxError(
                 INVALID_VALUE,
-                f"Invalid value for {key}: {problem['msg']}.",
-                hint=f"Give {key} a value that its setting accepts.",
+                f"Invalid value for {key}: {reason}.",
+                hint=f"Change the value given for {key}; {COMMAND_NAME} commands lists the "
+                "type and bounds of each option that gives a setting.",
                 details={"key": key},
             )
     return None
 
 
-def _given_keys(given: Mapping[str, Any], prefix: str = "") -> list[str]:
+def _given_values(given: Mapping[str, Any], prefix: str = "") -> list[str]:
+    """The dotted keys of the values given: a table, or a keyed table's entry, is not one."""
     keys = []
     for name, value in given.items():
         key = f"{prefix}{name}"
-        keys.append(key)
         if isinstance(value, Mapping):
-            keys += _given_keys(value, f"{key}.")
+            keys += _given_values(value, f"{key}.")
+        else:
+            keys.append(key)
     return keys
 
 

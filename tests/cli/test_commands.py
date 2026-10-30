@@ -275,6 +275,7 @@ def test_mirrored_options_match_their_fields() -> None:
 
     assert (mismatched, missing) == ([], []), (
         "an option that mirrors a setting differs from its field, or a [crawl] field has no "
-        "option: give the option in openlinx.cli.crawl the key's name, the field's default "
-        "and the field's ge and le as Click's min and max, with OptionMeta(setting=...)"
+        "option: give the option, in its Command's module of openlinx.cli, the key's name, the "
+        "field's default and the field's ge and le as Click's min and max, with "
+        "OptionMeta(setting=...)"
     )
