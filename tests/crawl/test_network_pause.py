@@ -498,7 +498,6 @@ def test_requests_that_fail_while_paused_are_requested_again_within_the_url_limi
         fetcher=FakeFetcher(clock, pages, outages=[(1, 30)]),
         concurrency=4,
         max_urls=25,
-        retries=0,
     )
     requested = query(
         result.crawl_file,
@@ -560,9 +559,7 @@ def test_an_outage_requeues_a_url_once_a_run(temp_workspace: TempWorkspace) -> N
     }
     fetcher = FakeFetcher(clock, pages, outages=[(1, 30), (42, 80)])
 
-    result = crawl_result(
-        "http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, retries=0
-    )
+    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher, concurrency=1)
     states = dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls"))
     starts = Counter(path for path, _ in fetcher.path_starts)
 

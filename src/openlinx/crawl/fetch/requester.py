@@ -168,8 +168,10 @@ class Requester:
             # stop, the last attempt's outcome is the URL's.
             if not await self._turn_before_stop(wait):
                 break
-            async with self._gated_slots(url):
-                if self._stop.is_set:
+            # A closed gate ends the retries: an outage spends none, and the network pause
+            # re-queues the URL from its last failure (022 design D4).
+            async with self._gated_slots(url, waits=False) as passed:
+                if not passed or self._stop.is_set:
                     break
                 outcome = await self._send(url)
                 on_attempt(outcome)
@@ -177,24 +179,27 @@ class Requester:
         return Attempted(outcome, attempts)
 
     @asynccontextmanager
-    async def _gated_slots(self, url: NormalizedUrl) -> AsyncIterator[None]:
+    async def _gated_slots(self, url: NormalizedUrl, *, waits: bool = True) -> AsyncIterator[bool]:
+        """Whether the request passed the gate: one that `waits` not ends at a closed one."""
         # Waited before any slot, so a paused request leaves the host's slots to the probes; one
         # that took them as the pause began gives them back and its turn goes unused.
-        while True:
-            await self._past_gate()
+        while await self._past_gate(waits=waits):
             async with self._slots(url, stops=True):
                 if self._open.is_set():
-                    yield
+                    yield True
                     return
+        yield False
 
-    async def _past_gate(self) -> None:
+    async def _past_gate(self, *, waits: bool) -> bool:
         """Those that waited at the gate wake a loop turn or more after it opens: a request
         that comes since then goes behind them, so requests reach the host's slot in the order
-        they were dispatched (design D1)."""
-        while self._at_gate:
+        they were dispatched (design D1). False for one that `waits` not at a closed gate."""
+        while self._at_gate and (waits or self._open.is_set()):
             await self._gate_drained.wait()
         if self._open.is_set():
-            return
+            return True
+        if not waits:
+            return False
         if not self._at_gate:
             self._gate_drained = asyncio.Event()
         self._at_gate += 1
@@ -204,6 +209,7 @@ class Requester:
             self._at_gate -= 1
             if not self._at_gate:
                 self._gate_drained.set()
+        return True
 
     @asynccontextmanager
     async def _slots(self, url: NormalizedUrl, *, stops: bool) -> AsyncIterator[None]:

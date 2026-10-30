@@ -9,6 +9,7 @@ from openlinx.crawl.fetch.politeness import RateGate
 from openlinx.output.reporter import Collected
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
+from tests.support.crawls import query
 from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
 
@@ -152,3 +153,31 @@ def test_a_network_that_goes_down_pauses_the_crawl_before_the_retries(
     # --concurrency 1 pauses at 8 URLs in a row: their first attempts, no retry among them.
     before = timeline[: timeline.index("crawl_paused")]
     assert [entry for entry in before if entry.startswith("/")] == [f"/p{n}" for n in range(1, 9)]
+
+
+def test_a_request_that_fails_during_a_network_pause_is_not_retried(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    # / answers at 12 seconds, and from then on nothing does: /p1 to /p8 fail at once, each
+    # counted at its first attempt, and pause the Crawl with their retries due a second later.
+    pages = {
+        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 21)), delay=12),
+        **{f"/p{n}": FakePage(f"<p>P{n}</p>") for n in range(1, 21)},
+    }
+    fetcher = FakeFetcher(clock, pages, outages=[(12, float("inf"))])
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, network_wait=30
+    )
+    starts = [(path, at) for path, at in fetcher.path_starts if path.startswith("/p")]
+    states = query(
+        result.crawl_file,
+        "SELECT fetch_state, attempt_count, count(*) FROM urls WHERE url LIKE '%/p%' GROUP BY 1, 2",
+    )
+
+    # The eight of the count keep their first failure, which a continue requests again.
+    assert (starts, states) == (
+        [(f"/p{n}", 12) for n in range(1, 9)],
+        [("error", 1, 8), ("queued", 0, 12)],
+    )
