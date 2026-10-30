@@ -842,6 +842,55 @@ pages = public_table(
         comment="Crawl Depth, equal to urls.crawl_depth: 0 for Seeds.",
     ),
     Column(
+        "folder_depth",
+        Integer,
+        nullable=False,
+        comment="The number of non-empty segments in the path of address; the query is "
+        "ignored, and an escaped / (%2F) stays inside its segment.",
+    ),
+    Column(
+        "inlinks",
+        Integer,
+        comment="Derived: the hyperlinks from Pages to this Page, self-links left out; NULL "
+        "until the post-crawl passes have run.",
+    ),
+    Column(
+        "unique_inlinks",
+        Integer,
+        comment="Derived: the distinct Pages whose hyperlinks reach this Page, itself left out; "
+        "NULL until the post-crawl passes have run.",
+    ),
+    Column(
+        "linking_pages_pct",
+        REAL,
+        comment="Derived: 100 times the distinct Pages with status 200 that link to this Page, "
+        "divided by the Pages with status 200, rounded half up to 2 decimals; NULL "
+        "until the post-crawl passes have run, or when no Page has status 200.",
+    ),
+    Column(
+        "outlinks",
+        Integer,
+        comment="The Page's hyperlinks to Internal URLs, self-links left out; NULL when the "
+        "Page is not analysed.",
+    ),
+    Column(
+        "unique_outlinks",
+        Integer,
+        comment="The distinct Internal targets of the Page's hyperlinks, itself left out; NULL "
+        "when the Page is not analysed.",
+    ),
+    Column(
+        "external_outlinks",
+        Integer,
+        comment="The Page's hyperlinks to External URLs; NULL when the Page is not analysed.",
+    ),
+    Column(
+        "unique_external_outlinks",
+        Integer,
+        comment="The distinct External targets of the Page's hyperlinks; NULL when the Page is "
+        "not analysed.",
+    ),
+    Column(
         "jsonld_item_count",
         Integer,
         comment="The number of JSON-LD items in the application/ld+json scripts: each top-level "
@@ -1026,6 +1075,15 @@ links = public_table(
     Column("rel_nofollow", Flag, nullable=False, comment="1 when rel holds nofollow."),
     Column("rel_ugc", Flag, nullable=False, comment="1 when rel holds ugc."),
     Column("rel_sponsored", Flag, nullable=False, comment="1 when rel holds sponsored."),
+    Column(
+        "followed",
+        Flag,
+        nullable=False,
+        comment="1 when the Crawl requests the target through this Link, by the Crawl's follow "
+        "rule (the Link type, and the Link's and the Page's nofollow, which --follow-nofollow "
+        "lifts), a Resource such as an img target included; robots.txt, the Scope and "
+        "--max-depth play no part. 0 otherwise.",
+    ),
     Column(
         "hreflang",
         Text,

@@ -230,6 +230,14 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `declared_language` | TEXT | yes | | | | The lang attribute of the root html element, trimmed: the empty string when it has no value; NULL when it is absent, or the Page is not analysed or its Page extractor failed. |
 | `content_hash` | TEXT | yes | | | | The SHA-256, as lowercase hex, of the normalised Content Area text as UTF-8, with no Unicode normalisation: Pages with the same value are Exact Duplicates; NULL when word_count is 0, or the Page is not analysed or its Page extractor failed. |
 | `crawl_depth` | INTEGER | no | | | | Crawl Depth, equal to urls.crawl_depth: 0 for Seeds. |
+| `folder_depth` | INTEGER | no | | | | The number of non-empty segments in the path of address; the query is ignored, and an escaped / (%2F) stays inside its segment. |
+| `inlinks` | INTEGER | yes | | | | Derived: the hyperlinks from Pages to this Page, self-links left out; NULL until the post-crawl passes have run. |
+| `unique_inlinks` | INTEGER | yes | | | | Derived: the distinct Pages whose hyperlinks reach this Page, itself left out; NULL until the post-crawl passes have run. |
+| `linking_pages_pct` | REAL | yes | | | | Derived: 100 times the distinct Pages with status 200 that link to this Page, divided by the Pages with status 200, rounded half up to 2 decimals; NULL until the post-crawl passes have run, or when no Page has status 200. |
+| `outlinks` | INTEGER | yes | | | | The Page's hyperlinks to Internal URLs, self-links left out; NULL when the Page is not analysed. |
+| `unique_outlinks` | INTEGER | yes | | | | The distinct Internal targets of the Page's hyperlinks, itself left out; NULL when the Page is not analysed. |
+| `external_outlinks` | INTEGER | yes | | | | The Page's hyperlinks to External URLs; NULL when the Page is not analysed. |
+| `unique_external_outlinks` | INTEGER | yes | | | | The distinct External targets of the Page's hyperlinks; NULL when the Page is not analysed. |
 | `jsonld_item_count` | INTEGER | yes | | | | The number of JSON-LD items in the application/ld+json scripts: each top-level object, of a script or of a top-level array, or instead the content of its @graph, an array of objects or one object; NULL when the Page is not analysed or its Page extractor failed. |
 | `microdata_item_count` | INTEGER | yes | | | | The number of top-level Microdata items: elements with itemscope and no itemprop; NULL when the Page is not analysed or its Page extractor failed. |
 | `jsonld_parse_error_count` | INTEGER | yes | | | | The number of application/ld+json scripts that are not valid JSON, or nest more than 1024 levels deep; NULL when the Page is not analysed or its Page extractor failed. |
@@ -278,6 +286,7 @@ One row for each Link the Crawl discovered in a response: in an analysed Page's 
 | `rel_nofollow` | INTEGER | no | | `boolean` | | 1 when rel holds nofollow. |
 | `rel_ugc` | INTEGER | no | | `boolean` | | 1 when rel holds ugc. |
 | `rel_sponsored` | INTEGER | no | | `boolean` | | 1 when rel holds sponsored. |
+| `followed` | INTEGER | no | | `boolean` | | 1 when the Crawl requests the target through this Link, by the Crawl's follow rule (the Link type, and the Link's and the Page's nofollow, which --follow-nofollow lifts), a Resource such as an img target included; robots.txt, the Scope and --max-depth play no part. 0 otherwise. |
 | `hreflang` | TEXT | yes | | | | For a hreflang Link, the trimmed hreflang of its element, or the hreflang parameter of its Link header; NULL for other Links, and for a Link of the HTML when the Page's Link extractor failed. |
 | `media` | TEXT | yes | | | | For a mobile_alternate Link, the trimmed media of its element; NULL for other Links, or when the Page's Link extractor failed. |
 | `link_position` | TEXT | yes | | | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | Where on the Page the Link is: head for a Link the parser places in head; otherwise from the nearest enclosing nav (navigation), header, footer or aside (sidebar), and content without one, a Link from a noscript's content taking the noscript's place; NULL for a header Link, or when the Page's Link extractor failed. |

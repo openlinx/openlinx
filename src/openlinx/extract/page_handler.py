@@ -12,7 +12,7 @@ from openlinx.crawl.pages.directives import RobotsDirectives
 from openlinx.crawl.pages.preparation import is_html_type
 from openlinx.crawl.pages.refresh import refresh_url
 from openlinx.crawl.references import C0_OR_SPACE, DiscoveredLink
-from openlinx.extract.addresses import display_address, path_and_query
+from openlinx.extract.addresses import display_address, folder_depth, path_and_query
 from openlinx.extract.cookies import cookie_row
 from openlinx.extract.dates import internet_date
 from openlinx.extract.page_data import PAGE_DATA, PageData
@@ -47,6 +47,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             url_encoded_address=result.url,
             url_path=url_path,
             url_query=url_query,
+            folder_depth=folder_depth(url_path),
             content_type=content_type,
             status_code=response.status_code,
             # The fetcher records "" for a status line without a phrase.
@@ -62,6 +63,7 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             **robots,
             **canonical,
             **_linked_page_columns(result),
+            **_outlink_columns(result),
         ),
     )
 
@@ -109,6 +111,13 @@ class _LinkedPageColumns(TypedDict, total=False):
     http_rel_prev_1: str | None
     amphtml_link_element: str | None
     mobile_alternate_link: str | None
+
+
+class _OutlinkColumns(TypedDict, total=False):
+    outlinks: int
+    unique_outlinks: int
+    external_outlinks: int
+    unique_external_outlinks: int
 
 
 def _redirect(result: UrlResult, data: PageData | None) -> _RedirectColumns:
@@ -194,6 +203,22 @@ def _canonical_columns(result: UrlResult) -> _CanonicalColumns:
             for link in html
         ),
     }
+
+
+def _outlink_columns(result: UrlResult) -> _OutlinkColumns:
+    if not result.parsed:
+        return {}
+    hyperlinks = [
+        link for link in result.links if link.type == "hyperlink" and link.target != result.url
+    ]
+    internal = [link.target for link in hyperlinks if link.is_internal]
+    external = [link.target for link in hyperlinks if not link.is_internal]
+    return _OutlinkColumns(
+        outlinks=len(internal),
+        unique_outlinks=len(set(internal)),
+        external_outlinks=len(external),
+        unique_external_outlinks=len(set(external)),
+    )
 
 
 def _linked_page_columns(result: UrlResult) -> _LinkedPageColumns:

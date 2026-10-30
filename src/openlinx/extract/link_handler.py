@@ -62,6 +62,7 @@ def _row(
         rel_nofollow="nofollow" in link.rel,
         rel_ugc="ugc" in link.rel,
         rel_sponsored="sponsored" in link.rel,
+        followed=link.requests_target,
         hreflang=header_hreflang if attributes is None else attributes.hreflang,
         media=None if attributes is None else attributes.media,
         link_position=None if attributes is None else attributes.link_position,
