@@ -1,5 +1,6 @@
 """Retries in time: the backoff between attempts (022-add-fetch-policy, fetching; fake timing)."""
 
+from dataclasses import replace
 from functools import partial
 from typing import Any
 
@@ -104,6 +105,19 @@ def test_a_retry_after_or_a_429_sets_the_wait_before_the_retry(
     crawl_result("http://site.test/a", clock=clock, fetcher=fetcher)
 
     assert _starts(fetcher, "/a") == [0.0, wait]
+
+
+def test_a_retry_after_date_counts_from_the_end_of_the_response(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    # The 503 takes 30 seconds to arrive and names a moment 5 seconds after it did.
+    slow = FakePage("", status=503, headers=(("Retry-After", "Thu, 01 Jan 2026 00:00:35 GMT"),))
+    fetcher = FakeFetcher(clock, {"/a": [replace(slow, delay=30), FakePage("<p>A</p>")]})
+
+    crawl_result("http://site.test/a", clock=clock, fetcher=fetcher)
+
+    assert _starts(fetcher, "/a") == [0.0, 35.0]
 
 
 def _cap_held_through_a_pause(clock: FakeClock, **callbacks: Any) -> FakeFetcher:

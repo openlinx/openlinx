@@ -5,6 +5,7 @@ from collections import deque
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Protocol
 
@@ -176,7 +177,7 @@ class Requester:
         any other stop ends a due retry, and the URL is not recorded (022 design D4)."""
         attempts = 1
         while True:
-            wait, pauses = retry_wait(outcome, attempts)
+            wait, pauses = retry_wait(outcome, attempts, self._clock.now())
             # Politeness toward the host, whether or not the URL has a retry left.
             if pauses:
                 self._gate.pause(host_key(url), wait)
@@ -312,12 +313,15 @@ def is_retried(outcome: FetchResult | FetchFailure) -> bool:
     return 500 <= outcome.status_code <= 599 or outcome.status_code == 429
 
 
-def retry_wait(outcome: FetchResult | FetchFailure, attempt: int) -> tuple[float, bool]:
+def retry_wait(
+    outcome: FetchResult | FetchFailure, attempt: int, ended: datetime
+) -> tuple[float, bool]:
     """The seconds before retry `attempt`, and whether the host pauses for them: a
     Retry-After on a 429 or 503 sets them, capped, and a 429 without one waits 10 seconds;
-    any other retry backs off, 1, 2, 4, ... seconds (022 design D4)."""
+    any other retry backs off, 1, 2, 4, ... seconds (022 design D4). `ended` is when the
+    response ended, from which a Retry-After date counts."""
     if isinstance(outcome, FetchResult) and outcome.status_code in (429, 503):
-        after = retry_after(outcome)
+        after = retry_after(outcome, ended)
         if after is not None:
             return min(after, RETRY_AFTER_CAP), True
         if outcome.status_code == 429:
@@ -325,7 +329,7 @@ def retry_wait(outcome: FetchResult | FetchFailure, attempt: int) -> tuple[float
     return 2.0 ** (attempt - 1), False
 
 
-def retry_after(response: FetchResult) -> float | None:
+def retry_after(response: FetchResult, ended: datetime) -> float | None:
     """The response's Retry-After in seconds, from a number of seconds or an HTTP date; None
     without a header that reads as either."""
     value = response.header("Retry-After")
@@ -340,4 +344,4 @@ def retry_after(response: FetchResult) -> float | None:
         return None
     if date.tzinfo is None:
         return None
-    return max(0.0, (date - response.fetched_at).total_seconds())
+    return max(0.0, (date - ended).total_seconds())

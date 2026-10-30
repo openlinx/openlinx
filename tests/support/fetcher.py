@@ -65,6 +65,8 @@ class FakeFetcher:
 
     async def fetch(self, request: Request) -> FetchResult | FetchFailure:
         path = urlsplit(request.url).path or "/"
+        # The time of the request, as the real Fetcher stamps it.
+        fetched_at = self._clock.now()
         started = self._clock.monotonic()
         self.starts.append((request.url, started))
         callback = self._on_start.get(request.url) or self._on_start.get(path)
@@ -87,14 +89,14 @@ class FakeFetcher:
             return FetchFailure(
                 fetch_error=fails,
                 message="No HTTP response, as the test asks",
-                fetched_at=self._clock.now(),
+                fetched_at=fetched_at,
             )
         return FetchResult(
             status_code=page.status,
             reason=HTTPStatus(page.status).phrase,
             headers=(("Content-Type", page.content_type), *page.headers),
             body=page.body.encode(),
-            fetched_at=self._clock.now(),
+            fetched_at=fetched_at,
             response_time_ms=0,
         )
 
