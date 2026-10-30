@@ -155,7 +155,7 @@ The first PR ships groups 1-9 and this group; group 10 follows in a second.
 - [x] 9b.3 [Fake timing] The URL limit's wait for an open pause count ends at `--network-wait` from the refusal, and then the Crawl stops (design D4).
 - [x] 9b.4 [Fake timing] A `Retry-After` date is measured from when the response ended, not from when its request was sent (design D4).
 - [x] 9b.5 [3+6] A continue records the proxy variables it fetches through, redacted as a start's are, in place of the start's, and `docs/crawling.md` ("Continuing a Crawl") says so (design D1).
-- [ ] 9b.6 Docs: `attempt_count` is the requests made for the URL in the dispatch that recorded it, its retries included; the spec, `schema.py` and `docs/schema.md` say one text.
+- [x] 9b.6 Docs: `attempt_count` is the requests made for the URL in the dispatch that recorded it, its retries included; the spec, `schema.py` and `docs/schema.md` say one text.
 - [ ] 9b.7 [Fake timing] A probe and a host's `Retry-After` pause, by the rule ruled at this task's plan check (design D4).
 - [ ] 9b.8 The Seed's Redirect Chain closes at one point; a second close, if a Crawl can reach it, is red first (design D3).
 - [ ] 9b.9 Refactor, behaviour unchanged: `StopSignal` gives two views, `new_requests` and `under_way`, each with `is_set` and `wait()`, and probes take one that is never set; `_slots` takes its view and yields whether it holds the slots.

@@ -142,7 +142,7 @@ The URL SHALL record the last attempt's response. This change adds this column t
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
-| `attempt_count` | INTEGER | no | | The number of requests made for the URL; 0 when it was not requested |
+| `attempt_count` | INTEGER | no | | The requests made for the URL in the dispatch that recorded it, its retries included; 0 when it was not requested |
 
 #### Scenario: A temporary 503 is retried
 - **WHEN** `/flaky` returns 503 once and 200 after that

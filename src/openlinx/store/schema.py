@@ -355,7 +355,8 @@ urls = public_table(
         Integer,
         nullable=False,
         server_default="0",
-        comment="The number of requests made for the URL; 0 when it was not requested.",
+        comment="The requests made for the URL in the dispatch that recorded it, its retries "
+        "included; 0 when it was not requested.",
     ),
     Column("fetched_at", Timestamp, comment="UTC time of the request."),
     Column(
