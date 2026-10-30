@@ -38,7 +38,7 @@
 - **Columns measured by later releases** exist now and stay NULL:
   - the four SERP pixel widths, `syllable_count`, `flesch_reading_ease`, `readability`, `detected_language`, `link_score` and `http_version` (v0.2)
   - `closest_similarity_pct` and `near_duplicate_count` (v0.3)
-  - `structured_data_errors` and `structured_data_warnings` (v0.3)
+  - `structured_data_error_count` and `structured_data_warning_count` (v0.3)
   - `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count` (v1.1)
 - No new Commands or MCP tools. The new tables appear in `linx schema` and can be read with `linx sql`, `pages`, `page` and `export` (`050`).
 
