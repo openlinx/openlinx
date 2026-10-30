@@ -987,7 +987,7 @@ def test_a_url_recorded_as_unwritten_keeps_its_robots_txt_verdict(
 
 
 def test_a_handler_without_its_writer_cannot_be_built() -> None:
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="'write'"):
         handler("seen", _seen)  # type: ignore[call-arg]
 
 

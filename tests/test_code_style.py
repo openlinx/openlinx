@@ -1,9 +1,13 @@
 """Guard: code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14, D19)."""
 
 import ast
+import re
+import tomllib
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+import pytest
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 # Typer takes a class, not an instance, so build_app makes one per app (ADR-0006).
@@ -100,7 +104,10 @@ def test_the_decidable_rules_of_adr_0006_hold_over_src_openlinx() -> None:
         for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
-    assert violations(sources) == []
+    assert violations(sources) == [], (
+        "ADR-0006: give the dataclass or Struct frozen=True, compose instead of subclassing an "
+        "own class, and give a memo an explicit maxsize"
+    )
 
 
 def test_a_dataclass_that_is_not_frozen_is_named() -> None:
@@ -222,7 +229,10 @@ def test_the_rules_of_design_d13_of_020_hold_over_src_openlinx() -> None:
         for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
-    assert url_type_violations(sources) == []
+    assert url_type_violations(sources) == [], (
+        "a NormalizedUrl is made only in openlinx.crawl.urls and openlinx.store.urls, and "
+        "openlinx.crawl.urls imports nothing of openlinx: call normalize_url instead"
+    )
 
 
 def test_an_import_of_openlinx_in_the_url_module_is_named() -> None:
@@ -285,7 +295,10 @@ def test_only_the_store_imports_sqlalchemy() -> None:
         for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
-    assert sqlalchemy_violations(sources) == []
+    assert sqlalchemy_violations(sources) == [], (
+        "SQL lives in openlinx.store: build the statement there (openlinx.store.query for "
+        "--where) and call it from your service"
+    )
 
 
 def test_an_import_of_sqlalchemy_outside_the_store_is_named() -> None:
@@ -392,7 +405,10 @@ def test_the_crawl_core_imports_no_plugin_layer() -> None:
         for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
-    assert plugin_import_violations(sources) == []
+    assert plugin_import_violations(sources) == [], (
+        "the crawl core imports no plugin layer: register the hook in default_hooks() in "
+        "openlinx.services.hooks, which the crawl core never imports"
+    )
 
 
 def test_an_import_of_a_plugin_layer_in_the_crawl_core_is_named() -> None:
@@ -518,7 +534,10 @@ def _src_sources() -> dict[str, str]:
 
 
 def test_the_crawl_imports_run_one_way() -> None:
-    assert import_rule_violations(_src_sources()) == []
+    assert import_rule_violations(_src_sources()) == [], (
+        "an import breaks a rule of IMPORT_RULES: move the shared code into a module the rule "
+        "allows, and import it from there"
+    )
 
 
 def test_an_import_against_an_import_rule_is_named() -> None:
@@ -555,7 +574,10 @@ def test_an_import_against_an_import_rule_is_named() -> None:
 
 
 def test_the_import_rules_name_each_crawl_package_and_no_missing_module() -> None:
-    assert unnamed_modules(IMPORT_RULES, _src_sources()) == []
+    assert unnamed_modules(IMPORT_RULES, _src_sources()) == [], (
+        "every package of openlinx.crawl has an import rule, and every rule names a module "
+        "that exists: add the package to IMPORT_RULES, or fix the rule's name"
+    )
 
 
 def test_a_module_that_an_import_rule_names_and_that_does_not_exist_is_named() -> None:
@@ -604,7 +626,10 @@ def test_no_module_that_reads_pages_serializes_a_node() -> None:
         for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
-    assert serializer_violations(sources) == []
+    assert serializer_violations(sources) == [], (
+        "a module that reads Pages never serializes a node, which overflows the stack on a "
+        "deep tree: read the node's attributes or text instead"
+    )
 
 
 def test_a_serialization_of_a_node_is_named() -> None:
@@ -687,7 +712,10 @@ def test_every_page_is_parsed_with_scripting_on() -> None:
         for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
-    assert (parse_violations(sources), bool(_parses(sources))) == ([], True)
+    assert (parse_violations(sources), bool(_parses(sources))) == ([], True), (
+        "a Page is parsed as a browser that runs scripts parses it: use "
+        "openlinx.crawl.pages.links.parse_html"
+    )
 
 
 def test_a_parse_with_scripting_off_is_named() -> None:
@@ -742,7 +770,10 @@ def test_every_request_goes_through_the_requester() -> None:
         for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
-    assert request_violations(sources) == []
+    assert request_violations(sources) == [], (
+        "every request goes through the Requester: call request_url or request_robots_txt of "
+        "openlinx.crawl.fetch.requester"
+    )
 
 
 def test_a_request_outside_the_requester_is_named() -> None:
@@ -794,7 +825,10 @@ def test_hooks_are_built_only_through_their_factories() -> None:
         for path in sorted(folder.rglob("*.py"))
     }
 
-    assert factory_violations(sources) == []
+    assert factory_violations(sources) == [], (
+        "a hook is built only through its factory: handler(name, handle, write) or "
+        "extractor(name, extract, config)"
+    )
 
 
 def test_a_hook_built_outside_its_factory_is_named() -> None:
@@ -912,7 +946,10 @@ def test_a_crawl_waits_only_through_its_clock() -> None:
         for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
-    assert wait_violations(sources) == []
+    assert wait_violations(sources) == [], (
+        "a Crawl waits only through its Clock: await clock.sleep(...), import asyncio's waits "
+        "by module, and set a request's deadline only in the Fetcher"
+    )
 
 
 def test_a_wait_outside_the_clock_is_named() -> None:
@@ -1077,7 +1114,10 @@ def test_every_hand_off_to_another_thread_holds_the_clock() -> None:
         for path in sorted((SRC / "openlinx").rglob("*.py"))
     }
 
-    assert handoff_violations(sources) == []
+    assert handoff_violations(sources) == [], (
+        "a hand-off to another thread or process holds the Clock: wrap it in "
+        "`with clock.off_loop():`, so a FakeClock does not run ahead of it"
+    )
 
 
 def test_a_hand_off_outside_the_hold_is_named() -> None:
@@ -1159,7 +1199,10 @@ def test_no_test_pairs_the_virtual_clock_with_real_io() -> None:
         for path in sorted(tests.rglob("*.py"))
     }
 
-    assert fake_clock_with_real_io(sources) == []
+    assert fake_clock_with_real_io(sources) == [], (
+        "a FakeClock test uses FakeFetcher, never the fixture site or aiohttp: pass "
+        "fetcher=FakeFetcher(clock, pages), or use SystemClock with the fixture site"
+    )
 
 
 def test_a_virtual_clock_beside_real_io_is_named() -> None:
@@ -1186,3 +1229,63 @@ def test_a_virtual_clock_beside_real_io_is_named() -> None:
         "tests/crawl/test_timing.py:3 test_session pairs FakeClock with real I/O",
         "tests/crawl/test_timing.py:6 test_crawl pairs FakeClock with real I/O",
     ]
+
+
+# Click's internals have no public path, and the runner owns the raw streams (design D15 of 023).
+TID251_SUPPRESSIONS = {"openlinx/cli/click_compat.py": 2, "openlinx/cli/runner.py": 1}
+# Every spelling that may silence it, a line's or a file's (ruff: or flake8:), in any case and
+# with or without spaces, alone or among other codes; matching more is only stricter.
+TID251_NOQA = re.compile(r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\s*:[^#\n]*\bTID251\b", re.IGNORECASE)
+PYPROJECT = SRC.parent / "pyproject.toml"
+
+
+def tid251_suppressions(source: str) -> int:
+    return len(TID251_NOQA.findall(source))
+
+
+@pytest.mark.parametrize(
+    ("line", "count"),
+    [
+        ('sys.stdout.write("y")  # noqa: TID251', 1),
+        ('sys.stdout.write("y")  # noqa:TID251', 1),
+        ('sys.stdout.write("y")  #noqa : TID251', 1),
+        ('sys.stdout.write("y")  # NOQA: TID251', 1),
+        ('sys.stdout.write("y")  # noqa: E501, TID251', 1),
+        ("# ruff: noqa: TID251", 1),
+        ("# flake8: noqa: TID251", 1),
+        ('sys.stdout.write("y")  # noqa: E501', 0),
+        ('sys.stdout.write("y")  # noqa: TID2510', 0),
+    ],
+)
+def test_every_spelling_of_a_tid251_suppression_is_counted(line: str, count: int) -> None:
+    assert tid251_suppressions(line) == count
+
+
+def test_only_the_streams_and_click_compat_suppress_tid251() -> None:
+    found: dict[str, int] = {}
+    for path, source in _src_sources().items():
+        count = tid251_suppressions(source)
+        if count:
+            found[path] = count
+
+    assert found == TID251_SUPPRESSIONS, (
+        "TID251 is suppressed beyond its three lines in openlinx.cli.click_compat and the runner's "
+        "streams: write output through openlinx.output, and import Click through "
+        "openlinx.cli.click_compat"
+    )
+
+
+def test_no_per_file_ignore_silences_tid251_in_src() -> None:
+    lint = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["tool"]["ruff"]["lint"]
+    ignores = {**lint.get("per-file-ignores", {}), **lint.get("extend-per-file-ignores", {})}
+
+    # A prefix such as TID or ALL selects TID251 too.
+    assert [
+        pattern
+        for pattern, codes in ignores.items()
+        if not pattern.startswith(("tests/", "scripts/"))
+        and any("TID251".startswith(code) or code == "ALL" for code in codes)
+    ] == [], (
+        "a per-file-ignore silences TID251 in src: remove it, and suppress only the lines "
+        "in openlinx.cli.click_compat and the runner's streams"
+    )

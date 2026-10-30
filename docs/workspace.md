@@ -39,9 +39,7 @@ On Windows, `--workspace` accepts `/` as well as `\`, and home folders with non-
 
 No environment variable selects the Workspace, sets a setting or changes a Command's output. The only inputs are flags, `openlinx.toml`, and the operating system's own home folder and current folder. There is no `OPENLINX_WORKSPACE`: MCP clients pass `linx mcp --workspace <dir>` instead.
 
-There are two exceptions:
-- **Proxy variables.** `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, in any letter case, are honoured for fetching, because they are the operating system's network configuration. They are the only variables that `linx commands` lists under `environment`.
-- **Detection signals.** Variables that host agents set, such as Codex's `CODEX_SANDBOX_NETWORK_DISABLED`, may shape the wording of diagnostics and hints. They never change a result, an exit code, the Workspace or a setting.
+No variable is honoured, so `linx commands` lists none under `environment`. One kind may be read: **detection signals**, variables that host agents set, such as Codex's `CODEX_SANDBOX_NETWORK_DISABLED`, may shape the wording of diagnostics and hints. They never change a result, an exit code, the Workspace or a setting.
 
 ## Creating a Workspace: `linx init`
 

@@ -73,6 +73,11 @@ def _declare(
 ) -> DiagnosticCode:
     if (kept == "once") != (once_per is not None):
         raise TypeError(f"{code}: a code kept once names its detail, and only it does")
+    if any(declared.code == code for declared in DECLARED):
+        raise TypeError(f"{code}: declared twice; declare a code once, in openlinx.output.codes")
+    # An error without an exit code fails only when it is first raised, deep in its error path.
+    if (level == "error") != (exit_code is not None):
+        raise TypeError(f"{code}: an error code has an exit code, and only an error code does")
     declared = DiagnosticCode(
         code=code,
         level=level,

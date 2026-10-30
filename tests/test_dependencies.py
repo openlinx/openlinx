@@ -59,7 +59,10 @@ def allowlisted() -> set[str]:
 
 
 def test_every_runtime_dependency_is_allowlisted() -> None:
-    assert sorted(runtime_dependencies() - allowlisted()) == []
+    assert sorted(runtime_dependencies() - allowlisted()) == [], (
+        "a runtime dependency is not allowlisted: add it to tests/dependency_allowlist.txt "
+        "with the reason it is needed"
+    )
 
 
 def test_no_telemetry_or_llm_sdk_is_a_runtime_dependency() -> None:
@@ -69,9 +72,12 @@ def test_no_telemetry_or_llm_sdk_is_a_runtime_dependency() -> None:
         if any(fnmatchcase(name, pattern) for pattern in TELEMETRY_AND_LLM_SDKS)
     ]
 
-    assert denied == []
+    assert denied == [], "no telemetry or LLM SDK may be a runtime dependency: remove it"
 
 
 def test_no_runtime_requirement_asks_for_extras() -> None:
     # The walk above does not follow extras, so a `pkg[extra]` would hide what it pulls in.
-    assert [str(r) for r in runtime_requirements() if r.extras] == []
+    assert [str(r) for r in runtime_requirements() if r.extras] == [], (
+        "a requirement asks for extras, which hide what it pulls in: list the packages the "
+        "extra adds as requirements of their own"
+    )

@@ -124,8 +124,10 @@ def check_command(command: Callable[..., Any]) -> CommandMeta:
     if default_format is not None and (default_format.default,) != meta.formats[:1]:
         problems.append("its --format default is not the first of its formats")
     problems += _secret_problems(command, declared)
-    if (meta.output == "document") != (meta.fields is None):
-        problems.append("fields belong to list and rows Commands only")
+    if meta.output == "document" and meta.fields is not None:
+        problems.append("a document Command has no fields")
+    elif meta.output != "document" and meta.fields is None:
+        problems.append(f"a {meta.output} Command declares its fields")
     elif meta.fields is not None and not set(meta.fields.default) <= set(meta.fields.available):
         problems.append("its default fields are not all available")
     if problems:

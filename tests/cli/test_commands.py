@@ -104,6 +104,12 @@ def test_a_secret_option_without_a_setting() -> None:
     assert (option["setting"], option["secret"]) == (None, True)
 
 
+def test_a_hidden_option_is_not_described() -> None:
+    options = _options(run_cli("commands", app=example_app()).json(), "example-settings")
+
+    assert list(options) == ["--format", "--level", "--token", "--api-key"]
+
+
 def test_error_codes_of_this_change() -> None:
     diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
     expected = {
@@ -159,13 +165,14 @@ def test_naming_rule_for_input_errors() -> None:
         for d in diagnostics
         if d["code"].endswith("_not_found") or d["code"] == "no_crawls"
         if d["exit_code"] != 4
-    ] == []
+    ] == [], (
+        "invalid_*, unknown_* and usage_error exit 2, *_not_found and no_crawls exit 4: fix the "
+        "code's name or its exit code"
+    )
 
 
-def test_the_proxy_variables_are_the_one_exception() -> None:
-    environment = run_cli("commands").json()["environment"]
-
-    assert [entry["names"] for entry in environment] == [["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]]
+def test_no_environment_variable_is_honoured() -> None:
+    assert run_cli("commands").json()["environment"] == []
 
 
 def test_detection_signals_change_nothing() -> None:

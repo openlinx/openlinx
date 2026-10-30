@@ -27,7 +27,9 @@ def test_names_are_snake_case() -> None:
         column["name"] for table in tables for column in table["columns"]
     ]
 
-    assert [name for name in names if not SNAKE_CASE.fullmatch(name)] == []
+    assert [name for name in names if not SNAKE_CASE.fullmatch(name)] == [], (
+        "a table or column name is not snake_case: rename it in openlinx.store.schema"
+    )
 
 
 def test_descriptions_are_present() -> None:
@@ -36,7 +38,9 @@ def test_descriptions_are_present() -> None:
         column["description"] for table in tables for column in table["columns"]
     ]
 
-    assert [text for text in descriptions if blank(text)] == []
+    assert [text for text in descriptions if blank(text)] == [], (
+        "a table or column has no description: give it a comment in openlinx.store.schema"
+    )
 
 
 def all_columns() -> list[dict[str, Any]]:
@@ -48,7 +52,7 @@ def test_booleans_are_integers() -> None:
         column["name"]
         for column in all_columns()
         if column["format"] == "boolean" and column["type"] != "INTEGER"
-    ] == []
+    ] == [], "a boolean column is not INTEGER: declare it with the shared Boolean type"
 
 
 def test_enumeration_values_are_snake_case() -> None:
@@ -57,7 +61,7 @@ def test_enumeration_values_are_snake_case() -> None:
         for column in all_columns()
         for value in column["values"] or []
         if not SNAKE_CASE.fullmatch(value)
-    ] == []
+    ] == [], "an enumeration value is not snake_case: rename it in its Literal"
 
 
 def test_every_declared_table_names_its_change_and_describes_itself() -> None:
@@ -70,7 +74,10 @@ def test_every_declared_table_names_its_change_and_describes_itself() -> None:
             missing.append(f"{table.name}: comment")
         missing += [f"{table.name}.{c.name}: comment" for c in table.columns if not c.comment]
 
-    assert missing == []
+    assert missing == [], (
+        "a declared table lacks its change or a comment: declare it with public_table(..., "
+        "change=<n>) and a comment on the table and every column"
+    )
 
 
 def test_column_types_are_those_strict_allows() -> None:
@@ -79,7 +86,7 @@ def test_column_types_are_those_strict_allows() -> None:
         column["name"]
         for column in all_columns()
         if column["type"] not in {"INTEGER", "REAL", "TEXT", "BLOB"}
-    ] == []
+    ] == [], "a column type is not one STRICT allows: use Integer, a REAL type, Text or a BLOB type"
 
 
 def test_reference_columns_are_declared() -> None:
@@ -89,7 +96,7 @@ def test_reference_columns_are_declared() -> None:
     assert (
         [column["name"] for column in references if column["references"] is None],
         bool(references),
-    ) == ([], True)
+    ) == ([], True), "an _id column references nothing: give it its ForeignKey"
 
 
 def test_index_names_start_with_their_table() -> None:
@@ -103,7 +110,7 @@ def test_index_names_start_with_their_table() -> None:
             if not index["name"].startswith(f"{table}_") or blank(index["description"])
         ],
         bool(indexes),
-    ) == ([], True)
+    ) == ([], True), "an index is not <table>_... or lacks a description: rename or describe it"
 
 
 def test_derived_and_later_columns_may_hold_null() -> None:
@@ -112,7 +119,7 @@ def test_derived_and_later_columns_may_hold_null() -> None:
         column["name"]
         for column in all_columns()
         if LATER_OR_DERIVED.match(column["description"]) and not column["nullable"]
-    ] == []
+    ] == [], "a derived or later column is NOT NULL: let it hold NULL until it is filled"
 
 
 def test_every_unique_rule_is_an_index_and_every_reference_one_key() -> None:
@@ -131,4 +138,7 @@ def test_every_unique_rule_is_an_index_and_every_reference_one_key() -> None:
             if len(column.foreign_keys) > 1
         ]
 
-    assert problems == []
+    assert problems == [], (
+        "a UNIQUE rule is a constraint, or a column has two foreign keys: declare a unique Index, "
+        "and one ForeignKey per column"
+    )
