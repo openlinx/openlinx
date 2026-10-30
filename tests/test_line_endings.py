@@ -33,7 +33,9 @@ def text_files_not_checked_out_with_lf(root: Path) -> list[str]:
 
 
 def test_checked_out_text_files_use_lf() -> None:
-    assert text_files_not_checked_out_with_lf(REPO_ROOT) == []
+    assert text_files_not_checked_out_with_lf(REPO_ROOT) == [], (
+        "a text file is checked out with CRLF: write it with LF, and check .gitattributes"
+    )
 
 
 def test_a_tracked_file_missing_from_the_working_tree_is_skipped(tmp_path: Path) -> None:

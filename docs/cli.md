@@ -2,7 +2,7 @@
 
 How every `linx` Command talks to agents and people. The spec is [openspec/specs/cli-contract/spec.md](../openspec/specs/cli-contract/spec.md). Terms follow [CONTEXT.md](../CONTEXT.md).
 
-`linx commands` describes every Command, the exit codes and the diagnostic codes as one JSON document. Agents read it instead of this page.
+`linx commands` describes every Command, the exit codes and the diagnostic codes as one JSON document. Agents read it instead of this page. It leaves out hidden options, which the tool passes to itself.
 
 ## stdout and stderr
 

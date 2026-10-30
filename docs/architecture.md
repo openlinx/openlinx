@@ -39,7 +39,7 @@ A short map for contributors and coding agents. Terms follow [CONTEXT.md](../CON
   - Every stderr line, a diagnostic or an event, is written under a lock and flushed at once.
   - ruff bans `print`, `sys.stdout`, `sys.stderr` and the echo functions everywhere else.
 - **The error-code registry:** every diagnostic code is one `DiagnosticCode` constant in `openlinx.output.codes`, with its level, exit code and description, and no code is declared anywhere else in `src/`. `OpenLinxError` takes such a constant, never a loose string. `linx commands` lists the codes and the exit codes from it, and the MCP server maps errors from it.
-- **The startup allowlist:** `linx --help` and `linx commands` may load only the standard library, Typer and its own dependencies (not rich: Typer's rich help is off), orjson and `openlinx`. A test checks it in a fresh process, so a new dependency must be allowed or imported lazily. pydantic, rich and every settings table load only in the Commands that need them.
+- **The startup allowlist:** `linx --help` may load only the standard library, Typer and its own dependencies (not rich: Typer's rich help is off), orjson and `openlinx`; `linx commands` may load pydantic too, since it reads each secret setting from its table's model. A test checks it in a fresh process, so a new dependency must be allowed or imported lazily. rich and every settings table load only in the Commands that need them.
 - **Typer's vendored Click** (`typer._click`) is imported only in `openlinx.cli.click_compat`, and `typer` is pinned below the next minor version, so an upgrade touches one module and one pin.
 - **The names:** every name-derived string in `src/` comes from `openlinx.naming`: `COMMAND_NAME` (`linx`), `PACKAGE_NAME` (`openlinx`) and `PRODUCT_NAME` (`OpenLinx`), with the settings file and the data folder made from them.
 
@@ -114,6 +114,7 @@ Frontier ──► Engine ──► Requester ──► Fetcher ──► Page e
   - **The conventions** are [ADR-0005](adr/0005-crawl-file-schema-conventions.md): names, keys and references, units, flags, enumerations, errors, indexes, and derived and later columns.
   - **The one way to declare a public table** is `public_table(name, *columns, comment=..., change=<n>)` in `openlinx.store.schema`. It makes the table `STRICT` and adds a CHECK for every enumeration and flag column, so the file refuses a value of another type or outside its list, whatever writes it. No CHECK is written by hand.
   - Every table, column and index has a description, because the descriptions feed that reference.
+- **Where SQL is built:** every statement is built in `openlinx.store`, and a service calls store functions. The `--where` language is split the same way: its tokenizer, parser and syntax tree are in `openlinx.query`, pure and tested at seam 4, and its compiler to Core expressions is in `openlinx.store.query`. A guard refuses sqlalchemy outside the store and the schema service.
 - **Prebuilt statements:** a unit that runs once per URL or per Page executes statements built once at import, as `execute(stmt, params)`. It never builds `.values(<literals>)` per unit, and never uses `insert().values(list)`.
   - In the store benchmark, a statement built per unit regenerated its cache key and coerced every value, so prebuilt statements were about twice as fast. A multi-values insert compiled per call was 60 times slower than `executemany`.
   - Units that run a bounded number of times per Crawl, such as the write check and setting the state, may build their statements where they run.
@@ -180,11 +181,11 @@ src/openlinx/
   services/     workspace (init), query, crawl, report
   workspace/    Workspace discovery, settings (openlinx.toml)
   output/       JSON/table/CSV serialisation, the Reporter, paging, diagnostic codes, exit codes
-  store/        schema (Core tables), writer, migrations/, read-only access
+  store/        schema (Core tables), writer, query (the --where compiler), migrations/, read-only access
   crawl/        engine, requester, fetcher, robots and its loader, scope, pages, hooks
   extract/      Page data extractors, links, content, readability, pixel widths
   rules/        Rule registry, rule modules, thresholds, Health Score
-  query/        --where language, paging, Segments
+  query/        --where tokenizer, parser and syntax tree, paging, Segments (no SQL)
   report/       ReportModel, Section Briefs, templates/, charts
   skill/        Skill generator and templates
 tests/

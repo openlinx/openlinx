@@ -168,6 +168,18 @@ A search engine first has to be allowed to fetch the URL, then needs a usable re
 - **Which responses have Links.** An analysed Page has its header Links and its document's. Any other in-Scope 2xx response, such as a PDF or a Page too large to analyse, has its header Links only, so a PDF's `Link: <...>; rel="canonical"` is stored. Other responses, such as a redirect or a 404, have no Links in `links`.
 - **Link position.** `link_position` reads elements only, so a site that marks its menu with a class rather than `nav` gets `content` for it, and the `[content_area]` settings do not change it.
 
+## Link counts
+
+The link counts count `hyperlink` Links whose source is a Page, nofollow included, and leave out a Link to its own source, since every Page listed in a menu would otherwise count a link to itself.
+- **Outlinks** are written with each analysed Page, from its own Links: `outlinks` and `external_outlinks` count its Links to Internal and to External URLs, and the `unique_` columns their distinct targets. They are NULL for a Page that is not analysed, and set for one whose Page or Link extractor failed, since they come from the Links the Crawl discovered.
+- **Inlinks** are derived: `inlinks` counts the Links from Pages to the Page, `unique_inlinks` their distinct sources, and `linking_pages_pct` is the share of the Crawl's Pages with status 200 that link to it, rounded half up to 2 decimals, or NULL when no Page has status 200. They are NULL until the post-crawl passes have run, and then set for every Page, 0 for one that no Page links to.
+- **When the passes run:** after the last URL is recorded, before the Crawl is written as `completed` or `stopped`, and again after a continue, each run replacing the last. A Crawl that fails before or during its first pass keeps the inlink columns NULL for the Pages that pass had not reached, and a continued Crawl shows the last run's counts until its passes run again.
+
+## Crawl Depth and Folder Depth
+
+- **`crawl_depth`** is the Crawl Depth that the Crawl records in `urls`: the fewest followed Links from a Seed. The Crawl gets it by finishing each depth before it starts the next, so it does not depend on the order responses arrive in. The one exception: a URL that a Resource Link such as an `<img src>` reached, which turns out to be an HTML Page and answers late, may record the URLs it finds a level or two deeper. A URL skipped beyond `--max-depth` is the target of `links` rows but has no `pages` row, since it got no response.
+- **`folder_depth`** counts the non-empty segments of the path of `address`: `/` is 0, `/blog/` is 1 and `/blog/post.html` is 2. The query, a trailing slash and an empty segment add none, and an escaped `/` (`%2F`) stays inside its segment.
+
 ## Cookies
 
 A Page's cookies are the `Set-Cookie` headers of its response, one `cookies` row each. They come from the response, not the HTML, so a Page that is not analysed, such as a redirect, has its cookies too.

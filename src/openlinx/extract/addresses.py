@@ -59,6 +59,11 @@ def _decoded(match: re.Match[str]) -> str:
     return "".join(parts)
 
 
+def folder_depth(path: str) -> int:
+    """An escaped "/" stays inside its segment, as address keeps it escaped."""
+    return sum(1 for segment in path.split("/") if segment)
+
+
 def path_and_query(address: str) -> tuple[str, str | None]:
     """The query is None without a "?", and "" when nothing follows it."""
     after_host = address.partition("://")[2].partition("/")[2]

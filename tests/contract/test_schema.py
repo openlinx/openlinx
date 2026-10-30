@@ -44,7 +44,9 @@ def test_no_check_lists_more_than_two_values(temp_workspace: TempWorkspace) -> N
             if values.count(",") > 1
         ]
 
-    assert long_lists == []
+    assert long_lists == [], (
+        "a CHECK lists its values inline: build it with one_of(...) in openlinx.store.schema"
+    )
 
 
 def file_schema(file: Path) -> dict[str, dict[str, Any]]:
@@ -162,7 +164,7 @@ def test_every_table_is_strict(temp_workspace: TempWorkspace) -> None:
 
     assert {name: table["strict"] for name, table in tables.items()} == {
         table["name"]: True for table in describe_schema().tables
-    }
+    }, "a table is not STRICT: declare it with public_table(...), which makes it STRICT"
 
 
 INDEXED_SECTION = """## Table `urls`

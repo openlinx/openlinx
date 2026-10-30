@@ -201,8 +201,13 @@ def example_settings(
         typer.Option("--api-key", help="A key that maps to no setting."),
         OptionMeta(secret=True),
     ] = None,
+    internal_flag: Annotated[
+        bool,
+        typer.Option("--internal-flag", hidden=True, help="Passed by the tool to itself."),
+    ] = False,
 ) -> Any:
-    """Has options mapped to the settings example.level and example.token, and --api-key."""
+    """Has options mapped to the settings example.level and example.token, --api-key, and the
+    hidden --internal-flag."""
     return {"level": level}
 
 

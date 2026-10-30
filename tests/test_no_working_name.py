@@ -56,4 +56,7 @@ def working_names(root: Path) -> list[str]:
 
 
 def test_no_file_uses_the_working_name() -> None:
-    assert working_names(REPO_ROOT) == []
+    assert working_names(REPO_ROOT) == [], (
+        "the working name is used: name the tool through openlinx.naming, and keep spider "
+        "only as the Crawl Mode and in KEPT_LINES"
+    )

@@ -321,9 +321,9 @@ def test_a_page_whose_page_extractor_failed_keeps_its_response_data_and_links(
     assert query(
         crawl_file,
         "SELECT urls.parsed, urls.parse_error, pages.status_code, title_1, meta_robots_noindex,"
-        " indexability FROM pages JOIN urls ON urls.id = pages.url_id WHERE address = ?",
+        " indexability, outlinks FROM pages JOIN urls ON urls.id = pages.url_id WHERE address = ?",
         [broken],
-    ) == [(1, "extractor_error", 200, None, 1, "non_indexable")]
+    ) == [(1, "extractor_error", 200, None, 1, "non_indexable", 1)]
     assert query(
         crawl_file,
         "SELECT target.url, links.type, links.anchor_text FROM links"

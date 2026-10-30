@@ -22,6 +22,7 @@ from openlinx.crawl.fetch.body import BODY_LIMIT, is_decodable
 from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult, joined_header
 from openlinx.crawl.fetch.requester import NotStarted
 from openlinx.crawl.following import is_redirection, redirect_target
+from openlinx.crawl.hook_failures import HookFailure, hook_failure
 from openlinx.crawl.pages.preparation import (
     PreparedPage,
     is_html_type,
@@ -251,8 +252,8 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
             context.warnings.warn(mismatch)
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
-    if parse_error is not None:
-        context.warnings.count(parse_failure(url, parse_error, parse_error_message), url)
+    if page is not None and page.parse_error is not None:
+        context.warnings.count(parse_failure(url, page, context.secrets), url)
     url_response = UrlResponse(
         status_code=response.status_code,
         reason=response.reason,
@@ -382,18 +383,18 @@ def _handler_rows(
 ) -> tuple[tuple[HandlerRows[Any], ...], Diagnostic | None]:
     """The handlers' rows, and their failure, which counts once the unit records it."""
     rows: list[HandlerRows[Any]] = []
-    failed: list[tuple[str, BaseException]] = []
+    failed: list[HookFailure] = []
     for handler in context.hooks.handlers:
         try:
             batch = _rows_of(handler, result)
         # A handler is later changes' code: its failure costs only its rows (design D16).
         except Exception as error:
-            failed.append((handler.name, error))
+            failed.append(hook_failure(handler.name, handler.handle, error))
             continue
         if batch is not None:
             rows.append(batch)
     # One count per URL, however many of its handlers failed (design D16).
-    return tuple(rows), handler_failure(result.url, failed) if failed else None
+    return tuple(rows), handler_failure(result.url, failed, context.secrets) if failed else None
 
 
 def _rows_of[R](handler: Handler[R], result: UrlResult) -> HandlerRows[R] | None:

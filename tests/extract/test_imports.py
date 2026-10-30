@@ -26,4 +26,7 @@ def test_the_page_extractor_loads_no_sqlalchemy() -> None:
         text=True,
     )
 
-    assert [name for name in completed.stderr.split() if name.startswith("sqlalchemy")] == []
+    assert [name for name in completed.stderr.split() if name.startswith("sqlalchemy")] == [], (
+        "the Page extractor loads sqlalchemy, which the parse pool's workers must not: import "
+        "only openlinx.store.records and the row records from the store"
+    )

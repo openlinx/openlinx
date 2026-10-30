@@ -852,7 +852,7 @@ This change stores each discovered Link together with the attributes that analys
 | `alt_text` | TEXT | yes | | for `image` Links from an `<img>` element, the normalised `alt` attribute: NULL when absent, the empty string when empty. NULL otherwise. |
 | `rel` | TEXT | yes | | the Link's `rel` tokens as `020-add-crawl-core`'s Link discovery reads them (ASCII lower-cased), joined with single spaces, or NULL |
 | `rel_nofollow`, `rel_ugc`, `rel_sponsored` | INTEGER | no | boolean | 1 when `rel` contains that token, otherwise 0 |
-| `followed` | INTEGER | no | boolean | 1 when the Crawl requests the target through this Link, by `020-add-crawl-core`'s rule (its type, and the Link's and the Page's nofollow), otherwise 0; a Resource such as an `<img>` target is requested but not crawled further |
+| `followed` | INTEGER | no | boolean | 1 when the Crawl requests the target through this Link, by the Crawl's follow rule (the Link type, and the Link's and the Page's nofollow, which `--follow-nofollow` lifts), a Resource such as an `<img>` target included; robots.txt, the Scope and `--max-depth` play no part. 0 otherwise. |
 | `hreflang` | TEXT | yes | | for `hreflang` Links, the trimmed `hreflang` attribute of the element, or the `hreflang` parameter of the `Link` header; otherwise NULL |
 | `media` | TEXT | yes | | the trimmed `media` value for `mobile_alternate` Links, otherwise NULL |
 | `link_position` | TEXT | yes | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | where on the Page the Link is (see below) |
@@ -906,6 +906,8 @@ The distinct targets of the Links stored for a response SHALL be exactly the URL
 - **THEN** the `urls` table holds exactly `{site}/links`, `{site}/a`, `{site}/b` and `{site}/i.png`, and `links` holds 3 rows whose targets are the last three
 
 ### Requirement: Inlink and outlink counts
+**In short:** outlinks are counted with each analysed Page, inlinks by a post-crawl pass, over `hyperlink` Links between Pages without self-links.
+
 The link count columns SHALL count only `hyperlink` Links whose source is a Page, and SHALL leave out Links whose target is their own source (self-links). Hyperlinks with `rel_nofollow` 1 still count.
 
 **Outlinks.** These SHALL be written with an analysed Page:
@@ -921,7 +923,7 @@ The link count columns SHALL count only `hyperlink` Links whose source is a Page
 - `unique_inlinks`: the distinct source Pages of those Links
 - `linking_pages_pct`: 100 × (the number of distinct source Pages with status 200 that link to this Page) ÷ (the number of Pages with status 200 in the Crawl), rounded to 2 decimals, or NULL when there are no Pages with status 200
 
-**The post-crawl passes.** The inlink counts are computed in the post-crawl passes that `020-add-crawl-core` runs when a Crawl ends as `completed` or `stopped`. They run again when a resumed Crawl ends, and each run SHALL replace the earlier results. They run before the post-crawl passes of `040-add-rules`.
+**The post-crawl passes.** The inlink counts are computed in the post-crawl passes that `020-add-crawl-core` runs when a Crawl ends as `completed` or `stopped`. They run again when a resumed Crawl ends, and each run SHALL replace the earlier results; until they have, a resumed Crawl keeps the counts of its last run. They run before the post-crawl passes of `040-add-rules`.
 
 `unique_js_inlinks` and `unique_js_outlinks` SHALL be NULL, because they are measured from v1.1.
 
@@ -936,7 +938,7 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 - **THEN** B has `inlinks` 2, `unique_inlinks` 1 and `linking_pages_pct` 25.00, and D has `inlinks` 0 and `linking_pages_pct` 0.00
 
 #### Scenario: Inlinks are NULL while the Crawl runs
-- **WHEN** a Crawl is still `running`
+- **WHEN** a Crawl's post-crawl passes have not run yet
 - **THEN** every stored Page has `inlinks` NULL
 
 #### Scenario: Inlink columns are derived
@@ -944,21 +946,13 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 - **THEN** the descriptions of `inlinks`, `unique_inlinks` and `linking_pages_pct` start with `Derived: `
 
 ### Requirement: Crawl Depth and Folder Depth
-**In short:** `crawl_depth` is the shortest path of followed Links from a Seed once the post-crawl passes have run; `folder_depth` counts the path's segments.
+**In short:** `crawl_depth` repeats the Crawl Depth that the crawl engine records in `urls`; `folder_depth` counts the path's segments.
 
-`crawl_depth` SHALL equal `urls.crawl_depth` for the Page. Once the post-crawl passes have run, both SHALL be the number of Links on the shortest path of followed Links (`links.followed` = 1) from a Seed, for every URL that such a path reaches, where a redirect (`urls.redirect_url_id`) is a step that adds no Link; a URL that no such path reaches keeps the depth the crawl engine recorded. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, and a trailing slash does not add a segment.
+`crawl_depth` SHALL equal `urls.crawl_depth` for the Page. `folder_depth` SHALL be the number of non-empty segments in the path of the Page's `address`. The query string is ignored, a trailing slash does not add a segment, and an escaped `/` (`%2F`) does not end one.
 
 #### Scenario: Folder depth
-- **WHEN** Pages have the paths `/`, `/blog/`, `/blog/post.html` and `/a//b/`
-- **THEN** their `folder_depth` values are 0, 1, 2 and 2
-
-#### Scenario: Crawl Depth is the shortest path over followed Links
-- **WHEN** the post-crawl passes run on a Crawl whose `urls` row for `{site}/p` has `crawl_depth` 3, while a path of 2 followed Links leads from the Seed to it
-- **THEN** `{site}/p` has `crawl_depth` 2 in `pages` and in `urls`
-
-#### Scenario: A redirect adds no Crawl Depth
-- **WHEN** the post-crawl passes run on a Crawl whose `urls` row for `{site}/p` has `crawl_depth` 3, while the Seed links to `{site}/old`, which redirects to `{site}/p`
-- **THEN** `{site}/p` has `crawl_depth` 1 in `pages` and in `urls`
+- **WHEN** Pages have the paths `/`, `/blog/`, `/blog/post.html`, `/a//b/` and `/a%2Fb/`
+- **THEN** their `folder_depth` values are 0, 1, 2, 2 and 1
 
 #### Scenario: Crawl Depth is copied from the crawl engine
 - **WHEN** the Seed `{site}/` links to `{site}/l1`, which links to `{site}/l2`
