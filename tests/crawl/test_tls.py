@@ -1,9 +1,12 @@
 """TLS trust (022-add-fetch-policy D5, fetching spec: TLS certificate verification)."""
 
+from openlinx.output.reporter import Collected
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.tls import StartTlsHosts
+from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
+from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
 
 SITE = Site(routes={"/": Page(body="<p>Site</p>")})
@@ -89,3 +92,30 @@ def test_a_robots_txt_with_a_bad_certificate_gives_its_urls_tls_error_without_a_
         ),
         hosts.badcert.requests,
     ) == ([("https://badcert.test/", "error", "tls_error", None, 0)], ())
+
+
+def test_tls_errors_never_pause_the_crawl(temp_workspace: TempWorkspace) -> None:
+    clock, reporter = FakeClock(), Collected()
+    hosts = [f"https://a{n}.site.test" for n in range(1, 13)]
+    # Each subdomain's certificate fails to verify, for its robots.txt and its page alike: more
+    # Internal failures in a row than pause the Crawl, if they counted.
+    pages = {
+        "https://site.test/": FakePage("".join(f'<a href="{host}/">A</a>' for host in hosts)),
+        **{f"{host}/robots.txt": FakePage("", fails="tls_error") for host in hosts},
+        **{f"{host}/": FakePage("", fails="tls_error") for host in hosts},
+    }
+
+    result = crawl_result(
+        "https://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages),
+        reporter=reporter,
+        scope="subdomains",
+        network_wait=0,
+    )
+
+    assert (
+        result.summary.state,
+        result.summary.stop_reason,
+        [name for name, _ in reporter.events if name == "crawl_paused"],
+    ) == ("completed", None, [])
