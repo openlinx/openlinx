@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
     Table,
     Text,
@@ -1230,4 +1231,32 @@ Index(
     links.c.type,
     links.c.target_url_id,
     info={"description": "The inlinks of a URL of one Link type, such as its hyperlink inlinks."},
+)
+
+page_sources = public_table(
+    "page_sources",
+    Column(
+        "url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        autoincrement=False,
+        comment="The Page whose HTML this is.",
+    ),
+    Column(
+        "encoding",
+        Text,
+        nullable=False,
+        comment="The character encoding the Page was decoded with, as the lower-case Encoding "
+        "Standard name that a browser's TextDecoder reports, such as windows-1251.",
+    ),
+    Column(
+        "html",
+        LargeBinary,
+        nullable=False,
+        comment="The response body after content decoding, as one zstd frame.",
+    ),
+    comment="Filled from v0.2. The HTML of each Page of a Crawl started with HTML storage on; "
+    "empty otherwise.",
+    change=30,
 )

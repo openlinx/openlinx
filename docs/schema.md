@@ -315,3 +315,13 @@ One row for each Link the Crawl discovered in a response: in an analysed Page's 
 |---|---|---|---|---|
 | `links_target` | `target_url_id` | no | | The inlinks of a URL: every Link that points at it. |
 | `links_type_target` | `type`, `target_url_id` | no | | The inlinks of a URL of one Link type, such as its hyperlink inlinks. |
+
+## Table `page_sources`
+
+Filled from v0.2. The HTML of each Page of a Crawl started with HTML storage on; empty otherwise.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | PK, → `urls.id` | | | The Page whose HTML this is. |
+| `encoding` | TEXT | no | | | | The character encoding the Page was decoded with, as the lower-case Encoding Standard name that a browser's TextDecoder reports, such as windows-1251. |
+| `html` | BLOB | no | | | | The response body after content decoding, as one zstd frame. |

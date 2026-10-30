@@ -363,3 +363,24 @@ def test_deferred_columns_are_null_after_a_completed_crawl(
         query(crawl_file, str(select(func.count()).select_from(table("pages")).where(filled))),
         query(crawl_file, "SELECT count(*), count(html_source) FROM links"),
     ) == ([("completed",)], [(2,)], [(0,)], [(2, 0)])
+
+
+def test_html_is_not_stored_by_default(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/about">About</a><a href="/contact">Contact</a>'),
+                "/about": Page(body="<p>About</p>"),
+                "/contact": Page(body="<p>Contact</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert (
+        query(crawl_file, "SELECT count(*) FROM pages"),
+        query(crawl_file, "SELECT count(*) FROM page_sources"),
+    ) == ([(3,)], [(0,)])
