@@ -19,7 +19,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 
 ### D1. The stop flag is set only on its loop
 - **In short:** `StopSignal.set` raises `RuntimeError` when it is called from a thread with no running loop or from another loop, and the message names `loop.call_soon_threadsafe(stop.set, reason)`.
-- The flag binds to the running loop at its first `set` or `wait`, because the Crawl Service builds it before its Runner starts the loop.
+- The flag binds to the running loop at its first `set` or `wait`, because the Crawl Service builds it before its Runner starts the loop. A test that sets it runs on a loop, as every caller in the product does.
 - **Why:** an `asyncio.Event` set from a thread wakes no waiter until the loop wakes for another reason. On `FakeClock` a test wakes by chance; an idle production loop, in a pause or with every slot taken, never wakes. `060`'s control check will run beside the loop, so the mistake is the natural one.
 - *Alternative:* `set` hops to the loop by itself with `call_soon_threadsafe`. It hides which thread sets the flag, and the callbacks (the stopping event, the grace) would then run later than their caller assumes. Rejected.
 
@@ -30,8 +30,11 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 
 ### D3. A hook failure names its error and where it was raised
 - **In short:** the first counted `handler_failed` and `parse_failed` warnings carry `details.error`, the error's text cut to 300 characters, and `details.at`, the file and line in the hook where it was raised.
-- **Which frame:** the deepest frame of the traceback whose file is the one that defines the hook's function (its `co_filename`), so an error raised in a library the hook calls points at the hook's own line. The file is written relative to the folder that holds its top-level package, with `/` on every OS, so the warning is the same on every machine.
+- **Which frame:** the deepest frame of the traceback whose file is the one that defines the hook's function (its `co_filename`), so an error raised in a library the hook calls points at the hook's own line. A `functools.partial` is unwrapped to its function first, since a partial has no code of its own. The file is written relative to the folder that holds its top-level package, with `/` on every OS, so the warning is the same on every machine; a file outside that folder is named by its module's dotted name. With no such frame, as when an extractor returns something other than its declared output and preparation raises, `at` is absent rather than pointing at preparation.
 - A preparation that gave nothing (`body_too_large`, `worker_crashed`, `parse_timeout`) raised nothing in a hook, so its warning has neither key.
+- Reading the error never fails the URL: an error whose text cannot be read is named by its type, a function compiled from text (no module) has no `at`, and a callable object's frames are those of its class's `__call__`.
+- **Secrets:** the values of the Crawl's secret settings, read from the same config and secret names that the recorded config's redaction reads, are replaced by `***` in `error` before the cut to 300 characters, so a library message that quotes a URL with its key leaks nothing to stderr or the crawl file. Each failure carries up to 10,000 characters, so the cut never leaves part of a secret. A continued Crawl reads its config from the file, which holds `***`, so it knows no secret to redact; the change that resumes Crawls (`060`) passes the secrets its hooks were built with.
+  - *Alternative:* redact every URL's query string in the text. It also hides the values that say what failed, and misses a key in a path or a header. Rejected.
 - `PreparedPage` carries each extractor failure as a small frozen struct (name, error type, text, place), so it crosses `026`'s process boundary. `parse_error_message` stays `name: Type`: it is a public column of every Page, and the text of one error belongs to the warning, which keeps only the first.
 - Test helpers that fail on an extractor error (`page_result`) print the same details.
 - *Alternative:* a traceback in the details. It is long, holds absolute paths, and differs by OS. Rejected.
@@ -113,7 +116,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 
 ### D16. Test seams
 - **In short:** the pure politeness and pause formulas (`global_cap`, `watchdog_seconds`, `pause_after`, `probe_times`, `BlockingRuns`) are tested at seam 4, table-driven, beside the service tests of the same rules.
-- The race of a skip that a raise overtook is driven through `crawl_result` with `FakeFetcher`'s `on_start`. If it cannot be staged there deterministically, `Outcomes` becomes a named internal seam in `docs/testing.md`, and its test stays.
+- The race of a skip that a raise overtook is driven through `crawl_result` with `FakeFetcher`'s page delays on `FakeClock`, and the test checks that the handler saw the URL twice, so it fails if the timing stops staging the race. `Outcomes` stays off the seam list.
 - **Why:** the formulas are specified tables whose values a service test shows only one at a time, so a table at seam 4 is the cheaper and the clearer proof; the race test pins a real double count, and the outcome pipeline's internals are its only setting today.
 - *Alternative:* delete the formula tables and keep the service tests. The tables would lose their checks of the edges. Rejected.
 - Seams of this change: 1 (`linx commands`), 2 (`plan_crawl`, the writer, the settings loader), 3+6 (hook failures), 4 (the stop flag, the extractor check, `locate_links`, the formulas), 6 (the schema guards).
@@ -126,6 +129,13 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - Guards named after no scenario, and the failure class each guards:
   - `test_a_stop_flag_set_off_its_loop_is_refused`: an off-loop set that wakes no waiter.
   - `test_the_default_page_settings_pickle`: an extractor or config that `026`'s workers cannot load.
+  - `test_an_extractor_whose_function_is_not_module_level_cannot_be_built`: an extractor that works in process and fails in every `026` worker.
+  - `test_an_error_that_cannot_be_printed_costs_only_the_extractor_s_output`: a hook failure whose report fails the URL.
+  - `test_a_long_error_is_cut_to_300_characters`: a warning that a long repr fills.
+  - `test_an_extractor_that_returns_another_type_names_no_line`: `at` pointing into preparation.
+  - `test_a_failing_handler_object_names_the_line_of_its_call`: a callable-object hook without `at`.
+  - `test_an_extractor_compiled_from_text_names_no_line`: a function without a module failing its URL.
+  - `test_an_error_raised_in_a_library_points_at_the_extractor_s_line`: a hook failure that points into the library instead of the hook.
   - `test_every_table_is_declared_in_the_schema_module`: a table missing from the contract.
   - `test_every_name_used_across_a_package_is_listed`: a hidden package interface.
   - `test_mirrored_options_match_their_fields`: a flag whose default or bounds differ from its setting.

@@ -172,6 +172,43 @@ def test_a_page_whose_preparation_failed_keeps_the_links_of_its_headers(
     )
 
 
+class CrashingOnBoom:
+    """Prepares Pages in process, except /boom, whose worker crashes."""
+
+    backlog = 0
+    workers = 0
+
+    def __init__(self) -> None:
+        self._settings: PageSettings | None = None
+
+    async def start(self, settings: PageSettings) -> None:
+        self._settings = settings
+
+    async def prepare(self, url: NormalizedUrl, response: FetchResult) -> PreparedPage:
+        assert self._settings is not None
+        if url.endswith("/boom"):
+            return PreparedPage(parse_error="worker_crashed", parse_error_message="worker 1 ended")
+        return prepare_page(url, response, self._settings)
+
+    async def close(self) -> None:
+        pass
+
+
+def test_a_preparation_that_gave_nothing_names_no_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/boom">Boom</a>'), "/boom": Page(body="<p>B</p>")})
+    )
+
+    result = crawl_result(server.url("/"), pages=CrashingOnBoom)
+
+    ((code, details),) = [
+        (warning["code"], warning["details"]) for warning in result.to_json()["warnings"]
+    ]
+    assert (code, details) == ("parse_failed", {"count": 1, "first_url": server.url("/boom")})
+
+
 class SlowPool:
     """A parse pool that takes 10 s per Page and holds two Pages beyond the requests."""
 

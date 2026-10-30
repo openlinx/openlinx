@@ -4,6 +4,8 @@ per what its code names (020-add-crawl-core D10)."""
 from collections.abc import Iterable, Sequence
 
 from openlinx.crawl.fetch.politeness import BLOCKING_RUN
+from openlinx.crawl.hook_failures import HookFailure
+from openlinx.crawl.pages.preparation import PreparedPage
 from openlinx.crawl.references import DiscoveredLink
 from openlinx.crawl.scope import ScopeRules, apex_seed_named_by_page
 from openlinx.crawl.urls import NormalizedUrl, url_host, url_origin
@@ -21,7 +23,8 @@ from openlinx.output.codes import (
     SEED_BLOCKED_BY_ROBOTS_TXT,
 )
 from openlinx.output.diagnostics import Diagnostic
-from openlinx.store.records import FetchError, ParseError
+from openlinx.store.records import FetchError
+from openlinx.store.redaction import SecretValues
 
 
 def url_limit_reached(crawl_id: str, limit: int) -> Diagnostic:
@@ -109,22 +112,31 @@ def seed_base_mismatch(
     )
 
 
-def handler_failure(url: NormalizedUrl, failed: Sequence[tuple[str, BaseException]]) -> Diagnostic:
-    names = [f"{name} ({type(error).__name__})" for name, error in failed]
+def handler_failure(
+    url: NormalizedUrl, failed: Sequence[HookFailure], secrets: SecretValues
+) -> Diagnostic:
+    names = [f"{error.hook} ({error.error_type})" for error in failed]
     if len(names) == 1:
         message = f"The handler {names[0]} raised on {url}; the URL was recorded without its rows."
     else:
         listed = ", ".join(names[:-1]) + f" and {names[-1]}"
         message = f"The handlers {listed} raised on {url}; the URL was recorded without their rows."
-    return Diagnostic.of(HANDLER_FAILED, message)
+    # The first handler's error, as the warning keeps only its first URL's.
+    return Diagnostic.of(HANDLER_FAILED, message, details=failed[0].details(secrets.redact))
 
 
-def parse_failure(url: NormalizedUrl, parse_error: ParseError, message: str | None) -> Diagnostic:
+def parse_failure(url: NormalizedUrl, page: PreparedPage, secrets: SecretValues) -> Diagnostic:
+    parse_error, message, failed = (
+        page.parse_error,
+        page.parse_error_message,
+        page.extractor_failures,
+    )
     if parse_error == "extractor_error":
         return Diagnostic.of(
             PARSE_FAILED,
             f"An extractor failed on {url} ({message}); the Page was recorded without its "
             "output, and its Links were followed.",
+            details=failed[0].details(secrets.redact) if failed else None,
         )
     detail = parse_error if message is None else f"{parse_error}: {message}"
     return Diagnostic.of(

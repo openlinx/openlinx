@@ -1,15 +1,14 @@
 """The Crawl's warning log (020-add-crawl-core D10; seams 2, 3 and 3+6)."""
 
 import json
+from collections.abc import Sequence
 from dataclasses import replace
-from datetime import UTC, datetime
 from pathlib import Path
 
-from openlinx.crawl.engine.crawl_warnings import handler_failure, network_paused
-from openlinx.crawl.engine.hooks import UrlResult
-from openlinx.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
-from openlinx.crawl.engine.progress import UrlCounters
-from openlinx.crawl.engine.stop import StopSignal
+from sqlalchemy import Connection
+
+from openlinx.crawl.engine.crawl_warnings import network_paused
+from openlinx.crawl.engine.hooks import Hooks, UrlResult, handler
 from openlinx.crawl.engine.warning_log import WarningLog
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.output.codes import (
@@ -20,22 +19,14 @@ from openlinx.output.codes import (
 )
 from openlinx.output.diagnostics import Diagnostic
 from openlinx.output.reporter import Collected
-from openlinx.store.records import FetchedUrl, LinkType, NewUrl, Provenance, QueuedUrl, SkippedUrl
-from openlinx.store.urls import (
-    queued_batch,
-    record_fetched,
-    record_seed,
-    record_skipped,
-    url_counts,
-)
-from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result, crawled
-from tests.support.crawls import crawl_row, create_any_crawl, query
+from tests.support.crawls import crawl_row, query
+from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
 
 
@@ -157,80 +148,55 @@ def test_a_warning_kept_once_per_a_detail_carries_that_detail(
     )
 
 
-def _fetched(url_id: int, provenance: Provenance, *discovered: NewUrl) -> FetchedUrl:
-    return FetchedUrl(
-        url_id=url_id,
-        provenance=provenance,
-        status_code=200,
-        content_type="text/html",
-        fetched_at=datetime(2026, 10, 27, tzinfo=UTC),
-        response_time_ms=1,
-        parsed=True,
-        discovered=discovered,
-    )
+def _no_rows(connection: Connection, rows: Sequence[object]) -> None:
+    """The writer of a handler that only fails."""
 
 
-def _new(url: str, discovered_via: LinkType = "hyperlink") -> NewUrl:
-    return NewUrl(
-        url=NormalizedUrl(url), discovered_via=discovered_via, is_internal=True, in_scope=True
-    )
+_RAISED = "http://other.test/x"
 
 
-def _skipped(queued: QueuedUrl, failure: Diagnostic) -> Recorded:
-    """A URL that robots.txt blocks, decided on its queued row, whose handler failed."""
-    result = UrlResult(
-        url_id=queued.id,
-        url=queued.url,
-        crawl_depth=queued.crawl_depth,
-        discovered_via=queued.discovered_via,
-        found_on_url_id=queued.found_on_url_id,
-        is_internal=True,
-        in_scope=True,
-        fetch_state="skipped",
-        skip_reason="blocked_by_robots_txt",
-        blocked_by_robots_txt=True,
-    )
-    skipped = SkippedUrl(
-        url_id=queued.id,
-        skip_reason="blocked_by_robots_txt",
-        provenance=provenance_of(result),
-        blocked_by_robots_txt=True,
-    )
-    return Recorded(result, record_skipped(skipped), failure)
-
-
-async def test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_decided_again(
+def test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_decided_again(
     temp_workspace: TempWorkspace,
 ) -> None:
-    crawl = create_any_crawl(temp_workspace)
-    log = WarningLog(Collected())
-    seed = NormalizedUrl("http://site.test/")
-    page_at = Provenance(crawl_depth=0, discovered_via="seed", found_on_url_id=None)
+    clock = FakeClock()
+    pages = {
+        # An image URL that answers HTML, late: its image Link raises other.test/x to a
+        # Resource while the skip of its hyperlink waits for other.test's robots.txt.
+        "/": FakePage('<a href="/a">A</a> <img src="/late.html">'),
+        "/a": FakePage(f'<a href="{_RAISED}">X</a>'),
+        "/late.html": FakePage(f'<img src="{_RAISED}">', delay=2),
+        "http://other.test/robots.txt": FakePage(
+            "User-agent: *\nDisallow: /\n", content_type="text/plain", delay=3
+        ),
+    }
+    seen_via: list[str] = []
 
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        seed_id = writer.run(record_seed(seed, is_internal=True, in_scope=True))
-        page, late = _new("http://site.test/a"), _new("http://site.test/late.html", "image")
-        writer.run(record_fetched(_fetched(seed_id, page_at, page, late)))
-        a_at = Provenance(crawl_depth=1, discovered_via="hyperlink", found_on_url_id=seed_id)
-        writer.run(record_fetched(_fetched(seed_id + 1, a_at, _new("http://site.test/x"))))
-        (dispatched,) = writer.run(queued_batch(2, 0, 10))
-        late_at = Provenance(crawl_depth=1, discovered_via="image", found_on_url_id=seed_id)
-        # The late check's image Link raises /x while its skip is on its way.
-        image = _new("http://site.test/x", "image")
-        writer.run(record_fetched(_fetched(seed_id + 2, late_at, image)))
-        outcomes = Outcomes(writer, log, StopSignal(), UrlCounters(writer.run(url_counts())))
-        failure = handler_failure(dispatched.url, [("pages", ValueError("no title"))])
-        await outcomes.submit(_skipped(dispatched, failure))
-        await outcomes.settled()
-        # Decided again on its raised row, its handlers fail again.
-        (again,) = writer.run(queued_batch(2, 0, 10))
-        await outcomes.submit(_skipped(again, failure))
-        await outcomes.settled()
+    def fails_on_x(result: UrlResult) -> tuple[object, ...]:
+        if result.url == _RAISED:
+            seen_via.append(result.discovered_via)
+            raise ValueError("no title")
+        return ()
 
+    hooks = replace(Hooks(), handlers=(handler("titles", fails_on_x, _no_rows),))
+
+    result = crawl_result(
+        "http://site.test/", hooks, clock=clock, fetcher=FakeFetcher(clock, pages)
+    )
+
+    # Decided on its hyperlink row that the raise overtook, then again on its raised row.
     assert (
-        [(warning.code, warning.details["count"]) for warning in log.warnings],
-        query(crawl.path, "SELECT fetch_state, discovered_via FROM urls WHERE id = ?", [again.id]),
-    ) == ([("handler_failed", 1)], [("skipped", "image")])
+        seen_via,
+        [(warning.code, warning.details["count"]) for warning in result.warnings],
+        query(
+            result.crawl_file,
+            "SELECT fetch_state, skip_reason, discovered_via FROM urls WHERE url = ?",
+            [_RAISED],
+        ),
+    ) == (
+        ["hyperlink", "image"],
+        [("handler_failed", 1)],
+        [("skipped", "blocked_by_robots_txt", "image")],
+    )
 
 
 _ROBOTS_DOWN = Site(

@@ -23,6 +23,7 @@ from openlinx.services.crawling import (
 )
 from openlinx.services.hooks import default_hooks
 from openlinx.store.records import CrawlFile, SecretNames
+from openlinx.workspace.tables import SettingsTables
 from tests.support.app import settings_tables
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
@@ -48,6 +49,7 @@ def crawl_result(
     clock: Clock | None = None,
     fetcher: Fetcher | None = None,
     stop: StopSignal | None = None,
+    tables: SettingsTables | None = None,
     **crawl: Any,
 ) -> CrawlResult:
     """Crawls through the Crawl Service, which alone takes test hooks, the DNS resolver hook
@@ -56,18 +58,21 @@ def crawl_result(
     `crawl` holds settings of the [crawl] table, as their flags would give them. Like the CLI, it
     crawls into the Workspace of the current folder, which `temp_workspace` sets, on the real
     clock unless `clock` is given: a FakeClock is for timing scenarios with a fake Fetcher, and
-    its time jumps to each sleep's wake once the loop is quiet.
+    its time jumps to each sleep's wake once the loop is quiet. `tables` are the settings
+    tables of another app, such as `example_app()`'s; their secret settings are redacted as the
+    CLI redacts them.
     """
+    tables = tables or settings_tables(build_app())
     request = CrawlRequest(
         seed=seed,
         cwd=Path.cwd(),
         home=Path.home(),
         workspace=None,
         command_argv=["linx", "crawl", seed],
-        secret_names=SecretNames(),
+        secret_names=SecretNames(settings=tables.secret_settings()),
         flags={"crawl": crawl},
     )
-    plan = plan_crawl(request, settings_tables(build_app()))
+    plan = plan_crawl(request, tables)
     return start_crawl(
         plan,
         clock or SystemClock(),

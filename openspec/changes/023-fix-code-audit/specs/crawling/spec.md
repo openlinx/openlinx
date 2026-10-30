@@ -5,14 +5,18 @@
 **In short:** the first counted `handler_failed` and `parse_failed` warnings say what the error was and where in the hook it was raised.
 
 The warning that "One URL never stops the Crawl" writes for the first URL a handler or an extractor raised on SHALL hold, besides `count` and `first_url`:
-- `details.error`: the error's text, at most 300 characters;
-- `details.at`: `<file>:<line>`, where the line is that of the deepest frame of the traceback in the file that defines the hook's function, and the file is that file's path relative to the folder that holds its top-level package, with `/` between its parts on every OS, such as `tests/crawl/test_hooks.py:88`.
+- `details.error`: the error's text, with each value of the Crawl's secret settings replaced by `***`, at most 300 characters;
+- `details.at`: `<file>:<line>`, where the line is that of the deepest frame of the traceback in the file that defines the hook's function, and the file is that file's path relative to the folder that holds its top-level package, with `/` between its parts on every OS, such as `tests/crawl/test_hooks.py:88`, or the module's dotted name for a file outside that folder; it is absent when no frame of the traceback is in that file, as for an extractor that returned something other than its declared output.
 
 A `parse_failed` warning whose first URL raised nothing, a page preparation that gave nothing (`body_too_large`, `worker_crashed`, `parse_timeout`), SHALL have neither key.
 
 #### Scenario: A failing handler names its error
 - **WHEN** a handler registered for the test, defined in `tests/crawl/test_hooks.py`, raises `KeyError("title")` on `{site}/boom`, `/` links to `/boom`, and `linx crawl {site}/` ends
 - **THEN** the result's `handler_failed` warning has `details.error` = `'title'`, and `details.at` = `tests/crawl/test_hooks.py:<n>`, where n is the line of the `raise`
+
+#### Scenario: A failing hook's error hides the Crawl's secret settings
+- **WHEN** the settings file sets the secret setting `example.token` to `k-7f3a9c2e`, a handler built with it raises `ValueError("401 Unauthorized for https://api.test/v1/pages?key=k-7f3a9c2e")` on `{site}/boom`, `/` links to `/boom`, and `linx crawl {site}/` ends
+- **THEN** the `handler_failed` warning, as written to stderr and as stored in `crawl.warnings`, has `details.error` = `401 Unauthorized for https://api.test/v1/pages?key=***`
 
 #### Scenario: A failing extractor names its error
 - **WHEN** an extractor registered for the test, defined in `tests/crawl/test_hooks.py`, raises `ValueError("no body")` on `{site}/boom`, `/` links to `/boom`, and `linx crawl {site}/` ends

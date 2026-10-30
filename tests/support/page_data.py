@@ -81,7 +81,11 @@ def page_result(
     scope = scope_rules(page_url)
     settings = PageSettings(scope=scope, extractors=extractors, strip_params=None)
     prepared = prepare_page(page_url, response, settings)
-    assert prepared.parse_error is None, prepared.parse_error_message
+    assert prepared.parse_error is None, [
+        f"{failed.hook}: {failed.error_type}: {failed.text}"
+        + (f" at {failed.at}" if failed.at else "")
+        for failed in prepared.extractor_failures
+    ] or prepared.parse_error_message
     return _url_result(
         page_url,
         response,

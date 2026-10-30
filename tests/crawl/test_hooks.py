@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing
 from dataclasses import dataclass, fields, replace
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,7 @@ from openlinx.store.types import Timestamp
 from openlinx.store.writer import CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site, Status
+from tests.support.app import example_app, settings_tables
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
@@ -1376,3 +1378,180 @@ def test_a_handler_sees_the_robots_meta_of_a_parsed_page(
     assert _links_seen(crawl_file, server.url("/draft")) == [
         repr(("noindex, nofollow", True, True))
     ]
+
+
+def _title_missing(result: UrlResult) -> tuple[Seen, ...]:
+    if result.url.endswith("/boom"):
+        raise KeyError("title")
+    return ()
+
+
+def test_a_failing_handler_names_its_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = replace(Hooks(), handlers=(handler("titles", _title_missing, _write_seen),))
+
+    result = crawl_result(server.url("/"), hooks)
+
+    ((code, details),) = [
+        (warning["code"], warning["details"]) for warning in result.to_json()["warnings"]
+    ]
+    assert (code, details["error"], details["at"]) == (
+        "handler_failed",
+        "'title'",
+        f"tests/crawl/test_hooks.py:{_title_missing.__code__.co_firstlineno + 2}",
+    )
+
+
+def _no_body(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
+    if page.url.endswith("/boom"):
+        raise ValueError("no body")
+    return Found(page.url)
+
+
+def test_a_failing_extractor_names_its_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+
+    result = crawl_result(server.url("/"), _with_extractors(extractor("body", _no_body, None)))
+
+    ((code, details),) = [
+        (warning["code"], warning["details"]) for warning in result.to_json()["warnings"]
+    ]
+    assert (
+        code,
+        details["error"],
+        details["at"],
+        query(
+            result.crawl_file,
+            "SELECT parse_error_message FROM urls WHERE url = ?",
+            [server.url("/boom")],
+        ),
+    ) == (
+        "parse_failed",
+        "no body",
+        f"tests/crawl/test_hooks.py:{_no_body.__code__.co_firstlineno + 2}",
+        [("body: ValueError",)],
+    )
+
+
+def _missing(key: str, result: UrlResult) -> tuple[Seen, ...]:
+    if result.url.endswith("/boom"):
+        raise KeyError(key)
+    return ()
+
+
+def test_a_failing_handler_names_its_error_through_a_partial(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = replace(Hooks(), handlers=(handler("titles", partial(_missing, "title"), _write_seen),))
+
+    result = crawl_result(server.url("/"), hooks)
+
+    ((details,),) = [[warning["details"] for warning in result.to_json()["warnings"]]]
+    assert (details["error"], details["at"]) == (
+        "'title'",
+        f"tests/crawl/test_hooks.py:{_missing.__code__.co_firstlineno + 2}",
+    )
+
+
+_API_KEY = "k-7f3a9c2e"
+
+
+def _call_api(token: str, result: UrlResult) -> tuple[Seen, ...]:
+    if result.url.endswith("/boom"):
+        # As an HTTP client words a refused request: the URL it called, its key included.
+        raise ValueError(f"401 Unauthorized for https://api.test/v1/pages?key={token}")
+    return ()
+
+
+def test_a_failing_hook_s_error_hides_the_crawl_s_secret_settings(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    (temp_workspace.root / "openlinx.toml").write_text(f'[example]\ntoken = "{_API_KEY}"\n')
+    # Built from the secret setting, as default_hooks(settings) builds a hook's config.
+    hooks = replace(Hooks(), handlers=(handler("api", partial(_call_api, _API_KEY), _write_seen),))
+    reporter = Collected()
+
+    result = crawl_result(
+        server.url("/"), hooks, reporter=reporter, tables=settings_tables(example_app())
+    )
+
+    assert (
+        [warning.details["error"] for warning in reporter.warnings],
+        [
+            warning["details"]["error"]
+            for warning in json.loads(crawl_row(result.crawl_file)["warnings"])
+        ],
+    ) == (
+        ["401 Unauthorized for https://api.test/v1/pages?key=***"],
+        ["401 Unauthorized for https://api.test/v1/pages?key=***"],
+    )
+
+
+def _quoting_the_page(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
+    body = tree.body
+    if page.url.endswith("/boom") and body is not None:
+        raise ValueError(f"no <h1> in {body.html}")
+    return Found(page.url)
+
+
+def test_a_long_error_is_cut_to_300_characters(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    paragraph = "<p>" + "A long article paragraph without a heading. " * 20 + "</p>"
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/boom">Boom</a>'), "/boom": Page(body=paragraph)})
+    )
+
+    result = crawl_result(
+        server.url("/"), _with_extractors(extractor("headings", _quoting_the_page, None))
+    )
+
+    ((details,),) = [[warning.details for warning in result.warnings]]
+    assert (len(details["error"]), details["error"][:16]) == (300, "no <h1> in <body")
+
+
+def test_an_extractor_that_returns_another_type_names_no_line(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+
+    result = crawl_result(
+        server.url("/"), _with_extractors(extractor("loose", _not_a_struct, None))
+    )
+
+    ((details,),) = [[warning.details for warning in result.warnings]]
+    assert (details["error"], "at" in details) == ("loose returned dict", False)
+
+
+class _RequiredHeader:
+    """A handler with its own config, as a callable object."""
+
+    def __init__(self, header: str) -> None:
+        self.header = header
+
+    def __call__(self, result: UrlResult) -> tuple[Seen, ...]:
+        if result.url.endswith("/boom"):
+            raise KeyError(self.header)
+        return ()
+
+
+def test_a_failing_handler_object_names_the_line_of_its_call(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = replace(
+        Hooks(), handlers=(handler("headers", _RequiredHeader("x-robots-tag"), _write_seen),)
+    )
+
+    result = crawl_result(server.url("/"), hooks)
+
+    ((details,),) = [[warning.details for warning in result.warnings]]
+    assert details["at"] == (
+        f"tests/crawl/test_hooks.py:{_RequiredHeader.__call__.__code__.co_firstlineno + 2}"
+    )

@@ -16,6 +16,42 @@ class Redacted:
     config: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SecretValues:
+    """The values of a Crawl's secret settings, for text that may quote one, such as a hook's
+    error (023-fix-code-audit D3)."""
+
+    # Longest first, so a value that holds another is replaced whole.
+    values: tuple[str, ...] = ()
+
+    def redact(self, text: str) -> str:
+        for value in self.values:
+            text = text.replace(value, REDACTED)
+        return text
+
+
+def secret_values(config: Mapping[str, Any], settings: frozenset[str]) -> SecretValues:
+    """From the config that the recorded one redacts, so both hide the same secrets."""
+    found: set[str] = set()
+    for setting in settings:
+        table, _, key = setting.partition(".")
+        value = config.get(table, {}).get(key)
+        if isinstance(value, str) and value:
+            found.add(value)
+            # A URL's password may be quoted without the rest of the URL.
+            password = _password(value)
+            if password:
+                found.add(password)
+    return SecretValues(tuple(sorted(found, key=len, reverse=True)))
+
+
+def _password(value: str) -> str | None:
+    try:
+        return urlsplit(value).password
+    except ValueError:
+        return None
+
+
 def redact(argv: Sequence[str], config: Mapping[str, Any], secrets: SecretNames) -> Redacted:
     return Redacted(_redact_argv(argv, secrets.flags), _redact_config(config, secrets.settings))
 
