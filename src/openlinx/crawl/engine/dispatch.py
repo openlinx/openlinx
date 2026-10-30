@@ -94,6 +94,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         seed_answered=await context.writer.run_async(seed_answered(seed)),
         stop=context.stop,
         requester=requester,
+        redispatch=redispatch,
         clock=context.clock,
         warnings=context.warnings,
         resumed=resumed,

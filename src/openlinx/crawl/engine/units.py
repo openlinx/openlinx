@@ -103,9 +103,8 @@ async def _outcome(
             # A stop kept its origin's robots.txt request from starting: it stays queued.
             return None
         origin_error = origin_robots.origin_error
+        run.pause.verdict(queued, decision, origin_error)
         if origin_error is not None:
-            if decision.is_internal:
-                run.pause.failed(origin_error, queued, requested=False)
             # The origin cannot be reached: the URL gets the error without a request of
             # its own (design D6).
             message = (
@@ -118,8 +117,6 @@ async def _outcome(
                 fetched_at=None,
             )
             return _errored(context, dispatched, failure)
-        if decision.is_internal:
-            run.pause.robots_txt_answered()
         skip_reason, blocked, warnings = _robots_verdict(
             context.settings, origin_robots, queued, decision, in_chain
         )
@@ -138,23 +135,15 @@ async def _outcome(
     attempted = await run.requester.request_url(
         queued.url, run.pause.attempts_of(queued, internal=decision.is_internal)
     )
-    if isinstance(attempted, NotStarted):
+    if isinstance(attempted, NotStarted) or not run.pause.outcome(queued, decision, attempted):
         return None
     response = attempted.outcome
     decided = replace(decided, attempt_count=attempted.attempt_count)
     host = host_key(queued.url)
     status_code = None if isinstance(response, FetchFailure) else response.status_code
-    if isinstance(response, FetchFailure) and run.pause.requeues(queued, response.fetch_error):
-        # Ended without a response while paused: not recorded, so its URL stays queued and is
-        # requested again, and counts toward the URL limit only then (design D16).
-        run.requester.give_back()
-        run.redispatch.add(queued)
-        return None
     if decision.is_internal and run.blocking.responded(host, status_code):
         context.warnings.warn(possible_blocking(host))
     if isinstance(response, FetchFailure):
-        if decision.is_internal:
-            run.pause.recorded(queued)
         failure = UrlFailure(
             fetch_error=response.fetch_error,
             fetch_error_message=response.message,

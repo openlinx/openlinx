@@ -13,7 +13,8 @@ from openlinx.crawl.engine.crawl_warnings import network_paused
 from openlinx.crawl.engine.stop import StopSignal
 from openlinx.crawl.engine.warning_log import WarningLog
 from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult
-from openlinx.crawl.fetch.requester import Requester
+from openlinx.crawl.fetch.requester import Attempted, Requester
+from openlinx.crawl.scope import ScopeDecision
 from openlinx.crawl.urls import NormalizedUrl, url_origin
 from openlinx.store.records import FetchError, QueuedUrl
 
@@ -118,9 +119,10 @@ class Redispatch:
 
 
 class NetworkPause:
-    """Kept by the engine from each Internal URL's outcome, since only it knows which URLs are
-    Internal and every code that counts, a robots.txt one included; the Requester holds its
-    gate and makes its probes (design D7, D16)."""
+    """Kept from each URL's outcome, which the engine hands it with the URL's dispatch decision,
+    since only the engine knows which URLs are Internal, and every code that counts, a
+    robots.txt one included; it decides whether a URL is recorded or re-queued, and the
+    Requester holds its gate and makes its probes (design D7, D16)."""
 
     def __init__(
         self,
@@ -132,6 +134,7 @@ class NetworkPause:
         seed_answered: bool,
         stop: StopSignal,
         requester: Requester,
+        redispatch: Redispatch,
         clock: Clock,
         warnings: WarningLog,
         resumed: Callable[[PauseEnd, Sequence[CountedUrl]], Awaitable[None]],
@@ -145,6 +148,7 @@ class NetworkPause:
         self._crawl_id = crawl_id
         self._stop = stop
         self._requester = requester
+        self._redispatch = redispatch
         self._clock = clock
         self._warnings = warnings
         self._resumed = resumed
@@ -169,13 +173,10 @@ class NetworkPause:
     def paused(self) -> bool:
         return self._probing is not None
 
-    def responded(self) -> None:
+    def _responded(self) -> None:
         self._in_a_row.clear()
         if self._paused is None:
             self._recorded.clear()
-        self._seed_answered = True
-
-    def robots_txt_answered(self) -> None:
         self._seed_answered = True
 
     def attempts_of(
@@ -192,30 +193,49 @@ class NetworkPause:
             if not internal:
                 return
             if not isinstance(outcome, FetchFailure):
-                self.responded()
+                self._responded()
             elif not counted and not self.paused and outcome.fetch_error in _NO_RESPONSE:
                 counted = True
-                self.failed(outcome.fetch_error, queued, requested=True)
+                self._failed(outcome.fetch_error, queued, requested=True)
 
         return attempted
 
-    def recorded(self, queued: QueuedUrl) -> None:
-        """An Internal URL whose request was recorded as an error."""
-        if any(counted.queued.id == queued.id for counted in (*self._in_a_row, *self._count)):
-            self._recorded.add(queued.id)
-
-    def requeues(self, queued: QueuedUrl, fetch_error: FetchError) -> bool:
-        """Whether a request that ended with `fetch_error` is made again: one without a response
-        while paused is not recorded, so its URL stays queued (design D16). A URL of the count
-        is recorded, so the pause's end decides on it: an outage re-queues it, once a run, and
-        a dead section keeps its error (022-add-fetch-policy D4)."""
-        return (
+    def outcome(self, queued: QueuedUrl, decision: ScopeDecision, attempted: Attempted) -> bool:
+        """Whether a URL's request is recorded. One that ended without a response while paused
+        is not, so its URL stays queued, is dispatched again, and counts toward the URL limit
+        only then (design D16). A URL of the count is recorded, so the pause's end decides on
+        it: an outage re-queues it, once a run, and a dead section keeps its error
+        (022-add-fetch-policy D4)."""
+        response = attempted.outcome
+        if not isinstance(response, FetchFailure):
+            return True
+        if (
             self.paused
-            and fetch_error in _NO_RESPONSE
+            and response.fetch_error in _NO_RESPONSE
             and all(counted.queued.id != queued.id for counted in self._count)
-        )
+        ):
+            self._requester.give_back()
+            self._redispatch.add(queued)
+            return False
+        if decision.is_internal and any(
+            counted.queued.id == queued.id for counted in (*self._in_a_row, *self._count)
+        ):
+            self._recorded.add(queued.id)
+        return True
 
-    def failed(self, fetch_error: FetchError, queued: QueuedUrl, *, requested: bool) -> None:
+    def verdict(
+        self, queued: QueuedUrl, decision: ScopeDecision, origin_error: FetchError | None
+    ) -> None:
+        """What the robots.txt verdict of an Internal URL's origin tells the pause: one without
+        a response counts, for the URL it records without a request of its own (design D6)."""
+        if not decision.is_internal:
+            return
+        if origin_error is None:
+            self._seed_answered = True
+        else:
+            self._failed(origin_error, queued, requested=False)
+
+    def _failed(self, fetch_error: FetchError, queued: QueuedUrl, *, requested: bool) -> None:
         if fetch_error not in _NO_RESPONSE or url_origin(queued.url) in self._dead_origins:
             return
         counted = CountedUrl(queued, requested)
