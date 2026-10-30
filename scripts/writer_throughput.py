@@ -28,7 +28,6 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
-    PrimaryKeyConstraint,
     Table,
     Text,
     bindparam,
@@ -49,6 +48,7 @@ from openlinx.output.reporter import Collected
 from openlinx.services.crawls import create_crawl
 from openlinx.store.reading import reading
 from openlinx.store.records import NewCrawl, SecretNames
+from openlinx.store.schema import links as declared_links
 from openlinx.store.schema import origins
 from openlinx.store.types import Flag, Timestamp
 from openlinx.store.writer import CrawlWriter, CrawlWriterClosedError
@@ -82,12 +82,10 @@ MAX_RSS_MIB = 400
 SAMPLE_SECONDS = 0.2
 READ_PAUSE_SECONDS = 1.0
 
-# Provisional: urls is shaped like 020's draft table, and links has all of 030's columns on its
-# provisional layout (030 D4). create_crawl declares urls and origins, so the URL rows must meet
-# the declared urls: an origin_id, and none of the draft's later columns. It declares links too,
-# but only the columns 030 has built so far, so the check replaces that table with this one. The
-# check moves to the declared links table once it has every column and the benchmark has chosen
-# its layout.
+# Provisional: urls is shaped like 020's draft table. create_crawl declares urls and origins, so
+# the URL rows must meet the declared urls: an origin_id, and none of the draft's later columns.
+# links is the declared table, with its key, layout and indexes (030 D4), so the check writes
+# what a Crawl writes and follows the layout the links benchmark chooses.
 METADATA = MetaData()
 URLS = Table(
     "urls",
@@ -110,36 +108,11 @@ URLS = Table(
     Column("parsed", Flag, nullable=False),
 )
 Index("urls_frontier", URLS.c.crawl_depth, URLS.c.id, sqlite_where=URLS.c.fetch_state == "queued")
-LINKS = Table(
-    "links",
-    METADATA,
-    Column("source_url_id", Integer, ForeignKey("urls.id"), nullable=False),
-    Column("ordinal", Integer, nullable=False),
-    Column("target_url_id", Integer, ForeignKey("urls.id"), nullable=False),
-    Column("type", Text, nullable=False),
-    Column("declared_in", Text, nullable=False),
-    Column("element", Text),
-    Column("attribute", Text),
-    Column("anchor_text", Text),
-    Column("alt_text", Text),
-    Column("rel", Text),
-    Column("rel_nofollow", Flag, nullable=False),
-    Column("rel_ugc", Flag, nullable=False),
-    Column("rel_sponsored", Flag, nullable=False),
-    Column("followed", Flag, nullable=False),
-    Column("hreflang", Text),
-    Column("media", Text),
-    Column("link_position", Text),
-    Column("html_source", Text),
-    PrimaryKeyConstraint("source_url_id", "ordinal"),
-)
-Index("links_target", LINKS.c.target_url_id)
-Index("links_type_target", LINKS.c.type, LINKS.c.target_url_id)
 
 UPSERT_URLS = sqlite_insert(URLS).on_conflict_do_nothing(index_elements=["url"])
 READ_IDS = select(URLS.c.url, URLS.c.id).where(URLS.c.url.in_(bindparam("urls", expanding=True)))
 UPDATE_URL = update(URLS).where(URLS.c.id == bindparam("page_id"))
-INSERT_LINKS = insert(LINKS)
+INSERT_LINKS = insert(declared_links)
 
 READS = (
     "SELECT fetch_state, count(*) FROM urls GROUP BY fetch_state",
@@ -295,8 +268,6 @@ def write_page(site: Site, page: Page, connection: Connection) -> None:
 
 
 def seed_pages(site: Site, page_count: int, connection: Connection) -> None:
-    LINKS.drop(connection)
-    METADATA.create_all(connection)
     connection.execute(
         insert(origins),
         [
@@ -371,8 +342,8 @@ def check_atomicity(path: Path, pages: list[Page], failed: set[int]) -> dict[str
         rows_left: int = connection.execute(
             select(
                 select(func.count())
-                .select_from(LINKS)
-                .where(LINKS.c.source_url_id.in_(poisoned))
+                .select_from(declared_links)
+                .where(declared_links.c.source_url_id.in_(poisoned))
                 .scalar_subquery()
                 + select(func.count()).where(URLS.c.found_on_url_id.in_(poisoned)).scalar_subquery()
                 + select(func.count())
@@ -383,7 +354,9 @@ def check_atomicity(path: Path, pages: list[Page], failed: set[int]) -> dict[str
         pages_stored = connection.execute(
             select(func.count()).where(URLS.c.fetch_state == "fetched")
         ).scalar_one()
-        link_rows = connection.execute(select(func.count()).select_from(LINKS)).scalar_one()
+        link_rows = connection.execute(
+            select(func.count()).select_from(declared_links)
+        ).scalar_one()
     expected_pages = len(pages) - len(poisoned)
     return {
         "ok": failed == set(poisoned)
