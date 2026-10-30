@@ -157,4 +157,20 @@ def _invalid_value(error: typer.BadParameter) -> OpenLinxError:
         callback = error.ctx.command.callback
         meta = meta_of(callback) if callback is not None else None
         hint = formats_hint(meta) if meta is not None else None
-    return OpenLinxError(INVALID_VALUE, error.format_message(), hint=hint)
+    setting = _setting_of(error)
+    # The shape of a value refused when given to a service: its setting's key (design D10).
+    details = {} if setting is None else {"key": setting}
+    return OpenLinxError(INVALID_VALUE, error.format_message(), hint=hint, details=details)
+
+
+def _setting_of(error: typer.BadParameter) -> str | None:
+    if error.param is None or error.ctx is None:
+        return None
+    return next(
+        (
+            extra.setting
+            for param, extra in options_with_meta(error.ctx.command)
+            if param.name == error.param.name
+        ),
+        None,
+    )

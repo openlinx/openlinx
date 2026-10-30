@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.cli import run_cli
@@ -308,11 +310,26 @@ def test_an_invalid_exclude_pattern_is_rejected(temp_workspace: TempWorkspace) -
     ) == (2, "invalid_pattern", {"pattern": "("}, [])
 
 
-def test_a_concurrency_of_zero_is_rejected(temp_workspace: TempWorkspace) -> None:
-    result = run_cli("crawl", "http://site.test/", "--concurrency", "0")
-    errors = [error["code"] for error in result.errors()]
+@pytest.mark.parametrize(
+    ("flag", "value", "key"),
+    [
+        ("--concurrency", "0", "crawl.concurrency"),
+        # Refused by its own check, not by Click's bounds.
+        ("--rate", "-1", "crawl.rate"),
+        ("--format", "xml", None),
+    ],
+)
+def test_a_refused_flag_names_its_setting(
+    temp_workspace: TempWorkspace, flag: str, value: str, key: str | None
+) -> None:
+    result = run_cli("crawl", "site.test", flag, value)
+    error = result.stderr_json_lines()[-1]
 
-    assert (result.exit_code, errors) == (2, ["invalid_value"])
+    assert (result.exit_code, error["code"], error["details"].get("key")) == (
+        2,
+        "invalid_value",
+        key,
+    )
 
 
 def test_a_concurrency_above_50_in_the_settings_file_is_refused(
