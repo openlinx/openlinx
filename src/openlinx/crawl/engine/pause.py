@@ -202,23 +202,28 @@ class NetworkPause:
 
     def outcome(self, queued: QueuedUrl, decision: ScopeDecision, attempted: Attempted) -> bool:
         """Whether a URL's request is recorded. One that ended without a response while paused
-        is not, so its URL stays queued, is dispatched again, and counts toward the URL limit
-        only then (design D16). A URL of the count is recorded, so the pause's end decides on
+        is not, nor one whose due retry the closed gate ended, whatever its last answer, so its
+        URL stays queued, is dispatched again, and counts toward the URL limit only then (design
+        D16). A URL of the count is recorded, so the pause's end decides on
         it: an outage re-queues it, once a run, and a dead section keeps its error
         (022-add-fetch-policy D4)."""
         response = attempted.outcome
-        if not isinstance(response, FetchFailure):
+        failed = isinstance(response, FetchFailure)
+        if failed and any(counted.queued.id == queued.id for counted in self._count):
+            self._recorded.add(queued.id)
             return True
-        if (
-            self.paused
+        if attempted.gated or (
+            isinstance(response, FetchFailure)
+            and self.paused
             and response.fetch_error in _NO_RESPONSE
-            and all(counted.queued.id != queued.id for counted in self._count)
         ):
             self._requester.give_back()
             self._redispatch.add(queued)
             return False
-        if decision.is_internal and any(
-            counted.queued.id == queued.id for counted in (*self._in_a_row, *self._count)
+        if (
+            failed
+            and decision.is_internal
+            and any(counted.queued.id == queued.id for counted in self._in_a_row)
         ):
             self._recorded.add(queued.id)
         return True

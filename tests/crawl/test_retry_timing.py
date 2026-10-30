@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from openlinx.crawl.engine.stop import StopSignal
 from openlinx.crawl.fetch.politeness import RateGate
 from openlinx.output.reporter import Collected
 from tests.support.clock import FakeClock
@@ -181,3 +182,68 @@ def test_a_request_that_fails_during_a_network_pause_is_not_retried(
         [(f"/p{n}", 12) for n in range(1, 9)],
         [("error", 1, 8), ("queued", 0, 12)],
     )
+
+
+def test_a_retry_under_way_outlasts_the_url_limit(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    pages: dict[str, FakePage | list[FakePage]] = {
+        "/": FakePage('<a href="/a">A</a><a href="/b">B</a><a href="/c">C</a>'),
+        "/a": [FakePage("", status=503), FakePage("<p>A</p>")],
+    }
+
+    # /c is refused at the limit while /a waits out its one-second backoff.
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=FakeFetcher(clock, pages), max_urls=3
+    )
+
+    assert (
+        result.summary.stop_reason,
+        query(
+            result.crawl_file,
+            "SELECT status_code, attempt_count FROM urls WHERE url = 'http://site.test/a'",
+        ),
+    ) == ("max_urls", [(200, 2)])
+
+
+@pytest.mark.parametrize("path", ["/", "/robots.txt"])
+def test_a_stop_cuts_a_pending_retry_and_keeps_its_url_queued(
+    temp_workspace: TempWorkspace, path: str
+) -> None:
+    clock, stop = FakeClock(), StopSignal()
+    # The Seed's own 503, or its robots.txt's, arrives with the stop.
+    pages = {path: [FakePage("", status=503), FakePage("<p>Home</p>")]}
+    fetcher = FakeFetcher(clock, pages, on_answer={path: lambda: stop.set("interrupt")})
+
+    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher, stop=stop)
+
+    assert (
+        result.summary.stop_reason,
+        query(result.crawl_file, "SELECT fetch_state, status_code FROM urls WHERE id = 1"),
+    ) == ("interrupt", [("queued", None)])
+
+
+def test_a_retry_the_closed_gate_ends_outside_the_count_is_requested_after_the_pause(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    external = "http://cdn.test/app.js"
+    # The External script answers 503 at once, and its retry is due a second later, when
+    # /p1 to /p8 have paused the Crawl; the Seed answers the first probe, at 5 seconds.
+    pages: dict[str, FakePage | list[FakePage]] = {
+        "/": FakePage(
+            f'<script src="{external}"></script>'
+            + "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 9))
+        ),
+        **{f"/p{n}": FakePage("", fails="connection_refused") for n in range(1, 9)},
+        external: [FakePage("", status=503), FakePage("", content_type="text/javascript")],
+    }
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=FakeFetcher(clock, pages), concurrency=1
+    )
+
+    # Its 503 is no final answer: requested afresh after the pause, it gets its 200.
+    assert query(
+        result.crawl_file,
+        "SELECT fetch_state, status_code, attempt_count FROM urls WHERE url = 'http://cdn.test/app.js'",
+    ) == [("fetched", 200, 1)]

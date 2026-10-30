@@ -223,6 +223,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_bytes_after_a_finished_stream_are_ignored` and `test_a_gzip_member_boundary_split_after_its_first_byte_is_decoded`, since bytes after a stream are ignored for every coding and a gzip member split across reads is still decoded.
   - The [Pure] tests of `read_body` on real compressed bytes.
   - `test_the_proxy_of_a_url`, since the lower-case variable, `NO_PROXY` and an ignored `ALL_PROXY` decide a proxy before any request.
+  - `test_a_retry_the_closed_gate_ends_outside_the_count_is_requested_after_the_pause`, since a 5xx or 429 whose due retry the network pause's closed gate ends is no final answer (D4).
   - `test_an_invalid_user_agent_in_the_settings_file_is_refused`, since `crawl.user_agent` must refuse what `--user-agent` refuses.
   - `test_a_timeout_that_is_not_a_finite_number_above_0_is_rejected`, `test_a_timeout_in_the_settings_file_that_is_not_a_finite_number_above_0_is_refused` and `test_a_whole_number_timeout_in_the_settings_file_is_taken`, since a timeout of 0, a negative one or one that is not finite would end every request at once or never.
   - `test_the_backoff_doubles_with_each_retry`, since two retries cannot tell a doubling backoff from one that grows by a second.
