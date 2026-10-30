@@ -341,27 +341,31 @@ class NetworkPause:
         """How the pause ended: a probe answered before the wait ended, or none did, or the
         Crawl stopped, and every probe still in flight is cancelled then. The first probe's
         answer means a dead section, a later one's an outage."""
-        probes: list[asyncio.Task[bool]] = []
+        probes: list[asyncio.Task[FetchResult | None]] = []
         times = probe_times(self._network_wait)
         # A first probe that hangs in its connection may answer only after the network came
-        # back, so its answer means a dead section only before the second probe is due.
-        dead_before = began + (times[1] if len(times) > 1 else self._network_wait)
+        # back, so its answer means a dead section only within the gap to the second probe,
+        # counted from when it was sent: one that waited out its host's Retry-After first
+        # cannot have hung (022-add-fetch-policy D4).
+        window = (times[1] if len(times) > 1 else self._network_wait) - (times or (0,))[0]
         try:
             for at in times:
                 if await self._answer_before(probes, began + at):
-                    return self._end(probes, dead_before)
+                    return self._end(probes, window)
                 if self._stop.ends_under_way:
                     return None
                 probes.append(asyncio.create_task(self._probe_once()))
             if await self._answer_before(probes, began + self._network_wait):
-                return self._end(probes, dead_before)
+                return self._end(probes, window)
             return None
         finally:
             for probe in probes:
                 probe.cancel()
             await asyncio.gather(*probes, return_exceptions=True)
 
-    async def _answer_before(self, probes: list[asyncio.Task[bool]], until: float) -> bool:
+    async def _answer_before(
+        self, probes: list[asyncio.Task[FetchResult | None]], until: float
+    ) -> bool:
         """Whether a probe answered by `until`; a stop ends the wait with no answer (design
         D16), but for the URL limit's, which refuses new URLs only (022-add-fetch-policy D4)."""
         while not any(_answered(probe) for probe in probes):
@@ -374,18 +378,21 @@ class NetworkPause:
             )
         return True
 
-    def _end(self, probes: list[asyncio.Task[bool]], dead_before: float) -> PauseEnd:
-        if _answered(probes[0]) and self._clock.monotonic() < dead_before:
+    def _end(self, probes: list[asyncio.Task[FetchResult | None]], window: float) -> PauseEnd:
+        first = probes[0]
+        answer = first.result() if _answered(first) else None
+        if answer is not None and (self._clock.now() - answer.fetched_at).total_seconds() < window:
             return "dead_section"
         return "outage"
 
-    async def _probe_once(self) -> bool:
+    async def _probe_once(self) -> FetchResult | None:
+        """The Seed's answer, None without one; its fetched_at is when the probe was sent."""
         response = await self._requester.request_probe(self._seed)
-        return not isinstance(response, FetchFailure)
+        return None if isinstance(response, FetchFailure) else response
 
 
-def _answered(probe: asyncio.Task[bool]) -> bool:
-    return probe.done() and not probe.cancelled() and probe.result()
+def _answered(probe: asyncio.Task[FetchResult | None]) -> bool:
+    return probe.done() and not probe.cancelled() and probe.result() is not None
 
 
 def _holds(count: Sequence[CountedUrl], queued: QueuedUrl) -> bool:

@@ -375,6 +375,34 @@ def test_a_first_probe_that_answers_after_the_second_is_due_means_an_outage(
     ) == (["outage"], {("fetched",)})
 
 
+def test_a_first_probe_held_back_by_its_host_s_retry_after_still_finds_a_dead_section(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    # /down/1 to /down/8 never answer and pause the Crawl at once, while /a, still in flight,
+    # answers 429 with Retry-After: 60 at 2 seconds: the probe due at 5 is sent at 62, and the
+    # Seed answers it at once.
+    links = '<a href="/a">A</a>' + "".join(f'<a href="/down/{n}">D</a>' for n in range(1, 9))
+    pages = {
+        "/": FakePage(links),
+        "/a": FakePage("", status=429, headers=(("Retry-After", "60"),), delay=2),
+        **{f"/down/{n}": FakePage("", fails="connection_refused") for n in range(1, 9)},
+    }
+
+    crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages),
+        reporter=reporter,
+        concurrency=4,
+    )
+
+    # The probe was not hung in its connection: its answer shows a dead section, not an outage.
+    assert [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"] == [
+        "dead_section"
+    ]
+
+
 def test_urls_whose_robots_txt_failed_wait_out_the_pause(temp_workspace: TempWorkspace) -> None:
     clock, reporter = FakeClock(), Collected()
     posts = range(1, 31)

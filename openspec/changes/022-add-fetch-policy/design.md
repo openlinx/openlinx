@@ -243,6 +243,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_a_robots_txt_retry_due_during_a_network_pause_waits_for_it`, since robots.txt's 503 must not stand as its verdict when the pause's gate kept its retry (D4).
   - `test_the_url_limit_s_wait_for_an_open_count_ends_at_the_network_wait`, since a refusal must be decided at once wherever the dispatcher waits, and its wait for the pause's count must end at `--network-wait` (D4).
   - `test_a_retry_after_date_counts_from_the_end_of_the_response`, since a slow 503 must not add its own transfer time to the wait it names (D4).
+  - `test_a_first_probe_held_back_by_its_host_s_retry_after_still_finds_a_dead_section`, since only a probe hung in its connection may answer too late to show a dead section (D4).
   - `test_a_stop_ends_the_wait_for_a_host_pause`, since a request must wait out its host's pause without the global permit, and leave it at a stop rather than sleep out a `Retry-After` (D4).
   - `test_a_request_without_a_response_is_retried`, `test_robots_txt_is_retried`, `test_a_robots_txt_that_times_out_gives_its_urls_timeout_without_a_request` and `test_only_the_first_attempt_counts_towards_the_url_limit`, since the spec's retry rules for a request without a response, for robots.txt and for `--max-urls` have no scenario of their own.
   - `test_a_proxy_that_is_down_is_named_in_the_failure`, since a proxy that is down makes every URL fail as though the site were.
