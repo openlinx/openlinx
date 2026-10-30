@@ -12,7 +12,9 @@ from openlinx.store.schema import metadata, public_table
 def indexed_rows_declared() -> Iterator[None]:
     """`indexed_rows`, declared the way 020's urls will be, until the block ends.
 
-    Safe because the tests run serially; under xdist this must use an isolated MetaData copy.
+    Temporary because `linx schema` and create_all read this MetaData: a table left in it
+    would be in every later contract test and crawl file. Safe because the tests run serially;
+    under xdist this must use an isolated MetaData copy.
     """
     table = public_table(
         "indexed_rows",

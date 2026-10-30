@@ -13,7 +13,7 @@ from queue import Empty, Full, Queue
 from types import TracebackType
 from typing import Any, Self, cast
 
-from sqlalchemy import Connection, update
+from sqlalchemy import Connection, event, update
 
 from openlinx.clock import Clock
 from openlinx.output.codes import CRAWL_NOT_WRITABLE
@@ -37,6 +37,11 @@ IDLE_CHECK_SECONDS = 0.05
 # How often a waiting caller checks that the writer thread is still there.
 ALIVE_CHECK_SECONDS = 0.5
 CLOSED = "The crawl writer is closed."
+# Under a loop's commit deadline only the async calls wake the deadline, so a sync submit waits
+# for 500 units, a flush or the close (023-fix-code-audit D5).
+SYNC_IN_A_CRAWL = "inside a Crawl use submit_async / run_async"
+
+type Unit[T] = Callable[[Connection], T]
 
 
 class CrawlWriterClosedError(RuntimeError):
@@ -54,7 +59,7 @@ class _Control(Enum):
 
 @dataclass(frozen=True)
 class _Job:
-    work: Callable[[Connection], Any] | _Control
+    work: Unit[Any] | _Control
     done: Future[Any]
     # Resolved at its commit rather than when it has run.
     submitted: bool = False
@@ -64,7 +69,7 @@ class _Job:
 class _Ran:
     """A unit in the open transaction, with its first run's result and the rows it changed."""
 
-    unit: Callable[[Connection], Any]
+    unit: Unit[Any]
     result: Any
     changes: int
     future: Future[Any] | None = None
@@ -97,6 +102,11 @@ class CrawlWriter:
         self._first_uncommitted_at = 0.0
         self._loop_deadline = False
         self._unflushed: asyncio.Event | None = None
+        # Armed only while a unit runs, so the writer's own commits and rollbacks, a replay's
+        # included, are not counted (design D6).
+        self._in_unit = False
+        # What the unit did to the transaction, in order: "commit" and "rollback".
+        self._unit_ended: list[str] = []
         started: Future[None] = Future()
         self._thread = threading.Thread(
             target=self._serve, args=(started,), name=f"crawl writer {path.name}", daemon=True
@@ -104,12 +114,13 @@ class CrawlWriter:
         self._thread.start()
         started.result()
 
-    def run[T](self, unit: Callable[[Connection], T]) -> T:
+    def run[T](self, unit: Unit[T]) -> T:
+        self._refuse_under_the_loop_deadline()
         done: Future[T] = Future()
         self._submit(_Job(unit, done))
         return self._wait(done)
 
-    async def run_async[T](self, unit: Callable[[Connection], T]) -> T:
+    async def run_async[T](self, unit: Unit[T]) -> T:
         done: Future[T] = Future()
         await self._submit_without_blocking(_Job(unit, done))
         with self._clock.off_loop():
@@ -120,12 +131,13 @@ class CrawlWriter:
                 except TimeoutError:
                     self._check_alive(done)
 
-    def submit[T](self, unit: Callable[[Connection], T]) -> Future[T]:
+    def submit[T](self, unit: Unit[T]) -> Future[T]:
+        self._refuse_under_the_loop_deadline()
         done: Future[T] = _uncancellable()
         self._submit(_Job(unit, done, submitted=True))
         return done
 
-    async def submit_async[T](self, unit: Callable[[Connection], T]) -> asyncio.Future[T]:
+    async def submit_async[T](self, unit: Unit[T]) -> asyncio.Future[T]:
         done: Future[T] = _uncancellable()
         await self._submit_without_blocking(_Job(unit, done, submitted=True))
         # Bound to this loop, so its callbacks run here and never on the writer thread. Not
@@ -136,7 +148,8 @@ class CrawlWriter:
     async def loop_deadline(self) -> AsyncIterator[None]:
         """The commit deadline on the loop's Clock, for a writer that an event loop drives, so a
         test's virtual clock sees it (020-add-crawl-core D7). The caller chooses it; from then
-        on the thread commits on its own only after BATCH_SIZE units, a flush or the close."""
+        on the thread commits on its own only after BATCH_SIZE units, a flush or the close, and
+        the sync calls are refused, until the block ends."""
         self._unflushed = asyncio.Event()
         self._loop_deadline = True
         deadline = asyncio.create_task(self._flush_at_deadlines(self._unflushed))
@@ -146,6 +159,8 @@ class CrawlWriter:
             deadline.cancel()
             with suppress(asyncio.CancelledError):
                 await deadline
+            self._loop_deadline = False
+            self._unflushed = None
 
     async def _flush_at_deadlines(self, unflushed: asyncio.Event) -> None:
         while True:
@@ -235,6 +250,10 @@ class CrawlWriter:
             with self._clock.off_loop():
                 await asyncio.to_thread(self._submit, job)
 
+    def _refuse_under_the_loop_deadline(self) -> None:
+        if self._loop_deadline:
+            raise RuntimeError(SYNC_IN_A_CRAWL)
+
     def _refuse_own_thread(self) -> None:
         # A unit that waited for its own writer would wait forever.
         if threading.current_thread() is self._thread:
@@ -259,6 +278,8 @@ class CrawlWriter:
                 engine.connect() as connection,
             ):
                 _check_writable(connection)
+                event.listen(connection, "commit", self._seen_commit)
+                event.listen(connection, "rollback", self._seen_rollback)
                 started.set_result(None)
                 self._work(connection)
         except BaseException as error:
@@ -317,11 +338,23 @@ class CrawlWriter:
         if not connection.in_transaction():
             self._begin(connection)
         # No savepoint: one per unit costs more than replaying the batch when a unit fails.
+        begun = connection.get_transaction()
+        self._in_unit, self._unit_ended = True, []
         try:
             result, changes = _run_counted(job.work, connection)
         # KeyboardInterrupt too: it rolls back like any failure and reaches the unit's caller.
         except BaseException as error:
-            self._replay(job, self._busy_error(error), connection)
+            self._in_unit = False
+            if self._kept_its_transaction(job, job.work, connection, begun, error):
+                self._replay(job, self._busy_error(error), connection)
+            return True
+        self._in_unit = False
+        if not self._kept_its_transaction(job, job.work, connection, begun, None):
+            return True
+        identity = _compared_by_identity(result)
+        if identity is not None:
+            # Refused as a failing unit is: it leaves no change, and the batch runs again.
+            self._replay(job, _identity_error(job.work, identity), connection)
             return True
         # Only units that succeeded run again, so a failing unit never does.
         self._batch.append(_Ran(job.work, result, changes, job.done if job.submitted else None))
@@ -330,6 +363,53 @@ class CrawlWriter:
             # Only now: a caller that reads after its unit returns sees the commit.
             job.done.set_result(result)
         return True
+
+    def _seen_commit(self, connection: Connection) -> None:
+        if self._in_unit:
+            self._unit_ended.append("commit")
+
+    def _seen_rollback(self, connection: Connection) -> None:
+        if self._in_unit:
+            self._unit_ended.append("rollback")
+
+    def _kept_its_transaction(
+        self,
+        job: _Job,
+        unit: Unit[Any],
+        connection: Connection,
+        begun: object,
+        error: BaseException | None,
+    ) -> bool:
+        """False, or the writer ends, when the unit committed or rolled back the batch's
+        transaction itself (design D6)."""
+        ended = self._unit_ended
+        if "commit" in ended:
+            durable = ended[0] == "commit" and _batch_committed(connection, begun)
+            raise self._committed(unit, connection, durable=durable) from error
+        if ended:
+            # The batch is gone, so it runs again, as after a failing unit; a busy file stays
+            # crawl_busy, whatever the unit did after it.
+            if error is not None and is_busy(error):
+                failure = self._busy_error(error)
+            else:
+                failure = _rolled_back_error(unit)
+                failure.__cause__ = error
+            self._replay(job, failure, connection)
+            return False
+        return True
+
+    def _committed(self, unit: Unit[Any], connection: Connection, *, durable: bool) -> RuntimeError:
+        """A unit committed: its changes after the commit go, and the batch before it, which a
+        commit that succeeded made permanent, resolves; the writer then ends, since a replay
+        could no longer undo the batch (design D6)."""
+        connection.rollback()
+        if durable:
+            self._settle(self._batch)
+            self._batch = []
+        return RuntimeError(
+            f"the unit {_unit_name(unit)} committed, or tried to commit, the writer's "
+            "transaction: never commit in a unit; the writer commits its batches"
+        )
 
     def _begin(self, connection: Connection) -> None:
         connection.begin()
@@ -371,6 +451,10 @@ class CrawlWriter:
             return
         connection.commit()
         batch, self._batch = self._batch, []
+        self._settle(batch)
+
+    def _settle(self, batch: list[_Ran]) -> None:
+        # Both the writer's own commit and a unit's commit make a batch durable.
         resolved = 0
         for ran in batch:
             if ran.future is not None:
@@ -426,7 +510,7 @@ def _driver(connection: Connection) -> sqlite3.Connection:
     return cast(sqlite3.Connection, connection.connection.driver_connection)
 
 
-def _run_counted[T](unit: Callable[[Connection], T], connection: Connection) -> tuple[T, int]:
+def _run_counted[T](unit: Unit[T], connection: Connection) -> tuple[T, int]:
     driver = _driver(connection)
     before = driver.total_changes
     result = unit(connection)
@@ -450,9 +534,54 @@ def _run_again(ran: _Ran, connection: Connection) -> None:
         raise _replay_error(ran, f"changed {changes} rows instead of {ran.changes}")
 
 
+def _compared_by_identity(result: object) -> str | None:
+    """The name of a type in the result that compares by identity, which a replay's != could not
+    check; per type, not per element, so a tuple of 500 records costs one check (design D6)."""
+    kinds = {type(result)}
+    if isinstance(result, tuple | list | set | frozenset):
+        kinds.update(type(element) for element in result)
+    elif isinstance(result, dict):
+        kinds.update(type(key) for key in result)
+        kinds.update(type(value) for value in result.values())
+    for kind in kinds:
+        # An enumeration member is a singleton: identity is its value.
+        if kind.__eq__ is object.__eq__ and not issubclass(kind, Enum):
+            return kind.__name__
+    return None
+
+
+def _batch_committed(connection: Connection, begun: object) -> bool:
+    """Whether the unit's first commit, which came before any rollback of it, wrote the batch.
+
+    SQLAlchemy fires its commit event before the commit runs. A commit that failed leaves the
+    unit's transaction in place; one that the unit then rolled back leaves SQLAlchemy with no
+    transaction, but SQLite still in the old one, since the rollback of a failed transaction
+    reaches no driver (design D6)."""
+    if connection.get_transaction() is begun:
+        return False
+    return connection.in_transaction() or not _driver(connection).in_transaction
+
+
+def _unit_name(unit: Unit[Any]) -> str:
+    return getattr(unit, "__qualname__", repr(unit))
+
+
+def _rolled_back_error(unit: Unit[Any]) -> RuntimeError:
+    return RuntimeError(
+        f"the unit {_unit_name(unit)} rolled back the writer's transaction: never roll back in a "
+        "unit; raise instead, and the writer rolls back the unit alone"
+    )
+
+
+def _identity_error(unit: Unit[Any], kind: str) -> TypeError:
+    return TypeError(
+        f"the unit {_unit_name(unit)} returned a {kind}, which compares by identity, so a "
+        "replay cannot check it: return values, such as .all() rows or a record"
+    )
+
+
 def _replay_error(ran: _Ran, what: str) -> CrawlWriterReplayError:
-    name = getattr(ran.unit, "__qualname__", repr(ran.unit))
-    return CrawlWriterReplayError(f"The unit {name} {what} when it ran again.")
+    return CrawlWriterReplayError(f"The unit {_unit_name(ran.unit)} {what} when it ran again.")
 
 
 def _fail_queued(queue: Queue[_Job], failure: BaseException | None) -> None:
