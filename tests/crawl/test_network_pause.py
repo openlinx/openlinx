@@ -566,6 +566,34 @@ def test_a_crawl_that_reaches_its_url_limit_during_a_network_pause_waits_for_the
     )
 
 
+def test_the_url_limit_s_wait_for_an_open_count_ends_at_the_network_wait(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, stop, stopped_at = FakeClock(), StopSignal(), []
+    stop.on_first_set(lambda _: stopped_at.append(clock.monotonic()))
+    # /p8 and /p9 time out at 2 seconds on every one of their 11 attempts: two failures in a
+    # row, no pause, when the limit refuses /p10 at 4 seconds.
+    pages = {
+        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY)),
+        **{f"/p{n}": FakePage(f"<p>P{n}</p>") for n in _TWENTY},
+        **{f"/p{n}": FakePage("", fails="timeout", delay=2) for n in (8, 9)},
+    }
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages),
+        stop=stop,
+        concurrency=1,
+        max_urls=10,
+        network_wait=30,
+        retries=10,
+    )
+
+    # The stop comes 30 seconds after the refusal, and its grace ends the retries 10 later.
+    assert (result.summary.stop_reason, stopped_at, clock.monotonic()) == ("max_urls", [34], 44)
+
+
 def test_the_url_limit_s_stop_does_not_end_a_network_pause(temp_workspace: TempWorkspace) -> None:
     clock, reporter = FakeClock(), Collected()
     hosts = ("http://site.test", "http://blog.site.test", "http://shop.site.test")

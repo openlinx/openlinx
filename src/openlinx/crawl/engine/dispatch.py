@@ -184,11 +184,16 @@ async def _crawl_depth(run: Run, depth: int) -> None:
             dispatched = await _start_depth(run, depth, running, checked_in_flight)
             if run.limits.limit_reached() is not None:
                 await _wait_for_the_pause_count(run, running)
-            # Read again: counts given back meanwhile take the refusal back.
-            if run.limits.limit_reached() is not None:
-                # The URL limit is a stop: what has started gets the grace, and nothing more
-                # starts.
-                run.context.stop.set("max_urls")
+                # Read again: counts given back meanwhile take the refusal back.
+                if run.limits.limit_reached() is not None:
+                    # The URL limit is a stop: what has started gets the grace, and nothing more
+                    # starts.
+                    run.context.stop.set("max_urls")
+                else:
+                    # The URLs it refused are queued at this depth: another pass reads them.
+                    dispatched = True
+            if not _stopping(run) and not await _ended_or_refused(run, running):
+                continue
             await _wait_out(run, running)
             if not dispatched or _stopping(run):
                 return
@@ -233,12 +238,30 @@ async def _start_depth(
 async def _wait_for_the_pause_count(run: Run, running: set[asyncio.Task[None]]) -> None:
     """A refusal at the URL limit while the network pause's count is open waits for its
     verdict, since an outage, or a failure while paused, gives counts back and takes the
-    refusal back: while the depth's requests end, then for a pause that is on (022 D4)."""
-    pause = run.pause
+    refusal back: while the depth's requests end, then for a pause that is on, for
+    --network-wait from the refusal at most (022 D4)."""
+    pause, clock = run.pause, run.context.clock
+    ends = clock.monotonic() + run.context.settings.network_wait
     while pause.counting and running and not _stopping(run):
-        await first_of(run.context.stop.wait(), wake_on=running)
-    if pause.paused and not _stopping(run):
-        await pause.ended()
+        left = ends - clock.monotonic()
+        if left <= 0:
+            return
+        await first_of(run.context.stop.wait(), clock.sleep(left), wake_on=running)
+    left = ends - clock.monotonic()
+    if pause.paused and not _stopping(run) and left > 0:
+        await first_of(pause.ended(), clock.sleep(left))
+
+
+async def _ended_or_refused(run: Run, tasks: set[asyncio.Task[None]]) -> bool:
+    """Waits until the tasks have ended or the Crawl stops; False as soon as the URL limit
+    refuses a URL inside one of them, so the depth's loop decides the refusal at once, wherever
+    it was waiting (022 D4)."""
+    limits, stop, failure = run.limits, run.context.stop, run.task_failure
+    while tasks and not stop.is_set and not failure.is_set:
+        if limits.limit_reached() is not None:
+            return False
+        await first_of(stop.wait(), limits.refused(), wake_on=tasks)
+    return True
 
 
 async def _wait_out(run: Run, tasks: set[asyncio.Task[None]]) -> None:

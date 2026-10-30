@@ -152,7 +152,7 @@ The first PR ships groups 1-9 and this group; group 10 follows in a second.
 
 - [x] 9b.1 [CLI] `linx commands` lists the proxy variables under `environment` again, with this change's wording, and `docs/workspace.md` says so. A test reads `environment` and checks each name against `ProxyVariables`' keys, so the list and the reader cannot drift (design D1).
 - [x] 9b.2 Docs: `docs/crawler.md` for site owners, every claim checked against the code: a URL is requested once per Crawl plus its retries, robots.txt's 5xx or 429 keeps the URLs of its origin unrequested after robots.txt's own retries, and the 10-second wait is a 429's only. `README.md` gains the line "Crawl only sites you own or have permission to crawl; the defaults are polite, see docs/crawler.md". The docs-link guard covers the page. Group 9's rules hold too: a robots.txt retry waits out a network pause, and a URL limit reached during one waits for it.
-- [ ] 9b.3 [Fake timing] The URL limit's wait for an open pause count ends at `--network-wait` from the refusal, and then the Crawl stops (design D4).
+- [x] 9b.3 [Fake timing] The URL limit's wait for an open pause count ends at `--network-wait` from the refusal, and then the Crawl stops (design D4).
 - [ ] 9b.4 [Fake timing] A `Retry-After` date is measured from when the response ended, not from when its request was sent (design D4).
 - [ ] 9b.5 [3+6] A continue records the proxy variables it fetches through, redacted as a start's are, in place of the start's, and `docs/crawling.md` ("Continuing a Crawl") says so (design D1).
 - [ ] 9b.6 Docs: `attempt_count` is the requests made for the URL in the dispatch that recorded it, its retries included; the spec, `schema.py` and `docs/schema.md` say one text.
