@@ -46,6 +46,10 @@ A value given with the settings, as a flag, by a caller of a service, or as an o
 - **WHEN** the settings of a Workspace whose `openlinx.toml` sets `example.level` to `"medium"` are resolved with the value `0` given for `crawl.concurrency`
 - **THEN** the error has the code `invalid_value` and `details.key` `"crawl.concurrency"`
 
+#### Scenario: A refused file value beside a given value stays a settings file error
+- **WHEN** the settings of a Workspace whose `openlinx.toml` sets `crawl.max_depth` to `-1` are resolved with the value `5` given for `crawl.concurrency`
+- **THEN** the error has the code `settings_invalid`, exit code 3 and `details.file`, and its error lists the key `crawl.max_depth`
+
 #### Scenario: A refused override of a continued Crawl names its key
 - **WHEN** a stopped Crawl is continued with the override `0` for `crawl.concurrency`
 - **THEN** the error has the code `invalid_value`, exit code 2 and `details.key` `"crawl.concurrency"`, and the Crawl's file is unchanged
