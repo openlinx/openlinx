@@ -172,6 +172,19 @@ def test_a_page_whose_preparation_failed_keeps_the_links_of_its_headers(
     )
 
 
+def test_a_preparation_that_gave_nothing_names_no_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body='<a href="/boom">Boom</a>')}))
+
+    result = crawl_result(server.url("/"), pages=CrashingExecutor)
+
+    ((code, details),) = [
+        (warning["code"], warning["details"]) for warning in result.to_json()["warnings"]
+    ]
+    assert (code, sorted(details)) == ("parse_failed", ["count", "first_url"])
+
+
 class SlowPool:
     """A parse pool that takes 10 s per Page and holds two Pages beyond the requests."""
 

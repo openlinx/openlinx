@@ -11,6 +11,7 @@ from openlinx.crawl.engine.outcomes import Outcomes, Recorded, provenance_of
 from openlinx.crawl.engine.progress import UrlCounters
 from openlinx.crawl.engine.stop import StopSignal
 from openlinx.crawl.engine.warning_log import WarningLog
+from openlinx.crawl.hook_errors import HookError
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.output.codes import (
     DECLARED,
@@ -219,7 +220,9 @@ async def test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_deci
         image = _new("http://site.test/x", "image")
         writer.run(record_fetched(_fetched(seed_id + 2, late_at, image)))
         outcomes = Outcomes(writer, log, StopSignal(), UrlCounters(writer.run(url_counts())))
-        failure = handler_failure(dispatched.url, [("pages", ValueError("no title"))])
+        failure = handler_failure(
+            dispatched.url, [HookError(hook="pages", error_type="ValueError", text="no title")]
+        )
         await outcomes.submit(_skipped(dispatched, failure))
         await outcomes.settled()
         # Decided again on its raised row, its handlers fail again.

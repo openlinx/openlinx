@@ -1376,3 +1376,60 @@ def test_a_handler_sees_the_robots_meta_of_a_parsed_page(
     assert _links_seen(crawl_file, server.url("/draft")) == [
         repr(("noindex, nofollow", True, True))
     ]
+
+
+def _title_missing(result: UrlResult) -> tuple[Seen, ...]:
+    if result.url.endswith("/boom"):
+        raise KeyError("title")
+    return ()
+
+
+def test_a_failing_handler_names_its_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = replace(Hooks(), handlers=(handler("titles", _title_missing, _write_seen),))
+
+    result = crawl_result(server.url("/"), hooks)
+
+    ((code, details),) = [
+        (warning["code"], warning["details"]) for warning in result.to_json()["warnings"]
+    ]
+    assert (code, details["error"], details["at"]) == (
+        "handler_failed",
+        "'title'",
+        f"tests/crawl/test_hooks.py:{_title_missing.__code__.co_firstlineno + 2}",
+    )
+
+
+def _no_body(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:
+    if page.url.endswith("/boom"):
+        raise ValueError("no body")
+    return Found(page.url)
+
+
+def test_a_failing_extractor_names_its_error(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(BOOM_SITE)
+
+    result = crawl_result(server.url("/"), _with_extractors(extractor("body", _no_body, None)))
+
+    ((code, details),) = [
+        (warning["code"], warning["details"]) for warning in result.to_json()["warnings"]
+    ]
+    assert (
+        code,
+        details["error"],
+        details["at"],
+        query(
+            result.crawl_file,
+            "SELECT parse_error_message FROM urls WHERE url = ?",
+            [server.url("/boom")],
+        ),
+    ) == (
+        "parse_failed",
+        "no body",
+        f"tests/crawl/test_hooks.py:{_no_body.__code__.co_firstlineno + 2}",
+        [("body: ValueError",)],
+    )

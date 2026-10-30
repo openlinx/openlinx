@@ -19,6 +19,7 @@ from openlinx.crawl.engine.outcomes import Recorded, provenance_of
 from openlinx.crawl.engine.tasks import Run
 from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult
 from openlinx.crawl.fetch.requester import NotStarted
+from openlinx.crawl.hook_errors import HookError, hook_error
 from openlinx.crawl.pages.preparation import (
     is_html_type,
     response_directives,
@@ -212,7 +213,8 @@ async def _fetched(context: CrawlContext, decided: UrlResult, response: FetchRes
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if parse_error is not None:
-        context.warnings.count(parse_failure(url, parse_error, parse_error_message), url)
+        failed = () if page is None else page.extractor_errors
+        context.warnings.count(parse_failure(url, parse_error, parse_error_message, failed), url)
     url_response = UrlResponse(
         status_code=response.status_code,
         reason=response.reason,
@@ -306,13 +308,13 @@ def _handler_rows(
 ) -> tuple[tuple[HandlerRows[Any], ...], Diagnostic | None]:
     """The handlers' rows, and their failure, which counts once the unit records it."""
     rows: list[HandlerRows[Any]] = []
-    failed: list[tuple[str, BaseException]] = []
+    failed: list[HookError] = []
     for handler in context.hooks.handlers:
         try:
             batch = _rows_of(handler, result)
         # A handler is later changes' code: its failure costs only its rows (design D16).
         except Exception as error:
-            failed.append((handler.name, error))
+            failed.append(hook_error(handler.name, handler.handle, error))
             continue
         if batch is not None:
             rows.append(batch)

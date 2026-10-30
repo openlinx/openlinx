@@ -1,5 +1,6 @@
 """An extractor's own config (020-add-crawl-core D9; seam 4)."""
 
+import json
 import pickle
 import re
 from collections.abc import Callable
@@ -129,4 +130,27 @@ def test_the_default_page_settings_pickle() -> None:
     assert restored == settings, (
         "the page settings of default_hooks() unpickle unequal: give each extractor's config "
         "struct value equality"
+    )
+
+
+def _settings_from_the_body(tree: LexborHTMLParser, page: PageInput, config: None) -> Greeted:
+    paragraph = tree.css_first("p")
+    settings = json.loads(paragraph.text() if paragraph else "")
+    return Greeted(settings["text"])
+
+
+def test_an_error_raised_in_a_library_points_at_the_extractor_s_line() -> None:
+    settings = PageSettings(
+        scope=scope_rules(SITE),
+        extractors=(extractor("settings", _settings_from_the_body, None),),
+        strip_params=None,
+    )
+
+    ((at, error_type),) = [
+        (failed.at, failed.error_type)
+        for failed in prepare_page(SITE, _PAGE, settings).extractor_errors
+    ]
+    assert (at, error_type) == (
+        f"tests/crawl/test_extractors.py:{_settings_from_the_body.__code__.co_firstlineno + 2}",
+        "JSONDecodeError",
     )

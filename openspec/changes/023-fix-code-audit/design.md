@@ -126,6 +126,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - Guards named after no scenario, and the failure class each guards:
   - `test_a_stop_flag_set_off_its_loop_is_refused`: an off-loop set that wakes no waiter.
   - `test_the_default_page_settings_pickle`: an extractor or config that `026`'s workers cannot load.
+  - `test_an_error_raised_in_a_library_points_at_the_extractor_s_line`: a hook failure that points into the library instead of the hook.
   - `test_every_table_is_declared_in_the_schema_module`: a table missing from the contract.
   - `test_every_name_used_across_a_package_is_listed`: a hidden package interface.
   - `test_mirrored_options_match_their_fields`: a flag whose default or bounds differ from its setting.
