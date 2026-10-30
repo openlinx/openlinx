@@ -38,7 +38,7 @@ def test_a_response_resets_the_count(
         )
     )
 
-    result = crawl_result(server.url("/"), concurrency=1, network_wait=0, retries=0)
+    result = crawl_result(server.url("/"), concurrency=1, network_wait=0)
 
     assert (result.summary.state, result.counts.errors) == ("completed", 20)
 
@@ -181,27 +181,24 @@ def test_a_dead_section_keeps_the_failed_robots_txt_verdict_of_its_origin(
 ) -> None:
     clock = FakeClock()
     first, later = range(1, 9), range(9, 17)
-    # blog.site.test never answers. Its first eight posts pause the Crawl; the Seed answers the
-    # first probe, at 5 seconds, and /p1 answers at 6 with eight more posts.
+    # blog.site.test never answers. Its robots.txt fails at 0, 1 and 3 seconds, its retries
+    # included, and its first eight posts pause the Crawl then; the Seed answers the first
+    # probe, at 8 seconds, and /p1 answers at 9 with eight more posts.
     pages = {
         "/": FakePage(_posts(first) + '<a href="/p1">P1</a>'),
-        "/p1": FakePage(_posts(later), delay=6),
+        "/p1": FakePage(_posts(later), delay=9),
         "http://blog.site.test/robots.txt": FakePage("", fails="connection_error"),
     }
     fetcher = FakeFetcher(clock, pages)
 
     result = crawl_result(
-        "http://site.test/",
-        clock=clock,
-        fetcher=fetcher,
-        concurrency=1,
-        scope="subdomains",
-        retries=0,
+        "http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, scope="subdomains"
     )
     blog = [url for url, _ in fetcher.starts if url.startswith("http://blog.")]
 
-    # Asked again after the dead section, its robots.txt would fail into a second pause.
-    assert (blog, result.summary.state) == (["http://blog.site.test/robots.txt"], "completed")
+    # One request, with its two retries: asked again after the dead section, its robots.txt
+    # would fail into a second pause.
+    assert (blog, result.summary.state) == (["http://blog.site.test/robots.txt"] * 3, "completed")
 
 
 def _posts(numbers: range) -> str:
@@ -231,7 +228,6 @@ def test_a_dead_subdomain_pauses_the_crawl_once(temp_workspace: TempWorkspace) -
         reporter=reporter,
         concurrency=1,
         scope="subdomains",
-        retries=0,
     )
     states = dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls"))
 
@@ -257,12 +253,7 @@ def test_a_dead_section_on_the_seeds_host_keeps_counting(temp_workspace: TempWor
     fetcher = FakeFetcher(clock, pages, outages=[(6, 120)])
 
     result = crawl_result(
-        "http://site.test/",
-        clock=clock,
-        fetcher=fetcher,
-        reporter=reporter,
-        concurrency=1,
-        retries=0,
+        "http://site.test/", clock=clock, fetcher=fetcher, reporter=reporter, concurrency=1
     )
     states = dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls"))
 
@@ -352,7 +343,6 @@ def test_one_failure_inside_a_dead_origins_streak_does_not_exempt_its_origin(
         reporter=reporter,
         concurrency=1,
         scope="subdomains",
-        retries=0,
     )
     states = dict(query(result.crawl_file, "SELECT url, fetch_state FROM urls"))
 
@@ -588,7 +578,7 @@ def test_no_request_starts_while_paused(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
     fetcher = FakeFetcher(clock, _outage_site(), outages=[(1, 30)])
 
-    crawl_result("http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, retries=0)
+    crawl_result("http://site.test/", clock=clock, fetcher=fetcher, concurrency=1)
 
     # /p2 to /p9 fail at one second and pause the Crawl; until the probe at 41 answers, only
     # the probes of / start.
@@ -638,7 +628,7 @@ def test_a_crawl_that_waits_longer_than_the_network_wait_fails(
     fetcher = FakeFetcher(clock, pages, outages=[(12, float("inf"))])
 
     result = crawl_result(
-        "http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, network_wait=30, retries=0
+        "http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, network_wait=30
     )
     probes = [at for url, at in fetcher.starts if url == "http://site.test/" and at > 0]
 
@@ -680,7 +670,6 @@ def test_a_url_held_at_the_pause_stays_queued_when_the_crawl_stops(
         concurrency=1,
         scope="subdomains",
         network_wait=3,
-        retries=0,
     )
 
     assert (
@@ -709,7 +698,7 @@ def test_a_stop_cancels_the_probe_in_flight(temp_workspace: TempWorkspace) -> No
     fetcher = FakeFetcher(clock, pages, on_start={"/": stop_at_the_first_probe})
 
     result = crawl_result(
-        "http://site.test/", clock=clock, fetcher=fetcher, stop=stop, concurrency=1, retries=0
+        "http://site.test/", clock=clock, fetcher=fetcher, stop=stop, concurrency=1
     )
 
     assert (
@@ -727,13 +716,14 @@ def test_a_seed_that_answers_late_is_crawled(temp_workspace: TempWorkspace) -> N
     clock = FakeClock()
     fetcher = FakeFetcher(clock, {"/": FakePage("<p>Home</p>")}, outages=[(0, 12)])
 
-    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher, retries=0)
+    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher)
     seed = query(result.crawl_file, "SELECT fetch_state FROM urls WHERE id = 1")
 
-    # The Seed's own request comes only once its robots.txt answers, after the probes at 5, 10
-    # and 20 seconds; the last of them is the first to answer.
+    # Its robots.txt fails at 0, 1 and 3 seconds, its retries included, which pauses the Crawl;
+    # the Seed's own request comes only once its robots.txt answers, after the probes at 8 and
+    # 13 seconds, the second of them the first to answer.
     assert (_seed_starts(fetcher), result.summary.state, seed) == (
-        [5, 10, 20, 20],
+        [8, 13, 13],
         "completed",
         [("fetched",)],
     )
@@ -772,12 +762,7 @@ def test_progress_events_say_when_the_crawl_is_paused(temp_workspace: TempWorksp
     fetcher = FakeFetcher(clock, pages, outages=[(1, 30)])
 
     crawl_result(
-        "http://site.test/",
-        clock=clock,
-        fetcher=fetcher,
-        reporter=reporter,
-        concurrency=1,
-        retries=0,
+        "http://site.test/", clock=clock, fetcher=fetcher, reporter=reporter, concurrency=1
     )
 
     assert [

@@ -2,7 +2,7 @@
 
 import asyncio
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
@@ -101,10 +101,13 @@ class Requester:
     def open_gate(self) -> None:
         self._open.set()
 
-    async def request_url(self, url: NormalizedUrl) -> Attempted | NotStarted:
+    async def request_url(
+        self, url: NormalizedUrl, on_attempt: Callable[[FetchResult | FetchFailure], None]
+    ) -> Attempted | NotStarted:
         """A URL's own request, with its retries. The URL limit counts the first attempt, with
         the slots held, so the count is exact; a retry is the same URL (022 design D4). After a
-        stop, none starts (design D16)."""
+        stop, none starts (design D16). `on_attempt` hears each attempt's outcome as it ends,
+        so the network pause counts a URL before its retries (022 design D4)."""
         async with self._gated_slots(url):
             # Refused with its turn under --rate already taken, and never given back: after a
             # stop or at the limit, no request starts again.
@@ -112,7 +115,8 @@ class Requester:
                 return NotStarted()
             self._starts.append(self._clock.monotonic())
             outcome = await self._send(url)
-        return await self._retried(url, outcome)
+            on_attempt(outcome)
+        return await self._retried(url, outcome, on_attempt)
 
     def give_back(self) -> None:
         """A URL request that is made again, as if it had not started (design D16)."""
@@ -138,7 +142,7 @@ class Requester:
             if self._stop.is_set:
                 return NotStarted()
             outcome = await self._send(url)
-        return (await self._retried(url, outcome)).outcome
+        return (await self._retried(url, outcome, _unheard)).outcome
 
     async def request_probe(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
         """A probe of the network pause: through the host's slot, its turn and the global cap,
@@ -146,7 +150,12 @@ class Requester:
         async with self._slots(url, stops=False):
             return await self._send(url)
 
-    async def _retried(self, url: NormalizedUrl, outcome: FetchResult | FetchFailure) -> Attempted:
+    async def _retried(
+        self,
+        url: NormalizedUrl,
+        outcome: FetchResult | FetchFailure,
+        on_attempt: Callable[[FetchResult | FetchFailure], None],
+    ) -> Attempted:
         attempts = 1
         while True:
             wait, pauses = retry_wait(outcome, attempts)
@@ -163,6 +172,7 @@ class Requester:
                 if self._stop.is_set:
                     break
                 outcome = await self._send(url)
+                on_attempt(outcome)
             attempts += 1
         return Attempted(outcome, attempts)
 
@@ -244,6 +254,10 @@ class Requester:
             message=f"No response within {self._watchdog_seconds:g} seconds",
             fetched_at=started_at,
         )
+
+
+def _unheard(outcome: FetchResult | FetchFailure) -> None:
+    """robots.txt's attempts: its verdict is counted, by the engine (design D16)."""
 
 
 def is_retried(outcome: FetchResult | FetchFailure) -> bool:

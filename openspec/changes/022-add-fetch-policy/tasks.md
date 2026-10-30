@@ -137,7 +137,7 @@ Seams (docs/testing.md):
 ## 9. The network pause meets retries (v0.1)
 
 - [ ] 9.1 [Fake timing] Drive "A request that fails during a network pause is not retried": after its backoff, a closed gate ends a URL's retries in the Requester, which returns the last failure, and the pause re-queues it (design D4).
-- [ ] 9.2 [Fake timing] Drive "A network that goes down pauses the Crawl before the retries": the Requester reports a URL's first attempt without a response to the network pause through a hook the engine gives it, and its later attempts never count (design D4). Done when: the tests of `020`'s pause that pass `--retries 0` for its count run with the default retries again.
+- [x] 9.2 [Fake timing] Drive "A network that goes down pauses the Crawl before the retries": the Requester reports a URL's first attempt without a response to the network pause through a hook the engine gives it, and its later attempts never count (design D4). Done when: the tests of `020`'s pause that pass `--retries 0` for its count run with the default retries again.
 - [ ] 9.3 Refactor, behaviour unchanged: the network pause owns its bookkeeping, `outcome(...)` for a URL's request and `verdict(...)` for robots.txt, and its `retries` is `requeues` (design D4). Red by a mutation that drops the URL-limit give-back inside `outcome`.
 - [ ] 9.4 Refactor, behaviour unchanged: the `CrawlContext` carries the `FetchPolicy`, and the watchdog reads `timeout_seconds` from it (design D1). **Guard:** `test_a_raised_timeout_raises_the_watchdog_with_it`, red by a mutation that gives the watchdog the default timeout.
 - [ ] 9.5 [Fake timing] **Guard:** "TLS errors never pause the Crawl", red by a mutation that counts `tls_error` (`020` keeps it out of the count already).

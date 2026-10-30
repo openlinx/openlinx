@@ -12,7 +12,7 @@ from openlinx.clock import Clock
 from openlinx.crawl.engine.crawl_warnings import network_paused
 from openlinx.crawl.engine.stop import StopSignal
 from openlinx.crawl.engine.warning_log import WarningLog
-from openlinx.crawl.fetch.fetcher import FetchFailure
+from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult
 from openlinx.crawl.fetch.requester import Requester
 from openlinx.crawl.urls import NormalizedUrl, url_origin
 from openlinx.store.records import FetchError, QueuedUrl
@@ -160,6 +160,9 @@ class NetworkPause:
         self._seed_answered = seed_answered
         # The origins that a dead section showed dead, which count no more (design D16).
         self._dead_origins: set[str] = set()
+        # The URLs of the count whose request was recorded as an error: an outage re-queues only
+        # them, never one still in its retries, fetched, or back in the queue unrecorded.
+        self._recorded: set[int] = set()
         self._probing: asyncio.Task[None] | None = None
 
     @property
@@ -168,15 +171,49 @@ class NetworkPause:
 
     def responded(self) -> None:
         self._in_a_row.clear()
+        if self._paused is None:
+            self._recorded.clear()
         self._seed_answered = True
 
     def robots_txt_answered(self) -> None:
         self._seed_answered = True
 
-    def retries(self, fetch_error: FetchError) -> bool:
+    def attempts_of(
+        self, queued: QueuedUrl, *, internal: bool
+    ) -> Callable[[FetchResult | FetchFailure], None]:
+        """What the attempts of a URL's request tell the pause: an Internal URL counts once, at
+        its first attempt without a response, and a response resets the count, so the count
+        follows dispatch order and a dead network pauses the Crawl before the retries
+        (022-add-fetch-policy D4). One that fails while paused counts not: it is re-queued."""
+        counted = False
+
+        def attempted(outcome: FetchResult | FetchFailure) -> None:
+            nonlocal counted
+            if not internal:
+                return
+            if not isinstance(outcome, FetchFailure):
+                self.responded()
+            elif not counted and not self.paused and outcome.fetch_error in _NO_RESPONSE:
+                counted = True
+                self.failed(outcome.fetch_error, queued, requested=True)
+
+        return attempted
+
+    def recorded(self, queued: QueuedUrl) -> None:
+        """An Internal URL whose request was recorded as an error."""
+        if any(counted.queued.id == queued.id for counted in (*self._in_a_row, *self._count)):
+            self._recorded.add(queued.id)
+
+    def requeues(self, queued: QueuedUrl, fetch_error: FetchError) -> bool:
         """Whether a request that ended with `fetch_error` is made again: one without a response
-        while paused is not recorded, so its URL stays queued (design D16)."""
-        return self.paused and fetch_error in _NO_RESPONSE
+        while paused is not recorded, so its URL stays queued (design D16). A URL of the count
+        is recorded, so the pause's end decides on it: an outage re-queues it, once a run, and
+        a dead section keeps its error (022-add-fetch-policy D4)."""
+        return (
+            self.paused
+            and fetch_error in _NO_RESPONSE
+            and all(counted.queued.id != queued.id for counted in self._count)
+        )
 
     def failed(self, fetch_error: FetchError, queued: QueuedUrl, *, requested: bool) -> None:
         if fetch_error not in _NO_RESPONSE or url_origin(queued.url) in self._dead_origins:
@@ -238,7 +275,8 @@ class NetworkPause:
                 if not self._stop.is_set:
                     self._stop.set(paused.reason)
             else:
-                await self._resumed(end, tuple(self._count))
+                count = (c for c in self._count if not c.requested or c.queued.id in self._recorded)
+                await self._resumed(end, tuple(count))
                 self._warnings.event(
                     "crawl_resumed",
                     crawl_id=self._crawl_id,
@@ -250,6 +288,7 @@ class NetworkPause:
             self._warnings.pause_ended(self._clock.monotonic() - paused.began)
             self._paused = None
             self._count = []
+            self._recorded.clear()
             self._probing = None
             # Open after giving up or failing too: the stop or the run's end then refuses the
             # requests that waited, where a closed gate would hold them for good.

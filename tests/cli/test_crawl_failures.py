@@ -60,9 +60,7 @@ def test_a_network_wait_of_zero_fails_at_once(
 ) -> None:
     server = fixture_site(_lost_section(then="/p1"))
 
-    document = run_cli(
-        "crawl", server.url("/"), "--concurrency", "1", "--network-wait", "0", "--retries", "0"
-    ).json()
+    document = run_cli("crawl", server.url("/"), "--concurrency", "1", "--network-wait", "0").json()
     p1 = query(
         Path(document["crawl_file"]),
         "SELECT fetch_state FROM urls WHERE url = ?",

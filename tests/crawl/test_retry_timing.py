@@ -1,8 +1,12 @@
 """Retries in time: the backoff between attempts (022-add-fetch-policy, fetching; fake timing)."""
 
+from functools import partial
+from typing import Any
+
 import pytest
 
 from openlinx.crawl.fetch.politeness import RateGate
+from openlinx.output.reporter import Collected
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.fetcher import FakeFetcher, FakePage
@@ -110,3 +114,41 @@ async def test_a_request_waiting_for_the_global_cap_when_its_host_pauses_starts_
     await gate.started("site.test")
 
     assert clock.monotonic() == 7.0
+
+
+class _Timeline(Collected):
+    """The Crawl's events, in one list with the requests a fake Fetcher saw start."""
+
+    def __init__(self, timeline: list[str]) -> None:
+        super().__init__()
+        self._timeline = timeline
+
+    def event(self, name: str, **data: Any) -> None:
+        self._timeline.append(name)
+        super().event(name, **data)
+
+
+def test_a_network_that_goes_down_pauses_the_crawl_before_the_retries(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    timeline: list[str] = []
+    links = "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 21))
+    refused = {f"/p{n}": FakePage("", fails="connection_refused") for n in range(1, 21)}
+    fetcher = FakeFetcher(
+        clock,
+        {"/": FakePage(links), **refused},
+        on_start={path: partial(timeline.append, path) for path in refused},
+    )
+
+    crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=_Timeline(timeline),
+        concurrency=1,
+    )
+
+    # --concurrency 1 pauses at 8 URLs in a row: their first attempts, no retry among them.
+    before = timeline[: timeline.index("crawl_paused")]
+    assert [entry for entry in before if entry.startswith("/")] == [f"/p{n}" for n in range(1, 9)]
