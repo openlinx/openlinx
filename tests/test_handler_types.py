@@ -10,7 +10,7 @@ import msgspec
 from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection
 
-from openlinx.crawl.engine.hooks import Hooks, UrlResult, handler
+from openlinx.crawl.engine.hooks import Hooks, Pass, PassContext, UrlResult, handler
 from openlinx.crawl.pages.preparation import PageInput, extractor
 
 
@@ -56,3 +56,14 @@ def test_an_extractor_and_a_config_of_different_types_fail_mypy() -> None:
     hooks = Hooks(extractors=(extractor("greeting", _greet, Size(1)),))  # type: ignore[arg-type]
 
     assert [registered.name for registered in hooks.extractors] == ["greeting"]
+
+
+async def _closing(context: PassContext) -> None:
+    # A pass ends nothing: the Crawl closes its writer once every pass has run.
+    context.writer.close()  # type: ignore[attr-defined]
+
+
+def test_a_pass_that_closes_the_crawl_s_writer_fails_mypy() -> None:
+    hooks = Hooks(passes=(Pass("closing", _closing),))
+
+    assert [registered.name for registered in hooks.passes] == ["closing"]

@@ -138,6 +138,8 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
   | `flush()` | at once, before `flush()` returns |
   | `close()` | everything still open |
 
+  A Crawl drives the writer from its event loop and holds `loop_deadline()` while it runs. Then the 1-second timer runs on the loop's clock, from the first unit that `submit_async` or `run_async` gave after the last commit, and the writer's own thread commits only at 500 units, a flush or the close. The sync `submit` and `run` are refused with `RuntimeError("inside a Crawl use submit_async / run_async")`, since no sync call wakes the loop's timer: a post-crawl pass gets a `PassWriter`, which has only the async calls. Once the block ends, the writer's own timer and its sync calls are back.
+
 - **The replay commit.** Units run without a savepoint each, which makes a batch faster. When a unit fails, the writer rolls back the whole open transaction, runs the units before it again, in order, and commits them at once. Only then does the failing unit's caller get its error. If that commit fails, the caller still gets the unit's own error, and the writer ends as after any failed commit.
 - **Units may run again.** Because of the replay, a unit may run a second time before it is committed. A unit therefore:
   - has no effect outside the writer's connection: no I/O, no shared state, and nothing reported from inside the unit

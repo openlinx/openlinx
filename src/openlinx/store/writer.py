@@ -37,6 +37,11 @@ IDLE_CHECK_SECONDS = 0.05
 # How often a waiting caller checks that the writer thread is still there.
 ALIVE_CHECK_SECONDS = 0.5
 CLOSED = "The crawl writer is closed."
+# Under a loop's commit deadline only the async calls wake the deadline, so a sync submit waits
+# for 500 units, a flush or the close (023-fix-code-audit D5).
+SYNC_IN_A_CRAWL = "inside a Crawl use submit_async / run_async"
+
+type Unit[T] = Callable[[Connection], T]
 
 
 class CrawlWriterClosedError(RuntimeError):
@@ -105,6 +110,7 @@ class CrawlWriter:
         started.result()
 
     def run[T](self, unit: Callable[[Connection], T]) -> T:
+        self._refuse_under_the_loop_deadline()
         done: Future[T] = Future()
         self._submit(_Job(unit, done))
         return self._wait(done)
@@ -121,6 +127,7 @@ class CrawlWriter:
                     self._check_alive(done)
 
     def submit[T](self, unit: Callable[[Connection], T]) -> Future[T]:
+        self._refuse_under_the_loop_deadline()
         done: Future[T] = _uncancellable()
         self._submit(_Job(unit, done, submitted=True))
         return done
@@ -136,7 +143,8 @@ class CrawlWriter:
     async def loop_deadline(self) -> AsyncIterator[None]:
         """The commit deadline on the loop's Clock, for a writer that an event loop drives, so a
         test's virtual clock sees it (020-add-crawl-core D7). The caller chooses it; from then
-        on the thread commits on its own only after BATCH_SIZE units, a flush or the close."""
+        on the thread commits on its own only after BATCH_SIZE units, a flush or the close, and
+        the sync calls are refused, until the block ends."""
         self._unflushed = asyncio.Event()
         self._loop_deadline = True
         deadline = asyncio.create_task(self._flush_at_deadlines(self._unflushed))
@@ -146,6 +154,8 @@ class CrawlWriter:
             deadline.cancel()
             with suppress(asyncio.CancelledError):
                 await deadline
+            self._loop_deadline = False
+            self._unflushed = None
 
     async def _flush_at_deadlines(self, unflushed: asyncio.Event) -> None:
         while True:
@@ -234,6 +244,10 @@ class CrawlWriter:
             # BATCH_SIZE-th unit commits without clock time, so room comes without it.
             with self._clock.off_loop():
                 await asyncio.to_thread(self._submit, job)
+
+    def _refuse_under_the_loop_deadline(self) -> None:
+        if self._loop_deadline:
+            raise RuntimeError(SYNC_IN_A_CRAWL)
 
     def _refuse_own_thread(self) -> None:
         # A unit that waited for its own writer would wait forever.

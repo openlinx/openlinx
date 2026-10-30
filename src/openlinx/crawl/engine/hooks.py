@@ -1,9 +1,10 @@
 """The hooks later changes plug into: extractors, handlers, passes (020-add-crawl-core D9)."""
 
+import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 import msgspec
 
@@ -14,7 +15,7 @@ from openlinx.crawl.references import DiscoveredLink
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.store.records import DiscoveredVia, FetchError, FetchState, ParseError, SkipReason
 from openlinx.store.rows import RowWriter
-from openlinx.store.writer import CrawlWriter
+from openlinx.store.writer import Unit
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -91,11 +92,22 @@ def handler[R](
     return Handler(name, handle, write)
 
 
+class PassWriter(Protocol):
+    """The writer's calls a pass may make: inside a Crawl only the async calls commit on the
+    loop's clock, and the Crawl closes its writer itself (023-fix-code-audit D5)."""
+
+    async def run_async[T](self, unit: Unit[T]) -> T: ...
+
+    async def submit_async[T](self, unit: Unit[T]) -> asyncio.Future[T]: ...
+
+    async def flush_async(self) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class PassContext:
     """What a post-crawl pass gets: a later dependency is a new field, not a new signature."""
 
-    writer: CrawlWriter
+    writer: PassWriter
     clock: Clock
 
 
