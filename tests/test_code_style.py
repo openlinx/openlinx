@@ -301,6 +301,56 @@ def test_only_the_store_imports_sqlalchemy() -> None:
     )
 
 
+# The packages under the CLI: a service called without the CLI, as the MCP server will call it,
+# must not load Typer or the CLI's adapters (023-fix-code-audit D9).
+UNDER_THE_CLI = tuple(
+    f"openlinx/{package}/"
+    for package in ("services", "workspace", "store", "crawl", "extract", "output")
+)
+
+
+def cli_import_violations(sources: Mapping[str, str]) -> list[str]:
+    """Modules under the CLI that import typer or openlinx.cli, given every module's source."""
+    return [
+        f"{module} imports {name}"
+        for module, source in sources.items()
+        if module.startswith(UNDER_THE_CLI)
+        for name in _imported_modules(ast.parse(source))
+        if name.partition(".")[0] == "typer"
+        or name == "openlinx.cli"
+        or name.startswith("openlinx.cli.")
+    ]
+
+
+def test_no_service_imports_the_cli() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
+    }
+
+    assert cli_import_violations(sources) == [], (
+        "a module under the CLI imports typer or openlinx.cli: take plain values and raise "
+        "OpenLinxError, and let the CLI adapter in openlinx.cli map flags to them"
+    )
+
+
+def test_an_import_of_the_cli_under_it_is_named() -> None:
+    sources = {
+        "openlinx/services/crawling.py": "def late():\n    import typer\n",
+        "openlinx/workspace/settings.py": "from openlinx.cli.options import OptionMeta\n",
+        "openlinx/output/writer.py": "from typer.testing import CliRunner\n",
+        "openlinx/store/urls.py": "import typing\nfrom openlinx.clock import Clock\n",
+        "openlinx/cli/crawl.py": "import typer\n",
+        "openlinx/naming.py": "import typer\n",
+    }
+
+    assert cli_import_violations(sources) == [
+        "openlinx/services/crawling.py imports typer",
+        "openlinx/workspace/settings.py imports openlinx.cli.options",
+        "openlinx/output/writer.py imports typer.testing",
+    ]
+
+
 def test_an_import_of_sqlalchemy_outside_the_store_is_named() -> None:
     sources = {
         "openlinx/crawl/engine/dispatch.py": "import sqlalchemy\n",
