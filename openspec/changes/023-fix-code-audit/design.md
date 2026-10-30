@@ -19,18 +19,18 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 
 ### D1. The stop flag is set only on its loop
 - **In short:** `StopSignal.set` raises `RuntimeError` when it is called from a thread with no running loop or from another loop, and the message names `loop.call_soon_threadsafe(stop.set, reason)`.
-- The flag binds to the running loop at its first `set` or `wait`, because the Crawl Service builds it before its Runner starts the loop.
+- The flag binds to the running loop at its first `set` or `wait`, because the Crawl Service builds it before its Runner starts the loop. A test that sets it runs on a loop, as every caller in the product does.
 - **Why:** an `asyncio.Event` set from a thread wakes no waiter until the loop wakes for another reason. On `FakeClock` a test wakes by chance; an idle production loop, in a pause or with every slot taken, never wakes. `060`'s control check will run beside the loop, so the mistake is the natural one.
 - *Alternative:* `set` hops to the loop by itself with `call_soon_threadsafe`. It hides which thread sets the flag, and the callbacks (the stopping event, the grace) would then run later than their caller assumes. Rejected.
 
 ### D2. An extractor is module-level, checked when it is built
-- **In short:** `Extractor` refuses a function whose `__qualname__` holds `<locals>` or whose name is `<lambda>`, with "the function of the extractor X is not module-level: a parse worker process imports it by name; pass values through config".
+- **In short:** `Extractor` refuses a function whose `__qualname__` holds `<locals>` or whose name is `<lambda>`, with "the function of the extractor X is not module-level: a parse worker process imports it by name; pass values through config". A callable without a `__qualname__`, such as a `functools.partial` of a module-level function, pickles by reference and passes.
 - A guard pickles the `PageSettings` built from `default_hooks()` and checks that it unpickles equal, which is what `026`'s pool does with it. It also catches a config field that does not pickle.
 - *Alternative:* `pickle.dumps` of every extractor at build time. It costs a pickle per Crawl and gives a pickle error instead of the rule. Rejected; the guard covers the built-ins and the qualname check covers the rest.
 
 ### D3. A hook failure names its error and where it was raised
 - **In short:** the first counted `handler_failed` and `parse_failed` warnings carry `details.error`, the error's text cut to 300 characters, and `details.at`, the file and line in the hook where it was raised.
-- **Which frame:** the deepest frame of the traceback whose file is the one that defines the hook's function (its `co_filename`), so an error raised in a library the hook calls points at the hook's own line. The file is written relative to the folder that holds its top-level package, with `/` on every OS, so the warning is the same on every machine.
+- **Which frame:** the deepest frame of the traceback whose file is the one that defines the hook's function (its `co_filename`), so an error raised in a library the hook calls points at the hook's own line. The file is written relative to the folder that holds its top-level package, with `/` on every OS, so the warning is the same on every machine. With no such frame, as when an extractor returns something other than its declared output and preparation raises, `at` is absent rather than pointing at preparation.
 - A preparation that gave nothing (`body_too_large`, `worker_crashed`, `parse_timeout`) raised nothing in a hook, so its warning has neither key.
 - `PreparedPage` carries each extractor failure as a small frozen struct (name, error type, text, place), so it crosses `026`'s process boundary. `parse_error_message` stays `name: Type`: it is a public column of every Page, and the text of one error belongs to the warning, which keeps only the first.
 - Test helpers that fail on an extractor error (`page_result`) print the same details.
