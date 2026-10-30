@@ -1,6 +1,7 @@
 """Guard: code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14, D19)."""
 
 import ast
+import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -1229,16 +1230,19 @@ def test_a_virtual_clock_beside_real_io_is_named() -> None:
 
 # Click's internals have no public path, and the runner owns the raw streams (design D15 of 023).
 TID251_SUPPRESSIONS = {"openlinx/cli/click_compat.py": 2, "openlinx/cli/runner.py": 1}
+# Every spelling ruff honours: with or without a space, alone or among other codes.
+TID251_NOQA = re.compile(r"#\s*noqa:[^#\n]*\bTID251\b")
 
 
 def test_only_the_streams_and_click_compat_suppress_tid251() -> None:
     found: dict[str, int] = {}
     for path, source in _src_sources().items():
-        count = sum("noqa: TID251" in line for line in source.splitlines())
+        count = len(TID251_NOQA.findall(source))
         if count:
             found[path] = count
 
     assert found == TID251_SUPPRESSIONS, (
-        "a banned API is suppressed outside openlinx.cli.click_compat and the runner's streams: "
-        "write output through openlinx.output, and import Click through openlinx.cli.click_compat"
+        "TID251 is suppressed beyond its three lines in openlinx.cli.click_compat and the runner's "
+        "streams: write output through openlinx.output, and import Click through "
+        "openlinx.cli.click_compat"
     )

@@ -10,7 +10,7 @@ import pytest
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
-from tests.support.cli import run_cli, run_cli_process
+from tests.support.cli import CRAWL_PROCESS_TIMEOUT, run_cli, run_cli_process
 from tests.support.workspace import TempWorkspace
 
 # The UTF-8 bytes of "Проверка", as the spec writes them.
@@ -68,7 +68,9 @@ def test_events_are_utf_8_on_windows(
     workspace = temp_workspace.root / "Ünits"
     run_cli("init", "--workspace", str(workspace))
 
-    stderr = run_cli_process("crawl", server.url("/"), "--workspace", str(workspace)).stderr
+    stderr = run_cli_process(
+        "crawl", server.url("/"), "--workspace", str(workspace), timeout=CRAWL_PROCESS_TIMEOUT
+    ).stderr
     crawl_files = [
         event["data"]["crawl_file"]
         for event in map(_utf8_json, stderr.splitlines())

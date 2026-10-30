@@ -10,7 +10,7 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 
 **060-min joins v0.1 (2026-10-05).** An agent runs Commands through its shell tool, which times out after minutes, so a foreground Crawl caps what an agent can crawl. With `crawl --detach`, `status` and `stop` in v0.1, an agent crawls a large site in the background and queries the crawl file while the Crawl is still writing.
 
-**Large sites first (2026-10-05).** The product bets on full crawls of large sites (see Positioning), so three more things join v0.1: 060's `resume`, no default `--max-urls` limit, and 026's ~500k-URL benchmark. Hostile sites wait until after the v0.1 release: anti-bot and WAF challenges, adaptive throttling. The first users' sites are friendly to crawl. The standard proxy variables stay in v0.1 (022-min): corporate networks need them, and 010's `linx commands` already lists them under `environment`.
+**Large sites first (2026-10-05).** The product bets on full crawls of large sites (see Positioning), so three more things join v0.1: 060's `resume`, no default `--max-urls` limit, and 026's ~500k-URL benchmark. Hostile sites wait until after the v0.1 release: anti-bot and WAF challenges, adaptive throttling. The first users' sites are friendly to crawl. The standard proxy variables stay in v0.1 (022-min): corporate networks need them, and 022 lists them under `environment` in `linx commands` when it honours them.
 
 **Robustness rule (2026-10-05), for every change from 020 on.** On a 500k-URL Crawl every rare failure happens, so:
 - **One URL never stops the Crawl.** A failure in fetching, decoding, parsing, extraction or Rule evaluation becomes that URL's recorded outcome (`fetch_state`, its error kind, `parse_error`) plus a counted warning, and the Crawl moves on. Only failures of the whole Crawl stop it, each with a `stop_reason`, and leave it resumable: an unreachable Seed, a crawl file that cannot be written (disk full included), and the zero-success breaker.
@@ -173,7 +173,7 @@ If a change needs something another change owns, it depends on that change inste
   - **TLS trust:** truststore with a certifi fallback, including a speed test.
   - Status and size checks for Resources.
   - The `response_headers` table, where cookie values are always stored as `***`. No cookies are sent.
-  - The standard proxy variables `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are honoured (010's one exception to its no-environment-variables rule), with proxy passwords redacted.
+  - The standard proxy variables `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are honoured, the one exception 022 adds to the no-environment-variables rule, and listed under `environment` in `linx commands`, with proxy passwords redacted.
   - HTTPS, virtual hosts and gzip on the fixture site (trustme).
   - **(v0.2)** HTTP version per origin via ALPN (`http_1_1` / `http_2`), the `--proxy` flag (and `[crawl] proxy`), basic auth and custom headers.
   - **(v0.2)** Bot-challenge detection, with the hostile-site work: a bot-protection or WAF challenge page, recognised by the headers, cookies and body markers of the common CDNs and WAFs, marks its URL `blocked`, never a Page with a missing title or H1. It detects and classifies; it never evades.

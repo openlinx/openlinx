@@ -1,5 +1,4 @@
-"""Relative links and their heading anchors in the contributor docs resolve (000-scaffold-project;
-023-fix-code-audit D15)."""
+"""Relative links and their heading anchors in the contributor docs resolve (000, 023 D15)."""
 
 import re
 from pathlib import Path
@@ -55,7 +54,6 @@ def resolves(doc: Path, target: str) -> bool:
 
 
 def contributor_docs() -> list[Path]:
-    # AGENTS.md first: it is the file agents trust most.
     return [
         REPO_ROOT / "AGENTS.md",
         REPO_ROOT / "CONTEXT.md",

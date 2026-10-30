@@ -165,7 +165,10 @@ def test_naming_rule_for_input_errors() -> None:
         for d in diagnostics
         if d["code"].endswith("_not_found") or d["code"] == "no_crawls"
         if d["exit_code"] != 4
-    ] == [], "invalid_* and unknown_* exit 2, *_not_found exits 4: fix the code's name or exit code"
+    ] == [], (
+        "invalid_*, unknown_* and usage_error exit 2, *_not_found and no_crawls exit 4: fix the "
+        "code's name or its exit code"
+    )
 
 
 def test_no_environment_variable_is_honoured() -> None:

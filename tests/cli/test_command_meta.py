@@ -66,6 +66,10 @@ def list_without_cursor(output_format: FormatOpt = Format.JSON, limit: int = 50)
             ),
             "it does not declare cursor; it does not declare fields",
         ),
+        (
+            command_meta(output="list", formats=[Format.JSON])(list_without_cursor),
+            "a list Command declares its fields",
+        ),
     ],
 )
 def test_a_command_its_output_kind_cannot_serve_is_refused(

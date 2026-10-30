@@ -107,7 +107,7 @@ def test_options_of_secret_settings_have_only_long_names(app: Callable[[], typer
         if extra.setting is not None and tables.is_secret(extra.setting)
         for name in option.opts
         if not name.startswith("--")
-    ] == []
+    ] == [], "an option of a secret setting has a short name: give it only its long name"
 
 
 def _names_a_flat_setting(tables: dict[str, Table], name: str, key: str) -> bool:
