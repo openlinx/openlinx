@@ -40,8 +40,8 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - *Alternative:* a traceback in the details. It is long, holds absolute paths, and differs by OS. Rejected.
 
 ### D4. Every table is declared in `openlinx.store.schema`
-- **In short:** a guard in a fresh process compares the tables bound in `openlinx.store.schema`'s own names, and their indexes, with what is on `metadata` after importing every `openlinx` module but `openlinx.__main__`, which runs the CLI, and names any extra one with "declare them in openlinx.store.schema".
-- The schema module's own names, not `metadata` after its import: that import loads the record modules too, and a table declared in one of them would count as declared.
+- **In short:** a guard in a fresh process compares the tables and indexes on `metadata` after `import openlinx.store.schema` with those after importing every `openlinx` module but `openlinx.__main__`, which runs the CLI, and names any extra one with "declare them in openlinx.store.schema".
+- The baseline holds no table of another module: the modules that the schema module imports run before it creates `metadata`, so none of them can declare a table on it.
 - SQLAlchemy's `MetaData` holds no views, and none is declared; the change that declares the first view extends the guard to it.
 - **Why:** `linx schema` and the docs test read only that module, while `create_all` builds whatever was imported. A table declared beside its units would be in the crawl file and missing from the contract, and the contract test would pass or fail by test order.
 - *Alternative:* `linx schema` imports every store module. The schema would then depend on import side effects, and the first change to declare a view elsewhere (`040`) would still pass. Rejected.
