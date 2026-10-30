@@ -68,7 +68,7 @@ from openlinx.store.records import (
     StopReason,
     UrlCounts,
 )
-from openlinx.store.redaction import SecretValues, secret_values
+from openlinx.store.redaction import SecretValues, redact, secret_values
 from openlinx.store.settings import StoreSettings
 from openlinx.store.transitions import check_transition
 from openlinx.store.urls import url_counts
@@ -324,6 +324,10 @@ def continue_crawl(
     check_transition(recorded.state, "running", None)
     settings = CrawlSettings.model_validate({**recorded.config["crawl"], **overrides.given()})
     strip_params = strip_params_pattern(settings.strip_params)
+    # The proxy variables of the continue's own environment, as a start reads them, recorded in
+    # place of the start's.
+    proxies = ProxyVariables.of(os.environ)
+    environment = _environment(proxies)
     planned = _Planned(
         seed=_seed(recorded.seeds[0], strip_params),
         settings=settings,
@@ -331,12 +335,16 @@ def continue_crawl(
         strip_params=strip_params,
         crawl_mode=recorded.crawl_mode,
         seed_count=len(recorded.seeds),
-        # The proxy variables of the continue's own environment, as a start reads them.
-        fetch_policy=_fetch_policy(settings, ProxyVariables.of(os.environ)),
-        # The recorded config holds no secret, so a continue knows none to redact.
-        secrets=SecretValues(),
+        fetch_policy=_fetch_policy(settings, proxies),
+        # The recorded config holds no secret; the continue's own proxy variables may.
+        secrets=secret_values(environment, _PROXY_SECRETS),
     )
-    config = {**recorded.config, "crawl": settings.model_dump(mode="json")}
+    started = {table: values for table, values in recorded.config.items() if table != "environment"}
+    config = {
+        **started,
+        "crawl": settings.model_dump(mode="json"),
+        **redact((), environment, SecretNames(settings=_PROXY_SECRETS)).config,
+    }
     crawl = _Crawl(
         plan=planned,
         crawl_file=crawl_file,

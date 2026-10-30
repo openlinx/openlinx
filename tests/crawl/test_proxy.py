@@ -7,11 +7,12 @@ from pathlib import Path
 import pytest
 
 from openlinx.crawl.fetch.proxy import ProxyVariables
+from openlinx.services.crawling import CrawlOverrides
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.cli import run_cli
-from tests.support.crawling import crawl_result, crawled
+from tests.support.crawling import continued, crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.proxy import StartProxy
 from tests.support.workspace import TempWorkspace
@@ -110,6 +111,26 @@ def test_only_the_proxy_variables_that_are_set_are_recorded(
         False,
         {"no_proxy": "intranet.local"},
     )
+
+
+def test_a_continue_records_the_proxy_variables_it_fetches_through(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    server = fixture_site(SHOP)
+    monkeypatch.setenv("NO_PROXY", "intranet.local")
+    stopped = crawl_result(server.url("/"), max_urls=1)
+    # The laptop moved to another network: another bypass list, and an https proxy with a
+    # password, which this http site does not go through.
+    monkeypatch.setenv("NO_PROXY", "branch.local")
+    monkeypatch.setenv("HTTPS_PROXY", "http://u:pw@proxy.corp:3128")
+
+    continued(stopped, CrawlOverrides(max_urls=None))
+    [(config,)] = query(stopped.crawl_file, "SELECT config FROM crawl")
+
+    assert json.loads(config)["environment"] == {
+        "https_proxy": "http://u:***@proxy.corp:3128",
+        "no_proxy": "branch.local",
+    }
 
 
 # The variables as a process environment holds them, a URL, and the proxy it goes through.

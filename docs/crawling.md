@@ -212,6 +212,8 @@ The Crawl Service continues a `stopped` or `failed` Crawl from its crawl file al
 
 Of the settings on this page, a continue may change the URL limit, to a higher one or none, `--concurrency` and `--rate`, as `060`'s resume options allow. The URL limit counts over the Crawl's whole life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see [Warnings](#warnings)). A Seed still down when a failed Crawl is continued fails it as `seed_unreachable` again.
 
+A continue fetches through the proxy variables of its own process, not the start's, and records them in `crawl.config`'s `environment` table in place of the start's, redacted the same way (see [Proxy variables](#proxy-variables)).
+
 ### When one URL fails
 
 One URL never stops the Crawl: what goes wrong with it is recorded on its row, and the Crawl goes on.
