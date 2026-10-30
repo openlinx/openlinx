@@ -150,6 +150,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
   - `test_a_pass_that_closes_the_crawl_s_writer_fails_mypy`: a pass that closes the Crawl's writer or calls its sync calls.
   - `test_a_unit_that_returns_an_enumeration_member_is_kept`: an enumeration result refused as an identity one.
   - `test_every_name_used_across_a_package_is_listed`: a hidden package interface.
+  - `test_a_table_that_is_not_registered_is_named`: a table read that fails with a bare StopIteration.
   - `test_mirrored_options_match_their_fields`: a flag whose default or bounds differ from its setting.
   - `test_only_the_streams_and_click_compat_suppress_tid251`: a banned API silenced.
   - `test_link_type_table_matches_the_docs`: the docs' Requested column out of step.

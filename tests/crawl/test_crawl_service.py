@@ -1,26 +1,30 @@
 """The Crawl Service wires 015's journal mode and redaction (020-add-crawl-core D11; seams 1, 2)."""
 
 import json
+import re
 import sys
 from pathlib import Path, PureWindowsPath
 
 import pytest
 
-from openlinx.cli.app import build_app
 from openlinx.clock import SystemClock
+from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlRequest, plan_crawl, start_crawl
 from openlinx.services.hooks import default_hooks
+from openlinx.services.settings import default_tables
 from openlinx.store.records import SecretNames
+from openlinx.workspace.tables import SettingsTables
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
-from tests.support.app import example_app, settings_tables
+from tests.support.app import EXAMPLE_TABLE, example_app
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
 from tests.support.fetcher import FakeFetcher, FakePage
+from tests.support.settings import ExampleSettings
 from tests.support.workspace import TempWorkspace
 
 HOME_PAGE = Site(routes={"/": Page(body="<p>Home</p>")})
@@ -31,7 +35,6 @@ def test_the_journal_mode_setting_reaches_the_crawl_file(
 ) -> None:
     server = fixture_site(HOME_PAGE)
     (temp_workspace.root / "openlinx.toml").write_bytes(b'[store]\njournal_mode = "delete"\n')
-    tables = settings_tables(build_app())
     request = CrawlRequest(
         seed=server.url("/"),
         cwd=temp_workspace.root,
@@ -42,7 +45,7 @@ def test_the_journal_mode_setting_reaches_the_crawl_file(
         flags={},
     )
 
-    result = start_crawl(plan_crawl(request, tables), SystemClock(), Collected(), default_hooks())
+    result = start_crawl(plan_crawl(request), SystemClock(), Collected(), default_hooks())
 
     assert crawl_row(result.crawl_file)["journal_mode"] == "delete"
 
@@ -131,3 +134,62 @@ def test_the_result_times_the_crawl_on_its_clock(temp_workspace: TempWorkspace) 
         "2026-01-01T00:00:05.000Z",
         5.0,
     )
+
+
+def _given(temp_workspace: TempWorkspace, flags: dict[str, dict[str, object]]) -> CrawlRequest:
+    return CrawlRequest(
+        seed="http://site.test/",
+        cwd=temp_workspace.root,
+        home=temp_workspace.home,
+        workspace=None,
+        command_argv=["linx", "crawl", "http://site.test/"],
+        secret_names=SecretNames(),
+        flags=flags,
+    )
+
+
+def _with_example() -> SettingsTables:
+    tables = default_tables()
+    tables.register("example", EXAMPLE_TABLE)
+    return tables
+
+
+def test_a_refused_value_given_with_the_settings_names_its_key(
+    temp_workspace: TempWorkspace,
+) -> None:
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, {"example": {"level": "medium"}}), _with_example())
+
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        refused.value.diagnostic.details.get("key"),
+        "file" in refused.value.diagnostic.details,
+    ) == ("invalid_value", 2, "example.level", False)
+
+
+def test_a_refused_given_value_is_reported_before_a_refused_file_value(
+    temp_workspace: TempWorkspace,
+) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(b'[example]\nlevel = "medium"\n')
+
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, {"crawl": {"concurrency": 0}}), _with_example())
+
+    assert (refused.value.code, refused.value.diagnostic.details.get("key")) == (
+        "invalid_value",
+        "crawl.concurrency",
+    )
+
+
+def test_a_table_that_is_not_registered_is_named(temp_workspace: TempWorkspace) -> None:
+    plan = plan_crawl(_given(temp_workspace, {}))
+
+    with pytest.raises(
+        TypeError,
+        match=re.escape(
+            "the settings table ExampleSettings is not registered: register it in "
+            "openlinx.services.settings.default_tables()"
+        ),
+    ):
+        plan.loaded.table(ExampleSettings)

@@ -2,7 +2,6 @@
 
 from openlinx.output.reporter import Collected
 from openlinx.services.workspace import InitRequest, init_workspace
-from openlinx.workspace.tables import SettingsTables
 from tests.support.workspace import TempWorkspace
 
 
@@ -14,7 +13,7 @@ def test_initialising_without_the_cli(temp_workspace: TempWorkspace) -> None:
     reporter = Collected()
     request = InitRequest(cwd=temp_workspace.root, home=temp_workspace.home, workspace=blog)
 
-    result = init_workspace(request, SettingsTables(), reporter)
+    result = init_workspace(request, reporter)
 
     assert (
         result.created,

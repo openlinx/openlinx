@@ -35,4 +35,4 @@ def init(
     """
     invocation: Invocation = ctx.obj
     request = InitRequest(cwd=Path.cwd(), home=Path.home(), workspace=workspace_dir)
-    return init_workspace(request, invocation.settings_tables, invocation.reporter).to_json()
+    return init_workspace(request, invocation.reporter, invocation.settings_tables).to_json()

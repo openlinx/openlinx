@@ -16,7 +16,7 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
-from openlinx.output.codes import SETTINGS_INVALID
+from openlinx.output.codes import INVALID_VALUE, SETTINGS_INVALID
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.workspace.discovery import Workspace
 from openlinx.workspace.tables import SettingsTables, keyed_entry
@@ -27,7 +27,13 @@ class Settings:
     root: BaseSettings
 
     def table[M: BaseModel](self, model: type[M]) -> M:
-        return next(value for value in vars(self.root).values() if isinstance(value, model))
+        for value in vars(self.root).values():
+            if isinstance(value, model):
+                return value
+        raise TypeError(
+            f"the settings table {model.__name__} is not registered: register it in "
+            "openlinx.services.settings.default_tables()"
+        )
 
 
 def load_settings(
@@ -55,6 +61,9 @@ def load_settings(
         problem = {"key": None, "message": str(error), "line": _line(error)}
         raise _invalid(settings_file, "is not valid TOML", [problem]) from error
     except ValidationError as error:
+        refused = refused_given_value(error, values)
+        if refused is not None:
+            raise refused from error
         problems: list[dict[str, Any]] = [
             {"key": ".".join(str(part) for part in problem["loc"]), "message": problem["msg"]}
             for problem in error.errors()
@@ -65,6 +74,38 @@ def load_settings(
             _in_file_order(problems, settings_file),
             hint=_suggestion(error, root_model),
         ) from error
+
+
+def refused_given_value(
+    error: ValidationError, given: Mapping[str, Mapping[str, Any]]
+) -> OpenLinxError | None:
+    """invalid_value for the first error at a key the caller gave, or None when the file's
+    values alone are refused: the call's own input is checked first, as Click checks flags
+    (023-fix-code-audit D9)."""
+    keys = set(_given_keys(given))
+    for problem in error.errors():
+        parts = [str(part) for part in problem["loc"]]
+        prefixes = {".".join(parts[:size]) for size in range(1, len(parts) + 1)}
+        # The deepest given key: a table's name is given too, with its keys.
+        key = next((p for p in sorted(prefixes, key=len, reverse=True) if p in keys), None)
+        if key is not None:
+            return OpenLinxError(
+                INVALID_VALUE,
+                f"Invalid value for {key}: {problem['msg']}.",
+                hint=f"Give {key} a value that its setting accepts.",
+                details={"key": key},
+            )
+    return None
+
+
+def _given_keys(given: Mapping[str, Any], prefix: str = "") -> list[str]:
+    keys = []
+    for name, value in given.items():
+        key = f"{prefix}{name}"
+        keys.append(key)
+        if isinstance(value, Mapping):
+            keys += _given_keys(value, f"{key}.")
+    return keys
 
 
 def _invalid(

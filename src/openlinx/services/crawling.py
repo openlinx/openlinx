@@ -45,6 +45,7 @@ from openlinx.services.crawl_failures import NETWORK_FAILURES, interrupted, writ
 from openlinx.services.crawls import create_crawl
 from openlinx.services.hooks import default_page_executor
 from openlinx.services.interrupts import interrupts_stop
+from openlinx.services.settings import default_tables
 from openlinx.store.crawls import (
     crawl_summary,
     read_recorded,
@@ -172,12 +173,13 @@ class CrawlResult:
         }
 
 
-def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
-    """Validation and config resolution, before anything is created (design D11)."""
+def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> CrawlPlan:
+    """Validation and config resolution, before anything is created (design D11); `tables`
+    are the built-in ones unless given."""
     # Checked before the Workspace is resolved, and stripped once the settings are read.
     _seed(request.seed, None)
     workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
-    settings = load_settings(workspace, tables, request.flags)
+    settings = load_settings(workspace, tables or default_tables(), request.flags)
     crawl_settings = settings.table(CrawlSettings)
     strip_params = strip_params_pattern(crawl_settings.strip_params)
     seed = _seed(request.seed, strip_params)

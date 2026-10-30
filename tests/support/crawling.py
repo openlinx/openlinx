@@ -6,7 +6,6 @@ from typing import Any
 
 from aiohttp.abc import AbstractResolver
 
-from openlinx.cli.app import build_app
 from openlinx.clock import Clock, SystemClock
 from openlinx.crawl.engine.hooks import Hooks
 from openlinx.crawl.engine.stop import StopSignal
@@ -22,9 +21,9 @@ from openlinx.services.crawling import (
     start_crawl,
 )
 from openlinx.services.hooks import default_hooks
+from openlinx.services.settings import default_tables
 from openlinx.store.records import CrawlFile, SecretNames
 from openlinx.workspace.tables import SettingsTables
-from tests.support.app import settings_tables
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
 from tests.support.fetcher import FakeFetcher, FakePage
@@ -62,7 +61,7 @@ def crawl_result(
     tables of another app, such as `example_app()`'s; their secret settings are redacted as the
     CLI redacts them.
     """
-    tables = tables or settings_tables(build_app())
+    tables = tables or default_tables()
     request = CrawlRequest(
         seed=seed,
         cwd=Path.cwd(),
