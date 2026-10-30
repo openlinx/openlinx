@@ -213,7 +213,7 @@ async def _fetched(context: CrawlContext, decided: UrlResult, response: FetchRes
     parse_error = None if page is None else page.parse_error
     parse_error_message = None if page is None else page.parse_error_message
     if page is not None and page.parse_error is not None:
-        context.warnings.count(parse_failure(url, page), url)
+        context.warnings.count(parse_failure(url, page, context.secrets), url)
     url_response = UrlResponse(
         status_code=response.status_code,
         reason=response.reason,
@@ -318,7 +318,7 @@ def _handler_rows(
         if batch is not None:
             rows.append(batch)
     # One count per URL, however many of its handlers failed (design D16).
-    return tuple(rows), handler_failure(result.url, failed) if failed else None
+    return tuple(rows), handler_failure(result.url, failed, context.secrets) if failed else None
 
 
 def _rows_of[R](handler: Handler[R], result: UrlResult) -> HandlerRows[R] | None:

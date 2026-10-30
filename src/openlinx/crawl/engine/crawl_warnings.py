@@ -24,6 +24,7 @@ from openlinx.output.codes import (
 )
 from openlinx.output.diagnostics import Diagnostic
 from openlinx.store.records import FetchError
+from openlinx.store.redaction import SecretValues
 
 
 def url_limit_reached(crawl_id: str, limit: int) -> Diagnostic:
@@ -111,7 +112,9 @@ def seed_base_mismatch(
     )
 
 
-def handler_failure(url: NormalizedUrl, failed: Sequence[HookFailure]) -> Diagnostic:
+def handler_failure(
+    url: NormalizedUrl, failed: Sequence[HookFailure], secrets: SecretValues
+) -> Diagnostic:
     names = [f"{error.hook} ({error.error_type})" for error in failed]
     if len(names) == 1:
         message = f"The handler {names[0]} raised on {url}; the URL was recorded without its rows."
@@ -119,10 +122,10 @@ def handler_failure(url: NormalizedUrl, failed: Sequence[HookFailure]) -> Diagno
         listed = ", ".join(names[:-1]) + f" and {names[-1]}"
         message = f"The handlers {listed} raised on {url}; the URL was recorded without their rows."
     # The first handler's error, as the warning keeps only its first URL's.
-    return Diagnostic.of(HANDLER_FAILED, message, details=failed[0].details)
+    return Diagnostic.of(HANDLER_FAILED, message, details=failed[0].details(secrets.redact))
 
 
-def parse_failure(url: NormalizedUrl, page: PreparedPage) -> Diagnostic:
+def parse_failure(url: NormalizedUrl, page: PreparedPage, secrets: SecretValues) -> Diagnostic:
     parse_error, message, failed = (
         page.parse_error,
         page.parse_error_message,
@@ -133,7 +136,7 @@ def parse_failure(url: NormalizedUrl, page: PreparedPage) -> Diagnostic:
             PARSE_FAILED,
             f"An extractor failed on {url} ({message}); the Page was recorded without its "
             "output, and its Links were followed.",
-            details=failed[0].details if failed else None,
+            details=failed[0].details(secrets.redact) if failed else None,
         )
     detail = parse_error if message is None else f"{parse_error}: {message}"
     return Diagnostic.of(

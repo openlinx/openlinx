@@ -63,6 +63,7 @@ from openlinx.store.records import (
     StopReason,
     UrlCounts,
 )
+from openlinx.store.redaction import SecretValues, secret_values
 from openlinx.store.settings import StoreSettings
 from openlinx.store.transitions import check_transition
 from openlinx.store.urls import url_counts
@@ -254,7 +255,8 @@ def start_crawl(
     """`resolver` is the DNS resolver hook of multi-host tests, `pages` builds the page
     executor instead of `default_page_executor`, `fetcher` is the fake Fetcher of the timing
     scenarios, used instead of aiohttp's, and `stop` is the stop flag that `060`'s control rows
-    set (design D9, D10, D15)."""
+    set: one per run, since it binds the loop of the run that first sets or awaits it (design
+    D9, D10, D15)."""
     log = WarningLog(reporter)
     planned = _Planned(
         seed=plan.seed,
@@ -263,6 +265,7 @@ def start_crawl(
         strip_params=plan.strip_params,
         crawl_mode=plan.new_crawl.crawl_mode,
         seed_count=len(plan.new_crawl.seeds),
+        secrets=secret_values(plan.new_crawl.config, plan.new_crawl.secret_names.settings),
     )
     crawl = _Crawl(
         plan=planned,
@@ -292,7 +295,7 @@ def continue_crawl(
     stop: StopSignal | None = None,
 ) -> CrawlResult:
     """Continues a stopped or failed Crawl from its file alone, which 060's resume calls; the
-    keyword arguments are start_crawl's (design D20)."""
+    keyword arguments are start_crawl's, a fresh stop flag for each run included (design D20)."""
     recorded = read_recorded(crawl_file.path)
     # Before anything is written; the continue's unit checks it again as it writes.
     check_transition(recorded.state, "running", None)
@@ -305,6 +308,8 @@ def continue_crawl(
         strip_params=strip_params,
         crawl_mode=recorded.crawl_mode,
         seed_count=len(recorded.seeds),
+        # The recorded config holds no secret, so a continue knows none to redact.
+        secrets=SecretValues(),
     )
     config = {**recorded.config, "crawl": settings.model_dump(mode="json")}
     crawl = _Crawl(
@@ -362,6 +367,7 @@ class _Planned:
     strip_params: re.Pattern[str] | None
     crawl_mode: CrawlMode
     seed_count: int
+    secrets: SecretValues
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -499,6 +505,7 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
                     pages=executor,
                     hooks=crawl.hooks,
                     stop=crawl.stop,
+                    secrets=crawl.plan.secrets,
                 )
         except BaseException:
             # An ended writer raises why it ended once more; the error raised says it first.

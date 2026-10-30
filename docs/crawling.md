@@ -233,7 +233,7 @@ Each of the three failures of the tool's own code is reported by one counted war
 | `handler_failed` | a handler failed | `count`, `first_url`, `error`, and `at` when the hook's file raised it |
 | `record_failed` | the rows could not be written | `count`, `first_url` |
 
-`error` is the first URL's error text, cut to 300 characters, and `at` is where the hook raised it: `<file>:<line>` of the deepest frame in the file that defines the hook's function, the file relative to the folder that holds its top-level package, with `/` on every OS, such as `tests/crawl/test_hooks.py:88`, or the module's dotted name for a file outside that folder. A library the hook calls is never named: its error points at the hook's line that called it. `at` is absent when no frame is in that file, as for an extractor that returned something other than its declared output. An error whose text cannot be read is named by its type.
+`error` is the first URL's error text, cut to 300 characters, and `at` is where the hook raised it: `<file>:<line>` of the deepest frame in the file that defines the hook's function, the file relative to the folder that holds its top-level package, with `/` on every OS, such as `tests/crawl/test_hooks.py:88`, or the module's dotted name for a file outside that folder. A library the hook calls is never named: its error points at the hook's line that called it. `at` is absent when no frame is in that file, as for an extractor that returned something other than its declared output. An error whose text cannot be read is named by its type. The values of the Crawl's secret settings are replaced by `***` in `error`, as in the recorded config.
 
 ## URLs
 

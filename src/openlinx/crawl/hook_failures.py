@@ -11,6 +11,9 @@ import msgspec
 
 # The warning keeps one error's text; a long repr would fill the result.
 TEXT_LIMIT = 300
+# Carried longer than the warning keeps, so the warning's cut comes after the redaction and
+# never leaves part of a secret.
+_CARRIED = 10_000
 
 
 class HookFailure(msgspec.Struct, frozen=True, kw_only=True):
@@ -22,10 +25,11 @@ class HookFailure(msgspec.Struct, frozen=True, kw_only=True):
     # `<file>:<line>`; None when no frame of the error is in the hook's own file.
     at: str | None = None
 
-    @property
-    def details(self) -> dict[str, str]:
-        """The warning's details of the first URL it failed on."""
-        return {"error": self.text} | ({} if self.at is None else {"at": self.at})
+    def details(self, redact: Callable[[str], str]) -> dict[str, str]:
+        """The warning's details of the first URL it failed on, with the Crawl's secrets
+        redacted, since a library's message may quote a URL with its key."""
+        text = redact(self.text)[:TEXT_LIMIT]
+        return {"error": text} | ({} if self.at is None else {"at": self.at})
 
 
 def hook_failure(hook: str, function: Callable[..., object], error: BaseException) -> HookFailure:
@@ -37,7 +41,7 @@ def hook_failure(hook: str, function: Callable[..., object], error: BaseExceptio
     except Exception:
         text = f"<{error_type} that cannot be printed>"
     return HookFailure(
-        hook=hook, error_type=error_type, text=text[:TEXT_LIMIT], at=_raised_at(function, error)
+        hook=hook, error_type=error_type, text=text[:_CARRIED], at=_raised_at(function, error)
     )
 
 
@@ -45,7 +49,13 @@ def _raised_at(function: Callable[..., object], error: BaseException) -> str | N
     while isinstance(function, partial):
         function = function.func
     code = getattr(function, "__code__", None)
+    module = getattr(function, "__module__", None)
     if code is None:
+        # A callable object: its frames are those of its class's __call__.
+        code = getattr(type(function).__call__, "__code__", None)
+        module = type(function).__module__
+    # A function compiled from text has no module, so no file to show.
+    if code is None or not isinstance(module, str):
         return None
     # The deepest frame in the hook's file, so an error that a library raises points at the
     # hook's line that called it.
@@ -56,7 +66,7 @@ def _raised_at(function: Callable[..., object], error: BaseException) -> str | N
     ]
     if not lines:
         return None
-    return f"{_shown_file(function.__module__, code.co_filename)}:{lines[-1]}"
+    return f"{_shown_file(module, code.co_filename)}:{lines[-1]}"
 
 
 # A handler that fails on every URL asks for one file again and again, on the loop's thread.

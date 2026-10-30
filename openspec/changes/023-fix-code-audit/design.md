@@ -32,7 +32,9 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - **In short:** the first counted `handler_failed` and `parse_failed` warnings carry `details.error`, the error's text cut to 300 characters, and `details.at`, the file and line in the hook where it was raised.
 - **Which frame:** the deepest frame of the traceback whose file is the one that defines the hook's function (its `co_filename`), so an error raised in a library the hook calls points at the hook's own line. A `functools.partial` is unwrapped to its function first, since a partial has no code of its own. The file is written relative to the folder that holds its top-level package, with `/` on every OS, so the warning is the same on every machine; a file outside that folder is named by its module's dotted name. With no such frame, as when an extractor returns something other than its declared output and preparation raises, `at` is absent rather than pointing at preparation.
 - A preparation that gave nothing (`body_too_large`, `worker_crashed`, `parse_timeout`) raised nothing in a hook, so its warning has neither key.
-- Reading the error never fails the URL: an error whose text cannot be read is named by its type.
+- Reading the error never fails the URL: an error whose text cannot be read is named by its type, a function compiled from text (no module) has no `at`, and a callable object's frames are those of its class's `__call__`.
+- **Secrets:** the values of the Crawl's secret settings, read from the same config and secret names that the recorded config's redaction reads, are replaced by `***` in `error` before the cut to 300 characters, so a library message that quotes a URL with its key leaks nothing to stderr or the crawl file. Each failure carries up to 10,000 characters, so the cut never leaves part of a secret. A continued Crawl reads its config from the file, which holds `***`, so it knows no secret to redact; the change that resumes Crawls (`060`) passes the secrets its hooks were built with.
+  - *Alternative:* redact every URL's query string in the text. It also hides the values that say what failed, and misses a key in a path or a header. Rejected.
 - `PreparedPage` carries each extractor failure as a small frozen struct (name, error type, text, place), so it crosses `026`'s process boundary. `parse_error_message` stays `name: Type`: it is a public column of every Page, and the text of one error belongs to the warning, which keeps only the first.
 - Test helpers that fail on an extractor error (`page_result`) print the same details.
 - *Alternative:* a traceback in the details. It is long, holds absolute paths, and differs by OS. Rejected.
@@ -129,6 +131,10 @@ The hooks seam, the writer and the settings loader work, but several of their ru
   - `test_the_default_page_settings_pickle`: an extractor or config that `026`'s workers cannot load.
   - `test_an_extractor_whose_function_is_not_module_level_cannot_be_built`: an extractor that works in process and fails in every `026` worker.
   - `test_an_error_that_cannot_be_printed_costs_only_the_extractor_s_output`: a hook failure whose report fails the URL.
+  - `test_a_long_error_is_cut_to_300_characters`: a warning that a long repr fills.
+  - `test_an_extractor_that_returns_another_type_names_no_line`: `at` pointing into preparation.
+  - `test_a_failing_handler_object_names_the_line_of_its_call`: a callable-object hook without `at`.
+  - `test_an_extractor_compiled_from_text_names_no_line`: a function without a module failing its URL.
   - `test_an_error_raised_in_a_library_points_at_the_extractor_s_line`: a hook failure that points into the library instead of the hook.
   - `test_every_table_is_declared_in_the_schema_module`: a table missing from the contract.
   - `test_every_name_used_across_a_package_is_listed`: a hidden package interface.

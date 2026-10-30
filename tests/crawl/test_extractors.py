@@ -5,6 +5,7 @@ import pickle
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import cast
 
 import msgspec
 import pytest
@@ -186,3 +187,17 @@ def test_an_error_that_cannot_be_printed_costs_only_the_extractor_s_output() -> 
         (("greeting", Greeted("hi")),),
         [("misformatted", "<_Misformatted that cannot be printed>")],
     )
+
+
+def test_an_extractor_compiled_from_text_names_no_line() -> None:
+    # As a rule language compiles its rules: a function with no module.
+    namespace: dict[str, object] = {"Greeted": Greeted}
+    source = "def rule(tree, page, config) -> Greeted:\n    raise ValueError('no title')\n"
+    exec(compile(source, "<rule title>", "exec"), namespace)  # noqa: S102
+    rule = cast(Callable[[LexborHTMLParser, PageInput, None], Greeted], namespace["rule"])
+    settings = PageSettings(
+        scope=scope_rules(SITE), extractors=(extractor("title", rule, None),), strip_params=None
+    )
+
+    ((failed,),) = [prepare_page(SITE, _PAGE, settings).extractor_failures]
+    assert (failed.text, failed.at) == ("no title", None)

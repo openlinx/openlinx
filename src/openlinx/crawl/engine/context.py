@@ -12,6 +12,7 @@ from openlinx.crawl.pages.preparation import PageExecutor
 from openlinx.crawl.scope import ScopeRules
 from openlinx.crawl.settings import CrawlSettings
 from openlinx.store.records import CrawlFile
+from openlinx.store.redaction import SecretValues
 from openlinx.store.writer import CrawlWriter
 
 
@@ -29,3 +30,5 @@ class CrawlContext:
     pages: PageExecutor
     hooks: Hooks
     stop: StopSignal
+    # Redacted from the text of a hook's error before the warning is written.
+    secrets: SecretValues
