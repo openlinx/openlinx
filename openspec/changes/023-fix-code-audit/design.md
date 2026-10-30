@@ -140,6 +140,8 @@ The hooks seam, the writer and the settings loader work, but several of their ru
   - `test_an_extractor_compiled_from_text_names_no_line`: a function without a module failing its URL.
   - `test_an_error_raised_in_a_library_points_at_the_extractor_s_line`: a hook failure that points into the library instead of the hook.
   - `test_every_table_is_declared_in_the_schema_module`: a table missing from the contract.
+  - `test_a_column_named_at_is_a_timestamp`: a time column without its CHECK and its Format.
+  - `test_a_message_column_explains_a_code_column`: an error message without its listed code.
   - `test_a_unit_that_returns_an_enumeration_member_is_kept`: an enumeration result refused as an identity one.
   - `test_every_name_used_across_a_package_is_listed`: a hidden package interface.
   - `test_mirrored_options_match_their_fields`: a flag whose default or bounds differ from its setting.

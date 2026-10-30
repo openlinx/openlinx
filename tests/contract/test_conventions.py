@@ -142,3 +142,30 @@ def test_every_unique_rule_is_an_index_and_every_reference_one_key() -> None:
         "a UNIQUE rule is a constraint, or a column has two foreign keys: declare a unique Index, "
         "and one ForeignKey per column"
     )
+
+
+def test_a_column_named_at_is_a_timestamp() -> None:
+    assert [
+        f"{table['name']}.{column['name']}"
+        for table in listed_tables()
+        for column in table["columns"]
+        if column["name"].endswith("_at") and column["format"] != "timestamp"
+    ] == [], (
+        "a column whose name ends in _at is not a timestamp: declare it with the shared Timestamp "
+        "type, or name it after what it holds"
+    )
+
+
+def test_a_message_column_explains_a_code_column() -> None:
+    unexplained = []
+    for table in listed_tables():
+        values = {column["name"]: column["values"] for column in table["columns"]}
+        for name in values:
+            code = name.removesuffix("_message")
+            if code != name and not values.get(code):
+                unexplained.append(f"{table['name']}.{name}")
+
+    assert unexplained == [], (
+        "a column <x>_message has no column <x> with values: an error is a code column whose "
+        "values are listed, beside the message column named after it"
+    )
