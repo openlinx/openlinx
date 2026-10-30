@@ -93,21 +93,21 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - *Alternative:* build Click's bounds from the fields when the app is built. It loads pydantic on `--help`. Rejected.
 
 ### D11. A Page's Link elements are located by ordinal
-- **In short:** `locate_links(tree, links)` takes every Link of the Page in order (`PageInput.links`, ordinals 1 to n) and returns a mapping from ordinal to a frozen `LocatedLink(element, placing)`; given anything else, it raises `ValueError("pass every Link of the Page; filter after locating")`.
+- **In short:** `locate_links(tree, links)` takes every Link of the Page in order (`PageInput.links`, ordinals 1 to n) and returns a mapping from ordinal to a frozen `LocatedLink(element, placing)`; given anything else, it raises `RuntimeError("pass every Link of the Page; filter after locating")`, a broken contract inside the code, as CONTRIBUTING has it. Every Link means ordinals 1 to n in order, header Links first.
 - **Why:** it pairs references with Links by element, attribute, type and raw value in document order, so a subset pairs a Link with an earlier element of the same URL, and a handler would write the wrong anchor text and position.
 - *Alternative:* keep each reference's element during the one walk, in `PageInput`. It removes the second walk but puts parser nodes into a record that must never cross `026`'s process boundary. Rejected.
 
 ### D12. One Link type table
 - **In short:** `LINK_TYPES` in `openlinx.store.records` maps each `LinkType` to its `requested` value (`followed`, `resource` or none) and its `sources`: the `(LinkElement, LinkAttribute)` pairs it is found in, and whether a header gives it.
-- **What reads it:** the follow rule and `RESOURCE_LINK_TYPES` derive from `requested`; Link discovery builds its element selectors from `sources` and narrows an element's tag through them, so `DiscoveredLink.element` is `LinkElement | None` and `attribute` is `LinkAttribute | None`, checked by mypy. The conditions stay in discovery: which `rel` gives which type, and which parent makes a `<source>` video or audio.
+- **What reads it:** the follow rule and `RESOURCE_LINK_TYPES` derive from `requested`; Link discovery builds its element selectors from `sources` and narrows an element's tag through them, so `DiscoveredLink.element` is `LinkElement | None` and `attribute` is `LinkAttribute | None`, checked by mypy. The conditions stay in discovery: which `rel` gives which type, and which parent makes a `<source>` video or audio. The narrowing is a `TypeGuard` over the table's elements and attributes, so `link_handler` writes them with no cast; discovery's own rule table, which element gives which type through which attribute, stays in discovery, held to the table by the pair guard.
 - `LinkElement` and `LinkAttribute` move beside `LinkType`; the `links` CHECKs read them.
-- `discovered_link`, the one constructor that applies the follow rule, moves beside `DiscoveredLink` in `openlinx.crawl.references`, and the factory guard names a `DiscoveredLink(...)` built elsewhere.
-- **Guards:** `030`'s element guard compares the `(element, attribute)` pairs that discovery gives on its fixture with the table's pairs, and the table's elements and attributes with the two Literals; a docs check compares the Requested column of `docs/crawling.md`'s table with `requested`.
+- `discovered_link`, the one constructor that applies the follow rule, moves beside `DiscoveredLink` in `openlinx.crawl.references`, and the factory guard names a `DiscoveredLink(...)` built elsewhere, in a test too: tests build Links through `discovered_link`.
+- **Guards:** `030`'s element guard compares the `(element, attribute)` pairs that discovery gives on its fixture with the table's pairs, and the table's elements and attributes with the two Literals; a docs check compares the Requested column of `docs/crawling.md`'s table with `requested`, reading `yes` as `followed`, `as a Resource` as `resource` and `no` as none.
 - **Why in the store:** the store may import only `openlinx.crawl.urls`, and its CHECKs and its upsert read the values.
 - *Alternative:* the sources in `openlinx.crawl.pages.links` and the follow rule in the store. Discovery's knowledge would stay in discovery, but the guards would read two modules for one table. Rejected.
 
 ### D13. Package interface lists are complete
-- **In short:** a guard checks that every name imported from `openlinx.crawl.<package>.<module>` outside that package is listed in the package's docstring, and its message names the docstring to edit.
+- **In short:** a guard checks that every name a module of `src` imports from `openlinx.crawl.<package>.<module>` outside that package is listed in the package's docstring, and its message names the docstring to edit.
 - `docs/architecture.md` says where a Link's element comes from: `locate_links(tree, page.links)`.
 - **Why:** CONTRIBUTING makes these lists the only statement of a package's interface, and they leave out names other packages already import, such as `prepare_page` and `locate_links`; a contributor who trusts them takes the names for internal ones and writes the walk again.
 - *Alternative:* `__all__` in each module. It states each module's names, not the package's interface, and nothing reads it in a package that is never star-imported. Rejected.
