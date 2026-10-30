@@ -31,7 +31,7 @@ None.
 
 ## Impact
 
-- Code: `openlinx.crawl.engine` (stop, hooks), `openlinx.crawl.pages` (preparation, links), `openlinx.crawl.references`, `openlinx.crawl.following`, `openlinx.store` (records, writer), `openlinx.services` (crawling, a new `settings` module), `openlinx.workspace.settings`, `openlinx.cli` (app, crawl, commands, options), `openlinx.output.codes`, `openlinx.extract` (`page_links`, `link_handler`), `pyproject.toml` (ruff).
+- Code: `openlinx.crawl.engine` (stop, hooks, warnings), `openlinx.crawl.hook_failures` (new), `openlinx.crawl.pages` (preparation, links), `openlinx.crawl.references`, `openlinx.crawl.following`, `openlinx.store` (records, writer), `openlinx.services` (crawling, a new `settings` module), `openlinx.workspace.settings`, `openlinx.cli` (app, crawl, commands, options), `openlinx.output.codes`, `openlinx.extract` (`page_links`, `link_handler`), `pyproject.toml` (ruff).
 - Tests: new guards in `tests/test_code_style.py`, `tests/workspace/test_tables.py` and `tests/contract/`; messages on the existing guards; `tests/support/crawling.py` without the app.
 - Docs: CONTRIBUTING's recipes, `docs/architecture.md`, `docs/crawl-store.md`, `docs/crawling.md`, `docs/testing.md`, `docs/workspace.md`, AGENTS.md links.
 - Other branches: `030` reads the Link type table in its element guard, its passes use the narrow writer, and its new tables go in `openlinx.store.schema`. `040` and `050` register their settings tables in `default_tables()`. `050` compiles `--where` in `openlinx.store.query`. `022`, which honours the proxy variables, modifies "Environment variables change nothing" and lists them under `environment`.

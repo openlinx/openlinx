@@ -24,14 +24,15 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - *Alternative:* `set` hops to the loop by itself with `call_soon_threadsafe`. It hides which thread sets the flag, and the callbacks (the stopping event, the grace) would then run later than their caller assumes. Rejected.
 
 ### D2. An extractor is module-level, checked when it is built
-- **In short:** `Extractor` refuses a function whose `__qualname__` holds `<locals>` or whose name is `<lambda>`, with "the function of the extractor X is not module-level: a parse worker process imports it by name; pass values through config". A callable without a `__qualname__`, such as a `functools.partial` of a module-level function, pickles by reference and passes.
+- **In short:** `Extractor` refuses a function whose `__qualname__` holds `<locals>` or whose name is `<lambda>`, with "the function of the extractor X is not module-level: a parse worker process imports it by name; pass values through config".
 - A guard pickles the `PageSettings` built from `default_hooks()` and checks that it unpickles equal, which is what `026`'s pool does with it. It also catches a config field that does not pickle.
 - *Alternative:* `pickle.dumps` of every extractor at build time. It costs a pickle per Crawl and gives a pickle error instead of the rule. Rejected; the guard covers the built-ins and the qualname check covers the rest.
 
 ### D3. A hook failure names its error and where it was raised
 - **In short:** the first counted `handler_failed` and `parse_failed` warnings carry `details.error`, the error's text cut to 300 characters, and `details.at`, the file and line in the hook where it was raised.
-- **Which frame:** the deepest frame of the traceback whose file is the one that defines the hook's function (its `co_filename`), so an error raised in a library the hook calls points at the hook's own line. The file is written relative to the folder that holds its top-level package, with `/` on every OS, so the warning is the same on every machine. With no such frame, as when an extractor returns something other than its declared output and preparation raises, `at` is absent rather than pointing at preparation.
+- **Which frame:** the deepest frame of the traceback whose file is the one that defines the hook's function (its `co_filename`), so an error raised in a library the hook calls points at the hook's own line. The function is unwrapped first, from a `functools.partial` and from a decorator's `__wrapped__`, so a decorator's file is never named. The file is written relative to the folder that holds its top-level package, with `/` on every OS, so the warning is the same on every machine; a file outside that folder is named by its module's dotted name. With no such frame, as when an extractor returns something other than its declared output and preparation raises, `at` is absent rather than pointing at preparation.
 - A preparation that gave nothing (`body_too_large`, `worker_crashed`, `parse_timeout`) raised nothing in a hook, so its warning has neither key.
+- Reading the error never fails the URL: an error whose text cannot be read is named by its type.
 - `PreparedPage` carries each extractor failure as a small frozen struct (name, error type, text, place), so it crosses `026`'s process boundary. `parse_error_message` stays `name: Type`: it is a public column of every Page, and the text of one error belongs to the warning, which keeps only the first.
 - Test helpers that fail on an extractor error (`page_result`) print the same details.
 - *Alternative:* a traceback in the details. It is long, holds absolute paths, and differs by OS. Rejected.
@@ -113,7 +114,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 
 ### D16. Test seams
 - **In short:** the pure politeness and pause formulas (`global_cap`, `watchdog_seconds`, `pause_after`, `probe_times`, `BlockingRuns`) are tested at seam 4, table-driven, beside the service tests of the same rules.
-- The race of a skip that a raise overtook is driven through `crawl_result` with `FakeFetcher`'s `on_start`. If it cannot be staged there deterministically, `Outcomes` becomes a named internal seam in `docs/testing.md`, and its test stays.
+- The race of a skip that a raise overtook is driven through `crawl_result` with `FakeFetcher`'s page delays on `FakeClock`, and the test checks that the handler saw the URL twice, so it fails if the timing stops staging the race. `Outcomes` stays off the seam list.
 - **Why:** the formulas are specified tables whose values a service test shows only one at a time, so a table at seam 4 is the cheaper and the clearer proof; the race test pins a real double count, and the outcome pipeline's internals are its only setting today.
 - *Alternative:* delete the formula tables and keep the service tests. The tables would lose their checks of the edges. Rejected.
 - Seams of this change: 1 (`linx commands`), 2 (`plan_crawl`, the writer, the settings loader), 3+6 (hook failures), 4 (the stop flag, the extractor check, `locate_links`, the formulas), 6 (the schema guards).
@@ -126,6 +127,8 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - Guards named after no scenario, and the failure class each guards:
   - `test_a_stop_flag_set_off_its_loop_is_refused`: an off-loop set that wakes no waiter.
   - `test_the_default_page_settings_pickle`: an extractor or config that `026`'s workers cannot load.
+  - `test_an_extractor_whose_function_is_not_module_level_cannot_be_built`: an extractor that works in process and fails in every `026` worker.
+  - `test_an_error_that_cannot_be_printed_costs_only_the_extractor_s_output`: a hook failure whose report fails the URL.
   - `test_an_error_raised_in_a_library_points_at_the_extractor_s_line`: a hook failure that points into the library instead of the hook.
   - `test_every_table_is_declared_in_the_schema_module`: a table missing from the contract.
   - `test_every_name_used_across_a_package_is_listed`: a hidden package interface.

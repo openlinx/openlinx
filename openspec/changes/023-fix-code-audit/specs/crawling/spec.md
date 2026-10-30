@@ -6,7 +6,7 @@
 
 The warning that "One URL never stops the Crawl" writes for the first URL a handler or an extractor raised on SHALL hold, besides `count` and `first_url`:
 - `details.error`: the error's text, at most 300 characters;
-- `details.at`: `<file>:<line>`, where the line is that of the deepest frame of the traceback in the file that defines the hook's function, and the file is that file's path relative to the folder that holds its top-level package, with `/` between its parts on every OS, such as `tests/crawl/test_hooks.py:88`; it is absent when no frame of the traceback is in that file, as for an extractor that returned something other than its declared output.
+- `details.at`: `<file>:<line>`, where the line is that of the deepest frame of the traceback in the file that defines the hook's function, and the file is that file's path relative to the folder that holds its top-level package, with `/` between its parts on every OS, such as `tests/crawl/test_hooks.py:88`, or the module's dotted name for a file outside that folder; it is absent when no frame of the traceback is in that file, as for an extractor that returned something other than its declared output.
 
 A `parse_failed` warning whose first URL raised nothing, a page preparation that gave nothing (`body_too_large`, `worker_crashed`, `parse_timeout`), SHALL have neither key.
 
