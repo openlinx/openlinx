@@ -61,7 +61,8 @@ def crawl_result(
     tables of another app, such as `example_app()`'s; their secret settings are redacted as the
     CLI redacts them.
     """
-    tables = tables or default_tables()
+    if tables is None:
+        tables = default_tables()
     request = CrawlRequest(
         seed=seed,
         cwd=Path.cwd(),
@@ -69,6 +70,7 @@ def crawl_result(
         workspace=None,
         command_argv=["linx", "crawl", seed],
         flags={"crawl": crawl},
+        secret_flags=frozenset(),
     )
     plan = plan_crawl(request, tables)
     return start_crawl(

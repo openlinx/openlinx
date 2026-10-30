@@ -84,12 +84,23 @@ def refused_given_value(
     """invalid_value for the first error at a key the caller gave, or None when the file's
     values alone are refused: the call's own input is checked first, as Click checks flags
     (023-fix-code-audit D9). `table` names the table of an error from one table's model."""
-    keys = set(_given_values(given))
+    values = _given_values(given)
+    keys = set(values)
+    # A table the caller gave values in: an error located at the table itself, such as a table
+    # that is not registered or a check of the whole table, is the caller's too.
+    tables = {
+        ".".join(names[:size])
+        for names in (key.split(".") for key in values)
+        for size in range(1, len(names))
+    }
     for problem in error.errors():
         parts = ([] if table is None else [table]) + [str(part) for part in problem["loc"]]
         # A list's item is located below its key, as crawl.exclude.1.
         prefixes = (".".join(parts[:size]) for size in range(len(parts), 0, -1))
         key = next((prefix for prefix in prefixes if prefix in keys), None)
+        located = ".".join(parts)
+        if key is None and located in tables:
+            key = located
         if key is not None:
             # pydantic words a validator's ValueError as "Value error, <its text>".
             reason = problem["msg"].removeprefix("Value error, ")

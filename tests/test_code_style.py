@@ -301,20 +301,18 @@ def test_only_the_store_imports_sqlalchemy() -> None:
     )
 
 
-# The packages under the CLI: a service called without the CLI, as the MCP server will call it,
-# must not load Typer or the CLI's adapters (023-fix-code-audit D9).
-UNDER_THE_CLI = tuple(
-    f"openlinx/{package}/"
-    for package in ("services", "workspace", "store", "crawl", "extract", "output")
-)
+# Only the CLI loads Typer: a service called without it, as the MCP server will call it, must not
+# load Typer or the CLI's adapters (023-fix-code-audit D9).
+CLI_MODULES = ("openlinx/cli/", "openlinx/__main__.py")
 
 
 def cli_import_violations(sources: Mapping[str, str]) -> list[str]:
-    """Modules under the CLI that import typer or openlinx.cli, given every module's source."""
+    """Modules outside the CLI that import typer or openlinx.cli, given every module's source.
+    Relative imports, which would hide the name, are banned by ruff's TID252."""
     return [
         f"{module} imports {name}"
         for module, source in sources.items()
-        if module.startswith(UNDER_THE_CLI)
+        if not module.startswith(CLI_MODULES)
         for name in _modules_and_submodules(ast.parse(source))
         if name.partition(".")[0] == "typer"
         or name == "openlinx.cli"
@@ -338,7 +336,7 @@ def test_no_service_imports_the_cli() -> None:
     }
 
     assert cli_import_violations(sources) == [], (
-        "a module under the CLI imports typer or openlinx.cli: take plain values and raise "
+        "a module outside openlinx.cli imports typer or openlinx.cli: take plain values and raise "
         "OpenLinxError, and let the CLI adapter in openlinx.cli map flags to them"
     )
 
@@ -350,8 +348,10 @@ def test_an_import_of_the_cli_under_it_is_named() -> None:
         "openlinx/output/writer.py": "from typer.testing import CliRunner\n",
         "openlinx/extract/page_data.py": "from openlinx import cli\n",
         "openlinx/store/urls.py": "import typing\nfrom openlinx.clock import Clock\n",
+        "openlinx/query/compiler.py": "import typer\n",
+        "openlinx/naming.py": "from openlinx.cli import options\n",
         "openlinx/cli/crawl.py": "import typer\n",
-        "openlinx/naming.py": "import typer\n",
+        "openlinx/__main__.py": "from openlinx.cli.app import main\n",
     }
 
     assert cli_import_violations(sources) == [
@@ -359,6 +359,8 @@ def test_an_import_of_the_cli_under_it_is_named() -> None:
         "openlinx/workspace/settings.py imports openlinx.cli.options",
         "openlinx/output/writer.py imports typer.testing",
         "openlinx/extract/page_data.py imports openlinx.cli",
+        "openlinx/query/compiler.py imports typer",
+        "openlinx/naming.py imports openlinx.cli",
     ]
 
 

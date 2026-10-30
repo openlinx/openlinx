@@ -40,6 +40,7 @@ def test_the_journal_mode_setting_reaches_the_crawl_file(
         workspace=None,
         command_argv=["linx", "crawl", server.url("/")],
         flags={},
+        secret_flags=frozenset(),
     )
 
     result = start_crawl(plan_crawl(request), SystemClock(), Collected(), default_hooks())
@@ -261,3 +262,30 @@ def test_a_refused_file_value_beside_a_given_value_stays_a_settings_file_error(
         "file" in details,
         [error["key"] for error in details.get("errors", [])],
     ) == ("settings_invalid", 3, True, ["crawl.max_depth"])
+
+
+def test_a_crawl_request_names_its_secret_flags(temp_workspace: TempWorkspace) -> None:
+    # A caller that forgot them would record a --token given on its command line in the clear.
+    with pytest.raises(TypeError, match="secret_flags"):
+        CrawlRequest(  # type: ignore[call-arg]
+            seed="http://site.test/",
+            cwd=temp_workspace.root,
+            home=temp_workspace.home,
+            workspace=None,
+            command_argv=["linx", "crawl", "http://site.test/", "--token", "s3cret"],
+            flags={},
+        )
+
+
+def test_a_table_given_with_the_settings_that_is_not_registered_names_it(
+    temp_workspace: TempWorkspace,
+) -> None:
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, {"crawl_rules": {"level": "high"}}))
+
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        refused.value.diagnostic.details.get("key"),
+        "file" in refused.value.diagnostic.details,
+    ) == ("invalid_value", 2, "crawl_rules", False)

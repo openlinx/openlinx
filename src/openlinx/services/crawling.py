@@ -92,10 +92,11 @@ class CrawlRequest:
     command_argv: Sequence[str]
     # Settings given as flags, by table: they override the settings file (010 D2).
     flags: Mapping[str, Mapping[str, Any]]
+    # The command line's tokens that take a secret, such as --token, which the file redacts:
+    # no default, so a caller that forgot them never records a secret in the clear.
+    secret_flags: frozenset[str]
     # --subdomains: the same as the scope "subdomains", which conflicts with another one.
     subdomains: bool = False
-    # The command line's tokens that take a secret, such as --token, which the file redacts.
-    secret_flags: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, kw_only=True)
