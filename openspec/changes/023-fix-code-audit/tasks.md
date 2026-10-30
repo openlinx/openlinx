@@ -32,7 +32,7 @@ Seams are those of docs/testing.md. A guard is proven red by a mutation, and the
 ## 4. The Crawl's input (design D9, D10)
 
 - [x] 4.1 Drive "A refused value given with the settings names its key" at seam 2, through `plan_crawl` with no app, and "A refused given value is reported before a refused file value", and `Settings.table` naming a table that is not registered. `default_tables()` in `openlinx.services.settings`; `build_app`, `plan_crawl` and `init_workspace` use it, the test helpers build no app, and docs/testing.md names it for seam-2 calls.
-- [ ] 4.2 Drive "A refused override of a continued Crawl names its key" at seam 2, through the mapper that `load_settings` uses.
+- [x] 4.2 Drive "A refused override of a continued Crawl names its key" at seam 2, through the mapper that `load_settings` uses.
 - [ ] 4.3 Drive "A refused flag names its setting" at seam 1: the runner's `invalid_value` takes `details.key` from the option's setting.
 - [ ] 4.4 `CrawlRequest` gets `subdomains` and `secret_flags` in place of `secret_names`, and `plan_crawl` resolves the alias and its conflict and builds the secret names, at seam 2 with the conflict's existing scenario kept at seam 1. The CLI adapter only maps flags.
 - [ ] 4.5 Drive "Bounds of an option" at seam 1: `min` and `max` in `linx commands` and docs/cli.md.

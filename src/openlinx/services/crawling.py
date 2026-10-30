@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from aiohttp.abc import AbstractResolver
+from pydantic import ValidationError
 
 from openlinx.aio import loop_factory
 from openlinx.clock import Clock
@@ -70,7 +71,7 @@ from openlinx.store.transitions import check_transition
 from openlinx.store.urls import url_counts
 from openlinx.store.writer import CrawlWriter
 from openlinx.workspace.discovery import resolve_workspace
-from openlinx.workspace.settings import Settings, load_settings
+from openlinx.workspace.settings import Settings, load_settings, refused_given_value
 from openlinx.workspace.tables import SettingsTables
 
 _SEED_PROBLEMS: Mapping[InvalidUrlReason, str] = {
@@ -301,7 +302,15 @@ def continue_crawl(
     recorded = read_recorded(crawl_file.path)
     # Before anything is written; the continue's unit checks it again as it writes.
     check_transition(recorded.state, "running", None)
-    settings = CrawlSettings.model_validate({**recorded.config["crawl"], **overrides.given()})
+    given = overrides.given()
+    try:
+        settings = CrawlSettings.model_validate({**recorded.config["crawl"], **given})
+    # Only an override can be refused: the recorded values passed when the Crawl started.
+    except ValidationError as error:
+        refused = refused_given_value(error, {"crawl": given}, table="crawl")
+        if refused is None:
+            raise
+        raise refused from error
     strip_params = strip_params_pattern(settings.strip_params)
     planned = _Planned(
         seed=_seed(recorded.seeds[0], strip_params),

@@ -77,14 +77,14 @@ def load_settings(
 
 
 def refused_given_value(
-    error: ValidationError, given: Mapping[str, Mapping[str, Any]]
+    error: ValidationError, given: Mapping[str, Mapping[str, Any]], table: str | None = None
 ) -> OpenLinxError | None:
     """invalid_value for the first error at a key the caller gave, or None when the file's
     values alone are refused: the call's own input is checked first, as Click checks flags
-    (023-fix-code-audit D9)."""
+    (023-fix-code-audit D9). `table` names the table of an error from one table's model."""
     keys = set(_given_keys(given))
     for problem in error.errors():
-        parts = [str(part) for part in problem["loc"]]
+        parts = ([] if table is None else [table]) + [str(part) for part in problem["loc"]]
         prefixes = {".".join(parts[:size]) for size in range(1, len(parts) + 1)}
         # The deepest given key: a table's name is given too, with its keys.
         key = next((p for p in sorted(prefixes, key=len, reverse=True) if p in keys), None)
