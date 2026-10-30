@@ -104,6 +104,14 @@ def test_a_secret_option_without_a_setting() -> None:
     assert (option["setting"], option["secret"]) == (None, True)
 
 
+def test_bounds_of_an_option() -> None:
+    options = _options(run_cli("commands").json(), "crawl")
+
+    assert {
+        name: (options[name]["min"], options[name]["max"]) for name in ("--concurrency", "--rate")
+    } == {"--concurrency": (1, 50), "--rate": (None, None)}
+
+
 def test_a_hidden_option_is_not_described() -> None:
     options = _options(run_cli("commands", app=example_app()).json(), "example-settings")
 

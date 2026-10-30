@@ -13,6 +13,8 @@
       "type": "choice",
       "choices": ["json", "table"],
       "default": "json",
+      "min": null,
+      "max": null,
       "required": false,
       "multiple": false,
       "global": true,
