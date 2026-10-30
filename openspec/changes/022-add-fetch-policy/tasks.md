@@ -30,7 +30,7 @@ Seams (docs/testing.md):
 ## 1. Request identity and cookies
 
 - [x] 1.0 Refactor, behaviour unchanged: the Crawl Service opens the Fetcher through one factory that takes a frozen `FetchPolicy` and the clock, and the factory replaces `start_crawl`'s `resolver=` and `fetcher=` keywords (design D1). `plan_crawl` builds the policy; `crawl_result` keeps its own keywords and builds the factory from them, so its callers do not change. After `020` task 5.24, which edits the same Fetcher.
-- [x] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` from `FetchPolicy`, built from `COMMAND_NAME`, `openlinx.__version__` and a `PROJECT_URL` constant next to `COMMAND_NAME` in `openlinx.naming`, the repository's URL until the product is named (design D1). No `User-Agent` is set today, so aiohttp's own goes out.
+- [x] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` from `FetchPolicy`, built from `PRODUCT_NAME`, `openlinx.__version__` and `CRAWLER_PAGE_URL`, the address of `docs/crawler.md`, in `openlinx.naming` (design D1). No `User-Agent` is set today, so aiohttp's own goes out.
 - [x] 1.2 [HTTP] Drive "A custom user agent is used on every request", and [CLI] "An invalid user agent is rejected", a pair: `--user-agent` and `crawl.user_agent`, which `setting_rules` refuses when it is empty or holds CR, LF or another control character (narrowed to visible ASCII, spaces and tabs by 2.0). robots.txt goes through the same Requester and Fetcher, so its request carries it too.
 - [x] 1.3 [HTTP] **Guard:** "Cookies set by the site are not sent back". `020`'s Fetcher already has a `DummyCookieJar`. `/` sets the cookie through the route's `headers`, and the request log shows the request for `/check`.
 - [x] 1.4 Docs: document the user agent and cookies in `docs/crawling.md`.
@@ -146,17 +146,40 @@ Seams (docs/testing.md):
 - [x] 9.7 [Fake timing] A request waits out its host's pause before it takes the global permit, racing the stop, and checks again once it holds it (design D4): `test_a_request_waiting_for_the_global_cap_when_its_host_pauses_starts_after_it` keeps its premise, and `test_a_stop_ends_the_wait_for_a_host_pause` is red first (design Risks).
 - [x] 9.8 Review: run the code-review skill on group 9's commits, with the findings of the review of the merges of `020` and main, then refactor with the whole suite green.
 
+## 9b. Before the first PR (v0.1)
+
+The first PR ships groups 1-9 and this group; group 10 follows in a second.
+
+- [ ] 9b.1 [CLI] `linx commands` lists the proxy variables under `environment` again, with this change's wording, and `docs/workspace.md` says so. A test reads `environment` and checks each name against `ProxyVariables`' keys, so the list and the reader cannot drift (design D1).
+- [ ] 9b.2 Docs: `docs/crawler.md` for site owners, every claim checked against the code: a URL is requested once per Crawl plus its retries, robots.txt's 5xx or 429 keeps the URLs of its origin unrequested after robots.txt's own retries, and the 10-second wait is a 429's only. `README.md` gains the line "Crawl only sites you own or have permission to crawl; the defaults are polite, see docs/crawler.md". The docs-link guard covers the page. Group 9's rules hold too: a robots.txt retry waits out a network pause, and a URL limit reached during one waits for it.
+- [ ] 9b.3 [Fake timing] The URL limit's wait for an open pause count ends at `--network-wait` from the refusal, and then the Crawl stops (design D4).
+- [ ] 9b.4 [Fake timing] A `Retry-After` date is measured from when the response ended, not from when its request was sent (design D4).
+- [ ] 9b.5 [3+6] A continue records the proxy variables it fetches through, redacted as a start's are, in place of the start's, and `docs/crawling.md` ("Continuing a Crawl") says so (design D1).
+- [ ] 9b.6 Docs: `attempt_count` is the requests made for the URL in the dispatch that recorded it, its retries included; the spec, `schema.py` and `docs/schema.md` say one text.
+- [ ] 9b.7 [Fake timing] A probe and a host's `Retry-After` pause, by the rule ruled at this task's plan check (design D4).
+- [ ] 9b.8 The Seed's Redirect Chain closes at one point; a second close, if a Crawl can reach it, is red first (design D3).
+- [ ] 9b.9 Refactor, behaviour unchanged: `StopSignal` gives two views, `new_requests` and `under_way`, each with `is_set` and `wait()`, and probes take one that is never set; `_slots` takes its view and yields whether it holds the slots.
+- [ ] 9b.10 Refactor, behaviour unchanged: the network pause's gate is a `PauseGate` (close, open, and whether a request passes it).
+- [ ] 9b.11 Refactor, behaviour unchanged: the pause's two per-URL methods say that they change its state and which one is robots.txt's, and take one kind of input.
+- [ ] 9b.12 Refactor, behaviour unchanged: one function of the URL limit gives a count back, for the Requester, the network pause and an outage.
+- [ ] 9b.13 Refactor, behaviour unchanged: the engine's `_outcome` is named after what it returns.
+- [ ] 9b.14 Refactor, behaviour unchanged: the request timeout has one reader, the `FetchPolicy` the `CrawlContext` carries.
+- [ ] 9b.15 Docs: CONTRIBUTING's module sizes are the real ones, and each module or class past them says the split it would take.
+- [ ] 9b.16 Docs: `docs/architecture.md`'s hooks rule names `_response_headers` as the one-line handle.
+- [ ] 9b.17 Style: the docstrings that restate their name go.
+- [ ] 9b.18 The comment of `_slots` on the global permit holds for `--rate`'s interval too.
+- [ ] 9b.19 Review: run the code-review skill on group 9b's commits, then refactor with the whole suite green.
+
 ## 10. Closing the change (v0.1)
 
-Tasks 6.4 and 8.2 close in this group too.
+Tasks 6.4 and 8.2 close in this group too, 8.2 from the first PR's CI.
 
-- [ ] 10.1 [CLI] With `023`'s group 1 on main, whose task 1.4 drops the proxy variables from `linx commands`: bring back the `environment` entry with this change's wording and the proxy sentence of `docs/workspace.md`, with this change's cli-contract delta of `023`'s requirement, the proxy variables as the only environment the tool honours. A test reads `environment` from `linx commands` and checks each name against `ProxyVariables`' keys, so the list and the reader cannot drift.
+- [ ] 10.1 Spec, once `023` is archived: this change's workspace delta MODIFIES `023`'s "Environment variables change nothing", the proxy variables its one exception, with this change's scenario, and its cli-contract delta the `environment` row; 9b.1's test is then named after that scenario.
 - [ ] 10.2 Refactor, behaviour unchanged: `BlockingRuns` and `BLOCKING_RUN` move to `openlinx.crawl.engine.blocking`, since only the engine uses them, and both package docstrings follow.
 - [ ] 10.3 [3+6] Drive "A redirect to another subdomain stays inside the Scope", on `fixture_named_hosts` with `en.site.test` (design D3).
-- [ ] 10.4 [Fixture] A self-signed listener served as `selfsigned.test`, test-first in `tests/fixture_site/`; then `test_a_self_signed_certificate_is_a_tls_error` [3+6], which CI runs on Windows, macOS and Linux, since each verifies through its own platform API (design D5, Risks).
-- [ ] 10.5 Docs: `docs/crawler.md` for site owners, every claim checked against the code: a URL is requested once per Crawl plus its retries, robots.txt's 5xx or 429 keeps the URLs of its origin unrequested after robots.txt's own retries, and the 10-second wait is a 429's only. `README.md` gains the line "Crawl only sites you own or have permission to crawl; the defaults are polite, see docs/crawler.md". The docs-link guard covers the page.
-- [ ] 10.6 Docs: `docs/crawling.md` ("Continuing a Crawl") says a continue uses its own process's proxy variables (design D1).
-- [ ] 10.7 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [ ] 10.4 [Fixture] A self-signed listener served as `selfsigned.test`, test-first in `tests/fixture_site/`, its certificate made with `cryptography`, which the dev group declares; then `test_a_self_signed_certificate_is_a_tls_error` [3+6], which CI runs on Windows, macOS and Linux, since each verifies through its own platform API (design D5, Risks).
+- [ ] 10.5 [Fake timing] The URL limit's wait for an open pause count also follows the Internal checked URLs in flight, which count towards the pause and may give counts back, red first (design D4).
+- [ ] 10.6 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
 
 ## 11. (v0.2) Custom headers and credentials
 
