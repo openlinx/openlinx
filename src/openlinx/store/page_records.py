@@ -67,7 +67,7 @@ class PageRow:
     crawl_timestamp: datetime
     # The fields default to NULL, in column order. From the Page extractor: NULL for a Page that
     # is not analysed or whose Page extractor failed (D2): the titles, meta elements, headings,
-    # meta_refresh, and the counts from word_count on.
+    # meta_refresh, and the counts from word_count on. The columns of later releases stay NULL.
     title_1: str | None = None
     title_1_length: int | None = None
     title_1_width_px: int | None = None

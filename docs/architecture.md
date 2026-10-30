@@ -129,11 +129,11 @@ Frontier ──► Engine ──► Requester ──► Fetcher ──► Page e
 
 ## Page data
 
-The columns of `pages`, by group; each column's definition is its description in [schema.md](schema.md#table-pages). A release in brackets marks a column that is NULL until that release ([ROADMAP.md](../ROADMAP.md)).
+The columns of `pages`, by group; each column's definition is its description in [schema.md](schema.md#table-pages). A release in parentheses marks a column that is NULL until that release ([ROADMAP.md](../ROADMAP.md)).
 
 | Group | Columns |
 |---|---|
-| Identity and response | `address`, `url_encoded_address`, `url_path`, `url_query`, `content_type`, `status_code`, `status`, `indexability`, `indexability_status`, `response_time_ms`, `last_modified`, `redirect_url`, `redirect_type`, `set_cookie_count`, `js_cookie_count` (v1.1), `http_version` (v0.2), `crawl_timestamp` |
+| Identity and response | `url_id`, `address`, `url_encoded_address`, `url_path`, `url_query`, `content_type`, `status_code`, `status`, `indexability`, `indexability_status`, `response_time_ms`, `last_modified`, `redirect_url`, `redirect_type`, `set_cookie_count`, `js_cookie_count` (v1.1), `http_version` (v0.2), `crawl_timestamp` |
 | Titles and headings | `title_1` and `title_2`, each with `_length` and `_width_px` (v0.2), `title_count`, `meta_description_1` and `meta_description_2`, each with `_length` and `_width_px` (v0.2), `meta_description_count`, `meta_keywords_1` and its `_length`, `h1_1` and `h1_2`, each with `_length`, `h1_count`, `h2_1` and `h2_2`, each with `_length`, `h2_count` |
 | Directives | `meta_robots` and `x_robots_tag`, each with `_noindex` and `_nofollow`, `meta_refresh`, `canonical_url`, `canonical_link_element_1`, `canonical_link_element_2`, `http_canonical`, `canonical_count`, `canonical_relative`, `rel_next_1`, `rel_prev_1`, `http_rel_next_1`, `http_rel_prev_1`, `amphtml_link_element`, `mobile_alternate_link` |
 | Size | `size_bytes`, `transferred_bytes`, `content_encoding` |

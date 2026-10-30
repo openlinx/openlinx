@@ -549,7 +549,8 @@ pages = public_table(
     Column(
         "http_version",
         Text,
-        comment="Filled from v0.2. origins.http_version for the Page's origin.",
+        comment="Filled from v0.2. The HTTP version that the requests to the Page's origin "
+        "use, equal to origins.http_version.",
         info={"values": literal_values(HttpVersion)},
     ),
     Column(
@@ -854,14 +855,17 @@ pages = public_table(
     Column(
         "syllable_count",
         Integer,
-        comment="Filled from v0.2. The syllables of the Content Area's words, counted by the "
-        "rules of the Page's readability language.",
+        comment="Filled from v0.2. The number of syllables in the Content Area's words, by the "
+        "rules of the Page's readability language: the lower-cased primary subtag of "
+        "declared_language, one of en, de, es, fr, nl, pt and ru; NULL for a Page without "
+        "one.",
     ),
     Column(
         "flesch_reading_ease",
         REAL,
         comment="Filled from v0.2. The Flesch Reading Ease of the Content Area text, by the "
-        "formula of the Page's readability language, rounded to 1 decimal.",
+        "formula of the Page's readability language (see syllable_count), rounded to 1 "
+        "decimal; NULL for a Page without one or without words.",
     ),
     Column(
         "readability",
@@ -888,7 +892,8 @@ pages = public_table(
         "detected_language",
         Text,
         comment="Filled from v0.2. The ISO 639-1 code of the language detected from the Content "
-        "Area text, when the Crawl detects languages.",
+        "Area text when the Crawl was started with --detect-language or [crawl] "
+        "detect_language; NULL otherwise, or when that text has no words.",
     ),
     Column(
         "content_hash",
@@ -943,8 +948,8 @@ pages = public_table(
     Column(
         "unique_js_inlinks",
         Integer,
-        comment="Filled from v1.1. The distinct source Pages whose hyperlinks to this Page come "
-        "from rendered HTML, measured with JavaScript rendering.",
+        comment="Filled from v1.1. The distinct source Pages of the hyperlinks to this Page "
+        "whose links.html_source is rendered, the Page itself left out.",
     ),
     Column(
         "linking_pages_pct",
@@ -968,8 +973,8 @@ pages = public_table(
     Column(
         "unique_js_outlinks",
         Integer,
-        comment="Filled from v1.1. The distinct Internal targets of the Page's hyperlinks that "
-        "come from its rendered HTML, measured with JavaScript rendering.",
+        comment="Filled from v1.1. The distinct Internal targets of the Page's hyperlinks whose "
+        "links.html_source is rendered, the Page itself left out.",
     ),
     Column(
         "external_outlinks",

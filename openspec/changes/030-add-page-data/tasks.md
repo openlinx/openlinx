@@ -174,7 +174,7 @@ Task 12.4 moved to group 4 as task 4.0.
 - [x] 12.2 Drive "HTML is not stored by default" at seam 3+6. Create `page_sources` in `openlinx.store.schema` (`url_id`, an INTEGER PRIMARY KEY referencing `urls.id`, and `encoding` and `html`, both NOT NULL), whose table description starts with `Filled from v0.2. `; nothing writes it in v0.1. Drive "Columns of page_sources" (seam 6) in the same slice.
 - [x] 12.3 Guard "Non-ASCII title on a Windows console" at seam 1, skipped off Windows: a real subprocess `cmd /c "chcp 1251 >nul && python -m openlinx crawl ..."` started with `CREATE_NEW_CONSOLE`, so the code page changes only the child's own console, over a Page that serves the title as UTF-8 with no declared charset. The console code page reaches neither the process's pipes nor the stored data, so the test passes at once; its red proof is a decoding that falls back to the locale's encoding.
 - [x] 12.5 Docs: add the later columns and the empty `page_sources` table to `docs/page-data.md`, update the Page data table in `docs/architecture.md` with the stored column names, each later column marked with its release. *Review:* each column description reads well alone, as the Skill's column reference that `080` generates.
-- [ ] 12.6 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
+- [x] 12.6 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
 
 ## 4b. Sizes and HTTP redirects (after 022-min)
 

@@ -86,7 +86,8 @@ def test_events_are_utf_8_on_windows(
 def test_non_ascii_title_on_a_windows_console(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
-    # No charset, so the title is decoded by the last rule, which no locale may enter.
+    # No charset, so the title is decoded by the last rule, UTF-8, where code that took the
+    # machine's encoding would go wrong.
     page = Page(body="<title>Привет, мир</title>", content_type="text/html")
     server = fixture_site(Site(routes={"/ru": page}))
     workspace = temp_workspace.root / "site"
@@ -96,6 +97,7 @@ def test_non_ascii_title_on_a_windows_console(
     )
     # A console of its own, so chcp leaves alone the one the other tests share.
     new_console = 0
+    # The test runs only on Windows; the check lets mypy for Linux and macOS accept the flag.
     if sys.platform == "win32":
         new_console = subprocess.CREATE_NEW_CONSOLE
 
@@ -115,9 +117,9 @@ def test_non_ascii_title_on_a_windows_console(
 
     # chcp prints the code page it set, in the console's language, before the Crawl runs.
     assert (
-        b"1251" in completed.stdout.splitlines()[0],
+        [b"1251" in line for line in completed.stdout.splitlines()[:1]],
         [query(Path(file), "SELECT title_1, title_1_length FROM pages") for file in crawl_files],
-    ) == (True, [[("Привет, мир", 11)]])
+    ) == ([True], [[("Привет, мир", 11)]])
 
 
 def _utf8_json(line: bytes) -> Any:

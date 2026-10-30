@@ -9,7 +9,7 @@ from openlinx.store.schema import public_tables as declared_tables
 from tests.support.cli import run_cli
 
 SNAKE_CASE = re.compile(r"[a-z][a-z0-9_]*")
-LATER_OR_DERIVED = re.compile(r"Derived: |Filled from v[0-9]+\.[0-9]+\. ")
+LATER_OR_DERIVED = re.compile(r"(?P<derived>Derived: )|(?P<later>Filled from v[0-9]+\.[0-9]+\. )")
 
 
 def blank(text: Any) -> bool:
@@ -112,8 +112,8 @@ def test_derived_and_later_columns_may_hold_null() -> None:
     # Each kind seen at least once, so the rule is not passing vacuously.
     assert (
         [column["name"] for column, match in marked if match and not column["nullable"]],
-        {match.group(0)[:7] for _, match in marked if match},
-    ) == ([], {"Derived", "Filled "})
+        {match.lastgroup for _, match in marked if match},
+    ) == ([], {"derived", "later"})
 
 
 def test_every_unique_rule_is_an_index_and_every_reference_one_key() -> None:
