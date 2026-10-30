@@ -134,7 +134,8 @@ The Crawl SHALL retry a request attempt, robots.txt included, that ends with the
 - **429 without Retry-After:** the wait SHALL be 10 seconds.
 - **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start. A 429 or a `Retry-After` SHALL pause the host even when the URL is not retried, with `--retries 0` or on its last attempt.
 - **Other 4xx statuses** SHALL NOT be retried.
-- **URL limit:** a retry is the same URL, so only a URL's first attempt SHALL count towards `--max-urls`.
+- **URL limit:** a retry is the same URL, so only a URL's first attempt SHALL count towards `--max-urls`, and the URL limit SHALL NOT end the retries of a URL already requested: they go on within the stop's grace, as any request in flight does.
+- **Stop:** after any other stop, such as an interrupt, a retry that is due SHALL NOT start, and its URL SHALL NOT be recorded: it stays `queued`, so a continue requests it.
 - **Network pause:** a URL SHALL count once towards the network pause of `020-add-crawl-core`, at its first attempt that gets no HTTP response; its later attempts SHALL NOT count again. While the Crawl is paused waiting for the network, a request attempt that fails SHALL be neither retried nor recorded, and a URL whose retry is due SHALL make no further attempt; its URL stays `queued` and is requested after the pause.
 
 The URL SHALL record the last attempt's response. This change adds this column to `urls`, under the conventions of `018-add-schema-conventions`:
@@ -170,6 +171,14 @@ The URL SHALL record the last attempt's response. This change adds this column t
 #### Scenario: An unresolvable External host is requested once
 - **WHEN** `http://site.test/` links to `http://gone.test/`, a host name that does not resolve
 - **THEN** `http://gone.test/` has `fetch_error` = `dns_error`, and the name `gone.test` is resolved once
+
+#### Scenario: A retry under way outlasts the URL limit
+- **WHEN** `http://site.test/` links to `/a`, `/b` and `/c`, a fake Fetcher answers `/a` with 503 once and with 200 after that, and the Crawl runs with `--max-urls 3` and a fake clock
+- **THEN** `http://site.test/a` has `status_code` = 200 and `attempt_count` = 2
+
+#### Scenario: A stop cuts a pending retry and keeps its URL queued
+- **WHEN** a fake Fetcher answers `http://site.test/` with 503 once and with 200 after that, and the Crawl is interrupted as that 503 arrives, with a fake clock
+- **THEN** `http://site.test/` has `fetch_state` = `queued`, so a continue requests it
 
 #### Scenario: A request that fails during a network pause is not retried
 - **WHEN** `http://site.test/` links to `/p1` to `/p20`, a fake Fetcher answers `/` and gets no response for any later request, and the Crawl runs with `--concurrency 1`, `--network-wait 30` and a fake clock

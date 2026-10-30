@@ -141,7 +141,9 @@ Seams (docs/testing.md):
 - [ ] 9.3 Refactor, behaviour unchanged: the network pause owns its bookkeeping, `outcome(...)` for a URL's request and `verdict(...)` for robots.txt, and its `retries` is `requeues` (design D4). Red by a mutation that drops the URL-limit give-back inside `outcome`.
 - [ ] 9.4 Refactor, behaviour unchanged: the `CrawlContext` carries the `FetchPolicy`, and the watchdog reads `timeout_seconds` from it (design D1). **Guard:** `test_a_raised_timeout_raises_the_watchdog_with_it`, red by a mutation that gives the watchdog the default timeout.
 - [ ] 9.5 [Fake timing] **Guard:** "TLS errors never pause the Crawl", red by a mutation that counts `tls_error` (`020` keeps it out of the count already).
-- [ ] 9.6 Review: run the code-review skill on group 9's commits, with the findings of the review of the merges of `020` and main, then refactor with the whole suite green.
+- [ ] 9.6 [Fake timing] Drive "A retry under way outlasts the URL limit" and "A stop cuts a pending retry and keeps its URL queued", a pair: the URL limit's stop lets the retries of a URL already requested go on within the grace, and any other stop ends a due retry with `NotStarted` and the URL-limit give-back, robots.txt's retries included (design D4).
+- [ ] 9.7 [Fake timing] A request waits out its host's pause before it takes the global permit, racing the stop, and checks again once it holds it (design D4): `test_a_request_waiting_for_the_global_cap_when_its_host_pauses_starts_after_it` keeps its premise, and `test_a_stop_ends_the_wait_for_a_host_pause` is red first (design Risks).
+- [ ] 9.8 Review: run the code-review skill on group 9's commits, with the findings of the review of the merges of `020` and main, then refactor with the whole suite green.
 
 ## 10. Closing the change (v0.1)
 
