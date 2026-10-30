@@ -22,7 +22,7 @@ from openlinx.services.crawling import (
 )
 from openlinx.services.hooks import default_hooks
 from openlinx.services.settings import default_tables
-from openlinx.store.records import CrawlFile, SecretNames
+from openlinx.store.records import CrawlFile
 from openlinx.workspace.tables import SettingsTables
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
@@ -68,7 +68,6 @@ def crawl_result(
         home=Path.home(),
         workspace=None,
         command_argv=["linx", "crawl", seed],
-        secret_names=SecretNames(settings=tables.secret_settings()),
         flags={"crawl": crawl},
     )
     plan = plan_crawl(request, tables)

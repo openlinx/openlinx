@@ -4,7 +4,7 @@ from typing import cast
 
 import typer
 
-from openlinx.cli.options import secret_names
+from openlinx.cli.options import secret_flags
 from openlinx.cli.runner import OpenLinxGroup
 from openlinx.store.records import SecretNames
 from openlinx.store.redaction import redact
@@ -84,7 +84,10 @@ def test_a_secret_setting_that_is_not_a_string() -> None:
 def example_secret_names() -> SecretNames:
     """Read from the test app's declarations, as the adapter that creates a Crawl reads its own."""
     group = cast(OpenLinxGroup, typer.main.get_group(example_app()))
-    return secret_names(group.commands["example-settings"], group.settings_tables)
+    tables = group.settings_tables
+    return SecretNames(
+        secret_flags(group.commands["example-settings"], tables), tables.secret_settings()
+    )
 
 
 def test_the_secret_is_nowhere_in_the_file(temp_workspace: TempWorkspace) -> None:

@@ -36,6 +36,7 @@ from openlinx.crawl.urls import (
 from openlinx.output.codes import (
     INVALID_PATTERN,
     INVALID_URL,
+    OPTION_CONFLICT,
     SEED_OUT_OF_SCOPE,
     SUBFOLDER_IS_ROOT,
 )
@@ -89,9 +90,12 @@ class CrawlRequest:
     home: Path
     workspace: Path | None
     command_argv: Sequence[str]
-    secret_names: SecretNames
     # Settings given as flags, by table: they override the settings file (010 D2).
     flags: Mapping[str, Mapping[str, Any]]
+    # --subdomains: the same as the scope "subdomains", which conflicts with another one.
+    subdomains: bool = False
+    # The command line's tokens that take a secret, such as --token, which the file redacts.
+    secret_flags: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -180,7 +184,9 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
     # Checked before the Workspace is resolved, and stripped once the settings are read.
     _seed(request.seed, None)
     workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
-    settings = load_settings(workspace, tables or default_tables(), request.flags)
+    tables = tables or default_tables()
+    flags = _with_subdomains(request.flags) if request.subdomains else request.flags
+    settings = load_settings(workspace, tables, flags)
     crawl_settings = settings.table(CrawlSettings)
     strip_params = strip_params_pattern(crawl_settings.strip_params)
     seed = _seed(request.seed, strip_params)
@@ -206,7 +212,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         # Every registered table, resolved (design D11).
         config=settings.root.model_dump(mode="json"),
         scope=scope.to_json(),
-        secret_names=request.secret_names,
+        secret_names=SecretNames(request.secret_flags, tables.secret_settings()),
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
         section_crawl=scope.section_crawl,
@@ -530,6 +536,23 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
     finally:
         # 026's pool shuts its workers down here, however the Crawl ended.
         await executor.close()
+
+
+def _with_subdomains(flags: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """--subdomains has no setting of its own: it is resolved into scope (design D11)."""
+    crawl_flags = dict(flags.get("crawl", {}))
+    scope = crawl_flags.get("scope", "subdomains")
+    if scope != "subdomains":
+        raise OpenLinxError(
+            OPTION_CONFLICT,
+            f"--subdomains means --scope subdomains, so it cannot be given with --scope {scope}.",
+            hint="Give --scope alone, or --subdomains alone.",
+            details={"options": ["--subdomains", "--scope"]},
+        )
+    return {
+        **{table: dict(values) for table, values in flags.items()},
+        "crawl": {**crawl_flags, "scope": "subdomains"},
+    }
 
 
 def _seed_out_of_scope(seed: NormalizedUrl, decision: ScopeDecision) -> OpenLinxError:

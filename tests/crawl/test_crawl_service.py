@@ -41,7 +41,6 @@ def test_the_journal_mode_setting_reaches_the_crawl_file(
         home=temp_workspace.home,
         workspace=None,
         command_argv=["linx", "crawl", server.url("/")],
-        secret_names=SecretNames(),
         flags={},
     )
 
@@ -136,14 +135,22 @@ def test_the_result_times_the_crawl_on_its_clock(temp_workspace: TempWorkspace) 
     )
 
 
-def _given(temp_workspace: TempWorkspace, flags: dict[str, dict[str, object]]) -> CrawlRequest:
+def _given(
+    temp_workspace: TempWorkspace,
+    flags: dict[str, dict[str, object]],
+    *,
+    seed: str = "http://site.test/",
+    subdomains: bool = False,
+    secret_flags: frozenset[str] = frozenset(),
+) -> CrawlRequest:
     return CrawlRequest(
-        seed="http://site.test/",
+        seed=seed,
         cwd=temp_workspace.root,
         home=temp_workspace.home,
         workspace=None,
-        command_argv=["linx", "crawl", "http://site.test/"],
-        secret_names=SecretNames(),
+        command_argv=["linx", "crawl", seed],
+        subdomains=subdomains,
+        secret_flags=secret_flags,
         flags=flags,
     )
 
@@ -193,3 +200,40 @@ def test_a_table_that_is_not_registered_is_named(temp_workspace: TempWorkspace) 
         ),
     ):
         plan.loaded.table(ExampleSettings)
+
+
+def test_the_subdomains_shorthand_is_the_subdomains_scope_without_the_cli(
+    temp_workspace: TempWorkspace,
+) -> None:
+    plan = plan_crawl(_given(temp_workspace, {}, subdomains=True))
+
+    assert plan.scope.mode == "subdomains"
+
+
+def test_the_subdomains_shorthand_conflicts_with_a_subfolder_scope_without_the_cli(
+    temp_workspace: TempWorkspace,
+) -> None:
+    request = _given(
+        temp_workspace,
+        {"crawl": {"scope": "subfolder"}},
+        seed="http://site.test/blog/",
+        subdomains=True,
+    )
+
+    with pytest.raises(OpenLinxError) as conflict:
+        plan_crawl(request)
+
+    assert (conflict.value.code, conflict.value.diagnostic.details) == (
+        "option_conflict",
+        {"options": ["--subdomains", "--scope"]},
+    )
+
+
+def test_the_plan_names_the_secrets_the_crawl_file_redacts(temp_workspace: TempWorkspace) -> None:
+    plan = plan_crawl(
+        _given(temp_workspace, {}, secret_flags=frozenset({"--token"})), _with_example()
+    )
+
+    assert plan.new_crawl.secret_names == SecretNames(
+        flags=frozenset({"--token"}), settings=frozenset({"example.token"})
+    )
