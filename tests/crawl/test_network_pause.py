@@ -527,13 +527,80 @@ def test_a_url_refused_at_the_limit_before_a_pause_is_requested_once_the_count_c
         fetcher=FakeFetcher(clock, pages, outages=[(1, 30)]),
         concurrency=4,
         max_urls=19,
-        retries=0,
     )
 
     assert query(
         result.crawl_file,
         "SELECT fetch_state, count(*) FROM urls WHERE fetch_state != 'queued' GROUP BY 1",
     ) == [("fetched", 19)]
+
+
+def test_a_crawl_that_reaches_its_url_limit_during_a_network_pause_waits_for_the_pause_to_end(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    pages = {
+        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 31))),
+        **{f"/p{n}": FakePage(f"<p>P{n}</p>", delay=0.5 + n / 100) for n in range(1, 31)},
+    }
+
+    # The limit refuses /p19 at 2.36 seconds, as the eight failures that pause the Crawl at
+    # 2.4 still count: the outage gives their counts back, so the refused URLs come after it.
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages, outages=[(1, 30)]),
+        reporter=reporter,
+        concurrency=4,
+        max_urls=19,
+    )
+    events = [
+        (name, data.get("outcome", data.get("reason")))
+        for name, data in reporter.events
+        if name in ("crawl_resumed", "stopping")
+    ]
+
+    assert (events, result.counts.fetched) == (
+        [("crawl_resumed", "outage"), ("stopping", "max_urls")],
+        19,
+    )
+
+
+def test_the_url_limits_stop_does_not_end_a_network_pause(temp_workspace: TempWorkspace) -> None:
+    clock, reporter = FakeClock(), Collected()
+    hosts = ("http://site.test", "http://blog.site.test", "http://shop.site.test")
+    # The first URL of site.test answers at once and the others time out at 2 seconds: the limit
+    # stops the Crawl at once, and the eleven requests in flight then pause it.
+    links = "".join(f'<a href="{host}/{n}">{n}</a>' for n in range(1, 31) for host in hosts)
+    pages = {
+        "http://site.test/": FakePage(links),
+        "http://site.test/1": FakePage("<p>1</p>"),
+        **{
+            f"{host}/{n}": FakePage("", fails="timeout", delay=2)
+            for host in hosts
+            for n in range(1, 31)
+            if (host, n) != ("http://site.test", 1)
+        },
+    }
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages),
+        reporter=reporter,
+        scope="subdomains",
+        concurrency=4,
+        max_urls=13,
+        timeout=2,
+    )
+    names = [name for name, _ in reporter.events if name in ("stopping", "crawl_paused")]
+
+    # Ended by the stop, the pause would let their retries fail into false errors.
+    assert (
+        result.summary.stop_reason,
+        names,
+        set(query(result.crawl_file, "SELECT attempt_count FROM urls WHERE fetch_state = 'error'")),
+    ) == ("max_urls", ["stopping", "crawl_paused"], {(1,)})
 
 
 def test_urls_that_failed_in_an_outage_are_requested_again(temp_workspace: TempWorkspace) -> None:

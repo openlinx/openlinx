@@ -48,11 +48,11 @@ class Stop(Protocol):
     def is_set(self) -> bool: ...
 
     @property
-    def ends_retries(self) -> bool: ...
+    def ends_under_way(self) -> bool: ...
 
     async def wait(self) -> None: ...
 
-    async def wait_ending_retries(self) -> None: ...
+    async def wait_ending_under_way(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,7 +184,7 @@ class Requester:
             # A closed gate ends the retries: an outage spends none, and the network pause
             # decides on the URL from its last outcome (022 design D4).
             async with self._gated_slots(url, retry=True) as passed:
-                if self._stop.ends_retries:
+                if self._stop.ends_under_way:
                     return NotStarted()
                 if not passed:
                     return Attempted(outcome, attempts, gated=True)
@@ -263,11 +263,11 @@ class Requester:
         """Whether the turn came before the stop flag: a request that has not started does not
         sleep out its turn after a stop (design D16), nor a retry after one that ends retries
         (022 design D4)."""
-        if self._stop.ends_retries if retry else self._stop.is_set:
+        if self._stop.ends_under_way if retry else self._stop.is_set:
             return False
         if wait <= 0:
             return True
-        stopped = self._stop.wait_ending_retries() if retry else self._stop.wait()
+        stopped = self._stop.wait_ending_under_way() if retry else self._stop.wait()
         turn = await first_of(self._clock.sleep(wait), stopped)
         return not turn.cancelled()
 

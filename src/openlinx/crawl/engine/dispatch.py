@@ -183,6 +183,8 @@ async def _crawl_depth(run: Run, depth: int) -> None:
         while True:
             dispatched = await _start_depth(run, depth, running, checked_in_flight)
             if run.limits.limit_reached() is not None:
+                await _count_settled(run, running)
+            if run.limits.limit_reached() is not None:
                 # The URL limit is a stop: what has started gets the grace, and nothing more
                 # starts.
                 run.context.stop.set("max_urls")
@@ -225,6 +227,17 @@ async def _start_depth(
                 return dispatched
         after = batch[-1].id
     return dispatched
+
+
+async def _count_settled(run: Run, running: set[asyncio.Task[None]]) -> None:
+    """A refusal at the URL limit while the network pause's count is open waits for its
+    verdict, since an outage, or a failure while paused, gives counts back and takes the
+    refusal back: while the depth's requests end, then for a pause that is on (022 D4)."""
+    pause = run.pause
+    while pause.counting and running and not _stopping(run):
+        await first_of(run.context.stop.wait(), wake_on=running)
+    if pause.paused and not _stopping(run):
+        await pause.ended()
 
 
 async def _wait_out(run: Run, tasks: set[asyncio.Task[None]]) -> None:

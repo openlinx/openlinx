@@ -22,9 +22,9 @@ class StopSignal:
         self._cause: BaseException | None = None
         self._on_first_set: list[Callable[[StopReason], object]] = []
         self._was_set = asyncio.Event()
-        # Set by every stop but the URL limit's, which refuses new URLs only, so a retry already
-        # under way goes on within the grace (022-add-fetch-policy D4).
-        self._ends_retries = asyncio.Event()
+        # Set by every stop but the URL limit's, which refuses new URLs only, so a retry and a
+        # network pause already under way go on within the grace (022-add-fetch-policy D4).
+        self._ends_under_way = asyncio.Event()
         self._closed = False
 
     @property
@@ -36,8 +36,8 @@ class StopSignal:
         return self._reason
 
     @property
-    def ends_retries(self) -> bool:
-        return self._ends_retries.is_set()
+    def ends_under_way(self) -> bool:
+        return self._ends_under_way.is_set()
 
     @property
     def cause(self) -> BaseException | None:
@@ -55,7 +55,7 @@ class StopSignal:
         if self._closed:
             return
         if reason != "max_urls":
-            self._ends_retries.set()
+            self._ends_under_way.set()
         first = self._reason is None
         if self._reason is None or _rank(reason) > _rank(self._reason):
             self._reason, self._cause = reason, cause
@@ -79,8 +79,8 @@ class StopSignal:
     async def wait(self) -> None:
         await self._was_set.wait()
 
-    async def wait_ending_retries(self) -> None:
-        await self._ends_retries.wait()
+    async def wait_ending_under_way(self) -> None:
+        await self._ends_under_way.wait()
 
 
 class StopGrace:
