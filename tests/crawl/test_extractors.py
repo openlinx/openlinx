@@ -1,6 +1,8 @@
 """An extractor's own config (020-add-crawl-core D9; seam 4)."""
 
 import pickle
+import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import msgspec
@@ -11,6 +13,7 @@ from openlinx.crawl.fetch.fetcher import FetchResult
 from openlinx.crawl.pages.preparation import PageInput, PageSettings, extractor, prepare_page
 from openlinx.crawl.scope import scope_rules
 from openlinx.crawl.urls import NormalizedUrl
+from openlinx.services.hooks import default_hooks
 
 SITE = NormalizedUrl("http://site.test/")
 _PAGE = FetchResult(
@@ -83,3 +86,47 @@ def test_an_extractor_whose_function_returns_no_struct_cannot_be_built() -> None
     with pytest.raises(TypeError, match="struct"):
         # mypy refuses it too; the check refuses an extractor that mypy never saw.
         extractor("headings", _headings, None)  # type: ignore[type-var]
+
+
+def _nested() -> Callable[[LexborHTMLParser, PageInput, Greeting], Greeted]:
+    def greet(tree: LexborHTMLParser, page: PageInput, config: Greeting) -> Greeted:
+        return Greeted(config.text)
+
+    return greet
+
+
+@pytest.mark.parametrize(
+    "extract",
+    [_nested(), lambda tree, page, config: Greeted(config.text)],
+    ids=["nested", "lambda"],
+)
+def test_an_extractor_whose_function_is_not_module_level_cannot_be_built(
+    extract: Callable[[LexborHTMLParser, PageInput, Greeting], Greeted],
+) -> None:
+    with pytest.raises(
+        TypeError,
+        match="the function of the extractor greeting is not module-level: a parse worker "
+        "process imports it by name; pass values through config",
+    ):
+        extractor("greeting", extract, Greeting("hi"))
+
+
+def test_the_default_page_settings_pickle() -> None:
+    settings = PageSettings(
+        scope=scope_rules(SITE, include=(re.compile("/blog/"),)),
+        extractors=default_hooks().extractors,
+        strip_params=re.compile("^utm_"),
+    )
+
+    try:
+        # Our own bytes, as 026's pool sends them, never data from outside.
+        restored = pickle.loads(pickle.dumps(settings))  # noqa: S301
+    except (pickle.PicklingError, AttributeError, TypeError) as error:
+        pytest.fail(
+            f"the page settings of default_hooks() reach a parse worker by pickle ({error}): "
+            "build each extractor from a module-level function and a module-level config struct"
+        )
+    assert restored == settings, (
+        "the page settings of default_hooks() unpickle unequal: give each extractor's config "
+        "struct value equality"
+    )

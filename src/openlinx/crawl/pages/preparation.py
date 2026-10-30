@@ -67,6 +67,14 @@ class Extractor[C: msgspec.Struct | None, O: msgspec.Struct]:
         return output if isinstance(output, self.output_type) else None
 
     def __post_init__(self) -> None:
+        # A callable without a qualname, such as a partial of a module-level function, pickles
+        # by reference (023-fix-code-audit D2).
+        qualname = getattr(self.extract, "__qualname__", "")
+        if "<locals>" in qualname or qualname.endswith("<lambda>"):
+            raise TypeError(
+                f"the function of the extractor {self.name} is not module-level: a parse worker "
+                "process imports it by name; pass values through config"
+            )
         object.__setattr__(self, "output_type", _output_type(self.name, self.extract))
         config: object = self.config
         # Shared by every Page of the Crawl and by every 026 worker. The check is shallow: a field
