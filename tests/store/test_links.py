@@ -3,9 +3,17 @@
 from dataclasses import fields
 from datetime import UTC, datetime
 
+from sqlalchemy import Connection
+
 from openlinx.crawl.urls import NormalizedUrl, parse_seed
-from openlinx.store.links import write_links
-from openlinx.store.page_records import LinkRow
+from openlinx.store.links import (
+    inlink_counts,
+    inlink_ranges,
+    pages_with_status_200,
+    write_links,
+)
+from openlinx.store.page_records import LinkRow, PageRow
+from openlinx.store.pages import write_pages
 from openlinx.store.records import FetchedUrl, NewUrl, Provenance
 from openlinx.store.rows import HandlerRows
 from openlinx.store.schema import links
@@ -41,6 +49,7 @@ def test_the_units_of_links_run_again_the_same(temp_workspace: TempWorkspace) ->
                 rel_nofollow=False,
                 rel_ugc=False,
                 rel_sponsored=False,
+                followed=True,
                 hreflang=None,
                 media=None,
                 link_position="content",
@@ -77,3 +86,85 @@ def test_the_link_row_has_every_links_column() -> None:
     }
 
     assert row_columns == {column.name for column in links.c}
+
+
+# More Pages than one unit holds, and 9 of them link to the first: 100 * 9 / 12000 is 0.075,
+# which a double holds as 0.07499..., so only exact arithmetic rounds it half up to 0.08.
+_PAGES = 12_000
+_SOURCES = 9
+
+
+def _page(url_id: int, url: str) -> PageRow:
+    return PageRow(
+        url_id=url_id,
+        address=url,
+        url_encoded_address=url,
+        url_path=url.removeprefix("https://site.test"),
+        url_query=None,
+        folder_depth=1,
+        content_type="text/html",
+        status_code=200,
+        status="OK",
+        indexability="indexable",
+        indexability_status=None,
+        response_time_ms=12,
+        last_modified=None,
+        redirect_url=None,
+        redirect_type=None,
+        set_cookie_count=0,
+        crawl_timestamp=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+    )
+
+
+def _link(source_url_id: int, target: str) -> LinkRow:
+    return LinkRow(
+        source_url_id=source_url_id,
+        ordinal=1,
+        target=target,
+        type="hyperlink",
+        declared_in="body",
+        element="a",
+        attribute="href",
+        anchor_text="Home",
+        alt_text=None,
+        rel=None,
+        rel_nofollow=False,
+        rel_ugc=False,
+        rel_sponsored=False,
+        followed=True,
+        hreflang=None,
+        media=None,
+        link_position="navigation",
+    )
+
+
+def _store_site(connection: Connection) -> None:
+    urls = [f"https://site.test/p{n}" for n in range(_PAGES)]
+    ids = [
+        record_seed(NormalizedUrl(url), is_internal=True, in_scope=True)(connection) for url in urls
+    ]
+    write_pages(connection, [_page(url_id, url) for url_id, url in zip(ids, urls, strict=True)])
+    write_links(connection, [_link(url_id, urls[0]) for url_id in ids[1 : 1 + _SOURCES]])
+
+
+def test_the_units_of_the_inlink_pass_run_again_the_same(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        writer.run(_store_site)
+        # The replay below then runs only the pass's units again.
+        writer.flush()
+        pages_200 = writer.run(pages_with_status_200)
+        ranges = writer.run(inlink_ranges)
+        for first, last in ranges:
+            writer.run(inlink_counts(first, last, pages_200))
+        replay_now(writer)
+
+    assert (
+        len(ranges),
+        query(
+            crawl.path,
+            "SELECT inlinks, unique_inlinks, linking_pages_pct, count(*) FROM pages"
+            " GROUP BY 1, 2, 3 ORDER BY 1",
+        ),
+    ) == (2, [(0, 0, 0.0, _PAGES - 1), (_SOURCES, _SOURCES, 0.08, 1)])
