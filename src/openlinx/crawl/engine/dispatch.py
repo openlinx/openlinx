@@ -11,7 +11,7 @@ from openlinx.crawl.engine.crawl_warnings import url_limit_reached
 from openlinx.crawl.engine.outcomes import Outcomes
 from openlinx.crawl.engine.pause import CountedUrl, NetworkPause, PauseEnd, Redispatch
 from openlinx.crawl.engine.progress import UrlCounters, report_progress
-from openlinx.crawl.engine.seed_chain import SeedChain, close_seed_chain
+from openlinx.crawl.engine.seed_chain import SeedChain, end_seed_chain
 from openlinx.crawl.engine.stop import StopGrace
 from openlinx.crawl.engine.tasks import Run, TaskFailure
 from openlinx.crawl.engine.units import unit_of, via_resource
@@ -130,7 +130,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
             await _crawl_depth(run, depth)
             if run.seed_chain.is_open and _closes_the_seed_chain(run):
                 # No URL of the chain was decided, such as one the URL limit refused.
-                await close_seed_chain(context, run.seed_chain, responded=False)
+                await end_seed_chain(context, run.seed_chain, responded=False)
             # The checked URLs in flight get the grace too; the sweep below would wait for them.
             if _stopping(run):
                 await _wait_out(run, run.task_failure.checked_urls)

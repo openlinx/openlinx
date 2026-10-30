@@ -16,7 +16,7 @@ from openlinx.crawl.engine.crawl_warnings import (
 from openlinx.crawl.engine.discovery import discovered_urls
 from openlinx.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from openlinx.crawl.engine.outcomes import Recorded, provenance_of
-from openlinx.crawl.engine.seed_chain import close_seed_chain
+from openlinx.crawl.engine.seed_chain import end_seed_chain
 from openlinx.crawl.engine.tasks import Run
 from openlinx.crawl.fetch.body import BODY_LIMIT, is_decodable
 from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult, joined_header
@@ -60,15 +60,10 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
     # The Seed's Redirect Chain is depth 0: a redirect target keeps its source's depth.
     in_chain = run.seed_chain.holds(queued)
     recorded = await _outcome(run, queued, decision, in_chain)
-    response = None if recorded is None else recorded.result.response
-    # The chain ended without a response of its own: a failure or a skip.
-    if (
-        in_chain
-        and run.seed_chain.is_open
-        and recorded is not None
-        and (response is None or response.redirect_target is None)
-    ):
-        await close_seed_chain(run.context, run.seed_chain, responded=False)
+    # The chain ended on a URL decided without a response: a failure or a skip. One with a
+    # response ended it in _fetched already.
+    if in_chain and recorded is not None and recorded.result.response is None:
+        await end_seed_chain(run.context, run.seed_chain, responded=False)
     return recorded
 
 
@@ -212,7 +207,7 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
     target = redirect_target(url, response.status_code, location, context.strip_params)
     if in_chain and target is None:
         # Before any preparation: the chain's last response may be a Page of the wider Scope.
-        await close_seed_chain(run.context, run.seed_chain, responded=True)
+        await end_seed_chain(run.context, run.seed_chain, responded=True)
     scope = run.seed_chain.scope
     # An External URL or one outside the Scope is a Checked URL, never parsed (design D5).
     followed = decided.in_scope and 200 <= response.status_code < 300

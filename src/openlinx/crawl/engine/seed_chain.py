@@ -31,15 +31,18 @@ class SeedChain:
         rules = self._provisional if self.is_open and in_chain else self.scope
         return rules.decide(url)
 
-    def close(
+    def end(self) -> None:
+        """Closes the chain, once: a second end is a bug."""
+        if not self.is_open:
+            raise RuntimeError(f"the Seed's Redirect Chain of {self.seed} is already closed")
+        self.is_open = False
+
+    def settle(
         self, chain: SeedChainUrls, *, responded: bool
     ) -> tuple[ScopeRules | None, list[Reclassified]]:
-        """Closes the chain once, on the URL it ended on: the Scope it widens to, when the
-        chain ended with a response on another host of the Seed's registrable domain, and
-        each URL of the chain decided again against the Scope it ended in."""
-        if not self.is_open:
-            raise RuntimeError(f"the Seed's Redirect Chain is already closed, at {chain[-1][1]}")
-        self.is_open = False
+        """The Scope the ended chain widens to, when it ended with a response on another host
+        of the Seed's registrable domain, and each URL of the chain decided again against the
+        Scope it ended in."""
         final_url = chain[-1][1]
         widened = self.scope.widened_to(final_url) if responded else None
         if widened is not None:
@@ -51,17 +54,21 @@ class SeedChain:
         ]
 
 
-async def close_seed_chain(context: CrawlContext, chain: SeedChain, *, responded: bool) -> None:
-    """Closes the Seed's Redirect Chain on the URL it ended on: its URLs are decided again
+async def end_seed_chain(context: CrawlContext, chain: SeedChain, *, responded: bool) -> None:
+    """Ends the Seed's Redirect Chain on the URL it ended on: its URLs are decided again
     against the Scope it ended in, which the Crawl records when it widened, and page
-    preparation starts with that Scope (022-add-fetch-policy D3)."""
+    preparation starts with that Scope (022-add-fetch-policy D3). It is the one entry of three
+    triggers: the chain's last response, before its own Page is prepared; a URL of the chain
+    decided without a response; and, after depth 0, a chain that no URL decided."""
+    # Before any await, so no second trigger can pass while this one reads the store.
+    chain.end()
     urls = await context.writer.run_async(
         seed_chain_urls(chain.seed, context.settings.max_redirects)
     )
     final_url = urls[-1][1]
     if chain.scope.is_out_of_scope(final_url):
         context.warnings.warn(seed_redirected_out_of_scope(chain.seed, final_url))
-    widened, decisions = chain.close(urls, responded=responded)
+    widened, decisions = chain.settle(urls, responded=responded)
     await context.writer.run_async(reclassify_urls(decisions))
     if widened is not None:
         await context.writer.run_async(record_scope(widened.to_json()))

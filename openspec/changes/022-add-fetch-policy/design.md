@@ -222,6 +222,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_a_body_at_the_cap_is_read_whole`, `test_a_body_past_the_cap_is_cut_at_the_cap` and `test_the_cap_falls_inside_a_chunk`, since `read_body`'s cap must hold at its exact byte and inside a chunk.
   - `test_a_url_past_2000_characters_is_too_long_before_any_pattern_runs`, since no pattern of the user's may run over such a URL (D12).
   - `test_a_precompressed_file_keeps_its_bytes` (fixture site), since the compression scenarios need the site to send a gzip file's bytes as they are (D9).
+  - `test_a_seed_chain_that_ends_without_a_response_as_the_crawl_stops_is_still_decided`, since after a stop no Scope is decided after depth 0, so the URL that ends the chain must end it (D3).
   - `test_a_redirect_gives_the_http_url_its_location_names_or_no_target`, since an unusable Location or a 300, 304 or 305 must leave no target.
   - `test_a_compressed_body_is_capped_after_decoding`, since a decompression bomb must stop at the cap.
   - `test_a_bomb_in_one_chunk_is_decoded_only_up_to_the_cap`, since a decoder must never hold a bomb's output in memory.

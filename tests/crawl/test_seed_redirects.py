@@ -3,12 +3,15 @@
 import json
 from pathlib import Path
 
+from openlinx.crawl.engine.stop import StopSignal
 from openlinx.services.crawling import CrawlResult
 from tests.fixture_site.hosts import StartNamedHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Robots, Site
+from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
+from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
 
 
@@ -336,3 +339,26 @@ def test_a_seed_chain_that_ends_on_a_checked_url_widens_the_scope_once_it_ends(
         _internal(result.crawl_file, "http://site.test/store/"),
         "site.test" in _scope_hosts(result.crawl_file),
     ) == ([("http://site.test/store/", 1, 0)], True)
+
+
+def test_a_seed_chain_that_ends_without_a_response_as_the_crawl_stops_is_still_decided(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, stop = FakeClock(), StopSignal()
+    # The shop moved to a domain that no longer resolves, and the Crawl is interrupted as its
+    # name fails: after a stop no Scope is decided after depth 0, so the URL ends the chain.
+    moved = FakePage("", status=301, headers=(("Location", "http://other.test/"),))
+    pages = {
+        "http://www.site.test/": moved,
+        "http://other.test/": FakePage("", fails="dns_error"),
+    }
+    fetcher = FakeFetcher(
+        clock, pages, on_answer={"http://other.test/": lambda: stop.set("interrupt")}
+    )
+
+    result = crawl_result("http://www.site.test/", clock=clock, fetcher=fetcher, stop=stop)
+
+    assert (result.summary.stop_reason, _warned(result, "seed_redirected_out_of_scope") != []) == (
+        "interrupt",
+        True,
+    )
