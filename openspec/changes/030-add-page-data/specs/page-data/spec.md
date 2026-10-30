@@ -970,13 +970,19 @@ From v0.2, storing the HTML of a Crawl's Pages SHALL be opt-in, and SHALL be dec
 
 The Crawl's recorded config SHALL hold the decision as `store_html` = `true` or `false`, and a resumed Crawl SHALL keep it.
 
-When storage is on, each Page SHALL have one `page_sources` row with these columns:
+When storage is on, each Page SHALL have one `page_sources` row. The table SHALL have exactly these columns:
 
-- `url_id`
-- `encoding`: the character encoding found by the decoding rules of this capability, as the lower-case name of the Encoding Standard that a browser's `TextDecoder` reports (`windows-1251`, `shift_jis`)
-- `html`: a zstd frame of the response body bytes after content decoding
+| Column | Type | Null | Value |
+|---|---|---|---|
+| `url_id` | INTEGER, primary key, references `urls.id` | no | the Page's URL |
+| `encoding` | TEXT | no | the character encoding found by the decoding rules of this capability, as the lower-case name of the Encoding Standard that a browser's `TextDecoder` reports (`windows-1251`, `shift_jis`) |
+| `html` | BLOB | no | a zstd frame of the response body bytes after content decoding |
 
 When storage is off, `page_sources` SHALL hold no rows.
+
+#### Scenario: Columns of page_sources
+- **WHEN** `linx schema page_sources` runs
+- **THEN** the item's columns, reduced to `name`, `type` and `nullable`, are the rows of the table above, as a set, and the item's description starts with `Filled from v0.2. `
 
 #### Scenario: HTML is not stored by default
 - **WHEN** a Crawl of a 3-Page fixture site runs with the default settings
