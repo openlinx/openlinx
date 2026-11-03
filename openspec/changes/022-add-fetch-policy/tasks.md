@@ -158,7 +158,7 @@ The first PR ships groups 1-9 and this group; group 10 follows in a second.
 - [x] 9b.6 Docs: `attempt_count` is the requests made for the URL in the dispatch that recorded it, its retries included; the spec, `schema.py` and `docs/schema.md` say one text.
 - [x] 9b.7 [Fake timing] The first probe's dead-section window counts from when it was sent, not when it was due, and a probe still honours its host's `Retry-After` (design D4).
 - [x] 9b.8 The Seed's Redirect Chain closes at one point; a second close, if a Crawl can reach it, is red first (design D3).
-- [ ] 9b.9 Refactor, behaviour unchanged: `StopSignal` gives two views, `new_requests` and `under_way`, each with `is_set` and `wait()`, and probes take one that is never set; `_slots` takes its view and yields whether it holds the slots.
+- [x] 9b.9 Refactor, behaviour unchanged: `StopSignal` gives two views, `new_requests` and `under_way`, each with `is_set` and `wait()`, and probes take one that is never set; `_slots` takes its view and yields whether it holds the slots.
 - [ ] 9b.10 Refactor, behaviour unchanged: the network pause's gate is a `PauseGate` (close, open, and whether a request passes it).
 - [ ] 9b.11 Refactor, behaviour unchanged: the pause's two per-URL methods say that they change its state and which one is robots.txt's, and take one kind of input.
 - [ ] 9b.12 Refactor, behaviour unchanged: one function of the URL limit gives a count back, for the Requester, the network pause and an outage.

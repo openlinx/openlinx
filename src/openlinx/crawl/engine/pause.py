@@ -302,7 +302,7 @@ class NetworkPause:
             seconds = self._clock.monotonic() - paused.began
             if end is None:
                 # A stop that ended the wait keeps its reason; giving up sets the pause's.
-                if not self._stop.ends_under_way:
+                if not self._stop.under_way.is_set:
                     self._stop.set(paused.reason)
             else:
                 count = (
@@ -352,7 +352,7 @@ class NetworkPause:
             for at in times:
                 if await self._answer_before(probes, began + at):
                     return self._end(probes, window)
-                if self._stop.ends_under_way:
+                if self._stop.under_way.is_set:
                     return None
                 probes.append(asyncio.create_task(self._probe_once()))
             if await self._answer_before(probes, began + self._network_wait):
@@ -370,12 +370,10 @@ class NetworkPause:
         D16), but for the URL limit's, which refuses new URLs only (022-add-fetch-policy D4)."""
         while not any(_answered(probe) for probe in probes):
             delay = until - self._clock.monotonic()
-            if delay <= 0 or self._stop.ends_under_way:
+            if delay <= 0 or self._stop.under_way.is_set:
                 return False
             waiting = {probe for probe in probes if not probe.done()}
-            await first_of(
-                self._clock.sleep(delay), self._stop.wait_ending_under_way(), wake_on=waiting
-            )
+            await first_of(self._clock.sleep(delay), self._stop.under_way.wait(), wake_on=waiting)
         return True
 
     def _end(self, probes: list[asyncio.Task[FetchResult | None]], window: float) -> PauseEnd:

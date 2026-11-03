@@ -42,6 +42,10 @@ class StopSignal:
         # network pause already under way go on within the grace (022-add-fetch-policy D4).
         self._ends_under_way = asyncio.Event()
         self._closed = False
+        # Any stop keeps a new request from starting; only one that ends what is under way
+        # cuts a retry or a network pause.
+        self.new_requests = _View(self, self._was_set)
+        self.under_way = _View(self, self._ends_under_way)
 
     @property
     def is_set(self) -> bool:
@@ -50,10 +54,6 @@ class StopSignal:
     @property
     def reason(self) -> StopReason | None:
         return self._reason
-
-    @property
-    def ends_under_way(self) -> bool:
-        return self._ends_under_way.is_set()
 
     @property
     def cause(self) -> BaseException | None:
@@ -97,10 +97,6 @@ class StopSignal:
         self._on_its_loop()
         await self._was_set.wait()
 
-    async def wait_ending_under_way(self) -> None:
-        self._on_its_loop()
-        await self._ends_under_way.wait()
-
     def _on_its_loop(self) -> None:
         try:
             loop = asyncio.get_running_loop()
@@ -110,6 +106,22 @@ class StopSignal:
             self._loop = loop
         elif loop is not self._loop:
             raise RuntimeError(_OFF_LOOP)
+
+
+class _View:
+    """One kind of the Crawl's stop, set when the flag is set with a reason of its kind."""
+
+    def __init__(self, signal: StopSignal, event: asyncio.Event) -> None:
+        self._signal = signal
+        self._event = event
+
+    @property
+    def is_set(self) -> bool:
+        return self._event.is_set()
+
+    async def wait(self) -> None:
+        self._signal._on_its_loop()
+        await self._event.wait()
 
 
 class StopGrace:
