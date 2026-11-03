@@ -119,6 +119,9 @@ def _options(command: Command, meta: CommandMeta, tables: SettingsTables) -> lis
                 "default": []
                 if param.multiple and param.default is None
                 else _json_value(param.default),
+                # Click's own bounds, an IntRange's or FloatRange's, so --help loads no pydantic.
+                "min": getattr(param.type, "min", None),
+                "max": getattr(param.type, "max", None),
                 "required": param.required,
                 "multiple": param.multiple,
                 "global": extra.is_global,

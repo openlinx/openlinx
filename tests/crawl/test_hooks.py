@@ -37,7 +37,7 @@ from openlinx.store.types import Timestamp
 from openlinx.store.writer import CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site, Status
-from tests.support.app import example_app, settings_tables
+from tests.support.app import tables_with_example
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
@@ -1477,9 +1477,7 @@ def test_a_failing_hook_s_error_hides_the_crawl_s_secret_settings(
     hooks = replace(Hooks(), handlers=(handler("api", partial(_call_api, _API_KEY), _write_seen),))
     reporter = Collected()
 
-    result = crawl_result(
-        server.url("/"), hooks, reporter=reporter, tables=settings_tables(example_app())
-    )
+    result = crawl_result(server.url("/"), hooks, reporter=reporter, tables=tables_with_example())
 
     assert (
         [warning.details["error"] for warning in reporter.warnings],

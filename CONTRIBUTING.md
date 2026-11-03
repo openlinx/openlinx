@@ -149,13 +149,13 @@ Each recipe lists the files to touch in order, the seam to test at, and what che
 3. If a flag mirrors it, see the next recipe.
 4. *Review:* document it with its table, such as `[crawl]` in docs/crawling.md "Options and `[crawl]` settings".
 
-A table has one owning change, and a new table is registered in `build_app` (`openlinx/cli/app.py`) by its `"module:Class"` reference, so `--help` never imports it.
+A table has one owning change, and a new table is registered in `default_tables()` (`openlinx/services/settings.py`) by its `"module:Class"` reference, so `--help` never imports it.
 
 ### An option that mirrors a setting
 
 1. Declare it on the Command as `--concurrency` is in `openlinx/cli/crawl.py`: `Annotated[int, typer.Option("--flag", ...), OptionMeta(setting="table.field")] = <default>`. The long name is the field's name with `-` for `_`. `tests/workspace/test_tables.py` checks that the setting exists.
 2. The adapter passes `setting_flags(ctx)` to the settings loader, so only a flag given on the command line beats the settings file.
-3. *Review:* the option's default, `min`/`max` and help match the field's.
+3. `test_mirrored_options_match_their_fields` checks that the option's name, default and `min`/`max` match the field's; *review* checks its help.
 4. A secret option inherits `secret` from its setting and takes only a long name; `check_command` refuses a short one.
 
 ### A Command
@@ -193,7 +193,7 @@ Plug it into `default_hooks()` in `openlinx/services/hooks.py`, as [How 030 and 
   - An error class of the store, such as `CrawlWriterClosedError`, is turned into a code by the service that catches it.
 - **`# type: ignore[code]` and `# noqa: CODE`** always name the code, and are used only when the fault is not ours: a third-party API or stub, or the one place that one of our banned-API rules (`TID251`) leads to. In a test, a deliberate type guard or a deliberately wrong call takes one too, with its reason. Prefer fixing the type. A short reason goes on the line, or in the comment right above it when the line would grow too long. That comment must not start with `noqa`, which ruff would read as a blanket directive and flag (`RUF100`).
 - **Private names** start with `_`. A module's public names are the ones without it, and only those are imported from other modules.
-- **Size, a guide and not a gate:** a module past about 300 non-blank lines, or a class past about 10 methods, is a question for review. Today `openlinx/store/writer.py` (504 lines) and its `CrawlWriter` (35 methods) are past both, and ADR-0006 says how to split them. `openlinx/store/schema.py` (393 lines) is past the line guide too, but nearly all of it is the declared tables' columns, one to a line, beside a few small helpers: it grows with the schema, not with its logic, so it stays one module. `openlinx/output/codes.py` (320 lines) is the same kind of list: one declaration per code. `openlinx/services/crawling.py` (505 lines), which plans, runs and continues a Crawl, is past it too: its next split would take the plan, from the settings to the Scope and the Seed's checks, into a module of its own. So is `openlinx/store/urls.py` (400 lines), the units of the `urls` table with their statements built at import: it would split by kind of unit, recording, the frontier and the counts. Complexity rules in ruff stay in the ROADMAP Backlog ("Code quality checks").
+- **Size, a guide and not a gate:** a module past about 300 non-blank lines, or a class past about 10 methods, is a question for review. Today `openlinx/store/writer.py` (504 lines) and its `CrawlWriter` (35 methods) are past both, and ADR-0006 says how to split them. `openlinx/store/schema.py` (393 lines) is past the line guide too, but nearly all of it is the declared tables' columns, one to a line, beside a few small helpers: it grows with the schema, not with its logic, so it stays one module. `openlinx/output/codes.py` (320 lines) is the same kind of list: one declaration per code. `openlinx/services/crawling.py` (549 lines), which plans, runs and continues a Crawl, is past it too: its next split would take the plan, from the settings to the Scope and the Seed's checks, into a module of its own. So is `openlinx/store/urls.py` (400 lines), the units of the `urls` table with their statements built at import: it would split by kind of unit, recording, the frontier and the counts. Complexity rules in ruff stay in the ROADMAP Backlog ("Code quality checks").
 - **Imports:**
   - Our own code is imported by name, as in `from openlinx.output.codes import USAGE_ERROR`, never as a module.
   - A standard-library or third-party module is imported either way: whole where its functions are called through it (`asyncio`, `sqlite3`, `re`, `time`, `orjson`, `typer`), and by name otherwise (`from pathlib import Path`).
