@@ -5,10 +5,32 @@
 You need [uv](https://docs.astral.sh/uv/). It installs the Python version from `.python-version` and the locked dependencies:
 
 ```
-uv sync
+uv sync --locked
 ```
 
 `.python-version` is the newest supported Python, 3.14, because some problems show only on newer Pythons: since 3.13, an unclosed SQLite connection is reported, and the tests treat that as an error. mypy checks against 3.12, the oldest, and CI runs all three.
+
+For development agents, restore the local skill aliases after each clone or new worktree:
+
+```
+uv run --locked python scripts/setup_agents.py
+```
+
+This stdlib-only script finds the repository from its own location and needs no
+credentials. It creates Windows junctions or relative POSIX symlinks from
+`.claude/skills/<name>` to the canonical `.agents/skills/<name>` directories.
+Running it again leaves correct aliases in place. It checks for conflicts before
+creating aliases and refuses existing real directories, files or links to other
+targets. Move a conflicting path aside yourself after reviewing its contents,
+then rerun setup; the script never deletes or overwrites it. Git ignores aliases
+and `.agents/migration-backup/`; edit only the canonical skills.
+
+Both agents follow [AGENTS.md](AGENTS.md); `CLAUDE.md` imports it and Codex also
+reads [.agents/CODEX.md](.agents/CODEX.md). Continue an existing task from
+[docs/development-state.md](docs/development-state.md), then verify its branch and
+files. Personal global skills, MCP connections and private memory are not part of
+the public clone or this setup. The project does not need a private handoff file
+under `.git/` to resume development.
 
 ## How a change is made
 
@@ -26,9 +48,9 @@ Features and fixes are built as OpenSpec changes under `openspec/changes/<id>/`.
 2. `/opsx:apply`: implement it, one task group at a time, on a branch named after the change, such as `000-scaffold-project`. Open a draft pull request into `main` early: CI runs on pull requests, not on pushes to other branches.
 3. `/opsx:archive`: when every task is done, merge the change's specs into `openspec/specs/`. Then the pull request is merged into `main`.
 
-- Claude Code finds OpenSpec's agent skills in `.claude/skills/`. Codex uses the same agent skills from `.agents/skills/`.
+- Both agents use the canonical OpenSpec workflows in `.agents/skills/`. Claude Code discovers them through the local `.claude/skills/` aliases created above; `/opsx:*` entries load the same SKILL.md and preserve their arguments.
 - The exception: fixes to the planning documents of a change that is not in progress go straight to `main`.
-- OpenSpec is a Node tool. Install Node (current LTS), then the version CI uses: `npm install -g @fission-ai/openspec@1.13.0`.
+- OpenSpec is a Node tool. Use Node's current LTS, selected by CI as `lts/*`, then install the pinned CLI: `npm install -g @fission-ai/openspec@1.13.0`.
 - OpenLinx sends no telemetry, so turn OpenSpec's off before running it:
   - bash: `export OPENSPEC_TELEMETRY=0`
   - PowerShell: `$env:OPENSPEC_TELEMETRY = "0"`
