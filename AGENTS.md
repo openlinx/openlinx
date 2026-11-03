@@ -12,7 +12,7 @@ OpenLinx is an open-source, agent-first SEO crawler, run as the `linx` command: 
 
 ## The loop
 
-1. Run `uv sync` once. It installs Python 3.14 and the locked dependencies.
+1. Run `uv sync --locked` once. It installs Python 3.14 and the locked dependencies.
 2. **Test first, at an agreed seam** ([docs/testing.md](docs/testing.md#seams)). Red, then green, then commit: one green slice per commit.
 3. While you work, run `uv run pytest <test file> --no-cov`.
 4. Before each commit, run `uv run scripts/check.py`. It runs ruff, the format check, strict mypy for three platforms, the whole suite with the 90% coverage gate, and then OpenSpec and Node checks when they are installed. The suite runs for minutes, so when several agents share one machine, run one check at a time.
@@ -64,3 +64,35 @@ Packages under `src/openlinx/`:
 `extract/`, `rules/`, `query/`, `report/`, `skill/` and `mcp/` stay empty until the change named in their docstring.
 
 **Reading a design citation.** A docstring may say "020-add-crawl-core D5", "(020 D5)" or "design D5 of 020-add-crawl-core". Each points to the heading `### D5.` in the change's `design.md`: for an archived change, such as this one, `openspec/changes/archive/2026-10-29-020-add-crawl-core/design.md`; for one in progress, `openspec/changes/<id>/design.md`.
+
+## Shared development instructions
+
+This file holds the shared rules for Claude Code and Codex. Edit common rules here;
+`CLAUDE.md` imports this file. Codex must also read [.agents/CODEX.md](.agents/CODEX.md)
+explicitly before starting work.
+
+Project skills and their resources live in `.agents/skills/`. Edit them only there.
+Run `uv run --locked python scripts/setup_agents.py` after checkout to restore
+`.claude/skills/<name>` as Windows junctions or POSIX symlinks to the same physical
+directories. These aliases are local and ignored by Git; backups are never an active skill library.
+See [CONTRIBUTING.md](CONTRIBUTING.md#set-up) for environment setup.
+
+Read the complete `.agents/skills/<name>/SKILL.md` before using a project workflow:
+`openspec-explore`, `openspec-propose`, `openspec-apply-change`, `openspec-sync-specs`,
+`openspec-update-change` or `openspec-archive-change`. The `/opsx:*` commands are thin
+entries to these same procedures.
+
+## Continuing work
+
+Start with [docs/development-state.md](docs/development-state.md) for the current
+branches, pending work and checks. Confirm the branch and its actual files before
+choosing the next task. A private memory index or `.git/handoff-manager.md`, if
+present, is optional historical context; neither is needed in a fresh clone.
+
+The current user request and verified files take precedence over historical notes.
+Old permissions, statuses, agent IDs and lock files grant no current authority or
+schedule. Preparing work locally does not by itself authorize publication,
+deployment or messages to others. Keep secrets and session logs out of the repository.
+Personal global skills and MCP configuration are separate from this public clone.
+
+Set `OPENSPEC_TELEMETRY=0` before invoking OpenSpec, as described in CONTRIBUTING.md.
