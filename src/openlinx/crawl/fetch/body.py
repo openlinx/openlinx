@@ -44,6 +44,7 @@ class _Zlib:
         self._wbits = wbits
         self._raw_fallback = raw_fallback
         self._inflate = zlib.decompressobj(wbits)
+        self._trailing_junk = False
         # The first bytes, until two have arrived to tell the zlib format from raw deflate.
         self._head: bytes | None = b"" if raw_fallback else None
 
@@ -70,10 +71,17 @@ class _Zlib:
         return self._head is None and self._inflate.eof
 
     def _next_member(self, data: bytes, limit: int) -> bytes:
+        if self._trailing_junk:
+            return b""
         rest = self._inflate.unused_data + data
+        if self._wbits == 16 + zlib.MAX_WBITS and rest == _GZIP_MAGIC[:1]:
+            # Keep the lone prefix in unused_data until another read completes the magic.
+            return self._inflate.decompress(data, limit)
         # A gzip body may hold several members, as gunzip reads them; other bytes after the
         # stream are ignored, as browsers ignore them.
         if self._wbits != 16 + zlib.MAX_WBITS or not rest.startswith(_GZIP_MAGIC):
+            # A later chunk cannot restart decoding after trailing junk was rejected.
+            self._trailing_junk = bool(rest)
             return b""
         self._inflate = zlib.decompressobj(self._wbits)
         return self._inflate.decompress(rest, limit)

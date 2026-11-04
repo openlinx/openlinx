@@ -197,3 +197,49 @@ def test_a_gzip_member_boundary_split_after_its_first_byte_is_decoded() -> None:
     body = asyncio.run(read_body(_pieces(packed[:split], packed[split:]), "gzip", BODY_LIMIT))
 
     assert body.data == head + tail
+
+
+@pytest.mark.parametrize(
+    "chunking", ["together", "members", "separate prefix", "attached prefix", "one byte"]
+)
+def test_gzip_members_are_decoded_across_chunk_boundaries(chunking: str) -> None:
+    first = gzip.compress(b"first", mtime=0)
+    second = gzip.compress(b"second", mtime=0)
+    pieces = {
+        "together": [first + second],
+        "members": [first, second],
+        "separate prefix": [first, second[:1], second[1:]],
+        "attached prefix": [first + second[:1], second[1:]],
+        "one byte": [bytes([byte]) for byte in first + second],
+    }[chunking]
+
+    body = asyncio.run(read_body(_pieces(*pieces), "gzip"))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"firstsecond", False, 51)
+
+
+def test_a_gzip_member_after_a_separate_prefix_is_bounded() -> None:
+    first = gzip.compress(b"first", mtime=0)
+    second = gzip.compress(b"x" * 1024, mtime=0)
+
+    body = asyncio.run(read_body(_pieces(first, second[:1], second[1:]), "gzip", 128))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"first" + b"x" * 123, True, 54)
+
+
+@pytest.mark.parametrize("junk", [b"X", b"\x00", b"\n"])
+@pytest.mark.parametrize("chunking", ["together", "separate prefix", "one byte", "before member"])
+def test_trailing_junk_cannot_restart_a_gzip_member(junk: bytes, chunking: str) -> None:
+    first = gzip.compress(b"first", mtime=0)
+    second = gzip.compress(b"second", mtime=0)
+    packed = first + second[:1] + junk + second[1:]
+    pieces = {
+        "together": [packed],
+        "separate prefix": [first, second[:1], junk, second[1:]],
+        "one byte": [bytes([byte]) for byte in packed],
+        "before member": [first, junk, second],
+    }[chunking]
+
+    body = asyncio.run(read_body(_pieces(*pieces), "gzip"))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"first", False, 52)
