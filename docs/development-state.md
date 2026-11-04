@@ -17,7 +17,7 @@ reviewed and gated narrow task 9b.9 refactor; the full fetching change remains u
 | Canonical branch | Code checkpoint | State |
 |---|---|---|
 | `main` | `f38d493fd50ebfda7c3fa968945b72d6633b754e` | PR #34 merged; canonical public entry point |
-| `022-add-fetch-policy` | `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68` | Group 9b accepted; first PR #39 CI closes 8.2; macOS TLS measurement 6.4 remains open |
+| `022-add-fetch-policy` | `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68` | Group 9b accepted; first PR #39 CI closes 8.2; TLS measurements recorded, 6.4 awaits the default-path/OS-trust decision |
 | `023-fix-code-audit` | `1f3dec66f474cb3b87a3c1c0f9172d9dcb5f3a29` | Group 5 planning checkpoint published |
 | `026-add-parse-pool` | `8294855ecfffb9f07094b931ed0d94754d0bf16d` | Unfinished pool/shutdown work |
 | `030-add-page-data` | `0eeed79504271c7cf1e51ab69543271225c995d8` | Published unfinished snapshot; group 12 acceptance blocked by C01/C02 |
@@ -105,7 +105,20 @@ covering Windows, macOS and Linux across Python 3.12–3.14 with the coverage ga
 This actual first-PR matrix closes
 task 8.2; its checkbox and this state update are applied together after that result.
 
-Task 6.4 remains open for the required macOS TLS speed measurement. The first
+The metadata checkpoint `50cbcf6ff453c6c52487d9ddc5c07e97b5f4ca18` also passed
+[CI 41815963203](https://github.com/openlinx/openlinx/actions/runs/41815963203),
+with all nine OS/Python cells successful. That result predates the measurement
+documentation recorded here.
+
+Task 6.4 now has the three-OS measurements from
+[proof PR #40](https://github.com/openlinx/openlinx/pull/40),
+[TLS run 41816962562](https://github.com/openlinx/openlinx/actions/runs/41816962562):
+3/3 jobs successful at `232845ede757d4b3a9f46c152809b2a6b5a05478`, with all five
+hosts and 20 handshakes per host per store on each OS. The accepted
+[measurement evidence](benchmarks.md#tls-handshake) shows extra truststore overhead.
+Task 6.4 remains open while D5's default-path condition is reconciled with the TLS
+spec's OS-root contract; a certifi-only default would violate it. The decision is
+deferred and runtime behaviour is unchanged. The first
 draft PR carries groups 1–9 and 9b; group 10 follows in a later PR, with 10.1 waiting
 for 023's archived workspace spec. Groups 11–14 are v0.2 work and are outside this
 acceptance.

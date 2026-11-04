@@ -448,7 +448,7 @@ The Crawl honours the standard proxy variables, as curl, pip and uv do. It is th
 
 - **Trust:** every https request, robots.txt's included, verifies the server's certificate and its host name against the operating system's trust store, through truststore. Where truststore cannot be loaded, on a Python runtime it does not support, certifi's CA bundle is used instead.
 - **A certificate that does not verify,** such as one issued for another name, one from a CA the trust store does not hold, or an expired one, records the URL with `fetch_state` = `error` and `fetch_error` = `tls_error`, and is not retried. When robots.txt's certificate does not verify, every URL of the origin gets that `tls_error` without a request of its own (see [What the response means](#what-the-response-means)).
-- **Speed:** asking the operating system costs no measurable handshake time; the measurements are in [benchmarks.md](benchmarks.md#tls-handshake).
+- **Speed:** the hosted measurements show extra handshake time with truststore compared with certifi; see [benchmarks.md](benchmarks.md#tls-handshake). The default still uses the operating system's trust store while the default-path decision is pending.
 
 ## Redirects
 
