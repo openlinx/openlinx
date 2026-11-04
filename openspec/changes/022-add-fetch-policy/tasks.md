@@ -177,7 +177,7 @@ The first PR ships groups 1-9 and this group; group 10 follows in a second.
 
 Tasks 6.4 and 8.2 close in this group too, 8.2 from the first PR's CI.
 
-- [ ] 10.1 Spec, once `023` is archived: this change's workspace delta MODIFIES `023`'s "Environment variables change nothing", the proxy variables its one exception, with this change's scenario, and its cli-contract delta the `environment` row; 9b.1's test is then named after that scenario.
+- [ ] 10.1 Spec, once `023` is archived: verify that the retained workspace requirement "No environment variables" preserves the proxy exception and scenario "The proxy variables are the one exception", and cli-contract preserves the `environment` row; retain 9b.1's matching test. Do not add duplicate requirements or deltas for wording already retained. Proxy variables apply from v0.1; `--proxy` and `crawl.proxy` overrides remain v0.2 (group 12).
 - [ ] 10.2 Refactor, behaviour unchanged: `BlockingRuns` and `BLOCKING_RUN` move to `openlinx.crawl.engine.blocking`, since only the engine uses them, and both package docstrings follow.
 - [ ] 10.3 [3+6] Drive "A redirect to another subdomain stays inside the Scope", on `fixture_named_hosts` with `en.site.test` (design D3).
 - [ ] 10.4 [Fixture] A self-signed listener served as `selfsigned.test`, test-first in `tests/fixture_site/`, its certificate made with `cryptography`, which the dev group declares; then `test_a_self_signed_certificate_is_a_tls_error` [3+6], which CI runs on Windows, macOS and Linux, since each verifies through its own platform API (design D5, Risks).

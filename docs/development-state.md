@@ -18,7 +18,7 @@ reviewed and gated narrow task 9b.9 refactor; the full fetching change remains u
 |---|---|---|
 | `main` | `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50` | First 022 PR #39 merged; main CI 41831195325 passed 9/9 |
 | `022-add-fetch-policy` | `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68` | Group 9b accepted; first PR #39 CI closes 8.2; TLS measurements and OS-trust policy accepted; 6.4 complete under revised D5 |
-| `023-fix-code-audit` | `80e97f34761387fbaadcebb0c26ae0dd1365396a` | Implementation and whole-change review complete; archive remains; current publication and CI are in PR #36 |
+| `023-fix-code-audit` | `c192f242b53c91395dfefde246be6f5e53aec300` | Whole-change review complete; specs synchronized and change archived on branch; PR #36 awaits current-head CI and merge |
 | `026-add-parse-pool` | `8294855ecfffb9f07094b931ed0d94754d0bf16d` | Unfinished pool/shutdown work |
 | `030-add-page-data` | `0eeed79504271c7cf1e51ab69543271225c995d8` | Published unfinished snapshot; group 12 acceptance blocked by C01/C02 |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
@@ -139,10 +139,10 @@ draft PR carries groups 1–9 and 9b; group 10 follows in a later PR, with 10.1 
 for 023's archived workspace spec. Groups 11–14 are v0.2 work and are outside this
 acceptance.
 
-### 023: whole-change review accepted; archive remains
+### 023: complete and archived on branch; PR awaits merge
 
-[Tasks](../openspec/changes/023-fix-code-audit/tasks.md),
-[design](../openspec/changes/023-fix-code-audit/design.md),
+[Tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md),
+[design](../openspec/changes/archive/2026-11-04-023-fix-code-audit/design.md),
 [PR #36](https://github.com/openlinx/openlinx/pull/36).
 
 Groups 1–4 are in `main`. Group 5 and the integration of main `4957b187` are
@@ -158,8 +158,11 @@ fix; the latest combined local gate passed 1932 tests with 12 platform skips,
 strict mypy on three platforms, OpenSpec 16/16 and Node 1/1.
 
 Both CLI self-description scenarios now have separate test names. The four delta
-specs map to 46 scenarios, with none missing or duplicated. Task 6.4 is complete;
-6.5, synchronizing the primary specs and archiving this change, remains.
+specs map to 46 scenarios, with none missing or duplicated. Whole-change review
+closed at `c192f242`. The four primary specs now contain the accepted deltas, and
+the change is archived with all tasks complete. The workspace proxy exception
+remains intact; 022 task 10.1 now targets that retained requirement and stays open.
+Strict validation after the archive passed all 15 remaining active specs and changes.
 
 Source integration `e9eb6dba` passed all nine cells of
 [CI 41839157705](https://github.com/openlinx/openlinx/actions/runs/41839157705).
