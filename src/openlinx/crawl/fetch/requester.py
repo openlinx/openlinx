@@ -231,8 +231,9 @@ class Requester:
     async def _slots(self, url: NormalizedUrl, cutoff: Stop) -> AsyncIterator[bool]:
         """Whether the request may start before `cutoff`; any host slot and global permit
         held are released on exit from the context."""
-        # The host's slot, then its turn under --rate, then the global cap: a request waiting
-        # for a busy host, or for its turn, holds no global permit.
+        # The host's slot and reserved turn precede the global permit, so their initial waits
+        # leave room for other hosts. After waiting for the permit, started() may still wait
+        # out the remaining --rate interval with the permit held.
         host = host_key(url)
         async with self._host(host):
             if not await self._before(cutoff, self._gate.reserve_turn(host)):
@@ -245,8 +246,8 @@ class Requester:
                         await self._gate.started(host)
                         yield not cutoff.is_set
                         return
-                # A pause that began while it waited for the permit is waited out without it,
-                # so no request sleeps on a permit and a stop never waits out a Retry-After
+                # A host pause that began while it waited for the permit is waited out without
+                # it, so a Retry-After holds no global permit and a stop ends that wait
                 # (022 design D4).
                 if not await self._before(cutoff, paused):
                     yield False
@@ -290,7 +291,6 @@ def _unheard(outcome: FetchResult | FetchFailure) -> None:
 
 
 def is_retried(outcome: FetchResult | FetchFailure) -> bool:
-    """Whether an attempt that ended this way is tried again, while retries are left."""
     if isinstance(outcome, FetchFailure):
         return outcome.fetch_error in RETRIED_FAILURES
     return 500 <= outcome.status_code <= 599 or outcome.status_code == 429

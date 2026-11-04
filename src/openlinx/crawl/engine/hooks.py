@@ -19,8 +19,6 @@ from openlinx.store.writer import CrawlWriter
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class UrlResponse:
-    """The URL's own HTTP response."""
-
     status_code: int
     # The status line's reason phrase, as received.
     reason: str | None
@@ -46,8 +44,6 @@ class UrlResponse:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class UrlFailure:
-    """Why the URL has no response."""
-
     fetch_error: FetchError
     fetch_error_message: str
     # None without a request of its own: its origin's robots.txt got no response.

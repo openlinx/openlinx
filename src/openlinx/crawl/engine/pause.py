@@ -64,8 +64,6 @@ class CountedUrl:
 
 @dataclass(frozen=True, slots=True)
 class _Paused:
-    """A pause: why it began, and when."""
-
     reason: _Reason
     began: float
 

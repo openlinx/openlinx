@@ -83,7 +83,6 @@ class StopSignal:
                 callback(reason)
 
     def write_failed(self, error: BaseException) -> None:
-        """Writing the crawl file failed, wherever it was written."""
         self.set("write_failed", write_failure_cause(error))
 
     def close(self) -> StopReason | None:

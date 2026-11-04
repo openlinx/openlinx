@@ -215,7 +215,23 @@ Plug it into `default_hooks()` in `openlinx/services/hooks.py`, as [How 030 and 
   - An error class of the store, such as `CrawlWriterClosedError`, is turned into a code by the service that catches it.
 - **`# type: ignore[code]` and `# noqa: CODE`** always name the code, and are used only when the fault is not ours: a third-party API or stub, or the one place that one of our banned-API rules (`TID251`) leads to. In a test, a deliberate type guard or a deliberately wrong call takes one too, with its reason. Prefer fixing the type. A short reason goes on the line, or in the comment right above it when the line would grow too long. That comment must not start with `noqa`, which ruff would read as a blanket directive and flag (`RUF100`).
 - **Private names** start with `_`. A module's public names are the ones without it, and only those are imported from other modules.
-- **Size, a guide and not a gate:** a module past about 300 non-blank lines, or a class past about 10 methods, is a question for review. Today `openlinx/store/writer.py` (407 lines) and its `CrawlWriter` (29 methods) are past both, and ADR-0006 says how to split them. `openlinx/store/schema.py` (393 lines) is past the line guide too, but nearly all of it is the declared tables' columns, one to a line, beside a few small helpers: it grows with the schema, not with its logic, so it stays one module. `openlinx/output/codes.py` (320 lines) is the same kind of list: one declaration per code. `openlinx/services/crawling.py` (505 lines), which plans, runs and continues a Crawl, is past it too: its next split would take the plan, from the settings to the Scope and the Seed's checks, into a module of its own. So is `openlinx/store/urls.py` (400 lines), the units of the `urls` table with their statements built at import: it would split by kind of unit, recording, the frontier and the counts. Complexity rules in ruff stay in the ROADMAP Backlog ("Code quality checks").
+- **Size, a guide and not a gate:** a module past about 300 non-blank lines, or a class past about 10 methods, is a question for review. The table below records each one and its next split or why it stays together. Complexity rules in ruff stay in the ROADMAP Backlog ("Code quality checks").
+
+  Counts include non-blank comments and docstrings. Methods are directly declared, including `__init__` and properties. Paths are under `src/openlinx/`.
+
+  | Module | Non-blank lines | Class (methods) | Next split, or why it stays together |
+  |---|---:|---|---|
+  | `crawl/engine/dispatch.py` | 335 | — | Frontier traversal and dispatch apart from pause and outage coordination. |
+  | `crawl/engine/pause.py` | 346 | `NetworkPause` (18) | Extract redispatch and probe scheduling and classification; `NetworkPause` keeps its count and state transitions. |
+  | `crawl/engine/units.py` | 370 | — | Response preparation and handler rows apart from URL record construction. |
+  | `crawl/fetch/requester.py` | 282 | `Requester` (14) | Extract retry and backoff orchestration into functions; `Requester` keeps request admission and the watchdog for each attempt. |
+  | `extract/unicode_scripts.py` | 1193 | — | Generated Unicode range tables, with no runtime logic; keep one generated module for the pinned Unicode version. |
+  | `output/codes.py` | 339 | — | One declaration per diagnostic code; it grows with the registry, not with its logic. |
+  | `services/crawling.py` | 541 | — | Move planning, from settings to Scope and the Seed's checks, into its own module. |
+  | `store/schema.py` | 1179 | — | Declared tables and columns; keep the public schema in its owning module. |
+  | `store/urls.py` | 484 | — | Split by kind of unit: recording, frontier and counts, each with its statements built at import. |
+  | `store/writer.py` | 407 | `CrawlWriter` (29) | Batch and replay functions, and a separate submission window, as ADR-0006 describes. |
+
 - **Imports:**
   - Our own code is imported by name, as in `from openlinx.output.codes import USAGE_ERROR`, never as a module.
   - A standard-library or third-party module is imported either way: whole where its functions are called through it (`asyncio`, `sqlite3`, `re`, `time`, `orjson`, `typer`), and by name otherwise (`from pathlib import Path`).
