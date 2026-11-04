@@ -14,6 +14,7 @@ from types import TracebackType
 from typing import Any, Self, cast
 
 from sqlalchemy import Connection, event, update
+from sqlalchemy.engine import ExceptionContext, RootTransaction
 
 from openlinx.clock import Clock
 from openlinx.output.codes import CRAWL_NOT_WRITABLE
@@ -107,6 +108,8 @@ class CrawlWriter:
         self._in_unit = False
         # What the unit did to the transaction, in order: "commit" and "rollback".
         self._unit_ended: list[str] = []
+        self._unit_transaction: RootTransaction | None = None
+        self._unit_commit_failed = False
         started: Future[None] = Future()
         self._thread = threading.Thread(
             target=self._serve, args=(started,), name=f"crawl writer {path.name}", daemon=True
@@ -280,6 +283,7 @@ class CrawlWriter:
                 _check_writable(connection)
                 event.listen(connection, "commit", self._seen_commit)
                 event.listen(connection, "rollback", self._seen_rollback)
+                event.listen(engine, "handle_error", self._seen_error)
                 started.set_result(None)
                 self._work(connection)
         except BaseException as error:
@@ -339,6 +343,7 @@ class CrawlWriter:
             self._begin(connection)
         # No savepoint: one per unit costs more than replaying the batch when a unit fails.
         begun = connection.get_transaction()
+        self._unit_transaction, self._unit_commit_failed = begun, False
         self._in_unit, self._unit_ended = True, []
         try:
             result, changes = _run_counted(job.work, connection)
@@ -372,6 +377,19 @@ class CrawlWriter:
         if self._in_unit:
             self._unit_ended.append("rollback")
 
+    def _seen_error(self, context: ExceptionContext) -> None:
+        transaction = self._unit_transaction
+        if (
+            self._in_unit
+            and transaction is not None
+            and context.connection is transaction.connection
+            and context.connection.get_transaction() is transaction
+            and context.statement is None
+            and self._unit_ended == ["commit"]
+        ):
+            # A failed commit can be hidden by rollback and later SQL resetting the connection.
+            self._unit_commit_failed = True
+
     def _kept_its_transaction(
         self,
         job: _Job,
@@ -384,7 +402,11 @@ class CrawlWriter:
         transaction itself (design D6)."""
         ended = self._unit_ended
         if "commit" in ended:
-            durable = ended[0] == "commit" and _batch_committed(connection, begun)
+            durable = (
+                ended[0] == "commit"
+                and not self._unit_commit_failed
+                and _batch_committed(connection, begun)
+            )
             raise self._committed(unit, connection, durable=durable) from error
         if ended:
             # The batch is gone, so it runs again, as after a failing unit; a busy file stays
@@ -551,15 +573,9 @@ def _compared_by_identity(result: object) -> str | None:
 
 
 def _batch_committed(connection: Connection, begun: object) -> bool:
-    """Whether the unit's first commit, which came before any rollback of it, wrote the batch.
-
-    SQLAlchemy fires its commit event before the commit runs. A commit that failed leaves the
-    unit's transaction in place; one that the unit then rolled back leaves SQLAlchemy with no
-    transaction, but SQLite still in the old one, since the rollback of a failed transaction
-    reaches no driver (design D6)."""
-    if connection.get_transaction() is begun:
-        return False
-    return connection.in_transaction() or not _driver(connection).in_transaction
+    # The caller excludes a latched failure of the first commit. Any current transaction is
+    # then a later one, whose failure cannot undo the original batch (design D6).
+    return connection.get_transaction() is not begun
 
 
 def _unit_name(unit: Unit[Any]) -> str:

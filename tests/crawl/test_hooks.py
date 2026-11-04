@@ -1,12 +1,13 @@
 """The hooks of a Crawl: handlers, passes and extractors (020-add-crawl-core D9; seam 2)."""
 
 import json
+import pickle
 import sqlite3
 import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing
 from dataclasses import dataclass, fields, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -27,12 +28,22 @@ from openlinx.crawl.engine.hooks import (
     UrlResult,
     handler,
 )
-from openlinx.crawl.pages.preparation import Extractor, PageInput, extractor
+from openlinx.crawl.fetch.fetcher import FetchResult
+from openlinx.crawl.pages.preparation import (
+    Extractor,
+    PageInput,
+    PageSettings,
+    extractor,
+    prepare_page,
+)
+from openlinx.crawl.scope import scope_rules
+from openlinx.crawl.urls import NormalizedUrl
 from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlResult
 from openlinx.store.connections import connect
 from openlinx.store.crawls import crawl_summary
 from openlinx.store.records import CrawlState, ErroredUrl, FetchedUrl, Provenance, SkippedUrl
+from openlinx.store.redaction import SecretValues
 from openlinx.store.types import Timestamp
 from openlinx.store.writer import CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
@@ -1490,6 +1501,111 @@ def test_a_failing_hook_s_error_hides_the_crawl_s_secret_settings(
         ["401 Unauthorized for https://api.test/v1/pages?key=***"],
         ["401 Unauthorized for https://api.test/v1/pages?key=***"],
     )
+
+
+class FailureText(msgspec.Struct, frozen=True):
+    text: str
+
+
+def _raise_handler_text(message: str, result: UrlResult) -> tuple[Seen, ...]:
+    if result.url.endswith("/boom"):
+        raise ValueError(message)
+    return ()
+
+
+def _raise_extractor_text(tree: LexborHTMLParser, page: PageInput, config: FailureText) -> Found:
+    if page.url.endswith("/boom"):
+        raise ValueError(config.text)
+    return Found(page.url)
+
+
+@pytest.mark.parametrize("hook", ["handler", "extractor"])
+@pytest.mark.parametrize(
+    ("token", "message", "expected"),
+    [
+        ("secret-prefix-" + "x" * 10_000, "token=secret-prefix-" + "x" * 10_000, "token=***"),
+        (
+            "token-" + "x" * 194,
+            ("token-" + "x" * 194) * 49 + "token=token-" + "x" * 194,
+            "***" * 49 + "token=***",
+        ),
+        ("ключ-" + "🔑" * 10_000, "token=ключ-" + "🔑" * 10_000, "token=***"),
+    ],
+    ids=["long-secret", "earlier-replacements", "unicode"],
+)
+def test_a_secret_crossing_the_carried_error_limit_is_hidden(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    hook: str,
+    token: str,
+    message: str,
+    expected: str,
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    (temp_workspace.root / "openlinx.toml").write_text(
+        f'[example]\ntoken = "{token}"\n', encoding="utf-8"
+    )
+    hooks = (
+        replace(
+            Hooks(),
+            handlers=(handler("api", partial(_raise_handler_text, message), _write_seen),),
+        )
+        if hook == "handler"
+        else _with_extractors(extractor("api", _raise_extractor_text, FailureText(message)))
+    )
+    reporter = Collected()
+
+    result = crawl_result(server.url("/"), hooks, reporter=reporter, tables=tables_with_example())
+
+    assert (
+        [warning.details["error"] for warning in reporter.warnings],
+        [
+            warning["details"]["error"]
+            for warning in json.loads(crawl_row(result.crawl_file)["warnings"])
+        ],
+    ) == ([expected], [expected])
+
+
+@pytest.mark.parametrize(
+    ("length", "carried", "truncated"),
+    [(9_999, 9_999, False), (10_000, 10_000, False), (10_001, 10_000, True)],
+)
+def test_a_prepared_failure_carries_bounded_text_and_truncation_through_pickle(
+    length: int, carried: int, truncated: bool
+) -> None:
+    url = NormalizedUrl("http://site.test/boom")
+    response = FetchResult(
+        status_code=200,
+        reason="OK",
+        headers=(("Content-Type", "text/html"),),
+        body=b"<p>Page</p>",
+        fetched_at=datetime(2026, 10, 16, tzinfo=UTC),
+        response_time_ms=1,
+    )
+    settings = PageSettings(
+        scope=scope_rules(url),
+        extractors=(
+            extractor("api", _raise_extractor_text, FailureText("token=" + "x" * (length - 6))),
+        ),
+        strip_params=None,
+    )
+
+    prepared = prepare_page(url, response, settings)
+    # Our own bytes, as the parse worker sends them, never data from outside.
+    restored = pickle.loads(pickle.dumps(prepared))  # noqa: S301
+
+    assert restored == prepared, (
+        "failure transport: preserve failure text and truncation metadata through pickle"
+    )
+    (failure,) = restored.extractor_failures
+    assert (failure.text, failure.truncated, hasattr(failure, "__dict__")) == (
+        "token=" + "x" * (carried - 6),
+        truncated,
+        False,
+    ), "failure transport: cap text at 10,000 and carry truncation in a slotted record"
+    assert failure.details(SecretValues(("x" * 10_000,)).redact)["error"] == (
+        "token=***" if truncated else "token=" + "x" * 294
+    ), "warning redaction: mask secret prefixes before cutting the error to 300 characters"
 
 
 def _quoting_the_page(tree: LexborHTMLParser, page: PageInput, config: None) -> Found:

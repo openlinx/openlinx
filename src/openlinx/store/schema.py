@@ -21,8 +21,6 @@ from sqlalchemy import (
 from openlinx.store.page_records import (
     Indexability,
     IndexabilityStatus,
-    LinkAttribute,
-    LinkElement,
     LinkPosition,
     RedirectType,
     SameSite,
@@ -36,6 +34,8 @@ from openlinx.store.records import (
     FetchState,
     HttpVersion,
     JournalMode,
+    LinkAttribute,
+    LinkElement,
     LinkType,
     ParseError,
     RobotsState,

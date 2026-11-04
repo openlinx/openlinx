@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from openlinx.store.records import DeclaredIn, LinkType
+from openlinx.store.records import DeclaredIn, LinkAttribute, LinkElement, LinkType
 
 type SameSite = Literal["strict", "lax", "none"]
 type Indexability = Literal["indexable", "non_indexable"]
@@ -19,24 +19,6 @@ type IndexabilityStatus = Literal[
 # javascript_redirect is filled from v1.1, by JavaScript rendering.
 type RedirectType = Literal["http_redirect", "http_refresh", "meta_refresh", "javascript_redirect"]
 type LinkPosition = Literal["head", "navigation", "header", "footer", "sidebar", "content"]
-# The elements and attributes that 020's Link discovery reads.
-type LinkElement = Literal[
-    "a",
-    "area",
-    "link",
-    "iframe",
-    "frame",
-    "meta",
-    "img",
-    "source",
-    "video",
-    "audio",
-    "track",
-    "embed",
-    "object",
-    "script",
-]
-type LinkAttribute = Literal["href", "src", "srcset", "poster", "data", "content"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

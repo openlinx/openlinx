@@ -155,30 +155,91 @@ The schema of a crawl file is a public contract ([ADR-0002](docs/adr/0002-sqlite
 
 ## Common changes
 
-Each recipe lists the files to touch in order, the seam to test at, and what checks it. Steps marked *review* are not checked by any test, so check them yourself. They describe `main`; 020's planned reworks are noted where they change a step.
+Each recipe lists the files to touch in order, the seam to test at, and what checks it. Obligations marked *review* are not checked by a test, so check them yourself. Use the built-ins below as the examples.
 
 ### A diagnostic code
 
-1. Declare it once, next to related codes, in `openlinx/output/codes.py`: `NAME = _declare("name", level, ExitCode.X or None, "One sentence.")`. An input error named `invalid_*` or `unknown_*` exits 2, and `*_not_found` exits 4 (`tests/cli/test_commands.py::test_naming_rule_for_input_errors`).
-2. Use it: `raise OpenLinxError(NAME, message, hint=..., details=...)` for an error, `reporter.warn(Diagnostic.of(NAME, ...))` for a warning.
-3. Test it at seam 1 or 2: the code, the exit code and the `details` an agent needs.
+1. Declare it once, next to related codes, in
+   [codes.py](src/openlinx/output/codes.py), through `_declare`. An error has an
+   `ExitCode`; warnings and info have `None`. At import, `_declare` refuses duplicate
+   names and inconsistent level/exit codes. An input error named `invalid_*` or
+   `unknown_*` exits 2, and `*_not_found` exits 4, checked by
+   [test_commands.py](tests/cli/test_commands.py)::`test_naming_rule_for_input_errors`.
+2. **Choose `kept=` for a Crawl warning.**
+   [warning_log.py](src/openlinx/crawl/engine/warning_log.py) implements these five
+   modes. *Review:* choose by what the warning describes, and use its matching log
+   call; setting `kept` alone does not count URLs or time a pause.
+
+   | `kept` | Choose it when / call | Existing check |
+   |---|---|---|
+   | `each` (default) | Every occurrence matters: `warn` keeps and forwards each one. | [test_warning_log.py](tests/crawl/test_warning_log.py)::`test_a_warning_is_kept_once_per_what_its_code_names` keeps both `max_urls_reached` calls in the current run; `run` uses the same write path as `each`. *Review:* a new `each` warning's own scenario checks its occurrences. |
+   | `once` | The same code and named detail describe one problem over the Crawl's life: call `warn`, and set `once_per="host"`, `"origin"` or the relevant detail key. | [test_warning_log.py](tests/crawl/test_warning_log.py)::`test_a_warning_is_written_once_per_code_and_host` and `test_a_warning_kept_once_per_a_detail_carries_that_detail`. |
+   | `counted` | Count affected URLs in one entry per code: call `count(diagnostic, url)`. Only the first is forwarded; the stored result updates `count` and retains `first_url`. | [test_hooks.py](tests/crawl/test_hooks.py)::`test_parse_failures_are_counted_in_one_warning`; [test_continue.py](tests/crawl/test_continue.py)::`test_a_counted_warning_adds_up_over_the_crawls_whole_life`. |
+   | `pauses` | The `network_paused` entry counts pauses and their total seconds, through `pause_began` and `pause_ended`; only the first beginning is forwarded. | [test_network_pause.py](tests/crawl/test_network_pause.py)::`test_network_paused_counts_the_pauses_and_their_seconds`; [test_warning_log.py](tests/crawl/test_warning_log.py)::`test_a_continuing_log_adds_its_pauses_to_the_stored_ones`. |
+   | `run` | The warning describes this run, such as `max_urls_reached`: call `warn`; a continue drops the earlier run's entry and may write a new one. | [test_continue.py](tests/crawl/test_continue.py)::`test_warnings_cover_the_crawl_s_whole_life`. |
+
+   `once_per` is required for `once` and forbidden for every other mode; `_declare`
+   checks this at import. Earlier `each`, `once`, `counted` and `pauses` entries
+   survive a continue without being forwarded again.
+3. Use `OpenLinxError` for an error, or `Diagnostic.of` for a warning, both from
+   [diagnostics.py](src/openlinx/output/diagnostics.py). Give the
+   warning to the Reporter (the Crawl's warning log inside a Crawl). Test at
+   seam 1 or 2: literal code, exit code and needed `details`, as
+   [test_diagnostics.py](tests/cli/test_diagnostics.py)::`test_unknown_command_is_a_usage_error`
+   and `test_error_object_has_exactly_the_diagnostic_keys` do. *Review:* the warning's
+   own scenario also checks its chosen retention and continuation behaviour.
 4. *Review:* document it where its area is documented: the CLI contract in [docs/cli.md](docs/cli.md), the store in [docs/crawl-store.md](docs/crawl-store.md), `linx crawl` in [docs/crawling.md](docs/crawling.md). `linx commands` lists it by itself.
 
 ### A setting in an existing table
 
-1. Add the field to the table's pydantic model, such as `CrawlSettings` in `openlinx/crawl/settings.py`, with a one-line `description` and a default TOML can write, or `None` for a setting that is unset. `tests/workspace/test_tables.py` checks every registered table against the [table rules](docs/architecture.md#settings). `linx init`'s commented template and the error hints come from the model.
-2. A secret is declared on the field, `json_schema_extra={"secret": True}`, and is redacted before a Crawl records it.
-3. If a flag mirrors it, see the next recipe.
-4. *Review:* document it with its table, such as `[crawl]` in docs/crawling.md "Options and `[crawl]` settings".
-
-A table has one owning change, and a new table is registered in `default_tables()` (`openlinx/services/settings.py`) by its `"module:Class"` reference, so `--help` never imports it.
+1. Add the field to its pydantic model, such as `CrawlSettings` in
+   [settings.py](src/openlinx/crawl/settings.py), with its bounds, a one-line
+   description and a TOML-writable default, or `None` when unset.
+   [test_tables.py](tests/workspace/test_tables.py)::`test_every_registered_table_follows_the_rules`
+   checks the [table rules](docs/architecture.md#settings); the commented template
+   and error hints come from the model. A new table belongs to one change and is
+   registered in `default_tables()` in
+   [services/settings.py](src/openlinx/services/settings.py) by `"module:Class"`.
+   `test_a_table_resolves_from_its_reference` checks reference resolution;
+   [test_startup.py](tests/cli/test_startup.py)::`test_settings_tables_load_with_the_settings`
+   checks that settings models remain unloaded during `--help`.
+2. **Every `[crawl]` field always gets a matching option** in
+   [cli/crawl.py](src/openlinx/cli/crawl.py), with its name, default and bounds; follow
+   the option recipe below. [test_commands.py](tests/cli/test_commands.py)::`test_mirrored_options_match_their_fields`
+   also refuses a `[crawl]` field with no option. *Review:* a setting in another
+   table gets an option when its contract calls for one.
+3. For a secret, set `json_schema_extra={"secret": True}` on the field.
+   [test_crawl_service.py](tests/crawl/test_crawl_service.py)::`test_a_secret_setting_is_redacted_in_the_recorded_config`
+   checks recording. At seam 2, test validation through `plan_crawl` in
+   [crawling.py](src/openlinx/services/crawling.py), with `default_tables()` and no app;
+   `test_a_refused_value_given_with_the_settings_names_its_key` checks the literal
+   `invalid_value`, exit 2 and dotted key for a refused caller value.
+4. *Review:* document the default, bounds and meaning beside the table in
+   [crawling.md](docs/crawling.md#options-and-crawl-settings) for `[crawl]`, in the
+   same feature slice. Check the new field's valid and invalid values through its
+   service scenario; the table guard does not prove its meaning.
 
 ### An option that mirrors a setting
 
-1. Declare it on the Command as `--concurrency` is in `openlinx/cli/crawl.py`: `Annotated[int, typer.Option("--flag", ...), OptionMeta(setting="table.field")] = <default>`. The long name is the field's name with `-` for `_`. `tests/workspace/test_tables.py` checks that the setting exists.
-2. The adapter passes `setting_flags(ctx)` to the settings loader, so only a flag given on the command line beats the settings file.
-3. `test_mirrored_options_match_their_fields` checks that the option's name, default and `min`/`max` match the field's; *review* checks its help.
-4. A secret option inherits `secret` from its setting and takes only a long name; `check_command` refuses a short one.
+1. In [cli/crawl.py](src/openlinx/cli/crawl.py), follow `--concurrency`:
+   `Annotated[int, typer.Option("--concurrency", min=1, max=50, ...), OptionMeta(setting="crawl.concurrency")] = 5`.
+   Use the field name with `-` for `_`, the same default, and `ge`/`le` as Click's
+   `min`/`max`. A validated value such as `rate` uses a callback sharing the field's
+   rule, without inventing inclusive bounds. The matching guard is
+   [test_commands.py](tests/cli/test_commands.py)::`test_mirrored_options_match_their_fields`;
+   [test_tables.py](tests/workspace/test_tables.py)::`test_every_option_setting_names_a_setting_of_a_registered_table`
+   checks the dotted key. *Review:* keep help accurate and validation equivalent.
+2. Pass `setting_flags(ctx)` from [options.py](src/openlinx/cli/options.py) through
+   `CrawlRequest.flags` to `plan_crawl`, as the adapter does; only explicitly given
+   flags override the file. At seam 2,
+   [test_settings.py](tests/workspace/test_settings.py)::`test_flag_over_settings_file`
+   checks precedence. *Review:* keep the adapter's mapping free of service logic.
+3. A secret option inherits secrecy from its field and has only a long name,
+   checked by [test_tables.py](tests/workspace/test_tables.py)::`test_options_of_secret_settings_have_only_long_names`.
+   Keep model imports off the startup path;
+   [test_startup.py](tests/cli/test_startup.py)::`test_startup_loads_only_the_allowlist`
+   checks `--help`, and `test_settings_tables_load_with_the_settings` checks that
+   settings models remain unloaded during `--help`.
 
 ### A Command
 
@@ -192,9 +253,166 @@ A table has one owning change, and a new table is registered in `default_tables(
 
 See [Changing the crawl store schema](#changing-the-crawl-store-schema) and [How to add a table](docs/schema.md#how-to-add-a-table). A new column goes into `openlinx.store.schema` and its `docs/schema.md` row in the same commit, at the same position in both. *Review:* a unit that runs once per URL or Page executes a statement built once at import ([architecture](docs/architecture.md#crawl-store)).
 
+#### A URL column written by the Crawl
+
+Use the integrated `urls.attempt_count` as the example; these are the files in
+data-flow order for a future column, not new assignments to add to the existing field.
+
+1. **Declare and document together.** Change [schema.py](src/openlinx/store/schema.py)
+   and [schema.md](docs/schema.md#table-urls) in the same slice: type, nullability,
+   default, description and any constraints. `attempt_count` is a non-null integer
+   defaulting to 0, for the dispatch that recorded the URL, retries included.
+   At seam 6, [test_schema.py](tests/contract/test_schema.py)::`test_documentation_and_declaration_agree`
+   checks docs against `linx schema`; `test_a_new_file_matches_the_declaration`
+   checks the created file. *Review:* use the schema conventions above.
+2. **Produce the value and carry it through the outcome.**
+   [requester.py](src/openlinx/crawl/fetch/requester.py) returns `Attempted`, with the
+   final outcome and attempt count. [units.py](src/openlinx/crawl/engine/units.py)
+   puts the count on the frozen `UrlResult` from
+   [hooks.py](src/openlinx/crawl/engine/hooks.py), then `_fetched_record` or
+   `_errored_record` builds `FetchedUrl` or `ErroredUrl` from
+   [records.py](src/openlinx/store/records.py). At seam 3+6,
+   [test_retries.py](tests/crawl/test_retries.py)::`test_a_temporary_503_is_retried`
+   expects `(200, 2)`, `test_a_persistent_500_is_recorded_after_the_retries` expects
+   `("fetched", 500, 3)`, and `test_a_404_is_not_retried` expects `(404, 1)`.
+   *Review:* cover every applicable outcome, including no request and recording
+   failure; do not count robots.txt requests as the URL's attempts.
+3. **Map to the store unit.** In [urls.py](src/openlinx/store/urls.py),
+   `record_fetched` and `record_error` map the record's count to the `attempts`
+   parameter of import-built `_FETCHED` and `_ERRORED`; `record_unwritten` preserves
+   it in `_UNWRITTEN` when the original unit failed. The fallback receives the
+   `UrlResult` count through [outcomes.py](src/openlinx/crawl/engine/outcomes.py).
+   *Review:* extend all relevant mappings, keep effects on the connection, inputs
+   unchanged and statements built at import. The seam 3+6 retry tests above check
+   the persisted value through the real engine, not a fabricated row assignment.
+4. **Prove replay at seam 2.** Extend
+   [test_urls.py](tests/store/test_urls.py)::`test_the_units_of_urls_run_again_the_same`:
+   run the affected units through `CrawlWriter`, call `replay_now` from
+   [tests/support/writer.py](tests/support/writer.py) before the batch commits, then
+   read the new column with independent literal expected values. The existing test
+   exercises fetched, skipped, error and fallback units and forces replay; its
+   current SQL assertion does not select `attempt_count`, so a future field needs
+   its own value assertion as well as the replay check.
+
+#### A Page column written by a handler
+
+Use `pages.title_1` as the example. The extractor returns `PageData`; the handler
+constructs the final `PageRow`, which also includes URL/response fields.
+
+1. **Declare and document together.** Update [schema.py](src/openlinx/store/schema.py)
+   and [schema.md](docs/schema.md#table-pages) in the same slice. `title_1` is nullable:
+   no title, an unanalysed Page or a failed Page extractor leaves it NULL. The two
+   [schema checks](tests/contract/test_schema.py) named in the URL recipe check the
+   declaration, docs and file at seam 6; *review* checks the new field's meaning.
+2. **Define the row and extraction output.** Put the stored field in `PageRow` in
+   [page_records.py](src/openlinx/store/page_records.py), in schema order; put an HTML
+   result field in `PageData` and `extract_page_data` in
+   [page_data.py](src/openlinx/extract/page_data.py). Title reading uses
+   [head_metadata.py](src/openlinx/extract/head_metadata.py). At seam 4,
+   [test_page_data.py](tests/extract/test_page_data.py)::`test_whitespace_is_collapsed_before_measuring`
+   expects `("Hello World", 11)` and `test_missing_title` expects `(0, None, None)`
+   through `page_row` in [tests/support/page_data.py](tests/support/page_data.py),
+   which runs preparation and the handler. `test_a_full_page_fills_every_html_column`
+   checks the full fixture; extend it for a new HTML field, with separate literal
+   assertions for its meaning.
+3. **Map the result, then register the pipeline.** In
+   [page_handler.py](src/openlinx/extract/page_handler.py), `page_rows` reads
+   `PAGE_DATA.output(result.outputs)` and expands present `PageData` fields into
+   `PageRow`, alongside response and URL values; absent output leaves HTML fields
+   at their row defaults. [services/hooks.py](src/openlinx/services/hooks.py)
+   registers `page_data_extractor(area)` and `handler("pages", page_rows, write_pages)`.
+   At seam 3+6, [test_pages.py](tests/extract/test_pages.py)::`test_error_page_keeps_response_data`
+   checks `(404, None)` for status/title, and
+   `test_a_page_whose_page_extractor_failed_keeps_its_response_data_and_links` checks
+   NULL title with the remaining data preserved. The seam-4 literal tests above
+   cover the successful HTML mapping. *Review:* add a new column's literal readback
+   through the Crawl too; an extraction output is not itself a stored Page row.
+4. **Write and replay.** [pages.py](src/openlinx/store/pages.py)::`write_pages`
+   maps `PageRow` fields into import-built `_INSERT_PAGE`; the engine includes these
+   handler rows in the URL's recording unit. At seam 2,
+   [test_pages.py](tests/store/test_pages.py)::`test_the_page_row_has_every_pages_column_in_order`
+   checks row coverage (except `crawl_depth`, which the unit reads from `urls`).
+   Extend `test_the_units_of_pages_run_again_the_same`: supply the field in its
+   `PageRow`, run `record_fetched`, call `replay_now`, and read back the field with a
+   literal expected value. Its existing query checks address fields, not title.
+   *Review:* no I/O outside the connection, no input mutation or transaction control;
+   a derived value such as inlinks belongs to the post-crawl pass in the next recipe.
+
 ### An extractor, handler or post-crawl pass
 
-Plug it into `default_hooks()` in `openlinx/services/hooks.py`, as [How 030 and 040 plug in](docs/architecture.md#crawl-pipeline) describes; the engine is never edited. 020 reworks these hooks before it is archived: a handler will name the store function that writes its rows (no separate `row_writers`), a pass will take a `PassContext`, an extractor will carry its own settings, and every request will go through one Requester. Read the architecture section as it stands on your branch before copying an example.
+Follow the Link pipeline below, with seams from [testing](docs/testing.md#seams).
+Register hooks at the composition root; the crawl core takes them as inputs.
+
+1. **Prepare the extractor.** In
+   [page_links.py](src/openlinx/extract/page_links.py), `PAGE_LINKS` is built with
+   `extractor("page_links", extract_page_links, None)` from
+   [preparation.py](src/openlinx/crawl/pages/preparation.py). Keep the extraction
+   function and output/config struct classes at module level. Return a typed frozen
+   `msgspec.Struct`; config is `None` or a frozen struct resolved when hooks are built,
+   and must survive pickle with the Page settings. At seam 4,
+   [test_extractors.py](tests/crawl/test_extractors.py) checks config delivery in
+   `test_an_extractor_gets_its_own_config`, refuses nested/lambda functions in
+   `test_an_extractor_whose_function_is_not_module_level_cannot_be_built`, and checks
+   the built-in settings in `test_the_default_page_settings_pickle`.
+   *Review:* config fields must themselves hold immutable values.
+2. **Locate complete Links before filtering.** `extract_page_links` in
+   [page_links.py](src/openlinx/extract/page_links.py) calls
+   `locate_links(tree, page.links, expected_total=len(page.links))` from
+   [links.py](src/openlinx/crawl/pages/links.py), using the original `PageInput.links`.
+   The locator checks the complete count, ordinals 1 to N and headers-first order,
+   then returns HTML locations by ordinal; header Links have no DOM location.
+   Filter only afterwards. At seam 4,
+   [test_links.py](tests/crawl/test_links.py) checks this in
+   `test_a_subset_of_a_page_s_links_is_refused`,
+   `test_links_out_of_ordinal_order_are_refused` and
+   `test_header_links_after_html_links_are_refused`.
+3. **Map output to rows.** `link_rows` in
+   [link_handler.py](src/openlinx/extract/link_handler.py) reads
+   `PAGE_LINKS.output(result.outputs)` and returns `LinkRow` values for the URL's
+   Links, including header Links and Links whose extractor output is absent.
+   At seam 4, [test_links.py](tests/extract/test_links.py) exercises preparation
+   through the handler with literal rows, including
+   `test_header_and_repeated_html_links_keep_their_ordinals_and_positions` and
+   `test_links_declared_in_a_header`. Build the handler with `handler(...)` from
+   [hooks.py](src/openlinx/crawl/engine/hooks.py); strict mypy checks its row type
+   against the writer in [test_handler_types.py](tests/test_handler_types.py),
+   `test_a_handler_and_a_writer_of_different_row_types_fail_mypy`.
+   *Review:* the mapper is pure, with no SQL or other I/O.
+4. **Write through the URL's unit.** `write_links(connection, rows)` in
+   [store/links.py](src/openlinx/store/links.py) executes the import-built
+   `_INSERT_LINK`; the engine includes the handler's rows in the unit that records
+   the URL. At seam 2, [test_links.py](tests/store/test_links.py) checks the writer
+   with `test_the_units_of_links_run_again_the_same`, which uses `replay_now`, and
+   checks row/schema coverage with `test_the_link_row_has_every_links_column`.
+   *Review:* build per-URL statements at import, keep effects inside the supplied
+   connection, do not mutate inputs, and never commit or roll back inside a unit.
+5. **Order post-crawl work.** `count_inlinks` in
+   [services/hooks.py](src/openlinx/services/hooks.py) orders the units from
+   [store/links.py](src/openlinx/store/links.py). Its `PassContext.writer` is the
+   async-only `PassWriter` from [engine/hooks.py](src/openlinx/crawl/engine/hooks.py):
+   use `run_async`, `submit_async` and `flush_async`; the Crawl owns closing it.
+   Seam 2's [test_links.py](tests/store/test_links.py) checks replay with
+   `test_the_units_of_the_inlink_pass_run_again_the_same`. At seam 3+6,
+   [test_link_counts.py](tests/extract/test_link_counts.py) checks the registered
+   pass's results in `test_counts_for_a_linked_page`;
+   [test_hooks.py](tests/crawl/test_hooks.py) checks pass execution/order in
+   `test_post_crawl_passes_run_before_a_crawl_is_completed` and
+   `test_post_crawl_passes_run_in_the_order_the_hooks_declare`.
+   Strict mypy checks the writer boundary in
+   [test_handler_types.py](tests/test_handler_types.py),
+   `test_a_pass_that_closes_the_crawl_s_writer_fails_mypy`.
+6. **Register the composition.** Extend `default_hooks()` in
+   [services/hooks.py](src/openlinx/services/hooks.py): it includes `PAGE_LINKS`,
+   `handler("links", link_rows, write_links)` and `Pass("inlinks", count_inlinks)`.
+   Retain the other registrations, including the `response_headers` handler.
+   At seam 3+6, [test_hooks.py](tests/crawl/test_hooks.py) checks registration with
+   `test_a_registered_handler_sees_each_recorded_outcome_once`.
+   [test_code_style.py](tests/test_code_style.py) enforces the factory boundary in
+   `test_hooks_and_links_are_built_only_through_their_factories` and keeps plugin
+   imports out of the crawl core in `test_the_crawl_core_imports_no_plugin_layer`.
+   If a new cross-package import is needed, update its package interface docstring;
+   [test_package_interfaces.py](tests/test_package_interfaces.py) checks
+   `test_every_name_used_across_a_package_is_listed`.
 
 ## Conventions
 

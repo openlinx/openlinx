@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Literal, TypedDict
 
 from openlinx.crawl.urls import NormalizedUrl
@@ -71,10 +72,82 @@ type LinkType = Literal[
     "sitemap_hreflang",
     "javascript_redirect",
 ]
-# Through these a URL is requested as a Resource; openlinx.crawl.following reads them,
-# and so does the urls upsert, which may import nothing of the crawl but urls.
+# The elements and attributes that 020's Link discovery reads.
+type LinkElement = Literal[
+    "a",
+    "area",
+    "link",
+    "iframe",
+    "frame",
+    "meta",
+    "img",
+    "source",
+    "video",
+    "audio",
+    "track",
+    "embed",
+    "object",
+    "script",
+]
+type LinkAttribute = Literal["href", "src", "srcset", "poster", "data", "content"]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LinkTypeInfo:
+    requested: Literal["followed", "resource"] | None
+    sources: tuple[tuple[LinkElement, LinkAttribute], ...]
+    header: bool
+
+
+# Discovery keeps the rel and parent conditions; the store also needs the request policy
+# without importing discovery (023-fix-code-audit D12).
+LINK_TYPES: Mapping[LinkType, LinkTypeInfo] = MappingProxyType(
+    {
+        "hyperlink": LinkTypeInfo(
+            requested="followed", sources=(("a", "href"), ("area", "href")), header=False
+        ),
+        "canonical": LinkTypeInfo(requested="followed", sources=(("link", "href"),), header=True),
+        "pagination": LinkTypeInfo(requested="followed", sources=(("link", "href"),), header=True),
+        "hreflang": LinkTypeInfo(requested="followed", sources=(("link", "href"),), header=True),
+        "iframe": LinkTypeInfo(
+            requested="followed", sources=(("iframe", "src"), ("frame", "src")), header=False
+        ),
+        "meta_refresh": LinkTypeInfo(
+            requested="followed", sources=(("meta", "content"),), header=False
+        ),
+        "http_refresh": LinkTypeInfo(requested="followed", sources=(), header=True),
+        "image": LinkTypeInfo(
+            requested="resource",
+            sources=(("img", "src"), ("img", "srcset"), ("source", "srcset"), ("video", "poster")),
+            header=False,
+        ),
+        "css": LinkTypeInfo(requested="resource", sources=(("link", "href"),), header=False),
+        "javascript": LinkTypeInfo(
+            requested="resource", sources=(("script", "src"),), header=False
+        ),
+        "video": LinkTypeInfo(
+            requested="resource",
+            sources=(("video", "src"), ("source", "src"), ("track", "src")),
+            header=False,
+        ),
+        "audio": LinkTypeInfo(
+            requested="resource",
+            sources=(("audio", "src"), ("source", "src"), ("track", "src")),
+            header=False,
+        ),
+        "media": LinkTypeInfo(
+            requested="resource", sources=(("embed", "src"), ("object", "data")), header=False
+        ),
+        "amphtml": LinkTypeInfo(requested=None, sources=(("link", "href"),), header=False),
+        "mobile_alternate": LinkTypeInfo(requested=None, sources=(("link", "href"),), header=False),
+        "misc": LinkTypeInfo(requested=None, sources=(("link", "href"),), header=False),
+        "xml_sitemap": LinkTypeInfo(requested=None, sources=(), header=False),
+        "sitemap_hreflang": LinkTypeInfo(requested=None, sources=(), header=False),
+        "javascript_redirect": LinkTypeInfo(requested=None, sources=(), header=False),
+    }
+)
 RESOURCE_LINK_TYPES: frozenset[LinkType] = frozenset(
-    {"image", "css", "javascript", "video", "audio", "media"}
+    link_type for link_type, info in LINK_TYPES.items() if info.requested == "resource"
 )
 type DeclaredIn = Literal["head", "body", "http_header"]
 type DiscoveredVia = (

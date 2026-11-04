@@ -6,14 +6,19 @@ import traceback
 from collections.abc import Callable
 from functools import lru_cache, partial
 from pathlib import Path
+from typing import Protocol
 
 import msgspec
 
 # The warning keeps one error's text; a long repr would fill the result.
 TEXT_LIMIT = 300
-# Carried longer than the warning keeps, so the warning's cut comes after the redaction and
-# never leaves part of a secret.
+# Capture stays bounded across the process boundary; truncation tells redaction to hide
+# terminal secret prefixes before the warning's shorter cut.
 _CARRIED = 10_000
+
+
+class _Redactor(Protocol):
+    def __call__(self, text: str, /, *, truncated: bool = False) -> str: ...
 
 
 class HookFailure(msgspec.Struct, frozen=True, kw_only=True):
@@ -22,13 +27,14 @@ class HookFailure(msgspec.Struct, frozen=True, kw_only=True):
     hook: str
     error_type: str
     text: str
+    truncated: bool
     # `<file>:<line>`; None when no frame of the error is in the hook's own file.
     at: str | None = None
 
-    def details(self, redact: Callable[[str], str]) -> dict[str, str]:
+    def details(self, redact: _Redactor) -> dict[str, str]:
         """The warning's details of the first URL it failed on, with the Crawl's secrets
         redacted, since a library's message may quote a URL with its key."""
-        text = redact(self.text)[:TEXT_LIMIT]
+        text = redact(self.text, truncated=self.truncated)[:TEXT_LIMIT]
         return {"error": text} | ({} if self.at is None else {"at": self.at})
 
 
@@ -41,7 +47,11 @@ def hook_failure(hook: str, function: Callable[..., object], error: BaseExceptio
     except Exception:
         text = f"<{error_type} that cannot be printed>"
     return HookFailure(
-        hook=hook, error_type=error_type, text=text[:_CARRIED], at=_raised_at(function, error)
+        hook=hook,
+        error_type=error_type,
+        text=text[:_CARRIED],
+        truncated=len(text) > _CARRIED,
+        at=_raised_at(function, error),
     )
 
 

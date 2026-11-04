@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from openlinx.crawl.references import DiscoveredLink
+from openlinx.crawl.references import DiscoveredLink, discovered_link
 from openlinx.crawl.scope import ScopeDecision, ScopeRules, apex_seed_named_by_page, scope_rules
 from openlinx.crawl.urls import InvalidUrl, NormalizedUrl, normalize_url, parse_seed
 from openlinx.store.records import LinkType
@@ -163,15 +163,15 @@ def test_the_subfolder_scope_keeps_urls_inside_the_folder(url: str, in_scope: bo
 
 
 def _link(link_type: LinkType, target: str) -> DiscoveredLink:
-    return DiscoveredLink(
-        type=link_type,
+    return discovered_link(
+        link_type=link_type,
         target=NormalizedUrl(target),
         raw=target,
         element="a",
         attribute="href",
         rel=(),
-        nofollow=False,
-        skip_reason=None,
+        page_nofollow=False,
+        follow_nofollow=False,
         declared_in="body",
         ordinal=1,
         is_internal=False,

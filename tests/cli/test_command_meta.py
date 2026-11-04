@@ -94,12 +94,20 @@ def unavailable_default_field(
     return None
 
 
-@pytest.mark.parametrize("command", [table_first, unavailable_default_field])
-def test_default_format_comes_first_and_default_fields_are_available(
-    command: Callable[..., Any],
-) -> None:
-    with pytest.raises(TypeError, match=command.__name__):
-        build_app(extra=AppExtra(commands=[command]))
+def test_default_format_comes_first() -> None:
+    with pytest.raises(
+        TypeError,
+        match=r"^Command table_first: its --format default is not the first of its formats\.$",
+    ):
+        build_app(extra=AppExtra(commands=[table_first]))
+
+
+def test_default_fields_are_available() -> None:
+    with pytest.raises(
+        TypeError,
+        match=r"^Command unavailable_default_field: its default fields are not all available\.$",
+    ):
+        build_app(extra=AppExtra(commands=[unavailable_default_field]))
 
 
 @command_meta(output="document", formats=[Format.JSON, Format.TABLE])
