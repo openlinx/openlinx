@@ -14,7 +14,7 @@ The next changes (`022`, `026`, `030`, `040`, `050`, `060`, `090`) plug into sea
 - **One Link type table** in `openlinx.store.records` drives the follow rule, the Resource types and the element selectors of Link discovery. `LinkElement` and `LinkAttribute` sit beside `LinkType`, and they type `DiscoveredLink`.
 - **Link reading by ordinal:** `locate_links` takes all of a Page's Links and refuses a subset.
 - **Services validate without the CLI:** the settings tables, the `--subdomains` alias and its conflict, the secret settings, and the error for a refused value move out of `openlinx.cli`. A refused value given with the settings, a flag's included, is `invalid_value` (exit 2) with its key, not `settings_invalid` against a file.
-- **Self-description:** `linx commands` gives each option's bounds, leaves out hidden options, and lists no environment variable until one is honoured.
+- **Self-description:** `linx commands` gives each option's bounds, leaves out hidden options, and preserves the honoured proxy variables owned by `022`.
 - **SQL home:** the `--where` parser stays in `openlinx.query`, every statement in `openlinx.store`; the docs and the sqlalchemy guard say so.
 - **Docs and recipes** describe what is built: the hooks recipe in steps over the real built-ins, two column recipes, the setting and code recipes, the test seams.
 
@@ -24,14 +24,14 @@ The next changes (`022`, `026`, `030`, `040`, `050`, `060`, `090`) plug into sea
 None.
 
 ### Modified Capabilities
-- `cli-contract`: `linx commands` gives option bounds, leaves out hidden options, and lists no environment variable.
-- `workspace`: no environment variable is honoured; a refused given value, a flag's included, is `invalid_value` with its key.
+- `cli-contract`: `linx commands` gives option bounds and leaves out hidden options.
+- `workspace`: a refused given value, a flag's included, is `invalid_value` with its key.
 - `crawling`: the first hook failure warning names the error and where it was raised.
 - `crawl-store`: the writer refuses units it could not replay and sync calls under a loop's commit deadline, and a unit that commits ends it.
 
 ## Impact
 
-- Code: `openlinx.crawl.engine` (stop, hooks, warnings), `openlinx.crawl.hook_failures` (new), `openlinx.crawl.pages` (preparation, links), `openlinx.crawl.references`, `openlinx.crawl.following`, `openlinx.store` (records, writer), `openlinx.services` (crawling, workspace, a new `settings` module), `openlinx.workspace.settings`, `openlinx.cli` (app, crawl, commands, init, options, runner), `openlinx.output.codes`, `openlinx.extract` (`page_links`, `link_handler`), `pyproject.toml` (ruff).
+- Code: `openlinx.crawl.engine` (stop, hooks, warnings), `openlinx.crawl.hook_failures` (new), `openlinx.crawl.pages` (preparation, links), `openlinx.crawl.references`, `openlinx.crawl.reference_urls` (pure resolution extracted without changing caller interfaces), `openlinx.crawl.following`, `openlinx.store` (records, writer), `openlinx.services` (crawling, workspace, a new `settings` module), `openlinx.workspace.settings`, `openlinx.cli` (app, crawl, commands, init, options, runner), `openlinx.output.codes`, `openlinx.extract` (`page_links`, `link_handler`), `pyproject.toml` (ruff).
 - Tests: new guards in `tests/test_code_style.py`, `tests/cli/test_commands.py`, `tests/workspace/test_tables.py` and `tests/contract/`; messages on the existing guards; the Crawl's input at seam 2 in `tests/crawl/test_crawl_service.py` and `tests/crawl/test_continue.py`; `tests/support/crawling.py` without the app.
 - Docs: CONTRIBUTING's recipes, `docs/architecture.md`, `docs/crawl-store.md`, `docs/crawling.md`, `docs/testing.md`, `docs/workspace.md`, AGENTS.md links.
-- Other branches: `030` reads the Link type table in its element guard, its passes use the narrow writer, and its new tables go in `openlinx.store.schema`. `040` and `050` register their settings tables in `default_tables()`. `050` compiles `--where` in `openlinx.store.query`. `022`, which honours the proxy variables, modifies "Environment variables change nothing" and lists them under `environment`.
+- Other branches: `030` reads the Link type table in its element guard, its passes use the narrow writer, and its new tables go in `openlinx.store.schema`. `040` and `050` register their settings tables in `default_tables()`. `050` compiles `--where` in `openlinx.store.query`. `022` owns the honoured proxy variables and their `environment` entry; this change preserves that contract when integrated and archived.
