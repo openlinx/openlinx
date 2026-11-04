@@ -78,6 +78,123 @@ def test_a_429_pauses_the_host_without_a_retry(temp_workspace: TempWorkspace) ->
 
 
 @pytest.mark.parametrize(
+    ("retry_after", "delay", "target_start"),
+    [
+        ("60", 0.0, 60.0),
+        ("600", 0.0, 120.0),
+        ("Thu, 01 Jan 2026 00:00:35 GMT", 30.0, 35.0),
+    ],
+)
+def test_a_redirect_retry_after_pauses_its_target_without_retrying_the_redirect(
+    temp_workspace: TempWorkspace, retry_after: str, delay: float, target_start: float
+) -> None:
+    clock = FakeClock()
+    fetcher = FakeFetcher(
+        clock,
+        {
+            "/old": FakePage(
+                "",
+                status=301,
+                headers=(("Location", "/new"), ("Retry-After", retry_after)),
+                delay=delay,
+            ),
+            "/new": FakePage("<p>New</p>"),
+        },
+    )
+
+    result = crawl_result("http://site.test/old", clock=clock, fetcher=fetcher)
+
+    assert (
+        _starts(fetcher, "/old"),
+        _starts(fetcher, "/new"),
+        query(result.crawl_file, "SELECT url, status_code, attempt_count FROM urls ORDER BY url"),
+    ) == (
+        [0.0],
+        [target_start],
+        [("http://site.test/new", 200, 1), ("http://site.test/old", 301, 1)],
+    )
+
+
+@pytest.mark.parametrize("status", [200, 404])
+@pytest.mark.parametrize("retries", [0, 2])
+def test_a_retry_after_on_a_non_retrying_response_pauses_the_host(
+    temp_workspace: TempWorkspace, status: int, retries: int
+) -> None:
+    clock = FakeClock()
+    fetcher = FakeFetcher(
+        clock,
+        {
+            "/": FakePage(
+                '<a href="/a">A</a><a href="/b">B</a><a href="http://other.test/x">X</a>'
+            ),
+            "/a": FakePage("<p>A</p>", status=status, headers=(("Retry-After", "7"),)),
+            "/b": FakePage("<p>B</p>"),
+            "http://other.test/x": FakePage("<p>X</p>"),
+        },
+    )
+
+    result = crawl_result(
+        "http://site.test/", clock=clock, fetcher=fetcher, concurrency=1, retries=retries
+    )
+
+    assert (
+        _starts(fetcher, "/a"),
+        _starts(fetcher, "/b"),
+        _starts(fetcher, "/x"),
+        query(
+            result.crawl_file,
+            "SELECT status_code, attempt_count FROM urls WHERE url LIKE 'http://site.test/_' "
+            "ORDER BY url",
+        ),
+    ) == ([0.0], [7.0], [0.0], [(status, 1), (200, 1)])
+
+
+def test_a_500_retry_also_waits_for_its_host_pause(temp_workspace: TempWorkspace) -> None:
+    clock = FakeClock()
+    fetcher = FakeFetcher(
+        clock,
+        {
+            "/a": [
+                FakePage("", status=500, headers=(("Retry-After", "7"),)),
+                FakePage("<p>A</p>"),
+            ],
+        },
+    )
+
+    result = crawl_result("http://site.test/a", clock=clock, fetcher=fetcher)
+
+    assert (
+        _starts(fetcher, "/a"),
+        query(result.crawl_file, "SELECT status_code, attempt_count FROM urls"),
+    ) == ([0.0, 7.0], [(200, 2)])
+
+
+def test_a_robots_txt_redirect_retry_after_pauses_its_host(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    fetcher = FakeFetcher(
+        clock,
+        {
+            "/robots.txt": FakePage(
+                "", status=301, headers=(("Location", "/rules"), ("Retry-After", "7"))
+            ),
+            "/rules": FakePage("User-agent: *\nAllow: /\n", content_type="text/plain"),
+            "/": FakePage("<p>Home</p>"),
+        },
+    )
+
+    result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher)
+
+    assert (
+        _starts(fetcher, "/robots.txt"),
+        _starts(fetcher, "/rules"),
+        _starts(fetcher, "/"),
+        query(result.crawl_file, "SELECT status_code, attempt_count FROM urls"),
+    ) == ([0.0], [7.0], [7.0], [(200, 1)])
+
+
+@pytest.mark.parametrize(
     ("status", "headers", "wait"),
     [
         # A 429 without Retry-After waits 10 seconds.

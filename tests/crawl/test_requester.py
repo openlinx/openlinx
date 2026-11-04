@@ -6,7 +6,7 @@ from typing import get_args
 import pytest
 
 from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult
-from openlinx.crawl.fetch.requester import is_retried
+from openlinx.crawl.fetch.requester import is_retried, retry_wait
 from openlinx.store.records import FetchError
 
 _AT = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
@@ -63,3 +63,50 @@ def test_a_response_is_retried_only_on_a_server_error_or_a_429(
     )
 
     assert is_retried(response) is retried
+
+
+@pytest.mark.parametrize(("attempt", "wait"), [(1, 1.0), (3, 4.0)])
+def test_a_500_retry_after_pauses_the_host_without_replacing_its_backoff(
+    attempt: int, wait: float
+) -> None:
+    response = FetchResult(
+        status_code=500,
+        reason=None,
+        headers=(("Retry-After", "60"),),
+        body=b"",
+        fetched_at=_AT,
+        response_time_ms=1,
+    )
+
+    assert retry_wait(response, attempt, _AT) == (wait, 60.0)
+
+
+@pytest.mark.parametrize(
+    ("status", "header", "expected"),
+    [
+        (301, None, (4.0, None)),
+        (301, "not a date", (4.0, None)),
+        (500, "not a date", (4.0, None)),
+        (503, None, (4.0, None)),
+        (503, "not a date", (4.0, None)),
+        (429, None, (10.0, 10.0)),
+        (429, "not a date", (10.0, 10.0)),
+        (301, "0", (4.0, 0.0)),
+        (503, "0", (0.0, 0.0)),
+        (500, "600", (4.0, 120.0)),
+        (503, "600", (120.0, 120.0)),
+    ],
+)
+def test_retry_wait_and_host_pause_keep_their_header_rules(
+    status: int, header: str | None, expected: tuple[float, float | None]
+) -> None:
+    response = FetchResult(
+        status_code=status,
+        reason=None,
+        headers=() if header is None else (("Retry-After", header),),
+        body=b"",
+        fetched_at=_AT,
+        response_time_ms=1,
+    )
+
+    assert retry_wait(response, 3, _AT) == expected

@@ -199,10 +199,10 @@ class Requester:
         any other stop ends a due retry, and the URL is not recorded (022 design D4)."""
         attempts = 1
         while True:
-            wait, pauses = retry_wait(outcome, attempts, self._clock.now())
+            wait, pause = retry_wait(outcome, attempts, self._clock.now())
             # Politeness toward the host, whether or not the URL has a retry left.
-            if pauses:
-                self._gate.pause(host_key(url), wait)
+            if pause is not None:
+                self._gate.pause(host_key(url), pause)
             if attempts > self._retries or not is_retried(outcome):
                 break
             # Outside the slots: a waiting retry holds none of the host's --concurrency.
@@ -306,18 +306,23 @@ def is_retried(outcome: FetchResult | FetchFailure) -> bool:
 
 def retry_wait(
     outcome: FetchResult | FetchFailure, attempt: int, ended: datetime
-) -> tuple[float, bool]:
-    """The seconds before retry `attempt`, and whether the host pauses for them: a
-    Retry-After on a 429 or 503 sets them, capped, and a 429 without one waits 10 seconds;
-    any other retry backs off, 1, 2, 4, ... seconds (022 design D4). `ended` is when the
-    response ended, from which a Retry-After date counts."""
-    if isinstance(outcome, FetchResult) and outcome.status_code in (429, 503):
+) -> tuple[float, float | None]:
+    """The URL retry wait and independent host pause, in seconds (022 design D4).
+
+    Any valid Retry-After pauses the host; only a 429 or 503 replaces the retry backoff.
+    A 429 without one waits 10 seconds. `ended` is when the response ended, from which a
+    Retry-After date counts.
+    """
+    pause = None
+    if isinstance(outcome, FetchResult):
         after = retry_after(outcome, ended)
         if after is not None:
-            return min(after, RETRY_AFTER_CAP), True
-        if outcome.status_code == 429:
-            return TOO_MANY_REQUESTS_WAIT, True
-    return 2.0 ** (attempt - 1), False
+            pause = min(after, RETRY_AFTER_CAP)
+        elif outcome.status_code == 429:
+            pause = TOO_MANY_REQUESTS_WAIT
+        if pause is not None and outcome.status_code in (429, 503):
+            return pause, pause
+    return 2.0 ** (attempt - 1), pause
 
 
 def retry_after(response: FetchResult, ended: datetime) -> float | None:
