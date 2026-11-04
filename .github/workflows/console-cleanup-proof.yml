@@ -1,0 +1,53 @@
+# Temporary evidence on an unmerged verification branch; existing CI remains independent.
+name: Console cleanup proof
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    name: Windows / Python ${{ matrix.python }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
+    defaults:
+      run:
+        shell: bash
+    env:
+      HYPOTHESIS_PROFILE: ci
+      OPENSPEC_TELEMETRY: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+
+      - name: Install the locked dependencies
+        run: uv sync --locked
+
+      - name: Check the matrix Python
+        env:
+          EXPECTED_PYTHON: ${{ matrix.python }}
+        run: >-
+          uv run --locked python -c "import os, sys;
+          version = '.'.join(map(str, sys.version_info[:2])); print(sys.version);
+          assert version == os.environ['EXPECTED_PYTHON'], version"
+
+      - name: Normal encoding suite
+        run: uv run --locked pytest tests/cli/test_encoding.py --no-cov
+
+      - name: Original green, root-only mutation, restored green
+        env:
+          PYTHONIOENCODING: utf-8
+        run: uv run --locked python -m scripts.verify_console_cleanup_guard
