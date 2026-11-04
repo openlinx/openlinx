@@ -1,6 +1,6 @@
-"""Link attributes (030-add-page-data, page-data; seam 4)."""
+"""Link attributes and source pairs agree with their declarations (030 D4; 023 D12; seam 4)."""
 
-from openlinx.store.records import LinkAttribute, LinkElement
+from openlinx.store.records import LINK_TYPES, LinkAttribute, LinkElement, LinkType
 from openlinx.store.schema import literal_values
 from tests.support.page_data import page_link_rows, response_link_rows
 
@@ -176,6 +176,9 @@ def test_hreflang_from_a_link_header() -> None:
 # only in a frameset document, a source in a picture and in a video, a track in a video and an
 # image in a noscript, whose content discovery parses again.
 _EVERY_LINK_ELEMENT = """<html><head><link rel="stylesheet" href="/site.css">
+<link rel="canonical" href="/canonical"><link rel="next" href="/next">
+<link rel="alternate" hreflang="de" href="/de"><link rel="amphtml" href="/amp">
+<link rel="alternate" media="handheld" href="/mobile"><link rel="icon" href="/favicon.ico">
 <meta http-equiv="refresh" content="30; url=/news"><script src="/app.js"></script></head>
 <body><a href="/about">About</a>
 <img src="/map.png" usemap="#m"><map name="m"><area href="/north" alt="North"></map>
@@ -184,9 +187,46 @@ _EVERY_LINK_ELEMENT = """<html><head><link rel="stylesheet" href="/site.css">
 <picture><source srcset="/hero.webp" type="image/webp"><img src="/hero.jpg" alt=""></picture>
 <video src="/intro.mp4" poster="/intro.jpg"><track src="/intro.vtt" kind="captions"></video>
 <video controls><source src="/demo.mp4" type="video/mp4"></video>
-<audio src="/theme.mp3"></audio><embed src="/tour.swf"><object data="/brochure.pdf"></object>
+<audio src="/theme.mp3"><source src="/song.mp3"><track src="/song.vtt"></audio>
+<embed src="/tour.swf"><object data="/brochure.pdf"></object>
 <noscript><img src="/pixel.gif" alt=""></noscript></body></html>"""
 _FRAMESET = '<html><frameset cols="20%,80%"><frame src="/menu.html"><frame src="/main.html">'
+
+_EXPECTED_SOURCES: dict[str, set[tuple[str, str]]] = {
+    "hyperlink": {("a", "href"), ("area", "href")},
+    "canonical": {("link", "href")},
+    "pagination": {("link", "href")},
+    "hreflang": {("link", "href")},
+    "iframe": {("iframe", "src"), ("frame", "src")},
+    "meta_refresh": {("meta", "content")},
+    "http_refresh": set(),
+    "image": {("img", "src"), ("img", "srcset"), ("source", "srcset"), ("video", "poster")},
+    "css": {("link", "href")},
+    "javascript": {("script", "src")},
+    "video": {("video", "src"), ("source", "src"), ("track", "src")},
+    "audio": {("audio", "src"), ("source", "src"), ("track", "src")},
+    "media": {("embed", "src"), ("object", "data")},
+    "amphtml": {("link", "href")},
+    "mobile_alternate": {("link", "href")},
+    "misc": {("link", "href")},
+    "xml_sitemap": set(),
+    "sitemap_hreflang": set(),
+    "javascript_redirect": set(),
+}
+
+
+def test_discovered_link_sources_match_the_type_table() -> None:
+    rows = page_link_rows(_EVERY_LINK_ELEMENT) + page_link_rows(_FRAMESET)
+    found: dict[str, set[tuple[str | None, str | None]]] = {
+        name: set() for name in _EXPECTED_SOURCES
+    }
+    for row in rows:
+        found.setdefault(row.type, set()).add((row.element, row.attribute))
+    declared = {name: set(info.sources) for name, info in LINK_TYPES.items()}
+
+    assert (found, declared) == (_EXPECTED_SOURCES, _EXPECTED_SOURCES), (
+        "Link sources must agree per LinkType: update the literal fixture or LINK_TYPES.sources"
+    )
 
 
 def test_every_element_and_attribute_discovery_reads_is_enumerated() -> None:
@@ -195,4 +235,43 @@ def test_every_element_and_attribute_discovery_reads_is_enumerated() -> None:
     assert (
         {row.element for row in rows},
         {row.attribute for row in rows},
-    ) == (set(literal_values(LinkElement)), set(literal_values(LinkAttribute)))
+        {element for info in LINK_TYPES.values() for element, _ in info.sources},
+        {attribute for info in LINK_TYPES.values() for _, attribute in info.sources},
+    ) == (
+        set(literal_values(LinkElement)),
+        set(literal_values(LinkAttribute)),
+        set(literal_values(LinkElement)),
+        set(literal_values(LinkAttribute)),
+    ), "Link source Literals must be covered: add the pair to LINK_TYPES and the literal fixture"
+
+
+def test_link_type_table_covers_the_link_type_literal() -> None:
+    assert set(LINK_TYPES) == set(literal_values(LinkType)), (
+        "every LinkType must be declared: add its request policy and sources to LINK_TYPES"
+    )
+
+
+def test_header_sources_are_recorded_without_dom_pairs() -> None:
+    rows = response_link_rows(
+        "application/pdf",
+        headers=(
+            (
+                "Link",
+                '</c>; rel="canonical", </next>; rel="next", </de>; rel="alternate"; hreflang="de"',
+            ),
+            ("Refresh", "0; url=/refreshed"),
+        ),
+    )
+
+    assert (
+        [(row.type, row.element, row.attribute) for row in rows],
+        {name for name, info in LINK_TYPES.items() if info.header},
+    ) == (
+        [
+            ("canonical", None, None),
+            ("pagination", None, None),
+            ("hreflang", None, None),
+            ("http_refresh", None, None),
+        ],
+        {"canonical", "pagination", "hreflang", "http_refresh"},
+    ), "header sources must agree: keep DOM pairs unset and match LINK_TYPES.header to discovery"
