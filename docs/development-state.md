@@ -18,7 +18,7 @@ reviewed and gated narrow task 9b.9 refactor; the full fetching change remains u
 |---|---|---|
 | `main` | `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50` | First 022 PR #39 merged; main CI 41831195325 passed 9/9 |
 | `022-add-fetch-policy` | `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68` | Group 9b accepted; first PR #39 CI closes 8.2; TLS measurements and OS-trust policy accepted; 6.4 complete under revised D5 |
-| `023-fix-code-audit` | `e9eb6dba5e288b83eef5c8f552e75ae70f197d4d` | Group 5 and main4957 source integration accepted; source PR #36 CI passed 9/9; 6.1 hooks and 6.2 column/setting/code recipes documented; group 6 unfinished |
+| `023-fix-code-audit` | `e9eb6dba5e288b83eef5c8f552e75ae70f197d4d` | Group 5 and main4957 source integration accepted; source PR #36 CI passed 9/9; documentation 6.1–6.3 complete; whole-change review and archive remain |
 | `026-add-parse-pool` | `8294855ecfffb9f07094b931ed0d94754d0bf16d` | Unfinished pool/shutdown work |
 | `030-add-page-data` | `0eeed79504271c7cf1e51ab69543271225c995d8` | Published unfinished snapshot; group 12 acceptance blocked by C01/C02 |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
@@ -194,8 +194,13 @@ handler-written `pages.title_1`, from declaration/docs through production and ro
 mapping to the store unit and `replay_now`, with literal checks at the existing
 seams. The setting recipe requires a matching option for every `[crawl]` field;
 the diagnostic recipe describes all five warning retention modes and their calls.
-See [Common changes](../CONTRIBUTING.md#common-changes). Tasks 6.3–6.5 remain open;
-the full 023 change is unfinished.
+See [Common changes](../CONTRIBUTING.md#common-changes).
+
+Task 6.3 documents the D16 formula tables, narrow hook/writer implementation checks
+and strict-mypy type contracts in [testing](testing.md). The recipes and testing
+guide have independent GPT-6 Astra Standards and Spec reviews with no open findings.
+Tasks 6.4–6.5, whole-change review and archive, remain open; the full 023 change is
+unfinished. The source CI above does not validate these later documentation commits.
 
 ### 026: reconcile the core, then close bounded shutdown
 

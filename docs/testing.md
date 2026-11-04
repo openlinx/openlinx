@@ -24,7 +24,7 @@ A seam is a public interface where behaviour is observed without reaching inside
 | 1 | **CLI** | Commands' JSON output, exit codes, files written, `-o`, errors | Typer `CliRunner` in-process; a few real subprocess runs per OS (Windows console encoding, `--detach`) |
 | 2 | **Services and store API** | Query, Crawl and Report service behaviour shared by the CLI and MCP; the Workspace and crawl-store API (create, write, read, migrate) | Direct calls to the public service / store API with a real crawl store in a temp Workspace |
 | 3 | **HTTP (local fixture site)** | Crawling: Scope, robots.txt, redirects, TLS, Resources, retries, politeness | The real crawler against a local test HTTP(S) server; aiohttp is never mocked |
-| 4 | **Pure-logic modules** | URL normalisation, Scope decisions, robots directives, the `--where` language, Rule evaluation, Indexability, the Page extractor (HTML in → Page data out), content metrics (words, sentences, Flesch, pixel widths) | Table-driven tests with literal expected values; property-based tests (hypothesis) for normalisation and the `--where` parser |
+| 4 | **Pure-logic modules** | URL normalisation, Scope decisions, robots directives, politeness and pause formulas (listed below), the `--where` language, Rule evaluation, Indexability, the Page extractor (HTML in → Page data out), content metrics (words, sentences, Flesch, pixel widths) | Table-driven tests with literal expected values; property-based tests (hypothesis) for normalisation and the `--where` parser |
 | 5 | **MCP tools** | Tool listings, inputs and outputs, error mapping | An in-process MCP client session |
 | 6 | **Store contract** | The public schema ([ADR-0002](adr/0002-sqlite-crawl-store-public-schema.md)) and the data a Crawl leaves behind | `linx schema` compared with `docs/schema.md`. **"Seam 3+6"**: crawl the fixture site, then read the documented tables through a read-only connection. `linx sql` is used only in tests about `sql` itself. |
 | 7 | **Report** | Report Sections, escaping, working offline, notes merge, `report brief` | Parse the generated HTML (no browser) and check the brief's JSON |
@@ -32,6 +32,29 @@ A seam is a public interface where behaviour is observed without reaching inside
 | 9 | **Report script** | The Report's inline table script (sorting, filtering) | `node --test` in CI (Node is already there for `openspec validate`); skipped locally when Node is missing |
 
 A change's `design.md` names the seams it is tested at. Adding a new seam is a design decision recorded there and agreed with the maintainer before any test uses it.
+
+### Crawl formula tables at seam 4
+
+Design D16 of `023-fix-code-audit` names these formula and blocking-response tables:
+
+| Interface | Source | Existing test |
+|---|---|---|
+| `global_cap` | [fetch/politeness.py](../src/openlinx/crawl/fetch/politeness.py) | [test_politeness.py](../tests/crawl/test_politeness.py): `test_the_global_cap_is_four_times_the_concurrency_within_20_to_100` |
+| `watchdog_seconds` | [fetch/requester.py](../src/openlinx/crawl/fetch/requester.py) | [test_watchdog.py](../tests/crawl/test_watchdog.py): `test_the_watchdog_is_120_seconds_or_30_more_than_the_request_deadline` |
+| `pause_after` | [engine/pause.py](../src/openlinx/crawl/engine/pause.py) | [test_network_pause.py](../tests/crawl/test_network_pause.py): `test_the_requests_in_a_row_that_pause_the_crawl` |
+| `probe_times` | [engine/pause.py](../src/openlinx/crawl/engine/pause.py) | [test_network_pause.py](../tests/crawl/test_network_pause.py): `test_probes_back_off_to_once_a_minute` |
+| `BlockingRuns` | [fetch/politeness.py](../src/openlinx/crawl/fetch/politeness.py) | [test_blocking.py](../tests/crawl/test_blocking.py): `test_a_host_warns_at_ten_403_or_429_responses_in_a_row` |
+
+Their expected values are literal tables, beside the Crawl Service tests of the
+same rules. Timing scenarios use `crawl_result` with `FakeFetcher` and `FakeClock`;
+real I/O, including the fixture site, uses `SystemClock`.
+
+The overtaken-skip race is exercised through that service boundary in
+[test_warning_log.py](../tests/crawl/test_warning_log.py),
+`test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_decided_again`.
+Its handler records both `hyperlink` and `image` calls before the test checks one
+counted warning, proving the race was staged. `Outcomes` remains internal; this
+does not add it to the direct test seams.
 
 ### Where tests live
 
@@ -71,6 +94,34 @@ Never replace our own modules or our own CLI with a double. Installer tests use 
 - **Mock only system boundaries:** the network outside the fixture site, the clock, randomness and, occasionally, the file system. Never mock our own modules. The Fetcher interface and an injectable clock exist so that scheduler and politeness tests can be deterministic.
 - **One logical assertion per test,** with a name that says *what* happens, not *how*.
 - **Cross-platform:** CI runs the whole suite on Windows, macOS and Linux × Python 3.12–3.14.
+
+### Narrow implementation checks
+
+Two existing checks pin a specific implementation choice with a measured cost:
+
+- [test_hooks.py](../tests/crawl/test_hooks.py),
+  `test_a_handler_s_rows_for_a_url_are_written_in_one_statement`, counts SQLAlchemy
+  `before_cursor_execute` events for the fixture handler's inserts. Several rows
+  for each URL must use one statement, preserving per-URL batching rather than
+  paying for a separate execution per row.
+- [test_writer.py](../tests/store/test_writer.py),
+  `test_the_replay_runs_units_without_a_savepoint`, traces SQLite statements and
+  checks that the insert runs twice with no savepoint. This pins the optimistic
+  batch/replay choice of `017` D6, whose purpose is to avoid per-unit savepoint cost.
+  [replay_now](../tests/support/writer.py) triggers a real failing unit through
+  `writer.run`, then flushes, so a replay mismatch fails at its cause.
+
+These checks retain their narrow purpose; they do not make other hook or writer
+internals public seams. Test new behaviour through the service and store APIs.
+
+### Hook type contracts
+
+[test_handler_types.py](../tests/test_handler_types.py) is checked by strict mypy
+with the rest of `src`, `tests` and `scripts`. It deliberately mismatches handler
+rows and writer rows, extractor config types, and a pass's async-only writer API.
+Each mismatch has a coded `type: ignore`; mypy's unused-ignore check fails if that
+mismatch stops being rejected. Executing the file with pytest alone does not prove
+these type contracts.
 
 ## Helpers
 
