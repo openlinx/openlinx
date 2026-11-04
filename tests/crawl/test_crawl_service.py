@@ -17,7 +17,7 @@ from openlinx.services.hooks import default_hooks
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
-from tests.support.app import example_app, tables_with_example
+from tests.support.app import GROUPS_TABLE, example_app, tables_with_example
 from tests.support.cli import run_cli
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
@@ -249,13 +249,15 @@ def test_a_secret_given_to_the_service_is_nowhere_in_the_crawl_file(
     assert ("s3cret" in row["command_argv"], "s3cret" in row["config"]) == (False, False)
 
 
+@pytest.mark.parametrize("given", [{"concurrency": 5}, {}], ids=["given-leaf", "empty-table"])
 def test_a_refused_file_value_beside_a_given_value_stays_a_settings_file_error(
     temp_workspace: TempWorkspace,
+    given: dict[str, object],
 ) -> None:
     (temp_workspace.root / "openlinx.toml").write_bytes(b"[crawl]\nmax_depth = -1\n")
 
     with pytest.raises(OpenLinxError) as refused:
-        plan_crawl(_given(temp_workspace, {"crawl": {"concurrency": 5}}))
+        plan_crawl(_given(temp_workspace, {"crawl": given}))
 
     details = refused.value.diagnostic.details
     assert (
@@ -291,3 +293,118 @@ def test_a_table_given_with_the_settings_that_is_not_registered_names_it(
         refused.value.diagnostic.details.get("key"),
         "file" in refused.value.diagnostic.details,
     ) == ("invalid_value", 2, "crawl_rules", False)
+
+
+def test_an_empty_table_given_with_the_settings_that_is_not_registered_names_it(
+    temp_workspace: TempWorkspace,
+) -> None:
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, {"crawl_rules": {}}))
+
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        refused.value.diagnostic.details.get("key"),
+        "file" in refused.value.diagnostic.details,
+    ) == ("invalid_value", 2, "crawl_rules", False)
+
+
+@pytest.mark.parametrize(
+    ("flags", "key"),
+    [
+        ({"crawl_rules": {}}, "crawl_rules"),
+        ({"crawl_rules": {}, "crawl": {"concurrency": 0}}, "crawl.concurrency"),
+    ],
+    ids=["empty-table", "field-order"],
+)
+def test_an_empty_unregistered_table_is_reported_before_a_refused_file_value(
+    temp_workspace: TempWorkspace,
+    flags: dict[str, dict[str, object]],
+    key: str,
+) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[crawl]\nmax_depth = -1\n")
+
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, flags))
+
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        refused.value.diagnostic.details.get("key"),
+        "file" in refused.value.diagnostic.details,
+    ) == ("invalid_value", 2, key, False)
+
+
+@pytest.mark.parametrize(
+    ("groups", "expected"),
+    [({}, {}), ({"blog": {}}, {"blog": {"level": "low"}})],
+    ids=["table", "entry"],
+)
+def test_a_registered_empty_table_or_entry_keeps_its_defaults(
+    temp_workspace: TempWorkspace,
+    groups: dict[str, dict[str, object]],
+    expected: dict[str, dict[str, str]],
+) -> None:
+    tables = tables_with_example()
+    tables.register("groups", GROUPS_TABLE)
+
+    plan = plan_crawl(
+        _given(temp_workspace, {"crawl": {}, "example": {}, "groups": dict(groups)}), tables
+    )
+
+    assert (
+        plan.settings.concurrency,
+        plan.loaded.table(ExampleSettings).level,
+        plan.loaded.root.model_dump()["groups"],
+    ) == (5, "low", expected)
+
+
+def test_a_refused_file_value_beside_an_empty_keyed_entry_stays_a_settings_file_error(
+    temp_workspace: TempWorkspace,
+) -> None:
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(b'[groups.blog]\nlevel = "medium"\n')
+    tables = tables_with_example()
+    tables.register("groups", GROUPS_TABLE)
+
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, {"groups": {"blog": {}}}), tables)
+
+    details = refused.value.diagnostic.details
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        details.get("file"),
+        [error["key"] for error in details.get("errors", [])],
+    ) == ("settings_invalid", 3, str(settings_file), ["groups.blog.level"])
+
+
+def test_a_scalar_unregistered_caller_table_names_the_table(
+    temp_workspace: TempWorkspace,
+) -> None:
+    # A caller's malformed table still gets an input error rather than a file error.
+    request = replace(_given(temp_workspace, {}), flags={"crawl_rules": "high"})  # type: ignore[dict-item]
+
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(request)
+
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        refused.value.diagnostic.details.get("key"),
+        "file" in refused.value.diagnostic.details,
+    ) == ("invalid_value", 2, "crawl_rules", False)
+
+
+def test_a_refused_sequence_item_names_the_given_setting(
+    temp_workspace: TempWorkspace,
+) -> None:
+    with pytest.raises(OpenLinxError) as refused:
+        plan_crawl(_given(temp_workspace, {"crawl": {"exclude": ["/admin", 5]}}))
+
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        refused.value.diagnostic.details.get("key"),
+        "file" in refused.value.diagnostic.details,
+    ) == ("invalid_value", 2, "crawl.exclude", False)

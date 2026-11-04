@@ -84,15 +84,7 @@ def refused_given_value(
     """invalid_value for the first error at a key the caller gave, or None when the file's
     values alone are refused: the call's own input is checked first, as Click checks flags
     (023-fix-code-audit D9). `table` names the table of an error from one table's model."""
-    values = _given_values(given)
-    keys = set(values)
-    # A table the caller gave values in: an error located at the table itself, such as a table
-    # that is not registered or a check of the whole table, is the caller's too.
-    tables = {
-        ".".join(names[:size])
-        for names in (key.split(".") for key in values)
-        for size in range(1, len(names))
-    }
+    keys, tables = _given_paths(given)
     for problem in error.errors():
         parts = ([] if table is None else [table]) + [str(part) for part in problem["loc"]]
         # A list's item is located below its key, as crawl.exclude.1.
@@ -114,16 +106,20 @@ def refused_given_value(
     return None
 
 
-def _given_values(given: Mapping[str, Any], prefix: str = "") -> list[str]:
-    """The dotted keys of the values given: a table, or a keyed table's entry, is not one."""
-    keys = []
+def _given_paths(given: Mapping[str, Any], prefix: str = "") -> tuple[set[str], set[str]]:
+    # Empty tables have no leaf keys; keep their paths for exact table-error attribution.
+    keys: set[str] = set()
+    tables: set[str] = set()
     for name, value in given.items():
         key = f"{prefix}{name}"
         if isinstance(value, Mapping):
-            keys += _given_values(value, f"{key}.")
+            tables.add(key)
+            child_keys, child_tables = _given_paths(value, f"{key}.")
+            keys.update(child_keys)
+            tables.update(child_tables)
         else:
-            keys.append(key)
-    return keys
+            keys.add(key)
+    return keys, tables
 
 
 def _invalid(
