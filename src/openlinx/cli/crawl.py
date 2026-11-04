@@ -9,7 +9,7 @@ from openlinx.cli.meta import Example, command_meta
 from openlinx.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_flags, setting_flags
 from openlinx.cli.runner import Invocation
 from openlinx.clock import SystemClock
-from openlinx.crawl.setting_rules import as_rate, as_robots_token
+from openlinx.crawl.setting_rules import as_rate, as_robots_token, as_timeout, as_user_agent
 from openlinx.naming import COMMAND_NAME, DEFAULT_ROBOTS_TOKEN
 from openlinx.output.diagnostics import Outcome
 from openlinx.output.writer import Format
@@ -23,6 +23,20 @@ def _robots_token(token: str) -> str:
         return as_robots_token(token)
     except ValueError as refusal:
         raise typer.BadParameter(f"{token!r}: {refusal}.") from None
+
+
+def _user_agent(user_agent: str | None) -> str | None:
+    try:
+        return None if user_agent is None else as_user_agent(user_agent)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{user_agent!r}: {refusal}.") from None
+
+
+def _timeout(timeout: float) -> float:
+    try:
+        return as_timeout(timeout)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{timeout}: {refusal}.") from None
 
 
 def _rate(rate: float | None) -> float | None:
@@ -126,6 +140,51 @@ def crawl(
         ),
         OptionMeta(setting="crawl.max_urls"),
     ] = None,
+    user_agent: Annotated[
+        str | None,
+        typer.Option(
+            "--user-agent",
+            callback=_user_agent,
+            help="The User-Agent request header of every request, robots.txt's included: "
+            "visible ASCII characters, spaces and tabs only. The tool's name, version and "
+            "project URL by default.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.user_agent"),
+    ] = None,
+    timeout: Annotated[
+        float,
+        typer.Option(
+            "--timeout",
+            callback=_timeout,
+            help="Seconds within which a request attempt, its body included, must complete: "
+            "a finite number above 0.",
+        ),
+        OptionMeta(setting="crawl.timeout"),
+    ] = 20,
+    retries: Annotated[
+        int,
+        typer.Option(
+            "--retries",
+            min=0,
+            max=10,
+            help="How many times, 0 to 10, a request that timed out, could not connect or "
+            "got a 429 or 5xx status is tried again, after 1, 2, 4, ... seconds or as its "
+            "Retry-After asks.",
+        ),
+        OptionMeta(setting="crawl.retries"),
+    ] = 2,
+    max_redirects: Annotated[
+        int,
+        typer.Option(
+            "--max-redirects",
+            min=0,
+            max=50,
+            help="The most consecutive redirects, 0 to 50, followed from the first URL of a "
+            "Redirect Chain; the target of the next one is recorded as skipped.",
+        ),
+        OptionMeta(setting="crawl.max_redirects"),
+    ] = 10,
     robots_user_agent: Annotated[
         str,
         typer.Option(

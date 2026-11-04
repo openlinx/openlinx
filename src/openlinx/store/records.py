@@ -35,6 +35,7 @@ type StopReason = Literal[
 ]
 # Rules applied, everything allowed, or everything disallowed or unanswered (D6).
 type RobotsState = Literal["ok", "missing", "unreachable"]
+type HttpVersion = Literal["http_2", "http_1_1"]
 type SkipReason = Literal[
     "excluded",
     "blocked_by_robots_txt",
@@ -48,7 +49,7 @@ type SkipReason = Literal[
 ]
 # The reasons a URL is recorded as skipped when it is discovered, never dispatched; a later
 # followed Link re-queues a URL skipped for one of them (020-add-crawl-core D5).
-type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed"]
+type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed", "max_redirects"]
 type LinkType = Literal[
     "hyperlink",
     "canonical",
@@ -91,7 +92,9 @@ type FetchError = Literal[
     "tls_error",
 ]
 # extractor_error keeps parsed = 1; the others mean nothing came out of page preparation.
-type ParseError = Literal["extractor_error", "body_too_large", "worker_crashed", "parse_timeout"]
+type ParseError = Literal[
+    "extractor_error", "body_too_large", "unsupported_encoding", "worker_crashed", "parse_timeout"
+]
 
 # The --crawl value that selects the Crawl that started last.
 LATEST = "latest"
@@ -137,6 +140,9 @@ class QueuedUrl:
     crawl_depth: int
     discovered_via: DiscoveredVia
     found_on_url_id: int | None
+    # The way the URL's Redirect Chain was first found: its own discovered_via, or for a
+    # redirect target the first that is no redirect, so a redirected image is still a Resource.
+    chain_via: DiscoveredVia
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -150,6 +156,15 @@ class NewUrl:
     in_scope: bool
     # Why none of the Page's Links to it is followed; None queues it (design D5).
     skip_reason: DiscoverySkipReason | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ResponseHeaders:
+    """A row of response_headers: the headers of a URL's last attempt (022-add-fetch-policy D7)."""
+
+    url_id: int
+    # As received, in order and letter case, with cookie values redacted.
+    headers: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -232,6 +247,27 @@ class CrawlSummary:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Redirect:
+    """A 3xx response's redirect: its raw Location header, the URL it leads to at the URL's
+    depth, None without a usable Location, and the hop limit the unit holds that URL to,
+    counting back over the file (022-add-fetch-policy D2)."""
+
+    location: str | None
+    target: NewUrl | None
+    max_redirects: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Reclassified:
+    """A URL's is_internal and in_scope decided again: a URL of a Seed's Redirect Chain,
+    against the Scope the chain ended in (022-add-fetch-policy D3)."""
+
+    url_id: int
+    is_internal: bool
+    in_scope: bool
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Provenance:
     """How a URL was found, as its dispatch read it from the URL's queued row."""
 
@@ -252,8 +288,15 @@ class FetchedUrl:
     fetched_at: datetime
     response_time_ms: int
     parsed: bool
+    attempt_count: int
+    # A 3xx response's redirect; None for any other status.
+    redirect: Redirect | None
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
+    body_truncated: bool = False
+    content_encoding: str | None = None
+    size_bytes: int | None = None
+    transferred_bytes: int | None = None
     # NULL when robots.txt was not checked (design D6).
     blocked_by_robots_txt: bool | None = None
     discovered: tuple[NewUrl, ...] = ()
@@ -283,6 +326,8 @@ class ErroredUrl:
     fetch_error_message: str
     # None without a request of its own: its origin's robots.txt got no response.
     fetched_at: datetime | None
+    # 0 without a request of its own.
+    attempt_count: int
     blocked_by_robots_txt: bool | None = None
     rows: tuple[HandlerRows[Any], ...] = ()
 

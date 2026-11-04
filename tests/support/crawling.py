@@ -1,6 +1,8 @@
 """Crawling the fixture site in tests (020-add-crawl-core, seam 3+6)."""
 
 from collections.abc import Callable
+from contextlib import nullcontext
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +11,7 @@ from aiohttp.abc import AbstractResolver
 from openlinx.clock import Clock, SystemClock
 from openlinx.crawl.engine.hooks import Hooks
 from openlinx.crawl.engine.stop import StopSignal
-from openlinx.crawl.fetch.fetcher import Fetcher
+from openlinx.crawl.fetch.fetcher import Fetcher, FetcherFactory, aiohttp_fetcher
 from openlinx.crawl.pages.preparation import PageExecutor
 from openlinx.output.reporter import Collected, Reporter
 from openlinx.services.crawling import (
@@ -43,6 +45,7 @@ def crawl_result(
     hooks: Hooks | None = None,
     *,
     resolver: AbstractResolver | None = None,
+    trust_anchors: str | None = None,
     pages: Callable[[], PageExecutor] | None = None,
     reporter: Reporter | None = None,
     clock: Clock | None = None,
@@ -51,8 +54,8 @@ def crawl_result(
     tables: SettingsTables | None = None,
     **crawl: Any,
 ) -> CrawlResult:
-    """Crawls through the Crawl Service, which alone takes test hooks, the DNS resolver hook
-    and the page executor.
+    """Crawls through the Crawl Service, which alone takes test hooks, the DNS resolver hook,
+    the test CA's trust anchors and the page executor.
 
     `crawl` holds settings of the [crawl] table, as their flags would give them. Like the CLI, it
     crawls into the Workspace of the current folder, which `temp_workspace` sets, on the real
@@ -78,9 +81,8 @@ def crawl_result(
         clock or SystemClock(),
         reporter or Collected(),
         hooks or default_hooks(),
-        resolver=resolver,
         pages=pages,
-        fetcher=fetcher,
+        fetchers=_fetchers(resolver, trust_anchors, fetcher),
         stop=stop,
     )
 
@@ -91,6 +93,7 @@ def continued(
     hooks: Hooks | None = None,
     *,
     resolver: AbstractResolver | None = None,
+    trust_anchors: str | None = None,
     reporter: Reporter | None = None,
     clock: Clock | None = None,
     fetcher: Fetcher | None = None,
@@ -103,10 +106,17 @@ def continued(
         clock or SystemClock(),
         reporter or Collected(),
         hooks or default_hooks(),
-        resolver=resolver,
-        fetcher=fetcher,
+        fetchers=_fetchers(resolver, trust_anchors, fetcher),
         stop=stop,
     )
+
+
+def _fetchers(
+    resolver: AbstractResolver | None, trust_anchors: str | None, fetcher: Fetcher | None
+) -> FetcherFactory:
+    if fetcher is None:
+        return partial(aiohttp_fetcher, resolver=resolver, trust_anchors=trust_anchors)
+    return lambda policy, clock: nullcontext(fetcher)
 
 
 def stopped_with_an_error() -> Path:

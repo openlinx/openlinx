@@ -63,6 +63,8 @@ def test_the_units_of_links_run_again_the_same(temp_workspace: TempWorkspace) ->
             content_type="text/html",
             fetched_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
             response_time_ms=12,
+            attempt_count=1,
+            redirect=None,
             parsed=True,
             discovered=(
                 NewUrl(url=target, discovered_via="hyperlink", is_internal=True, in_scope=True),

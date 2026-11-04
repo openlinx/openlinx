@@ -16,11 +16,15 @@ from openlinx.crawl.engine.crawl_warnings import (
 from openlinx.crawl.engine.discovery import discovered_urls
 from openlinx.crawl.engine.hooks import Handler, UrlFailure, UrlResponse, UrlResult
 from openlinx.crawl.engine.outcomes import Recorded, provenance_of
+from openlinx.crawl.engine.seed_chain import end_seed_chain
 from openlinx.crawl.engine.tasks import Run
-from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult
+from openlinx.crawl.fetch.body import BODY_LIMIT, is_decodable
+from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult, joined_header
 from openlinx.crawl.fetch.requester import NotStarted
+from openlinx.crawl.following import is_redirection, redirect_target
 from openlinx.crawl.hook_failures import HookFailure, hook_failure
 from openlinx.crawl.pages.preparation import (
+    PreparedPage,
     is_html_type,
     response_directives,
     response_links,
@@ -28,7 +32,7 @@ from openlinx.crawl.pages.preparation import (
 from openlinx.crawl.robots.reader import OriginRobots
 from openlinx.crawl.scope import ScopeDecision
 from openlinx.crawl.settings import CrawlSettings
-from openlinx.crawl.urls import host_key, url_origin
+from openlinx.crawl.urls import NormalizedUrl, host_key, url_origin
 from openlinx.output.diagnostics import Diagnostic
 from openlinx.store.records import (
     RESOURCE_LINK_TYPES,
@@ -36,6 +40,7 @@ from openlinx.store.records import (
     FetchedUrl,
     NewUrl,
     QueuedUrl,
+    Redirect,
     SkippedUrl,
     SkipReason,
 )
@@ -44,7 +49,7 @@ from openlinx.store.urls import record_error, record_fetched, record_skipped
 
 
 def via_resource(queued: QueuedUrl) -> bool:
-    return queued.discovered_via in RESOURCE_LINK_TYPES
+    return queued.chain_via in RESOURCE_LINK_TYPES
 
 
 async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recorded | None:
@@ -52,6 +57,19 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
     and the unit that records it with their rows; or None when a stop or the URL limit keeps a
     new request from starting, which leaves it queued. `decision` is taken once, at dispatch,
     so a URL found on several Pages is recorded once (design D1)."""
+    # The Seed's Redirect Chain is depth 0: a redirect target keeps its source's depth.
+    in_chain = run.seed_chain.holds(queued)
+    recorded = await _recorded(run, queued, decision, in_chain)
+    # The chain ended on a URL decided without a response: a failure or a skip. One with a
+    # response ended it in _fetched already.
+    if in_chain and recorded is not None and recorded.result.response is None:
+        await end_seed_chain(run.context, run.seed_chain, responded=False)
+    return recorded
+
+
+async def _recorded(
+    run: Run, queued: QueuedUrl, decision: ScopeDecision, in_chain: bool
+) -> Recorded | None:
     context, robots = run.context, run.robots
     dispatched = _dispatched(queued, decision)
     skip_reason = _skip_reason(context, queued, decision)
@@ -81,9 +99,8 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
             # A stop kept its origin's robots.txt request from starting: it stays queued.
             return None
         origin_error = origin_robots.origin_error
+        run.pause.update_from_robots_txt(queued, origin_error, internal=decision.is_internal)
         if origin_error is not None:
-            if decision.is_internal:
-                run.pause.failed(origin_error, queued, requested=False)
             # The origin cannot be reached: the URL gets the error without a request of
             # its own (design D6).
             message = (
@@ -96,10 +113,8 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
                 fetched_at=None,
             )
             return _errored(context, dispatched, failure)
-        if decision.is_internal:
-            run.pause.robots_txt_answered()
         skip_reason, blocked, warnings = _robots_verdict(
-            context.settings, origin_robots, queued, decision
+            context.settings, origin_robots, queued, decision, in_chain
         )
         for warning in warnings:
             context.warnings.warn(warning)
@@ -113,22 +128,17 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
         return Recorded(
             skipped, record_skipped(_skipped_record(skipped, skip_reason, rows)), failed_handlers
         )
-    response = await run.requester.request_url(queued.url)
-    if isinstance(response, NotStarted):
+    attempted = await run.requester.request_url(
+        queued.url, run.pause.attempts_of(queued, internal=decision.is_internal)
+    )
+    if isinstance(attempted, NotStarted) or not run.pause.update_from_request(
+        queued, attempted, internal=decision.is_internal
+    ):
         return None
+    response = attempted.outcome
+    decided = replace(decided, attempt_count=attempted.attempt_count)
     host = host_key(queued.url)
     status_code = None if isinstance(response, FetchFailure) else response.status_code
-    if isinstance(response, FetchFailure) and run.pause.retries(response.fetch_error):
-        # Ended without a response while paused: not recorded, so its URL stays queued and is
-        # requested again, and counts toward the URL limit only then (design D16).
-        run.requester.give_back()
-        run.redispatch.add(queued)
-        return None
-    if decision.is_internal:
-        if isinstance(response, FetchFailure):
-            run.pause.failed(response.fetch_error, queued, requested=True)
-        else:
-            run.pause.responded()
     if decision.is_internal and run.blocking.responded(host, status_code):
         context.warnings.warn(possible_blocking(host))
     if isinstance(response, FetchFailure):
@@ -138,7 +148,7 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
             fetched_at=response.fetched_at,
         )
         return _errored(context, decided, failure)
-    return await _fetched(context, decided, response)
+    return await _fetched(run, decided, response, in_chain)
 
 
 def _errored(context: CrawlContext, decided: UrlResult, failure: UrlFailure) -> Recorded:
@@ -149,7 +159,11 @@ def _errored(context: CrawlContext, decided: UrlResult, failure: UrlFailure) -> 
 
 
 def _robots_verdict(
-    settings: CrawlSettings, origin_robots: OriginRobots, queued: QueuedUrl, decision: ScopeDecision
+    settings: CrawlSettings,
+    origin_robots: OriginRobots,
+    queued: QueuedUrl,
+    decision: ScopeDecision,
+    in_chain: bool,
 ) -> tuple[SkipReason | None, bool | None, tuple[Diagnostic, ...]]:
     """robots.txt's skip of a URL that would be requested, its blocked_by_robots_txt, NULL
     while the rules are unknown, and the warnings for the caller to give (design D6)."""
@@ -166,7 +180,8 @@ def _robots_verdict(
     blocked = not origin_robots.allows(queued.url)
     # --ignore-robots requests it, still labelled as blocked.
     if blocked and not ignore:
-        if queued.discovered_via == "seed":
+        # Any URL of the Seed's chain: the Seed answered with a redirect, its target is blocked.
+        if in_chain:
             warnings += (blocked_seed(queued.url, settings.robots_user_agent),)
         return "blocked_by_robots_txt", True, warnings
     return None, blocked, warnings
@@ -187,17 +202,38 @@ def _skip_reason(
     return None
 
 
-async def _fetched(context: CrawlContext, decided: UrlResult, response: FetchResult) -> Recorded:
-    url = decided.url
+async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain: bool) -> Recorded:
+    context, url = run.context, decided.url
     content_type = response.header("Content-Type")
+    location = response.header("Location") if is_redirection(response.status_code) else None
+    target = redirect_target(url, response.status_code, location, context.strip_params)
+    if in_chain and target is None:
+        # Before any preparation: the chain's last response may be a Page of the wider Scope.
+        await end_seed_chain(run.context, run.seed_chain, responded=True)
+    scope = run.seed_chain.scope
     # An External URL or one outside the Scope is a Checked URL, never parsed (design D5).
     followed = decided.in_scope and 200 <= response.status_code < 300
     prepared = followed and is_html_type(content_type)
-    page = await context.pages.prepare(url, response) if prepared else None
+    content_encoding = joined_header(response.headers, "Content-Encoding")
+    decoded = is_decodable(content_encoding)
+    if prepared and response.body_truncated:
+        # A Page cut at the cap would be parsed as another, shorter one (022 design D1).
+        page: PreparedPage | None = PreparedPage(
+            parse_error="body_too_large",
+            parse_error_message=f"The body is larger than {BODY_LIMIT // 1024 // 1024} MiB.",
+        )
+    elif prepared and not decoded:
+        # A server that ignored the offered codings: its bytes are no text to parse (D1).
+        page = PreparedPage(
+            parse_error="unsupported_encoding",
+            parse_error_message=f"The body is in {content_encoding}, which no request offers.",
+        )
+    else:
+        page = await context.pages.prepare(url, response) if prepared else None
     parsed = page is not None and page.parsed
     # The Link and Refresh headers of an in-Scope 2xx response count, whatever became of its
     # preparation (design D9).
-    links = response_links(url, response, context.scope, context.strip_params) if followed else ()
+    links = response_links(url, response, scope, context.strip_params) if followed else ()
     if page is not None:
         links += page.html_links
     if page is not None and page.parsed:
@@ -205,9 +241,10 @@ async def _fetched(context: CrawlContext, decided: UrlResult, response: FetchRes
     else:
         # The X-Robots-Tag applies to any response, a PDF's or a failed Page's (D9).
         directives = response_directives(response, context.settings.robots_user_agent)
-    discovered = discovered_urls(links, context.scope)
-    if parsed and decided.discovered_via == "seed":
-        mismatch = seed_base_mismatch(url, links, context.scope)
+    discovered = discovered_urls(links, scope)
+    # The Page the Seed's Redirect Chain ends on, the Seed's own when it answered at once.
+    if parsed and in_chain:
+        mismatch = seed_base_mismatch(url, links, scope)
         if mismatch is not None:
             context.warnings.warn(mismatch)
     parse_error = None if page is None else page.parse_error
@@ -221,7 +258,13 @@ async def _fetched(context: CrawlContext, decided: UrlResult, response: FetchRes
         headers=response.headers,
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
+        body_truncated=response.body_truncated,
+        content_encoding=content_encoding,
+        # Measured on the decoded body, unless the cap cut it or it was kept as received (D1).
+        size_bytes=len(response.body) if decoded and not response.body_truncated else None,
+        transferred_bytes=response.transferred_bytes,
         directives=directives,
+        redirect_target=target,
     )
     fetched = replace(
         decided,
@@ -234,8 +277,19 @@ async def _fetched(context: CrawlContext, decided: UrlResult, response: FetchRes
         outputs={} if page is None else dict(page.outputs),
     )
     rows, failed_handlers = _handler_rows(context, fetched)
-    unit = record_fetched(_fetched_record(fetched, url_response, discovered, rows))
-    return Recorded(fetched, unit, failed_handlers)
+    redirect = (
+        Redirect(
+            location=location,
+            target=None
+            if target is None
+            else _redirect(target, run.seed_chain.decide(target, in_chain=in_chain)),
+            max_redirects=context.settings.max_redirects,
+        )
+        if is_redirection(response.status_code)
+        else None
+    )
+    record = _fetched_record(fetched, url_response, discovered, rows, redirect=redirect)
+    return Recorded(fetched, record_fetched(record), failed_handlers)
 
 
 # Each record reads its values from the UrlResult, and from the outcome's record in it.
@@ -260,6 +314,7 @@ def _errored_record(
         fetch_error=failure.fetch_error,
         fetch_error_message=failure.fetch_error_message,
         fetched_at=failure.fetched_at,
+        attempt_count=failed.attempt_count,
         blocked_by_robots_txt=failed.blocked_by_robots_txt,
         rows=rows,
     )
@@ -270,6 +325,8 @@ def _fetched_record(
     response: UrlResponse,
     discovered: tuple[NewUrl, ...],
     rows: tuple[HandlerRows[Any], ...],
+    *,
+    redirect: Redirect | None,
 ) -> FetchedUrl:
     return FetchedUrl(
         url_id=fetched.url_id,
@@ -278,12 +335,28 @@ def _fetched_record(
         content_type=response.content_type,
         fetched_at=response.fetched_at,
         response_time_ms=response.response_time_ms,
+        attempt_count=fetched.attempt_count,
+        redirect=redirect,
         parsed=fetched.parsed,
         parse_error=fetched.parse_error,
         parse_error_message=fetched.parse_error_message,
+        body_truncated=response.body_truncated,
+        content_encoding=response.content_encoding,
+        size_bytes=response.size_bytes,
+        transferred_bytes=response.transferred_bytes,
         blocked_by_robots_txt=fetched.blocked_by_robots_txt,
         discovered=discovered,
         rows=rows,
+    )
+
+
+def _redirect(target: NormalizedUrl, decision: ScopeDecision) -> NewUrl:
+    # No Link: the Scope, robots.txt and the depth limit decide it at dispatch, as any URL.
+    return NewUrl(
+        url=target,
+        discovered_via="redirect",
+        is_internal=decision.is_internal,
+        in_scope=decision.in_scope,
     )
 
 

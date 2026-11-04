@@ -46,11 +46,17 @@ class Outcomes:
         self._stop = stop
         self._counters = counters
         self._pending: set[asyncio.Future[Any]] = set()
+        self._pending_urls: set[int] = set()
         self._failed_in_a_row = 0
+
+    def is_pending(self, url_id: int) -> bool:
+        """True from the submit of the URL's unit until its outcome, a fallback's included."""
+        return url_id in self._pending_urls
 
     async def submit(self, recorded: Recorded) -> None:
         future = await self._writer.submit_async(recorded.unit)
         self._pending.add(future)
+        self._pending_urls.add(recorded.result.url_id)
         future.add_done_callback(lambda done: self._unit_done(recorded, done))
 
     async def settled(self) -> None:
@@ -71,11 +77,13 @@ class Outcomes:
         if failure is not None and (error is not None or done.result().recorded):
             self._warnings.count(failure, result.url)
         if error is None:
+            self._pending_urls.discard(result.url_id)
             # At the commit, as the file then shows it (design D10).
             self._counters.add(done.result().tally)
             self._failed_in_a_row = 0
             return
         if not is_one_urls_failure(error):
+            self._pending_urls.discard(result.url_id)
             self._stop.write_failed(error)
             return
         self._warnings.count(record_failure(result.url, error), result.url)
@@ -90,6 +98,7 @@ class Outcomes:
         fallback = asyncio.ensure_future(self._fall_back(result, error))
         self._pending.add(fallback)
         fallback.add_done_callback(self._pending.discard)
+        fallback.add_done_callback(lambda _: self._pending_urls.discard(result.url_id))
 
     async def _fall_back(self, result: UrlResult, error: BaseException) -> None:
         message = f"{type(error).__name__}: {error}"
@@ -97,6 +106,7 @@ class Outcomes:
             result.url_id,
             message,
             blocked_by_robots_txt=result.blocked_by_robots_txt,
+            attempt_count=result.attempt_count,
             provenance=provenance_of(result),
         )
         try:

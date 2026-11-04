@@ -181,11 +181,12 @@ def test_a_dead_section_keeps_the_failed_robots_txt_verdict_of_its_origin(
 ) -> None:
     clock = FakeClock()
     first, later = range(1, 9), range(9, 17)
-    # blog.site.test never answers. Its first eight posts pause the Crawl; the Seed answers the
-    # first probe, at 5 seconds, and /p1 answers at 6 with eight more posts.
+    # blog.site.test never answers. Its robots.txt fails at 0, 1 and 3 seconds, its retries
+    # included, and its first eight posts pause the Crawl then; the Seed answers the first
+    # probe, at 8 seconds, and /p1 answers at 9 with eight more posts.
     pages = {
         "/": FakePage(_posts(first) + '<a href="/p1">P1</a>'),
-        "/p1": FakePage(_posts(later), delay=6),
+        "/p1": FakePage(_posts(later), delay=9),
         "http://blog.site.test/robots.txt": FakePage("", fails="connection_error"),
     }
     fetcher = FakeFetcher(clock, pages)
@@ -195,8 +196,9 @@ def test_a_dead_section_keeps_the_failed_robots_txt_verdict_of_its_origin(
     )
     blog = [url for url, _ in fetcher.starts if url.startswith("http://blog.")]
 
-    # Asked again after the dead section, its robots.txt would fail into a second pause.
-    assert (blog, result.summary.state) == (["http://blog.site.test/robots.txt"], "completed")
+    # One request, with its two retries: asked again after the dead section, its robots.txt
+    # would fail into a second pause.
+    assert (blog, result.summary.state) == (["http://blog.site.test/robots.txt"] * 3, "completed")
 
 
 def _posts(numbers: range) -> str:
@@ -350,27 +352,204 @@ def test_one_failure_inside_a_dead_origins_streak_does_not_exempt_its_origin(
     ) == (["dead_section", "outage"], {"fetched"})
 
 
-def test_a_first_probe_that_answers_after_the_second_is_due_means_an_outage(
+def test_a_forward_wall_clock_jump_does_not_turn_a_fast_probe_into_an_outage(
     temp_workspace: TempWorkspace,
 ) -> None:
     clock, reporter = FakeClock(), Collected()
-    # The Seed answers after 12 seconds, as a slow server does, and the network is down from 12
-    # to 16: the pause begins at 12, and its first probe, at 17, answers at 29, after the second
-    # was due at 22.
-    pages = {
-        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY), delay=12),
-        **{f"/p{n}": FakePage(f"<p>P{n}</p>") for n in _TWENTY},
+    links = "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 9))
+    pages: dict[str, FakePage | list[FakePage]] = {
+        "/": [FakePage(links), FakePage("", delay=1)],
+        **{
+            f"/p{n}": FakePage("<p>Recovered</p>", fails="connection_refused", until=1)
+            for n in range(1, 9)
+        },
     }
-    fetcher = FakeFetcher(clock, pages, outages=[(12, 16)])
+
+    def jump_at_probe_answer() -> None:
+        if clock.monotonic() == 6:
+            clock.shift_wall(3600)
+
+    fetcher = FakeFetcher(clock, pages, on_answer={"/": jump_at_probe_answer})
 
     result = crawl_result(
-        "http://site.test/", clock=clock, fetcher=fetcher, reporter=reporter, concurrency=1
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=1,
+        network_wait=30,
     )
 
     assert (
-        [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"],
-        set(query(result.crawl_file, "SELECT fetch_state FROM urls WHERE url LIKE '%/p%'")),
-    ) == (["outage"], {("fetched",)})
+        _seed_starts(fetcher)[1],
+        [
+            (data["outcome"], data["duration_s"])
+            for name, data in reporter.events
+            if name == "crawl_resumed"
+        ],
+        query(
+            result.crawl_file,
+            "SELECT fetch_state, count(*) FROM urls WHERE url LIKE '%/p%' GROUP BY fetch_state",
+        ),
+    ) == (5.0, [("dead_section", 6.0)], [("error", 8)])
+
+
+def test_a_backward_wall_clock_jump_does_not_turn_a_late_probe_into_a_dead_section(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    links = "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 9))
+    pages: dict[str, FakePage | list[FakePage]] = {
+        "/": [FakePage(links), FakePage("", delay=12)],
+        **{
+            f"/p{n}": FakePage("<p>Recovered</p>", fails="connection_refused", until=1)
+            for n in range(1, 9)
+        },
+    }
+
+    def jump_at_probe_answer() -> None:
+        if clock.monotonic() == 17:
+            clock.shift_wall(-3600)
+
+    fetcher = FakeFetcher(clock, pages, on_answer={"/": jump_at_probe_answer})
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=1,
+        network_wait=30,
+    )
+
+    assert (
+        _seed_starts(fetcher)[1],
+        [
+            (data["outcome"], data["duration_s"])
+            for name, data in reporter.events
+            if name == "crawl_resumed"
+        ],
+        query(
+            result.crawl_file,
+            "SELECT fetch_state, count(*) FROM urls WHERE url LIKE '%/p%' GROUP BY fetch_state",
+        ),
+    ) == (5.0, [("outage", 17.0)], [("fetched", 8)])
+
+
+def test_a_first_probe_that_hangs_beyond_its_classification_window_means_an_outage(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    links = "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 9))
+    pages: dict[str, FakePage | list[FakePage]] = {
+        "/": [FakePage(links), FakePage("", delay=12)],
+        **{
+            f"/p{n}": FakePage("<p>Recovered</p>", fails="connection_refused", until=1)
+            for n in range(1, 9)
+        },
+    }
+    answers: list[float] = []
+    fetcher = FakeFetcher(clock, pages, on_answer={"/": lambda: answers.append(clock.monotonic())})
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=1,
+        network_wait=30,
+    )
+
+    assert _seed_starts(fetcher)[1] == 5.0
+    assert answers[1] == 17.0
+    assert [data["duration_s"] for name, data in reporter.events if name == "crawl_resumed"] == [
+        17.0
+    ]
+    assert [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"] == [
+        "outage"
+    ]
+    assert query(
+        result.crawl_file,
+        "SELECT fetch_state, count(*) FROM urls WHERE url LIKE '%/p%' GROUP BY fetch_state",
+    ) == [("fetched", 8)]
+
+
+def test_a_first_probe_answering_exactly_at_its_classification_window_means_an_outage(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    links = "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 9))
+    pages: dict[str, FakePage | list[FakePage]] = {
+        "/": [FakePage(links), FakePage("", delay=5)],
+        **{
+            f"/p{n}": FakePage("<p>Recovered</p>", fails="connection_refused", until=1)
+            for n in range(1, 9)
+        },
+    }
+    answers: list[float] = []
+    fetcher = FakeFetcher(clock, pages, on_answer={"/": lambda: answers.append(clock.monotonic())})
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=1,
+        network_wait=30,
+    )
+
+    assert _seed_starts(fetcher)[1] == 5.0
+    assert answers[1] == 10.0
+    assert [data["duration_s"] for name, data in reporter.events if name == "crawl_resumed"] == [
+        10.0
+    ]
+    assert [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"] == [
+        "outage"
+    ]
+    assert query(
+        result.crawl_file,
+        "SELECT fetch_state, count(*) FROM urls WHERE url LIKE '%/p%' GROUP BY fetch_state",
+    ) == [("fetched", 8)]
+
+
+def test_a_first_probe_held_back_by_its_host_s_retry_after_still_finds_a_dead_section(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    # /down/1 to /down/8 never answer and pause the Crawl at once, while /a, still in flight,
+    # answers 429 with Retry-After: 60 at 2 seconds: the probe due at 5 is sent at 62, and the
+    # Seed answers it at once.
+    links = '<a href="/a">A</a>' + "".join(f'<a href="/down/{n}">D</a>' for n in range(1, 9))
+    pages = {
+        "/": FakePage(links),
+        "/a": FakePage("", status=429, headers=(("Retry-After", "60"),), delay=2),
+        **{f"/down/{n}": FakePage("", fails="connection_refused") for n in range(1, 9)},
+    }
+
+    answers: list[float] = []
+    fetcher = FakeFetcher(clock, pages, on_answer={"/": lambda: answers.append(clock.monotonic())})
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=4,
+    )
+
+    # The probe was not hung in its connection: its answer shows a dead section, not an outage.
+    assert [data["outcome"] for name, data in reporter.events if name == "crawl_resumed"] == [
+        "dead_section"
+    ]
+
+    assert _seed_starts(fetcher)[1] == 62.0
+    assert answers[1] == 62.0
+    assert [data["duration_s"] for name, data in reporter.events if name == "crawl_resumed"] == [
+        62.0
+    ]
+    assert query(
+        result.crawl_file,
+        "SELECT fetch_state, count(*) FROM urls WHERE url LIKE '%/down/%' GROUP BY fetch_state",
+    ) == [("error", 8)]
 
 
 def test_urls_whose_robots_txt_failed_wait_out_the_pause(temp_workspace: TempWorkspace) -> None:
@@ -533,6 +712,102 @@ def test_a_url_refused_at_the_limit_before_a_pause_is_requested_once_the_count_c
     ) == [("fetched", 19)]
 
 
+def test_a_crawl_that_reaches_its_url_limit_during_a_network_pause_waits_for_the_pause_to_end(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    pages = {
+        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 31))),
+        **{f"/p{n}": FakePage(f"<p>P{n}</p>", delay=0.5 + n / 100) for n in range(1, 31)},
+    }
+
+    # The limit refuses /p19 at 2.36 seconds, as the eight failures that pause the Crawl at
+    # 2.4 still count: the outage gives their counts back, so the refused URLs come after it.
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages, outages=[(1, 30)]),
+        reporter=reporter,
+        concurrency=4,
+        max_urls=19,
+    )
+    events = [
+        (name, data.get("outcome", data.get("reason")))
+        for name, data in reporter.events
+        if name in ("crawl_resumed", "stopping")
+    ]
+
+    assert (events, result.counts.fetched) == (
+        [("crawl_resumed", "outage"), ("stopping", "max_urls")],
+        19,
+    )
+
+
+def test_the_url_limit_s_wait_for_an_open_count_ends_at_the_network_wait(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, stop, stopped_at = FakeClock(), StopSignal(), []
+    stop.on_first_set(lambda _: stopped_at.append(clock.monotonic()))
+    # /p8 and /p9 time out at 2 seconds on every one of their 11 attempts: two failures in a
+    # row, no pause, when the limit refuses /p10 at 4 seconds.
+    pages = {
+        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY)),
+        **{f"/p{n}": FakePage(f"<p>P{n}</p>") for n in _TWENTY},
+        **{f"/p{n}": FakePage("", fails="timeout", delay=2) for n in (8, 9)},
+    }
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages),
+        stop=stop,
+        concurrency=1,
+        max_urls=10,
+        network_wait=30,
+        retries=10,
+    )
+
+    # The stop comes 30 seconds after the refusal, and its grace ends the retries 10 later.
+    assert (result.summary.stop_reason, stopped_at, clock.monotonic()) == ("max_urls", [34], 44)
+
+
+def test_the_url_limit_s_stop_does_not_end_a_network_pause(temp_workspace: TempWorkspace) -> None:
+    clock, reporter = FakeClock(), Collected()
+    hosts = ("http://site.test", "http://blog.site.test", "http://shop.site.test")
+    # The first URL of site.test answers at once and the others time out at 2 seconds: the limit
+    # stops the Crawl at once, and the eleven requests in flight then pause it.
+    links = "".join(f'<a href="{host}/{n}">{n}</a>' for n in range(1, 31) for host in hosts)
+    pages = {
+        "http://site.test/": FakePage(links),
+        "http://site.test/1": FakePage("<p>1</p>"),
+        **{
+            f"{host}/{n}": FakePage("", fails="timeout", delay=2)
+            for host in hosts
+            for n in range(1, 31)
+            if (host, n) != ("http://site.test", 1)
+        },
+    }
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages),
+        reporter=reporter,
+        scope="subdomains",
+        concurrency=4,
+        max_urls=13,
+        timeout=2,
+    )
+    names = [name for name, _ in reporter.events if name in ("stopping", "crawl_paused")]
+
+    # Ended by the stop, the pause would let their retries fail into false errors.
+    assert (
+        result.summary.stop_reason,
+        names,
+        set(query(result.crawl_file, "SELECT attempt_count FROM urls WHERE fetch_state = 'error'")),
+    ) == ("max_urls", ["stopping", "crawl_paused"], {(1,)})
+
+
 def test_urls_that_failed_in_an_outage_are_requested_again(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
     fetcher = FakeFetcher(clock, _outage_site(), outages=[(1, 30)])
@@ -544,6 +819,34 @@ def test_urls_that_failed_in_an_outage_are_requested_again(temp_workspace: TempW
 
     # Requested again at the depth they were found at.
     assert set(pages) == {("fetched", 1)}
+
+
+def test_an_outage_requeues_errors_recorded_before_the_pause(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    links = "".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY)
+    # DNS failures are not retried, so the first seven errors are recorded before the eighth
+    # starts the pause; the Seed's probes see the same outage until clock time 30.
+    pages: dict[str, FakePage | list[FakePage]] = {
+        "/": [FakePage(links), FakePage("", fails="dns_error", until=30)],
+        **{f"/p{n}": FakePage("", fails="dns_error", until=30) for n in _TWENTY},
+    }
+    reporter = Collected()
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages),
+        reporter=reporter,
+        concurrency=1,
+    )
+
+    assert (
+        result.summary.state,
+        [data["outcome"] for name, data in _pause_events(reporter) if name == "crawl_resumed"],
+        query(result.crawl_file, "SELECT fetch_state, count(*) FROM urls GROUP BY fetch_state"),
+    ) == ("completed", ["outage"], [("fetched", 21)])
 
 
 def test_an_outage_requeues_a_url_once_a_run(temp_workspace: TempWorkspace) -> None:
@@ -713,10 +1016,11 @@ def test_a_seed_that_answers_late_is_crawled(temp_workspace: TempWorkspace) -> N
     result = crawl_result("http://site.test/", clock=clock, fetcher=fetcher)
     seed = query(result.crawl_file, "SELECT fetch_state FROM urls WHERE id = 1")
 
-    # The Seed's own request comes only once its robots.txt answers, after the probes at 5, 10
-    # and 20 seconds; the last of them is the first to answer.
+    # Its robots.txt fails at 0, 1 and 3 seconds, its retries included, which pauses the Crawl;
+    # the Seed's own request comes only once its robots.txt answers, after the probes at 8 and
+    # 13 seconds, the second of them the first to answer.
     assert (_seed_starts(fetcher), result.summary.state, seed) == (
-        [5, 10, 20, 20],
+        [8, 13, 13],
         "completed",
         [("fetched",)],
     )

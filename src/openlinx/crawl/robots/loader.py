@@ -6,7 +6,7 @@ from datetime import datetime
 
 from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult
 from openlinx.crawl.fetch.requester import NotStarted, Requester
-from openlinx.crawl.references import resolve_reference
+from openlinx.crawl.following import redirect_target
 from openlinx.crawl.robots.reader import (
     OriginRobots,
     read_robots_txt,
@@ -20,7 +20,6 @@ from openlinx.store.writer import CrawlWriter
 
 # RFC 9309 2.3.1.2: at least five consecutive redirects are followed.
 _REDIRECT_HOPS = 5
-_REDIRECTS = frozenset({301, 302, 303, 307, 308})
 
 
 class RobotsLoader:
@@ -91,7 +90,7 @@ class RobotsLoader:
         for _ in range(_REDIRECT_HOPS):
             if isinstance(response, (FetchFailure, NotStarted)):
                 break
-            target = _redirect_target(url, response)
+            target = redirect_target(url, response.status_code, response.header("Location"), None)
             if target is None:
                 break
             redirect, url = response, target
@@ -108,15 +107,6 @@ class RobotsLoader:
         record = _robots_txt_record(url_origin(robots_url), robots, text, response.fetched_at)
         await self._writer.run_async(record_robots_txt(record))
         return robots
-
-
-def _redirect_target(url: NormalizedUrl, response: FetchResult) -> NormalizedUrl | None:
-    if response.status_code not in _REDIRECTS:
-        return None
-    location = response.header("Location")
-    if location is None:
-        return None
-    return resolve_reference(url, location, codec=None, strip_params=None)
 
 
 def _failed_redirect(

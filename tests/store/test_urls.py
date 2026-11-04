@@ -19,6 +19,8 @@ from openlinx.store.records import (
     NewUrl,
     Provenance,
     QueuedUrl,
+    Reclassified,
+    Redirect,
     RobotsTxtRecord,
     SkippedUrl,
     SkipReason,
@@ -30,6 +32,7 @@ from openlinx.store.schema import literal_values
 from openlinx.store.urls import (
     next_depth,
     queued_batch,
+    reclassify_urls,
     record_error,
     record_fetched,
     record_seed,
@@ -90,6 +93,8 @@ def _fetched(writer: CrawlWriter, url_id: int, *discovered: NewUrl) -> FetchedUr
         fetched_at=datetime(2026, 10, 14, 9, 0, tzinfo=UTC),
         response_time_ms=10,
         parsed=True,
+        attempt_count=1,
+        redirect=None,
         discovered=discovered,
     )
 
@@ -118,7 +123,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         seed_id = writer.run(record_seed(seed, is_internal=True, in_scope=True))
         writer.run(record_seed(seed, is_internal=True, in_scope=True))
-        first = writer.run(queued_batch(0, 0, 10))
+        first = writer.run(queued_batch(0, 0, 10, 10))
         writer.run(
             record_fetched(
                 FetchedUrl(
@@ -131,6 +136,8 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     fetched_at=datetime(2026, 9, 27, 14, 3, 13, tzinfo=UTC),
                     response_time_ms=120,
                     parsed=True,
+                    attempt_count=2,
+                    redirect=None,
                     discovered=found,
                     rows=(HandlerRows(_write_note, (Note(seed_id),)),),
                 ),
@@ -146,7 +153,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
             )
         )
         deeper = writer.run(next_depth(0))
-        second = writer.run(queued_batch(1, 0, 1))
+        second = writer.run(queued_batch(1, 0, 1, 10))
         writer.run(
             record_error(
                 ErroredUrl(
@@ -155,6 +162,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                     fetch_error="connection_refused",
                     fetch_error_message="ConnectionRefusedError: refused",
                     fetched_at=datetime(2026, 9, 27, 14, 3, 14, tzinfo=UTC),
+                    attempt_count=3,
                 ),
             )
         )
@@ -163,6 +171,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 seed_id + 3,
                 "ValueError: no row",
                 blocked_by_robots_txt=False,
+                attempt_count=1,
                 provenance=_as_dispatched(writer, seed_id + 3),
             )
         )
@@ -183,7 +192,12 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
     ) == (
         (
             QueuedUrl(
-                id=seed_id, url=seed, crawl_depth=0, discovered_via="seed", found_on_url_id=None
+                id=seed_id,
+                url=seed,
+                crawl_depth=0,
+                discovered_via="seed",
+                found_on_url_id=None,
+                chain_via="seed",
             ),
         ),
         1,
@@ -194,6 +208,7 @@ def test_the_units_of_urls_run_again_the_same(temp_workspace: TempWorkspace) -> 
                 crawl_depth=1,
                 discovered_via="hyperlink",
                 found_on_url_id=seed_id,
+                chain_via="hyperlink",
             ),
         ),
         UrlCounts(
@@ -479,12 +494,17 @@ def test_an_outcome_after_a_raise_in_flight_keeps_the_provenance_its_depth_agree
                 fetch_error="connection_refused",
                 fetch_error_message="ConnectionRefusedError: refused",
                 fetched_at=datetime(2026, 10, 27, tzinfo=UTC),
+                attempt_count=1,
             )
             writer.run(record_error(errored))
         else:
             message = "ValueError: no row"
             unit = record_unwritten(
-                ids["/t"], message, blocked_by_robots_txt=None, provenance=dispatched
+                ids["/t"],
+                message,
+                blocked_by_robots_txt=None,
+                attempt_count=1,
+                provenance=dispatched,
             )
             writer.run(unit)
         replay_now(writer)
@@ -516,7 +536,7 @@ def test_each_reason_of_a_skip_at_discovery_is_a_skip_reason() -> None:
     discovery = literal_values(DiscoverySkipReason)
 
     assert (discovery, set(discovery) <= set(literal_values(SkipReason))) == (
-        ["nofollow", "link_type_not_followed"],
+        ["nofollow", "link_type_not_followed", "max_redirects"],
         True,
     )
 
@@ -541,9 +561,102 @@ def test_the_frontier_read_uses_its_index(temp_workspace: TempWorkspace) -> None
     crawl = create_any_crawl(temp_workspace)
 
     with opening(crawl.path, role="read") as engine, engine.connect() as connection:
-        plan = _plan_of_first_statement(connection, queued_batch(1, 0, 10))
+        plan = _plan_of_first_statement(connection, queued_batch(1, 0, 10, 10))
 
     assert ("USING INDEX urls_crawl_depth_id" in plan, "TEMP B-TREE" in plan) == (True, False), plan
+
+
+def _redirected(writer: CrawlWriter, url_id: int, target: str, max_redirects: int) -> FetchedUrl:
+    return replace(
+        _fetched(writer, url_id),
+        status_code=301,
+        content_type=None,
+        parsed=False,
+        redirect=Redirect(
+            location=target,
+            target=_new(target, discovered_via="redirect"),
+            max_redirects=max_redirects,
+        ),
+    )
+
+
+def test_the_units_of_redirects_run_again_the_same(temp_workspace: TempWorkspace) -> None:
+    # A move chain past a hop limit of 1, and a cart and a login page that send each other back.
+    crawl = create_any_crawl(temp_workspace)
+    site = "https://site.test"
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        seed_id = writer.run(record_seed(_url(f"{site}/"), is_internal=True, in_scope=True))
+        writer.run(
+            record_fetched(_fetched(writer, seed_id, _new(f"{site}/old"), _new(f"{site}/cart")))
+        )
+        ids = {
+            queued.url.removeprefix(site): queued.id
+            for queued in writer.run(queued_batch(1, 0, 10, 10))
+        }
+        writer.run(record_fetched(_redirected(writer, ids["/old"], f"{site}/mid", 1)))
+        mid = writer.run(queued_batch(1, ids["/cart"], 10, 1))
+        writer.run(record_fetched(_redirected(writer, mid[0].id, f"{site}/new", 1)))
+        writer.run(record_fetched(_redirected(writer, ids["/cart"], f"{site}/login", 10)))
+        login = writer.run(queued_batch(1, mid[0].id, 10, 10))
+        writer.run(record_fetched(_redirected(writer, login[0].id, f"{site}/cart", 10)))
+        writer.run(
+            reclassify_urls([Reclassified(url_id=ids["/old"], is_internal=False, in_scope=False)])
+        )
+        replay_now(writer)
+
+    assert query(
+        crawl.path,
+        "SELECT source.url, source.fetch_state, source.skip_reason, source.in_redirect_loop, "
+        "source.is_internal, target.url FROM urls AS source "
+        "LEFT JOIN urls AS target ON target.id = source.redirect_url_id ORDER BY source.id",
+    ) == [
+        (f"{site}/", "fetched", None, None, 1, None),
+        (f"{site}/old", "fetched", None, 0, 0, f"{site}/mid"),
+        (f"{site}/cart", "fetched", None, 1, 1, f"{site}/login"),
+        (f"{site}/mid", "fetched", None, 0, 1, f"{site}/new"),
+        (f"{site}/new", "skipped", "max_redirects", None, 1, None),
+        (f"{site}/login", "fetched", None, 1, 1, f"{site}/cart"),
+    ]
+
+
+def test_a_redirect_into_a_loop_that_does_not_run_through_it_ends_its_walk_at_once(
+    temp_workspace: TempWorkspace,
+) -> None:
+    # /x sends to the cart, while the cart and the login page send each other back.
+    crawl = create_any_crawl(temp_workspace)
+    site = "https://site.test"
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        seed_id = writer.run(record_seed(_url(f"{site}/"), is_internal=True, in_scope=True))
+        writer.run(
+            record_fetched(_fetched(writer, seed_id, _new(f"{site}/cart"), _new(f"{site}/x")))
+        )
+        ids = {
+            queued.url.removeprefix(site): queued.id
+            for queued in writer.run(queued_batch(1, 0, 10, 50))
+        }
+        writer.run(record_fetched(_redirected(writer, ids["/cart"], f"{site}/login", 50)))
+        (login,) = writer.run(queued_batch(1, ids["/x"], 10, 50))
+        writer.run(record_fetched(_redirected(writer, login.id, f"{site}/cart", 50)))
+        x_to_cart = _redirected(writer, ids["/x"], f"{site}/cart", 50)
+    walks: list[str] = []
+
+    def keep(_: Any, __: Any, sql: str, *args: Any) -> None:
+        if sql.startswith("SELECT urls.redirect_url_id"):
+            walks.append(sql)
+
+    with opening(crawl.path, role="write") as engine, engine.begin() as connection:
+        event.listen(connection, "before_cursor_execute", keep)
+        record_fetched(x_to_cart)(connection)
+
+    assert (
+        len(walks),
+        query(
+            crawl.path,
+            "SELECT url, in_redirect_loop FROM urls WHERE url IN (?, ?, ?) ORDER BY url",
+            [f"{site}/cart", f"{site}/login", f"{site}/x"],
+        ),
+    ) == (2, [(f"{site}/cart", 1), (f"{site}/login", 1), (f"{site}/x", 0)])
 
 
 def test_the_units_of_an_outage_and_a_continue_run_again_the_same(

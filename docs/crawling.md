@@ -32,6 +32,10 @@ Every crawl setting is an option of `linx crawl` and a key of the `[crawl]` tabl
 | `--max-urls <n>` | `max_urls` | none | The most URL requests the Crawl starts over its whole life, 1 or more (see [The URL limit](#the-url-limit)). |
 | `--network-wait <seconds>` | `network_wait` | `1800` | How long a Crawl that lost the network waits for its Seed to answer before it fails, 0 or more; 0 fails at once (see [The network pause](#the-network-pause)). |
 | `--ignore-robots` | `ignore_robots` | `false` | Request URLs that robots.txt disallows; they are still recorded with `blocked_by_robots_txt` = 1 (see [`--ignore-robots`](#--ignore-robots)). |
+| `--timeout <s>` | `timeout` | `20` | Seconds within which a request attempt, its body included, must complete: a finite number above 0 (see [Timeouts and retries](#timeouts-and-retries)). |
+| `--retries <n>` | `retries` | `2` | How many times, 0 to 10, a request that timed out, could not connect or got a 429 or 5xx status is tried again (see [Timeouts and retries](#timeouts-and-retries)). |
+| `--max-redirects <n>` | `max_redirects` | `10` | The most consecutive redirects followed from the first URL of a Redirect Chain, 0 to 50 (see [The hop limit](#the-hop-limit)). |
+| `--user-agent <string>` | `user_agent` | `OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `openlinx` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
 `--workspace` and `--format` are the global flags of every Command.
@@ -208,13 +212,18 @@ The Crawl Service continues a `stopped` or `failed` Crawl from its crawl file al
 
 Of the settings on this page, a continue may change the URL limit, to a higher one or none, `--concurrency` and `--rate`, as `060`'s resume options allow. The URL limit counts over the Crawl's whole life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see [Warnings](#warnings)). A Seed still down when a failed Crawl is continued fails it as `seed_unreachable` again.
 
+A continue fetches through the proxy variables of its own process, not the start's, and records them in `crawl.config`'s `environment` table in place of the start's, redacted the same way (see [Proxy variables](#proxy-variables)).
+
 ### When one URL fails
 
 One URL never stops the Crawl: what goes wrong with it is recorded on its row, and the Crawl goes on.
 
 | What fails | How the URL is recorded |
 |---|---|
-| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `tls_error` (the TLS handshake failed, such as a self-signed or expired certificate), `connection_error` (any other failure, a connection reset in the middle of the body included), `watchdog` (the request had not ended when the watchdog cancelled it, see [Backstops](#backstops)) |
+| The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `tls_error` (the TLS handshake failed, such as a self-signed or expired certificate), `timeout` (no complete response within `--timeout`), `connection_error` (any other failure, a connection reset in the middle of the body included), `watchdog` (the request had not ended when the watchdog cancelled it, see [Backstops](#backstops)). The last attempt's, after the retries (see [Timeouts and retries](#timeouts-and-retries)). |
+| The body is in a coding it does not decode as, such as a gzip label on plain bytes | `fetch_state` = `error`, `fetch_error` = `invalid_response` (see [Body size and compression](#body-size-and-compression)). |
+| A Page's body is larger than 20 MiB | It is recorded with `body_truncated` = 1 and is not parsed: `parse_error` = `body_too_large`. |
+| A Page's body is in a coding that was not offered | It is recorded as received and is not parsed: `parse_error` = `unsupported_encoding`. |
 | The body has bytes its character encoding cannot hold | Nothing: they are decoded as replacement characters, and the Page is parsed as usual. |
 | A registered extractor raises an error | `parsed` stays 1 and the Page's Links are followed; `parse_error` = `extractor_error`, and `parse_error_message` names the extractor and the error's type, such as `title: ValueError`. Only that extractor's output is missing. |
 | A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |
@@ -223,13 +232,14 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 | Only nofollow Links reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `nofollow` (see [Nofollow](#nofollow)). |
 | Only Links of a type that is not requested reach the URL | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `link_type_not_followed` (see [Link types](#link-types)). |
 | The URL is External, with `--no-check-external` | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `external_not_checked`; an External URL that an `--exclude` pattern matches is `excluded`. |
+| The URL is longer than 2,000 characters | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `url_too_long` (see [URL length](#url-length)). |
 | The URL is deeper than `--max-depth`, and no Resource | It is not requested: `fetch_state` = `skipped`, `skip_reason` = `max_depth` (see [Crawl Depth](#crawl-depth)). |
 
 Each of the three failures of the tool's own code is reported by one counted warning, written to stderr when it first occurs and kept once in the result's `warnings`, however many URLs it affects:
 
 | Code | Counts URLs where | `details` |
 |---|---|---|
-| `parse_failed` | an extractor failed, or a Page's preparation gave nothing (`body_too_large`, `worker_crashed`, `parse_timeout`) | `count`, `first_url`; for an extractor's error, `error`, and `at` when the hook's file raised it |
+| `parse_failed` | an extractor failed, or a Page's preparation gave nothing (`body_too_large`, `unsupported_encoding`, `worker_crashed`, `parse_timeout`) | `count`, `first_url`; for an extractor's error, `error`, and `at` when the hook's file raised it |
 | `handler_failed` | a handler failed | `count`, `first_url`, `error`, and `at` when the hook's file raised it |
 | `record_failed` | the rows could not be written | `count`, `first_url` |
 
@@ -325,7 +335,7 @@ Each URL's row says what it is: `urls.is_internal` is 1 for an Internal URL, and
 
 ### External URLs
 
-A hyperlink to an External URL is checked, not followed: the URL is requested once, its response is recorded (`status_code`, `content_type`, `response_time_ms`), and it is never parsed, so `parsed` = 0 and nothing it links to is recorded. A broken outbound link therefore shows as a 4xx or 5xx `status_code`, or as a `fetch_error`, such as `dns_error` for a host that no longer exists (see [When one URL fails](#when-one-url-fails)).
+A hyperlink to an External URL is checked, not followed: the URL is requested, retried as any request is, its response is recorded (`status_code`, `content_type`, `response_time_ms`), and it is never parsed, so `parsed` = 0 and nothing it links to is recorded. A broken outbound link therefore shows as a 4xx or 5xx `status_code`, or as a `fetch_error`, such as `dns_error` for a host that no longer exists (see [When one URL fails](#when-one-url-fails)).
 
 External URLs count against the same limits as internal ones: at most `--concurrency` requests to each External host, and the cap on requests in flight in all.
 
@@ -333,7 +343,7 @@ With `--no-check-external`, no External URL is requested. Each one is still reco
 
 ### Origins
 
-Every URL belongs to an origin: its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host. The row also records the origin's robots.txt (see [robots.txt](#robotstxt)).
+Every URL belongs to an origin: its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host. The row also records the origin's robots.txt (see [robots.txt](#robotstxt)), and has `http_version`, the HTTP version that the origin's requests use, which is filled from v0.2 and NULL until then.
 
 ### `--scope`
 
@@ -388,6 +398,96 @@ linx crawl site.test/blog/ --scope subfolder --exclude "/draft"
 
 An agent reads it to know what a Crawl covered without parsing its command line.
 
+## Requests
+
+### The User-Agent header
+
+Every request, robots.txt's included, carries the header `User-Agent: OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)`, where the version is the tool's and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` replaces it on every request. It holds visible ASCII characters, spaces and tabs only: an empty value or one of spaces only, which is empty on the wire, a CR or LF, which would end the header or add one, and a character outside ASCII, which servers and log pipelines misread, are rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3). When it is not given, `crawl.config` records `user_agent` as null; the default it stood for follows from `crawl.tool_version`. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
+
+### Cookies
+
+The Crawl keeps no cookies: a cookie that a response sets is never sent with a later request, so every URL is requested as a first visit is. A site that needs a session cookie shows it, as it does to a search engine's crawler, in redirect loops or 403 responses.
+
+### Response headers
+
+The `response_headers` table keeps the headers of each URL whose last attempt got a response, one row per URL (see [schema.md](schema.md#table-response_headers)). `headers` is a JSON array of `[name, value]` pairs, in the order and letter case they were received, repeated names kept. A URL without a response has no row. A query that filters by a header reads `headers` with `json_each`.
+
+- **Cookie values are never stored.** They are replaced by `***` as the headers are received, so no part of the Crawl holds one. Header names, cookie names, attributes and the order of the headers are kept.
+- **`Set-Cookie`:** the cookie value, the text after the first `=` and before the first `;`, becomes `***`: `sid=abc123; Path=/; HttpOnly` is stored as `sid=***; Path=/; HttpOnly`. A value with no `=` before its first `;` is stored as `***` followed by its attributes.
+- **`Cookie`:** the value of each `name=value` pair becomes `***`: `a=1; b=2` is stored as `a=***; b=***`. A part without `=` is a value alone, and becomes `***`.
+
+### Timeouts and retries
+
+- **Timeout:** a request attempt that has not completed within `--timeout` seconds (default 20) fails, its body included, so a server that sends its headers and then the body a byte at a time is cut off too. A URL whose attempts all time out is recorded with `fetch_state` = `error` and `fetch_error` = `timeout`. A value of 0, a negative one or one that is not finite is rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3).
+- **Retries:** a request that times out (`timeout`), cannot connect (`connection_refused`, `connection_error`) or gets a 429 or 5xx status is tried again up to `--retries` times (default 2, at most 10), robots.txt's included. A name that does not resolve (`dns_error`), a certificate that does not verify (`tls_error`) and a response that is not HTTP (`invalid_response`) are answers and are not retried, so a dead External domain costs one lookup; nor is any other status: a 404 is requested once. A network-wide outage is the network pause's to wait out, not the retries'.
+- **Backoff:** before retry n the Crawl waits 2^(n-1) seconds, 1, then 2, then 4, with no jitter. A waiting retry holds none of the host's `--concurrency` slots, and each attempt waits its `--rate` turn again.
+- **Retry-After and 429:** a `Retry-After` header on a 429 or 503 response, in seconds or as an HTTP date, sets the wait instead, capped at 120 seconds; a 429 without one waits 10 seconds. During such a wait the host is paused: no request to it starts, the retried one's or any other, with or without `--rate`. The pause comes whether or not the URL has a retry left, with `--retries 0` too.
+- **What is recorded:** the last attempt's response or failure, and `urls.attempt_count`, the number of requests made for the URL, 0 when it was not requested. A retry is the same URL, so only its first attempt counts towards `--max-urls`.
+
+### Body size and compression
+
+- **Compression:** every request, robots.txt's included, sends `Accept-Encoding: gzip, deflate, br`, and the Crawl decodes those codings itself: gzip, deflate (the zlib format, or raw deflate, as some servers send) and br, several of them in the reverse order of the `Content-Encoding` header, whose repeated lines count as one list. A gzip body of several members is decoded whole, as gunzip reads it.
+- **Sizes:** every response records `content_encoding`, the header as received, `transferred_bytes`, the body as it came over the network, and `size_bytes`, the body after decoding. A script sent as 2,500 bytes of gzip that holds 10,000 bytes has `transferred_bytes` = 2500 and `size_bytes` = 10000. An image or any other Resource has its sizes recorded too, and is never parsed.
+- **The 20 MiB cap:** reading a body stops within one read past 20 MiB, at most 20 MiB of it is kept, and at most 20 MiB of it is decoded, so a small compressed body that would expand to gigabytes stops there. A body past the cap, as transferred or as decoded, has `body_truncated` = 1, `transferred_bytes` the bytes read and `size_bytes` NULL, since its full size was never measured. A Page past the cap is not parsed: `parse_error` = `body_too_large`.
+- **A body that fails to decode,** a body labelled gzip that is not, or a stream that ends inside its coding, is recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`, and is not retried.
+- **A coding that was not offered,** such as zstd from a server that ignores `Accept-Encoding`, is kept as received: the URL is `fetched` with `size_bytes` NULL, and a Page in it is not parsed, `parse_error` = `unsupported_encoding`.
+
+### URL length
+
+A URL longer than 2,000 characters, counted on the normalised URL with its non-ASCII characters percent-encoded, is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `url_too_long`, before any `--include` or `--exclude` pattern is matched against it.
+
+### Proxy variables
+
+The Crawl honours the standard proxy variables, as curl, pip and uv do. It is the one place where the tool reads the environment.
+- **Which proxy:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs. Each is read under its lower-case and its upper-case name, as curl reads them, and when both are set, the lower-case one wins; an empty variable counts as unset. A proxy without a scheme, such as `proxy.corp:3128`, is an http proxy. `ALL_PROXY` and the variables of other schemes are not read.
+- **Bypass:** `NO_PROXY` is a comma-separated list of host names and domain suffixes, with or without a leading dot, or `*` for every host. A host it names, or a host under a domain suffix it names, is requested directly: `site.test` covers `site.test` and `www.site.test`, but not `mysite.test`. Ports, IP addresses and IP ranges in `NO_PROXY` are not read.
+- **When:** the variables are read once, when a run starts, and every request of the run, robots.txt's included, follows them. A resumed Crawl reads them again.
+- **Recorded:** the variables that are set are recorded in the `environment` table of `crawl.config`, under `http_proxy`, `https_proxy` and `no_proxy`. The password of a proxy URL is recorded as `***`, as in `http://u:***@proxy:3128`, and a proxy URL without a password is recorded as `***`.
+
+### TLS
+
+- **Trust:** every https request, robots.txt's included, verifies the server's certificate and its host name against the operating system's trust store, through truststore. Where truststore cannot be loaded, on a Python runtime it does not support, certifi's CA bundle is used instead.
+- **A certificate that does not verify,** such as one issued for another name, one from a CA the trust store does not hold, or an expired one, records the URL with `fetch_state` = `error` and `fetch_error` = `tls_error`, and is not retried. When robots.txt's certificate does not verify, every URL of the origin gets that `tls_error` without a request of its own (see [What the response means](#what-the-response-means)).
+- **Speed:** the hosted measurements show extra handshake time with truststore compared with certifi; see [benchmarks.md](benchmarks.md#tls-handshake). This overhead is accepted to retain the operating system's trust store as the default; certifi is used only when truststore cannot be loaded.
+
+## Redirects
+
+A redirect is a response, not a Link: the Crawl follows it hop by hop, and each hop is a URL of its own.
+
+### Redirect Chains
+
+- **A hop is a URL row.** A 301, 302, 303, 307 or 308 response keeps its raw `Location` header in `redirect_location`, and the URL it leads to, resolved against the redirecting URL, stripped by `--strip-params` and normalised, in `redirect_url_id`. The target is recorded with `discovered_via` = `redirect` and `found_on_url_id` = the redirecting URL, at the redirecting URL's Crawl Depth, so a chain does not use up `--max-depth`.
+- **A hop is requested like any URL.** The target goes through the Scope, robots.txt, `--max-depth` and the per-host limits, and counts towards `--max-urls`. It keeps the way its chain was found: a redirected Resource stays a Resource, so it is still checked one deeper than `--max-depth`.
+- **Not a Link.** No Link type, nofollow or Link following rule applies to a redirect, and it is never in the `links` table. A Redirect Chain is read through `redirect_url_id`, forward from its first URL, and the URLs that redirect to a URL through the `urls_redirect_url_id` index.
+- **No target.** A 300, 304 or 305 response keeps its `redirect_location` but has no target. So does a `Location` that gives no http or https URL, such as `ftp://…`, one with a user name, or a malformed reference: `redirect_url_id` stays NULL.
+
+```sql
+SELECT source.url, source.status_code, target.url
+FROM urls AS source JOIN urls AS target ON target.id = source.redirect_url_id
+```
+
+### The hop limit
+
+`--max-redirects <n>` (default 10, at most 50, `crawl.max_redirects`) is the most consecutive redirects the Crawl follows from the first URL of a chain. The target of the next one is recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, unrequested. The count is read back from the crawl file, never kept in memory. A Link found later to that URL queues it again, as a URL found through the Link. `--max-redirects 0` follows no redirect. A value above 50 is rejected as `invalid_value`, and in `openlinx.toml` as `settings_invalid`: a longer chain is a misconfiguration, and each hop is a request.
+
+### Loops
+
+The Crawl requests each URL at most once in a run, so every redirect loop ends: a redirect back to a URL already requested records the hop and requests nothing. `in_redirect_loop` marks it:
+- 1 for every URL of the loop, a URL that redirects to itself included;
+- 0 for any other 3xx response;
+- NULL for a URL without a 3xx response.
+
+### A Seed that redirects
+
+- **On its registrable domain:** when a Seed's chain ends on another host of the Seed's registrable domain, inside the Seed's folder under `--scope subfolder`, such as `www.site.test` → `site.test` or `site.test` → `en.site.test`, that host becomes a Seed host for the rest of the Crawl and is added to `crawl.scope.hosts`. Every URL of the chain is then classified by the wider Scope. The [www rule](#internal-and-external-urls) already makes the `www.` host of an apex Seed internal, so an apex Seed that redirects there needs nothing more.
+- **Outside the Crawl's Scope:** a chain that ends on another registrable domain, or under `--scope subfolder` outside the Seed's folder, changes nothing in the Scope, and the result's `warnings` hold `seed_redirected_out_of_scope`, whose `hint` gives the final URL as the Seed to crawl instead. A section crawl of `/blog/` that redirects to `/` stays a section crawl. A chain that ends in a fetch error widens nothing either.
+- **A chain cut short:** a chain whose last target is never requested, skipped with `max_redirects` or refused by `--max-urls`, ends on that target: it is read back from the crawl file, from the Seed along `redirect_url_id`, and every URL on it is classified by the Scope it ended in.
+- **The Seed's checks:** `seed_base_mismatch` and `seed_blocked_by_robots_txt` read the URL the chain ends on, since the Seed itself answered with a redirect.
+
+### Meta refresh
+
+A `<meta http-equiv="refresh">` and an HTTP `Refresh` header are Links of type `meta_refresh` and `http_refresh` (see [Link types](#link-types)), never redirect hops: the Page keeps its own status code, its `redirect_url_id` and `in_redirect_loop` stay NULL, and its target is one Crawl Depth deeper. Reporting a meta refresh as the Page's redirect belongs to page data.
+
 ## robots.txt
 
 Before its first request to an origin, the Crawl requests the origin's `/robots.txt`, once per origin in a run, and obeys it for the robots user-agent token (see [The robots user-agent token](#the-robots-user-agent-token)). Every origin is asked: Internal ones, External ones and those of Resources. A URL recorded without a request, such as an excluded URL or an External URL under `--no-check-external`, never makes its origin's robots.txt be requested, and neither does a URL that the URL limit refuses.
@@ -404,8 +504,8 @@ Before its first request to an origin, the Crawl requests the origin's `/robots.
 |---|---|---|
 | 2xx | `ok` | Requested, unless its rules disallow them for the token: a disallowed URL is `skipped` with `skip_reason` = `blocked_by_robots_txt`. |
 | 4xx other than 429, a final 3xx such as 304, more than 5 redirects, or a redirect hop without a response | `missing` | All requested. |
-| 5xx, 429, or a status outside 200–599 | `unreachable` | None requested: each is `skipped` with `skip_reason` = `robots_unreachable`. An Internal origin gives a `robots_unreachable` warning, once per host, whose hint names `--ignore-robots`. |
-| No HTTP response | `unreachable` | None requested: each is `error`, with the `fetch_error` of the robots.txt request, such as `dns_error`, and a `fetch_error_message` that names that request. |
+| 5xx, 429, or a status outside 200–599, after its retries | `unreachable` | None requested: each is `skipped` with `skip_reason` = `robots_unreachable`. An Internal origin gives a `robots_unreachable` warning, once per host, whose hint names `--ignore-robots`. |
+| No HTTP response, after its retries | `unreachable` | None requested: each is `error`, with the `fetch_error` of the robots.txt request, such as `dns_error` or `tls_error`, and a `fetch_error_message` that names that request. |
 
 `urls.blocked_by_robots_txt` is 1 for a URL the rules disallow, 0 for one they allow, and NULL for a URL that was not checked: one skipped before robots.txt mattered, or one of an origin whose rules are unknown.
 
@@ -455,7 +555,7 @@ The Crawl reads Links from every response it parses: an in-Scope 2xx HTML respon
 | `mobile_alternate` | `<link rel="alternate" media>` without `hreflang` | no |
 | `misc` | `<link href>` with any other `rel`, such as `icon`, `manifest`, `preload`, or a feed's `alternate` | no |
 
-- A Resource is checked: requested once to record its response, whenever its Page is followed, even one deeper than `--max-depth`, and parsed only when it turns out to be in-Scope HTML. A broken image shows as its 4xx or 5xx `status_code`.
+- A Resource is checked: requested to record its response, retried as any request is, whenever its Page is followed, even one deeper than `--max-depth`, and parsed only when it turns out to be in-Scope HTML. A broken image shows as its 4xx or 5xx `status_code`.
 - A URL reached only through Links that are not requested is recorded with `fetch_state` = `skipped` and `skip_reason` = `link_type_not_followed`. A Link that is requested, on the same Page or a later one, still requests it.
 - `<link rel="preconnect">` and `rel="dns-prefetch"` name an origin to connect to, not a file, so they give no Link.
 - `rel` tokens are compared without case: `rel="NoFollow"` is `nofollow`.
@@ -465,7 +565,7 @@ The Crawl reads Links from every response it parses: an in-Scope 2xx HTML respon
 
 The same list of types also holds, from v0.1, the types of later releases: `xml_sitemap` (a URL listed in an XML sitemap) and `sitemap_hreflang` (an hreflang alternate in a sitemap) in v0.2, and `javascript_redirect` in v1.1, with JavaScript rendering. A URL's `discovered_via` is the type of the Link it was found through, or `seed`, and `found_on_url_id` points to the URL whose response gave that Link: the first Link that reached it, unless a followed Link or a Resource Link reached it later, as below. A Page that links to a URL several times records it once. When Links that are not followed reach a URL first and a followed Link reaches it later, its `discovered_via`, `found_on_url_id` and `crawl_depth` come from the first Page that follows it, where a Resource Link to it comes before a followed one, so its depth and where it was found tell one story.
 
-HTTP redirects, HSTS, fonts in CSS, SWF and PDF are not Link types: a redirect is the redirecting URL's `redirect_url_id`, and a PDF is a content type.
+HTTP redirects, HSTS, fonts in CSS, SWF and PDF are not Link types: a redirect is the redirecting URL's `redirect_url_id` (see [Redirects](#redirects)), and a PDF is a content type.
 
 ### Nofollow
 

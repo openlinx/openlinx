@@ -1,20 +1,22 @@
-> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
-
 Each task below is one vertical TDD slice and one commit. It is done when:
 1. the test for the named scenario, or trivial pair of scenarios, written first at the named seam, fails for the right reason
 2. only enough code is written to make it pass
 3. ruff, the strict type checker and the full suite (with the coverage gate) pass
 4. the commit message names the scenario
 
-A slice that needs a new column, index or table adds it through `018`'s `public_table()` (STRICT, and CHECKs from the declared values), with its description and `info={"change": 22}`, and updates `docs/schema.md` in the same commit. The enumeration values this change writes are already listed by `020` (design D10).
+A **Guard** is a test that may pass on its first run, since `020` already gives the behaviour; it then shows its red by a mutation, which its commit names.
+
+A slice that needs a new column, index or table adds it through `018`'s `public_table()` (STRICT, and CHECKs from the declared values), with its description, and updates `docs/schema.md` in the same commit. A new table passes `change=22`; a column added to `urls` or `origins` carries no change tag, since `public_table()` tags tables only (design D10). The enumeration values this change writes are already listed by `020`.
 
 An option and its setting are declared by the task that applies them (`020` D11, no inert option), each with `OptionMeta(setting="crawl.<key>")` and its key in `CrawlSettings`: `--user-agent` in 1.2, `--retries` in 3.2, `--timeout` in 3.5 and `--max-redirects` in 4.11.
 
-`response_headers` rows follow `020` D9 and D14: this change's handler returns them, and `openlinx.store.response_headers` writes them through the row writer it registers in `Hooks.row_writers`, with statements built once (`017` D9), both listed in `default_hooks()` (`openlinx.services.hooks`).
+`response_headers` rows follow `020` D9 and D14: `handler("response_headers", handle, write)` in `default_hooks()` (`openlinx.services.hooks`), whose writer takes a URL's rows as one sequence and runs one `executemany` of a statement built once (`017` D9).
 
-**v0.1 and v0.2:** groups 1–8 are 022-min, in v0.1 (ROADMAP). Groups 9–12 are marked (v0.2) and wait for v0.2.
+A value that a handler or the store needs from a response goes on `020`'s `UrlResponse` (`UrlResult.response`), and a request that got none keeps its `UrlFailure` (`UrlResult.failure`); the store record is built from them (`020` task 5.20).
 
-**Order against `020`:** this change starts once `020`'s first pull request (its groups 1–6) is on main. A task that needs a later part of `020` says "after `020` task N", and waits until that task is on main.
+**v0.1 and v0.2:** groups 1–8 are 022-min, in v0.1 (ROADMAP). Groups 9 and 10 join it with `020`'s network pause and close it. Groups 11–14 are marked (v0.2) and wait for v0.2.
+
+**Order against `020`:** this change builds on `020`'s accepted code with its `UrlResult` shape (`020` tasks 5.19–5.25), merged in at the manager's SHA. A task that needs a part of `020` that is not merged yet says "after `020` task N". `020`'s network pause (its group 12) is merged in; group 9 joins it with this change's retries.
 
 Seams (docs/testing.md):
 - **[Pure]**: seam 4, pure-logic modules
@@ -22,125 +24,196 @@ Seams (docs/testing.md):
 - **[3+6]**: crawl the fixture site, through `crawl_result` (`tests/support/crawling.py`) or `crawled` (the CLI), both on the real clock, then read the documented tables read-only. A retry test there waits its real backoff (design, Test seams).
 - **[2]**: seam 2, a store module through the writer, with `replay_now(writer)` (`017` D7)
 - **[CLI]**: seam 1, `CliRunner`
-- **[Fake timing]**: `020`'s fake Fetcher plus `FakeClock`, through the context builder, for timing scenarios only
+- **[Fake timing]**: `020`'s fake Fetcher (`tests/support/fetcher.py`) plus `FakeClock`, through the context builder, for timing scenarios only
 - **[Fixture]**: a new fixture-site or test-support capability, test-first in `tests/fixture_site/` or `tests/support/`
 
 ## 1. Request identity and cookies
 
-- [ ] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` in `aiohttp_fetcher`, built from `openlinx.naming` and the tool's version, with a `PROJECT_URL` constant next to `COMMAND_NAME` (design D1).
-- [ ] 1.2 [HTTP] Drive "A custom user agent is used on every request": `--user-agent` and `crawl.user_agent`. Its robots.txt half comes after `020` task 10.4.
-- [ ] 1.3 [HTTP] **Guard:** "Cookies set by the site are not sent back". `020`'s Fetcher already has a `DummyCookieJar`, so the test may pass on its first run; it then shows its red by a mutation. `/` sets the cookie through the route's `headers`, and the request log shows the request for `/check`.
-- [ ] 1.4 Docs: document the user agent and cookies in `docs/crawling.md`.
-- [ ] 1.5 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [x] 1.0 Refactor, behaviour unchanged: the Crawl Service opens the Fetcher through one factory that takes a frozen `FetchPolicy` and the clock, and the factory replaces `start_crawl`'s `resolver=` and `fetcher=` keywords (design D1). `plan_crawl` builds the policy; `crawl_result` keeps its own keywords and builds the factory from them, so its callers do not change. After `020` task 5.24, which edits the same Fetcher.
+- [x] 1.1 [HTTP] Drive "The default user agent identifies the tool": the session's `User-Agent` from `FetchPolicy`, built from `PRODUCT_NAME`, `openlinx.__version__` and `CRAWLER_PAGE_URL`, the address of `docs/crawler.md`, in `openlinx.naming` (design D1). No `User-Agent` is set today, so aiohttp's own goes out.
+- [x] 1.2 [HTTP] Drive "A custom user agent is used on every request", and [CLI] "An invalid user agent is rejected", a pair: `--user-agent` and `crawl.user_agent`, which `setting_rules` refuses when it is empty or holds CR, LF or another control character (narrowed to visible ASCII, spaces and tabs by 2.0). robots.txt goes through the same Requester and Fetcher, so its request carries it too.
+- [x] 1.3 [HTTP] **Guard:** "Cookies set by the site are not sent back". `020`'s Fetcher already has a `DummyCookieJar`. `/` sets the cookie through the route's `headers`, and the request log shows the request for `/check`.
+- [x] 1.4 Docs: document the user agent and cookies in `docs/crawling.md`.
+- [x] 1.5 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Proxy variables
 
-- [ ] 2.1 [Fixture] Add a small forward-proxy helper to `tests/support/` that records the requests it relays.
-- [ ] 2.2 [HTTP] Drive "The HTTP_PROXY variable is honoured": the proxy chosen per request from `getproxies_environment()`, read when the run starts, with `trust_env=False` (design D1). `000`'s proxy isolation removes the variables before every test, so the test sets them with `monkeypatch.setenv`.
-- [ ] 2.3 [HTTP] Drive "A lower-case proxy variable is honoured".
-- [ ] 2.4 [HTTP] Drive "NO_PROXY bypasses the proxy": `proxy_bypass_environment()`.
-- [ ] 2.5 [3+6] Drive "A proxy password from a variable is redacted": the `environment` table of `crawl.config`, with `environment.http_proxy` and `environment.https_proxy` in `SecretNames.settings` (design D8).
-- [ ] 2.6 Docs: document the proxy variables and `NO_PROXY` in `docs/crawling.md`.
-- [ ] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
+- [x] 2.0 Fix: a user agent holds visible ASCII characters, spaces and tabs only (RFC 9110 VCHAR, SP, HTAB), with a Cyrillic and an accented name in "An invalid user agent is rejected".
+- [x] 2.1 [Fixture] Add a small forward-proxy helper to `tests/support/` that records the requests it relays. It resolves the fixture's names itself through `hosts_for` and `FixtureResolver`, since a proxied request leaves name resolution to the proxy.
+- [x] 2.2 [HTTP] Drive "The HTTP_PROXY variable is honoured": the proxy variables read once in `plan_crawl` into `FetchPolicy`, and the proxy chosen per request from that snapshot, with `trust_env=False` (design D1). `000`'s proxy isolation removes the variables before every test, so the test sets them with `monkeypatch.setenv`.
+- [x] 2.3 [HTTP] Drive "A lower-case proxy variable is honoured".
+- [x] 2.4 [HTTP] Drive "NO_PROXY bypasses the proxy": the spec's NO_PROXY rule inside a pure `ProxyVariables.for_url(url)`, since urllib's `proxy_bypass_environment` is undocumented, with a [Pure] table of its cases: the lower-case variable wins, `NO_PROXY` bypasses, and `ALL_PROXY` is ignored (`test_the_proxy_of_a_url`, design Risks).
+- [x] 2.5 [3+6] Drive "A proxy password from a variable is redacted": the Crawl Service adds the `environment` table of the same snapshot to `crawl.config`, and `environment.http_proxy` and `environment.https_proxy` to `NewCrawl.secret_names` (design D8). `crawl_result` passes empty `SecretNames()`, so the service, not the test helper, must add them, or the test cannot go red.
+- [x] 2.6 Docs: document the proxy variables and `NO_PROXY` in `docs/crawling.md`, and correct `ENVIRONMENT` in `openlinx.cli.commands`, which names a `--proxy` that v0.1 lacks.
+- [x] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. Timeouts and retries
 
-- [ ] 3.1 [Fixture] Add response sequences to the fixture site, a new route kind (for example 503 once, then 200).
-- [ ] 3.2 [3+6] Drive "A temporary 503 is retried": `--retries` and `crawl.retries`, the retry loop around the Fetcher in `020`'s Requester (design D4, `020` D7), and the `attempt_count` column.
-- [ ] 3.3 [3+6] Drive "A persistent 500 is recorded after the retries".
-- [ ] 3.4 [3+6] Drive "A 404 is not retried".
-- [ ] 3.5 [3+6] Drive "A hanging response times out": `--timeout` and `crawl.timeout` in place of `_REQUEST_DEADLINE_SECONDS`, and `TimeoutError` → `timeout` (design D1). The timeout feeds `020`'s `watchdog_seconds` here if `020` task 12.14 is on main, or in that task otherwise.
-- [ ] 3.6 [Fixture] Add a route option for a body that stalls after its headers and one that trickles forever, test-first. Then **Guard:** a trickling body ends as `timeout` within `--timeout` (`test_a_trickling_body_times_out`, design Risks).
-- [ ] 3.7 [Fake timing] Drive "Retries wait one and then two seconds", after `020`'s fake Fetcher (its groups 11 and 12).
-- [ ] 3.8 [Fake timing] Drive "Retry-After pauses the host": the host's next allowed start in `RequestLimits`, after `020` task 11.1.
-- [ ] 3.9 Docs: document timeouts, retries, backoff, `Retry-After` and the network pause's view of a retry in `docs/crawling.md`.
-- [ ] 3.10 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [x] 3.1 [Fixture] Add response sequences to the fixture site, a new route kind (for example 503 once, then 200).
+- [x] 3.2 [3+6] Drive "A temporary 503 is retried": `--retries` and `crawl.retries`, the retry loop around the Fetcher in `020`'s Requester (design D4, `020` D7), and the `attempt_count` column, a top-level field of `UrlResult`: `Requester.request_url` returns the outcome with its count, and `FetchedUrl` and `ErroredUrl` copy it. A retry is the same URL: only its first attempt counts towards `--max-urls`, each attempt takes the host's slot and its `--rate` turn again, and the backoff holds no slot.
+- [x] 3.3 [3+6] Drive "A persistent 500 is recorded after the retries".
+- [x] 3.4 [3+6] **Guard:** "A 404 is not retried".
+- [x] 3.5a [Pure] `fetch_error_of` maps `TimeoutError`, from which aiohttp's timeouts derive, to `timeout`, checked before the fallback to `connection_error`; the table in `tests/crawl/test_fetcher.py` that pins them to `connection_error` flips (design D1, Risks).
+- [x] 3.5 [3+6] Drive "A hanging response times out": `--timeout` and `crawl.timeout`, finite and above 0 through `setting_rules`, through `FetchPolicy.timeout_seconds`, fixed at 20 until then. The timeout feeds `020`'s `watchdog_seconds` here if `020` task 12.14 is merged, or in that task otherwise.
+- [x] 3.6 [Fixture] Add a route option for a body that stalls after its headers and one that trickles forever, test-first (`delay` and `hang` act before the headers). Then **Guard:** a trickling body ends as `timeout` within `--timeout` (`test_a_trickling_body_times_out`, design Risks).
+- [x] 3.7a [Fixture] Let `020`'s fake Fetcher answer a status, headers and a response sequence per path, test-first in `tests/support/`.
+- [x] 3.7 [Fake timing] Drive "Retries wait one and then two seconds".
+- [x] 3.8 [Fake timing] Drive "Retry-After pauses the host": the host's next allowed start in `020`'s `RateGate`, which must also act without `--rate`. A 429 is retried here, with its 10-second wait. After `020` task 12.0, since the pause makes requests wait concurrently. Done when: `docs/crawling.md` documents `Retry-After` and the 429 wait, and its retry rule, the `--retries` help and the `crawl.retries` description name 429 beside 5xx.
+- [x] 3.9 Docs: document timeouts, retries, backoff and `attempt_count` in `docs/crawling.md`. `Retry-After` comes with 3.8, and the network pause's view of a retry with `020`'s network pause (its group 12).
+- [x] 3.10 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+
+- [x] 3.11 Fix: retry only the failures that may pass (`timeout`, `connection_refused`, `connection_error`) besides 5xx, with a [Pure] table over every `fetch_error` value and the status classes, so a new value must be classified; drive "An unresolvable External host is requested once" at [3+6] with the DNS resolver hook, which logs each name it resolves, since the URL behind its failed robots.txt is never requested itself; and refuse a `--retries` above 10 (design D4).
+- [x] 3.12 After `022`'s next merge of `020` (its group 18): pass `--retries 0` in the tests whose scenario is not about retries but which still wait a real backoff (a robots.txt 503, a 5xx page), so the suite does not pay it. With the merge, design Testing's Seam 3+6 sentence reasons from `020`'s virtual clock, whose sleep waits until virtual time reaches the wake and whose time jumps only when nothing runs, not from a FakeClock whose sleeps end at once.
+- [x] 3.13 [Fake timing] Drive "A 429 pauses the host without a retry": the Requester pauses the host for every 429, and for every 429 or 503 with `Retry-After`, then decides the retry on its own, so a URL without a retry left still slows its host down.
 
 ## 4. Redirects
 
-- [ ] 4.1 [3+6] Drive "Every hop of a Redirect Chain is recorded", and [CLI] "Index of redirect targets", a pair: hops as URL rows recorded by the engine, the `redirect_location` column, `redirect_url_id` as a declared reference with the partial index `urls_redirect_url_id`, and writing the value `redirect`. Done when: `_crawl_depth` reads the open depth again after its tasks end, so a target recorded at the open depth is dispatched in the same run (design D2).
-- [ ] 4.2 [3+6] Drive "A relative Location is resolved": through a public function made of `_resolved` in `openlinx.crawl.links` (design D2).
-- [ ] 4.3 [3+6] Drive "A redirect without Location has no target", with the fixture's `Status(302)`. Done when: a Location that gives no `NormalizedUrl` has no target either, by a [Pure] table (`test_a_location_that_is_no_http_url_has_no_target`, design Risks).
-- [ ] 4.4 [3+6] Drive "A redirect target keeps the depth".
-- [ ] 4.5 [3+6] Drive "A redirect to an excluded URL is not followed".
-- [ ] 4.6 [3+6] Drive "A redirect to an External URL is checked", on `020`'s `fixture_hosts`.
-- [ ] 4.7 [Fixture] Let `fixture_hosts` take a site per name (design D9), test-first in `tests/fixture_site/test_hosts.py`.
-- [ ] 4.8 [3+6] Drive "A www Seed that redirects to its apex keeps the apex inside the Scope", after `020` tasks 8.11 and 14.2: the Seed's Redirect Chain widens the Scope once, at its end and before its final Page is prepared, with the wider `ScopeRules`, the page executor's new settings snapshot, `crawl.scope.hosts` and the chain's earlier rows updated in the final hop's unit, and a continue that builds the Scope from `crawl.scope` (design D3, the user's decision of 2026-10-14).
-- [ ] 4.9 [3+6] Drive "A redirect to another subdomain stays inside the Scope": the added host without a `www.` host, since `en.site.test` is no registrable domain, and `crawl.scope` lists it.
-- [ ] 4.10 [CLI] Drive "A redirect to another site is reported". Done when: `seed_redirected_off_site` is declared.
-- [ ] 4.11 [3+6] Drive "The eleventh redirect is not followed": `--max-redirects` and `crawl.max_redirects`, the hop count walked back over `found_on_url_id` (design D2), on the fixture's `redirect_chain("/r", 11, "/r12")`, and writing the value `max_redirects`.
-- [ ] 4.12 [3+6] Drive "A loop of two URLs is marked": the `in_redirect_loop` column.
-- [ ] 4.13 [HTTP] Drive "A looping URL is requested once".
-- [ ] 4.14 [3+6] Drive "A meta refresh is not recorded as a redirect", after `020` task 7.7.
-- [ ] 4.15 Docs: document Redirect Chains, hop limits, loops, Seed redirects and the meta refresh boundary in `docs/crawling.md`.
-- [ ] 4.16 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) for the redirect, hop-count and loop units, then refactor with the whole suite green.
+- [x] 4.0 Refactor, behaviour unchanged: one `insert_urls` helper in `openlinx.store.urls` records the rows' origins before it inserts them, and `record_seed` and `record_fetched` insert through it, so no inserter can forget the origin (design D2). A guard test refuses any other insert into `urls`, red by a mutation that inserts directly.
+- [x] 4.1 [3+6] Drive "Every hop of a Redirect Chain is recorded", and [CLI] "Index of redirect targets", a pair: `REDIRECT_STATUSES` and the pure `redirect_target(url, status, location, strip_params)` in `openlinx.crawl.following`, which the robots.txt loader calls too, carried on `UrlResponse.redirect_target`; the target recorded by the unit of the 3xx response through `insert_urls` at the source's Crawl Depth, the `redirect_location` column, `redirect_url_id` as a declared reference with the partial index `urls_redirect_url_id`, and writing the value `redirect`. Done when: `_crawl_depth` reads the open depth again after its tasks end, so a target recorded at the open depth, or a URL lowered to it below the read cursor, is dispatched in the same run, and no in-flight URL of that depth is dispatched twice (design D2).
+- [x] 4.2 [3+6] **Guard:** "A relative Location is resolved": `redirect_target` resolves through `020`'s `resolve_reference` with the Crawl's `strip_params` (design D2).
+- [x] 4.3 [3+6] Drive "A redirect without Location has no target", with the fixture's `Status(302)`. Done when: a Location that gives no `NormalizedUrl`, and a 300, 304 or 305 response, have no target either, by a [Pure] table of `redirect_target` (`test_a_redirect_gives_the_http_url_its_location_names_or_no_target`, design Risks).
+- [x] 4.4 [3+6] **Guard:** "A redirect target keeps the depth", red by a mutation that records the target at depth + 1.
+- [x] 4.5 [3+6] **Guard:** "A redirect to an excluded URL is not followed".
+- [x] 4.6 [3+6] Drive "A redirect to an External URL is checked", on `020`'s `fixture_hosts`. The target is recorded for any 3xx, whatever the source's Scope, outside the branch that follows Links.
+- [x] 4.7 [Fixture] Let `fixture_hosts` take a site per name (design D9), test-first in `tests/fixture_site/test_hosts.py`.
+- [x] 4.8 [3+6] Drive "A www Seed that redirects to its apex keeps the apex inside the Scope", and "A Seed chain that ends off its site widens nothing", a pair (design D3). `Run` holds the Seed chain's state, open with its provisional Scope, which admits only the hosts of the Seed's registrable domain and only for a target of the chain. The final URL's unit closes it once: it writes `is_internal` and `in_scope` of every URL of the chain against the final Scope, and, when the chain ends on the Seed's registrable domain with a response, appends the host to `crawl.scope`; then the context is replaced and `pages.start` runs. Done when: every hop of a two-hop chain is checked, not only the last.
+- [x] 4.8a [3+6] Drive "A www Seed that redirects on its host is checked on its final Page": `020`'s `seed_base_mismatch` reads the final Page of the Seed's Redirect Chain (design D3).
+- [x] 4.8b [3+6] Drive "A redirected image beyond the depth limit is checked": a redirect target is found the way its chain was first found (`chain_via`, the first `discovered_via` of the chain that is no `redirect`), so the depth limit and the depth barrier treat a redirected image as a Resource (design D2).
+- [x] 4.9 [CLI] Drive "A redirect to another site is reported". Done when: `seed_redirected_out_of_scope` is declared.
+- [x] 4.10 [3+6] Drive "The eleventh redirect is not followed": `--max-redirects` and `crawl.max_redirects`, the hop count walked back over `found_on_url_id` (design D2), on the fixture's `redirect_chain("/r", 11, "/r12")`, writing the value `max_redirects`, which joins `DiscoverySkipReason`, so a Link found later queues the URL again.
+- [x] 4.11 [3+6] Drive "A loop of two URLs is marked": the `in_redirect_loop` column, 0 for any other 3xx, and 1 for a URL that redirects to itself.
+- [x] 4.12 [HTTP] **Guard:** "A looping URL is requested once".
+- [x] 4.13 [3+6] **Guard:** "A meta refresh is not recorded as a redirect".
+- [x] 4.14 Docs: document Redirect Chains, hop limits, loops, Seed redirects and the meta refresh boundary in `docs/crawling.md`, and that a redirect is not a Link.
+- [x] 4.15 Review: run the code-review skill on group 4's commits, also against `017`'s unit contract (D7) for the redirect, hop-count and loop units, then refactor with the whole suite green.
+- [x] 4.16 [3+6] Fix the group 4 review findings and verdict, red first, in one commit:
+  - Drive "A Seed chain cut by the hop limit off its site is reported" and "A Seed chain cut by the URL limit is decided by its final Scope": the fallback close walks `redirect_url_id` from the Seed in the store, at most `--max-redirects` + 1 reads, for the final URL and every URL of the chain (design D3).
+  - Drive "A section Seed whose chain leaves the section is reported": a chain that ends outside the Crawl's Scope widens nothing and gives `seed_redirected_out_of_scope`, the renamed `seed_redirected_off_site`; the warning-log guard's crawls follow the rename.
+  - Drive "A Seed blocked by robots.txt at its chain's end is reported": `seed_blocked_by_robots_txt` reads the chain's last URL, as `seed_base_mismatch` does.
+  - Drive "More than 50 redirects are rejected", with its settings-file twin.
+  - **Guard:** "A Page reached through an External redirect is followed" (design D2, Resource status).
+  - The loop walk stops at a URL it has seen, with a guard on `/x` → `/cart` while `/cart` and `/login` loop.
+  - The context keeps the planned Scope under a name that says so, and every read of the current Scope goes through the Seed chain's one accessor (design D3); one source of "the URL is in the Seed's chain" and one 3xx predicate, `REDIRECT_STATUSES`.
+  - `test_a_hop_that_a_link_reached_first_starts_the_hop_count_again` (design Risks), and the stale "continued unit" comment of the walk back.
+- [x] 4.17 Refactor with the whole suite green and no behaviour change: one frozen `Redirect` record in place of `redirect_location`, `redirect` and `max_redirects` on `FetchedUrl`; the redirect statements and walks split out of `openlinx.store.urls` into `openlinx.store.redirects`; the chain close moved into `seed_chain.py`; a frozen record for the decisions `reclassify_urls` takes.
 
 ## 5. Limits, compression and Resource sizes
 
-- [ ] 5.1 [3+6] Drive "A huge page is not parsed": the 20 MiB cap, and the `body_truncated` column, on the fixture's `LargeFile` with `content_type="text/html"`.
-- [ ] 5.2 [3+6] Drive "A very long URL is skipped": `ScopeRules.decide` gives `url_too_long` before its patterns (design D12).
-- [ ] 5.3 [HTTP] Drive "Requests accept compressed bodies": `auto_decompress=False` and an explicit `Accept-Encoding: gzip, deflate, br`.
-- [ ] 5.4 [Fixture] Serve a precompressed gzip file from a site folder with `Page(file=..., headers=[("Content-Encoding", "gzip")])`, test-first; add a raw-bytes route kind only if that cannot serve it (design D9).
-- [ ] 5.5 [3+6] Drive "A compressed Resource records both sizes", after `020` task 9.1: decoding in the tool, and the `content_encoding`, `size_bytes` and `transferred_bytes` columns. Done when: the 20 MiB cap applies to the decoded size too (`test_a_compressed_body_is_capped_after_decoding`, design Risks).
-- [ ] 5.6 [3+6] Drive "An image's size is recorded", after `020` task 9.1.
-- [ ] 5.7 Docs: document the limits, compression and the size columns in `docs/crawling.md`.
-- [ ] 5.8 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [x] 5.1 [3+6] Drive "A huge page is not parsed": the 20 MiB cap in `read_body` of `openlinx.crawl.fetch.body`, with [Pure] tests of the cap on real bytes, and the `body_truncated` column, through `FetchResult`, `UrlResponse` and `FetchedUrl` (design D1); the URL's unit gives a capped HTML body `PreparedPage(parse_error="body_too_large")` instead of preparing it. On the fixture's `LargeFile` with `content_type="text/html"`.
+- [x] 5.2 [3+6] Drive "A very long URL is skipped": `ScopeRules.decide` gives `url_too_long` before its patterns (design D12).
+- [x] 5.3 [HTTP] Drive "Requests accept compressed bodies": an explicit `Accept-Encoding: gzip, deflate, br` in `aiohttp_fetcher`, in place of aiohttp's own list, which offers zstd on Python 3.14.
+- [x] 5.4 [Fixture] **Guard:** a precompressed gzip file from a site folder, served with `Page(file=..., content_type="text/javascript", headers=[("Content-Encoding", "gzip")])`, keeps its bytes (design D9).
+- [x] 5.5 [3+6] Drive "A compressed Resource records both sizes": `auto_decompress=False`, the `brotli` dependency with its allowlist line, decoding in `read_body` with decoders bounded in output, and the `content_encoding`, `size_bytes` and `transferred_bytes` columns (design D1). Done when: the 20 MiB cap applies to the decoded size too, and raw deflate is decoded, by [Pure] tests on real compressed bytes (`test_a_compressed_body_is_capped_after_decoding`, design Risks).
+- [x] 5.5a [3+6] Drive "Stacked encodings are decoded in reverse order", "A corrupt compressed body is an invalid response" and "A body in an encoding that was not offered is not parsed", on real compressed bytes, with the `parse_error` value `unsupported_encoding` (design D1, D10).
+- [x] 5.6 [3+6] Drive "An image's size is recorded".
+- [x] 5.7 Docs: document the limits, compression and the size columns in `docs/crawling.md`.
+- [x] 5.8 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. TLS
 
-- [ ] 6.1 [Fixture] Add HTTPS listeners with a `trustme` CA to the fixture site, which the DNS resolver hook maps from port 443 of a name: one for `site.test`, one with a certificate for `other.test` served as `badcert.test`, one with a certificate from an untrusted CA, and one with a self-signed certificate served as `selfsigned.test`. The crawler's TLS setup takes extra trust anchors for the test CA through the context builder (design D5).
-- [ ] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback in `openlinx.crawl.tls`, and `aiohttp.ClientSSLError` → `tls_error`, before `020`'s `ClientConnectorError` branch, so `ClientConnectorCertificateError`, a subclass of both, is no longer `connection_error` (design D1). Done when: a [Pure] table maps each aiohttp exception class to its `fetch_error` (`test_each_request_error_has_its_fetch_error`, design Risks).
-- [ ] 6.3 [3+6] Drive "A certificate from an unknown CA is a TLS error". Done when: a self-signed certificate is `tls_error` too, through the OS trust store, on Windows, macOS and Linux in CI (`test_a_self_signed_certificate_is_a_tls_error`, design D5 and Risks).
-- [ ] 6.4 Speed test: measure TLS handshake time with truststore and with certifi on Windows, macOS and Linux. Record the results in `docs/crawling.md`, and change the default path only if truststore is measurably slower (design D5).
-- [ ] 6.5 [CLI] Drive "The HTTP version is a later column" (v0.1): `origins.http_version` declared NULL in every row, with its values and a description that starts with `Filled from v0.2. `. If it is the first later column in the schema, `018`'s guard over derived and later columns switches on its assertion that it saw one.
-- [ ] 6.6 Docs: document TLS trust, the speed-test result and `http_version` (NULL in v0.1) in `docs/crawling.md`.
-- [ ] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
+- [x] 6.1 [Fixture] Add HTTPS listeners with a `trustme` CA to the fixture site, which the DNS resolver hook maps from port 443 of a name, so `FixtureResolver` is keyed by name and port: one for `site.test`, one with a certificate for `other.test` served as `badcert.test`, and one with a certificate from an untrusted CA. The crawler's TLS setup takes extra trust anchors for the test CA through the Fetcher factory of 1.0 (design D5). `trustme` is a dev dependency.
+- [x] 6.2 [3+6] Drive "A certificate for another name is a TLS error": the truststore context with the certifi fallback in `openlinx.crawl.fetch.tls`, both runtime dependencies with their allowlist lines, imported only from `openlinx.crawl.fetch`. `aiohttp.ClientSSLError` → `tls_error` is `020`'s already. A [Pure] test covers the fallback branch.
+- [x] 6.3 [3+6] Drive "A certificate from an unknown CA is a TLS error", and `test_a_robots_txt_with_a_bad_certificate_gives_its_urls_tls_error_without_a_request` [3+6] over the `badcert.test` listener, since the TLS requirement's robots.txt sentence has no scenario of its own.
+- [x] 6.4 Speed test: `scripts/tls_handshake_speed.py`, a one-off measurement against public hosts that is never a test and never runs in the gate, measures TLS handshake time with truststore and with certifi on Windows, macOS and Linux. Windows and WSL are measured by hand; all three run on a throwaway branch whose one-job workflow runs the script on each OS, in a draft PR that is closed unmerged. Record the results and their limitations in `docs/benchmarks.md`, and record acceptance of the measured overhead while retaining the OS trust store as the default and certifi only as the fallback when truststore cannot be loaded (design D5).
+
+  Measurement evidence: [proof PR #40](https://github.com/openlinx/openlinx/pull/40), [TLS run 41816962562](https://github.com/openlinx/openlinx/actions/runs/41816962562), 3/3 OS jobs successful at `232845ede757d4b3a9f46c152809b2a6b5a05478`, based on `50cbcf6ff453c6c52487d9ddc5c07e97b5f4ca18`. The proof PR was closed unmerged after the measurements and [ordinary CI 41816962565](https://github.com/openlinx/openlinx/actions/runs/41816962565) passed all nine cells. Each OS completed 5/5 hosts and 20 handshakes per host per store, without errors or skips. [The dated results](../../../docs/benchmarks.md#tls-handshake) retain the manual Windows/WSL measurements and record the hosted provenance, median/p90 and limitations. Measurements and the TLS policy reconciliation are accepted: retain the OS trust store as the default, with certifi only when truststore cannot be loaded, accepting the observed overhead under revised D5. The hosted pooled median differences were +1.3 ms on Windows, +5.7 ms on Linux and +9.4 ms on macOS. These single fixed-order runs establish the reported observations, not statistical significance or equivalent trust policies. No runtime change follows from this decision.
+
+- [x] 6.5 [CLI] Drive "The HTTP version is a later column" (v0.1): `origins.http_version` declared NULL in every row, with its values from a `Literal` in `openlinx.store.records` and a description that starts with `Filled from v0.2. `. It is the first later column, so `018`'s guard over derived and later columns gains the assertion that it saw one.
+- [x] 6.6 Docs: document TLS trust, the speed-test result and `http_version` (NULL in v0.1) in `docs/crawling.md`.
+- [x] 6.7 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Response headers
 
-- [ ] 7.1 [3+6] Drive "Response headers are stored as received", and [CLI] "Columns of response_headers", a pair: the `response_headers` table, declared through `018`'s `public_table()` with `url_id` as its primary key and a declared reference, and no secondary index; this change's handler and the row writer of `openlinx.store.response_headers`, listed in `default_hooks()`, with a [2] replay test of the writer (design Risks).
-- [ ] 7.2 [3+6] Drive "A cookie value is not stored": the Fetcher redacts `Set-Cookie` values in `FetchResult.headers` (design D7).
-- [ ] 7.3 [Pure] Drive "A Cookie header is redacted pair by pair".
-- [ ] 7.4 Docs: document `response_headers` and the cookie redaction format in `docs/crawling.md`.
-- [ ] 7.5 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [x] 7.1 [3+6] Drive "Response headers are stored as received", and [CLI] "Columns of response_headers", a pair: the `response_headers` table, declared through `018`'s `public_table()` with `url_id` as its primary key and a declared reference, and no secondary index; `handler("response_headers", handle, write)` in `default_hooks()`, whose `handle` returns no row for a `UrlResult` without a `response`, and whose writer runs a plain INSERT, with a [2] replay test of the writer (design D7, Risks).
+- [x] 7.2 [3+6] Drive "A cookie value is not stored": the Fetcher redacts `Set-Cookie` values where it decodes the received headers, so `FetchResult.headers` never holds one (design D7).
+- [x] 7.3 [Pure] Drive "A Cookie header is redacted pair by pair", over the same function, with the spec's `Set-Cookie` value that has no `=` before its first `;`.
+- [x] 7.4 Docs: document `response_headers` and the cookie redaction format in `docs/crawling.md`.
+- [x] 7.5 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Change check (v0.1)
 
-- [ ] 8.1 Verify that every `#### Scenario:` in `specs/fetching/spec.md` that groups 1–7 drive has exactly one test named after it, with a small script over the test ids. The scenarios of groups 9–12 are checked when v0.2 builds them.
-- [ ] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate.
-- [ ] 8.3 **Guard:** every code this change declares (design D11) is listed by `linx commands` with its level and exit code [CLI].
-- [ ] 8.4 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.
+- [x] 8.1 Verify that every `#### Scenario:` in `specs/fetching/spec.md` that groups 1–7 drive has exactly one test named after it, with `scripts/scenario_coverage.py <spec.md>`, written here as the one shared check (`020` task 16.1 reuses it): it reports missing scenarios, scenarios with more than one test and tests named close to a scenario that no longer exists, and a v0.2 scenario as waiting. It is a check that is run, not a test.
+- [x] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate: the 9 cells of main's CI on this change's first PR. Evidence: [first draft PR #39](https://github.com/openlinx/openlinx/pull/39), [CI 41812691634](https://github.com/openlinx/openlinx/actions/runs/41812691634), 9/9 passed at `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68`.
+- [x] 8.3 **Guard:** every code this change declares (design D11) is listed by `linx commands` with its level and exit code [CLI]; the `commands.json` snapshot holds only the `commands` Command's own entry, so it does not change.
+- [x] 8.4 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.
 
-## 9. (v0.2) Custom headers and credentials
+## 9. The network pause meets retries (v0.1)
 
-- [ ] 9.1 [HTTP] Drive "A custom header is sent to Internal URLs": `--header` with the `crawl.header` setting, and `Request` carries its dispatch decision's `is_internal` (design D1).
-- [ ] 9.2 [HTTP] Drive "A custom header never goes to External URLs", on `020`'s two fixture instances.
-- [ ] 9.3 [CLI] Drive "A malformed header is rejected".
-- [ ] 9.4 [3+6] Drive "A cookie header keeps its name and hides its value": declare `--header` and `crawl.header` a header secret, the header form of `015`'s redaction.
-- [ ] 9.5 [HTTP] Drive "Credentials are sent to Internal URLs": `--auth`, marked secret.
-- [ ] 9.6 [HTTP] Drive "Credentials never go to External URLs".
-- [ ] 9.7 [3+6] Drive "The recorded command hides the password".
-- [ ] 9.8 [HTTP] Drive "Credentials in openlinx.toml are used".
-- [ ] 9.9 Docs: document custom headers, basic auth and secrets in `docs/crawling.md`.
-- [ ] 9.10 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [x] 9.1 [Fake timing] Drive "A request that fails during a network pause is not retried": after its backoff, a closed gate ends a URL's retries in the Requester, which returns the last failure; a URL of the pause's count is recorded with it, any other is re-queued (design D4). Done when: the two tests of `020`'s pause that still pass `--retries 0` for this cause run with the default retries.
+- [x] 9.2 [Fake timing] Drive "A network that goes down pauses the Crawl before the retries": the Requester reports a URL's first attempt without a response to the network pause through a hook the engine gives it, and its later attempts never count (design D4). Done when: the tests of `020`'s pause that pass `--retries 0` for its count run with the default retries again, but for three whose cause is task 9.1's or 9.6b's.
+- [x] 9.3 Refactor, behaviour unchanged: the network pause owns its bookkeeping, `outcome(...)` for a URL's request and `verdict(...)` for robots.txt, and its `retries` is `requeues` (design D4). Red by a mutation that drops the URL-limit give-back inside `outcome`.
+- [x] 9.4 Refactor, behaviour unchanged: the `CrawlContext` carries the `FetchPolicy`, and the watchdog reads `timeout_seconds` from it (design D1). **Guard:** `test_a_raised_timeout_raises_the_watchdog_with_it`, red by a mutation that gives the watchdog the default timeout.
+- [x] 9.5 [Fake timing] **Guard:** "TLS errors never pause the Crawl", red by a mutation that counts `tls_error` (`020` keeps it out of the count already).
+- [x] 9.6 [Fake timing] Drive "A retry under way outlasts the URL limit" and "A stop cuts a pending retry and keeps its URL queued", a pair: the URL limit's stop lets the retries of a URL already requested go on within the grace, and any other stop ends a due retry with `NotStarted` and the URL-limit give-back, robots.txt's retries included (design D4). A retry that a closed gate ends for a URL outside the pause's count is given back and re-queued, whatever its last outcome.
+- [x] 9.6b [Fake timing] Drive "A Crawl that reaches its URL limit during a network pause waits for the pause to end" and "The URL limit's stop does not end a network pause": a refusal at the limit while the pause's count is open sets no stop until the depth's requests and the pause have ended, and the pause races only a stop that ends retries (design D4). Done when: `test_a_url_refused_at_the_limit_before_a_pause_is_requested_once_the_count_comes_back` runs with the default retries.
+- [x] 9.7 [Fake timing] A request waits out its host's pause before it takes the global permit, racing the stop, and checks again once it holds it (design D4): `test_a_request_waiting_for_the_global_cap_when_its_host_pauses_starts_after_it` keeps its premise, and `test_a_stop_ends_the_wait_for_a_host_pause` is red first (design Risks).
+- [x] 9.8 Review: run the code-review skill on group 9's commits, with the findings of the review of the merges of `020` and main, then refactor with the whole suite green.
 
-## 10. (v0.2) The proxy flag
+## 9b. Before the first PR (v0.1)
 
-- [ ] 10.1 [HTTP] Drive "Requests go through the proxy": `--proxy` and `crawl.proxy`.
-- [ ] 10.2 [HTTP] Drive "The proxy flag overrides the proxy variables".
-- [ ] 10.3 [3+6] Drive "A proxy password is redacted": mark `--proxy` a URL secret.
-- [ ] 10.4 Docs: document `--proxy` and `[crawl] proxy` in `docs/crawling.md`.
-- [ ] 10.5 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+The first PR ships groups 1-9 and this group; group 10 follows in a second.
 
-## 11. (v0.2) HTTP version
+- [x] 9b.1 [CLI] `linx commands` lists the proxy variables under `environment` again, with this change's wording, and `docs/workspace.md` says so. A test reads `environment` and checks each name against `ProxyVariables`' keys, so the list and the reader cannot drift (design D1).
+- [x] 9b.2 Docs: `docs/crawler.md` for site owners, every claim checked against the code: a URL is requested once per Crawl plus its retries, robots.txt's 5xx or 429 keeps the URLs of its origin unrequested after robots.txt's own retries, and the 10-second wait is a 429's only. `README.md` gains the line "Crawl only sites you own or have permission to crawl; the defaults are polite, see docs/crawler.md". The docs-link guard covers the page. Group 9's rules hold too: a robots.txt retry waits out a network pause, and a URL limit reached during one waits for it.
+- [x] 9b.3 [Fake timing] The URL limit's wait for an open pause count ends at `--network-wait` from the refusal, and then the Crawl stops (design D4).
+- [x] 9b.4 [Fake timing] A `Retry-After` date is measured from when the response ended, not from when its request was sent (design D4).
+- [x] 9b.5 [3+6] A continue records the proxy variables it fetches through, redacted as a start's are, in place of the start's, and `docs/crawling.md` ("Continuing a Crawl") says so (design D1).
+- [x] 9b.6 Docs: `attempt_count` is the requests made for the URL in the dispatch that recorded it, its retries included; the spec, `schema.py` and `docs/schema.md` say one text.
+- [x] 9b.7 [Fake timing] The first probe's dead-section window counts from when it was sent, not when it was due, and a probe still honours its host's `Retry-After` (design D4).
+- [x] 9b.8 The Seed's Redirect Chain closes at one point; a second close, if a Crawl can reach it, is red first (design D3).
+- [x] 9b.9 Refactor, behaviour unchanged: `StopSignal` gives two views, `new_requests` and `under_way`, each with `is_set` and `wait()`, and probes take one that is never set; `_slots` takes its view and yields whether it holds the slots.
+- [x] 9b.10 Refactor, behaviour unchanged: the network pause's gate is a `PauseGate` (close, open, and whether a request passes it).
+- [x] 9b.11 Refactor, behaviour unchanged: the pause's two per-URL methods say that they change its state and which one is robots.txt's, and take one kind of input.
+- [x] 9b.12 Refactor, behaviour unchanged: one function of the URL limit gives a count back, for the Requester, the network pause and an outage.
+- [x] 9b.13 Refactor, behaviour unchanged: the engine's `_outcome` is named after what it returns.
+- [x] 9b.14 Refactor, behaviour unchanged: the request timeout has one reader, the `FetchPolicy` the `CrawlContext` carries.
+- [x] 9b.15 Docs: CONTRIBUTING's module sizes are the real ones, and each module or class past them says the split it would take.
+- [x] 9b.16 Docs: `docs/architecture.md`'s hooks rule names `_response_headers` as the one-line handle.
+- [x] 9b.17 Style: the docstrings that restate their name go.
+- [x] 9b.18 The comment of `_slots` on the global permit holds for `--rate`'s interval too.
+- [x] 9b.19 Review: run the code-review skill on group 9b's commits, then refactor with the whole suite green.
 
-- [ ] 11.1 [Fixture] Add two HTTPS listeners: one that selects `h2`, and one that offers only `http/1.1`.
-- [ ] 11.2 [3+6] Drive "A plain http origin": filling `origins.http_version`.
-- [ ] 11.3 [3+6] Drive "An origin that selects HTTP/2": the ALPN handshake (design D6).
-- [ ] 11.4 [3+6] Drive "An origin that offers only HTTP/1.1".
-- [ ] 11.5 Docs: document `http_version` and the ALPN check in `docs/crawling.md`.
-- [ ] 11.6 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+## 10. Closing the change (v0.1)
 
-## 12. (v0.2) zstd
+Tasks 6.4 and 8.2 close in this group too, 8.2 from the first PR's CI.
 
-- [ ] 12.1 [3+6] Add zstd decoding (`zstandard`, or `compression.zstd` on 3.14) and the `zstd` token of `Accept-Encoding` (design D1), with a test of a zstd Resource's two sizes, then run the code-review skill on it.
+- [ ] 10.1 Spec, once `023` is archived: this change's workspace delta MODIFIES `023`'s "Environment variables change nothing", the proxy variables its one exception, with this change's scenario, and its cli-contract delta the `environment` row; 9b.1's test is then named after that scenario.
+- [ ] 10.2 Refactor, behaviour unchanged: `BlockingRuns` and `BLOCKING_RUN` move to `openlinx.crawl.engine.blocking`, since only the engine uses them, and both package docstrings follow.
+- [ ] 10.3 [3+6] Drive "A redirect to another subdomain stays inside the Scope", on `fixture_named_hosts` with `en.site.test` (design D3).
+- [ ] 10.4 [Fixture] A self-signed listener served as `selfsigned.test`, test-first in `tests/fixture_site/`, its certificate made with `cryptography`, which the dev group declares; then `test_a_self_signed_certificate_is_a_tls_error` [3+6], which CI runs on Windows, macOS and Linux, since each verifies through its own platform API (design D5, Risks).
+- [ ] 10.5 [Fake timing] The URL limit's wait for an open pause count also follows the Internal checked URLs in flight, which count towards the pause and may give counts back, red first (design D4).
+- [ ] 10.6 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+
+## 11. (v0.2) Custom headers and credentials
+
+- [ ] 11.1 [HTTP] Drive "A custom header is sent to Internal URLs": `--header` with the `crawl.header` setting, and `Request` carries its dispatch decision's `is_internal` (design D1).
+- [ ] 11.2 [HTTP] Drive "A custom header never goes to External URLs", on `020`'s two fixture instances.
+- [ ] 11.3 [CLI] Drive "A malformed header is rejected".
+- [ ] 11.4 [3+6] Drive "A cookie header keeps its name and hides its value": declare `--header` and `crawl.header` a header secret, the header form of `015`'s redaction.
+- [ ] 11.5 [HTTP] Drive "Credentials are sent to Internal URLs": `--auth`, marked secret.
+- [ ] 11.6 [HTTP] Drive "Credentials never go to External URLs".
+- [ ] 11.7 [3+6] Drive "The recorded command hides the password".
+- [ ] 11.8 [HTTP] Drive "Credentials in openlinx.toml are used".
+- [ ] 11.9 Docs: document custom headers, basic auth and secrets in `docs/crawling.md`.
+- [ ] 11.10 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+
+## 12. (v0.2) The proxy flag
+
+- [ ] 12.1 [HTTP] Drive "Requests go through the proxy": `--proxy` and `crawl.proxy`.
+- [ ] 12.2 [HTTP] Drive "The proxy flag overrides the proxy variables".
+- [ ] 12.3 [3+6] Drive "A proxy password is redacted": mark `--proxy` a URL secret.
+- [ ] 12.4 Docs: document `--proxy` and `[crawl] proxy` in `docs/crawling.md`.
+- [ ] 12.5 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
+
+## 13. (v0.2) HTTP version
+
+- [ ] 13.1 [Fixture] Add two HTTPS listeners: one that selects `h2`, and one that offers only `http/1.1`.
+- [ ] 13.2 [3+6] Drive "A plain http origin": filling `origins.http_version`.
+- [ ] 13.3 [3+6] Drive "An origin that selects HTTP/2": the ALPN handshake (design D6).
+- [ ] 13.4 [3+6] Drive "An origin that offers only HTTP/1.1".
+- [ ] 13.5 Docs: document `http_version` and the ALPN check in `docs/crawling.md`.
+- [ ] 13.6 Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
+
+## 14. (v0.2) zstd
+
+- [ ] 14.1 [3+6] Add zstd decoding (`zstandard`, or `compression.zstd` on 3.14) and the `zstd` token of `Accept-Encoding` (design D1), with a test of a zstd Resource's two sizes, then run the code-review skill on it.

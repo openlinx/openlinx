@@ -35,6 +35,19 @@ async def test_a_file_is_served_byte_for_byte(fixture_site: StartSite) -> None:
     assert body == b"a\r\nb\nc"
 
 
+async def test_a_precompressed_file_keeps_its_bytes(fixture_site: StartSite) -> None:
+    server = fixture_site(exact.SITE)
+
+    async with (
+        aiohttp.ClientSession(auto_decompress=False) as session,
+        session.get(server.url("/app.js")) as response,
+    ):
+        sent = (await response.read(), response.headers.get("Content-Encoding"))
+
+    assert exact.SITE.root is not None
+    assert sent == ((exact.SITE.root / "app.js.gz").read_bytes(), "gzip")
+
+
 async def fetch_body(server: ServerHandle, path: str) -> bytes:
     async with aiohttp.ClientSession() as session, session.get(server.url(path)) as response:
         return await response.read()

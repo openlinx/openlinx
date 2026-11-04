@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from openlinx.crawl.engine.context import CrawlContext
 from openlinx.crawl.engine.outcomes import Outcomes
 from openlinx.crawl.engine.pause import NetworkPause, Redispatch
+from openlinx.crawl.engine.seed_chain import SeedChain
 from openlinx.crawl.engine.stop import StopGrace, StopSignal
 from openlinx.crawl.fetch.politeness import BlockingRuns, RequestLimits
 from openlinx.crawl.fetch.requester import Requester
@@ -61,6 +62,7 @@ class Run:
     requester: Requester
     robots: RobotsLoader
     blocking: BlockingRuns
+    seed_chain: SeedChain
     task_failure: TaskFailure
     pause: NetworkPause
     redispatch: Redispatch

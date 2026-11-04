@@ -37,6 +37,7 @@ SITE = Site(
 | `Sitemap(paths)` | 200, `application/xml` and a `<urlset>` with one absolute `<loc>` per path. |
 | `SitemapIndex(paths)` | 200, `application/xml` and a `<sitemapindex>` with one absolute `<loc>` per path. |
 | `LargeFile(size)` | 200, `Content-Length: size` and a stream of the bytes 0–255 repeated. |
+| `Responses(answers)` | The answers in turn, one per request to the path, then the last one again: `Responses((Status(503), Page(body=...)))` is a page that fails once. Each path counts its own requests. |
 
 A gzipped sitemap is an ordinary `Page(file="sitemap.xml.gz", content_type="application/gzip")`. The extension table knows only `.html`, `.txt` and `.xml`; any other extension is `application/octet-stream` unless `content_type` says otherwise.
 
@@ -49,9 +50,11 @@ Every route takes these as keyword arguments:
 - `delay=0.5`: seconds to wait before the response headers.
 - `hang=True`: never answer.
 - `reset_after=100`: send the headers, with the whole body's `Content-Length`, and that many bytes of the body, then reset the connection (TCP RST).
+- `stall_body=True`: send the headers, then never the body.
+- `trickle=True`: send the headers, then the body one byte every 100 ms, never ending, which no per-read timeout ever ends.
 - `after="/b"`: answer only once the site has received a request for `/b`, then after `delay`. It orders a test's events by what the Crawl requests instead of by time. A route that waits in vain for 10 s answers 503, and the server fails the test at its teardown, naming both paths. The awaited path must be one the Crawl requests without the held response, or the test fails.
 
-When the server stops, it cancels every handler still running (hanging or delayed) before aiohttp's cleanup, which would otherwise wait up to 60 s for them.
+When the server stops, it cancels every handler still running (hanging, delayed, stalled or trickling) before aiohttp's cleanup, which would otherwise wait up to 60 s for them.
 
 ## Fixtures
 
@@ -59,7 +62,10 @@ When the server stops, it cancels every handler still running (hanging or delaye
 - **`module_fixture_site`**: the same, stopped after the module. It is for hypothesis tests, which cannot use function-scoped fixtures.
 - **`fixture_hosts`** (function-scoped), for multi-host Crawls: `hosts = fixture_hosts(SITE, OTHER)` starts two instances and returns a `FixtureHosts`:
   - `site`, the `ServerHandle` that `site.test` and `www.site.test` name, and `other`, the one that `other.test` names
-  - `resolver`, the DNS resolver hook: an aiohttp resolver that maps those names, on any port, to their instance's address and port, and fails every other name as the system resolver does, so aiohttp reports `ClientConnectorDNSError`. It goes into a Crawl through the Crawl Service, `start_crawl(..., resolver=hosts.resolver)`, which `tests.support.crawling.crawl_result` calls.
+  - `resolver`, the DNS resolver hook: an aiohttp resolver that maps those names, on port 80, to their instance's address and port, and fails every other name or port as the system resolver does, so aiohttp reports `ClientConnectorDNSError`. `hosts.resolver.lookups` holds each name it was asked, in order, a failed one included. It goes into a Crawl through `tests.support.crawling.crawl_result(..., resolver=hosts.resolver)`, which binds it into the Fetcher factory that the Crawl Service's `start_crawl` takes.
+- **`fixture_named_hosts`** (function-scoped), for a site per host name: `hosts = fixture_named_hosts({"www.site.test": WWW, "site.test": APEX})` starts an instance per name and returns a `NamedHosts`, with `servers` by name and the `resolver` that maps each name, on port 80, to its own instance. A host that redirects to another one, such as a www host to its apex, then answers on its own, where `fixture_hosts` would loop.
+- **`fixture_tls_hosts`** (function-scoped), for the TLS scenarios: `hosts = fixture_tls_hosts(SITE, OTHER)` returns a `TlsHosts` (`tests/fixture_site/tls.py`). `SITE` may instead be a function that builds the site from `untrusted_port`, for a page that links to that listener. `SITE` answers on `http://site.test` (`hosts.site`) and `https://site.test` (`hosts.secure_site`), `www.site.test` included, with a certificate from a trustme test CA. `OTHER` answers on `https://badcert.test` (`hosts.badcert`), whose certificate from that CA names `other.test`, and on `https://other.test:{hosts.untrusted_port}` (`hosts.untrusted`), whose certificate comes from a second CA. `hosts.trust_anchors` is the first CA's certificate in PEM, which `crawl_result(..., trust_anchors=hosts.trust_anchors)` passes into the crawler's TLS setup; nothing trusts the second CA except a test of the listener itself (`hosts.untrusted_anchors`).
+- **`fixture_proxy`** (function-scoped), for the proxy scenarios: `proxy = fixture_proxy(hosts.resolver)` starts a forward proxy (`tests/support/proxy.py`) at `proxy.url`. It relays each plain-http request it receives in absolute form, resolving the fixture's names with the DNS resolver hook it is given, since behind a proxy the crawler resolves only the proxy's address, and `proxy.requests` holds each relayed URL in order.
 - **`ServerHandle`**:
   - `base_url`, such as `http://127.0.0.1:53124`
   - `url(path)`

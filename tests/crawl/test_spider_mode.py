@@ -248,7 +248,7 @@ def test_a_closed_port_is_a_refused_connection(
     target = f"http://127.0.0.1:{closed_port()}/"
     server = fixture_site(Site(routes={"/": Page(body=f'<a href="{target}">Gone</a>')}))
 
-    crawl_file = crawled(server.url("/"))
+    crawl_file = crawled(server.url("/"), "--retries", "0")
     ((fetch_state, status_code, fetch_error, message),) = query(
         crawl_file,
         "SELECT fetch_state, status_code, fetch_error, fetch_error_message FROM urls WHERE url = ?",
@@ -276,7 +276,7 @@ def test_a_connection_reset_in_the_body_is_a_connection_error(
         )
     )
 
-    crawl_file = crawled(server.url("/"))
+    crawl_file = crawled(server.url("/"), "--retries", "0")
 
     assert sorted(
         query(

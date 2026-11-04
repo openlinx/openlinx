@@ -122,10 +122,18 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `fetch_error` | TEXT | yes | | | `dns_error`, `connection_refused`, `connection_error`, `invalid_response`, `watchdog`, `record_failed`, `timeout`, `tls_error` | Why no response is recorded for the URL. |
 | `fetch_error_message` | TEXT | yes | | | | Human-readable detail of fetch_error. |
 | `content_type` | TEXT | yes | | | | The Content-Type response header as received; NULL without a response or without the header. |
+| `content_encoding` | TEXT | yes | | | | The Content-Encoding response header as received; NULL without a response or without the header. |
+| `size_bytes` | INTEGER | yes | | | | The body size after content decoding; NULL without a response, for a body larger than 20 MiB, or for a coding that was not offered. |
+| `transferred_bytes` | INTEGER | yes | | | | The body size as transferred, before decoding; NULL without a response. |
 | `response_time_ms` | INTEGER | yes | | | | Time from sending the request to receiving the whole body. |
+| `redirect_location` | TEXT | yes | | | | The raw Location header of a 3xx response. |
+| `redirect_url_id` | INTEGER | yes | → `urls.id` | | | The redirect's target, resolved against the URL and normalised; NULL without a usable Location. |
+| `in_redirect_loop` | INTEGER | yes | | `boolean` | | 1 when the URL is in a redirect loop, 0 for another 3xx response; NULL without a 3xx response. |
+| `attempt_count` | INTEGER | no | | | | The requests made for the URL in the dispatch that recorded it, its retries included; 0 when it was not requested. |
 | `fetched_at` | TEXT | yes | | `timestamp` | | UTC time of the request. |
+| `body_truncated` | INTEGER | yes | | `boolean` | | 1 when the body, as transferred or as decoded, was larger than 20 MiB and was not read in full; NULL without a response. |
 | `parsed` | INTEGER | no | | `boolean` | | 1 when the response was parsed and its Links were found. |
-| `parse_error` | TEXT | yes | | | `extractor_error`, `body_too_large`, `worker_crashed`, `parse_timeout` | Why parsing failed in whole or in part: a registered extractor failed (parsed stays 1), or nothing came out of page preparation (parsed = 0). |
+| `parse_error` | TEXT | yes | | | `extractor_error`, `body_too_large`, `unsupported_encoding`, `worker_crashed`, `parse_timeout` | Why parsing failed in whole or in part: a registered extractor failed (parsed stays 1), or nothing came out of page preparation (parsed = 0). |
 | `parse_error_message` | TEXT | yes | | | | Human-readable detail of parse_error. |
 
 ### Indexes
@@ -133,6 +141,7 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | Name | Columns | Unique | Where | Description |
 |---|---|---|---|---|
 | `urls_crawl_depth_id` | `crawl_depth`, `id` | no | `fetch_state = 'queued'` | The frontier: the next queued URLs of the open Crawl Depth, in id order. |
+| `urls_redirect_url_id` | `redirect_url_id` | no | `redirect_url_id IS NOT NULL` | Finding the URLs that redirect to a URL: the reverse walk of a Redirect Chain. |
 | `urls_url` | `url` | yes | | Recording a discovered URL once (ON CONFLICT (url)), and finding one URL's row. |
 
 ## Table `origins`
@@ -153,12 +162,22 @@ One row for each origin of a URL that the Crawl recorded.
 | `robots_txt` | TEXT | yes | | | | The robots.txt body as parsed, up to 512,000 bytes. |
 | `robots_crawl_delay_ms` | INTEGER | yes | | | | The Crawl-delay for the robots user-agent token; recorded, not applied. |
 | `robots_sitemaps` | TEXT | yes | | `json` | | JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not been fetched. |
+| `http_version` | TEXT | yes | | | `http_2`, `http_1_1` | Filled from v0.2. The HTTP version that the origin's requests use. |
 
 ### Indexes
 
 | Name | Columns | Unique | Where | Description |
 |---|---|---|---|---|
 | `origins_origin` | `origin` | yes | | Recording an origin once (ON CONFLICT (origin)), and finding an origin's row. |
+
+## Table `response_headers`
+
+The response headers of each URL whose last attempt got a response.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | PK, → `urls.id` | | | The URL whose response the headers are. |
+| `headers` | TEXT | no | | `json` | | JSON array of [name, value] pairs in the order and letter case they were received; cookie values are ***. |
 
 ## Table `pages`
 

@@ -1,16 +1,16 @@
 """The Crawl Service: a foreground Spider-mode Crawl (020-add-crawl-core D11, D15)."""
 
 import asyncio
+import os
 import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager, nullcontext
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, fields, replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
-from aiohttp.abc import AbstractResolver
 from pydantic import ValidationError
 
 from openlinx.aio import loop_factory
@@ -20,7 +20,13 @@ from openlinx.crawl.engine.dispatch import run_crawl
 from openlinx.crawl.engine.hooks import Hooks, PassContext
 from openlinx.crawl.engine.stop import StopSignal
 from openlinx.crawl.engine.warning_log import WarningLog
-from openlinx.crawl.fetch.fetcher import Fetcher, aiohttp_fetcher
+from openlinx.crawl.fetch.fetcher import (
+    DEFAULT_USER_AGENT,
+    FetcherFactory,
+    FetchPolicy,
+    aiohttp_fetcher,
+)
+from openlinx.crawl.fetch.proxy import SECRET_KEYS, ProxyVariables
 from openlinx.crawl.pages.preparation import PageExecutor
 from openlinx.crawl.scope import ScopeDecision, ScopeRules, scope_rules
 from openlinx.crawl.settings import CrawlSettings
@@ -66,7 +72,7 @@ from openlinx.store.records import (
     StopReason,
     UrlCounts,
 )
-from openlinx.store.redaction import SecretValues, secret_values
+from openlinx.store.redaction import SecretValues, redact, secret_values
 from openlinx.store.settings import StoreSettings
 from openlinx.store.transitions import check_transition
 from openlinx.store.urls import url_counts
@@ -105,6 +111,7 @@ class CrawlPlan:
     settings: CrawlSettings
     scope: ScopeRules
     strip_params: re.Pattern[str] | None
+    fetch_policy: FetchPolicy
     new_crawl: NewCrawl
     # Every table as loaded, from which default_hooks takes the configs of 030's hooks.
     loaded: Settings
@@ -205,6 +212,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
     if not decision.in_scope:
         raise _seed_out_of_scope(seed, decision)
     settings_file = workspace.settings_file if workspace.settings_file.is_file() else None
+    proxies = ProxyVariables.of(os.environ)
     new_crawl = NewCrawl(
         workspace=workspace,
         crawl_mode="spider",
@@ -213,9 +221,9 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         command_argv=request.command_argv,
         cwd=request.cwd,
         # Every registered table, resolved (design D11).
-        config=settings.root.model_dump(mode="json"),
+        config={**settings.root.model_dump(mode="json"), **_environment(proxies)},
         scope=scope.to_json(),
-        secret_names=SecretNames(request.secret_flags, tables.secret_settings()),
+        secret_names=SecretNames(request.secret_flags, tables.secret_settings() | _PROXY_SECRETS),
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
         section_crawl=scope.section_crawl,
@@ -225,9 +233,27 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         settings=crawl_settings,
         scope=scope,
         strip_params=strip_params,
+        fetch_policy=_fetch_policy(crawl_settings, proxies),
         new_crawl=new_crawl,
         loaded=settings,
     )
+
+
+# A proxy URL may hold a password; 015's redaction keeps its user and host (design D8).
+_PROXY_SECRETS = frozenset(f"environment.{key}" for key in SECRET_KEYS)
+
+
+def _fetch_policy(settings: CrawlSettings, proxies: ProxyVariables) -> FetchPolicy:
+    return FetchPolicy(
+        user_agent=settings.user_agent or DEFAULT_USER_AGENT,
+        proxies=proxies,
+        timeout_seconds=settings.timeout,
+    )
+
+
+def _environment(proxies: ProxyVariables) -> dict[str, dict[str, str]]:
+    used = proxies.recorded()
+    return {"environment": used} if used else {}
 
 
 def _seed(text: str, strip_params: re.Pattern[str] | None) -> NormalizedUrl:
@@ -259,16 +285,13 @@ def start_crawl(
     reporter: Reporter,
     hooks: Hooks,
     *,
-    resolver: AbstractResolver | None = None,
     pages: Callable[[], PageExecutor] | None = None,
-    fetcher: Fetcher | None = None,
+    fetchers: FetcherFactory = aiohttp_fetcher,
     stop: StopSignal | None = None,
 ) -> CrawlResult:
-    """`resolver` is the DNS resolver hook of multi-host tests, `pages` builds the page
-    executor instead of `default_page_executor`, `fetcher` is the fake Fetcher of the timing
-    scenarios, used instead of aiohttp's, and `stop` is the stop flag that `060`'s control rows
-    set: one per run, since it binds the loop of the run that first sets or awaits it (design
-    D9, D10, D15)."""
+    """`pages` builds the page executor instead of `default_page_executor`, `fetchers` opens
+    the Fetcher, and `stop` is the stop flag that `060`'s control rows set: one per run, since
+    it binds the loop of the run that first sets or awaits it (design D9, D10, D15)."""
     log = WarningLog(reporter)
     planned = _Planned(
         seed=plan.seed,
@@ -277,6 +300,7 @@ def start_crawl(
         strip_params=plan.strip_params,
         crawl_mode=plan.new_crawl.crawl_mode,
         seed_count=len(plan.new_crawl.seeds),
+        fetch_policy=plan.fetch_policy,
         secrets=secret_values(plan.new_crawl.config, plan.new_crawl.secret_names.settings),
     )
     crawl = _Crawl(
@@ -286,9 +310,8 @@ def start_crawl(
         clock=clock,
         log=log,
         hooks=hooks,
-        resolver=resolver,
         pages=pages or default_page_executor,
-        fetcher=fetcher,
+        fetchers=fetchers,
         stop=stop or StopSignal(),
     )
     return _crawled(crawl)
@@ -301,9 +324,8 @@ def continue_crawl(
     reporter: Reporter,
     hooks: Hooks,
     *,
-    resolver: AbstractResolver | None = None,
     pages: Callable[[], PageExecutor] | None = None,
-    fetcher: Fetcher | None = None,
+    fetchers: FetcherFactory = aiohttp_fetcher,
     stop: StopSignal | None = None,
 ) -> CrawlResult:
     """Continues a stopped or failed Crawl from its file alone, which 060's resume calls; the
@@ -321,6 +343,10 @@ def continue_crawl(
             raise
         raise refused from error
     strip_params = strip_params_pattern(settings.strip_params)
+    # The proxy variables of the continue's own environment, as a start reads them, recorded in
+    # place of the start's.
+    proxies = ProxyVariables.of(os.environ)
+    environment = _environment(proxies)
     planned = _Planned(
         seed=_seed(recorded.seeds[0], strip_params),
         settings=settings,
@@ -328,10 +354,16 @@ def continue_crawl(
         strip_params=strip_params,
         crawl_mode=recorded.crawl_mode,
         seed_count=len(recorded.seeds),
-        # The recorded config holds no secret, so a continue knows none to redact.
-        secrets=SecretValues(),
+        fetch_policy=_fetch_policy(settings, proxies),
+        # The recorded config holds no secret; the continue's own proxy variables may.
+        secrets=secret_values(environment, _PROXY_SECRETS),
     )
-    config = {**recorded.config, "crawl": settings.model_dump(mode="json")}
+    started = {table: values for table, values in recorded.config.items() if table != "environment"}
+    config = {
+        **started,
+        "crawl": settings.model_dump(mode="json"),
+        **redact((), environment, SecretNames(settings=_PROXY_SECRETS)).config,
+    }
     crawl = _Crawl(
         plan=planned,
         crawl_file=crawl_file,
@@ -339,9 +371,8 @@ def continue_crawl(
         clock=clock,
         log=WarningLog(reporter, [Diagnostic.from_json(w) for w in recorded.warnings]),
         hooks=hooks,
-        resolver=resolver,
         pages=pages or default_page_executor,
-        fetcher=fetcher,
+        fetchers=fetchers,
         stop=stop or StopSignal(),
     )
     return _crawled(crawl)
@@ -387,6 +418,7 @@ class _Planned:
     strip_params: re.Pattern[str] | None
     crawl_mode: CrawlMode
     seed_count: int
+    fetch_policy: FetchPolicy
     secrets: SecretValues
 
 
@@ -403,9 +435,8 @@ class _Crawl:
     clock: Clock
     log: WarningLog
     hooks: Hooks
-    resolver: AbstractResolver | None
     pages: Callable[[], PageExecutor]
-    fetcher: Fetcher | None
+    fetchers: FetcherFactory
     stop: StopSignal
 
 
@@ -506,22 +537,21 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
         with clock.off_loop():
             writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
         try:
-            fetching = (
-                aiohttp_fetcher(clock, crawl.resolver)
-                if crawl.fetcher is None
-                else nullcontext(crawl.fetcher)
-            )
             # The engine drives the writer, so its commits keep the Crawl's clock.
-            async with writer.loop_deadline(), fetching as fetcher:
+            async with (
+                writer.loop_deadline(),
+                crawl.fetchers(plan.fetch_policy, clock) as fetcher,
+            ):
                 yield CrawlContext(
                     crawl_file=crawl_file,
                     settings=plan.settings,
-                    scope=plan.scope,
+                    planned_scope=plan.scope,
                     strip_params=plan.strip_params,
                     clock=clock,
                     warnings=crawl.log,
                     writer=writer,
                     fetcher=fetcher,
+                    fetch_policy=plan.fetch_policy,
                     pages=executor,
                     hooks=crawl.hooks,
                     stop=crawl.stop,
