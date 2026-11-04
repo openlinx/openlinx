@@ -2,13 +2,14 @@
 
 from typing import cast
 
+import pytest
 import typer
 
 from openlinx.cli.options import secret_flags
 from openlinx.cli.runner import OpenLinxGroup
 from openlinx.services.crawling import CrawlRequest, plan_crawl
 from openlinx.store.records import SecretNames
-from openlinx.store.redaction import redact
+from openlinx.store.redaction import SecretValues, redact
 from openlinx.store.writer import CrawlWriter
 from tests.support.app import example_app
 from tests.support.clock import FakeClock
@@ -19,6 +20,66 @@ from tests.support.workspace import TempWorkspace
 EXAMPLE_SECRETS = SecretNames(
     flags=frozenset({"--token", "--api-key"}), settings=frozenset({"example.token"})
 )
+
+
+@pytest.mark.parametrize(
+    ("values", "text", "expected"),
+    [
+        (("abc", "bcd"), "token=abcd", "token=***"),
+        (("aba",), "token=ababa", "token=***"),
+        (("abc", "def"), "token=abcdef", "token=******"),
+        (("abcdef", "***x"), "token=abcdefx", "token=***x"),
+        (("***tail",), "token=***tail", "token=***"),
+        (("abcdef",), "token=abc", "token=abc"),
+    ],
+    ids=[
+        "overlapping-secrets",
+        "self-overlap",
+        "adjacent",
+        "generated-marker",
+        "literal-marker",
+        "prefix",
+    ],
+)
+def test_secret_matches_are_found_in_the_original_text(
+    values: tuple[str, ...], text: str, expected: str
+) -> None:
+    assert SecretValues(values).redact(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("values", "text", "expected"),
+    [
+        (("abcdef",), "token=abc", "token=***"),
+        (("abcdef",), "token=abcX", "token=abcX"),
+        (("abcd", "cdef"), "token=abcd", "token=***"),
+        (("cdef", "abcd"), "token=abcd", "token=***"),
+        (("abcdef", "***tail"), "token=abcdeft", "token=***t"),
+        (("***tail",), "token=***ta", "token=***"),
+        (("ababac",), "token=ababab", "token=ab***"),
+        (("ключ-🔑",), "token=ключ-", "token=***"),
+        (("x",), "token=x", "token=***"),
+        (("abcdef",), "", ""),
+        ((), "token=abc", "token=abc"),
+    ],
+    ids=[
+        "proper-prefix",
+        "not-a-suffix",
+        "full-overlaps-partial",
+        "reverse-order",
+        "generated-marker",
+        "literal-marker",
+        "prefix-fallback",
+        "unicode",
+        "one-character",
+        "empty-text",
+        "no-secrets",
+    ],
+)
+def test_only_a_truncated_text_hides_terminal_secret_prefixes(
+    values: tuple[str, ...], text: str, expected: str
+) -> None:
+    assert SecretValues(values).redact(text, truncated=True) == expected
 
 
 def test_secret_option_with_a_separate_value() -> None:
