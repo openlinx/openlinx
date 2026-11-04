@@ -1,15 +1,14 @@
 ---
 name: openspec-explore
 description: Enter explore mode - a thinking partner for exploring ideas, investigating problems, and clarifying requirements. Use when the user wants to think through something before or during a change.
-allowed-tools: Bash(openspec:*)
 license: MIT
-compatibility: Requires openspec CLI.
 metadata:
   author: openspec
   version: "1.0"
   generatedBy: "1.13.0"
 ---
 
+Requires the OpenSpec CLI. Run its commands with the available shell tool.
 Enter explore mode. Think deeply. Visualize freely. Follow the conversation wherever it goes.
 
 **IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, investigate the codebase, and run read-only commands or tools without confirmation, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit explore mode first and create a change proposal. You MAY create or update OpenSpec change artifacts (proposals, designs, specs) within a confirmed scope—that's capturing thinking, not implementing. Answering design or clarifying questions is never consent to write. Before the first write-capable action, name the artifacts or files you would change and what you would do, ask a direct yes/no question, and wait for the user's confirmation in a separate message. Confirmation covers only the scope you described; ask again before expanding it. For a new change, scaffold it first as described below.
@@ -255,7 +254,7 @@ You: [reads codebase]
 
 **User is stuck mid-implementation:**
 ```
-User: $openspec-explore (Codex) or /openspec-explore (other agents) add-auth-system
+User: $openspec-explore add-auth-system
       The OAuth integration is more complex than expected
 
 You: [reads change artifacts]
