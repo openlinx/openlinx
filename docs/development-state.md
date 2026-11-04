@@ -169,11 +169,12 @@ The C01 repair is complete; C02 still blocks group 12 acceptance and work on 4b:
   Standards and Spec review reported no findings. The coordinator reports the
   full gate passed with 1468 tests, 13 skips, 98.63% coverage, OpenSpec 15/15 and
   Node 1/1. This evidence accepts C01 only, not group 12.
-- **C02, open:** task 12.3 promises Windows subprocess-tree cleanup on timeout.
-  `tests/cli/test_encoding.py` uses `subprocess.run(timeout=...)` on `cmd`, with no
-  path that terminates its Python descendants. Implement ownership and cleanup of
-  the whole tree and verify that no child survives a timeout. A hang was not
-  reproduced during this review; the missing cleanup path was found by reading it.
+- **C02, awaiting Windows proof:** task 12.3 now uses a controlled console-process
+  helper with descendant cleanup and bounded waits. A real Windows guard readies a
+  `cmd` and two Python descendants before timing out, then checks their termination
+  before its independent emergency cleanup. Linux checks pass, but their Windows
+  skips do not prove this path. Run the guard on Windows and prove it fails when
+  cleanup kills only the root, then restore the helper and obtain a green run.
 
 Then review the corrected group with the Page/Link contract tests, extractor tests,
 Windows encoding/cleanup checks and writer throughput smoke test. Group 4b also
