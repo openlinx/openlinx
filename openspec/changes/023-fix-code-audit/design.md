@@ -93,7 +93,9 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - *Alternative:* build Click's bounds from the fields when the app is built. It loads pydantic on `--help`. Rejected.
 
 ### D11. A Page's Link elements are located by ordinal
-- **In short:** `locate_links(tree, links)` takes every Link of the Page in order (`PageInput.links`, ordinals 1 to n) and returns a mapping from ordinal to a frozen `LocatedLink(element, placing)`; given anything else, it raises `RuntimeError("pass every Link of the Page; filter after locating")`, a broken contract inside the code, as CONTRIBUTING has it. Every Link means ordinals 1 to n in order, header Links first.
+- **In short:** `locate_links(tree, links, *, expected_total)` takes every Link of the Page and returns a mapping from HTML Link ordinal to a frozen `LocatedLink(element, placing)`; header Links have no DOM location. The caller passes `expected_total=len(page.links)` from the original frozen `PageInput`, before filtering.
+- Before filtering header Links, it checks the count against `expected_total`, ordinals exactly 1 to N in order, and header Links before all HTML Links. A violation raises `RuntimeError("pass every Link of the Page; filter after locating")`, a broken internal contract. Every proper subset is refused relative to the original N, including a dropped tail or omitted header Links. An empty Page gives an empty mapping. No extra count field is added to `PageInput`.
+- DOM references still match by element, attribute, type and raw value in document order; a Link absent from the tree remains an error. The count and order checks do not establish provenance for arbitrarily substituted records.
 - **Why:** it pairs references with Links by element, attribute, type and raw value in document order, so a subset pairs a Link with an earlier element of the same URL, and a handler would write the wrong anchor text and position.
 - *Alternative:* keep each reference's element during the one walk, in `PageInput`. It removes the second walk but puts parser nodes into a record that must never cross `026`'s process boundary. Rejected.
 

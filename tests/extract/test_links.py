@@ -5,6 +5,19 @@ from openlinx.store.schema import literal_values
 from tests.support.page_data import page_link_rows, response_link_rows
 
 
+def test_header_and_repeated_html_links_keep_their_ordinals_and_positions() -> None:
+    rows = page_link_rows(
+        '<nav><a href="/same">Nav</a></nav><main><a href="/same">Main</a></main>',
+        headers=(("Link", '</c>; rel="canonical"'),),
+    )
+
+    assert [(row.ordinal, row.anchor_text, row.link_position) for row in rows] == [
+        (1, None, None),
+        (2, "Nav", "navigation"),
+        (3, "Main", "content"),
+    ]
+
+
 def test_hyperlink_with_rel_flags() -> None:
     (row,) = page_link_rows(
         '<main><a href="/b" rel="nofollow UGC">Read  more</a></main>', url="https://example.test/a"

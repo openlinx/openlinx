@@ -196,14 +196,32 @@ def link_references(tree: LexborHTMLParser) -> Iterator[LinkReference]:
             )
 
 
+@dataclass(frozen=True, slots=True)
+class LocatedLink:
+    element: LexborNode
+    placing: LexborNode
+
+
 def locate_links(
-    tree: LexborHTMLParser, links: Iterable[DiscoveredLink]
-) -> list[tuple[DiscoveredLink, LexborNode, LexborNode]]:
-    """Each HTML Link that links_in_tree found in the tree, with the element it came from and
-    the element that places it; header Links are left out. Raises RuntimeError for a Link the
-    tree does not hold."""
-    pending = [link for link in links if link.declared_in != "http_header"]
-    located: list[tuple[DiscoveredLink, LexborNode, LexborNode]] = []
+    tree: LexborHTMLParser, links: Iterable[DiscoveredLink], *, expected_total: int
+) -> Mapping[int, LocatedLink]:
+    """Locate HTML Links after checking the original Page's count and order (023 D11).
+
+    Pass expected_total from the original PageInput.links, before filtering. A Link the
+    tree does not hold raises RuntimeError too.
+    """
+    all_links = tuple(links)
+    invalid = "pass every Link of the Page; filter after locating"
+    if len(all_links) != expected_total:
+        raise RuntimeError(invalid)
+    seen_html = False
+    for ordinal, link in enumerate(all_links, start=1):
+        if link.ordinal != ordinal or (seen_html and link.declared_in == "http_header"):
+            raise RuntimeError(invalid)
+        if link.declared_in != "http_header":
+            seen_html = True
+    pending = [link for link in all_links if link.declared_in != "http_header"]
+    located: dict[int, LocatedLink] = {}
     # Resolution reads only a reference and the document's base and encoding, so a reference
     # that matches the next Link is the one that gave it, and one that does not resolved to
     # nothing.
@@ -217,7 +235,7 @@ def locate_links(
             reference.type,
             reference.raw,
         ):
-            located.append((link, reference.element, reference.placing))
+            located[link.ordinal] = LocatedLink(reference.element, reference.placing)
     if len(located) != len(pending):
         raise RuntimeError(f"link {pending[len(located)].ordinal} is not in the tree")
     return located
