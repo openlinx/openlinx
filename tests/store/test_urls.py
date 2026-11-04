@@ -447,6 +447,34 @@ def test_a_resource_link_raises_a_url_that_a_link_of_another_type_reached_first(
     assert _raised(crawl.path) == [(depth, f"https://site.test{found_on}", *rest)]
 
 
+@pytest.mark.parametrize("resource_type", ["image", "css", "javascript", "video", "audio", "media"])
+@pytest.mark.parametrize("state", ["queued", "max_depth"])
+def test_each_resource_type_raises_a_hyperlinked_url_at_the_same_depth(
+    temp_workspace: TempWorkspace,
+    resource_type: DiscoveredVia,
+    state: Literal["queued", "max_depth"],
+) -> None:
+    crawl = create_any_crawl(temp_workspace)
+
+    with CrawlWriter(crawl.path, FakeClock()) as writer:
+        ids = _target_at_depth_three(writer)
+        if state == "max_depth":
+            writer.run(
+                record_skipped(
+                    SkippedUrl(
+                        url_id=ids["/t"],
+                        skip_reason="max_depth",
+                        provenance=_as_dispatched(writer, ids["/t"]),
+                    )
+                )
+            )
+        resource = _new(_TARGET, discovered_via=resource_type)
+        writer.run(record_fetched(_fetched(writer, ids["/s2"], resource)))
+        replay_now(writer)
+
+    assert _raised(crawl.path) == [(3, "https://site.test/s2", "queued", resource_type)]
+
+
 @pytest.mark.parametrize("outcome", ["fetched", "error", "unwritten"])
 @pytest.mark.parametrize(
     ("page", "expected"),
