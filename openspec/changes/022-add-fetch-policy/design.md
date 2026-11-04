@@ -113,7 +113,7 @@ The unit that records a 3xx response records its target as a URL discovered from
     - *Alternative: decide the stop whenever the dispatcher next looks, as `020` did.* Whether counts came back first then depends on where the dispatcher waits: retries hold task permits, the dispatcher looks at once, and the URLs refused just before a pause are never requested. Rejected.
     - *Alternative: wait for every request in flight before any URL-limit stop.* It drops `020`'s grace for the limit, so a hanging request would hold the Crawl up to the watchdog. Rejected.
   - An outage re-queues only the count's URLs recorded as errors: since a URL counts at its first attempt, one of the count may still be in its retries, or fetched, when the pause ends, and it is its own request's then.
-  - The pause owns its bookkeeping: `outcome(queued, decision, attempted)` says whether a URL is recorded or re-queued, and gives back its URL-limit count and re-dispatches it, and `verdict(...)` does the same for robots.txt. The engine calls one of them per URL, in no order it must keep.
+  - The pause owns its bookkeeping: `update_from_request(queued, attempted, internal=...)` says whether a URL is recorded or re-queued, and gives back its URL-limit count and re-dispatches it, and `update_from_robots_txt(queued, origin_error, internal=...)` updates its state from robots.txt. Both take the URL's Internal flag, as `attempts_of` does, rather than its whole Scope decision. The engine calls one of them per URL, in no order it must keep.
   - A robots.txt retry that falls in a pause waits at the gate instead: robots.txt is no URL of the count, nothing re-queues it, and its origin's URLs wait for its verdict, so a 503 met just before a pause is asked again after it rather than standing as `robots_unreachable`.
 - **robots.txt without a response:** after its retries, a robots.txt that timed out or failed TLS gives its origin's URLs the same `fetch_error` without a request (`020` D6); one that answered 5xx or 429 stays `robots_unreachable`.
 
@@ -236,6 +236,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_a_continue_records_the_proxy_variables_it_fetches_through`, since `crawl.config` must name the proxies in use, and a continue's may differ from its start's (D1).
   - `test_the_proxy_of_a_url`, since the lower-case variable, `NO_PROXY` and an ignored `ALL_PROXY` decide a proxy before any request.
   - `test_a_retry_the_closed_gate_ends_outside_the_count_is_requested_after_the_pause`, since a 5xx or 429 whose due retry the network pause's closed gate ends is no final answer (D4).
+  - `test_an_outage_requeues_errors_recorded_before_the_pause`, since errors recorded before the pause must still be re-queued after an outage (D4).
   - `test_an_invalid_user_agent_in_the_settings_file_is_refused`, since `crawl.user_agent` must refuse what `--user-agent` refuses.
   - `test_a_timeout_that_is_not_a_finite_number_above_0_is_rejected`, `test_a_timeout_in_the_settings_file_that_is_not_a_finite_number_above_0_is_refused` and `test_a_whole_number_timeout_in_the_settings_file_is_taken`, since a timeout of 0, a negative one or one that is not finite would end every request at once or never.
   - `test_the_backoff_doubles_with_each_retry`, since two retries cannot tell a doubling backoff from one that grows by a second.

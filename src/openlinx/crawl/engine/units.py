@@ -99,7 +99,7 @@ async def _outcome(
             # A stop kept its origin's robots.txt request from starting: it stays queued.
             return None
         origin_error = origin_robots.origin_error
-        run.pause.verdict(queued, decision, origin_error)
+        run.pause.update_from_robots_txt(queued, origin_error, internal=decision.is_internal)
         if origin_error is not None:
             # The origin cannot be reached: the URL gets the error without a request of
             # its own (design D6).
@@ -131,7 +131,9 @@ async def _outcome(
     attempted = await run.requester.request_url(
         queued.url, run.pause.attempts_of(queued, internal=decision.is_internal)
     )
-    if isinstance(attempted, NotStarted) or not run.pause.outcome(queued, decision, attempted):
+    if isinstance(attempted, NotStarted) or not run.pause.update_from_request(
+        queued, attempted, internal=decision.is_internal
+    ):
         return None
     response = attempted.outcome
     decided = replace(decided, attempt_count=attempted.attempt_count)

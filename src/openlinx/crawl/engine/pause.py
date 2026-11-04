@@ -14,7 +14,6 @@ from openlinx.crawl.engine.stop import StopSignal
 from openlinx.crawl.engine.warning_log import WarningLog
 from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult
 from openlinx.crawl.fetch.requester import Attempted, Requester
-from openlinx.crawl.scope import ScopeDecision
 from openlinx.crawl.urls import NormalizedUrl, url_origin
 from openlinx.store.records import FetchError, QueuedUrl
 
@@ -206,7 +205,9 @@ class NetworkPause:
 
         return attempted
 
-    def outcome(self, queued: QueuedUrl, decision: ScopeDecision, attempted: Attempted) -> bool:
+    def update_from_request(
+        self, queued: QueuedUrl, attempted: Attempted, *, internal: bool
+    ) -> bool:
         """Whether a URL's request is recorded. One that ended without a response while paused
         is not, nor one whose due retry the closed gate ended, whatever its last answer, so its
         URL stays queued, is dispatched again, and counts toward the URL limit only then (design
@@ -225,7 +226,7 @@ class NetworkPause:
         if attempted.gated or (self.paused and response.fetch_error in _NO_RESPONSE):
             self._requeue(queued)
             return False
-        if decision.is_internal and _holds(self._in_a_row, queued):
+        if internal and _holds(self._in_a_row, queued):
             self._recorded.add(queued.id)
         return True
 
@@ -233,12 +234,12 @@ class NetworkPause:
         self._requester.give_back()
         self._redispatch.add(queued)
 
-    def verdict(
-        self, queued: QueuedUrl, decision: ScopeDecision, origin_error: FetchError | None
+    def update_from_robots_txt(
+        self, queued: QueuedUrl, origin_error: FetchError | None, *, internal: bool
     ) -> None:
         """What the robots.txt verdict of an Internal URL's origin tells the pause: one without
         a response counts, for the URL it records without a request of its own (design D6)."""
-        if not decision.is_internal:
+        if not internal:
             return
         if origin_error is None:
             self._seed_answered = True

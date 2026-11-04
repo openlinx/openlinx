@@ -737,6 +737,34 @@ def test_urls_that_failed_in_an_outage_are_requested_again(temp_workspace: TempW
     assert set(pages) == {("fetched", 1)}
 
 
+def test_an_outage_requeues_errors_recorded_before_the_pause(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock = FakeClock()
+    links = "".join(f'<a href="/p{n}">P{n}</a>' for n in _TWENTY)
+    # DNS failures are not retried, so the first seven errors are recorded before the eighth
+    # starts the pause; the Seed's probes see the same outage until clock time 30.
+    pages: dict[str, FakePage | list[FakePage]] = {
+        "/": [FakePage(links), FakePage("", fails="dns_error", until=30)],
+        **{f"/p{n}": FakePage("", fails="dns_error", until=30) for n in _TWENTY},
+    }
+    reporter = Collected()
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages),
+        reporter=reporter,
+        concurrency=1,
+    )
+
+    assert (
+        result.summary.state,
+        [data["outcome"] for name, data in _pause_events(reporter) if name == "crawl_resumed"],
+        query(result.crawl_file, "SELECT fetch_state, count(*) FROM urls GROUP BY fetch_state"),
+    ) == ("completed", ["outage"], [("fetched", 21)])
+
+
 def test_an_outage_requeues_a_url_once_a_run(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock()
     # /p2 to /p9 fail until 80 seconds: requested again at 41 when the first outage ends, they
