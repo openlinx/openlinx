@@ -1,0 +1,99 @@
+# One-off evidence for 022 task 6.4; close its draft PR unmerged.
+name: TLS speed proof
+
+"on":
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/tls-speed-proof.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'bench/022-tls-speed'
+    name: TLS speed / ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.14"]
+    env:
+      PYTHONUNBUFFERED: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # A pull_request checkout otherwise measures the synthetic merge commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+
+      - name: Install the locked dependencies
+        run: uv sync --locked
+
+      # Set up job logs also identify the runner version and exact image/software manifest.
+      - name: Record and verify the measured source and environment
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          SOURCE_BASE_SHA: 50cbcf6ff453c6c52487d9ddc5c07e97b5f4ca18
+          RUNNER_LABEL: ${{ matrix.os }}
+        run: |
+          uv run --locked python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import platform
+          import ssl
+          import subprocess
+          import sys
+          from importlib.metadata import version
+          from pathlib import Path
+
+          head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          assert head == os.environ["EXPECTED_HEAD"], (head, os.environ["EXPECTED_HEAD"])
+          assert sys.version_info[:2] == (3, 14), sys.version
+          details = {
+              "head_sha": head,
+              "source_base_sha": os.environ["SOURCE_BASE_SHA"],
+              "pr_base_sha": os.environ["PR_BASE_SHA"],
+              "event_sha": os.environ["GITHUB_SHA"],
+              "run_url": "/".join((
+                  os.environ["GITHUB_SERVER_URL"], os.environ["GITHUB_REPOSITORY"],
+                  "actions/runs", os.environ["GITHUB_RUN_ID"],
+              )),
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "job": os.environ["GITHUB_JOB"],
+              "runner_label": os.environ["RUNNER_LABEL"],
+              "platform": platform.platform(),
+              "architecture": platform.machine(),
+              "python": platform.python_version(),
+              "openssl": ssl.OPENSSL_VERSION,
+              "dependencies": {name: version(name) for name in ("truststore", "certifi")},
+              "files": {
+                  name: {
+                      "sha256": hashlib.sha256(Path(name).read_bytes()).hexdigest(),
+                      "git_blob": subprocess.check_output(
+                          ["git", "rev-parse", f"HEAD:{name}"], text=True,
+                      ).strip(),
+                  }
+                  for name in ("scripts/tls_handshake_speed.py", "uv.lock")
+              },
+          }
+          print(json.dumps(details, sort_keys=True))
+          PY
+
+      - name: Measure TLS handshakes
+        timeout-minutes: 10
+        run: uv run --locked python scripts/tls_handshake_speed.py --rounds 20
