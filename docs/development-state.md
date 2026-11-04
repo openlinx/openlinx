@@ -18,7 +18,7 @@ reviewed and gated narrow task 9b.9 refactor; the full fetching change remains u
 |---|---|---|
 | `main` | `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50` | First 022 PR #39 merged; main CI 41831195325 passed 9/9 |
 | `022-add-fetch-policy` | `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68` | Group 9b accepted; first PR #39 CI closes 8.2; TLS measurements and OS-trust policy accepted; 6.4 complete under revised D5 |
-| `023-fix-code-audit` | `e9eb6dba5e288b83eef5c8f552e75ae70f197d4d` | Group 5 and main4957 source integration accepted; source PR #36 CI passed 9/9; documentation 6.1–6.3 complete; whole-change review and archive remain |
+| `023-fix-code-audit` | `80e97f34761387fbaadcebb0c26ae0dd1365396a` | Implementation and whole-change review complete; archive remains; current publication and CI are in PR #36 |
 | `026-add-parse-pool` | `8294855ecfffb9f07094b931ed0d94754d0bf16d` | Unfinished pool/shutdown work |
 | `030-add-page-data` | `0eeed79504271c7cf1e51ab69543271225c995d8` | Published unfinished snapshot; group 12 acceptance blocked by C01/C02 |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
@@ -139,68 +139,33 @@ draft PR carries groups 1–9 and 9b; group 10 follows in a later PR, with 10.1 
 for 023's archived workspace spec. Groups 11–14 are v0.2 work and are outside this
 acceptance.
 
-### 023: group 5 accepted; group 6 remains
+### 023: whole-change review accepted; archive remains
 
-[Tasks](https://github.com/openlinx/openlinx/blob/e9eb6dba5e288b83eef5c8f552e75ae70f197d4d/openspec/changes/023-fix-code-audit/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/e9eb6dba5e288b83eef5c8f552e75ae70f197d4d/openspec/changes/023-fix-code-audit/design.md),
+[Tasks](../openspec/changes/023-fix-code-audit/tasks.md),
+[design](../openspec/changes/023-fix-code-audit/design.md),
 [PR #36](https://github.com/openlinx/openlinx/pull/36).
 
-Groups 1–4 are in `main`; group 5, including review 5.5, is accepted at source checkpoint
-`7ffa39e59da3e9b4b808b06ff838ca54a1a1c3b7`.
-[D11](https://github.com/openlinx/openlinx/blob/7ffa39e59da3e9b4b808b06ff838ca54a1a1c3b7/openspec/changes/023-fix-code-audit/design.md#d11-a-pages-link-elements-are-located-by-ordinal)
-requires `locate_links` to check the complete original Link count, ordinals 1 to N
-and headers-first order before filtering; HTML locations are returned by ordinal.
+Groups 1–4 are in `main`. Group 5 and the integration of main `4957b187` are
+accepted; tasks 6.1–6.3 document the real extension recipes, formula seams,
+implementation checks and strict-mypy contracts.
 
-[D12](https://github.com/openlinx/openlinx/blob/7ffa39e59da3e9b4b808b06ff838ca54a1a1c3b7/openspec/changes/023-fix-code-audit/design.md#d12-one-link-type-table)
-is implemented by the shared `LINK_TYPES` table, the guarded `discovered_link`
-factory beside `DiscoveredLink`, and typed discovery through to the handler without
-casts. Follow/Resource policy and selectors derive from the table; rel, parent and
-noscript conditions remain in discovery. Independent literal fixtures check each
-LinkType's source pairs, Literal coverage and header metadata in
-[extractor tests](https://github.com/openlinx/openlinx/blob/7ffa39e59da3e9b4b808b06ff838ca54a1a1c3b7/tests/extract/test_links.py);
-[contract tests](https://github.com/openlinx/openlinx/blob/7ffa39e59da3e9b4b808b06ff838ca54a1a1c3b7/tests/contract/test_links.py)
-check the docs' Requested column. The factory guard is in
-[code-style tests](https://github.com/openlinx/openlinx/blob/7ffa39e59da3e9b4b808b06ff838ca54a1a1c3b7/tests/test_code_style.py); the package interface guard is in
-[package-interface tests](https://github.com/openlinx/openlinx/blob/7ffa39e59da3e9b4b808b06ff838ca54a1a1c3b7/tests/test_package_interfaces.py).
+The whole-change GPT-6 Astra Standards and Spec review covered groups 1–6,
+including the earlier merged groups and current integration. Its three reproduced
+findings are fixed: writer batch durability in `575dab4f`, bounded hook-error
+redaction in `8778e412`, and caller attribution for empty unknown tables in
+`80e97f34761387fbaadcebb0c26ae0dd1365396a`. Independent Astra review accepted each
+fix; the latest combined local gate passed 1932 tests with 12 platform skips,
+strict mypy on three platforms, OpenSpec 16/16 and Node 1/1.
 
-The historical full gate on `de433cd4`: 1601 tests passed, 12 Windows
-skips, OpenSpec 16/16 and Node 1/1. Whole-group review (5.5) of
-`82ffcce6...de433cd4` completed in fresh parallel contexts: Standards 0 findings,
-Spec 0 findings. This accepts group 5 only; the full 023 change remains unfinished.
-[CI 41810063426](https://github.com/openlinx/openlinx/actions/runs/41810063426)
-is historical group-5 evidence, not verification of the current integration.
+Both CLI self-description scenarios now have separate test names. The four delta
+specs map to 46 scenarios, with none missing or duplicated. Task 6.4 is complete;
+6.5, synchronizing the primary specs and archiving this change, remains.
 
-The accepted integration plan is committed at `815c0cd7cddfa428d262555cb204469a02cdaa88`.
-The source integration of main `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50`
-is accepted at `e9eb6dba5e288b83eef5c8f552e75ae70f197d4d` and published in PR #36.
-The manager reports fresh GPT-6 Astra Standards and Spec reviews with zero findings,
-and the integration full gate passed: 1890 tests passed, 12 skipped, strict mypy on
-three platforms, OpenSpec 16/16 and Node 1/1.
-[CI 41839157705](https://github.com/openlinx/openlinx/actions/runs/41839157705)
-completed successfully in all nine cells at that source integration checkpoint.
-Later documentation commits require their own gates and current-head CI evidence.
-
-Task 6.1's numbered hooks recipe is documented in
-[CONTRIBUTING](../CONTRIBUTING.md#an-extractor-handler-or-post-crawl-pass), using the
-integrated Link extractor, handler, writer, inlink pass and composition root with
-their existing tests. The manager accepted 6.1 at
-`c73366b2986a3cabe189cf095532a4d78122823a` after fresh GPT-6 Astra Standards and
-Spec reviews with zero findings and a full gate: 1890 passed, 12 skipped, strict
-mypy on three platforms, OpenSpec 16/16 and Node 1/1. The CI above belongs to
-`e9eb6dba`, not to that documentation commit.
-
-Task 6.2 documents ordered recipes for the Crawl-written `urls.attempt_count` and
-handler-written `pages.title_1`, from declaration/docs through production and row
-mapping to the store unit and `replay_now`, with literal checks at the existing
-seams. The setting recipe requires a matching option for every `[crawl]` field;
-the diagnostic recipe describes all five warning retention modes and their calls.
-See [Common changes](../CONTRIBUTING.md#common-changes).
-
-Task 6.3 documents the D16 formula tables, narrow hook/writer implementation checks
-and strict-mypy type contracts in [testing](testing.md). The recipes and testing
-guide have independent GPT-6 Astra Standards and Spec reviews with no open findings.
-Tasks 6.4–6.5, whole-change review and archive, remain open; the full 023 change is
-unfinished. The source CI above does not validate these later documentation commits.
+Source integration `e9eb6dba` passed all nine cells of
+[CI 41839157705](https://github.com/openlinx/openlinx/actions/runs/41839157705).
+That run predates the later docs and fixes. Check PR #36 for publication and CI
+on the current head; no earlier result validates these later commits. This branch
+has not been merged into `main`.
 
 ### 026: reconcile the core, then close bounded shutdown
 
