@@ -16,4 +16,7 @@ def test_name_derived_literals_appear_only_in_openlinx_naming() -> None:
         if any(literal in line for literal in NAME_LITERALS)
     ]
 
-    assert hits == []
+    assert hits == [], (
+        "a name of the tool is typed outside openlinx.naming: use COMMAND_NAME, PACKAGE_NAME, "
+        "PRODUCT_NAME or the file names defined there"
+    )

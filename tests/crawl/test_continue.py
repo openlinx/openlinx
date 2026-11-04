@@ -11,6 +11,7 @@ from sqlalchemy import Connection, text
 
 from openlinx.crawl.engine.hooks import Pass, PassContext, UrlResult, handler
 from openlinx.crawl.pages.preparation import PageInput, extractor
+from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlOverrides
 from openlinx.services.hooks import default_hooks
@@ -19,7 +20,7 @@ from tests.fixture_site.hosts import FixtureResolver
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import continued, crawl_result
-from tests.support.crawls import query
+from tests.support.crawls import query, sha256_of
 from tests.support.network import closed_port
 from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
@@ -315,3 +316,21 @@ def test_a_completed_crawl_is_not_continued(
         reporter.events,
         query(completed.crawl_file, "SELECT state, config, warnings FROM crawl"),
     ) == ([], before)
+
+
+def test_a_refused_override_of_a_continued_crawl_names_its_key(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(NINE_PAGES)
+    stopped = crawl_result(server.url("/"), max_urls=3)
+    before = sha256_of(stopped.crawl_file)
+
+    with pytest.raises(OpenLinxError) as refused:
+        continued(stopped, CrawlOverrides(concurrency=0))
+
+    assert (
+        refused.value.code,
+        refused.value.exit_code,
+        refused.value.diagnostic.details.get("key"),
+        sha256_of(stopped.crawl_file) == before,
+    ) == ("invalid_value", 2, "crawl.concurrency", True)

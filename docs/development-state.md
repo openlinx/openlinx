@@ -158,13 +158,17 @@ they are not the immediate coding task.
 Groups 1–11 are in `main`. Group 12 has an earlier review commit `e556abb2` followed
 by planning corrections `0eeed795`; the current continuity review found that its
 acceptance claims are incomplete. It may be transported as unfinished work.
-Resolve these two findings before declaring group 12 accepted or proceeding to 4b:
+The C01 repair is complete; C02 still blocks group 12 acceptance and work on 4b:
 
-- **C01, open:** the spec/proposal require `structured_data_error_count` and
-  `structured_data_warning_count`, but the schema, Page record, schema/architecture
-  docs and test data list still use `structured_data_errors` and
-  `structured_data_warnings`. Align the names throughout the public contract and
-  independently check the declared schema, NULL values and release prefixes.
+- **C01, closed at `ae9f481b`:** `structured_data_error_count` and
+  `structured_data_warning_count` now agree across the schema, Page record, docs
+  and deferred-column test data. Literal seam-6 expectations pin their names,
+  INTEGER type, nullable shape, v0.3 description prefixes and absence of the old
+  names; a real completed Crawl proves both columns hold NULL at seam 3+6.
+  Both checks failed before the fix; the focused run passed 38 tests. Independent
+  Standards and Spec review reported no findings. The coordinator reports the
+  full gate passed with 1468 tests, 13 skips, 98.63% coverage, OpenSpec 15/15 and
+  Node 1/1. This evidence accepts C01 only, not group 12.
 - **C02, open:** task 12.3 promises Windows subprocess-tree cleanup on timeout.
   `tests/cli/test_encoding.py` uses `subprocess.run(timeout=...)` on `cmd`, with no
   path that terminates its Python descendants. Implement ownership and cleanup of

@@ -28,14 +28,8 @@ TYPE_NAMES = {
     "float range": "number",
 }
 
-# The only variables the tool honours: the OS's proxy settings, which 022 applies to fetching.
-ENVIRONMENT = [
-    {
-        "names": ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"],
-        "description": "The proxy for fetching, matched in any letter case. "
-        "--proxy or [crawl] proxy overrides them.",
-    }
-]
+# The variables the tool honours: none yet, since no fetch reads the proxy variables.
+ENVIRONMENT: list[dict[str, Any]] = []
 
 
 @command_meta(
@@ -108,6 +102,9 @@ def _arguments(command: Command) -> list[dict[str, Any]]:
 def _options(command: Command, meta: CommandMeta, tables: SettingsTables) -> list[dict[str, Any]]:
     entries = []
     for param, extra in options_with_meta(command):
+        # The tool passes a hidden option to itself; it is no input of an agent's.
+        if param.hidden:
+            continue
         choices = getattr(param.type, "choices", None)
         if param.name == FORMAT_PARAMETER:
             # Click knows every format; the Command offers only its own.
@@ -122,6 +119,9 @@ def _options(command: Command, meta: CommandMeta, tables: SettingsTables) -> lis
                 "default": []
                 if param.multiple and param.default is None
                 else _json_value(param.default),
+                # Click's own bounds, an IntRange's or FloatRange's, so --help loads no pydantic.
+                "min": getattr(param.type, "min", None),
+                "max": getattr(param.type, "max", None),
                 "required": param.required,
                 "multiple": param.multiple,
                 "global": extra.is_global,

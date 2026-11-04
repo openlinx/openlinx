@@ -1,5 +1,6 @@
 """Registering Commands on the app (design D7 of 010-add-workspace-and-cli-contract)."""
 
+import re
 from collections.abc import Callable
 from typing import Annotated, Any
 
@@ -30,24 +31,51 @@ def list_without_cursor(output_format: FormatOpt = Format.JSON, limit: int = 50)
 
 
 @pytest.mark.parametrize(
-    "command",
+    ("command", "problem"),
     [
-        no_format,
-        command_meta(output="document", formats=[Format.JSON])(no_format),
-        command_meta(output="document", formats=[Format.JSON, Format.JSONL])(
-            document_with_json_lines
+        (no_format, "no_format has no @command_meta"),
+        (
+            command_meta(output="document", formats=[Format.JSON])(no_format),
+            "no_format: it does not declare output_format",
         ),
-        command_meta(output="rows", formats=[Format.JSONL])(rows_without_fields),
-        command_meta(
-            output="rows", formats=[Format.JSONL, Format.TABLE], fields=Fields(("n",), ("n",))
-        )(rows_without_fields),
-        command_meta(output="list", formats=[Format.JSON], fields=Fields(("n",), ("n",)))(
-            list_without_cursor
+        (
+            command_meta(output="document", formats=[Format.JSON, Format.JSONL])(
+                document_with_json_lines
+            ),
+            "a document Command cannot offer jsonl",
+        ),
+        (
+            command_meta(output="document", formats=[Format.JSON], fields=Fields(("n",), ("n",)))(
+                document_with_json_lines
+            ),
+            "a document Command has no fields",
+        ),
+        (
+            command_meta(output="rows", formats=[Format.JSONL])(rows_without_fields),
+            "a rows Command declares its fields",
+        ),
+        (
+            command_meta(
+                output="rows", formats=[Format.JSONL, Format.TABLE], fields=Fields(("n",), ("n",))
+            )(rows_without_fields),
+            "a rows Command cannot offer table",
+        ),
+        (
+            command_meta(output="list", formats=[Format.JSON], fields=Fields(("n",), ("n",)))(
+                list_without_cursor
+            ),
+            "it does not declare cursor; it does not declare fields",
+        ),
+        (
+            command_meta(output="list", formats=[Format.JSON])(list_without_cursor),
+            "a list Command declares its fields",
         ),
     ],
 )
-def test_a_command_its_output_kind_cannot_serve_is_refused(command: Callable[..., Any]) -> None:
-    with pytest.raises(TypeError):
+def test_a_command_its_output_kind_cannot_serve_is_refused(
+    command: Callable[..., Any], problem: str
+) -> None:
+    with pytest.raises(TypeError, match=re.escape(problem)):
         build_app(extra=AppExtra(commands=[command]))
 
 

@@ -3,10 +3,14 @@
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from pydantic import BaseModel
+from pydantic.fields import FieldInfo
 
+from openlinx.crawl.settings import CrawlSettings
+from openlinx.services.settings import default_tables
 from tests.support.app import example_app
 from tests.support.cli import run_cli, run_cli_process
 from tests.support.project import project_version
@@ -104,6 +108,20 @@ def test_a_secret_option_without_a_setting() -> None:
     assert (option["setting"], option["secret"]) == (None, True)
 
 
+def test_bounds_of_an_option() -> None:
+    options = _options(run_cli("commands").json(), "crawl")
+
+    assert {
+        name: (options[name]["min"], options[name]["max"]) for name in ("--concurrency", "--rate")
+    } == {"--concurrency": (1, 50), "--rate": (None, None)}
+
+
+def test_a_hidden_option_is_not_described() -> None:
+    options = _options(run_cli("commands", app=example_app()).json(), "example-settings")
+
+    assert list(options) == ["--format", "--level", "--token", "--api-key"]
+
+
 def test_error_codes_of_this_change() -> None:
     diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
     expected = {
@@ -159,13 +177,14 @@ def test_naming_rule_for_input_errors() -> None:
         for d in diagnostics
         if d["code"].endswith("_not_found") or d["code"] == "no_crawls"
         if d["exit_code"] != 4
-    ] == []
+    ] == [], (
+        "invalid_*, unknown_* and usage_error exit 2, *_not_found and no_crawls exit 4: fix the "
+        "code's name or its exit code"
+    )
 
 
-def test_the_proxy_variables_are_the_one_exception() -> None:
-    environment = run_cli("commands").json()["environment"]
-
-    assert [entry["names"] for entry in environment] == [["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]]
+def test_no_environment_variable_is_honoured() -> None:
+    assert run_cli("commands").json()["environment"] == []
 
 
 def test_detection_signals_change_nothing() -> None:
@@ -221,3 +240,42 @@ def test_the_codes_of_this_change_are_self_described() -> None:
         for code in expected
         if code in diagnostics
     } == expected
+
+
+def _field_bounds(field: FieldInfo) -> tuple[object, object]:
+    # pydantic keeps Field(ge=..., le=...) as Ge and Le rules in the field's metadata.
+    lower = next((rule.ge for rule in field.metadata if hasattr(rule, "ge")), None)
+    upper = next((rule.le for rule in field.metadata if hasattr(rule, "le")), None)
+    return lower, upper
+
+
+def test_mirrored_options_match_their_fields() -> None:
+    tables = dict(default_tables().items())
+    mismatched = []
+    mirrored: set[str] = set()
+    for command in run_cli("commands").json()["commands"]:
+        for option in command["options"]:
+            setting = option["setting"]
+            if setting is None:
+                continue
+            mirrored.add(setting)
+            table, _, key = setting.partition(".")
+            model = cast(type[BaseModel], tables[table])
+            field = model.model_fields[key]
+            shown = (option["name"], option["default"], option["min"], option["max"])
+            expected = (
+                f"--{key.replace('_', '-')}",
+                model.model_validate({}).model_dump(mode="json")[key],
+            )
+            if shown != expected + _field_bounds(field):
+                mismatched.append(f"{command['name']} {option['name']}: {shown}")
+    missing = [
+        f"crawl.{key}" for key in CrawlSettings.model_fields if f"crawl.{key}" not in mirrored
+    ]
+
+    assert (mismatched, missing) == ([], []), (
+        "an option that mirrors a setting differs from its field, or a [crawl] field has no "
+        "option: give the option, in its Command's module of openlinx.cli, the key's name, the "
+        "field's default and the field's ge and le as Click's min and max, with "
+        "OptionMeta(setting=...)"
+    )

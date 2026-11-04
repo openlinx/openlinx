@@ -1,5 +1,6 @@
 """The table rules and the registry (design D2 of 010-add-workspace-and-cli-contract)."""
 
+import re
 from collections.abc import Callable
 from typing import cast
 
@@ -45,20 +46,20 @@ class TomlDefaults(BaseModel):
 
 
 @pytest.mark.parametrize(
-    "table",
+    ("table", "problem"),
     [
-        Loose,
-        Undescribed,
-        TwoLineDescription,
-        NotANumberDefault,
-        dict[str, Loose],
-        dict[int, TomlDefaults],
-        dict[str, TomlDefaults],
-        dict[str, str],
+        (Loose, 'Settings table [example] must set extra="forbid"'),
+        (Undescribed, "Setting example.level needs a one-line description"),
+        (TwoLineDescription, "Setting example.level needs a one-line description"),
+        (NotANumberDefault, "Setting example.ratio needs a default TOML can write"),
+        (dict[str, Loose], 'Settings table [example.<name>] must set extra="forbid"'),
+        (dict[int, TomlDefaults], "A keyed settings table needs str keys"),
+        (dict[str, TomlDefaults], "Settings table [example] needs a one-line entry docstring"),
+        (dict[str, str], "Settings table [example] needs a table model for its entries"),
     ],
 )
-def test_a_table_the_template_cannot_describe_is_refused(table: Table) -> None:
-    with pytest.raises(TypeError):
+def test_a_table_the_template_cannot_describe_is_refused(table: Table, problem: str) -> None:
+    with pytest.raises(TypeError, match=re.escape(problem)):
         check_table("example", table)
 
 
@@ -91,7 +92,7 @@ def test_every_option_setting_names_a_setting_of_a_registered_table(
         setting
         for setting in settings
         if not _names_a_flat_setting(tables, *setting.partition(".")[::2])
-    ] == []
+    ] == [], "an option's OptionMeta(setting=...) names no registered setting: fix its key"
 
 
 @pytest.mark.parametrize("app", [build_app, example_app])
@@ -106,7 +107,7 @@ def test_options_of_secret_settings_have_only_long_names(app: Callable[[], typer
         if extra.setting is not None and tables.is_secret(extra.setting)
         for name in option.opts
         if not name.startswith("--")
-    ] == []
+    ] == [], "an option of a secret setting has a short name: give it only its long name"
 
 
 def _names_a_flat_setting(tables: dict[str, Table], name: str, key: str) -> bool:

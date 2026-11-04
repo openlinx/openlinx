@@ -1,5 +1,6 @@
 """Stopping a Crawl with an interrupt (020-add-crawl-core D10, D16)."""
 
+import asyncio
 import json
 import signal
 import socket
@@ -579,7 +580,7 @@ def test_a_requested_stop_ends_the_crawl_stopped_after_its_passes(
         ("site_unreachable", "seed_unreachable", "site_unreachable"),
     ],
 )
-def test_a_write_failure_outranks_the_network_failures(
+async def test_a_write_failure_outranks_the_network_failures(
     first: StopReason, then: StopReason, kept: StopReason
 ) -> None:
     stop = StopSignal()
@@ -588,3 +589,44 @@ def test_a_write_failure_outranks_the_network_failures(
     stop.set(then)
 
     assert stop.reason == kept
+
+
+def _set_off_the_loop(stop: StopSignal, *, own_loop: bool) -> list[str]:
+    refused: list[str] = []
+
+    async def on_another_loop() -> None:
+        stop.set("interrupt")
+
+    def set_it() -> None:
+        try:
+            if own_loop:
+                asyncio.run(on_another_loop())
+            else:
+                stop.set("interrupt")
+        except RuntimeError as error:
+            refused.append(str(error))
+
+    thread = threading.Thread(target=set_it)
+    thread.start()
+    thread.join()
+    return refused
+
+
+@pytest.mark.parametrize("own_loop", [False, True], ids=["no loop", "another loop"])
+async def test_a_stop_flag_set_off_its_loop_is_refused(own_loop: bool) -> None:
+    stop = StopSignal()
+    waiter = asyncio.ensure_future(stop.wait())
+    await asyncio.sleep(0)
+
+    refused = await asyncio.to_thread(_set_off_the_loop, stop, own_loop=own_loop)
+
+    await asyncio.sleep(0)
+    assert (refused, stop.is_set, waiter.done()) == (
+        [
+            "the stop flag is set only on the loop of its Crawl: from another thread, call "
+            "loop.call_soon_threadsafe(stop.set, reason)"
+        ],
+        False,
+        False,
+    )
+    waiter.cancel()

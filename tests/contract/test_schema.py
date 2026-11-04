@@ -1,7 +1,9 @@
 """Docs, schema and file agree (015-add-crawl-store, 018-add-schema-conventions, crawl-store)."""
 
+import json
 import re
 import sqlite3
+import subprocess
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -14,9 +16,10 @@ from openlinx.services.schema import describe_schema
 from openlinx.services.schema_doc import parse_tables
 from openlinx.store.schema import metadata
 from openlinx.workspace.discovery import resolve_workspace
-from tests.support.cli import run_cli
+from tests.support.cli import CLI_PROCESS_TIMEOUT, run_cli
 from tests.support.clock import FakeClock
 from tests.support.crawls import create_any_crawl, new_crawl
+from tests.support.processes import python_command
 from tests.support.schema import indexed_rows_declared
 from tests.support.workspace import TempWorkspace
 
@@ -44,7 +47,9 @@ def test_no_check_lists_more_than_two_values(temp_workspace: TempWorkspace) -> N
             if values.count(",") > 1
         ]
 
-    assert long_lists == []
+    assert long_lists == [], (
+        "a CHECK lists its values inline: build it with one_of(...) in openlinx.store.schema"
+    )
 
 
 def file_schema(file: Path) -> dict[str, dict[str, Any]]:
@@ -162,7 +167,7 @@ def test_every_table_is_strict(temp_workspace: TempWorkspace) -> None:
 
     assert {name: table["strict"] for name, table in tables.items()} == {
         table["name"]: True for table in describe_schema().tables
-    }
+    }, "a table is not STRICT: declare it with public_table(...), which makes it STRICT"
 
 
 INDEXED_SECTION = """## Table `urls`
@@ -218,3 +223,43 @@ def test_a_documented_indexes_table_is_parsed() -> None:
             ],
         }
     ]
+
+
+# Imports every module of the tool, but the one that runs the CLI, and prints the tables and
+# indexes that their imports declared besides those of openlinx.store.schema. The modules that
+# the schema module imports run before it creates its MetaData, so none of them can be among
+# those it declares.
+_DECLARED_ELSEWHERE = """
+import importlib, json, pkgutil
+import openlinx
+from openlinx.store.schema import metadata
+
+def declared():
+    tables = set(metadata.tables)
+    return tables | {index.name for table in metadata.tables.values() for index in table.indexes}
+
+schema = declared()
+for module in pkgutil.walk_packages(openlinx.__path__, "openlinx."):
+    if module.name != "openlinx.__main__":
+        importlib.import_module(module.name)
+print(json.dumps(sorted(declared() - schema)))
+"""
+
+
+def test_every_table_is_declared_in_the_schema_module() -> None:
+    # A fresh process: in this one, test order decides what the suite has imported.
+    command = python_command("-c", _DECLARED_ELSEWHERE)
+    completed = subprocess.run(
+        command.argv,
+        capture_output=True,
+        env=command.env,
+        check=False,
+        timeout=CLI_PROCESS_TIMEOUT,
+    )
+    assert completed.returncode == 0, completed.stderr.decode(errors="replace")
+
+    elsewhere = json.loads(completed.stdout)
+    assert elsewhere == [], (
+        f"tables or indexes declared outside openlinx.store.schema, {elsewhere}: linx schema and "
+        "the docs read only that module, so declare them in openlinx.store.schema"
+    )

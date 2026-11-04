@@ -16,8 +16,19 @@ def _rank(reason: StopReason) -> int:
     return 1 if reason in TRANSITIONS["running", "failed"] else 0
 
 
+_OFF_LOOP = (
+    "the stop flag is set only on the loop of its Crawl: from another thread, call "
+    "loop.call_soon_threadsafe(stop.set, reason)"
+)
+
+
 class StopSignal:
+    """Set and awaited only on the loop of its Crawl, which it binds at its first set or wait:
+    an Event set from another thread wakes no waiter until the loop wakes for something else
+    (023-fix-code-audit D1)."""
+
     def __init__(self) -> None:
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._reason: StopReason | None = None
         self._cause: BaseException | None = None
         self._on_first_set: list[Callable[[StopReason], object]] = []
@@ -45,6 +56,7 @@ class StopSignal:
         """The first stop counts, but a failure outranks a stop and a write failure the
         network failures: a Crawl that stopped at its URL limit and then lost its file has
         failed (design D10, D16)."""
+        self._on_its_loop()
         if self._closed:
             return
         first = self._reason is None
@@ -68,7 +80,18 @@ class StopSignal:
         return self._reason
 
     async def wait(self) -> None:
+        self._on_its_loop()
         await self._was_set.wait()
+
+    def _on_its_loop(self) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            raise RuntimeError(_OFF_LOOP) from None
+        if self._loop is None:
+            self._loop = loop
+        elif loop is not self._loop:
+            raise RuntimeError(_OFF_LOOP)
 
 
 class StopGrace:

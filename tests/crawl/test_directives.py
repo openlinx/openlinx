@@ -91,13 +91,22 @@ _PIECES = st.sampled_from(
         "\ud800",
     ]
 )
-_VALUES = st.lists(_PIECES | st.text(max_size=8), max_size=6).map("".join)
+# The characters the parser treats apart, and as often non-ASCII ones: letters whose case
+# changes their length or their letter, Unicode spaces and controls. A text strategy without an
+# alphabet builds Hypothesis's Unicode table on its first draw, which a loaded machine reports as
+# too slow a generation.
+_CHARACTERS = st.sampled_from("aZ09-_:;,. \t\n\r\x00\x1f\x7f") | st.sampled_from(
+    "\xa0\x85\u1680\u2003\u2028\u3000\ufeff\u0130\u0131\u212a\u017f\xdf\xe9\u0416"
+    "\u03a3\u6f22\U0001f600\U0001d400\ud800\x80\x9f"
+)
+_TEXT = st.text(_CHARACTERS, max_size=8)
+_VALUES = st.lists(_PIECES | _TEXT, max_size=6).map("".join)
 
 
 @given(
     st.lists(_VALUES, max_size=4),
     st.lists(_VALUES, max_size=4),
-    st.text() | _PIECES | st.just(DEFAULT_ROBOTS_TOKEN),
+    st.text(_CHARACTERS, max_size=20) | _PIECES | st.just(DEFAULT_ROBOTS_TOKEN),
 )
 def test_the_robots_directives_parser_accepts_any_values(
     meta_contents: list[str], header_values: list[str], token: str

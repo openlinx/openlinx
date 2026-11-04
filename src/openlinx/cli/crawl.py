@@ -6,13 +6,12 @@ from typing import Annotated, Any
 import typer
 
 from openlinx.cli.meta import Example, command_meta
-from openlinx.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_names, setting_flags
+from openlinx.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_flags, setting_flags
 from openlinx.cli.runner import Invocation
 from openlinx.clock import SystemClock
 from openlinx.crawl.setting_rules import as_rate, as_robots_token
 from openlinx.naming import COMMAND_NAME, DEFAULT_ROBOTS_TOKEN
-from openlinx.output.codes import OPTION_CONFLICT
-from openlinx.output.diagnostics import OpenLinxError, Outcome
+from openlinx.output.diagnostics import Outcome
 from openlinx.output.writer import Format
 from openlinx.store.records import ScopeKind
 
@@ -202,25 +201,12 @@ def crawl(
         home=Path.home(),
         workspace=workspace_dir,
         command_argv=[invocation.command, *invocation.argv],
-        secret_names=secret_names(ctx.command, invocation.settings_tables),
-        flags=_with_subdomains(setting_flags(ctx)) if subdomains else setting_flags(ctx),
+        flags=setting_flags(ctx),
+        subdomains=subdomains,
+        secret_flags=secret_flags(ctx.command, invocation.settings_tables),
     )
     plan = plan_crawl(request, invocation.settings_tables)
     result = start_crawl(plan, SystemClock(), invocation.reporter, default_hooks(plan.loaded))
     if result.failure is not None:
         return Outcome(result.to_json(), result.failure)
     return result.to_json()
-
-
-def _with_subdomains(flags: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """--subdomains has no setting of its own: it is resolved into scope (design D11)."""
-    crawl_flags = flags.get("crawl", {})
-    scope = crawl_flags.get("scope", "subdomains")
-    if scope != "subdomains":
-        raise OpenLinxError(
-            OPTION_CONFLICT,
-            f"--subdomains means --scope subdomains, so it cannot be given with --scope {scope}.",
-            hint="Give --scope alone, or --subdomains alone.",
-            details={"options": ["--subdomains", "--scope"]},
-        )
-    return {**flags, "crawl": {**crawl_flags, "scope": "subdomains"}}

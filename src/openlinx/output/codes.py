@@ -73,6 +73,11 @@ def _declare(
 ) -> DiagnosticCode:
     if (kept == "once") != (once_per is not None):
         raise TypeError(f"{code}: a code kept once names its detail, and only it does")
+    if any(declared.code == code for declared in DECLARED):
+        raise TypeError(f"{code}: declared twice; declare a code once, in openlinx.output.codes")
+    # An error without an exit code fails only when it is first raised, deep in its error path.
+    if (level == "error") != (exit_code is not None):
+        raise TypeError(f"{code}: an error code has an exit code, and only an error code does")
     declared = DiagnosticCode(
         code=code,
         level=level,
@@ -92,7 +97,11 @@ USAGE_ERROR = _declare(
     "An unknown Command or flag, a missing argument, or a global flag before the Command name.",
 )
 INVALID_VALUE = _declare(
-    "invalid_value", "error", ExitCode.USAGE, "A flag or argument value that is not allowed."
+    "invalid_value",
+    "error",
+    ExitCode.USAGE,
+    "A flag or argument value that is not allowed, or a value given with the settings that its "
+    "setting refuses; details.key names the setting, when there is one.",
 )
 UNKNOWN_FIELD = _declare(
     "unknown_field", "error", ExitCode.USAGE, "A --fields name the Command does not have."
@@ -289,7 +298,9 @@ PARSE_FAILED = _declare(
     None,
     "A registered extractor raised an error, or a Page's preparation gave nothing "
     "(body_too_large, worker_crashed, parse_timeout), so a Page was recorded without its "
-    "output; details.count says for how many URLs, details.first_url for which first.",
+    "output; details.count says for how many URLs, details.first_url for which first, and "
+    "for an extractor's error details.error its text and details.at its file and line when "
+    "the extractor's own file raised it.",
     kept="counted",
 )
 HANDLER_FAILED = _declare(
@@ -297,7 +308,9 @@ HANDLER_FAILED = _declare(
     "warning",
     None,
     "A per-response handler raised an error, so the URL was recorded without that handler's "
-    "rows; details.count says for how many URLs, details.first_url for which first.",
+    "rows; details.count says for how many URLs, details.first_url for which first, "
+    "details.error the error's text and details.at its file and line when the handler's own "
+    "file raised it.",
     kept="counted",
 )
 NETWORK_PAUSED = _declare(

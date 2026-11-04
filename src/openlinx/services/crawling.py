@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from aiohttp.abc import AbstractResolver
+from pydantic import ValidationError
 
 from openlinx.aio import loop_factory
 from openlinx.clock import Clock
@@ -35,6 +36,7 @@ from openlinx.crawl.urls import (
 from openlinx.output.codes import (
     INVALID_PATTERN,
     INVALID_URL,
+    OPTION_CONFLICT,
     SEED_OUT_OF_SCOPE,
     SUBFOLDER_IS_ROOT,
 )
@@ -45,6 +47,7 @@ from openlinx.services.crawl_failures import NETWORK_FAILURES, interrupted, writ
 from openlinx.services.crawls import create_crawl
 from openlinx.services.hooks import default_page_executor
 from openlinx.services.interrupts import interrupts_stop
+from openlinx.services.settings import default_tables
 from openlinx.store.crawls import (
     crawl_summary,
     read_recorded,
@@ -63,12 +66,13 @@ from openlinx.store.records import (
     StopReason,
     UrlCounts,
 )
+from openlinx.store.redaction import SecretValues, secret_values
 from openlinx.store.settings import StoreSettings
 from openlinx.store.transitions import check_transition
 from openlinx.store.urls import url_counts
 from openlinx.store.writer import CrawlWriter
 from openlinx.workspace.discovery import resolve_workspace
-from openlinx.workspace.settings import Settings, load_settings
+from openlinx.workspace.settings import Settings, load_settings, refused_given_value
 from openlinx.workspace.tables import SettingsTables
 
 _SEED_PROBLEMS: Mapping[InvalidUrlReason, str] = {
@@ -86,9 +90,13 @@ class CrawlRequest:
     home: Path
     workspace: Path | None
     command_argv: Sequence[str]
-    secret_names: SecretNames
     # Settings given as flags, by table: they override the settings file (010 D2).
     flags: Mapping[str, Mapping[str, Any]]
+    # The command line's tokens that take a secret, such as --token, which the file redacts:
+    # no default, so a caller that forgot them never records a secret in the clear.
+    secret_flags: frozenset[str]
+    # --subdomains: the same as the scope "subdomains", which conflicts with another one.
+    subdomains: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -171,12 +179,17 @@ class CrawlResult:
         }
 
 
-def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
-    """Validation and config resolution, before anything is created (design D11)."""
-    # Checked before the Workspace is resolved, and stripped once the settings are read.
+def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> CrawlPlan:
+    """Validation and config resolution, before anything is created (design D11); `tables`
+    are the built-in ones unless given."""
+    # The call's own input first: the Seed, stripped once the settings are read, and the
+    # flags that conflict.
     _seed(request.seed, None)
+    flags = _with_subdomains(request.flags) if request.subdomains else request.flags
     workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
-    settings = load_settings(workspace, tables, request.flags)
+    if tables is None:
+        tables = default_tables()
+    settings = load_settings(workspace, tables, flags)
     crawl_settings = settings.table(CrawlSettings)
     strip_params = strip_params_pattern(crawl_settings.strip_params)
     seed = _seed(request.seed, strip_params)
@@ -202,7 +215,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables) -> CrawlPlan:
         # Every registered table, resolved (design D11).
         config=settings.root.model_dump(mode="json"),
         scope=scope.to_json(),
-        secret_names=request.secret_names,
+        secret_names=SecretNames(request.secret_flags, tables.secret_settings()),
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
         section_crawl=scope.section_crawl,
@@ -254,7 +267,8 @@ def start_crawl(
     """`resolver` is the DNS resolver hook of multi-host tests, `pages` builds the page
     executor instead of `default_page_executor`, `fetcher` is the fake Fetcher of the timing
     scenarios, used instead of aiohttp's, and `stop` is the stop flag that `060`'s control rows
-    set (design D9, D10, D15)."""
+    set: one per run, since it binds the loop of the run that first sets or awaits it (design
+    D9, D10, D15)."""
     log = WarningLog(reporter)
     planned = _Planned(
         seed=plan.seed,
@@ -263,6 +277,7 @@ def start_crawl(
         strip_params=plan.strip_params,
         crawl_mode=plan.new_crawl.crawl_mode,
         seed_count=len(plan.new_crawl.seeds),
+        secrets=secret_values(plan.new_crawl.config, plan.new_crawl.secret_names.settings),
     )
     crawl = _Crawl(
         plan=planned,
@@ -292,11 +307,19 @@ def continue_crawl(
     stop: StopSignal | None = None,
 ) -> CrawlResult:
     """Continues a stopped or failed Crawl from its file alone, which 060's resume calls; the
-    keyword arguments are start_crawl's (design D20)."""
+    keyword arguments are start_crawl's, a fresh stop flag for each run included (design D20)."""
     recorded = read_recorded(crawl_file.path)
     # Before anything is written; the continue's unit checks it again as it writes.
     check_transition(recorded.state, "running", None)
-    settings = CrawlSettings.model_validate({**recorded.config["crawl"], **overrides.given()})
+    given = overrides.given()
+    try:
+        settings = CrawlSettings.model_validate({**recorded.config["crawl"], **given})
+    # Only an override can be refused: the recorded values passed when the Crawl started.
+    except ValidationError as error:
+        refused = refused_given_value(error, {"crawl": given}, table="crawl")
+        if refused is None:
+            raise
+        raise refused from error
     strip_params = strip_params_pattern(settings.strip_params)
     planned = _Planned(
         seed=_seed(recorded.seeds[0], strip_params),
@@ -305,6 +328,8 @@ def continue_crawl(
         strip_params=strip_params,
         crawl_mode=recorded.crawl_mode,
         seed_count=len(recorded.seeds),
+        # The recorded config holds no secret, so a continue knows none to redact.
+        secrets=SecretValues(),
     )
     config = {**recorded.config, "crawl": settings.model_dump(mode="json")}
     crawl = _Crawl(
@@ -362,6 +387,7 @@ class _Planned:
     strip_params: re.Pattern[str] | None
     crawl_mode: CrawlMode
     seed_count: int
+    secrets: SecretValues
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -499,6 +525,7 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
                     pages=executor,
                     hooks=crawl.hooks,
                     stop=crawl.stop,
+                    secrets=crawl.plan.secrets,
                 )
         except BaseException:
             # An ended writer raises why it ended once more; the error raised says it first.
@@ -512,6 +539,23 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
     finally:
         # 026's pool shuts its workers down here, however the Crawl ended.
         await executor.close()
+
+
+def _with_subdomains(flags: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """--subdomains has no setting of its own: it is resolved into scope (design D11)."""
+    crawl_flags = dict(flags.get("crawl", {}))
+    scope = crawl_flags.get("scope", "subdomains")
+    if scope != "subdomains":
+        raise OpenLinxError(
+            OPTION_CONFLICT,
+            f"--subdomains means --scope subdomains, so it cannot be given with --scope {scope}.",
+            hint="Give --scope alone, or --subdomains alone.",
+            details={"options": ["--subdomains", "--scope"]},
+        )
+    return {
+        **{table: dict(values) for table, values in flags.items()},
+        "crawl": {**crawl_flags, "scope": "subdomains"},
+    }
 
 
 def _seed_out_of_scope(seed: NormalizedUrl, decision: ScopeDecision) -> OpenLinxError:
