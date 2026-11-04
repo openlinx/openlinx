@@ -59,7 +59,7 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
     so a URL found on several Pages is recorded once (design D1)."""
     # The Seed's Redirect Chain is depth 0: a redirect target keeps its source's depth.
     in_chain = run.seed_chain.holds(queued)
-    recorded = await _outcome(run, queued, decision, in_chain)
+    recorded = await _recorded(run, queued, decision, in_chain)
     # The chain ended on a URL decided without a response: a failure or a skip. One with a
     # response ended it in _fetched already.
     if in_chain and recorded is not None and recorded.result.response is None:
@@ -67,7 +67,7 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
     return recorded
 
 
-async def _outcome(
+async def _recorded(
     run: Run, queued: QueuedUrl, decision: ScopeDecision, in_chain: bool
 ) -> Recorded | None:
     context, robots = run.context, run.robots

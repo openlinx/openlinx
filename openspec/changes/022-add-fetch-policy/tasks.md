@@ -162,8 +162,8 @@ The first PR ships groups 1-9 and this group; group 10 follows in a second.
 - [x] 9b.10 Refactor, behaviour unchanged: the network pause's gate is a `PauseGate` (close, open, and whether a request passes it).
 - [x] 9b.11 Refactor, behaviour unchanged: the pause's two per-URL methods say that they change its state and which one is robots.txt's, and take one kind of input.
 - [x] 9b.12 Refactor, behaviour unchanged: one function of the URL limit gives a count back, for the Requester, the network pause and an outage.
-- [ ] 9b.13 Refactor, behaviour unchanged: the engine's `_outcome` is named after what it returns.
-- [ ] 9b.14 Refactor, behaviour unchanged: the request timeout has one reader, the `FetchPolicy` the `CrawlContext` carries.
+- [x] 9b.13 Refactor, behaviour unchanged: the engine's `_outcome` is named after what it returns.
+- [x] 9b.14 Refactor, behaviour unchanged: the request timeout has one reader, the `FetchPolicy` the `CrawlContext` carries.
 - [ ] 9b.15 Docs: CONTRIBUTING's module sizes are the real ones, and each module or class past them says the split it would take.
 - [ ] 9b.16 Docs: `docs/architecture.md`'s hooks rule names `_response_headers` as the one-line handle.
 - [ ] 9b.17 Style: the docstrings that restate their name go.
