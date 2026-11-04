@@ -18,7 +18,7 @@ reviewed and gated narrow task 9b.9 refactor; the full fetching change remains u
 |---|---|---|
 | `main` | `f38d493fd50ebfda7c3fa968945b72d6633b754e` | PR #34 merged; canonical public entry point |
 | `022-add-fetch-policy` | `99f0280128badabcff68e256d2819717ca25c14b` | Published unfinished checkpoint; 9b.9 complete, next 9b.10, C03 open |
-| `023-fix-code-audit` | `1f3dec66f474cb3b87a3c1c0f9172d9dcb5f3a29` | Group 5 planning checkpoint published |
+| `023-fix-code-audit` | `de433cd43fcb6ed9552bf672eb3222077aaaa0d5` | Group 5 accepted; PR #36; change unfinished, group 6 remains |
 | `026-add-parse-pool` | `8294855ecfffb9f07094b931ed0d94754d0bf16d` | Unfinished pool/shutdown work |
 | `030-add-page-data` | `0eeed79504271c7cf1e51ab69543271225c995d8` | Published unfinished snapshot; group 12 acceptance blocked by C01/C02 |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
@@ -103,23 +103,35 @@ measurement (6.4) still lacks the required macOS evidence, and 8.2 needs the fir
 PR's actual nine-cell CI result. Neither is an instruction to start a benchmark now.
 Groups 11–14 are v0.2 work.
 
-### 023: verify the group 5 plan, then start 5.1
+### 023: group 5 accepted; group 6 remains
 
-[Tasks](https://github.com/openlinx/openlinx/blob/1f3dec66f474cb3b87a3c1c0f9172d9dcb5f3a29/openspec/changes/023-fix-code-audit/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/1f3dec66f474cb3b87a3c1c0f9172d9dcb5f3a29/openspec/changes/023-fix-code-audit/design.md).
+[Tasks](https://github.com/openlinx/openlinx/blob/de433cd43fcb6ed9552bf672eb3222077aaaa0d5/openspec/changes/023-fix-code-audit/tasks.md),
+[design](https://github.com/openlinx/openlinx/blob/de433cd43fcb6ed9552bf672eb3222077aaaa0d5/openspec/changes/023-fix-code-audit/design.md),
+[PR #36](https://github.com/openlinx/openlinx/pull/36).
 
-Groups 1–4 are in `main`; group 4 was merged through PR #34. The development branch
-had merged `main` at `763b94ea` before committing its group 5 plan at `1f3dec66`.
-That published plan supersedes
-the older instruction to wait for a group 5 plan ruling. The prerequisite, 030 group 11
-in `main`, is present.
+Groups 1–4 are in `main`; group 5's tasks 5.1–5.4 are accepted at source checkpoint
+`de433cd43fcb6ed9552bf672eb3222077aaaa0d5`.
+[D11](https://github.com/openlinx/openlinx/blob/de433cd43fcb6ed9552bf672eb3222077aaaa0d5/openspec/changes/023-fix-code-audit/design.md#d11-a-pages-link-elements-are-located-by-ordinal)
+requires `locate_links` to check the complete original Link count, ordinals 1 to N
+and headers-first order before filtering; HTML locations are returned by ordinal.
 
-Next is task 5.1: at seam 4, prove that `locate_links` refuses a subset of a Page's
-Links with `RuntimeError`, then return locations by ordinal and adapt `page_links`.
-Use the Page whose nav and main link the same URL; the subset must fail before the
-fix. Group 5 also owns the single `LINK_TYPES` table and its discovery/docs guards.
-Keep those changes on this branch so 030 does not implement a competing table.
-Complete the group's review before its PR; group 6 docs and archive remain later.
+[D12](https://github.com/openlinx/openlinx/blob/de433cd43fcb6ed9552bf672eb3222077aaaa0d5/openspec/changes/023-fix-code-audit/design.md#d12-one-link-type-table)
+is implemented by the shared `LINK_TYPES` table, the guarded `discovered_link`
+factory beside `DiscoveredLink`, and typed discovery through to the handler without
+casts. Follow/Resource policy and selectors derive from the table; rel, parent and
+noscript conditions remain in discovery. Independent literal fixtures check each
+LinkType's source pairs, Literal coverage and header metadata in
+[extractor tests](https://github.com/openlinx/openlinx/blob/de433cd43fcb6ed9552bf672eb3222077aaaa0d5/tests/extract/test_links.py);
+[contract tests](https://github.com/openlinx/openlinx/blob/de433cd43fcb6ed9552bf672eb3222077aaaa0d5/tests/contract/test_links.py)
+check the docs' Requested column. The factory guard is in
+[code-style tests](https://github.com/openlinx/openlinx/blob/de433cd43fcb6ed9552bf672eb3222077aaaa0d5/tests/test_code_style.py); the package interface guard is in
+[package-interface tests](https://github.com/openlinx/openlinx/blob/de433cd43fcb6ed9552bf672eb3222077aaaa0d5/tests/test_package_interfaces.py).
+
+The coordinator reports the full gate on `de433cd4`: 1601 tests passed, 12 Windows
+skips, OpenSpec 16/16 and Node 1/1. Whole-group review (5.5) of
+`82ffcce6...de433cd4` completed in fresh parallel contexts: Standards 0 findings,
+Spec 0 findings. This accepts group 5 only; the full 023 change remains unfinished.
+Group 6's docs, whole-change review and archive remain later work.
 
 ### 026: reconcile the core, then close bounded shutdown
 

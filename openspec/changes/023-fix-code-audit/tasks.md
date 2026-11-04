@@ -48,7 +48,7 @@ Starts only after the pull request of `030`'s group 11 (link counts and Folder D
 - [x] 5.2 Guard `test_every_name_used_across_a_package_is_listed`, over the imports in `src`, with the lists of `openlinx.crawl.pages`, `openlinx.crawl.fetch` and `openlinx.crawl.engine` completed, and docs/architecture.md's pointer to `locate_links` (design D13). Done when: it is red on main's lists and green after them.
 - [x] 5.3 `LINK_TYPES` in `openlinx.store.records`, with `LinkElement` and `LinkAttribute` beside `LinkType`; the follow rule, `RESOURCE_LINK_TYPES` and discovery's selectors derive from it; `DiscoveredLink.element` and `attribute` are typed, and `link_handler`'s cast goes; `discovered_link` moves to `openlinx.crawl.references`, under the factory guard, and the tests that built `DiscoveredLink` go through it; `openlinx.crawl.following`'s docstring drops its promise about shortest paths (design D12). Done when: the Link type and link extractor tables pass unchanged, and the factory guard is red with a `DiscoveredLink(...)` built in a pages module.
 - [x] 5.4 `030`'s element guard compares pairs with `LINK_TYPES`, and the guard `test_link_type_table_matches_the_docs` (design D12). Done when: they are red with a table pair that discovery does not read, with a Literal value that has no pair, and with a Requested cell changed.
-- [ ] 5.5 Review.
+- [x] 5.5 Review.
 
 ## 6. Docs and recipes
 
