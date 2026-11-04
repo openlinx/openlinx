@@ -7,7 +7,13 @@ import msgspec
 
 from openlinx.crawl.following import skip_reason
 from openlinx.crawl.urls import NormalizedUrl, normalize_url
-from openlinx.store.records import DeclaredIn, DiscoverySkipReason, LinkType
+from openlinx.store.records import (
+    DeclaredIn,
+    DiscoverySkipReason,
+    LinkAttribute,
+    LinkElement,
+    LinkType,
+)
 
 # The URL Standard strips these around a reference and removes tabs and newlines inside it;
 # urlsplit strips only the leading ones.
@@ -24,8 +30,8 @@ class DiscoveredLink(msgspec.Struct, frozen=True, kw_only=True):
     type: LinkType
     target: NormalizedUrl
     raw: str
-    element: str | None
-    attribute: str | None
+    element: LinkElement | None
+    attribute: LinkAttribute | None
     rel: tuple[str, ...]
     nofollow: bool
     # Why the Crawl does not request the target through this Link (openlinx.crawl.following).
@@ -44,8 +50,8 @@ def discovered_link(
     target: NormalizedUrl,
     raw: str,
     *,
-    element: str | None,
-    attribute: str | None,
+    element: LinkElement | None,
+    attribute: LinkAttribute | None,
     rel: tuple[str, ...],
     declared_in: DeclaredIn,
     ordinal: int,
