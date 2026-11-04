@@ -12,6 +12,7 @@ from typing import Protocol
 from openlinx.aio import first_of
 from openlinx.clock import Clock
 from openlinx.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
+from openlinx.crawl.fetch.pause_gate import PauseGate
 from openlinx.crawl.fetch.politeness import RateGate, RequestLimits
 from openlinx.crawl.urls import NormalizedUrl, host_key
 from openlinx.store.records import FetchError
@@ -112,18 +113,13 @@ class Requester:
         self._hosts: dict[str, asyncio.Semaphore] = {}
         self._requests = asyncio.Semaphore(cap)
         self._retries = retries
-        # The network pause's gate: set while requests may start (design D16).
-        self._open = asyncio.Event()
-        self._open.set()
-        # The requests still waiting at the gate, and the event of their last one.
-        self._at_gate = 0
-        self._gate_drained = asyncio.Event()
+        self._pause_gate = PauseGate()
 
     def close_gate(self) -> None:
-        self._open.clear()
+        self._pause_gate.close()
 
     def open_gate(self) -> None:
-        self._open.set()
+        self._pause_gate.open()
 
     async def request_url(
         self, url: NormalizedUrl, on_attempt: Callable[[FetchResult | FetchFailure], None]
@@ -224,33 +220,12 @@ class Requester:
         `ends_at_gate` does not wait at a closed one."""
         # Waited before any slot, so a paused request leaves the host's slots to the probes; one
         # that took them as the pause began gives them back and its turn goes unused.
-        while await self._past_gate(ends_at_gate=ends_at_gate):
+        while await self._pause_gate.pass_request(ends_at_gate=ends_at_gate):
             async with self._slots(url, cutoff) as held:
-                if not held or self._open.is_set():
+                if not held or self._pause_gate.is_open:
                     yield held
                     return
         yield False
-
-    async def _past_gate(self, *, ends_at_gate: bool) -> bool:
-        """Those that waited at the gate wake a loop turn or more after it opens: a request
-        that comes since then goes behind them, so requests reach the host's slot in the order
-        they were dispatched (design D1). False for one that `ends_at_gate` at a closed one."""
-        while self._at_gate and (not ends_at_gate or self._open.is_set()):
-            await self._gate_drained.wait()
-        if self._open.is_set():
-            return True
-        if ends_at_gate:
-            return False
-        if not self._at_gate:
-            self._gate_drained = asyncio.Event()
-        self._at_gate += 1
-        try:
-            await self._open.wait()
-        finally:
-            self._at_gate -= 1
-            if not self._at_gate:
-                self._gate_drained.set()
-        return True
 
     @asynccontextmanager
     async def _slots(self, url: NormalizedUrl, cutoff: Stop) -> AsyncIterator[bool]:
