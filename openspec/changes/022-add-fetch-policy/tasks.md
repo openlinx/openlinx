@@ -168,7 +168,7 @@ The first PR ships groups 1-9 and this group; group 10 follows in a second.
 - [x] 9b.16 Docs: `docs/architecture.md`'s hooks rule names `_response_headers` as the one-line handle.
 - [x] 9b.17 Style: the docstrings that restate their name go.
 - [x] 9b.18 The comment of `_slots` on the global permit holds for `--rate`'s interval too.
-- [ ] 9b.19 Review: run the code-review skill on group 9b's commits, then refactor with the whole suite green.
+- [x] 9b.19 Review: run the code-review skill on group 9b's commits, then refactor with the whole suite green.
 
 ## 10. Closing the change (v0.1)
 

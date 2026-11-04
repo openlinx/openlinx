@@ -222,9 +222,9 @@ Plug it into `default_hooks()` in `openlinx/services/hooks.py`, as [How 030 and 
   | Module | Non-blank lines | Class (methods) | Next split, or why it stays together |
   |---|---:|---|---|
   | `crawl/engine/dispatch.py` | 335 | — | Frontier traversal and dispatch apart from pause and outage coordination. |
-  | `crawl/engine/pause.py` | 346 | `NetworkPause` (18) | Extract redispatch and probe scheduling and classification; `NetworkPause` keeps its count and state transitions. |
+  | `crawl/engine/pause.py` | 345 | `NetworkPause` (17) | Extract redispatch and probe scheduling and classification; `NetworkPause` keeps its count and state transitions. |
   | `crawl/engine/units.py` | 370 | — | Response preparation and handler rows apart from URL record construction. |
-  | `crawl/fetch/requester.py` | 282 | `Requester` (14) | Extract retry and backoff orchestration into functions; `Requester` keeps request admission and the watchdog for each attempt. |
+  | `crawl/fetch/requester.py` | 288 | `Requester` (14) | Extract retry and backoff orchestration into functions; `Requester` keeps request admission and the watchdog for each attempt. |
   | `extract/unicode_scripts.py` | 1193 | — | Generated Unicode range tables, with no runtime logic; keep one generated module for the pinned Unicode version. |
   | `output/codes.py` | 343 | — | One declaration per diagnostic code; it grows with the registry, not with its logic. |
   | `services/crawling.py` | 574 | — | Move planning, from settings to Scope and the Seed's checks, into its own module. |

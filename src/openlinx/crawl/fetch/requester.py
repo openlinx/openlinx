@@ -82,6 +82,12 @@ class Attempted:
     gated: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class ProbeResult:
+    outcome: FetchResult | FetchFailure
+    elapsed_seconds: float
+
+
 class Requester:
     """The host's slot, its turn under --rate, the global cap, the URL limit and the watchdog
     for every request, a URL's retries (022 design D4), and the network pause's gate and
@@ -171,13 +177,15 @@ class Requester:
         retried = await self._retried(url, outcome, _unheard, ends_at_gate=False)
         return retried if isinstance(retried, NotStarted) else retried.outcome
 
-    async def request_probe(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
+    async def request_probe(self, url: NormalizedUrl) -> ProbeResult:
         """A probe of the network pause: through the host's slot, its turn and the global cap,
         but never the pause's gate or the URL limit (design D16)."""
         async with self._slots(url, _Never()) as passed:
             if not passed:
                 raise RuntimeError("A probe cannot be refused by its never-set stop")
-            return await self._send(url)
+            started = self._clock.monotonic()
+            outcome = await self._send(url)
+            return ProbeResult(outcome, self._clock.monotonic() - started)
 
     async def _retried(
         self,

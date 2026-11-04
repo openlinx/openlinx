@@ -13,7 +13,7 @@ from openlinx.crawl.engine.crawl_warnings import network_paused
 from openlinx.crawl.engine.stop import StopSignal
 from openlinx.crawl.engine.warning_log import WarningLog
 from openlinx.crawl.fetch.fetcher import FetchFailure, FetchResult
-from openlinx.crawl.fetch.requester import Attempted, Requester
+from openlinx.crawl.fetch.requester import Attempted, ProbeResult, Requester
 from openlinx.crawl.urls import NormalizedUrl, url_origin
 from openlinx.store.records import FetchError, QueuedUrl
 
@@ -340,7 +340,7 @@ class NetworkPause:
         """How the pause ended: a probe answered before the wait ended, or none did, or the
         Crawl stopped, and every probe still in flight is cancelled then. The first probe's
         answer means a dead section, a later one's an outage."""
-        probes: list[asyncio.Task[FetchResult | None]] = []
+        probes: list[asyncio.Task[ProbeResult | None]] = []
         times = probe_times(self._network_wait)
         # A first probe that hangs in its connection may answer only after the network came
         # back, so its answer means a dead section only within the gap to the second probe,
@@ -350,12 +350,12 @@ class NetworkPause:
         try:
             for at in times:
                 if await self._answer_before(probes, began + at):
-                    return self._end(probes, window)
+                    return _pause_end(probes, window)
                 if self._stop.under_way.is_set:
                     return None
                 probes.append(asyncio.create_task(self._probe_once()))
             if await self._answer_before(probes, began + self._network_wait):
-                return self._end(probes, window)
+                return _pause_end(probes, window)
             return None
         finally:
             for probe in probes:
@@ -363,7 +363,7 @@ class NetworkPause:
             await asyncio.gather(*probes, return_exceptions=True)
 
     async def _answer_before(
-        self, probes: list[asyncio.Task[FetchResult | None]], until: float
+        self, probes: list[asyncio.Task[ProbeResult | None]], until: float
     ) -> bool:
         """Whether a probe answered by `until`; a stop ends the wait with no answer (design
         D16), but for the URL limit's, which refuses new URLs only (022-add-fetch-policy D4)."""
@@ -375,20 +375,20 @@ class NetworkPause:
             await first_of(self._clock.sleep(delay), self._stop.under_way.wait(), wake_on=waiting)
         return True
 
-    def _end(self, probes: list[asyncio.Task[FetchResult | None]], window: float) -> PauseEnd:
-        first = probes[0]
-        answer = first.result() if _answered(first) else None
-        if answer is not None and (self._clock.now() - answer.fetched_at).total_seconds() < window:
-            return "dead_section"
-        return "outage"
-
-    async def _probe_once(self) -> FetchResult | None:
-        """The Seed's answer, None without one; its fetched_at is when the probe was sent."""
-        response = await self._requester.request_probe(self._seed)
-        return None if isinstance(response, FetchFailure) else response
+    async def _probe_once(self) -> ProbeResult | None:
+        probe = await self._requester.request_probe(self._seed)
+        return None if isinstance(probe.outcome, FetchFailure) else probe
 
 
-def _answered(probe: asyncio.Task[FetchResult | None]) -> bool:
+def _pause_end(probes: list[asyncio.Task[ProbeResult | None]], window: float) -> PauseEnd:
+    first = probes[0]
+    answer = first.result() if _answered(first) else None
+    if answer is not None and answer.elapsed_seconds < window:
+        return "dead_section"
+    return "outage"
+
+
+def _answered(probe: asyncio.Task[ProbeResult | None]) -> bool:
     return probe.done() and not probe.cancelled() and probe.result() is not None
 
 

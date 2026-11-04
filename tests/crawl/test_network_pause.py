@@ -352,6 +352,90 @@ def test_one_failure_inside_a_dead_origins_streak_does_not_exempt_its_origin(
     ) == (["dead_section", "outage"], {"fetched"})
 
 
+def test_a_forward_wall_clock_jump_does_not_turn_a_fast_probe_into_an_outage(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    links = "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 9))
+    pages: dict[str, FakePage | list[FakePage]] = {
+        "/": [FakePage(links), FakePage("", delay=1)],
+        **{
+            f"/p{n}": FakePage("<p>Recovered</p>", fails="connection_refused", until=1)
+            for n in range(1, 9)
+        },
+    }
+
+    def jump_at_probe_answer() -> None:
+        if clock.monotonic() == 6:
+            clock.shift_wall(3600)
+
+    fetcher = FakeFetcher(clock, pages, on_answer={"/": jump_at_probe_answer})
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=1,
+        network_wait=30,
+    )
+
+    assert (
+        _seed_starts(fetcher)[1],
+        [
+            (data["outcome"], data["duration_s"])
+            for name, data in reporter.events
+            if name == "crawl_resumed"
+        ],
+        query(
+            result.crawl_file,
+            "SELECT fetch_state, count(*) FROM urls WHERE url LIKE '%/p%' GROUP BY fetch_state",
+        ),
+    ) == (5.0, [("dead_section", 6.0)], [("error", 8)])
+
+
+def test_a_backward_wall_clock_jump_does_not_turn_a_late_probe_into_a_dead_section(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    links = "".join(f'<a href="/p{n}">P{n}</a>' for n in range(1, 9))
+    pages: dict[str, FakePage | list[FakePage]] = {
+        "/": [FakePage(links), FakePage("", delay=12)],
+        **{
+            f"/p{n}": FakePage("<p>Recovered</p>", fails="connection_refused", until=1)
+            for n in range(1, 9)
+        },
+    }
+
+    def jump_at_probe_answer() -> None:
+        if clock.monotonic() == 17:
+            clock.shift_wall(-3600)
+
+    fetcher = FakeFetcher(clock, pages, on_answer={"/": jump_at_probe_answer})
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        reporter=reporter,
+        concurrency=1,
+        network_wait=30,
+    )
+
+    assert (
+        _seed_starts(fetcher)[1],
+        [
+            (data["outcome"], data["duration_s"])
+            for name, data in reporter.events
+            if name == "crawl_resumed"
+        ],
+        query(
+            result.crawl_file,
+            "SELECT fetch_state, count(*) FROM urls WHERE url LIKE '%/p%' GROUP BY fetch_state",
+        ),
+    ) == (5.0, [("outage", 17.0)], [("fetched", 8)])
+
+
 def test_a_first_probe_that_hangs_beyond_its_classification_window_means_an_outage(
     temp_workspace: TempWorkspace,
 ) -> None:
