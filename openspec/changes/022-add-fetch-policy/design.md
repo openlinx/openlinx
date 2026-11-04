@@ -121,7 +121,7 @@ The unit that records a 3xx response records its target as a URL discovered from
 ### D5. TLS trust
 - **The default:** `truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)`, in a module of its own (`openlinx.crawl.fetch.tls`), uses the OS trust store on Windows, macOS and Linux. truststore and certifi are imported only from `openlinx.crawl.fetch`, which `--help` never loads.
 - **The fallback:** if truststore cannot be loaded, `ssl.create_default_context(cafile=certifi.where())`.
-- **Speed test:** a benchmark task measures handshake cost with truststore and with certifi on each OS, and records the result in the docs. If truststore is measurably slower, only the default path changes, not the behaviour.
+- **Speed test:** a benchmark task measures handshake cost with truststore and with certifi on each OS, and records the result in the docs. The OS trust store remains the default even when truststore is slower; certifi remains the fallback only when truststore cannot be loaded. The measured overhead is accepted to preserve the TLS requirement's OS-trust policy. Public-host handshake timings do not establish equivalent trust policies and cannot authorize a different default.
 - **Shared setup:** the same context is used for requests and robots.txt, and from v0.2 for the ALPN check. `080`'s `doctor` TLS check reuses it.
 - **Tests:** the TLS setup accepts extra trust anchors, and tests pass the trustme CA through them. They go into a Crawl through the Fetcher factory of D1, as the DNS resolver hook does. It is an approved boundary double, and docs/testing.md lists it. The real TLS stack still verifies every certificate.
 

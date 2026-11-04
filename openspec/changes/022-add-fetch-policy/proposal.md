@@ -41,7 +41,7 @@ The response headers must also be stored, without cookie values, because `page -
   - A meta refresh stays a Link, never a redirect hop.
 - **Limits:** response bodies are read up to 20 MiB, before and after decoding (`body_truncated`, `parse_error = body_too_large`), and URLs longer than 2,000 characters are skipped (`url_too_long`).
 - **Compression:** gzip, deflate and br, decoded by the tool; zstd from v0.2, so v0.1 sends `Accept-Encoding: gzip, deflate, br`. The `content_encoding`, `size_bytes` and `transferred_bytes` columns record status and size checks for Resources.
-- **TLS trust:** certificates are verified with truststore (the OS trust store), falling back to certifi. A speed test decides the default path. Failures are `tls_error`.
+- **TLS trust:** certificates are verified with truststore (the OS trust store), falling back to certifi only when truststore cannot be loaded. A speed test records the cost of this policy; it does not select the trust store. Failures are `tls_error`.
 - **HTTP version:** one ALPN handshake per https origin gives `origins.http_version` = `http_2` or `http_1_1` (v0.2). In v0.1 the column exists and is NULL, and its description starts with `Filled from v0.2. `.
 - **The `response_headers` table:** one JSON row per URL with a response, keyed by `url_id`. Headers keep their received order and letter case, and cookie values in `Set-Cookie` and `Cookie` are stored as `***`, with their names and attributes kept.
 - **Store, under ADR-0005 and `018`:**

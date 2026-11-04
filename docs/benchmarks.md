@@ -43,7 +43,7 @@ A 5,000-Page run (`--pages 5000`) that proves the script. It is not a run agains
 
 - **What it does:** for each of five public hosts (www.python.org, github.com, www.wikipedia.org, www.cloudflare.com, pypi.org) it connects once to find an address that answers, then times 20 fresh TLS handshakes per trust store, alternating them, certificate verification included. A host that does not answer is named and skipped.
 - **Running it:** `uv run python scripts/tls_handshake_speed.py`. `--rounds` and a list of host names change the run. It prints the median and 90th percentile handshake per host and over all hosts.
-- **The result:** the hosted measurements below show extra handshake time with truststore. The operating-system trust store remains the default while the default-path decision is pending; task 6.4 remains open.
+- **The result:** the hosted measurements below show extra handshake time with truststore. The accepted policy retains the operating-system trust store as the default and certifi only when truststore cannot be loaded. Task 6.4's measurement and policy acceptance criteria are met under revised D5, with the observed overhead accepted.
 
 ### Runs, 2026-10-27
 
@@ -147,8 +147,9 @@ absolute timings across different networks, OSes and OpenSSL versions are not
 comparable evidence of a store's cost. No selective rerun or significance threshold
 was used to accept these measurements.
 
-The measurements are accepted as evidence, but task 6.4 remains open. D5's
-conditional default-path change must be reconciled with the fetching spec's
-requirement to use operating-system roots. Making certifi alone the default would
-violate that contract. The decision is deferred; runtime truststore default and
-certifi fallback remain unchanged.
+The measurements and the TLS policy reconciliation are accepted. Revised D5
+retains the fetching spec's operating-system trust requirement and accepts the
+observed overhead, satisfying task 6.4's measurement and policy acceptance criteria.
+Public-host timings do not establish
+equivalent trust policies. The runtime default remains truststore, with certifi
+only when truststore cannot be loaded.
