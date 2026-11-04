@@ -1,15 +1,14 @@
 ---
 name: openspec-sync-specs
 description: Sync delta specs from a change to main specs. Use when the user wants to update main specs with changes from a delta spec, without archiving the change.
-allowed-tools: Bash(openspec:*)
 license: MIT
-compatibility: Requires openspec CLI.
 metadata:
   author: openspec
   version: "1.0"
   generatedBy: "1.13.0"
 ---
 
+Requires the OpenSpec CLI. Run its commands with the available shell tool.
 Sync delta specs from a change to main specs.
 
 This is an **agent-driven** operation - you will read delta specs and directly edit main specs to apply the changes. This allows intelligent merging (e.g., adding a scenario without copying the entire requirement).
@@ -31,7 +30,7 @@ This is an **agent-driven** operation - you will read delta specs and directly e
 
    When prompting, show changes that have delta specs (under `specs/` directory).
 
-   Always announce: "Using change: <name>" and how to override (e.g., `$openspec-sync-specs (Codex) or /openspec-sync-specs (other agents) <other>`).
+   Always announce: "Using change: <name>" and how to override (e.g., `$openspec-sync-specs <other>`).
 
 2. **Resolve change context**
 
