@@ -18,7 +18,7 @@ reviewed and gated narrow task 9b.9 refactor; the full fetching change remains u
 |---|---|---|
 | `main` | `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50` | First 022 PR #39 merged; main CI 41831195325 passed 9/9 |
 | `022-add-fetch-policy` | `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68` | Group 9b accepted; first PR #39 CI closes 8.2; TLS measurements and OS-trust policy accepted; 6.4 complete under revised D5 |
-| `023-fix-code-audit` | `7ffa39e59da3e9b4b808b06ff838ca54a1a1c3b7` | Group 5 accepted; controlled main4957 integration awaits new checks/review; group 6 remains |
+| `023-fix-code-audit` | `e9eb6dba5e288b83eef5c8f552e75ae70f197d4d` | Group 5 and main4957 source integration accepted; source PR #36 CI passed 9/9; 6.1 hooks recipe documented; group 6 unfinished |
 | `026-add-parse-pool` | `8294855ecfffb9f07094b931ed0d94754d0bf16d` | Unfinished pool/shutdown work |
 | `030-add-page-data` | `0eeed79504271c7cf1e51ab69543271225c995d8` | Published unfinished snapshot; group 12 acceptance blocked by C01/C02 |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
@@ -141,8 +141,8 @@ acceptance.
 
 ### 023: group 5 accepted; group 6 remains
 
-[Tasks](https://github.com/openlinx/openlinx/blob/7ffa39e59da3e9b4b808b06ff838ca54a1a1c3b7/openspec/changes/023-fix-code-audit/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/7ffa39e59da3e9b4b808b06ff838ca54a1a1c3b7/openspec/changes/023-fix-code-audit/design.md),
+[Tasks](https://github.com/openlinx/openlinx/blob/e9eb6dba5e288b83eef5c8f552e75ae70f197d4d/openspec/changes/023-fix-code-audit/tasks.md),
+[design](https://github.com/openlinx/openlinx/blob/e9eb6dba5e288b83eef5c8f552e75ae70f197d4d/openspec/changes/023-fix-code-audit/design.md),
 [PR #36](https://github.com/openlinx/openlinx/pull/36).
 
 Groups 1–4 are in `main`; group 5, including review 5.5, is accepted at source checkpoint
@@ -171,11 +171,19 @@ Spec 0 findings. This accepts group 5 only; the full 023 change remains unfinish
 is historical group-5 evidence, not verification of the current integration.
 
 The accepted integration plan is committed at `815c0cd7cddfa428d262555cb204469a02cdaa88`.
-The controlled integration of main `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50`
-is in progress in the isolated integration branch. Focused cold-import, Link,
-redirect, schema and fetch-policy checks pass on the uncommitted candidate. Fresh
-Astra source review and the new full gate are pending; no integration CI success is claimed.
-Group 6's recipes, whole-change review and archive remain later work.
+The source integration of main `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50`
+is accepted at `e9eb6dba5e288b83eef5c8f552e75ae70f197d4d` and published in PR #36.
+The manager reports fresh GPT-6 Astra Standards and Spec reviews with zero findings,
+and the integration full gate passed: 1890 tests passed, 12 skipped, strict mypy on
+three platforms, OpenSpec 16/16 and Node 1/1.
+[CI 41839157705](https://github.com/openlinx/openlinx/actions/runs/41839157705)
+completed successfully in all nine cells at that source integration checkpoint.
+Later documentation commits require their own gates and current-head CI evidence.
+
+Task 6.1's numbered hooks recipe is documented in
+[CONTRIBUTING](../CONTRIBUTING.md#an-extractor-handler-or-post-crawl-pass), using the
+integrated Link extractor, handler, writer, inlink pass and composition root with
+their existing tests. Tasks 6.2–6.5 remain open; the full 023 change is unfinished.
 
 ### 026: reconcile the core, then close bounded shutdown
 

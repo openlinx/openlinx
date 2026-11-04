@@ -155,7 +155,7 @@ The schema of a crawl file is a public contract ([ADR-0002](docs/adr/0002-sqlite
 
 ## Common changes
 
-Each recipe lists the files to touch in order, the seam to test at, and what checks it. Steps marked *review* are not checked by any test, so check them yourself. They describe `main`; 020's planned reworks are noted where they change a step.
+Each recipe lists the files to touch in order, the seam to test at, and what checks it. Obligations marked *review* are not checked by a test, so check them yourself. Use the built-ins below as the examples.
 
 ### A diagnostic code
 
@@ -194,7 +194,79 @@ See [Changing the crawl store schema](#changing-the-crawl-store-schema) and [How
 
 ### An extractor, handler or post-crawl pass
 
-Plug it into `default_hooks()` in `openlinx/services/hooks.py`, as [How 030 and 040 plug in](docs/architecture.md#crawl-pipeline) describes; the engine is never edited. 020 reworks these hooks before it is archived: a handler will name the store function that writes its rows (no separate `row_writers`), a pass will take a `PassContext`, an extractor will carry its own settings, and every request will go through one Requester. Read the architecture section as it stands on your branch before copying an example.
+Follow the Link pipeline below, with seams from [testing](docs/testing.md#seams).
+Register hooks at the composition root; the crawl core takes them as inputs.
+
+1. **Prepare the extractor.** In
+   [page_links.py](src/openlinx/extract/page_links.py), `PAGE_LINKS` is built with
+   `extractor("page_links", extract_page_links, None)` from
+   [preparation.py](src/openlinx/crawl/pages/preparation.py). Keep the extraction
+   function and output/config struct classes at module level. Return a typed frozen
+   `msgspec.Struct`; config is `None` or a frozen struct resolved when hooks are built,
+   and must survive pickle with the Page settings. At seam 4,
+   [test_extractors.py](tests/crawl/test_extractors.py) checks config delivery in
+   `test_an_extractor_gets_its_own_config`, refuses nested/lambda functions in
+   `test_an_extractor_whose_function_is_not_module_level_cannot_be_built`, and checks
+   the built-in settings in `test_the_default_page_settings_pickle`.
+   *Review:* config fields must themselves hold immutable values.
+2. **Locate complete Links before filtering.** `extract_page_links` in
+   [page_links.py](src/openlinx/extract/page_links.py) calls
+   `locate_links(tree, page.links, expected_total=len(page.links))` from
+   [links.py](src/openlinx/crawl/pages/links.py), using the original `PageInput.links`.
+   The locator checks the complete count, ordinals 1 to N and headers-first order,
+   then returns HTML locations by ordinal; header Links have no DOM location.
+   Filter only afterwards. At seam 4,
+   [test_links.py](tests/crawl/test_links.py) checks this in
+   `test_a_subset_of_a_page_s_links_is_refused`,
+   `test_links_out_of_ordinal_order_are_refused` and
+   `test_header_links_after_html_links_are_refused`.
+3. **Map output to rows.** `link_rows` in
+   [link_handler.py](src/openlinx/extract/link_handler.py) reads
+   `PAGE_LINKS.output(result.outputs)` and returns `LinkRow` values for the URL's
+   Links, including header Links and Links whose extractor output is absent.
+   At seam 4, [test_links.py](tests/extract/test_links.py) exercises preparation
+   through the handler with literal rows, including
+   `test_header_and_repeated_html_links_keep_their_ordinals_and_positions` and
+   `test_links_declared_in_a_header`. Build the handler with `handler(...)` from
+   [hooks.py](src/openlinx/crawl/engine/hooks.py); strict mypy checks its row type
+   against the writer in [test_handler_types.py](tests/test_handler_types.py),
+   `test_a_handler_and_a_writer_of_different_row_types_fail_mypy`.
+   *Review:* the mapper is pure, with no SQL or other I/O.
+4. **Write through the URL's unit.** `write_links(connection, rows)` in
+   [store/links.py](src/openlinx/store/links.py) executes the import-built
+   `_INSERT_LINK`; the engine includes the handler's rows in the unit that records
+   the URL. At seam 2, [test_links.py](tests/store/test_links.py) checks the writer
+   with `test_the_units_of_links_run_again_the_same`, which uses `replay_now`, and
+   checks row/schema coverage with `test_the_link_row_has_every_links_column`.
+   *Review:* build per-URL statements at import, keep effects inside the supplied
+   connection, do not mutate inputs, and never commit or roll back inside a unit.
+5. **Order post-crawl work.** `count_inlinks` in
+   [services/hooks.py](src/openlinx/services/hooks.py) orders the units from
+   [store/links.py](src/openlinx/store/links.py). Its `PassContext.writer` is the
+   async-only `PassWriter` from [engine/hooks.py](src/openlinx/crawl/engine/hooks.py):
+   use `run_async`, `submit_async` and `flush_async`; the Crawl owns closing it.
+   Seam 2's [test_links.py](tests/store/test_links.py) checks replay with
+   `test_the_units_of_the_inlink_pass_run_again_the_same`. At seam 3+6,
+   [test_link_counts.py](tests/extract/test_link_counts.py) checks the registered
+   pass's results in `test_counts_for_a_linked_page`;
+   [test_hooks.py](tests/crawl/test_hooks.py) checks pass execution/order in
+   `test_post_crawl_passes_run_before_a_crawl_is_completed` and
+   `test_post_crawl_passes_run_in_the_order_the_hooks_declare`.
+   Strict mypy checks the writer boundary in
+   [test_handler_types.py](tests/test_handler_types.py),
+   `test_a_pass_that_closes_the_crawl_s_writer_fails_mypy`.
+6. **Register the composition.** Extend `default_hooks()` in
+   [services/hooks.py](src/openlinx/services/hooks.py): it includes `PAGE_LINKS`,
+   `handler("links", link_rows, write_links)` and `Pass("inlinks", count_inlinks)`.
+   Retain the other registrations, including the `response_headers` handler.
+   At seam 3+6, [test_hooks.py](tests/crawl/test_hooks.py) checks registration with
+   `test_a_registered_handler_sees_each_recorded_outcome_once`.
+   [test_code_style.py](tests/test_code_style.py) enforces the factory boundary in
+   `test_hooks_and_links_are_built_only_through_their_factories` and keeps plugin
+   imports out of the crawl core in `test_the_crawl_core_imports_no_plugin_layer`.
+   If a new cross-package import is needed, update its package interface docstring;
+   [test_package_interfaces.py](tests/test_package_interfaces.py) checks
+   `test_every_name_used_across_a_package_is_listed`.
 
 ## Conventions
 
