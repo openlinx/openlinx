@@ -130,7 +130,7 @@ Seams (docs/testing.md):
 ## 8. Change check (v0.1)
 
 - [x] 8.1 Verify that every `#### Scenario:` in `specs/fetching/spec.md` that groups 1–7 drive has exactly one test named after it, with `scripts/scenario_coverage.py <spec.md>`, written here as the one shared check (`020` task 16.1 reuses it): it reports missing scenarios, scenarios with more than one test and tests named close to a scenario that no longer exists, and a v0.2 scenario as waiting. It is a check that is run, not a test.
-- [ ] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate: the 9 cells of main's CI on this change's first PR.
+- [x] 8.2 Verify that the whole suite passes in CI on Windows, macOS and Linux × Python 3.12–3.14 with the coverage gate: the 9 cells of main's CI on this change's first PR. Evidence: [first draft PR #39](https://github.com/openlinx/openlinx/pull/39), [CI 41812691634](https://github.com/openlinx/openlinx/actions/runs/41812691634), 9/9 passed at `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68`.
 - [x] 8.3 **Guard:** every code this change declares (design D11) is listed by `linx commands` with its level and exit code [CLI]; the `commands.json` snapshot holds only the `commands` Command's own entry, so it does not change.
 - [x] 8.4 Review: run the code-review skill on the whole change against `specs/fetching/spec.md`, then refactor with the whole suite green.
 
