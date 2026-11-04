@@ -6,10 +6,15 @@ from dataclasses import dataclass
 
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
-from openlinx.crawl.following import skip_reason
 from openlinx.crawl.pages.decoding import query_codec
 from openlinx.crawl.pages.refresh import refresh_url
-from openlinx.crawl.references import C0_OR_SPACE, DiscoveredLink, resolve_base, resolve_reference
+from openlinx.crawl.references import (
+    C0_OR_SPACE,
+    DiscoveredLink,
+    discovered_link,
+    resolve_base,
+    resolve_reference,
+)
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.store.records import DeclaredIn, LinkType
 
@@ -78,40 +83,6 @@ def rel_tokens(rel: str) -> tuple[str, ...]:
 def base_url(tree: LexborHTMLParser, url: NormalizedUrl, encoding: str) -> str:
     """What the Page's references resolve against: its base href, else the response URL."""
     return _base(tree, url, query_codec(encoding))
-
-
-def discovered_link(
-    link_type: LinkType,
-    target: NormalizedUrl,
-    raw: str,
-    *,
-    element: str | None,
-    attribute: str | None,
-    rel: tuple[str, ...],
-    declared_in: DeclaredIn,
-    ordinal: int,
-    is_internal: bool,
-    page_nofollow: bool,
-    follow_nofollow: bool,
-) -> DiscoveredLink:
-    """A Link of the document or of a header: its nofollow is its rel's, and the follow rule
-    gives its skip reason (design D5)."""
-    nofollow = "nofollow" in rel
-    return DiscoveredLink(
-        type=link_type,
-        target=target,
-        raw=raw,
-        element=element,
-        attribute=attribute,
-        rel=rel,
-        nofollow=nofollow,
-        skip_reason=skip_reason(
-            link_type, nofollow, page_nofollow=page_nofollow, follow_nofollow=follow_nofollow
-        ),
-        declared_in=declared_in,
-        ordinal=ordinal,
-        is_internal=is_internal,
-    )
 
 
 def rel_link_type(

@@ -109,19 +109,34 @@ def test_a_complete_header_only_page_has_no_dom_locations() -> None:
 def test_a_relative_link_is_resolved_against_the_base_href() -> None:
     links = _links('<base href="http://site.test/docs/"><a href="guide">Guide</a>')
 
-    assert links == [
-        DiscoveredLink(
-            type="hyperlink",
-            target=NormalizedUrl("http://site.test/docs/guide"),
-            raw="guide",
-            element="a",
-            attribute="href",
-            rel=(),
-            nofollow=False,
-            skip_reason=None,
-            declared_in="body",
-            ordinal=1,
-            is_internal=True,
+    assert [
+        (
+            link.type,
+            link.target,
+            link.raw,
+            link.element,
+            link.attribute,
+            link.rel,
+            link.nofollow,
+            link.skip_reason,
+            link.declared_in,
+            link.ordinal,
+            link.is_internal,
+        )
+        for link in links
+    ] == [
+        (
+            "hyperlink",
+            "http://site.test/docs/guide",
+            "guide",
+            "a",
+            "href",
+            (),
+            False,
+            None,
+            "body",
+            1,
+            True,
         )
     ]
 

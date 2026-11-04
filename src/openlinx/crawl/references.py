@@ -1,10 +1,11 @@
-"""Reference resolution as browsers do it, and the Link record (020-add-crawl-core D5, D19)."""
+"""Reference resolution and Links through one policy-aware factory (020 D5, D19; 023 D12)."""
 
 import re
 from urllib.parse import urljoin
 
 import msgspec
 
+from openlinx.crawl.following import skip_reason
 from openlinx.crawl.urls import NormalizedUrl, normalize_url
 from openlinx.store.records import DeclaredIn, DiscoverySkipReason, LinkType
 
@@ -36,6 +37,40 @@ class DiscoveredLink(msgspec.Struct, frozen=True, kw_only=True):
     @property
     def requests_target(self) -> bool:
         return self.skip_reason is None
+
+
+def discovered_link(
+    link_type: LinkType,
+    target: NormalizedUrl,
+    raw: str,
+    *,
+    element: str | None,
+    attribute: str | None,
+    rel: tuple[str, ...],
+    declared_in: DeclaredIn,
+    ordinal: int,
+    is_internal: bool,
+    page_nofollow: bool,
+    follow_nofollow: bool,
+) -> DiscoveredLink:
+    """A Link of the document or of a header: its nofollow is its rel's, and the follow rule
+    gives its skip reason (design D5)."""
+    nofollow = "nofollow" in rel
+    return DiscoveredLink(
+        type=link_type,
+        target=target,
+        raw=raw,
+        element=element,
+        attribute=attribute,
+        rel=rel,
+        nofollow=nofollow,
+        skip_reason=skip_reason(
+            link_type, nofollow, page_nofollow=page_nofollow, follow_nofollow=follow_nofollow
+        ),
+        declared_in=declared_in,
+        ordinal=ordinal,
+        is_internal=is_internal,
+    )
 
 
 def resolve_reference(

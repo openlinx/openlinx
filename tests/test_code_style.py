@@ -864,23 +864,44 @@ def test_a_request_outside_the_requester_is_named() -> None:
 FACTORIES = {
     "Handler": "src/openlinx/crawl/engine/hooks.py",
     "Extractor": "src/openlinx/crawl/pages/preparation.py",
+    "DiscoveredLink": "src/openlinx/crawl/references.py",
 }
 
 
 def factory_violations(sources: Mapping[str, str]) -> list[str]:
-    """Hooks built outside their factories, given every module's source by its path."""
+    """Hooks and Links built outside their factories, by source path (023 D12)."""
     found = []
     for module, source in sources.items():
-        for node in ast.walk(ast.parse(source)):
+        tree = ast.parse(source)
+        names = {
+            alias.asname or alias.name: alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+            if alias.name in FACTORIES
+        }
+        link_factory_calls = {
+            call
+            for definition in tree.body
+            if isinstance(definition, ast.FunctionDef) and definition.name == "discovered_link"
+            for statement in definition.body
+            for call in ast.walk(statement)
+            if isinstance(call, ast.Call)
+        }
+        for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
             name = _base_name(node.func)
-            if name in FACTORIES and module != FACTORIES[name]:
+            name = names.get(name, name) if name is not None else None
+            if name in FACTORIES and (
+                module != FACTORIES[name]
+                or (name == "DiscoveredLink" and node not in link_factory_calls)
+            ):
                 found.append(f"{module}:{node.lineno} builds {name}(...) outside its factory")
     return found
 
 
-def test_hooks_are_built_only_through_their_factories() -> None:
+def test_hooks_and_links_are_built_only_through_their_factories() -> None:
     root = SRC.parent
     sources = {
         path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
@@ -889,8 +910,8 @@ def test_hooks_are_built_only_through_their_factories() -> None:
     }
 
     assert factory_violations(sources) == [], (
-        "a hook is built only through its factory: handler(name, handle, write) or "
-        "extractor(name, extract, config)"
+        "a hook or Link is built only through its factory: use handler(name, handle, write), "
+        "extractor(name, extract, config) or openlinx.crawl.references.discovered_link(...)"
     )
 
 
@@ -910,6 +931,30 @@ def test_a_hook_built_outside_its_factory_is_named() -> None:
         "tests/crawl/test_hooks.py:1 builds Handler(...) outside its factory",
         "src/openlinx/services/hooks.py:1 builds Handler(...) outside its factory",
         "src/openlinx/services/pages.py:1 builds Extractor(...) outside its factory",
+    ]
+
+
+def test_a_link_built_outside_its_factory_is_named() -> None:
+    sources = {
+        "src/openlinx/crawl/pages/links.py": "link = DiscoveredLink(type='hyperlink')\n",
+        "tests/crawl/test_links.py": "link = references.DiscoveredLink(type='hyperlink')\n",
+        "tests/crawl/test_scope.py": (
+            "from openlinx.crawl.references import DiscoveredLink as Link\n"
+            "link = Link(type='canonical')\n"
+        ),
+        "src/openlinx/crawl/references.py": (
+            "def discovered_link():\n    return DiscoveredLink(type='hyperlink')\n"
+            "def elsewhere():\n    return DiscoveredLink(type='hyperlink')\n"
+        ),
+        "src/openlinx/crawl/engine/hooks.py": "links: tuple[DiscoveredLink, ...]\n",
+        "tests/crawl/test_headers.py": "link = discovered_link('canonical')\n",
+    }
+
+    assert factory_violations(sources) == [
+        "src/openlinx/crawl/pages/links.py:1 builds DiscoveredLink(...) outside its factory",
+        "tests/crawl/test_links.py:1 builds DiscoveredLink(...) outside its factory",
+        "tests/crawl/test_scope.py:2 builds DiscoveredLink(...) outside its factory",
+        "src/openlinx/crawl/references.py:4 builds DiscoveredLink(...) outside its factory",
     ]
 
 
