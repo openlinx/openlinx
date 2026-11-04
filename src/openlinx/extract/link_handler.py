@@ -8,7 +8,8 @@ from openlinx.crawl.pages.headers import header_links_with_parameters
 from openlinx.crawl.references import DiscoveredLink
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.extract.page_links import PAGE_LINKS, LinkAttributes
-from openlinx.store.page_records import LinkAttribute, LinkElement, LinkRow
+from openlinx.store.page_records import LinkRow
+from openlinx.store.records import LinkAttribute, LinkElement
 
 
 def link_rows(result: UrlResult) -> Iterable[LinkRow]:
