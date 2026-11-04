@@ -32,6 +32,7 @@ from openlinx.store.records import (
     DiscoveredVia,
     FetchError,
     FetchState,
+    HttpVersion,
     JournalMode,
     LinkAttribute,
     LinkElement,
@@ -314,11 +315,56 @@ urls = public_table(
         "without the header.",
     ),
     Column(
+        "content_encoding",
+        Text,
+        comment="The Content-Encoding response header as received; NULL without a response or "
+        "without the header.",
+    ),
+    Column(
+        "size_bytes",
+        Integer,
+        comment="The body size after content decoding; NULL without a response, for a body "
+        "larger than 20 MiB, or for a coding that was not offered.",
+    ),
+    Column(
+        "transferred_bytes",
+        Integer,
+        comment="The body size as transferred, before decoding; NULL without a response.",
+    ),
+    Column(
         "response_time_ms",
         Integer,
         comment="Time from sending the request to receiving the whole body.",
     ),
+    Column("redirect_location", Text, comment="The raw Location header of a 3xx response."),
+    Column(
+        "redirect_url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        comment="The redirect's target, resolved against the URL and normalised; NULL without a "
+        "usable Location.",
+    ),
+    Column(
+        "in_redirect_loop",
+        Flag,
+        comment="1 when the URL is in a redirect loop, 0 for another 3xx response; NULL without a "
+        "3xx response.",
+    ),
+    Column(
+        "attempt_count",
+        Integer,
+        nullable=False,
+        server_default="0",
+        comment="The requests made for the URL in the dispatch that recorded it, its retries "
+        "included; 0 when it was not requested.",
+    ),
     Column("fetched_at", Timestamp, comment="UTC time of the request."),
+    Column(
+        "body_truncated",
+        Flag,
+        comment="1 when the body, as transferred or as decoded, was larger than 20 MiB and was "
+        "not read in full; NULL without a response.",
+    ),
     Column(
         "parsed",
         Flag,
@@ -344,6 +390,15 @@ Index(
     info={
         "description": "Recording a discovered URL once (ON CONFLICT (url)), and finding one "
         "URL's row."
+    },
+)
+Index(
+    "urls_redirect_url_id",
+    urls.c.redirect_url_id,
+    sqlite_where=urls.c.redirect_url_id.is_not(None),
+    info={
+        "description": "Finding the URLs that redirect to a URL: the reverse walk of a Redirect "
+        "Chain."
     },
 )
 Index(
@@ -416,6 +471,12 @@ origins = public_table(
         comment="JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not "
         "been fetched.",
     ),
+    Column(
+        "http_version",
+        Text,
+        comment="Filled from v0.2. The HTTP version that the origin's requests use.",
+        info={"values": literal_values(HttpVersion)},
+    ),
     comment="One row for each origin of a URL that the Crawl recorded.",
     change=20,
 )
@@ -427,6 +488,26 @@ Index(
         "description": "Recording an origin once (ON CONFLICT (origin)), and finding an "
         "origin's row."
     },
+)
+
+response_headers = public_table(
+    "response_headers",
+    Column(
+        "url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        comment="The URL whose response the headers are.",
+    ),
+    Column(
+        "headers",
+        Json,
+        nullable=False,
+        comment="JSON array of [name, value] pairs in the order and letter case they were "
+        "received; cookie values are ***.",
+    ),
+    comment="The response headers of each URL whose last attempt got a response.",
+    change=22,
 )
 
 pages = public_table(

@@ -555,15 +555,16 @@ def test_a_url_whose_rows_cannot_be_written_is_recorded_as_an_error(
     assert (
         query(
             result.crawl_file,
-            "SELECT url, fetch_state, fetch_error FROM urls WHERE url IN (?, ?) ORDER BY id",
+            "SELECT url, fetch_state, fetch_error, attempt_count FROM urls "
+            "WHERE url IN (?, ?) ORDER BY id",
             [server.url("/boom"), server.url("/ok")],
         ),
         result.summary.state,
         [(warning.code, warning.details["count"]) for warning in result.warnings],
     ) == (
         [
-            (server.url("/boom"), "error", "record_failed"),
-            (server.url("/ok"), "fetched", None),
+            (server.url("/boom"), "error", "record_failed", 1),
+            (server.url("/ok"), "fetched", None, 1),
         ],
         "completed",
         [("record_failed", 1)],
@@ -1100,7 +1101,7 @@ def test_each_url_is_recorded_with_the_values_its_handlers_saw(
     hooks = Hooks()
     hooks = replace(hooks, handlers=(*hooks.handlers, handler("values", _values, _write_values)))
 
-    crawl_file = crawl_result(server.url("/"), hooks, exclude=["/logout$"]).crawl_file
+    crawl_file = crawl_result(server.url("/"), hooks, exclude=["/logout$"], retries=0).crawl_file
 
     seen = {url_id: json.loads(v) for url_id, v in query(crawl_file, "SELECT * FROM test_values")}
     recorded = {row["id"]: row for row in _urls_rows(crawl_file)}

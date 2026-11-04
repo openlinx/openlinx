@@ -21,6 +21,7 @@ from openlinx.output.codes import (
     ROBOTS_UNREACHABLE,
     SEED_BASE_MISMATCH,
     SEED_BLOCKED_BY_ROBOTS_TXT,
+    SEED_REDIRECTED_OUT_OF_SCOPE,
 )
 from openlinx.output.diagnostics import Diagnostic
 from openlinx.store.records import FetchError
@@ -94,6 +95,16 @@ def blocked_seed(seed: NormalizedUrl, robots_token: str) -> Diagnostic:
         hint="Give --ignore-robots to crawl it anyway, or --robots-user-agent with the "
         "token the site allows.",
         details={"seed": seed},
+    )
+
+
+def seed_redirected_out_of_scope(seed: NormalizedUrl, final_url: NormalizedUrl) -> Diagnostic:
+    return Diagnostic.of(
+        SEED_REDIRECTED_OUT_OF_SCOPE,
+        f"The Seed {seed} redirects to {final_url}, outside the Crawl's Scope, so the Crawl "
+        "stayed in the Seed's Scope and found little or nothing of it.",
+        hint=f"Give {final_url} as the Seed to crawl the site the Seed redirects to.",
+        details={"seed": seed, "final_url": final_url},
     )
 
 

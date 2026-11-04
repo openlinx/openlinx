@@ -243,6 +243,16 @@ MAX_URLS_REACHED = _declare(
     "that continues it with a higher limit.",
     kept="run",
 )
+SEED_REDIRECTED_OUT_OF_SCOPE = _declare(
+    "seed_redirected_out_of_scope",
+    "warning",
+    None,
+    "A Seed's Redirect Chain ended outside the Crawl's Scope, on another registrable domain or "
+    "outside the Seed's folder; the Scope did not change, and the hint gives the URL the chain "
+    "ended on.",
+    kept="once",
+    once_per="seed",
+)
 SEED_BASE_MISMATCH = _declare(
     "seed_base_mismatch",
     "warning",
@@ -297,10 +307,10 @@ PARSE_FAILED = _declare(
     "warning",
     None,
     "A registered extractor raised an error, or a Page's preparation gave nothing "
-    "(body_too_large, worker_crashed, parse_timeout), so a Page was recorded without its "
-    "output; details.count says for how many URLs, details.first_url for which first, and "
-    "for an extractor's error details.error its text and details.at its file and line when "
-    "the extractor's own file raised it.",
+    "(body_too_large, unsupported_encoding, worker_crashed, parse_timeout), so a Page was "
+    "recorded without its output; details.count says for how many URLs, details.first_url "
+    "for which first, and for an extractor's error details.error its text and details.at "
+    "its file and line when the extractor's own file raised it.",
     kept="counted",
 )
 HANDLER_FAILED = _declare(

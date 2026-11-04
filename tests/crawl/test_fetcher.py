@@ -11,8 +11,17 @@ from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
 from openlinx.clock import SystemClock
-from openlinx.crawl.fetch.fetcher import AiohttpFetcher, FetchFailure, Request, fetch_error_of
+from openlinx.crawl.fetch.fetcher import (
+    AiohttpFetcher,
+    FetchFailure,
+    FetchResult,
+    Request,
+    fetch_error_of,
+)
+from openlinx.crawl.fetch.proxy import ProxyVariables
 from openlinx.crawl.urls import parse_seed
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site
 
 
 class _Unencodable(AbstractResolver):
@@ -33,16 +42,39 @@ async def test_a_host_that_dns_cannot_encode_is_a_dns_error() -> None:
     connector = aiohttp.TCPConnector(resolver=_Unencodable())
 
     async with aiohttp.ClientSession(connector=connector) as session:
-        result = await AiohttpFetcher(session, SystemClock()).fetch(Request(url))
+        result = await AiohttpFetcher(session, SystemClock(), ProxyVariables()).fetch(Request(url))
 
     assert (type(result), getattr(result, "fetch_error", None)) == (FetchFailure, "dns_error")
+
+
+async def test_the_fetcher_never_holds_a_cookie_value(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(
+                    body="<title>Your basket</title>",
+                    headers=[("Set-Cookie", "sid=abc123; Path=/; HttpOnly")],
+                )
+            }
+        )
+    )
+    url = parse_seed(server.url("/"))
+    assert isinstance(url, str)
+
+    async with aiohttp.ClientSession() as session:
+        result = await AiohttpFetcher(session, SystemClock(), ProxyVariables()).fetch(Request(url))
+
+    assert isinstance(result, FetchResult)
+    assert [value for name, value in result.headers if name == "Set-Cookie"] == [
+        "sid=***; Path=/; HttpOnly"
+    ]
 
 
 _KEY = ConnectionKey("site.test", 443, True, True, None, None, None, None)
 _REQUEST = aiohttp.RequestInfo(URL("https://site.test/"), "GET", CIMultiDictProxy(CIMultiDict()))
 
 # Every error class the Fetcher can meet, with its code: a subclass that an earlier branch of
-# the mapping catches fails here, not in a Crawl. 022 adds timeout and its own errors.
+# the mapping catches fails here, not in a Crawl.
 _ERRORS: list[tuple[Exception, str]] = [
     (
         aiohttp.ClientConnectorCertificateError(_KEY, ssl.SSLCertVerificationError("self-signed")),
@@ -53,6 +85,7 @@ _ERRORS: list[tuple[Exception, str]] = [
     (UnicodeError("label empty or too long"), "dns_error"),
     (aiohttp.ClientConnectorError(_KEY, ConnectionRefusedError()), "connection_refused"),
     (aiohttp.ClientConnectorError(_KEY, OSError("network unreachable")), "connection_error"),
+    (aiohttp.ClientConnectorError(_KEY, TimeoutError("connect timed out")), "timeout"),
     (aiohttp.ClientProxyConnectionError(_KEY, OSError("proxy down")), "connection_error"),
     (aiohttp.ClientOSError(OSError("broken pipe")), "connection_error"),
     (aiohttp.ClientConnectionResetError("reset by peer"), "connection_error"),
@@ -62,10 +95,10 @@ _ERRORS: list[tuple[Exception, str]] = [
         aiohttp.ClientResponseError(_REQUEST, (), status=400, message="bad status line"),
         "invalid_response",
     ),
-    (aiohttp.ConnectionTimeoutError(), "connection_error"),
-    (aiohttp.SocketTimeoutError(), "connection_error"),
-    # aiohttp's total timeout raises a plain TimeoutError; 022 maps it to timeout.
-    (TimeoutError(), "connection_error"),
+    (aiohttp.ConnectionTimeoutError(), "timeout"),
+    (aiohttp.SocketTimeoutError(), "timeout"),
+    # aiohttp's total timeout, --timeout, raises a plain TimeoutError.
+    (TimeoutError(), "timeout"),
     (aiohttp.InvalidURL("http://[bad"), "connection_error"),
 ]
 

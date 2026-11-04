@@ -25,6 +25,7 @@ from openlinx.store.records import (
     CrawlSummary,
     NewCrawl,
     RecordedCrawl,
+    RecordedScope,
     StopReason,
 )
 from openlinx.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
@@ -81,6 +82,17 @@ def record_state(
 
     def unit(connection: Connection) -> None:
         set_state(connection, state, at, stop_reason)
+
+    return unit
+
+
+def record_scope(scope: RecordedScope) -> Callable[[Connection], None]:
+    """A unit that records the Scope again, once a Seed's Redirect Chain widened it
+    (022-add-fetch-policy D3)."""
+    statement = update(crawl).values(scope=dict(scope))
+
+    def unit(connection: Connection) -> None:
+        connection.execute(statement)
 
     return unit
 

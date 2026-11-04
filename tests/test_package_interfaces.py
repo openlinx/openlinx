@@ -2,8 +2,14 @@
 
 import ast
 import re
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
+
+import pytest
+
+from tests.support.cli import PROCESS_TIMEOUT, REPO_ROOT
+from tests.support.processes import python_command
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 
@@ -85,3 +91,38 @@ def test_listed_imports_and_imports_within_the_package_need_no_new_entry() -> No
     }
 
     assert missing_interface_names(sources) == []
+
+
+@pytest.mark.parametrize(
+    "references_first", [True, False], ids=["references first", "following first"]
+)
+def test_reference_resolution_and_redirects_import_cold_in_either_order(
+    references_first: bool,
+) -> None:
+    imports = [
+        "from openlinx.crawl.references import C0_OR_SPACE, resolve_base, resolve_reference\n",
+        "from openlinx.crawl.following import redirect_target\n",
+    ]
+    command = python_command(
+        "-c",
+        "".join(imports if references_first else reversed(imports))
+        + "from openlinx.crawl.urls import NormalizedUrl\n"
+        + "url = NormalizedUrl('http://site.test/dir/page')\n"
+        + "assert resolve_reference(url, '../next', None, None) == 'http://site.test/next'\n"
+        + "assert resolve_base(url, '/base/', None) == 'http://site.test/base/'\n"
+        + "assert redirect_target(url, 302, '../next', None) == 'http://site.test/next'\n",
+    )
+    completed = subprocess.run(
+        command.argv,
+        env=command.env,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        timeout=PROCESS_TIMEOUT,
+        text=True,
+        check=False,
+    )
+
+    assert (completed.returncode, completed.stdout, completed.stderr) == (0, "", ""), (
+        "reference resolution and redirects import cold in either order: keep shared URL "
+        "resolution in a dependency leaf, with the existing named interfaces preserved"
+    )

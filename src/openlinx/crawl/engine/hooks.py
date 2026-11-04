@@ -20,25 +20,31 @@ from openlinx.store.writer import Unit
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class UrlResponse:
-    """The URL's own HTTP response."""
-
     status_code: int
     # The status line's reason phrase, as received.
     reason: str | None
     # The Content-Type header as received; None without one.
     content_type: str | None
-    # As received: in order, in their letter case, repeated names kept.
+    # As received, cookie values redacted (openlinx.crawl.fetch.cookies): in order, in their letter
+    # case, repeated names kept.
     headers: tuple[tuple[str, str], ...]
     fetched_at: datetime
     response_time_ms: int
+    # Larger than the body cap, so read only up to it (022 design D1).
+    body_truncated: bool
+    # The Content-Encoding header as received; None without one.
+    content_encoding: str | None
+    # The body after decoding, and as transferred; None where not measured (022 design D1).
+    size_bytes: int | None
+    transferred_bytes: int | None
     # Page preparation's when the Page was parsed, else the X-Robots-Tag's alone.
     directives: RobotsDirectives
+    # Where a 301, 302, 303, 307 or 308 leads; None for any other response (022 design D2).
+    redirect_target: NormalizedUrl | None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class UrlFailure:
-    """Why the URL has no response."""
-
     fetch_error: FetchError
     fetch_error_message: str
     # None without a request of its own: its origin's robots.txt got no response.
@@ -59,6 +65,8 @@ class UrlResult:
     fetch_state: FetchState
     # NULL when robots.txt was not checked (design D6).
     blocked_by_robots_txt: bool | None = None
+    # The requests made for the URL, retries included; 0 when it was not requested.
+    attempt_count: int = 0
     skip_reason: SkipReason | None = None
     # A fetched URL has a response, an errored one a failure, a skipped one neither.
     response: UrlResponse | None = None

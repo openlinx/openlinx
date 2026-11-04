@@ -16,15 +16,19 @@ Scenario conventions:
 ## ADDED Requirements
 
 ### Requirement: User agent
-Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLinx/<version> (+<project URL>)` by default, where `<version>` is the tool's version. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request.
+Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)` by default, where `<version>` is the tool's version and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request. A value that is empty or only spaces, or holds a character other than visible ASCII, space and tab (RFC 9110's VCHAR, SP and HTAB), SHALL be rejected with exit code 2 and error code `invalid_value`.
 
 #### Scenario: The default user agent identifies the tool
 - **WHEN** `linx crawl {site}/` runs
-- **THEN** every request the fixture site receives has a `User-Agent` that matches `^OpenLinx/\d+\.\d+\.\d+\S* \(\+https://\S+\)$`
+- **THEN** every request the fixture site receives has a `User-Agent` that matches `^OpenLinx/\d+\.\d+\.\d+\S* \(\+https://github\.com/openlinx/openlinx/blob/main/docs/crawler\.md\)$`
 
 #### Scenario: A custom user agent is used on every request
 - **WHEN** `linx crawl {site}/ --user-agent "AuditBot/1.0"` runs
 - **THEN** every request the fixture site receives, including the one for `/robots.txt`, has `User-Agent` = `AuditBot/1.0`
+
+#### Scenario: An invalid user agent is rejected
+- **WHEN** `linx crawl {site}/ --user-agent ""` runs
+- **THEN** it exits with code 2 and error code `invalid_value`, and no request is made
 
 ### Requirement: Custom headers
 **(v0.2)** `--header "Name: Value"` SHALL add a request header. It SHALL be accepted more than once, and its setting `crawl.header` SHALL be a list of `Name: Value` strings. A value without `:` SHALL be rejected with exit code 2 and error code `invalid_value`. Custom headers SHALL be sent only with requests for Internal URLs and their robots.txt, never with requests for External URLs.
@@ -72,11 +76,12 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLi
 Without `--proxy` or `[crawl] proxy`, the Crawl SHALL honour the standard proxy variables, as curl, pip and uv do:
 - **Which variable:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs.
 - **Bypass:** `NO_PROXY`, a comma-separated list of host names and domain suffixes, or `*`, names the hosts that bypass the proxy.
-- **Letter case:** each variable is read in any letter case. When both cases are set, the lower-case one wins.
+- **Letter case:** each variable is read under its lower-case and its upper-case name, as curl reads them. When both are set, the lower-case one wins. An empty variable counts as unset.
+- **Scheme:** a proxy given without a scheme, such as `proxy.corp:3128`, SHALL be used as the http proxy `http://proxy.corp:3128`.
 
 The proxy variables are honoured from v0.1. This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. From v0.2, `--proxy` and `[crawl] proxy` SHALL override the variables, and the scenarios that pass `--proxy` apply. A resumed Crawl SHALL read the variables again.
 
-The password in a proxy URL SHALL be marked partly secret, whether it comes from `--proxy` or from a variable, and `015-add-crawl-store` records it as `http://<user>:***@<host>:<port>`. The proxy variables in use SHALL be recorded, set ones only, in the `environment` table of `crawl.config` under the lower-case keys `http_proxy`, `https_proxy` and `no_proxy`.
+The password in a proxy URL SHALL be marked partly secret, whether it comes from `--proxy` or from a variable, and `015-add-crawl-store` records it as `http://<user>:***@<host>:<port>`; a proxy URL from a variable without a password is recorded as `***`. The proxy variables in use SHALL be recorded, set ones only, in the `environment` table of `crawl.config` under the lower-case keys `http_proxy`, `https_proxy` and `no_proxy`.
 
 #### Scenario: Requests go through the proxy
 - **WHEN** a test proxy listens on `127.0.0.1:{proxy_port}`, and `linx crawl http://site.test/ --proxy http://127.0.0.1:{proxy_port}` runs
@@ -114,7 +119,7 @@ The Crawl SHALL NOT send cookies that responses set. After a response with `Set-
 - **THEN** the request for `/check` has no `Cookie` header
 
 ### Requirement: Timeouts
-A request attempt that has not completed within `--timeout` seconds (default 20, setting `crawl.timeout`) SHALL fail. When no attempt for a URL succeeds, the URL SHALL be recorded with `fetch_state` = `error`, `status_code` NULL and `fetch_error` = `timeout`. `timeout` is a value of `urls.fetch_error` that `020-add-crawl-core` lists.
+A request attempt that has not completed within `--timeout` seconds (default 20, setting `crawl.timeout`) SHALL fail. When every attempt for a URL times out, the URL SHALL be recorded with `fetch_state` = `error`, `status_code` NULL and `fetch_error` = `timeout`. `timeout` is a value of `urls.fetch_error` that `020-add-crawl-core` lists.
 
 A timeout is a request without an HTTP response, so it counts towards the network pause of `020-add-crawl-core`. When every attempt at an origin's robots.txt times out, the origin's URLs SHALL be recorded with `fetch_error` = `timeout` without a request, as `020-add-crawl-core` records the URLs behind a robots.txt that got no HTTP response; a robots.txt that answers 5xx or 429 after the retries stays `robots_unreachable`.
 
@@ -123,19 +128,21 @@ A timeout is a request without an HTTP response, so it counts towards the networ
 - **THEN** `{site}/hang` has `fetch_state` = `error` and `fetch_error` = `timeout`
 
 ### Requirement: Retries with backoff
-The Crawl SHALL retry a request attempt, robots.txt included, that gets no response, a 5xx status or a 429 status, up to `--retries` times (default 2, setting `crawl.retries`).
+The Crawl SHALL retry a request attempt, robots.txt included, that ends with the `fetch_error` `timeout`, `connection_refused` or `connection_error`, or with a 5xx status or a 429 status, up to `--retries` times (default 2, at most 10, setting `crawl.retries`). An attempt that ends with `dns_error`, `tls_error`, `invalid_response` or `watchdog` SHALL NOT be retried. A `--retries` above 10 SHALL be rejected with exit code 2 and error code `invalid_value`.
 - **Backoff:** before retry n (counting from 1), the Crawl SHALL wait 2^(n-1) seconds.
 - **Retry-After:** a `Retry-After` header on a 429 or 503 response SHALL set the wait instead, capped at 120 seconds.
 - **429 without Retry-After:** the wait SHALL be 10 seconds.
-- **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start.
+- **Host pause:** during a wait caused by a 429 status or a `Retry-After` header, no request to that host SHALL start. A 429 or a `Retry-After` SHALL pause the host even when the URL is not retried, with `--retries 0` or on its last attempt.
 - **Other 4xx statuses** SHALL NOT be retried.
-- **Network pause:** while the Crawl is paused waiting for the network (`020-add-crawl-core`), a request attempt that fails SHALL be neither retried nor recorded; its URL stays `queued` and is requested after the pause.
+- **URL limit:** a retry is the same URL, so only a URL's first attempt SHALL count towards `--max-urls`, and the URL limit SHALL NOT end the retries of a URL already requested: they go on within the stop's grace, as any request in flight does. When the URL limit refuses a URL while the network pause of `020-add-crawl-core` is on, or while Internal requests in a row without an HTTP response count towards one, the Crawl SHALL NOT stop yet: it SHALL wait while those requests end and, when a pause is on, for the pause to end, at most `--network-wait`. A URL given back meanwhile frees room under the limit, and the Crawl SHALL then request the URLs the limit refused, up to the limit; otherwise it stops.
+- **Stop:** after any other stop, such as an interrupt, a retry that is due SHALL NOT start, and its URL SHALL NOT be recorded: it stays `queued`, so a continue requests it.
+- **Network pause:** a URL SHALL count once towards the network pause of `020-add-crawl-core`, at its first attempt that gets no HTTP response while the Crawl is not paused; its later attempts SHALL NOT count again. While the Crawl is paused waiting for the network, a request attempt that fails SHALL NOT be retried, and a URL whose retry is due SHALL make no further attempt. A URL of the pause's count SHALL be recorded with its last failure, and the pause's end decides on it as on the rest of its count; any other such URL SHALL NOT be recorded: it stays `queued` and is requested after the pause. When the pause ends in an outage, only the URLs of its count recorded as errors SHALL be re-queued.
 
 The URL SHALL record the last attempt's response. This change adds this column to `urls`, under the conventions of `018-add-schema-conventions`:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
-| `attempt_count` | INTEGER | no | | The number of requests made for the URL; 0 when it was not requested |
+| `attempt_count` | INTEGER | no | | The requests made for the URL in the dispatch that recorded it, its retries included; 0 when it was not requested |
 
 #### Scenario: A temporary 503 is retried
 - **WHEN** `/flaky` returns 503 once and 200 after that
@@ -149,6 +156,10 @@ The URL SHALL record the last attempt's response. This change adds this column t
 - **WHEN** a fake Fetcher always returns 500 for `http://site.test/down`, with a fake clock
 - **THEN** the three attempts start at 0, 1 and 3 seconds
 
+#### Scenario: A 429 pauses the host without a retry
+- **WHEN** a fake Fetcher returns 429 with `Retry-After: 7` for `http://site.test/a` at 0 seconds, with a fake clock and `--retries 0`
+- **THEN** the next request to `site.test` starts at 7 seconds
+
 #### Scenario: Retry-After pauses the host
 - **WHEN** a fake Fetcher returns 429 with `Retry-After: 7` for `http://site.test/a` at 0 seconds, with a fake clock
 - **THEN** the next request to `site.test` starts at 7 seconds
@@ -157,13 +168,37 @@ The URL SHALL record the last attempt's response. This change adds this column t
 - **WHEN** `/` links to `/missing`, which returns 404
 - **THEN** `{site}/missing` has `attempt_count` = 1
 
+#### Scenario: An unresolvable External host is requested once
+- **WHEN** `http://site.test/` links to `http://gone.test/`, a host name that does not resolve
+- **THEN** `http://gone.test/` has `fetch_error` = `dns_error`, and the name `gone.test` is resolved once
+
+#### Scenario: A retry under way outlasts the URL limit
+- **WHEN** `http://site.test/` links to `/a`, `/b` and `/c`, a fake Fetcher answers `/a` with 503 once and with 200 after that, and the Crawl runs with `--max-urls 3` and a fake clock
+- **THEN** `http://site.test/a` has `status_code` = 200 and `attempt_count` = 2
+
+#### Scenario: A Crawl that reaches its URL limit during a network pause waits for the pause to end
+- **WHEN** `http://site.test/` links to `/p1` to `/p30`, each `/pN` answers after 0.5 + N/100 seconds, a fake Fetcher gets no response for any request started from 1 to 30 seconds of clock time, and the Crawl runs with `--concurrency 4`, `--max-urls 19` and a fake clock
+- **THEN** the `crawl_resumed` event, with `data.outcome` = `outage`, comes before the `stopping` event, whose reason is `max_urls`, and 19 URLs have `fetch_state` = `fetched`
+
+#### Scenario: A stop cuts a pending retry and keeps its URL queued
+- **WHEN** a fake Fetcher answers `http://site.test/` with 503 once and with 200 after that, and the Crawl is interrupted as that 503 arrives, with a fake clock
+- **THEN** `http://site.test/` has `fetch_state` = `queued`, so a continue requests it
+
+#### Scenario: A request that fails during a network pause is not retried
+- **WHEN** `http://site.test/` links to `/p1` to `/p20`, a fake Fetcher answers `/` and gets no response for any later request, and the Crawl runs with `--concurrency 1`, `--network-wait 30` and a fake clock
+- **THEN** no request for a `/pN` URL starts after the pause began; `/p1` to `/p8`, the pause's count, are `error` with `attempt_count` = 1, and every later `/pN` URL is `queued` when the Crawl ends
+
+#### Scenario: A network that goes down pauses the Crawl before the retries
+- **WHEN** `http://site.test/` links to `/p1` to `/p20`, a fake Fetcher answers `/` and refuses every later connection at once, and the Crawl runs with `--concurrency 1`, the default `--retries` and a fake clock
+- **THEN** the `crawl_paused` event comes before any retry starts
+
 ### Requirement: Redirects are followed hop by hop
-The Crawl SHALL NOT follow redirects within one request. For a 3xx response with a `Location` header:
+The Crawl SHALL NOT follow redirects within one request. For a 301, 302, 303, 307 or 308 response with a `Location` header:
 - **On the redirecting URL** it SHALL record the status code, the raw header in `redirect_location`, and the target in `redirect_url_id`.
 - **The target** is resolved against the redirecting URL and normalised. It SHALL be recorded as a URL with `discovered_via` = `redirect`, `found_on_url_id` pointing to the redirecting URL, and the same Crawl Depth.
-- **Requests:** each target SHALL be requested on its own, subject to the Scope, robots.txt and `--exclude`. The target of a URL that is only checked SHALL also be checked.
+- **Requests:** each target SHALL be requested on its own, subject to the Scope, robots.txt and `--exclude`. The target of a Resource's redirect SHALL also be a Resource; any other target SHALL be decided by its own Scope, whatever its source's.
 
-A 3xx response without a usable `Location` SHALL have `redirect_url_id` NULL.
+A 3xx response without a usable `Location`, and a 300, 304 or 305 response, SHALL have `redirect_url_id` NULL; any 3xx response SHALL keep its raw `Location` header in `redirect_location`.
 
 `redirect` is a value of `urls.discovered_via` that `020-add-crawl-core` lists. This change adds these columns to `urls`, under the conventions of `018-add-schema-conventions`:
 
@@ -203,12 +238,20 @@ It also adds this index to `urls`, built while the Crawl writes:
 - **WHEN** `http://site.test/` links to `http://site.test/out`, which returns 301 to `http://other.test/landing`
 - **THEN** `http://other.test/landing` has `fetch_state` = `fetched` and `parsed` = 0
 
+#### Scenario: A redirected image beyond the depth limit is checked
+- **WHEN** `/` holds `<img src="/logo.png">`, `/logo.png` returns 301 to `/img/logo.png`, and `linx crawl {site}/ --max-depth 0` runs
+- **THEN** `{site}/img/logo.png` has `fetch_state` = `fetched`
+
+#### Scenario: A Page reached through an External redirect is followed
+- **WHEN** `http://site.test/` links to `http://other.test/go`, which redirects with 302 to `http://site.test/promo`, which links to `/deal`, and `linx crawl http://site.test/` runs
+- **THEN** `http://site.test/promo` has `parsed` = 1 and `http://site.test/deal` has `fetch_state` = `fetched`
+
 #### Scenario: Index of redirect targets
 - **WHEN** `linx schema urls --fields indexes` runs
 - **THEN** the item's `indexes`, reduced to `name`, `columns`, `unique` and `where`, include `{"name":"urls_redirect_url_id","columns":["redirect_url_id"],"unique":false,"where":"redirect_url_id IS NOT NULL"}`
 
 ### Requirement: A Seed that redirects within its site extends the Scope
-When a Seed's Redirect Chain ends on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. When the chain ends on another registrable domain, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_off_site` warning whose hint contains the final URL of the chain.
+When a Seed's Redirect Chain ends with a response inside the Seed's section on a host with the same registrable domain as the Seed host, that host SHALL be treated as a Seed host for the rest of the Crawl, and SHALL be listed in `crawl.scope`. The `seed_base_mismatch` and `seed_blocked_by_robots_txt` checks of `020-add-crawl-core` SHALL read the URL that the Seed's Redirect Chain ends on. When the chain ends outside the Crawl's Scope, on another registrable domain or, under `--scope subfolder`, outside the Seed's folder, the Scope SHALL NOT change, and the Crawl SHALL record a `seed_redirected_out_of_scope` warning whose hint contains the final URL of the chain. A chain whose last target is never requested, skipped with `max_redirects` or refused by `--max-urls`, SHALL end on that target.
 
 #### Scenario: A www Seed that redirects to its apex keeps the apex inside the Scope
 - **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, which links to `/a`, and `linx crawl http://www.site.test/` runs
@@ -218,12 +261,36 @@ When a Seed's Redirect Chain ends on a host with the same registrable domain as 
 - **WHEN** `http://site.test/` redirects with 301 to `http://en.site.test/`, which links to `/a`, and `linx crawl http://site.test/` runs
 - **THEN** `http://en.site.test/a` has `fetch_state` = `fetched` and `is_internal` = 1, and `crawl.scope` lists `en.site.test` among its hosts
 
+#### Scenario: A www Seed that redirects on its host is checked on its final Page
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://www.site.test/home`, which holds `<link rel="canonical" href="http://site.test/">`, and `linx crawl http://www.site.test/` runs
+- **THEN** the result's `warnings` hold an entry with code `seed_base_mismatch` whose `hint` contains `http://site.test/`
+
+#### Scenario: A Seed chain that ends off its site widens nothing
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/old`, which redirects with 301 to `http://other.test/`, and `linx crawl http://www.site.test/` runs
+- **THEN** `http://site.test/old` and `http://other.test/` have `is_internal` = 0, and `crawl.scope` does not list `site.test`
+
+#### Scenario: A Seed blocked by robots.txt at its chain's end is reported
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, whose robots.txt disallows `/`, and `linx crawl http://www.site.test/` runs
+- **THEN** the result's `warnings` hold an entry with code `seed_blocked_by_robots_txt`
+
+#### Scenario: A section Seed whose chain leaves the section is reported
+- **WHEN** `http://site.test/blog/` redirects with 301 to `http://site.test/`, and `linx crawl http://site.test/blog/ --scope subfolder` runs
+- **THEN** the result's `warnings` hold an entry with code `seed_redirected_out_of_scope` whose `hint` contains `http://site.test/`, `http://site.test/` has `in_scope` = 0, and `crawl.scope` keeps the folder `/blog/`
+
+#### Scenario: A Seed chain cut by the URL limit is decided by its final Scope
+- **WHEN** `http://www.site.test/` redirects with 301 to `http://site.test/`, and `linx crawl http://www.site.test/ --max-urls 1` runs
+- **THEN** `http://site.test/` has `fetch_state` = `queued` and `is_internal` = 0, and `crawl.scope` does not list `site.test`
+
+#### Scenario: A Seed chain cut by the hop limit off its site is reported
+- **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `linx crawl http://site.test/ --max-redirects 0` runs
+- **THEN** the result's `warnings` hold an entry with code `seed_redirected_out_of_scope` whose `hint` contains `http://other.test/`, and `http://other.test/` has `is_internal` = 0
+
 #### Scenario: A redirect to another site is reported
 - **WHEN** `http://site.test/` redirects with 301 to `http://other.test/`, and `linx crawl http://site.test/` runs
-- **THEN** the result's `warnings` hold an entry with code `seed_redirected_off_site` whose `hint` contains `http://other.test/`
+- **THEN** the result's `warnings` hold an entry with code `seed_redirected_out_of_scope` whose `hint` contains `http://other.test/`
 
 ### Requirement: Redirect hop limit
-The Crawl SHALL NOT follow a redirect that would be more than `--max-redirects` (default 10, setting `crawl.max_redirects`) consecutive redirects from the first URL of its chain. The target of such a redirect SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, a value that `020-add-crawl-core` lists.
+The Crawl SHALL NOT follow a redirect that would be more than `--max-redirects` (default 10, at most 50, setting `crawl.max_redirects`) consecutive redirects from the first URL of its chain. A value above 50 SHALL be rejected as `invalid_value`, and in the settings file as `settings_invalid`. The target of such a redirect SHALL be recorded with `fetch_state` = `skipped` and `skip_reason` = `max_redirects`, a value that `020-add-crawl-core` lists.
 
 #### Scenario: The eleventh redirect is not followed
 - **WHEN** `/` links to `/r1`, and each of `/r1` to `/r11` returns 301 to the next one (`/r1` to `/r2`, and so on up to `/r11` to `/r12`)
@@ -241,6 +308,10 @@ Its values are:
 - It is 0 for other 3xx responses.
 - It is NULL for URLs without a 3xx response.
 
+#### Scenario: More than 50 redirects are rejected
+- **WHEN** `linx crawl http://site.test/ --max-redirects 51` runs
+- **THEN** it exits with code 2 and an error with code `invalid_value` that names `--max-redirects`
+
 #### Scenario: A loop of two URLs is marked
 - **WHEN** `/` links to `/loop-a`, `/loop-a` returns 301 to `/loop-b`, and `/loop-b` returns 301 to `/loop-a`
 - **THEN** `{site}/loop-a` and `{site}/loop-b` both have `in_redirect_loop` = 1
@@ -257,13 +328,13 @@ A `<meta http-equiv="refresh">` SHALL stay a Link of type `meta_refresh` (`020-a
 - **THEN** `{site}/old` has `status_code` = 200 and `redirect_url_id` NULL
 
 ### Requirement: Response size limit
-The Crawl SHALL read at most 20,971,520 bytes (20 MiB) of a response body. This change adds this column to `urls`:
+The Crawl SHALL stop reading a response body within one read past 20,971,520 bytes (20 MiB), and keep at most 20 MiB of it. This change adds this column to `urls`:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
 | `body_truncated` | INTEGER | yes | boolean | 1 when the body was larger and not read in full |
 
-A URL with a larger body SHALL have `body_truncated` = 1 and `parsed` = 0. If it would otherwise have been parsed, it SHALL have `parse_error` = `body_too_large`, a value that `020-add-crawl-core` lists.
+A URL with a larger body SHALL have `body_truncated` = 1, `parsed` = 0, `size_bytes` NULL, and `transferred_bytes` the number of bytes read. If it would otherwise have been parsed, it SHALL have `parse_error` = `body_too_large`, a value that `020-add-crawl-core` lists.
 
 #### Scenario: A huge page is not parsed
 - **WHEN** `/` links to `/huge.html`, a 26,214,400-byte (25 MiB) HTML page
@@ -277,7 +348,7 @@ URLs longer than 2,000 characters SHALL NOT be requested, and SHALL be recorded 
 - **THEN** that URL has `skip_reason` = `url_too_long`
 
 ### Requirement: Compression
-Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Accept-Encoding: gzip, deflate, br, zstd`. The Crawl SHALL decode those encodings itself. This change adds these columns to `urls`:
+Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Accept-Encoding: gzip, deflate, br, zstd`, and offer no other coding. The Crawl SHALL decode those encodings itself, and several of them in the reverse order of the `Content-Encoding` header. A body that fails to decode SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`. A body in a coding that was not offered SHALL be recorded as `fetched`, with `size_bytes` NULL and `parsed` = 0; if it would otherwise have been parsed, it SHALL have `parse_error` = `unsupported_encoding`. This change adds these columns to `urls`:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
@@ -293,6 +364,18 @@ Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Ac
 - **WHEN** `/app.js` returns a 10,000-byte script as a 2,500-byte gzip body with `Content-Encoding: gzip`, and `/` holds `<script src="/app.js">`
 - **THEN** `{site}/app.js` has `size_bytes` = 10000, `transferred_bytes` = 2500 and `content_encoding` = `gzip`
 
+#### Scenario: Stacked encodings are decoded in reverse order
+- **WHEN** `/app.js` returns a 10,000-byte script compressed with gzip and then with br, with `Content-Encoding: gzip, br`, and `/` holds `<script src="/app.js">`
+- **THEN** `{site}/app.js` has `size_bytes` = 10000 and `content_encoding` = `gzip, br`
+
+#### Scenario: A corrupt compressed body is an invalid response
+- **WHEN** `/broken.js` returns bytes that are no gzip stream with `Content-Encoding: gzip`, and `/` holds `<script src="/broken.js">`
+- **THEN** `{site}/broken.js` has `fetch_state` = `error` and `fetch_error` = `invalid_response`
+
+#### Scenario: A body in an encoding that was not offered is not parsed
+- **WHEN** `/` links to `/zstd.html`, an HTML page that returns a zstd body with `Content-Encoding: zstd`
+- **THEN** `{site}/zstd.html` has `fetch_state` = `fetched`, `parsed` = 0, `parse_error` = `unsupported_encoding` and `size_bytes` NULL
+
 ### Requirement: Resource sizes
 Every requested Resource SHALL have its `status_code`, `size_bytes` and `transferred_bytes` recorded, and SHALL NOT be parsed.
 
@@ -301,7 +384,7 @@ Every requested Resource SHALL have its `status_code`, `size_bytes` and `transfe
 - **THEN** `{site}/logo.png` has `status_code` = 200, `size_bytes` = 2048 and `transferred_bytes` = 2048
 
 ### Requirement: TLS certificate verification
-HTTPS requests SHALL verify the server certificate and its host name against the operating system's trust store. When that store cannot be used, certifi's bundle SHALL be the fallback. A request whose certificate does not verify SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `tls_error`, a value that `020-add-crawl-core` lists. When an origin's robots.txt request fails verification, the origin's URLs SHALL be recorded with `fetch_error` = `tls_error` without a request, as `020-add-crawl-core` records the URLs behind a robots.txt that got no HTTP response. A `tls_error` SHALL NOT count towards the network pause of `020-add-crawl-core`: a certificate that fails verification is an answer from the server, and a site-wide certificate failure would otherwise wait out `--network-wait` and fail as `site_unreachable`.
+HTTPS requests SHALL verify the server certificate and its host name against the operating system's trust store, through truststore. When truststore cannot be loaded, certifi's bundle SHALL be the fallback. A request whose certificate does not verify SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `tls_error`, a value that `020-add-crawl-core` lists. When an origin's robots.txt request fails verification, the origin's URLs SHALL be recorded with `fetch_error` = `tls_error` without a request, as `020-add-crawl-core` records the URLs behind a robots.txt that got no HTTP response. A `tls_error` SHALL NOT count towards the network pause of `020-add-crawl-core`: a certificate that fails verification is an answer from the server, and a site-wide certificate failure would otherwise wait out `--network-wait` and fail as `site_unreachable`.
 
 #### Scenario: A certificate for another name is a TLS error
 - **WHEN** `http://site.test/` links to `https://badcert.test/`, whose certificate is issued for `other.test`
@@ -310,6 +393,10 @@ HTTPS requests SHALL verify the server certificate and its host name against the
 #### Scenario: A certificate from an unknown CA is a TLS error
 - **WHEN** `http://site.test/` links to `https://other.test:{untrusted_port}/`, whose certificate comes from a CA that is not trusted
 - **THEN** that URL has `fetch_error` = `tls_error`
+
+#### Scenario: TLS errors never pause the Crawl
+- **WHEN** `https://site.test/` links to `https://a1.site.test/` to `https://a12.site.test/`, whose certificates do not verify, a fake Fetcher gives each of them `tls_error`, and `linx crawl https://site.test/ --scope subdomains --network-wait 0` runs with a fake clock
+- **THEN** the Crawl completes, and no `crawl_paused` event is written
 
 ### Requirement: HTTP version per origin
 This change adds this column to `origins` in v0.1. Its description SHALL start with `Filled from v0.2. `, and it SHALL be NULL in every row until then.
@@ -337,18 +424,18 @@ From v0.2, for every https origin it requests, the Crawl SHALL make one TLS hand
 - **THEN** the `origins` row for `{site}` has `http_version` = `http_1_1`
 
 ### Requirement: The response_headers table
-The crawl store SHALL keep the response headers of each requested URL's last attempt in a table `response_headers`, under the conventions of `018-add-schema-conventions`, with one row for each URL that received a response, and two columns:
+The crawl store SHALL keep the response headers of each requested URL's last attempt in a table `response_headers`, under the conventions of `018-add-schema-conventions`, with one row for each URL whose last attempt received a response, and two columns:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
 | `url_id` | INTEGER, primary key, references `urls.id` | no | | The URL whose response the headers are |
-| `headers` | TEXT | no | json | A JSON array of `[name, value]` pairs in the order and letter case they were received |
+| `headers` | TEXT | no | json | A JSON array of `[name, value]` pairs in the order and letter case they were received, with cookie values as `***` |
 
 The table SHALL have no secondary index: its rows are read by `url_id`, its primary key. A query that filters by a header reads `headers` with `json_each`.
 
 Cookie values SHALL never be stored. They SHALL be redacted in this exact format:
 - **`Set-Cookie`:** the cookie value, meaning the text after the first `=` and before the first `;`, SHALL be replaced by `***`. So `sid=abc123; Path=/; HttpOnly` is stored as `sid=***; Path=/; HttpOnly`. A value with no `=` before its first `;` SHALL be stored as `***` followed by its attributes.
-- **`Cookie`:** the value of each `name=value` pair, separated by `;`, SHALL be replaced by `***`. So `a=1; b=2` is stored as `a=***; b=***`.
+- **`Cookie`:** the value of each `name=value` pair, separated by `;`, SHALL be replaced by `***`. So `a=1; b=2` is stored as `a=***; b=***`. A part without `=` is a value alone, and SHALL be stored as `***`.
 
 Header names, cookie names, attributes, and the order of the headers SHALL be kept.
 

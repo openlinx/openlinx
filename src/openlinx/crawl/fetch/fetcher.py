@@ -1,7 +1,7 @@
 """The Fetcher: one request, one hop, never a redirect followed (020-add-crawl-core D8)."""
 
-from collections.abc import AsyncIterator, Iterable
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Iterable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -10,18 +10,34 @@ import aiohttp
 import yarl
 from aiohttp.abc import AbstractResolver
 
+from openlinx import __version__
 from openlinx.clock import Clock
+from openlinx.crawl.fetch.body import OFFERED_CODINGS, BodyDecodingError, read_body
+from openlinx.crawl.fetch.cookies import redacted_header
+from openlinx.crawl.fetch.proxy import ProxyVariables
+from openlinx.crawl.fetch.tls import tls_context
 from openlinx.crawl.urls import NormalizedUrl
+from openlinx.naming import CRAWLER_PAGE_URL, PRODUCT_NAME
 from openlinx.store.records import FetchError
-
-# Fixed until 022 makes it a setting; the watchdog of design D16 outlasts it.
-REQUEST_DEADLINE_SECONDS = 20
 
 
 def header_values(headers: Iterable[tuple[str, str]], name: str) -> list[str]:
     """The values of the header `name`, in any letter case, in the order received."""
     wanted = name.lower()
     return [value for key, value in headers if key.lower() == wanted]
+
+
+def joined_header(headers: Iterable[tuple[str, str]], name: str) -> str | None:
+    """The header `name` with its repeated lines joined into one list, as RFC 9110 5.3
+    reads them; None without one."""
+    values = header_values(headers, name)
+    return ", ".join(values) if values else None
+
+
+def _received_header(name: bytes, value: bytes) -> tuple[str, str]:
+    # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.
+    text = name.decode("latin-1")
+    return text, redacted_header(text, value.decode("latin-1"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,12 +49,17 @@ class Request:
 class FetchResult:
     status_code: int
     reason: str | None
-    # As received: in order, in their letter case, repeated names kept.
+    # As received, cookie values redacted (openlinx.crawl.fetch.cookies): in order, in their letter
+    # case, repeated names kept.
     headers: tuple[tuple[str, str], ...]
     body: bytes
     # When the request was sent, and how long until the whole body arrived.
     fetched_at: datetime
     response_time_ms: int
+    # Larger than the body cap, so read only up to it.
+    body_truncated: bool = False
+    # The bytes read before decoding; None from a fake Fetcher, which sends its body as is.
+    transferred_bytes: int | None = None
 
     def header(self, name: str) -> str | None:
         """The first value of the header `name`, in any letter case."""
@@ -59,22 +80,47 @@ class Fetcher(Protocol):
     async def fetch(self, request: Request) -> FetchResult | FetchFailure: ...
 
 
+_CHUNK_BYTES = 64 * 1024
+ACCEPT_ENCODING = ", ".join(OFFERED_CODINGS)
+DEFAULT_USER_AGENT = f"{PRODUCT_NAME}/{__version__} (+{CRAWLER_PAGE_URL})"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FetchPolicy:
+    """The Fetcher's settings of a Crawl, from its plan to its Fetcher; retries and the hop limit
+    are the Requester's and the engine's (022-add-fetch-policy D1)."""
+
+    user_agent: str
+    proxies: ProxyVariables
+    # The watchdog of 020's design D16 outlasts it.
+    timeout_seconds: float
+
+
+# Opens the Crawl's Fetcher: tests bind the DNS resolver hook or a fake Fetcher into one.
+type FetcherFactory = Callable[[FetchPolicy, Clock], AbstractAsyncContextManager[Fetcher]]
+
+
 class AiohttpFetcher:
-    def __init__(self, session: aiohttp.ClientSession, clock: Clock) -> None:
+    def __init__(
+        self, session: aiohttp.ClientSession, clock: Clock, proxies: ProxyVariables
+    ) -> None:
         self._session = session
         self._clock = clock
+        self._proxies = proxies
 
     async def fetch(self, request: Request) -> FetchResult | FetchFailure:
         # As given: yarl would decode a %2F in the query and request another URL than recorded.
         url = yarl.URL(request.url, encoded=True)
         fetched_at, started = self._clock.now(), self._clock.monotonic()
         try:
-            async with self._session.get(url, allow_redirects=False) as response:
-                body = await response.read()
-                # HTTP header bytes are Latin-1 by definition; nothing is lost or refused.
+            proxy = self._proxies.for_url(request.url)
+            async with self._session.get(url, allow_redirects=False, proxy=proxy) as response:
                 headers = tuple(
-                    (name.decode("latin-1"), value.decode("latin-1"))
-                    for name, value in response.raw_headers
+                    _received_header(name, value) for name, value in response.raw_headers
+                )
+                body = await read_body(
+                    response.content.iter_chunked(_CHUNK_BYTES),
+                    joined_header(headers, "Content-Encoding"),
                 )
                 status_code, reason = response.status, response.reason
         # Cancellation is no Exception, so it passes through.
@@ -89,9 +135,11 @@ class AiohttpFetcher:
             status_code=status_code,
             reason=reason,
             headers=headers,
-            body=body,
+            body=body.data,
             fetched_at=fetched_at,
             response_time_ms=round(elapsed * 1000),
+            body_truncated=body.truncated,
+            transferred_bytes=body.transferred_bytes,
         )
 
 
@@ -100,6 +148,8 @@ def fetch_error_of(error: Exception) -> FetchError:
     # an answer of sorts, which the network pause must never count (design D16).
     if isinstance(error, aiohttp.ClientSSLError):
         return "tls_error"
+    if isinstance(error, BodyDecodingError):
+        return "invalid_response"
     # The system resolver cannot encode a name such as a..b.test, and aiohttp passes that on.
     if isinstance(error, aiohttp.ClientConnectorDNSError | UnicodeError):
         return "dns_error"
@@ -109,17 +159,33 @@ def fetch_error_of(error: Exception) -> FetchError:
     # aiohttp reports a response it cannot read as HTTP this way.
     if isinstance(error, aiohttp.ClientResponseError):
         return "invalid_response"
+    # aiohttp's connect and read timeouts derive from TimeoutError, as its total timeout raises;
+    # the OS's own connect timeout (ETIMEDOUT) comes wrapped in a connector error.
+    if isinstance(cause, TimeoutError):
+        return "timeout"
     return "connection_error"
 
 
 @asynccontextmanager
 async def aiohttp_fetcher(
-    clock: Clock, resolver: AbstractResolver | None = None
+    policy: FetchPolicy,
+    clock: Clock,
+    resolver: AbstractResolver | None = None,
+    trust_anchors: str | None = None,
 ) -> AsyncIterator[AiohttpFetcher]:
+    """`resolver` and `trust_anchors` (PEM certificates trusted besides the OS store) are for
+    tests: the DNS resolver hook and the test CA."""
     async with aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(resolver=resolver),
-        timeout=aiohttp.ClientTimeout(total=REQUEST_DEADLINE_SECONDS),
+        connector=aiohttp.TCPConnector(resolver=resolver, ssl=tls_context(trust_anchors)),
+        timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
+        headers={
+            "User-Agent": policy.user_agent,
+            # The codings this tool decodes itself, never aiohttp's own list (design D1).
+            "Accept-Encoding": ACCEPT_ENCODING,
+        },
         # No cookie session: a cookie set by one response would change what later ones return.
         cookie_jar=aiohttp.DummyCookieJar(),
+        # read_body decodes, so it measures the body both as transferred and as decoded.
+        auto_decompress=False,
     ) as session:
-        yield AiohttpFetcher(session, clock)
+        yield AiohttpFetcher(session, clock, policy.proxies)

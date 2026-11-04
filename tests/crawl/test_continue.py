@@ -16,7 +16,7 @@ from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlOverrides
 from openlinx.services.hooks import default_hooks
 from openlinx.store.transitions import CrawlStateError
-from tests.fixture_site.hosts import FixtureResolver
+from tests.fixture_site.hosts import FixtureResolver, on_http_port
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import continued, crawl_result
@@ -91,7 +91,9 @@ def test_warnings_cover_the_crawl_s_whole_life(
         }
     )
     seed, down = fixture_site(seed_site), fixture_site(Site(routes={"/robots.txt": Status(503)}))
-    resolver = FixtureResolver({"site.test": seed, "a.site.test": down, "b.site.test": down})
+    resolver = FixtureResolver(
+        on_http_port({"site.test": seed, "a.site.test": down, "b.site.test": down})
+    )
     stopped = crawl_result("http://site.test/", resolver=resolver, scope="subdomains", max_urls=3)
 
     result = continued(stopped, CrawlOverrides(max_urls=None), resolver=resolver)
@@ -216,7 +218,7 @@ def test_a_continue_requests_the_urls_an_unreachable_robots_txt_blocked(
     up = fixture_site(Site(routes={"/a": Page(body="<p>A</p>")}))
     stopped = crawl_result(
         "http://site.test/",
-        resolver=FixtureResolver({"site.test": seed, "other.test": down}),
+        resolver=FixtureResolver(on_http_port({"site.test": seed, "other.test": down})),
         max_urls=3,
     )
     blocked = query(
@@ -226,7 +228,7 @@ def test_a_continue_requests_the_urls_an_unreachable_robots_txt_blocked(
     result = continued(
         stopped,
         CrawlOverrides(max_urls=None),
-        resolver=FixtureResolver({"site.test": seed, "other.test": up}),
+        resolver=FixtureResolver(on_http_port({"site.test": seed, "other.test": up})),
     )
 
     assert (
@@ -270,7 +272,7 @@ def test_a_continue_whose_seed_answered_before_pauses_for_no_other_origin(
             }
         )
     )
-    resolver = FixtureResolver({"site.test": seed})
+    resolver = FixtureResolver(on_http_port({"site.test": seed}))
     stopped = crawl_result(
         "http://site.test/", resolver=resolver, scope="subdomains", network_wait=0, max_urls=2
     )

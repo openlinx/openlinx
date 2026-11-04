@@ -3,6 +3,7 @@
 import json
 import re
 import sys
+from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path, PureWindowsPath
 
@@ -233,14 +234,15 @@ def test_a_secret_given_to_the_service_is_nowhere_in_the_crawl_file(
         command_argv=["linx", "crawl", seed, "--token", "s3cret"],
     )
     clock = FakeClock()
-    fetcher = FakeFetcher(clock, {"/": FakePage("<p>Home</p>")})
 
     result = start_crawl(
         plan_crawl(request, tables_with_example()),
         clock,
         Collected(),
         default_hooks(),
-        fetcher=fetcher,
+        fetchers=lambda policy, clock: nullcontext(
+            FakeFetcher(clock, {"/": FakePage("<p>Home</p>")})
+        ),
     )
     row = crawl_row(result.crawl_file)
 
