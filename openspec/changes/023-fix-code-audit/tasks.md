@@ -23,22 +23,22 @@ Seams are those of docs/testing.md. A guard is proven red by a mutation, and the
 
 ## 3. Store
 
-- [ ] 3.1 Guard `test_every_table_is_declared_in_the_schema_module` in a fresh process (design D4), and the schema-service fixture's docstring says why its table is temporary. Done when: it is red with a table declared in `openlinx.store.pages`.
-- [ ] 3.2 Drive "A sync submit under a loop's commit deadline is refused" and "A unit submitted under a loop's commit deadline commits at the deadline" at seam 2, on `FakeClock` (design D5); `PassContext.writer` is the async Protocol, proven by a mypy-checked call of `close()` in `tests/test_handler_types.py`; docs/crawl-store.md "When it commits" states both regimes.
-- [ ] 3.3 Drive "A unit that returns a cursor is refused" and "A unit that commits ends the writer" at seam 2 (design D6).
-- [ ] 3.4 The guards `_at` → `timestamp` and `<x>_message` → `<x>` with values over `linx schema` (design D7), and CONTRIBUTING's schema section names what tests check. Done when: each is red with one bad column.
-- [ ] 3.5 Review.
+- [x] 3.1 Guard `test_every_table_is_declared_in_the_schema_module` in a fresh process, over tables and indexes (design D4), and the schema-service fixture's docstring says why its table is temporary. Done when: it is red with a table declared in `openlinx.store.pages`.
+- [x] 3.2 Drive "A sync submit under a loop's commit deadline is refused" and "A unit submitted under a loop's commit deadline commits at the deadline" at seam 2, on `FakeClock` (design D5), the deadline's scenario a guard proven by mutation; leaving `loop_deadline()` gives back the writer's own timer and its sync calls; `PassContext.writer` is the `PassWriter` Protocol, proven by a mypy-checked call of `close()` in `tests/test_handler_types.py`; docs/crawl-store.md "When it commits" states both regimes.
+- [x] 3.3 Drive "A unit that returns a cursor is refused" and "A unit that commits ends the writer" at seam 2 (design D6), the earlier units' Futures resolving.
+- [x] 3.4 The guards `_at` → `timestamp` and `<x>_message` → `<x>` with values over `linx schema` (design D7), and CONTRIBUTING's schema section names what tests check. Done when: each is red with one bad column.
+- [x] 3.5 Review.
 
 ## 4. The Crawl's input (design D9, D10)
 
-- [ ] 4.1 Drive "A refused value given with the settings names its key" at seam 2, through `plan_crawl` with no app, and `Settings.table` naming a table that is not registered. `default_tables()` in `openlinx.services.settings`; `build_app`, `plan_crawl` and `init_workspace` use it, and the test helpers build no app.
-- [ ] 4.2 Drive "A refused override of a continued Crawl names its key" at seam 2.
-- [ ] 4.3 Drive "A refused flag names its setting" at seam 1: the runner's `invalid_value` takes `details.key` from the option's setting.
-- [ ] 4.4 `CrawlRequest` gets `subdomains` and `secret_flags`, and `plan_crawl` resolves the alias and its conflict and builds the secret names, at seam 2 with the conflict's existing scenario kept at seam 1. The CLI adapter only maps flags.
-- [ ] 4.5 Drive "Bounds of an option" at seam 1: `min` and `max` in `linx commands`.
-- [ ] 4.6 The import rule: `openlinx.services`, `.workspace`, `.store`, `.crawl`, `.extract` and `.output` import no `typer` and no `openlinx.cli`. Done when: it is red with a `typer` import in a service.
-- [ ] 4.7 Guard `test_mirrored_options_match_their_fields` over every Command (design D10), replacing the hidden rule in the recorded-config test. Done when: it is red with Click's `max` changed and with a `[crawl]` field that has no option.
-- [ ] 4.8 Review.
+- [x] 4.1 Drive "A refused value given with the settings names its key" at seam 2, through `plan_crawl` with no app, and "A refused given value is reported before a refused file value", and `Settings.table` naming a table that is not registered. `default_tables()` in `openlinx.services.settings`; `build_app`, `plan_crawl` and `init_workspace` use it, the test helpers build no app, and docs/testing.md names it for seam-2 calls.
+- [x] 4.2 Drive "A refused override of a continued Crawl names its key" at seam 2, through the mapper that `load_settings` uses.
+- [x] 4.3 Drive "A refused flag names its setting" at seam 1: the runner's `invalid_value` takes `details.key` from the option's setting.
+- [x] 4.4 `CrawlRequest` gets `subdomains` and `secret_flags` in place of `secret_names`, and `plan_crawl` resolves the alias and its conflict and builds the secret names, at seam 2 with the conflict's existing scenario kept at seam 1. The CLI adapter only maps flags.
+- [x] 4.5 Drive "Bounds of an option" at seam 1: `min` and `max` in `linx commands` and docs/cli.md.
+- [x] 4.6 The import rule: no module outside `openlinx.cli` and `openlinx.__main__` imports `typer` or `openlinx.cli`, and ruff's `TID252` bans relative imports, which would hide the name. Done when: it is red with a `typer` import in a service and in `openlinx.query`.
+- [x] 4.7 Guard `test_mirrored_options_match_their_fields` over every Command (design D10), replacing the hidden rule in the recorded-config test, which compares with `CrawlSettings()`. Done when: it is red with Click's `max` changed and with a `[crawl]` field that has no option.
+- [x] 4.8 Review.
 
 ## 5. Link reading and the Link type table
 

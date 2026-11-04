@@ -149,7 +149,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 
 The schema of a crawl file is a public contract ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)): agents query it with SQL. It changes only this way:
 - **In one slice:** add the table or column to the declared schema (`openlinx.store.schema`) and to [docs/schema.md](docs/schema.md) in the same commit, in the slice whose scenario first needs it. The store contract test compares the two, so neither may lead. [How to add a table](docs/schema.md#how-to-add-a-table) has the details.
-- **Declared in full:** a new table through `public_table(..., change=<n>)`, a comment on every table and column, a description on every index, the shared column types for timestamps, JSON and booleans, and the conventions of [ADR-0005](docs/adr/0005-crawl-file-schema-conventions.md), summed up in `docs/schema.md`. Tests check them on every declared table.
+- **Declared in full:** a new table through `public_table(..., change=<n>)`, a comment on every table and column, a description on every index, the shared column types for timestamps, JSON and booleans, and the conventions of [ADR-0005](docs/adr/0005-crawl-file-schema-conventions.md), summed up in `docs/schema.md`, whose [How to add a table](docs/schema.md#how-to-add-a-table) says which of them tests check on every declared table and which only review checks.
 - **Before v0.1:** no migration. Edit the declared tables directly; `schema_version` stays `1`, and crawl files from earlier development builds are not supported.
 - **From v0.1 on:** every schema change adds 1 to `schema_version`, and brings a migration and a test that upgrades a crawl file from every published schema version.
 
@@ -171,13 +171,13 @@ Each recipe lists the files to touch in order, the seam to test at, and what che
 3. If a flag mirrors it, see the next recipe.
 4. *Review:* document it with its table, such as `[crawl]` in docs/crawling.md "Options and `[crawl]` settings".
 
-A table has one owning change, and a new table is registered in `build_app` (`openlinx/cli/app.py`) by its `"module:Class"` reference, so `--help` never imports it.
+A table has one owning change, and a new table is registered in `default_tables()` (`openlinx/services/settings.py`) by its `"module:Class"` reference, so `--help` never imports it.
 
 ### An option that mirrors a setting
 
 1. Declare it on the Command as `--concurrency` is in `openlinx/cli/crawl.py`: `Annotated[int, typer.Option("--flag", ...), OptionMeta(setting="table.field")] = <default>`. The long name is the field's name with `-` for `_`. `tests/workspace/test_tables.py` checks that the setting exists.
 2. The adapter passes `setting_flags(ctx)` to the settings loader, so only a flag given on the command line beats the settings file.
-3. *Review:* the option's default, `min`/`max` and help match the field's.
+3. `test_mirrored_options_match_their_fields` checks that the option's name, default and `min`/`max` match the field's; *review* checks its help.
 4. A secret option inherits `secret` from its setting and takes only a long name; `check_command` refuses a short one.
 
 ### A Command
@@ -226,11 +226,11 @@ Plug it into `default_hooks()` in `openlinx/services/hooks.py`, as [How 030 and 
   | `crawl/engine/units.py` | 370 | — | Response preparation and handler rows apart from URL record construction. |
   | `crawl/fetch/requester.py` | 282 | `Requester` (14) | Extract retry and backoff orchestration into functions; `Requester` keeps request admission and the watchdog for each attempt. |
   | `extract/unicode_scripts.py` | 1193 | — | Generated Unicode range tables, with no runtime logic; keep one generated module for the pinned Unicode version. |
-  | `output/codes.py` | 339 | — | One declaration per diagnostic code; it grows with the registry, not with its logic. |
-  | `services/crawling.py` | 541 | — | Move planning, from settings to Scope and the Seed's checks, into its own module. |
+  | `output/codes.py` | 343 | — | One declaration per diagnostic code; it grows with the registry, not with its logic. |
+  | `services/crawling.py` | 574 | — | Move planning, from settings to Scope and the Seed's checks, into its own module. |
   | `store/schema.py` | 1179 | — | Declared tables and columns; keep the public schema in its owning module. |
   | `store/urls.py` | 484 | — | Split by kind of unit: recording, frontier and counts, each with its statements built at import. |
-  | `store/writer.py` | 407 | `CrawlWriter` (29) | Batch and replay functions, and a separate submission window, as ADR-0006 describes. |
+  | `store/writer.py` | 518 | `CrawlWriter` (35) | Batch and replay functions, and a separate submission window, as ADR-0006 describes. |
 
 - **Imports:**
   - Our own code is imported by name, as in `from openlinx.output.codes import USAGE_ERROR`, never as a module.

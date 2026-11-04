@@ -14,7 +14,7 @@ from openlinx.cli.meta import check_command
 from openlinx.cli.runner import Invocation, OpenLinxGroup
 from openlinx.cli.schema import schema
 from openlinx.naming import COMMAND_NAME, PRODUCT_NAME
-from openlinx.workspace.tables import SettingsTables
+from openlinx.services.settings import default_tables
 
 
 def _print_version(ctx: typer.Context, value: bool) -> None:
@@ -44,10 +44,7 @@ class AppExtra:
 
 def build_app(extra: AppExtra | None = None) -> typer.Typer:
     extra = extra or AppExtra()
-    tables = SettingsTables()
-    tables.register("crawl", "openlinx.crawl.settings:CrawlSettings")
-    tables.register("store", "openlinx.store.settings:StoreSettings")
-    tables.register("content_area", "openlinx.extract.settings:ContentAreaSettings")
+    tables = default_tables()
     for name, reference in extra.settings_tables.items():
         tables.register(name, reference)
 

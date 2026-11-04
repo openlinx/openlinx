@@ -8,8 +8,9 @@ Crawl data SHALL be written only through the Crawl's transactional writer. Calle
 - **Order:** units SHALL run one at a time, in the order they were submitted. Each unit runs in the writer's open transaction and sees the effects of every unit before it. A unit that only reads SHALL commit nothing.
 - **Atomic units:** a unit that fails SHALL leave no change, and its error SHALL be raised to its caller. The other units SHALL be unaffected. A unit that fails SHALL NOT run again.
 - **Units may run again:** when a unit fails, the units that ran before it since the last commit MAY run a second time before they are committed. A unit SHALL therefore have no effect outside the writer's connection, SHALL NOT change its input, SHALL be deterministic given the file's state, and SHALL return a value that compares by value. When a unit that runs again raises, returns a different result or changes a different number of rows, the writer SHALL end without that commit: the failing unit's caller still gets its own error, and later units fail with the error that the writer is closed.
-- **Units it refuses:** at a unit's first run, the writer SHALL refuse a result whose type compares by identity, or a tuple, list or frozenset with such an element, or a dict with such a key or value; an enumeration member is a value. The unit's caller gets an error that names the unit and says to return values, the unit leaves no change, and the other units are unaffected.
-- **A unit that commits:** a unit that commits the writer's transaction SHALL end the writer. Its caller gets an error that names the unit and says never to commit. What the unit committed stays in the file: its own changes before the commit, and those of the units before it since the last commit. Its changes after the commit are rolled back, and later units fail with the error that the writer is closed.
+- **Units it refuses:** at a unit's first run, the writer SHALL refuse a result whose type compares by identity, or a tuple, list, set or frozenset with such an element, or a dict with such a key or value; an enumeration member is a value. The unit's caller gets an error that names the unit and says to return values, the unit leaves no change, and the other units are unaffected.
+- **A unit that commits:** a unit that commits the writer's transaction SHALL end the writer. Its caller gets an error that names the unit and says never to commit. What the unit committed stays in the file: its own changes before the commit, and those of the units before it since the last commit. Its changes after the commit are rolled back, and later units fail with the error that the writer is closed. A unit whose commit fails ends the writer with nothing of its batch committed.
+- **A unit that rolls back:** a unit that rolls back the writer's transaction SHALL fail as a failing unit does: its caller gets an error that names the unit and says to raise instead, the units before it since the last commit run again and are committed, and the writer goes on.
 - **Commits:** the writer SHALL commit its open transaction when any of these happens:
   - 500 units have run since the last commit
   - 1 second has passed since the first unit after the last commit
@@ -99,9 +100,13 @@ Crawl data SHALL be written only through the Crawl's transactional writer. Calle
 - **WHEN** a unit inserts the Seed `(1, "https://example.com/a")` and returns the result of its `execute`, the next unit inserts the Seed `(2, "https://example.com/b")`, and the writer is closed
 - **THEN** the caller of the first unit receives an error that names the unit, and `seeds` holds exactly the position 2
 
+#### Scenario: A unit that rolls back fails as a failing unit
+- **WHEN** a unit inserts the Seed at position 1, the next unit inserts the Seed at position 2 and rolls back the connection, a third unit inserts the Seed at position 3, and the writer is closed
+- **THEN** the caller of the second unit receives an error that names the unit, and `seeds` holds exactly the positions 1 and 3
+
 #### Scenario: A unit that commits ends the writer
 - **WHEN** a unit inserts the Seed at position 1, the next unit inserts the Seed at position 2, commits the connection and inserts the Seed at position 3, and a third unit inserts the Seed at position 4
-- **THEN** the caller of the second unit receives an error that names the unit, the caller of the third unit receives `CrawlWriterClosedError("The crawl writer is closed.")`, and `seeds` holds exactly the positions 1 and 2
+- **THEN** the caller of the second unit receives an error that names the unit, the Future of the first unit resolves with its result, the caller of the third unit receives `CrawlWriterClosedError("The crawl writer is closed.")`, and `seeds` holds exactly the positions 1 and 2
 
 
 ## ADDED Requirements
@@ -111,12 +116,12 @@ Crawl data SHALL be written only through the Crawl's transactional writer. Calle
 **In short:** under a loop's commit deadline, units go through the async calls, which commit on the loop's clock; the sync calls are refused.
 
 While a caller holds the writer's loop commit deadline, as a Crawl does:
-- the 1-second commit of "Transactional writer" SHALL be measured on the loop's clock, from the first unit an async call submitted after the last commit;
+- the 1-second commit of "Transactional writer" SHALL be measured on the loop's clock: a unit that an async call submitted SHALL be committed no later than 1 second after it;
 - a sync `submit` or `run` SHALL fail at once with an error that names the async call to use, and SHALL queue nothing.
 
 #### Scenario: A sync submit under a loop's commit deadline is refused
-- **WHEN** a unit is submitted with the sync `submit` while the loop's commit deadline is held
-- **THEN** the call fails at once with an error that names `submit_async`, and the unit does not run
+- **WHEN** a unit is submitted with the sync `submit` while the loop's commit deadline is held, the deadline is then released, and a unit is run with the sync `run`
+- **THEN** the submit fails at once with an error that names `submit_async`, its unit does not run, and the later `run` runs
 
 #### Scenario: A unit submitted under a loop's commit deadline commits at the deadline
 - **WHEN** one unit is submitted with `submit_async` while the loop's commit deadline is held, and the loop's clock advances 1 second

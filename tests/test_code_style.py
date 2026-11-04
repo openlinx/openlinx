@@ -302,6 +302,69 @@ def test_only_the_store_imports_sqlalchemy() -> None:
     )
 
 
+# Only the CLI loads Typer: a service called without it, as the MCP server will call it, must not
+# load Typer or the CLI's adapters (023-fix-code-audit D9).
+CLI_MODULES = ("openlinx/cli/", "openlinx/__main__.py")
+
+
+def cli_import_violations(sources: Mapping[str, str]) -> list[str]:
+    """Modules outside the CLI that import typer or openlinx.cli, given every module's source.
+    Relative imports, which would hide the name, are banned by ruff's TID252."""
+    return [
+        f"{module} imports {name}"
+        for module, source in sources.items()
+        if not module.startswith(CLI_MODULES)
+        for name in _modules_and_submodules(ast.parse(source))
+        if name.partition(".")[0] == "typer"
+        or name == "openlinx.cli"
+        or name.startswith("openlinx.cli.")
+    ]
+
+
+def _modules_and_submodules(tree: ast.AST) -> list[str]:
+    """The modules imported, and for `from openlinx import cli` the submodule too."""
+    found = _imported_modules(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "openlinx" and not node.level:
+            found += [f"openlinx.{alias.name}" for alias in node.names]
+    return found
+
+
+def test_no_service_imports_the_cli() -> None:
+    sources = {
+        path.relative_to(SRC).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((SRC / "openlinx").rglob("*.py"))
+    }
+
+    assert cli_import_violations(sources) == [], (
+        "a module outside openlinx.cli imports typer or openlinx.cli: take plain values and raise "
+        "OpenLinxError, and let the CLI adapter in openlinx.cli map flags to them"
+    )
+
+
+def test_an_import_of_the_cli_under_it_is_named() -> None:
+    sources = {
+        "openlinx/services/crawling.py": "def late():\n    import typer\n",
+        "openlinx/workspace/settings.py": "from openlinx.cli.options import OptionMeta\n",
+        "openlinx/output/writer.py": "from typer.testing import CliRunner\n",
+        "openlinx/extract/page_data.py": "from openlinx import cli\n",
+        "openlinx/store/urls.py": "import typing\nfrom openlinx.clock import Clock\n",
+        "openlinx/query/compiler.py": "import typer\n",
+        "openlinx/naming.py": "from openlinx.cli import options\n",
+        "openlinx/cli/crawl.py": "import typer\n",
+        "openlinx/__main__.py": "from openlinx.cli.app import main\n",
+    }
+
+    assert cli_import_violations(sources) == [
+        "openlinx/services/crawling.py imports typer",
+        "openlinx/workspace/settings.py imports openlinx.cli.options",
+        "openlinx/output/writer.py imports typer.testing",
+        "openlinx/extract/page_data.py imports openlinx.cli",
+        "openlinx/query/compiler.py imports typer",
+        "openlinx/naming.py imports openlinx.cli",
+    ]
+
+
 def test_an_import_of_sqlalchemy_outside_the_store_is_named() -> None:
     sources = {
         "openlinx/crawl/engine/dispatch.py": "import sqlalchemy\n",
@@ -1244,6 +1307,20 @@ def _called(call: ast.Call) -> str:
     return call.func.id if isinstance(call.func, ast.Name) else ""
 
 
+def _is_fake_fetcher_factory(factory: ast.expr) -> bool:
+    match factory:
+        case ast.Lambda(
+            body=ast.Call(
+                func=ast.Name(id="nullcontext"),
+                args=[ast.Call(func=ast.Name(id="FakeFetcher"))],
+                keywords=[],
+            )
+        ):
+            return True
+        case _:
+            return False
+
+
 def fake_clock_with_real_io(sources: Mapping[str, str]) -> list[str]:
     """Test functions that pair FakeClock with the fixture site or the aiohttp Fetcher."""
     found: list[str] = []
@@ -1258,7 +1335,11 @@ def fake_clock_with_real_io(sources: Mapping[str, str]) -> list[str]:
             arguments = {argument.arg for argument in function.args.args}
             unfaked_crawl = any(
                 _called(call) in CRAWLS
-                and not any(keyword.arg == "fetcher" for keyword in call.keywords)
+                and not any(
+                    keyword.arg == "fetcher"
+                    or (keyword.arg == "fetchers" and _is_fake_fetcher_factory(keyword.value))
+                    for keyword in call.keywords
+                )
                 for call in calls
             )
             if arguments & REAL_IO_FIXTURES or called & REAL_IO_CALLS or unfaked_crawl:
@@ -1277,8 +1358,51 @@ def test_no_test_pairs_the_virtual_clock_with_real_io() -> None:
 
     assert fake_clock_with_real_io(sources) == [], (
         "a FakeClock test uses FakeFetcher, never the fixture site or aiohttp: pass "
-        "fetcher=FakeFetcher(clock, pages), or use SystemClock with the fixture site"
+        "fetcher=FakeFetcher(clock, pages) or "
+        "fetchers=lambda policy, clock: nullcontext(FakeFetcher(clock, pages)), "
+        "or use SystemClock with the fixture site"
     )
+
+
+@pytest.mark.parametrize(
+    "crawl",
+    [
+        "start_crawl(plan, clock, reporter, hooks",
+        "continue_crawl(file, overrides, clock, reporter, hooks",
+    ],
+)
+def test_a_virtual_clock_with_an_explicit_fake_fetcher_factory_is_allowed(crawl: str) -> None:
+    sources = {
+        "tests/crawl/test_timing.py": "def test_factory():\n"
+        "    clock = FakeClock()\n"
+        f"    {crawl}, fetchers=lambda policy, clock: nullcontext(FakeFetcher(clock, {{}})))\n",
+    }
+
+    assert fake_clock_with_real_io(sources) == []
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        "",
+        ", fetchers=None",
+        ", fetchers=aiohttp_fetcher",
+        ", fetchers=unknown_factory",
+        ", fetchers=lambda policy, clock: nullcontext(fetcher)",
+        ", fetchers=lambda policy, clock: nullcontext(AiohttpFetcher(session, clock))",
+    ],
+)
+def test_a_virtual_clock_with_an_unproven_fetcher_factory_is_named(factory: str) -> None:
+    sources = {
+        "tests/crawl/test_timing.py": "def test_factory():\n"
+        "    clock = FakeClock()\n"
+        "    unused = FakeFetcher(clock, {})\n"
+        f"    start_crawl(plan, clock, reporter, hooks{factory})\n",
+    }
+
+    assert fake_clock_with_real_io(sources) == [
+        "tests/crawl/test_timing.py:1 test_factory pairs FakeClock with real I/O"
+    ]
 
 
 def test_a_virtual_clock_beside_real_io_is_named() -> None:

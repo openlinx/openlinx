@@ -40,27 +40,31 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - *Alternative:* a traceback in the details. It is long, holds absolute paths, and differs by OS. Rejected.
 
 ### D4. Every table is declared in `openlinx.store.schema`
-- **In short:** a guard in a fresh process compares the tables, indexes and views on `metadata` after `import openlinx.store.schema` with those after importing every `openlinx` module, and names any extra one with "declare it in openlinx.store.schema".
+- **In short:** a guard in a fresh process compares the tables and indexes on `metadata` after `import openlinx.store.schema` with those after importing every `openlinx` module but `openlinx.__main__`, which runs the CLI, and names any extra one with "declare them in openlinx.store.schema".
+- The baseline holds no table of another module: the modules that the schema module imports run before it creates `metadata`, so none of them can declare a table on it.
+- SQLAlchemy's `MetaData` holds no views, and none is declared; the change that declares the first view extends the guard to it.
 - **Why:** `linx schema` and the docs test read only that module, while `create_all` builds whatever was imported. A table declared beside its units would be in the crawl file and missing from the contract, and the contract test would pass or fail by test order.
 - *Alternative:* `linx schema` imports every store module. The schema would then depend on import side effects, and the first change to declare a view elsewhere (`040`) would still pass. Rejected.
 
 ### D5. A pass gets the writer's async calls only
-- **In short:** `PassContext.writer` is a Protocol with `run_async`, `submit_async` and `flush_async`, and under `loop_deadline()` the writer's sync `submit` and `run` raise `RuntimeError("inside a Crawl use submit_async / run_async")`.
+- **In short:** `PassContext.writer` is `PassWriter`, a Protocol in `openlinx.crawl.engine.hooks` with `run_async`, `submit_async` and `flush_async`, and under `loop_deadline()` the writer's sync `submit` and `run` raise `RuntimeError("inside a Crawl use submit_async / run_async")`.
+- Leaving `loop_deadline()` gives the writer back its own 1-second timer and its sync calls, so the refusal holds only while the deadline is held.
 - **Why:** under a loop's commit deadline the writer's thread does not commit on its own timer; only the async calls wake the loop's deadline. A sync `submit` therefore waits for 500 units, a flush or the close, which under `FakeClock` hangs the test and in a Crawl delays the pass's units to the end. A pass has no use for `close`.
 - `docs/crawl-store.md` "When it commits" states both regimes.
 - *Alternative:* the sync `submit` wakes the loop's deadline through `call_soon_threadsafe`. It keeps a call that blocks the loop when the window is full. Rejected.
 
 ### D6. The writer refuses a unit it could not replay
 - **In short:** at a unit's first run the writer refuses a result that compares by identity, and a unit that commits ends the writer; both errors name the unit's `__qualname__` and the fix ("return values, such as .all() rows or a record"; "never commit").
-- **Identity equality:** `type(result).__eq__ is object.__eq__`. For a tuple, list or frozenset, the same check runs over the set of its element types, and for a dict over the set of its key types and its value types, so a tuple of 500 records costs one check per type. An `enum.Enum` member passes: it is a singleton, so identity is its value. A `CursorResult`, a connection-bound object or a plain class is refused; `Row`, records, numbers and strings pass. A refused result leaves no change, as a failing unit does.
-- **A commit:** a SQLAlchemy `commit` event listener on the writer's connection, armed while a unit runs, sees a commit wherever the unit makes it. `in_transaction()` after the unit would miss a unit that commits and then executes again, since the connection begins a new transaction by itself. The commit has already written the unit's changes before it and the batch before them, so the writer cannot undo it: it ends, as a failed replay ends it, and later units fail with the writer-closed error.
+- **Identity equality:** `type(result).__eq__ is object.__eq__`, refused with a `TypeError`, since it is a broken contract inside the code. For a tuple, list, set or frozenset, the same check runs over the set of its element types, and for a dict over the set of its key types and its value types, so a tuple of 500 records costs one check per type. The check goes one level deep: a tuple of tuples that holds a `CursorResult` passes it, and the replay's comparison still catches it. An `enum.Enum` member passes: it is a singleton, so identity is its value. A `CursorResult`, a connection-bound object or a plain class is refused; `Row`, records, numbers and strings pass. A refused result leaves no change, as a failing unit does.
+- **A commit:** SQLAlchemy `commit` and `rollback` event listeners on the writer's connection, armed only while a unit runs and never during a replay, see what the unit does to the transaction wherever it does it. The `commit` event fires before the commit runs, so whether the batch was written rests on the connections themselves: the unit's first commit must come before any rollback, and after the unit SQLAlchemy must no longer hold the transaction the unit began in, nor SQLite one that SQLAlchemy shows no more. A commit that fails leaves SQLAlchemy's transaction in place, and a rollback of a failed transaction reaches no driver, so SQLite keeps it; in both cases the writer ends with nothing of the batch committed. A commit that wrote the batch counts whatever the unit did after it. `in_transaction()` after the unit would miss a unit that commits and then executes again, since the connection begins a new transaction by itself. The commit has already written the unit's changes before it and the batch before them, so the writer cannot undo it: the batch's Futures resolve with their results, since their rows are in the file, and the writer ends, as a failed replay ends it, and later units fail with the writer-closed error. A unit that commits and then raises counts as one that commits.
+- **A rollback:** a unit that rolls back has dropped the batch before it, whose units would otherwise resolve as committed or never resolve. It is handled as a failing unit: the batch runs again and is committed, and the unit's caller gets a `RuntimeError` that names it and says to raise instead, raised from the unit's own error when it raised one; a busy file stays `crawl_busy`.
 - **Why:** a replayed unit is compared with its first result by `!=`. A unit that returns a cursor or commits works until a later unit of its batch fails, which is rare in tests and normal in a Crawl, and the Crawl then ends `write_failed`.
 - *Alternative:* an allowlist of value types walked recursively. It refuses every new record type until it is listed, and costs a walk per unit. Rejected.
 
 ### D7. Schema conventions that a test checks
 - **In short:** two guards over `linx schema`: a column whose name ends in `_at` has the format `timestamp`, and a column `<x>_message` has a column `<x>` with values.
 - Only one direction for `_at`: a timestamp may have another name, such as `pages.last_modified`, which is named after its header.
-- CONTRIBUTING says which conventions tests check and which only review checks, as `docs/schema.md` does.
+- `docs/schema.md` says which conventions tests check and which only review checks, and CONTRIBUTING points to it.
 - **Why:** each mistake passes every test today and leaves the column without its CHECK and its Format or Values cell, so an agent that queries it with SQL loses the format. Both rules read only the declared schema, so the guards are cheap and cannot drift.
 - *Alternative:* guard every ADR-0005 naming rule, such as `is_` for booleans and the unit suffixes. Those rules have exceptions a test cannot tell from mistakes, so review keeps them. Rejected.
 
@@ -73,15 +77,19 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - **In short:** `plan_crawl(request, tables=None)` checks everything a caller gives it, so the CLI adapter only maps flags and a service call without the CLI validates the same way.
 - **The module:** its interface is `CrawlRequest` (the Seed, the Workspace inputs, the settings given by table, `subdomains`, the command line and `secret_flags`, the argv tokens to redact) and the codes it raises. Behind it: the settings tables, precedence (a given value beats the file), the `subdomains` alias and its `option_conflict`, the fields' bounds, the secret settings, and which input a refused value came from.
 - **Adapters:** the Typer adapter, which passes the values given on the command line; the test helper `crawl_result`, which passes plain values and builds no app; later the MCP server. Removing the module would put the registry, the conflict and the error mapping back into each adapter.
-- **The tables:** `default_tables()` in `openlinx.services.settings` lists every built-in table by its `"module:Class"` reference, so `build_app` stays light; `plan_crawl` and `init_workspace` default to it. A change that adds a table registers it there.
-- **A refused given value:** `load_settings` splits a validation error by its key: an error at a key the caller gave is that value's, raised as `invalid_value` (exit 2) with `details.key`; the others stay `settings_invalid` with `details.file`. Continuing a Crawl maps a refused override the same way. `Settings.table` names a table that is not registered instead of raising `StopIteration`.
-- An import rule keeps `typer` and `openlinx.cli` out of `openlinx.services`, `.workspace`, `.store`, `.crawl`, `.extract` and `.output`.
+- **The tables:** `default_tables()` in `openlinx.services.settings` lists every built-in table by its `"module:Class"` reference, so `build_app` stays light; `plan_crawl` and `init_workspace` default to it. A change that adds a table registers it there. Each call returns a new registry, since `build_app` registers its extra tables on it. The module imports only the registry, so `--help` loads nothing more.
+- **A refused given value:** `load_settings` splits a validation error by its key: an error at a value the caller gave, a key whose value is not a table, is that value's, and an error located at a table the caller gave values in, such as a table that is not registered, is the caller's, keyed by the table's name. Both are raised as `invalid_value` (exit 2) with `details.key`; the others stay `settings_invalid` with `details.file`, also in a table where the caller gave another key. When both a given value and the file are refused, the given value's error is raised, the first in the tables' field order: the call's own input is checked first, as Click checks flags before a Command runs, and the file's error shows on the next call. One mapper in `openlinx.workspace.settings`, from a validation error and the given keys, serves `load_settings` and a continued Crawl's overrides, which `CrawlSettings` refuses as pydantic errors otherwise. `Settings.table` raises a `TypeError` that names a table that is not registered and where to register it, `default_tables()` or `AppExtra.settings_tables`.
+- Input conflicts that need no file, such as `--subdomains` with another `--scope`, are checked before the Workspace is resolved.
+- **Secrets:** `plan_crawl` builds the secret names from `secret_flags` and the tables' secret settings. `secret_flags` has no default, so a caller that forgot it fails to build its request instead of recording a `--token` in the clear.
+- An import rule keeps `typer` and `openlinx.cli` out of every module but those of `openlinx.cli` and `openlinx.__main__`, the MCP server, the query and the report included; ruff's `TID252` bans relative imports, so every import names its module.
 - *Alternative:* a separate `build_crawl_request(given, tables)` that each adapter calls before `plan_crawl`. It is a second call to make in the right order, with no behaviour of its own. Rejected.
 - *Alternative:* `default_tables()` in `openlinx.services.hooks`, beside `default_hooks()`. That module imports the extractors and the store, so `--help` would load them. Rejected.
 
 ### D10. An option that mirrors a setting matches its field
 - **In short:** a guard over every Command checks that an option with a setting has the key's name (`-` for `_`), the field's default and the field's bounds as Click's `min` and `max`, and that every `[crawl]` field has an option; its message names where to add the option.
-- Click keeps its own `min` and `max`, so `--help` loads no pydantic. Click refuses a bad flag as `invalid_value`, and the runner adds `details.key` from the option's setting, so a refused flag and a refused value given to a service have one shape.
+- Click keeps its own `min` and `max`, so `--help` loads no pydantic. Click refuses a bad flag as `invalid_value`, and the runner adds `details.key` from the option's setting, when it has one, so a refused flag and a refused value given to a service have one shape. The value callbacks, such as `--rate`'s, refuse through Click too, so they get the same key.
+- The guard compares `ge` and `le`, the bounds Click's `min` and `max` can carry. A field bounded by `gt` or `lt`, such as `rate`, has no Click bounds: its option checks it with the same callback the field's validator uses. No option uses an open or clamped Click range.
+- The guard compares defaults as `linx commands` shows them: a repeatable option given no value is `[]`, as its field's default is. The recorded-config test then compares the recorded `[crawl]` table with `CrawlSettings()`, which is what a Crawl with no flags and no file records.
 - *Alternative:* build Click's bounds from the fields when the app is built. It loads pydantic on `--help`. Rejected.
 
 ### D11. A Page's Link elements are located by ordinal
@@ -126,6 +134,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 - **The value-equality check misses a nested identity field:** a frozen dataclass compares by value even when a field holds a cursor. → The replay comparison still catches it, as today; the check targets the common shapes.
 - **A NaN result** compares unequal to itself, so its replay fails. → A unit that returns a float is rare; the replay error names the unit.
 - **Two bounds per option** (Click and the field). → D10's guard keeps them equal.
+- **A commit through the driver** (`connection.connection.commit()`, `exec_driver_sql("COMMIT")`) is not seen by SQLAlchemy's `commit` event. → The natural mistake is `connection.commit()`, which it sees; a replay usually fails then, as on a unit whose inserts the commit made permanent, and review checks the rest.
 - Guards named after no scenario, and the failure class each guards:
   - `test_a_stop_flag_set_off_its_loop_is_refused`: an off-loop set that wakes no waiter.
   - `test_the_default_page_settings_pickle`: an extractor or config that `026`'s workers cannot load.
@@ -137,7 +146,17 @@ The hooks seam, the writer and the settings loader work, but several of their ru
   - `test_an_extractor_compiled_from_text_names_no_line`: a function without a module failing its URL.
   - `test_an_error_raised_in_a_library_points_at_the_extractor_s_line`: a hook failure that points into the library instead of the hook.
   - `test_every_table_is_declared_in_the_schema_module`: a table missing from the contract.
+  - `test_a_column_named_at_is_a_timestamp`: a time column without its CHECK and its Format.
+  - `test_a_message_column_explains_a_code_column`: an error message without its listed code.
+  - `test_a_unit_whose_commit_fails_ends_the_writer_with_nothing_committed`: a batch resolved as durable that its unit's failed commit lost.
+  - `test_a_pass_that_closes_the_crawl_s_writer_fails_mypy`: a pass that closes the Crawl's writer or calls its sync calls.
+  - `test_a_unit_that_returns_an_enumeration_member_is_kept`: an enumeration result refused as an identity one.
   - `test_every_name_used_across_a_package_is_listed`: a hidden package interface.
+  - `test_a_table_that_is_not_registered_is_named`: a table read that fails with a bare StopIteration.
+  - `test_no_service_imports_the_cli`: a service that only works under the CLI.
+  - `test_an_import_of_the_cli_under_it_is_named`: the import rule's own cases, reported and ignored.
+  - `test_a_secret_given_to_the_service_is_nowhere_in_the_crawl_file`: a service caller's secret recorded in the clear.
+  - `test_a_crawl_request_names_its_secret_flags`: a request built without the tokens its file must redact.
   - `test_mirrored_options_match_their_fields`: a flag whose default or bounds differ from its setting.
   - `test_only_the_streams_and_click_compat_suppress_tid251`: a banned API silenced.
   - `test_link_type_table_matches_the_docs`: the docs' Requested column out of step.
