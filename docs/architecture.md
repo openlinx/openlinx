@@ -130,17 +130,19 @@ Frontier ──► Engine ──► Requester ──► Fetcher ──► Page e
 
 ## Page data
 
+The columns of `pages`, by group; each column's definition is its description in [schema.md](schema.md#table-pages). A release in parentheses marks a column that is NULL until that release ([ROADMAP.md](../ROADMAP.md)).
+
 | Group | Columns |
 |---|---|
-| Identity and response | Address, URL-encoded address, Content Type, Status Code, Status, Indexability, Indexability Status, Response Time, Last Modified, Redirect URL, Redirect Type, Cookies (Set-Cookie), HTTP Version, Crawl Timestamp |
-| Titles and headings | Title 1/2 (+ length, pixel width), Meta Description 1/2 (+ length, pixel width), Meta Keywords, H1-1/2 (+ length), H2-1/2 (+ length) |
-| Directives | Meta Robots, X-Robots-Tag, Meta Refresh, Canonical Link Element, rel next/prev (HTML and HTTP header), amphtml, Mobile Alternate |
-| Size | Size, Transferred, Content-Encoding |
-| Content | Word Count, Sentence Count, Average Words per Sentence, Flesch Reading Ease / Readability, Text Ratio, Language, Hash, Closest Near-Duplicate†, Near-Duplicate count† |
-| Links | Crawl Depth, Folder Depth, Link Score†, Inlinks, Unique Inlinks, Unique JS Inlinks†, % of Total, Outlinks, Unique Outlinks, Unique JS Outlinks†, External Outlinks, Unique External Outlinks |
-| Structured data | JSON-LD / Microdata item counts and types, validation errors† / warnings† |
+| Identity and response | `url_id`, `address`, `url_encoded_address`, `url_path`, `url_query`, `content_type`, `status_code`, `status`, `indexability`, `indexability_status`, `response_time_ms`, `last_modified`, `redirect_url`, `redirect_type`, `set_cookie_count`, `js_cookie_count` (v1.1), `http_version` (v0.2), `crawl_timestamp` |
+| Titles and headings | `title_1` and `title_2`, each with `_length` and `_width_px` (v0.2), `title_count`, `meta_description_1` and `meta_description_2`, each with `_length` and `_width_px` (v0.2), `meta_description_count`, `meta_keywords_1` and its `_length`, `h1_1` and `h1_2`, each with `_length`, `h1_count`, `h2_1` and `h2_2`, each with `_length`, `h2_count` |
+| Directives | `meta_robots` and `x_robots_tag`, each with `_noindex` and `_nofollow`, `meta_refresh`, `canonical_url`, `canonical_link_element_1`, `canonical_link_element_2`, `http_canonical`, `canonical_count`, `canonical_relative`, `rel_next_1`, `rel_prev_1`, `http_rel_next_1`, `http_rel_prev_1`, `amphtml_link_element`, `mobile_alternate_link` |
+| Size | `size_bytes`, `transferred_bytes`, `content_encoding` |
+| Content | `word_count`, `sentence_count`, `average_words_per_sentence`, `syllable_count` (v0.2), `flesch_reading_ease` (v0.2), `readability` (v0.2), `text_ratio_pct`, `declared_language`, `detected_language` (v0.2), `content_hash`, `closest_similarity_pct` (v0.3), `near_duplicate_count` (v0.3) |
+| Links | `crawl_depth`, `folder_depth`, `link_score` (v0.2), `inlinks`, `unique_inlinks`, `unique_js_inlinks` (v1.1), `linking_pages_pct`, `outlinks`, `unique_outlinks`, `unique_js_outlinks` (v1.1), `external_outlinks`, `unique_external_outlinks` |
+| Structured data | `jsonld_item_count`, `microdata_item_count`, `jsonld_parse_error_count`, `structured_data_types`, `structured_data_error_count` (v0.3), `structured_data_warning_count` (v0.3) |
 
-† These columns are null until the release that measures them (see [ROADMAP.md](../ROADMAP.md)).
+Beside `pages`, Page data has `links` (one row per discovered Link), `cookies` (one row per `Set-Cookie` header, never its value) and `page_sources` (the stored HTML, from v0.2).
 
 ## Report pipeline
 

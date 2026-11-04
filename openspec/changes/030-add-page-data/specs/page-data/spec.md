@@ -191,8 +191,8 @@ A value *rounded to 2 decimals* SHALL be its exact quotient rounded half up, so 
 | Structured data | `microdata_item_count` | INTEGER | yes |  |  |
 | Structured data | `jsonld_parse_error_count` | INTEGER | yes |  |  |
 | Structured data | `structured_data_types` | TEXT | yes |  | json |
-| Structured data | `structured_data_errors` | INTEGER | yes | N3 |  |
-| Structured data | `structured_data_warnings` | INTEGER | yes | N3 |  |
+| Structured data | `structured_data_error_count` | INTEGER | yes | N3 |  |
+| Structured data | `structured_data_warning_count` | INTEGER | yes | N3 |  |
 
 `url_id` SHALL be the primary key. `pages` SHALL have one secondary index, `pages_address`, unique over `address`, which serves finding a Page by its display address and is the tie-breaker of the keyset paging of `050-add-query-and-segments`. Other sorts and filters over `pages` scan the table.
 
@@ -814,7 +814,7 @@ For an analysed Page, the structured-data columns SHALL be:
 - **`microdata_item_count`**: the number of elements that have `itemscope` and no `itemprop`.
 - **`structured_data_types`**: a JSON array of the distinct types of all counted items, sorted by code point. Types come from `@type`, a string or an array of them, and from `itemtype`, split at ASCII whitespace. A value of `@type` that is not a string, or is empty, is skipped. A leading `http://schema.org/` or `https://schema.org/` is removed from each type, and a type that is empty once it is removed is skipped. The array is `[]` when there are none.
 
-`structured_data_errors` and `structured_data_warnings` SHALL be NULL, because validation is measured from v0.3.
+`structured_data_error_count` and `structured_data_warning_count` SHALL be NULL, because validation is measured from v0.3.
 
 #### Scenario: JSON-LD graph, a broken block and nested Microdata
 - **WHEN** an analysed Page contains the script `{"@context":"https://schema.org","@graph":[{"@type":"Organization"},{"@type":"WebSite"}]}`, the script `{bad json`, and `<div itemscope itemtype="https://schema.org/Product"><span itemprop="offers" itemscope itemtype="https://schema.org/Offer"></span></div>`
@@ -970,13 +970,19 @@ From v0.2, storing the HTML of a Crawl's Pages SHALL be opt-in, and SHALL be dec
 
 The Crawl's recorded config SHALL hold the decision as `store_html` = `true` or `false`, and a resumed Crawl SHALL keep it.
 
-When storage is on, each Page SHALL have one `page_sources` row with these columns:
+When storage is on, each Page SHALL have one `page_sources` row. The table SHALL have exactly these columns:
 
-- `url_id`
-- `encoding`: the character encoding found by the decoding rules of this capability, as the lower-case name of the Encoding Standard that a browser's `TextDecoder` reports (`windows-1251`, `shift_jis`)
-- `html`: a zstd frame of the response body bytes after content decoding
+| Column | Type | Null | Value |
+|---|---|---|---|
+| `url_id` | INTEGER, primary key, references `urls.id` | no | the Page's URL |
+| `encoding` | TEXT | no | the character encoding found by the decoding rules of this capability, as the lower-case name of the Encoding Standard that a browser's `TextDecoder` reports (`windows-1251`, `shift_jis`) |
+| `html` | BLOB | no | a zstd frame of the response body bytes after content decoding |
 
 When storage is off, `page_sources` SHALL hold no rows.
+
+#### Scenario: Columns of page_sources
+- **WHEN** `linx schema page_sources` runs
+- **THEN** the item's columns, reduced to `name`, `type` and `nullable`, are the rows of the table above, as a set, and the item's description starts with `Filled from v0.2. `
 
 #### Scenario: HTML is not stored by default
 - **WHEN** a Crawl of a 3-Page fixture site runs with the default settings
@@ -1010,7 +1016,7 @@ When storage is off, `page_sources` SHALL hold no rows.
 These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0, until the release that fills them:
 
 - from v0.2: the SERP pixel widths `title_1_width_px`, `title_2_width_px`, `meta_description_1_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, which follows `022-add-fetch-policy`'s `origins.http_version`
-- from v0.3: `closest_similarity_pct` and `near_duplicate_count`; `structured_data_errors` and `structured_data_warnings`
+- from v0.3: `closest_similarity_pct` and `near_duplicate_count`; `structured_data_error_count` and `structured_data_warning_count`
 - from v1.1: `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count`
 
 `links.html_source` SHALL likewise be NULL in every `links` row until v1.1. The description of each SHALL start with `Filled from v<major>.<minor>. `, naming that release, as the conventions of `018-add-schema-conventions` require.

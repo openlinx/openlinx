@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 from selectolax.lexbor import LexborHTMLParser
-from sqlalchemy import select
+from sqlalchemy import column, func, or_, select, table
 
 from openlinx.crawl.pages.preparation import Extractor, PageInput, extractor
 from openlinx.extract.page_data import PAGE_DATA, PageData
@@ -20,6 +20,7 @@ from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
 from tests.support.fetcher import FakeFetcher, FakePage
+from tests.support.page_data import LATER_PAGE_COLUMNS
 from tests.support.workspace import TempWorkspace
 
 # Long against the few milliseconds a local request takes, short for a test.
@@ -331,3 +332,59 @@ def test_a_page_whose_page_extractor_failed_keeps_its_response_data_and_links(
         " JOIN urls AS target ON target.id = links.target_url_id WHERE source.url = ?",
         [broken],
     ) == [(server.url("/a"), "hyperlink", None)]
+
+
+def test_deferred_columns_are_null_after_a_completed_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # Every input a later column will read: a language, titles, a description, structured data,
+    # a cookie and Links both ways.
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(
+                    body='<html lang="en"><title>Home</title>'
+                    '<meta name="description" content="The home page.">'
+                    '<script type="application/ld+json">{"@type":"WebSite"}</script>'
+                    '<p>Read the guide.</p><a href="/guide">Guide</a>',
+                    headers=[("Set-Cookie", "sid=1; Path=/")],
+                ),
+                "/guide": Page(body='<title>Guide</title><p>Go home.</p><a href="/">Home</a>'),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    filled = or_(*(column(name).is_not(None) for name in LATER_PAGE_COLUMNS))
+    assert (
+        query(crawl_file, "SELECT state FROM crawl"),
+        query(crawl_file, "SELECT count(*) FROM pages WHERE inlinks IS NOT NULL"),
+        query(
+            crawl_file,
+            "SELECT structured_data_error_count, structured_data_warning_count FROM pages",
+        ),
+        query(crawl_file, str(select(func.count()).select_from(table("pages")).where(filled))),
+        query(crawl_file, "SELECT count(*), count(html_source) FROM links"),
+    ) == ([("completed",)], [(2,)], [(None, None), (None, None)], [(0,)], [(2, 0)])
+
+
+def test_html_is_not_stored_by_default(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/about">About</a><a href="/contact">Contact</a>'),
+                "/about": Page(body="<p>About</p>"),
+                "/contact": Page(body="<p>Contact</p>"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert (
+        query(crawl_file, "SELECT count(*) FROM pages"),
+        query(crawl_file, "SELECT count(*) FROM page_sources"),
+    ) == ([(3,)], [(0,)])

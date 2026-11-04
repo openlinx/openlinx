@@ -9,7 +9,7 @@ from openlinx.store.schema import public_tables as declared_tables
 from tests.support.cli import run_cli
 
 SNAKE_CASE = re.compile(r"[a-z][a-z0-9_]*")
-LATER_OR_DERIVED = re.compile(r"Derived: |Filled from v[0-9]+\.[0-9]+\. ")
+LATER_OR_DERIVED = re.compile(r"(?P<derived>Derived: )|(?P<later>Filled from v[0-9]+\.[0-9]+\. )")
 
 
 def blank(text: Any) -> bool:
@@ -114,12 +114,16 @@ def test_index_names_start_with_their_table() -> None:
 
 
 def test_derived_and_later_columns_may_hold_null() -> None:
-    # Vacuous until 022's or 030's first later column; its task asserts that one was seen.
-    assert [
-        column["name"]
-        for column in all_columns()
-        if LATER_OR_DERIVED.match(column["description"]) and not column["nullable"]
-    ] == [], "a derived or later column is NOT NULL: let it hold NULL until it is filled"
+    marked = [(column, LATER_OR_DERIVED.match(column["description"])) for column in all_columns()]
+
+    # Each kind seen at least once, so the rule is not passing vacuously.
+    assert (
+        [column["name"] for column, match in marked if match and not column["nullable"]],
+        {match.lastgroup for _, match in marked if match},
+    ) == ([], {"derived", "later"}), (
+        "a derived or later column is NOT NULL, or a kind is missing: let both kinds hold NULL "
+        "until filled and check that both were seen"
+    )
 
 
 def test_every_unique_rule_is_an_index_and_every_reference_one_key() -> None:

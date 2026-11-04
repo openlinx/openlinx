@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from openlinx.store.records import DeclaredIn, LinkType
+from openlinx.store.records import DeclaredIn, HttpVersion, LinkType
 
 type SameSite = Literal["strict", "lax", "none"]
 type Indexability = Literal["indexable", "non_indexable"]
@@ -18,7 +18,13 @@ type IndexabilityStatus = Literal[
 ]
 # javascript_redirect is filled from v1.1, by JavaScript rendering.
 type RedirectType = Literal["http_redirect", "http_refresh", "meta_refresh", "javascript_redirect"]
+# The bands of flesch_reading_ease, filled from v0.2.
+type Readability = Literal[
+    "very_easy", "easy", "fairly_easy", "normal", "fairly_difficult", "difficult", "very_difficult"
+]
 type LinkPosition = Literal["head", "navigation", "header", "footer", "sidebar", "content"]
+# Filled from v1.1, by JavaScript rendering.
+type HtmlSource = Literal["raw", "rendered"]
 # The elements and attributes that 020's Link discovery reads.
 type LinkElement = Literal[
     "a",
@@ -56,19 +62,25 @@ class PageRow:
     redirect_url: str | None
     redirect_type: RedirectType | None
     set_cookie_count: int
+    js_cookie_count: int | None = None
+    http_version: HttpVersion | None = None
     crawl_timestamp: datetime
     # The fields default to NULL, in column order. From the Page extractor: NULL for a Page that
     # is not analysed or whose Page extractor failed (D2): the titles, meta elements, headings,
-    # meta_refresh, and the counts from word_count on.
+    # meta_refresh, and the counts from word_count on. The columns of later releases stay NULL.
     title_1: str | None = None
     title_1_length: int | None = None
+    title_1_width_px: int | None = None
     title_2: str | None = None
     title_2_length: int | None = None
+    title_2_width_px: int | None = None
     title_count: int | None = None
     meta_description_1: str | None = None
     meta_description_1_length: int | None = None
+    meta_description_1_width_px: int | None = None
     meta_description_2: str | None = None
     meta_description_2_length: int | None = None
+    meta_description_2_width_px: int | None = None
     meta_description_count: int | None = None
     meta_keywords_1: str | None = None
     meta_keywords_1_length: int | None = None
@@ -106,22 +118,34 @@ class PageRow:
     word_count: int | None = None
     sentence_count: int | None = None
     average_words_per_sentence: float | None = None
+    syllable_count: int | None = None
+    flesch_reading_ease: float | None = None
+    readability: Readability | None = None
     text_ratio_pct: float | None = None
     declared_language: str | None = None
+    detected_language: str | None = None
     content_hash: str | None = None
+    closest_similarity_pct: float | None = None
+    near_duplicate_count: int | None = None
     folder_depth: int
-    # The inlink pass writes these three; the Page's unit leaves them NULL.
+    link_score: float | None = None
+    # The inlink pass writes inlinks, unique_inlinks and linking_pages_pct; the Page's unit
+    # leaves them NULL.
     inlinks: int | None = None
     unique_inlinks: int | None = None
+    unique_js_inlinks: int | None = None
     linking_pages_pct: float | None = None
     outlinks: int | None = None
     unique_outlinks: int | None = None
+    unique_js_outlinks: int | None = None
     external_outlinks: int | None = None
     unique_external_outlinks: int | None = None
     jsonld_item_count: int | None = None
     microdata_item_count: int | None = None
     jsonld_parse_error_count: int | None = None
     structured_data_types: tuple[str, ...] | None = None
+    structured_data_error_count: int | None = None
+    structured_data_warning_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -159,3 +183,4 @@ class LinkRow:
     hreflang: str | None
     media: str | None
     link_position: LinkPosition | None
+    html_source: HtmlSource | None = None

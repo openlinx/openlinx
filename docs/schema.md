@@ -181,16 +181,22 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `redirect_url` | TEXT | yes | | | | The URL the Page redirects to: the target of its 3xx response, of its HTTP Refresh header, or of its first meta refresh; NULL when it does not redirect, or when the target is its own URL. |
 | `redirect_type` | TEXT | yes | | | `http_redirect`, `http_refresh`, `meta_refresh`, `javascript_redirect` | How the Page redirects to redirect_url; NULL when it does not redirect. javascript_redirect is filled from v1.1. |
 | `set_cookie_count` | INTEGER | no | | | | The number of Set-Cookie headers of the Page's response, equal to its rows in cookies. |
+| `js_cookie_count` | INTEGER | yes | | | | Filled from v1.1. The number of cookies the Page's scripts set, measured with JavaScript rendering. |
+| `http_version` | TEXT | yes | | | `http_2`, `http_1_1` | Filled from v0.2. The HTTP version that the requests to the Page's origin use, equal to origins.http_version. |
 | `crawl_timestamp` | TEXT | no | | `timestamp` | | The UTC time of the Page's request, equal to urls.fetched_at. |
 | `title_1` | TEXT | yes | | | | The text of the Page's first title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `title_1_length` | INTEGER | yes | | | | The length of title_1 in Unicode code points; NULL exactly when title_1 is. |
+| `title_1_width_px` | INTEGER | yes | | | | Filled from v0.2. The width of title_1 in Arial regular at 20 px, in pixels. |
 | `title_2` | TEXT | yes | | | | The text of the Page's second title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `title_2_length` | INTEGER | yes | | | | The length of title_2 in Unicode code points; NULL exactly when title_2 is. |
+| `title_2_width_px` | INTEGER | yes | | | | Filled from v0.2. The width of title_2 in Arial regular at 20 px, in pixels. |
 | `title_count` | INTEGER | yes | | | | The number of title elements without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
 | `meta_description_1` | TEXT | yes | | | | The content of the Page's first meta description, whitespace-normalised, the empty string for one without content; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `meta_description_1_length` | INTEGER | yes | | | | The length of meta_description_1 in Unicode code points; NULL exactly when meta_description_1 is. |
+| `meta_description_1_width_px` | INTEGER | yes | | | | Filled from v0.2. The width of meta_description_1 in Arial regular at 14 px, in pixels. |
 | `meta_description_2` | TEXT | yes | | | | The content of the Page's second meta description, whitespace-normalised, the empty string for one without content; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `meta_description_2_length` | INTEGER | yes | | | | The length of meta_description_2 in Unicode code points; NULL exactly when meta_description_2 is. |
+| `meta_description_2_width_px` | INTEGER | yes | | | | Filled from v0.2. The width of meta_description_2 in Arial regular at 14 px, in pixels. |
 | `meta_description_count` | INTEGER | yes | | | | The number of meta elements named description without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
 | `meta_keywords_1` | TEXT | yes | | | | The content of the Page's first meta keywords element, whitespace-normalised, the empty string for one without content; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `meta_keywords_1_length` | INTEGER | yes | | | | The length of meta_keywords_1 in Unicode code points; NULL exactly when meta_keywords_1 is. |
@@ -226,22 +232,33 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `word_count` | INTEGER | yes | | | | The number of words in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
 | `sentence_count` | INTEGER | yes | | | | The number of sentences in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
 | `average_words_per_sentence` | REAL | yes | | | | word_count divided by sentence_count, rounded half up to 2 decimals; NULL when sentence_count is 0, or the Page is not analysed or its Page extractor failed. |
+| `syllable_count` | INTEGER | yes | | | | Filled from v0.2. The number of syllables in the Content Area's words, by the rules of the Page's readability language: the lower-cased primary subtag of declared_language, one of en, de, es, fr, nl, pt and ru; NULL for a Page without one. |
+| `flesch_reading_ease` | REAL | yes | | | | Filled from v0.2. The Flesch Reading Ease of the Content Area text, by the formula of the Page's readability language (see syllable_count), rounded to 1 decimal; NULL for a Page without one or without words. |
+| `readability` | TEXT | yes | | | `very_easy`, `easy`, `fairly_easy`, `normal`, `fairly_difficult`, `difficult`, `very_difficult` | Filled from v0.2. The band of flesch_reading_ease. |
 | `text_ratio_pct` | REAL | yes | | | | 100 times the length of the normalised text of body, without Content Area exclusions, divided by the decoded HTML document's length in characters, rounded half up to 2 decimals; NULL when the document is empty, or the Page is not analysed or its Page extractor failed. |
 | `declared_language` | TEXT | yes | | | | The lang attribute of the root html element, trimmed: the empty string when it has no value; NULL when it is absent, or the Page is not analysed or its Page extractor failed. |
+| `detected_language` | TEXT | yes | | | | Filled from v0.2. The ISO 639-1 code of the language detected from the Content Area text when the Crawl was started with --detect-language or [crawl] detect_language; NULL otherwise, or when that text has no words. |
 | `content_hash` | TEXT | yes | | | | The SHA-256, as lowercase hex, of the normalised Content Area text as UTF-8, with no Unicode normalisation: Pages with the same value are Exact Duplicates; NULL when word_count is 0, or the Page is not analysed or its Page extractor failed. |
+| `closest_similarity_pct` | REAL | yes | | | | Filled from v0.3. The similarity of the Page's Content Area to that of the most similar other Page, in percent. |
+| `near_duplicate_count` | INTEGER | yes | | | | Filled from v0.3. The number of other Pages that are Near-Duplicates of this Page. |
 | `crawl_depth` | INTEGER | no | | | | Crawl Depth, equal to urls.crawl_depth: 0 for Seeds. |
 | `folder_depth` | INTEGER | no | | | | The number of non-empty segments in the path of address; the query is ignored, and an escaped / (%2F) stays inside its segment. |
+| `link_score` | REAL | yes | | | | Filled from v0.2. The Link Score: a 0 to 100 measure of the Page's internal link authority, from the Links between Internal URLs. |
 | `inlinks` | INTEGER | yes | | | | Derived: the hyperlinks from Pages to this Page, self-links left out; NULL until the post-crawl passes have run. |
 | `unique_inlinks` | INTEGER | yes | | | | Derived: the distinct Pages whose hyperlinks reach this Page, itself left out; NULL until the post-crawl passes have run. |
+| `unique_js_inlinks` | INTEGER | yes | | | | Filled from v1.1. The distinct source Pages of the hyperlinks to this Page whose links.html_source is rendered, the Page itself left out. |
 | `linking_pages_pct` | REAL | yes | | | | Derived: 100 times the distinct Pages with status 200 that link to this Page, divided by the Pages with status 200, rounded half up to 2 decimals; NULL until the post-crawl passes have run, or when no Page has status 200. |
 | `outlinks` | INTEGER | yes | | | | The Page's hyperlinks to Internal URLs, self-links left out; NULL when the Page is not analysed. |
 | `unique_outlinks` | INTEGER | yes | | | | The distinct Internal targets of the Page's hyperlinks, itself left out; NULL when the Page is not analysed. |
+| `unique_js_outlinks` | INTEGER | yes | | | | Filled from v1.1. The distinct Internal targets of the Page's hyperlinks whose links.html_source is rendered, the Page itself left out. |
 | `external_outlinks` | INTEGER | yes | | | | The Page's hyperlinks to External URLs; NULL when the Page is not analysed. |
 | `unique_external_outlinks` | INTEGER | yes | | | | The distinct External targets of the Page's hyperlinks; NULL when the Page is not analysed. |
 | `jsonld_item_count` | INTEGER | yes | | | | The number of JSON-LD items in the application/ld+json scripts: each top-level object, of a script or of a top-level array, or instead the content of its @graph, an array of objects or one object; NULL when the Page is not analysed or its Page extractor failed. |
 | `microdata_item_count` | INTEGER | yes | | | | The number of top-level Microdata items: elements with itemscope and no itemprop; NULL when the Page is not analysed or its Page extractor failed. |
 | `jsonld_parse_error_count` | INTEGER | yes | | | | The number of application/ld+json scripts that are not valid JSON, or nest more than 1024 levels deep; NULL when the Page is not analysed or its Page extractor failed. |
 | `structured_data_types` | TEXT | yes | | `json` | | JSON array of the distinct types of the counted items, from @type and itemtype without a leading http://schema.org/ or https://schema.org/, sorted by code point: [] when there are none; NULL when the Page is not analysed or its Page extractor failed. |
+| `structured_data_error_count` | INTEGER | yes | | | | Filled from v0.3. The number of validation errors in the Page's structured data. |
+| `structured_data_warning_count` | INTEGER | yes | | | | Filled from v0.3. The number of validation warnings in the Page's structured data. |
 
 ### Indexes
 
@@ -290,6 +307,7 @@ One row for each Link the Crawl discovered in a response: in an analysed Page's 
 | `hreflang` | TEXT | yes | | | | For a hreflang Link, the trimmed hreflang of its element, or the hreflang parameter of its Link header; NULL for other Links, and for a Link of the HTML when the Page's Link extractor failed. |
 | `media` | TEXT | yes | | | | For a mobile_alternate Link, the trimmed media of its element; NULL for other Links, or when the Page's Link extractor failed. |
 | `link_position` | TEXT | yes | | | `head`, `navigation`, `header`, `footer`, `sidebar`, `content` | Where on the Page the Link is: head for a Link the parser places in head; otherwise from the nearest enclosing nav (navigation), header, footer or aside (sidebar), and content without one, a Link from a noscript's content taking the noscript's place; NULL for a header Link, or when the Page's Link extractor failed. |
+| `html_source` | TEXT | yes | | | `raw`, `rendered` | Filled from v1.1. Whether the Link came from the raw or the rendered HTML, measured with JavaScript rendering. |
 
 ### Indexes
 
@@ -297,3 +315,13 @@ One row for each Link the Crawl discovered in a response: in an analysed Page's 
 |---|---|---|---|---|
 | `links_target` | `target_url_id` | no | | The inlinks of a URL: every Link that points at it. |
 | `links_type_target` | `type`, `target_url_id` | no | | The inlinks of a URL of one Link type, such as its hyperlink inlinks. |
+
+## Table `page_sources`
+
+Filled from v0.2. The HTML of each Page of a Crawl started with HTML storage on; empty otherwise.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `url_id` | INTEGER | no | PK, → `urls.id` | | | The Page whose HTML this is. |
+| `encoding` | TEXT | no | | | | The character encoding the Page was decoded with, as the lower-case Encoding Standard name that a browser's TextDecoder reports, such as windows-1251. |
+| `html` | BLOB | no | | | | The response body after content decoding, as one zstd frame. |

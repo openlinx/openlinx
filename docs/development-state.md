@@ -20,7 +20,7 @@ reviewed and gated narrow task 9b.9 refactor; the full fetching change remains u
 | `022-add-fetch-policy` | `99f0280128badabcff68e256d2819717ca25c14b` | Published unfinished checkpoint; 9b.9 complete, next 9b.10, C03 open |
 | `023-fix-code-audit` | `1f3dec66f474cb3b87a3c1c0f9172d9dcb5f3a29` | Group 5 planning checkpoint published |
 | `026-add-parse-pool` | `8294855ecfffb9f07094b931ed0d94754d0bf16d` | Unfinished pool/shutdown work |
-| `030-add-page-data` | `0eeed79504271c7cf1e51ab69543271225c995d8` | Published unfinished snapshot; group 12 acceptance blocked by C01/C02 |
+| `030-add-page-data` | `68fcfeebd8ae2af81d40efffeeff6c802ef6fc4e` | Group 12 accepted; C01/C02 closed; group 4b waits for 022 in main |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
 | `050-add-query-and-segments` | `bd21fe4164077076076c5e64805e9f80aeb4b434` | Published unfinished snapshot; review fixes remain |
 
@@ -150,30 +150,48 @@ selection and timing interpretation so an in-process baseline really uses that
 executor. Baseline/layout measurements and the pool rerun need a quiet machine;
 they are not the immediate coding task.
 
-### 030: resolve group 12 contract and cleanup findings first
+### 030: group 12 accepted; group 4b waits for 022
 
-[Tasks](https://github.com/openlinx/openlinx/blob/0eeed79504271c7cf1e51ab69543271225c995d8/openspec/changes/030-add-page-data/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/0eeed79504271c7cf1e51ab69543271225c995d8/openspec/changes/030-add-page-data/design.md).
+[Tasks](https://github.com/openlinx/openlinx/blob/68fcfeebd8ae2af81d40efffeeff6c802ef6fc4e/openspec/changes/030-add-page-data/tasks.md),
+[design](https://github.com/openlinx/openlinx/blob/68fcfeebd8ae2af81d40efffeeff6c802ef6fc4e/openspec/changes/030-add-page-data/design.md).
 
-Groups 1–11 are in `main`. Group 12 has an earlier review commit `e556abb2` followed
-by planning corrections `0eeed795`; the current continuity review found that its
-acceptance claims are incomplete. It may be transported as unfinished work.
-Resolve these two findings before declaring group 12 accepted or proceeding to 4b:
+Groups 1–11 are in `main`. Group 12 is accepted at
+[source `68fcfeeb`](https://github.com/openlinx/openlinx/commit/68fcfeebd8ae2af81d40efffeeff6c802ef6fc4e),
+with C01 and C02 closed.
+[Source CI 41749711189](https://github.com/openlinx/openlinx/actions/runs/41749711189)
+passed all nine OS/Python cells. The 030 change remains unfinished; group 4b waits
+for its dependencies below.
 
-- **C01, open:** the spec/proposal require `structured_data_error_count` and
-  `structured_data_warning_count`, but the schema, Page record, schema/architecture
-  docs and test data list still use `structured_data_errors` and
-  `structured_data_warnings`. Align the names throughout the public contract and
-  independently check the declared schema, NULL values and release prefixes.
-- **C02, open:** task 12.3 promises Windows subprocess-tree cleanup on timeout.
-  `tests/cli/test_encoding.py` uses `subprocess.run(timeout=...)` on `cmd`, with no
-  path that terminates its Python descendants. Implement ownership and cleanup of
-  the whole tree and verify that no child survives a timeout. A hang was not
-  reproduced during this review; the missing cleanup path was found by reading it.
+Fresh independent Standards and Spec reviews of `82ffcce6...68fcfeeb` found no
+defects. The final source local gate passed: 1541 tests, 14 Windows skips, strict
+mypy for three platforms, OpenSpec 16/16 and Node 1/1.
 
-Then review the corrected group with the Page/Link contract tests, extractor tests,
-Windows encoding/cleanup checks and writer throughput smoke test. Group 4b also
-waits for 022's size and redirect support in `main`. Its later plan check starts
+- **C01, closed at `ae9f481b`:** `structured_data_error_count` and
+  `structured_data_warning_count` now agree across the schema, Page record, docs
+  and deferred-column test data. Literal seam-6 expectations pin their names,
+  INTEGER type, nullable shape, v0.3 description prefixes and absence of the old
+  names; a real completed Crawl proves both columns hold NULL at seam 3+6.
+  Both checks failed before the fix; the focused run passed 38 tests. Independent
+  Standards and Spec review reported no findings. The coordinator reports the
+  full gate passed with 1468 tests, 13 skips, 98.63% coverage, OpenSpec 15/15 and
+  Node 1/1.
+- **C02, closed at `68fcfeeb`:** task 12.3 uses a controlled console-process
+  helper with descendant cleanup and bounded waits. A real Windows guard readies a
+  `cmd` and two Python descendants before timing out, then checks their termination
+  before its independent emergency cleanup.
+  [Windows proof run 41802806574](https://github.com/openlinx/openlinx/actions/runs/41802806574)
+  for [verification commit `5562597f`](https://github.com/openlinx/openlinx/commit/5562597f47f5d2d8b11ad345a6a8a4318e535d3c)
+  passed on Python 3.12, 3.13 and 3.14. Each cell passed the eight encoding tests,
+  then the original guard exited 0, a root-only cleanup mutation exited 1 at
+  `assert [False, True, True] == [False, False, False]`, and the restored guard
+  exited 0. The mutation replaced `_end_console_tree` with `process.kill()` and
+  `process.wait(timeout=timeout)`; the independent cleanup did not fail. Original
+  source bytes were restored before the final green run, with SHA-256
+  `62e9edab3bd7aa09981d2fa0abfd492a246ac99ae89faaa038f6577a1a79c18e`.
+  The verification assets remain in separate [PR #38](https://github.com/openlinx/openlinx/pull/38),
+  which is closed unmerged.
+
+Group 4b waits for 022's size and redirect support in `main`. Its plan check starts
 at 4.6, compressed Page sizes, and covers the full Page-column contract before the
 HTTP-redirect slices. Reconcile 023's Link-reading/type-table changes when integrating
 the new product base. Shared setup on `main` does not perform that integration.
@@ -245,9 +263,11 @@ and the existing fixes are reviewed. Groups 9–13 remain v0.2.
 ## Evidence and checks
 
 The checkpoint facts come from Git refs, diffs, tasks, designs and test sources.
-C01–C05 were identified during the current independent continuity review; they remain
-open. These are static findings, not a claim that every current test was run or is
-red. Older passing runs do not prove the later spec/implementation pairs agree.
+C01–C05 were identified during the independent continuity review. This update closes
+C01 and C02 with the 030 acceptance evidence above. C03–C05 belong to their streams'
+documented checkpoints; this update makes no claim about their current status on
+other branches. The original static findings did not mean every current test was
+run or was red. Older passing runs do not prove the later spec/implementation pairs agree.
 
 PR #34's gate and the 022 task 9b.9 review/gate above have separate scopes; their
 results do not establish acceptance of the remaining fetching, Page data or query
@@ -289,6 +309,6 @@ replace a run on the reviewed code.
 
 The durable sources are the files linked above and the branch history, including
 the planning commits `0d209151` (022 group 9b), `1f3dec66` (023 group 5),
-`0eeed795` (030 group 12 planning corrections, acceptance blocked) and
+`0eeed795` (030 group 12 planning corrections; acceptance evidence above) and
 `f64324b8` (050 review fixes).
 Keep this checkpoint current when a group is reviewed, published or integrated.

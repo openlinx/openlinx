@@ -35,6 +35,7 @@ type StopReason = Literal[
 ]
 # Rules applied, everything allowed, or everything disallowed or unanswered (D6).
 type RobotsState = Literal["ok", "missing", "unreachable"]
+type HttpVersion = Literal["http_2", "http_1_1"]
 type SkipReason = Literal[
     "excluded",
     "blocked_by_robots_txt",
