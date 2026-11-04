@@ -110,7 +110,7 @@ The hooks seam, the writer and the settings loader work, but several of their ru
 
 ### D13. Package interface lists are complete
 - **In short:** a guard checks that every name a module of `src` imports from `openlinx.crawl.<package>.<module>` outside that package is listed in the package's docstring, and its message names the docstring to edit.
-- `docs/architecture.md` says where a Link's element comes from: `locate_links(tree, page.links)`.
+- `docs/architecture.md` says where a Link's element comes from: `locate_links(tree, page.links, expected_total=len(page.links))`.
 - **Why:** CONTRIBUTING makes these lists the only statement of a package's interface, and they leave out names other packages already import, such as `prepare_page` and `locate_links`; a contributor who trusts them takes the names for internal ones and writes the walk again.
 - *Alternative:* `__all__` in each module. It states each module's names, not the package's interface, and nothing reads it in a package that is never star-imported. Rejected.
 
