@@ -360,9 +360,13 @@ def test_deferred_columns_are_null_after_a_completed_crawl(
     assert (
         query(crawl_file, "SELECT state FROM crawl"),
         query(crawl_file, "SELECT count(*) FROM pages WHERE inlinks IS NOT NULL"),
+        query(
+            crawl_file,
+            "SELECT structured_data_error_count, structured_data_warning_count FROM pages",
+        ),
         query(crawl_file, str(select(func.count()).select_from(table("pages")).where(filled))),
         query(crawl_file, "SELECT count(*), count(html_source) FROM links"),
-    ) == ([("completed",)], [(2,)], [(0,)], [(2, 0)])
+    ) == ([("completed",)], [(2,)], [(None, None), (None, None)], [(0,)], [(2, 0)])
 
 
 def test_html_is_not_stored_by_default(

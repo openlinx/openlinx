@@ -206,6 +206,6 @@ LATER_PAGE_COLUMNS = {
     "link_score": "v0.2",
     "unique_js_inlinks": "v1.1",
     "unique_js_outlinks": "v1.1",
-    "structured_data_errors": "v0.3",
-    "structured_data_warnings": "v0.3",
+    "structured_data_error_count": "v0.3",
+    "structured_data_warning_count": "v0.3",
 }

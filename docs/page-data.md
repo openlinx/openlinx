@@ -192,7 +192,7 @@ Page data never holds a cookie's value, only its name and attributes, since a va
 
 Some columns exist from v0.1 and are NULL, never 0, until the release that measures them, so that release changes no table and a query written now keeps working. Each one's description starts with `Filled from v<major>.<minor>. `, naming that release:
 - **v0.2:** the SERP pixel widths `title_1_width_px`, `title_2_width_px`, `meta_description_1_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, a copy of the origin's.
-- **v0.3:** `closest_similarity_pct` and `near_duplicate_count`; `structured_data_errors` and `structured_data_warnings`.
+- **v0.3:** `closest_similarity_pct` and `near_duplicate_count`; `structured_data_error_count` and `structured_data_warning_count`.
 - **v1.1, with JavaScript rendering:** `js_cookie_count`, `unique_js_inlinks` and `unique_js_outlinks`, and `links.html_source`.
 
 ## Stored HTML

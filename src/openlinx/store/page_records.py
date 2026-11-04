@@ -144,8 +144,8 @@ class PageRow:
     microdata_item_count: int | None = None
     jsonld_parse_error_count: int | None = None
     structured_data_types: tuple[str, ...] | None = None
-    structured_data_errors: int | None = None
-    structured_data_warnings: int | None = None
+    structured_data_error_count: int | None = None
+    structured_data_warning_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

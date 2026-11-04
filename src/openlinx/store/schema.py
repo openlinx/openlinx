@@ -1016,12 +1016,12 @@ pages = public_table(
         "when there are none; NULL when the Page is not analysed or its Page extractor failed.",
     ),
     Column(
-        "structured_data_errors",
+        "structured_data_error_count",
         Integer,
         comment="Filled from v0.3. The number of validation errors in the Page's structured data.",
     ),
     Column(
-        "structured_data_warnings",
+        "structured_data_warning_count",
         Integer,
         comment="Filled from v0.3. The number of validation warnings in the Page's structured "
         "data.",

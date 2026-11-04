@@ -139,7 +139,7 @@ The columns of `pages`, by group; each column's definition is its description in
 | Size | `size_bytes`, `transferred_bytes`, `content_encoding` |
 | Content | `word_count`, `sentence_count`, `average_words_per_sentence`, `syllable_count` (v0.2), `flesch_reading_ease` (v0.2), `readability` (v0.2), `text_ratio_pct`, `declared_language`, `detected_language` (v0.2), `content_hash`, `closest_similarity_pct` (v0.3), `near_duplicate_count` (v0.3) |
 | Links | `crawl_depth`, `folder_depth`, `link_score` (v0.2), `inlinks`, `unique_inlinks`, `unique_js_inlinks` (v1.1), `linking_pages_pct`, `outlinks`, `unique_outlinks`, `unique_js_outlinks` (v1.1), `external_outlinks`, `unique_external_outlinks` |
-| Structured data | `jsonld_item_count`, `microdata_item_count`, `jsonld_parse_error_count`, `structured_data_types`, `structured_data_errors` (v0.3), `structured_data_warnings` (v0.3) |
+| Structured data | `jsonld_item_count`, `microdata_item_count`, `jsonld_parse_error_count`, `structured_data_types`, `structured_data_error_count` (v0.3), `structured_data_warning_count` (v0.3) |
 
 Beside `pages`, Page data has `links` (one row per discovered Link), `cookies` (one row per `Set-Cookie` header, never its value) and `page_sources` (the stored HTML, from v0.2).
 

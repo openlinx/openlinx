@@ -46,6 +46,29 @@ def test_deferred_columns_are_described_with_their_release() -> None:
     } == expected
 
 
+def test_structured_data_validation_counts_are_deferred_integer_columns() -> None:
+    columns = _columns("pages")
+    names = (
+        "structured_data_error_count",
+        "structured_data_warning_count",
+        "structured_data_errors",
+        "structured_data_warnings",
+    )
+
+    assert {
+        name: (
+            column["type"],
+            column["nullable"],
+            column["description"][: len("Filled from v0.3. ")],
+        )
+        for name in names
+        if (column := columns.get(name)) is not None
+    } == {
+        "structured_data_error_count": ("INTEGER", True, "Filled from v0.3. "),
+        "structured_data_warning_count": ("INTEGER", True, "Filled from v0.3. "),
+    }
+
+
 def test_later_enumerations_list_their_values() -> None:
     pages, links = _columns("pages"), _columns("links")
 

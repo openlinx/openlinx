@@ -257,8 +257,8 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `microdata_item_count` | INTEGER | yes | | | | The number of top-level Microdata items: elements with itemscope and no itemprop; NULL when the Page is not analysed or its Page extractor failed. |
 | `jsonld_parse_error_count` | INTEGER | yes | | | | The number of application/ld+json scripts that are not valid JSON, or nest more than 1024 levels deep; NULL when the Page is not analysed or its Page extractor failed. |
 | `structured_data_types` | TEXT | yes | | `json` | | JSON array of the distinct types of the counted items, from @type and itemtype without a leading http://schema.org/ or https://schema.org/, sorted by code point: [] when there are none; NULL when the Page is not analysed or its Page extractor failed. |
-| `structured_data_errors` | INTEGER | yes | | | | Filled from v0.3. The number of validation errors in the Page's structured data. |
-| `structured_data_warnings` | INTEGER | yes | | | | Filled from v0.3. The number of validation warnings in the Page's structured data. |
+| `structured_data_error_count` | INTEGER | yes | | | | Filled from v0.3. The number of validation errors in the Page's structured data. |
+| `structured_data_warning_count` | INTEGER | yes | | | | Filled from v0.3. The number of validation warnings in the Page's structured data. |
 
 ### Indexes
 
