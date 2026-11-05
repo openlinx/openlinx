@@ -81,6 +81,33 @@ def test_a_www_seed_that_redirects_to_its_apex_keeps_the_apex_inside_the_scope(
     ) == ([("fetched", 1)], True)
 
 
+def test_a_redirect_to_another_subdomain_stays_inside_the_scope(
+    temp_workspace: TempWorkspace, fixture_named_hosts: StartNamedHosts
+) -> None:
+    hosts = fixture_named_hosts(
+        {
+            "site.test": Site({"/": Redirect("http://en.site.test/", status=301)}),
+            "en.site.test": Site(
+                {
+                    "/": Page(body='<title>Shop</title><a href="/a">Shoes</a>'),
+                    "/a": Page(body="<title>Shoes</title>"),
+                }
+            ),
+        }
+    )
+
+    crawl_file = crawl_result("http://site.test/", resolver=hosts.resolver).crawl_file
+
+    assert (
+        query(
+            crawl_file,
+            "SELECT fetch_state, is_internal, in_scope "
+            "FROM urls WHERE url = 'http://en.site.test/a'",
+        ),
+        "en.site.test" in _scope_hosts(crawl_file),
+    ) == ([("fetched", 1, 1)], True)
+
+
 def test_every_hop_of_a_seed_chain_that_widens_the_scope_is_internal(
     temp_workspace: TempWorkspace, fixture_named_hosts: StartNamedHosts
 ) -> None:
