@@ -148,7 +148,8 @@ def test_a_new_file_matches_the_declaration(temp_workspace: TempWorkspace) -> No
     shop = temp_workspace.root / "shop"
     (shop / ".openlinx" / "crawls").mkdir(parents=True)
     workspace = resolve_workspace(cwd=shop, flag=None, home=temp_workspace.home)
-    file = create_crawl(new_crawl(workspace), FakeClock(), Collected()).path
+    with create_crawl(new_crawl(workspace), FakeClock(), Collected()) as crawl:
+        file = crawl.path
 
     assert file_schema(file) == declared_schema()
 

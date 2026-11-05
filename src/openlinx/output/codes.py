@@ -150,6 +150,12 @@ CRAWL_BUSY = _declare(
     "Another connection held the crawl file for longer than a reader or the writer waits; "
     "details.file names it.",
 )
+CRAWL_LOCKED = _declare(
+    "crawl_locked",
+    "error",
+    ExitCode.BUSY,
+    "Another process holds the Crawl's writer claim; details.file names the crawl file.",
+)
 CRAWL_FILE_INVALID = _declare(
     "crawl_file_invalid",
     "error",

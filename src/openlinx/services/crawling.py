@@ -303,18 +303,19 @@ def start_crawl(
         fetch_policy=plan.fetch_policy,
         secrets=secret_values(plan.new_crawl.config, plan.new_crawl.secret_names.settings),
     )
-    crawl = _Crawl(
-        plan=planned,
-        crawl_file=create_crawl(plan.new_crawl, clock, log),
-        continuing=None,
-        clock=clock,
-        log=log,
-        hooks=hooks,
-        pages=pages or default_page_executor,
-        fetchers=fetchers,
-        stop=stop or StopSignal(),
-    )
-    return _crawled(crawl)
+    with create_crawl(plan.new_crawl, clock, log) as crawl_file:
+        crawl = _Crawl(
+            plan=planned,
+            crawl_file=crawl_file,
+            continuing=None,
+            clock=clock,
+            log=log,
+            hooks=hooks,
+            pages=pages or default_page_executor,
+            fetchers=fetchers,
+            stop=stop or StopSignal(),
+        )
+        return _crawled(crawl)
 
 
 def continue_crawl(

@@ -26,7 +26,7 @@ Seams (docs/testing.md):
 
 ## 0. Writer ownership before control Commands (v0.1)
 
-- [ ] 0.1 [Subprocess + HTTP] Drive "A running Crawl keeps its writer claim": a real foreground Crawl holds its claim while an independent OS-lock probe is refused. Acquire before creating the SQLite file, and hold through the full start operation, post-crawl passes, failure recording and writer closure. Use context-managed creation; `CrawlFile` remains a record of id and path (design D12). Adapt direct create callers without weakening their assertions.
+- [x] 0.1 [Subprocess + HTTP] Drive "A running Crawl keeps its writer claim": a real foreground Crawl holds its claim while an independent OS-lock probe is refused. Acquire before creating the SQLite file, and hold through the full start operation, post-crawl passes, failure recording and writer closure. Use context-managed creation; `CrawlFile` remains a record of id and path (design D12). Adapt direct create callers without weakening their assertions.
 - [ ] 0.2 [Services + Subprocess] Drive "A completed Crawl releases its writer claim": keep the process that called the service alive after it returns, and prove another process can acquire the claim.
 - [ ] 0.3 [Services + Subprocess] Drive "A failed Crawl releases its writer claim": the same live-owner proof after a failed Crawl, including the fallback failure writer. A run failure preserves the crawl file.
 - [ ] 0.4 [Services + Subprocess] Drive "A failed creation releases its writer claim": a real filesystem or SQLite failure leaves no incomplete crawl file and releases the claim; the lock file may remain.

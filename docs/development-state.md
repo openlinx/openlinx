@@ -9,29 +9,32 @@ its own product checkpoint. Read
 
 ## Code checkpoints and transport
 
-Code checkpoints below identify the application, specs and task state reviewed on
-2026-11-04. Later transport or agent-setup commits may follow them on the same branch.
-They do not change which product work is complete. The 022 checkpoint includes the
-reviewed and gated narrow task 9b.9 refactor; the full fetching change remains unfinished.
+The main, 022, 023 and 030 entries were verified against local Git and GitHub on
+2026-11-05. The 060 entry records task 0.1 complete locally in a slice on top of
+`9cc871ac`, with independent review and a passing local gate. Other streams retain their 2026-11-04
+checkpoints and pending work. Historical checks below apply only to their named
+commits; they do not validate later integration or uncommitted work.
 
 | Canonical branch | Code checkpoint | State |
 |---|---|---|
-| `main` | `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50` | First 022 PR #39 merged; main CI 41831195325 passed 9/9 |
-| `022-add-fetch-policy` | `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68` | Group 9b accepted; first PR #39 CI closes 8.2; TLS measurements and OS-trust policy accepted; 6.4 complete under revised D5 |
-| `023-fix-code-audit` | `c192f242b53c91395dfefde246be6f5e53aec300` | Whole-change review complete; specs synchronized and change archived on branch; PR #36 awaits current-head CI and merge |
+| `main` | `27b18e745aba9d606b91067c5fa795c4cdfb8952` | 023 PR #36 merged after 022 PR #39; main CI 41921423999 passed 9/9 |
+| `022-add-fetch-policy` | `8a6fd88b78e1e79cd97c3729091233883e804248` | Group 10 accepted; v0.1 complete on branch; draft PR #41 open and mergeable; exact-head CI 42014800275 passed 9/9 |
+| `023-fix-code-audit` | `cc684d2def17186291cf7647f1a48ed67513c066` | Complete and archived; exact-head CI 41854123018 passed 9/9; PR #36 merged into main at `27b18e74` |
 | `026-add-parse-pool` | `8294855ecfffb9f07094b931ed0d94754d0bf16d` | Unfinished pool/shutdown work |
-| `030-add-page-data` | `0eeed79504271c7cf1e51ab69543271225c995d8` | Published unfinished snapshot; group 12 acceptance blocked by C01/C02 |
+| `030-add-page-data` | `908e140cce578d1b9efff21be4194e4869e5960f` | Group 12 accepted; C01/C02 closed; exact-head CI 41804474670 passed 9/9; PR #37 open with conflicts; integrate current main before group 4b |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
 | `050-add-query-and-segments` | `bd21fe4164077076076c5e64805e9f80aeb4b434` | Published unfinished snapshot; review fixes remain |
+| `060-add-crawl-control` | Task 0.1 slice on top of `9cc871ac21d6f9e82812b528ab5e89b38b4ca60e` | Task 0.1 complete locally; Astra Standards 0 / Spec 0; local gate green; next 0.2; remaining tasks unchecked; groups 1–11 Draft; platform CI not yet run |
 
-The 030 and 050 checkpoints have been pushed by native Git fast-forward as unfinished
-snapshots. No fresh full gate or feature acceptance is claimed for that transport.
-The 022 checkpoint is also published, with its narrow 9b.9 review and gate recorded
-below. Open findings remain part of each stream's next work. Publishing a ref does not
-accept its features or merge it into `main`; transport alone needs no draft feature PR.
+The published 022 and 030 heads match their local worktrees and PR heads. Their
+acceptance evidence is recorded below: 022's v0.1 work and 030's group 12 are
+accepted on their branches, but PRs #41 and #37 remain unmerged. The full 030 change
+and the published 050 snapshot remain unfinished. Transport alone establishes no
+feature acceptance. Only task 0.1 of 060 has local review and gate acceptance;
+group 0 and the full change remain unfinished, with no 060 platform CI yet.
 
 Shared instructions, canonical skills, development setup and this hand-off have one
-entry point on `main`. They are not automatically transplanted to the six active
+entry point on `main`. They are not automatically transplanted to the other
 branches. Start on `main`, read this map, then choose the stream. Before first
 continuing an older branch, review and
 adapt its instructions/setup to its actual code and tests, preserving its own rules.
@@ -60,27 +63,51 @@ The separate 023 group 5 planning checkpoint `1f3dec66` has since been published
 First 022 [PR #39](https://github.com/openlinx/openlinx/pull/39) is merged into
 main at `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50`.
 [Main CI 41831195325](https://github.com/openlinx/openlinx/actions/runs/41831195325)
-passed all nine OS/Python cells on that checkpoint. This is incoming-main evidence,
-not validation of the current 023 integration.
+passed all nine OS/Python cells on that historical checkpoint. The size and HTTP
+redirect support needed by 030 group 4b is already in main through this merge.
+
+023 [PR #36](https://github.com/openlinx/openlinx/pull/36) subsequently merged at
+`27b18e745aba9d606b91067c5fa795c4cdfb8952`, the verified local and remote main HEAD.
+[Main CI 41921423999](https://github.com/openlinx/openlinx/actions/runs/41921423999)
+passed all nine OS/Python cells on that exact merge commit. This post-merge run is
+separate from PR #36's source-head CI and does not validate the pending 030 integration.
 
 ## Next work by stream
 
 Stream task, design and spec links below point to the reviewed code checkpoints.
 Check the chosen branch head for any later changes.
 
-### 022: group 9b accepted; first draft PR's nine-cell CI passed
+### 022: group 10 accepted; v0.1 complete on branch, PR #41 unmerged
 
-[Tasks](https://github.com/openlinx/openlinx/blob/6398ef80ef81d91c1ea7deaa55836ddf83bc2c68/openspec/changes/022-add-fetch-policy/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/6398ef80ef81d91c1ea7deaa55836ddf83bc2c68/openspec/changes/022-add-fetch-policy/design.md),
-[fetching spec](https://github.com/openlinx/openlinx/blob/6398ef80ef81d91c1ea7deaa55836ddf83bc2c68/openspec/changes/022-add-fetch-policy/specs/fetching/spec.md).
+[Tasks](https://github.com/openlinx/openlinx/blob/8a6fd88b78e1e79cd97c3729091233883e804248/openspec/changes/022-add-fetch-policy/tasks.md),
+[design](https://github.com/openlinx/openlinx/blob/8a6fd88b78e1e79cd97c3729091233883e804248/openspec/changes/022-add-fetch-policy/design.md),
+[fetching spec](https://github.com/openlinx/openlinx/blob/8a6fd88b78e1e79cd97c3729091233883e804248/openspec/changes/022-add-fetch-policy/specs/fetching/spec.md).
+
+Group 10 is accepted at source `255fcf1611a992c91c45a2e0b207c9c570155644`, after
+independent Standards and Spec reviews against main `27b18e74` with no unresolved
+findings. Its reported local gate passed 1938 tests with 12 platform skips, strict
+mypy on three platforms, OpenSpec 15/15 and Node 1/1;
+[source CI 42012946895](https://github.com/openlinx/openlinx/actions/runs/42012946895)
+passed all nine cells, including the self-signed TLS tests on all three OSes.
+Acceptance metadata is committed at `8a6fd88b`, with a separately reported full
+local gate of 1938 passed and 12 skipped. The verified
+[current-head CI 42014800275](https://github.com/openlinx/openlinx/actions/runs/42014800275)
+passed 9/9 on `8a6fd88b78e1e79cd97c3729091233883e804248`.
+
+[PR #41](https://github.com/openlinx/openlinx/pull/41) remains open and Draft;
+GitHub reports MERGEABLE/CLEAN. The branch already contains main `27b18e74`, so no
+further local main integration is currently needed. The next landing step is Ready
+and maintainer merge of #41. All v0.1 tasks are checked; groups 11–14 remain v0.2.
+
+Historical acceptance evidence follows, tied to its own checkpoints.
 
 Group 9 was reviewed at `a2c6b643`. The whole-group Standards and Spec review of
 9b covered `a2c6b643...c8384792`, followed by closure of its findings. Group 9b is
 accepted through `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68`, where task 9b.19 was
 checked in the P2/S2 fix commit after the final local gate and closure of all fresh
-review findings. This accepts the pre-PR group; the full fetching change remains unfinished.
+review findings. That accepted the pre-PR group; group 10 acceptance is recorded above.
 
-The branch actually integrates main `82ffcce61f4e3fc800726e8690eedbc4d55b08af`
+The earlier branch integration took main `82ffcce61f4e3fc800726e8690eedbc4d55b08af`
 through merge commit `f56d3bbde820fd6acca46035a9d923052ff1c923`. The earlier
 `809d0d66` restored setup only. The integration preserves main's writer/service,
 settings and CLI contracts together with 022's fetching semantics and TLS/proxy
@@ -134,41 +161,45 @@ hosts and 20 handshakes per host per store on each OS. The accepted
 Task 6.4 is complete under revised D5: the observed overhead is accepted while
 retaining the TLS spec's OS trust store and certifi fallback only when truststore
 cannot be loaded. The user approved this decision on 2026-11-04; it changes no
-runtime behaviour. The first
-draft PR carries groups 1–9 and 9b; group 10 follows in a later PR, with 10.1 waiting
-for 023's archived workspace spec. Groups 11–14 are v0.2 work and are outside this
-acceptance.
+runtime behaviour. The first draft PR carried groups 1–9 and 9b; group 10 is now
+accepted in #41. Task 10.1 verified the retained workspace proxy exception after
+023 was archived. Groups 11–14 remain v0.2 work outside this acceptance.
 
-### 023: complete and archived on branch; PR awaits merge
+### 023: complete, archived and merged; main CI passed
 
 [Tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md),
 [design](../openspec/changes/archive/2026-11-04-023-fix-code-audit/design.md),
 [PR #36](https://github.com/openlinx/openlinx/pull/36).
 
-Groups 1–4 are in `main`. Group 5 and the integration of main `4957b187` are
-accepted; tasks 6.1–6.3 document the real extension recipes, formula seams,
-implementation checks and strict-mypy contracts.
+All groups are complete and archived, and PR #36 is merged. Its exact source head
+`cc684d2def17186291cf7647f1a48ed67513c066` passed all nine cells of
+[CI 41854123018](https://github.com/openlinx/openlinx/actions/runs/41854123018).
+The merge commit `27b18e74` separately passed main CI 41921423999, linked above.
+There is no remaining 023 landing or CI blocker.
+
+Historical review evidence: groups 1–4 were already in main; group 5 and the
+integration of main `4957b187` were accepted on the branch. Tasks 6.1–6.3 document
+the real extension recipes, formula seams, implementation checks and strict-mypy contracts.
 
 The whole-change GPT-6 Astra Standards and Spec review covered groups 1–6,
 including the earlier merged groups and current integration. Its three reproduced
 findings are fixed: writer batch durability in `575dab4f`, bounded hook-error
 redaction in `8778e412`, and caller attribution for empty unknown tables in
 `80e97f34761387fbaadcebb0c26ae0dd1365396a`. Independent Astra review accepted each
-fix; the latest combined local gate passed 1932 tests with 12 platform skips,
+fix; the reported pre-merge combined local gate passed 1932 tests with 12 platform skips,
 strict mypy on three platforms, OpenSpec 16/16 and Node 1/1.
 
 Both CLI self-description scenarios now have separate test names. The four delta
 specs map to 46 scenarios, with none missing or duplicated. Whole-change review
 closed at `c192f242`. The four primary specs now contain the accepted deltas, and
 the change is archived with all tasks complete. The workspace proxy exception
-remains intact; 022 task 10.1 now targets that retained requirement and stays open.
+remains intact; 022 task 10.1 verified that retained requirement in `0ff53486`.
 Strict validation after the archive passed all 15 remaining active specs and changes.
 
 Source integration `e9eb6dba` passed all nine cells of
 [CI 41839157705](https://github.com/openlinx/openlinx/actions/runs/41839157705).
-That run predates the later docs and fixes. Check PR #36 for publication and CI
-on the current head; no earlier result validates these later commits. This branch
-has not been merged into `main`.
+That historical run predates the later docs and fixes; current source-head and
+post-merge acceptance are established by the separate runs above.
 
 ### 026: reconcile the core, then close bounded shutdown
 
@@ -199,33 +230,51 @@ selection and timing interpretation so an in-process baseline really uses that
 executor. Baseline/layout measurements and the pool rerun need a quiet machine;
 they are not the immediate coding task.
 
-### 030: resolve group 12 contract and cleanup findings first
+### 030: group 12 accepted; integrate current main before group 4b
 
-[Tasks](https://github.com/openlinx/openlinx/blob/0eeed79504271c7cf1e51ab69543271225c995d8/openspec/changes/030-add-page-data/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/0eeed79504271c7cf1e51ab69543271225c995d8/openspec/changes/030-add-page-data/design.md).
+[Tasks](https://github.com/openlinx/openlinx/blob/908e140cce578d1b9efff21be4194e4869e5960f/openspec/changes/030-add-page-data/tasks.md),
+[design](https://github.com/openlinx/openlinx/blob/908e140cce578d1b9efff21be4194e4869e5960f/openspec/changes/030-add-page-data/design.md).
 
-Groups 1–11 are in `main`. Group 12 has an earlier review commit `e556abb2` followed
-by planning corrections `0eeed795`; the current continuity review found that its
-acceptance claims are incomplete. It may be transported as unfinished work.
-Resolve these two findings before declaring group 12 accepted or proceeding to 4b:
+Groups 1–11 are in main. Group 12 is accepted at source `68fcfeeb`, recorded in
+metadata head `908e140cce578d1b9efff21be4194e4869e5960f`, with C01/C02 closed.
+[PR #37](https://github.com/openlinx/openlinx/pull/37) is open and ready for review,
+but GitHub reports CONFLICTING/DIRTY against current main. Its
+[exact-head CI 41804474670](https://github.com/openlinx/openlinx/actions/runs/41804474670)
+passed all nine OS/Python cells on `908e140c`. This does not validate a future
+integration result; the full 030 change remains unfinished.
 
-- **C01, open:** the spec/proposal require `structured_data_error_count` and
-  `structured_data_warning_count`, but the schema, Page record, schema/architecture
-  docs and test data list still use `structured_data_errors` and
-  `structured_data_warnings`. Align the names throughout the public contract and
-  independently check the declared schema, NULL values and release prefixes.
-- **C02, open:** task 12.3 promises Windows subprocess-tree cleanup on timeout.
-  `tests/cli/test_encoding.py` uses `subprocess.run(timeout=...)` on `cmd`, with no
-  path that terminates its Python descendants. Implement ownership and cleanup of
-  the whole tree and verify that no child survives a timeout. A hang was not
-  reproduced during this review; the missing cleanup path was found by reading it.
+Historical acceptance evidence supersedes the earlier blocked checkpoint
+`0eeed795`: source
+[CI 41749711189](https://github.com/openlinx/openlinx/actions/runs/41749711189)
+passed 9/9 on `68fcfeeb`. Independent Standards and Spec reviews found no defects;
+the reported full local gate passed 1541 tests with 14 Windows skips, strict mypy
+on three platforms, OpenSpec 16/16 and Node 1/1.
 
-Then review the corrected group with the Page/Link contract tests, extractor tests,
-Windows encoding/cleanup checks and writer throughput smoke test. Group 4b also
-waits for 022's size and redirect support in `main`. Its later plan check starts
-at 4.6, compressed Page sizes, and covers the full Page-column contract before the
-HTTP-redirect slices. Reconcile 023's Link-reading/type-table changes when integrating
-the new product base. Shared setup on `main` does not perform that integration.
+- **C01, closed at `ae9f481b`:** `structured_data_error_count` and
+  `structured_data_warning_count` agree across the schema, Page record, docs and
+  deferred-column test data. Independent literal expectations pin INTEGER,
+  nullable shape, v0.3 description prefixes, absent old names and stored NULLs.
+- **C02, closed at `68fcfeeb`:** the Windows console helper owns its controlled
+  process tree and performs bounded descendant cleanup on timeout. The real guard
+  checks termination of `cmd` and two Python descendants before emergency cleanup.
+  [Windows mutation proof 41802806574](https://github.com/openlinx/openlinx/actions/runs/41802806574)
+  passed on Python 3.12–3.14 at verification commit `5562597f`: original green,
+  root-only cleanup red at the surviving-descendants assertion, exact source bytes
+  restored, then green again. Verification assets stayed in separate
+  [PR #38](https://github.com/openlinx/openlinx/pull/38), closed unmerged.
+
+Next: review the remaining plan, then locally integrate current main `27b18e74`
+into 030 before task 4.6. Its current merge-base is `82ffcce6`; reconcile 022's
+fetching/size/redirect contracts and 023's Link-reading/type-table changes with
+group 12. Preserve the schema, `HttpVersion`, shared Link types/`LINK_TYPES`, Page
+records, test helpers and contract tests. Review and gate the integrated result;
+the existing green head CI cannot establish acceptance of that result.
+
+022's size and HTTP redirect support is already available in main through PR #39
+at `4957b187`; group 4b does not need to wait for PR #41 for that dependency. After
+integration, start task 4.6 with compressed Page sizes and the full Page-column
+contract, then 4.7, 4.10, docs 4.14 and review 4.15. Shared setup does not perform
+this product integration.
 
 Tasks 10.1 (Link layout) and 10.11 (writer capacity) still need a quiet-machine slot.
 Share the recorded layout choice with 026 rather than running competing decisions.
@@ -291,13 +340,41 @@ Reconcile the rename and 023's service contracts in that plan; the where parser
 belongs in `query`, its SQL compiler in `store`. Group 3 starts only after this plan
 and the existing fixes are reviewed. Groups 9–13 remain v0.2.
 
+### 060: task 0.1 complete locally; next 0.2
+
+[Tasks](../openspec/changes/060-add-crawl-control/tasks.md),
+[design](../openspec/changes/060-add-crawl-control/design.md).
+
+Task 0.1, "A running Crawl keeps its writer claim", is complete locally in the
+slice on top of `9cc871ac21d6f9e82812b528ab5e89b38b4ca60e`. Context-managed creation
+holds the OS claim around the full start operation; direct callers retain their
+post-operation assertions, and the writer throughput script retains ownership
+through writer closure. Exclusive creation of the claim file handles id collisions
+before SQLite creation without weakening the existing exclusive SQLite create.
+
+Independent Astra review found Standards 0 / Spec 0. The full local
+`uv run scripts/check.py` passed on the reviewed source: 1935 tests passed,
+12 skipped in 197.23 seconds, coverage 98.42%, strict mypy for three platforms,
+OpenSpec 15/15 and Node 1/1. The coordinator independently checked the log and the
+16-file candidate manifest. These results precede the acceptance metadata update;
+source and tests remain unchanged. Disabling POSIX flock acquisition made the
+independent process probe return 0 instead of 10; the source bytes were restored
+and the test passed again. Actual Windows/macOS/Linux CI has not run for 060.
+
+Only task 0.1 is checked. Task 0.2 onward, including 0.6, remains unchecked;
+group 0 and the change remain unfinished, and groups 1–11 remain Draft.
+Next is 0.2, "A completed Crawl releases its writer claim": keep the caller process
+alive after the service returns and prove acquisition from another process.
+Reconcile later groups against implemented dependencies before using their draft
+tasks; integrate 022 group 10 fixes before accepting URL-limit resume.
+
 ## Evidence and checks
 
 The checkpoint facts come from Git refs, diffs, tasks, designs and test sources.
-C01–C05 were identified during the independent continuity review. C03 is closed
-by the 022 evidence above. C01, C02, C04 and C05 belong to their streams' documented
-checkpoints; check those branches for current status. Older passing runs do not
-establish that later spec and implementation pairs agree.
+C01–C05 were identified during the independent continuity review. C01/C02 are closed
+by the 030 evidence above, and C03 by the 022 evidence. C04/C05 remain open at the
+recorded 050 checkpoint. Older passing runs do not establish that later spec and
+implementation pairs agree, or that a pending integration or the remaining 060 work has passed.
 
 PR #34's gate and the 022 task 9b.9 review/gate above have separate scopes; their
 results do not establish acceptance of the remaining fetching, Page data or query
@@ -339,6 +416,6 @@ replace a run on the reviewed code.
 
 The durable sources are the files linked above and the branch history, including
 the planning commits `0d209151` (022 group 9b), `1f3dec66` (023 group 5),
-`0eeed795` (030 group 12 planning corrections, acceptance blocked) and
+`0eeed795` (030 group 12 planning corrections, since accepted through `908e140c`) and
 `f64324b8` (050 review fixes).
 Keep this checkpoint current when a group is reviewed, published or integrated.

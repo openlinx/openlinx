@@ -124,6 +124,43 @@ The Crawl Service continues a `stopped` or `failed` Crawl (see [Continuing a Cra
 
 Creating a Crawl writes its file, its `crawl` row and its Seeds in one transaction. Everything written after that goes through the Crawl's writer, in **units of work**.
 
+### Writer ownership
+
+A foreground Crawl takes an operating-system writer claim on `<crawl id>.lock`
+next to its crawl file before creating the SQLite file. The claim stays held through
+fetching, post-crawl passes, failure recording and the closure of every writer used
+by the start operation. Replacing a failed writer does not release the claim.
+
+The service and store APIs make the owner explicit:
+
+| API | Context value and lifetime |
+|---|---|
+| `openlinx.store.claim.claim_writer(crawl_file)` | Yields no value; owns the lock descriptor until context exit |
+| `openlinx.store.crawls.create_crawl_file(...)` | Yields `(CrawlFile, JournalChoice)` with the claim held |
+| `openlinx.services.crawls.create_crawl(...)` | Yields `CrawlFile` with the claim held; the caller keeps all its writers inside this context |
+
+Creation uses `claim_writer(..., exclusive=True)` to create the lock file
+exclusively. An existing lock file, including one created by a racing process,
+makes creation draw another id before touching SQLite. Other claim callers open
+the existing lock file, creating it if absent.
+
+`CrawlFile` contains only an id and path. Keeping that record after leaving the
+context does not retain ownership. `start_crawl` manages the creation context for
+its caller, around the entire run.
+
+Claim acquisition makes one nonblocking attempt. A lock conflict raises
+`crawl_locked` (exit code 5), with `details.file` naming the crawl file. File-open
+errors are not lock conflicts; creation reports an unwritable Workspace through
+`workspace_not_writable`. This claim is separate from SQLite's transaction locks
+and their `crawl_busy` diagnostic.
+
+Initialization failure removes the incomplete SQLite file under the claim. Once
+creation yields, a run failure preserves the initialized file. Context exit closes
+the descriptor, and the operating system also releases ownership when its process
+dies. The `.lock` file remains; its existence alone does not mean the claim is held.
+
+### Units of work
+
 - **A unit** is a function that gets a database connection and may insert, update and read rows. It returns a value to its caller, for example the next URL to fetch.
 - **One at a time, in order.** The writer runs units on its own thread, one at a time, in the order they were submitted. Units can come from several threads, or from an event loop without blocking it.
 - **One open transaction.** Every unit sees what the units before it wrote, committed or not, so a unit can read a row and update it in one step.
@@ -168,7 +205,7 @@ Creating a Crawl writes its file, its `crawl` row and its Seeds in one transacti
 - **Watching commits.** An optional `on_commit` callable, given when the writer is opened, is called on the writer thread after each commit with the number of units that commit made durable, for progress and metrics. It must be quick, and an error it raises ends the writer like a failed commit.
 - **What a crash loses.** A process that is killed, even with SIGKILL or TerminateProcess, loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound: `PRAGMA integrity_check` returns `ok`. Tests kill a real writer process to check both.
 - **The write check.** Opening the writer first runs a write that it rolls back. A crawl file that cannot be written, for example one with the read-only attribute, fails at once with `crawl_not_writable` (exit code 7) and `details.file`, before anything is crawled, and the file is left unchanged.
-- **One writer per Crawl.** Until `060-add-crawl-control`, only the process that creates a Crawl writes it, because a Crawl cannot be resumed or detached yet. `060` adds a claim on the file when a second process can write.
+- **One writer per Crawl.** The start operation holds its [writer claim](#writer-ownership) until its writers close. Opening a raw `CrawlWriter` does not acquire that claim; its caller owns the surrounding claim context.
 - **A busy file.** When another connection holds the crawl file, the writer waits up to 30 seconds, on opening, when it starts a transaction or while a unit runs, then fails with `crawl_busy` (exit code 5) and `details.file`. In WAL mode only another writer can hold it that long; in rollback-journal mode a long read can too.
 - **After `close()`,** the writer accepts no more units: a unit submitted then fails at once. Closing twice is harmless.
 
