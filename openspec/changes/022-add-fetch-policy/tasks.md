@@ -180,9 +180,16 @@ Tasks 6.4 and 8.2 close in this group too, 8.2 from the first PR's CI.
 - [x] 10.1 Spec, once `023` is archived: verify that the retained workspace requirement "No environment variables" preserves the proxy exception and scenario "The proxy variables are the one exception", and cli-contract preserves the `environment` row; retain 9b.1's matching test. Do not add duplicate requirements or deltas for wording already retained. Proxy variables apply from v0.1; `--proxy` and `crawl.proxy` overrides remain v0.2 (group 12).
 - [x] 10.2 Refactor, behaviour unchanged: `BlockingRuns` and `BLOCKING_RUN` move to `openlinx.crawl.engine.blocking`, since only the engine uses them, and both package docstrings follow.
 - [x] 10.3 [3+6] Drive "A redirect to another subdomain stays inside the Scope", on `fixture_named_hosts` with `en.site.test` (design D3).
-- [ ] 10.4 [Fixture] A self-signed listener served as `selfsigned.test`, test-first in `tests/fixture_site/`, its certificate made with `cryptography`, which the dev group declares; then `test_a_self_signed_certificate_is_a_tls_error` [3+6], which CI runs on Windows, macOS and Linux, since each verifies through its own platform API (design D5, Risks).
+- [x] 10.4 [Fixture] A self-signed listener served as `selfsigned.test`, test-first in `tests/fixture_site/`, its certificate made with `cryptography`, which the dev group declares; then `test_a_self_signed_certificate_is_a_tls_error` [3+6], which CI runs on Windows, macOS and Linux, since each verifies through its own platform API (design D5, Risks).
 - [x] 10.5 [Fake timing] The URL limit's wait for an open pause count also follows the Internal checked URLs in flight, which count towards the pause and may give counts back, red first (design D4).
-- [ ] 10.6 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+- [x] 10.6 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
+
+Group 10 is accepted at `255fcf1611a992c91c45a2e0b207c9c570155644`, reviewed
+against `27b18e745aba9d606b91067c5fa795c4cdfb8952` on Standards and Spec with no
+unresolved findings. [PR #41](https://github.com/openlinx/openlinx/pull/41),
+[CI 42012946895](https://github.com/openlinx/openlinx/actions/runs/42012946895): all
+nine Windows/macOS/Linux × Python 3.12–3.14 cells passed, including the self-signed
+TLS tests. Groups 11–14 remain open for v0.2.
 
 ## 11. (v0.2) Custom headers and credentials
 
