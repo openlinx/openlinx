@@ -9,16 +9,17 @@ its own product checkpoint. Read
 
 ## Code checkpoints and transport
 
-Code checkpoints below identify the application, specs and task state reviewed on
-2026-11-04. Later transport or agent-setup commits may follow them on the same branch.
-They do not change which product work is complete. The 022 checkpoint includes the
-reviewed and gated narrow task 9b.9 refactor; the full fetching change remains unfinished.
+Code checkpoints below identify the application, specs and task state. The main,
+022 and 023 entries were verified on 2026-11-05; other streams retain their dated
+checkpoints until independently updated. Later transport or metadata commits may
+follow a code checkpoint without changing its accepted product scope. The 022 v0.1
+work is accepted on its branch; groups 11–14 remain unfinished v0.2 work.
 
 | Canonical branch | Code checkpoint | State |
 |---|---|---|
-| `main` | `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50` | First 022 PR #39 merged; main CI 41831195325 passed 9/9 |
-| `022-add-fetch-policy` | `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68` | Group 9b accepted; first PR #39 CI closes 8.2; TLS measurements and OS-trust policy accepted; 6.4 complete under revised D5 |
-| `023-fix-code-audit` | `c192f242b53c91395dfefde246be6f5e53aec300` | Whole-change review complete; specs synchronized and change archived on branch; PR #36 awaits current-head CI and merge |
+| `main` | `27b18e745aba9d606b91067c5fa795c4cdfb8952` | 023 PR #36 merged; main CI 41921423999 passed 9/9 |
+| `022-add-fetch-policy` | `255fcf1611a992c91c45a2e0b207c9c570155644` | Group 10 accepted; draft PR #41 CI 42012946895 passed 9/9; v0.1 complete on branch |
+| `023-fix-code-audit` | `c192f242b53c91395dfefde246be6f5e53aec300` | Whole-change review complete; specs synchronized and change archived; PR #36 merged into main at `27b18e74` |
 | `026-add-parse-pool` | `8294855ecfffb9f07094b931ed0d94754d0bf16d` | Unfinished pool/shutdown work |
 | `030-add-page-data` | `0eeed79504271c7cf1e51ab69543271225c995d8` | Published unfinished snapshot; group 12 acceptance blocked by C01/C02 |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
@@ -26,8 +27,8 @@ reviewed and gated narrow task 9b.9 refactor; the full fetching change remains u
 
 The 030 and 050 checkpoints have been pushed by native Git fast-forward as unfinished
 snapshots. No fresh full gate or feature acceptance is claimed for that transport.
-The 022 checkpoint is also published, with its narrow 9b.9 review and gate recorded
-below. Open findings remain part of each stream's next work. Publishing a ref does not
+The 022 checkpoint is published in PR #41; group 10 review and nine-cell CI
+evidence are recorded below. Open findings remain part of each stream's next work. Publishing a ref does not
 accept its features or merge it into `main`; transport alone needs no draft feature PR.
 
 Shared instructions, canonical skills, development setup and this hand-off have one
@@ -68,11 +69,24 @@ not validation of the current 023 integration.
 Stream task, design and spec links below point to the reviewed code checkpoints.
 Check the chosen branch head for any later changes.
 
-### 022: group 9b accepted; first draft PR's nine-cell CI passed
+### 022: group 10 accepted; v0.1 complete on branch
 
-[Tasks](https://github.com/openlinx/openlinx/blob/6398ef80ef81d91c1ea7deaa55836ddf83bc2c68/openspec/changes/022-add-fetch-policy/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/6398ef80ef81d91c1ea7deaa55836ddf83bc2c68/openspec/changes/022-add-fetch-policy/design.md),
-[fetching spec](https://github.com/openlinx/openlinx/blob/6398ef80ef81d91c1ea7deaa55836ddf83bc2c68/openspec/changes/022-add-fetch-policy/specs/fetching/spec.md).
+[Tasks](https://github.com/openlinx/openlinx/blob/255fcf1611a992c91c45a2e0b207c9c570155644/openspec/changes/022-add-fetch-policy/tasks.md),
+[design](https://github.com/openlinx/openlinx/blob/255fcf1611a992c91c45a2e0b207c9c570155644/openspec/changes/022-add-fetch-policy/design.md),
+[fetching spec](https://github.com/openlinx/openlinx/blob/255fcf1611a992c91c45a2e0b207c9c570155644/openspec/changes/022-add-fetch-policy/specs/fetching/spec.md).
+
+Group 10 is accepted at `255fcf1611a992c91c45a2e0b207c9c570155644` after independent
+Standards and Spec reviews against main `27b18e74`, with no unresolved findings.
+[Draft PR #41](https://github.com/openlinx/openlinx/pull/41) has a successful
+[CI run 42012946895](https://github.com/openlinx/openlinx/actions/runs/42012946895):
+all nine OS/Python cells passed. The self-signed TLS fixture and Crawl tests ran
+without skips on Windows, macOS and Linux. The local full gate passed 1938 tests
+with 12 platform skips, 99% coverage, strict mypy on three platforms, OpenSpec
+15/15 and Node 1/1. Tasks 10.4 and 10.6 are complete; the
+[current task record](../openspec/changes/022-add-fetch-policy/tasks.md#10-closing-the-change-v01)
+records this acceptance. The PR is not merged. Groups 11–14 remain open for v0.2.
+
+Earlier acceptance evidence follows, tied to its own source checkpoints.
 
 Group 9 was reviewed at `a2c6b643`. The whole-group Standards and Spec review of
 9b covered `a2c6b643...c8384792`, followed by closure of its findings. Group 9b is
@@ -135,11 +149,11 @@ Task 6.4 is complete under revised D5: the observed overhead is accepted while
 retaining the TLS spec's OS trust store and certifi fallback only when truststore
 cannot be loaded. The user approved this decision on 2026-11-04; it changes no
 runtime behaviour. The first
-draft PR carries groups 1–9 and 9b; group 10 follows in a later PR, with 10.1 waiting
-for 023's archived workspace spec. Groups 11–14 are v0.2 work and are outside this
-acceptance.
+draft PR carried groups 1–9 and 9b. Group 10 is now accepted in PR #41 as recorded
+above; 10.1 verified the retained proxy contract after 023 was archived. Groups
+11–14 are v0.2 work and are outside this acceptance.
 
-### 023: complete and archived on branch; PR awaits merge
+### 023: complete, archived and merged
 
 [Tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md),
 [design](../openspec/changes/archive/2026-11-04-023-fix-code-audit/design.md),
@@ -161,14 +175,15 @@ Both CLI self-description scenarios now have separate test names. The four delta
 specs map to 46 scenarios, with none missing or duplicated. Whole-change review
 closed at `c192f242`. The four primary specs now contain the accepted deltas, and
 the change is archived with all tasks complete. The workspace proxy exception
-remains intact; 022 task 10.1 now targets that retained requirement and stays open.
+remains intact; 022 task 10.1 verified that retained requirement in `0ff53486`.
 Strict validation after the archive passed all 15 remaining active specs and changes.
 
 Source integration `e9eb6dba` passed all nine cells of
 [CI 41839157705](https://github.com/openlinx/openlinx/actions/runs/41839157705).
-That run predates the later docs and fixes. Check PR #36 for publication and CI
-on the current head; no earlier result validates these later commits. This branch
-has not been merged into `main`.
+That run predates the later docs and fixes. PR #36 was merged into `main` at
+`27b18e745aba9d606b91067c5fa795c4cdfb8952`; the resulting
+[main CI 41921423999](https://github.com/openlinx/openlinx/actions/runs/41921423999)
+passed all nine OS/Python cells.
 
 ### 026: reconcile the core, then close bounded shutdown
 

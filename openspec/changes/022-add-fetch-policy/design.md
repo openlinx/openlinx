@@ -17,7 +17,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 - **`015-add-crawl-store`** redacts secrets in `create_crawl`, from `NewCrawl.secret_names` (a `SecretNames(flags, settings)`): whole values become `***`, and a URL's password becomes `user:***@host` (the private `_redact_value` in `openlinx.store.redaction`). It has no header form yet (`Cookie: ***`), which this change adds in v0.2.
 - **`017-speed-up-crawl-writer`** gives the writer that `020`'s unit per URL goes through. A unit may run twice, so the units of this change follow its D7 contract, including the hop count and the loop walk of D2.
 - **`018-add-schema-conventions` and ADR-0005** set the schema rules. Every column, index and table of this change is declared through `018`'s `public_table()` (D10).
-- **`010-add-workspace-and-cli-contract` and `023-fix-code-audit`** take settings only from flags and `openlinx.toml`, and environment variables change nothing, but for the proxy variables: this change honours them and `linx commands` lists them under `environment`. Its workspace delta makes them the one exception to `023`'s "Environment variables change nothing", so `023` is archived first.
+- **`010-add-workspace-and-cli-contract` and `023-fix-code-audit`** take settings only from flags and `openlinx.toml`. The retained workspace requirement "No environment variables" already excepts the proxy variables and includes "The proxy variables are the one exception"; cli-contract retains the `environment` row. This change verifies those contracts after `023` is archived, without duplicate requirements or deltas. Proxy variables apply from v0.1; `--proxy` and `crawl.proxy` overrides remain v0.2.
 - **ADR-0001:** aiohttp has no HTTP/2, so `http_version` is measured with an ALPN handshake (v0.2).
 - **`000-scaffold-project`:** its proxy isolation removes `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `ALL_PROXY`, in both cases, before every test, and it leaves HTTPS, named hosts and gzip on the fixture site to this change.
 
@@ -155,7 +155,7 @@ Each is added test-first in `tests/fixture_site/` or `tests/support/` by the fir
   - one for `site.test`
   - one whose certificate names `other.test`, served as `badcert.test`
   - one with a certificate from a CA the test never trusts
-  - one with a self-signed certificate (no CA), served as `selfsigned.test`, made with `cryptography`, which `trustme` already brings
+  - one with a self-signed leaf certificate (no CA), served as `selfsigned.test:443`, made with the direct dev dependency `cryptography`; unlike the unknown-CA listener, its leaf verifies with its own public key. Its name and validity must be correct so rejection tests only missing trust.
   - **(v0.2)** one that selects `h2`, and one that offers only `http/1.1`
 - **Response sequences,** a new route kind: for example 503 once and then 200.
 - **Stalled and trickling bodies,** a new route option: the hostile fixtures that `020` D16 leaves to this change, with the huge page (`LargeFile`) and the compressed one.
@@ -233,7 +233,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_codings_on_repeated_header_lines_are_decoded_as_one_list`, since repeated Content-Encoding lines are one list (RFC 9110 5.3).
   - `test_bytes_after_a_finished_stream_are_ignored` and `test_a_gzip_member_boundary_split_after_its_first_byte_is_decoded`, since bytes after a stream are ignored for every coding and a gzip member split across reads is still decoded.
   - The [Pure] tests of `read_body` on real compressed bytes.
-  - `test_the_proxy_variables_are_the_one_exception`, until this change's workspace delta brings its scenario, since `linx commands` must list exactly the variables a run reads.
+  - `test_the_proxy_variables_are_the_one_exception` matches the retained workspace scenario and checks that `linx commands` lists exactly the variables a run reads.
   - `test_a_continue_records_the_proxy_variables_it_fetches_through`, since `crawl.config` must name the proxies in use, and a continue's may differ from its start's (D1).
   - `test_the_proxy_of_a_url`, since the lower-case variable, `NO_PROXY` and an ignored `ALL_PROXY` decide a proxy before any request.
   - `test_a_retry_the_closed_gate_ends_outside_the_count_is_requested_after_the_pause`, since a 5xx or 429 whose due retry the network pause's closed gate ends is no final answer (D4).
@@ -270,6 +270,8 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_every_insert_into_urls_goes_through_insert_urls` and `test_an_insert_into_urls_outside_insert_urls_is_named`, since an inserter that skips `insert_urls` records no origin for its URLs.
   - `test_each_https_listener_serves_the_certificate_it_is_named_for` and `test_a_name_is_resolved_only_on_the_ports_it_listens_on` (fixture site), since each TLS scenario needs a listener whose certificate fails for the one reason it is named for, and a name asked on a port it does not listen on must fail as DNS.
   - `test_an_https_site_signed_by_a_ca_the_crawl_trusts_is_crawled`, since a TLS error proves nothing unless the Crawl trusts the test CA.
+  - `test_self_signed_listener_serves_a_valid_leaf_that_can_be_explicitly_trusted` inspects the actual served certificate: matching SAN, equal subject and issuer, a signature verified by its own RSA public key, `ca=False`, and current validity. Explicit leaf trust with hostname verification proves that this listener can complete a valid connection; an unknown-CA leaf substituted for it must fail the self-signing assertions.
+  - `test_a_self_signed_certificate_is_a_tls_error` checks an External Link with the real TLS stack and Crawl store (seams 3+6), alongside a trusted HTTPS Page returning 200. The Crawl receives only the test CA anchor, never the self-signed leaf. Temporarily adding the leaf to its anchors must make the expected `tls_error` fail. Actual runs on Windows, macOS and Linux are required; local Linux results or static platform checks alone do not close task 10.4.
   - `test_a_robots_txt_with_a_bad_certificate_gives_its_urls_tls_error_without_a_request`, since only an Internal Seed behind a bad certificate shows the TLS requirement's robots.txt rule: no request (`attempt_count` 0, NULL `fetched_at`, an empty request log) where the scenarios record just the code.
   - `test_the_context_verifies_against_the_os_trust_store`, since every crawl test passes on certifi's bundle as well, so only it shows that the OS trust store is asked.
   - `test_without_truststore_the_context_trusts_certifis_bundle_and_the_extra_anchors`, since a Python runtime that truststore refuses must still verify against certifi's bundle and the extra anchors.
