@@ -181,7 +181,7 @@ Tasks 6.4 and 8.2 close in this group too, 8.2 from the first PR's CI.
 - [x] 10.2 Refactor, behaviour unchanged: `BlockingRuns` and `BLOCKING_RUN` move to `openlinx.crawl.engine.blocking`, since only the engine uses them, and both package docstrings follow.
 - [x] 10.3 [3+6] Drive "A redirect to another subdomain stays inside the Scope", on `fixture_named_hosts` with `en.site.test` (design D3).
 - [ ] 10.4 [Fixture] A self-signed listener served as `selfsigned.test`, test-first in `tests/fixture_site/`, its certificate made with `cryptography`, which the dev group declares; then `test_a_self_signed_certificate_is_a_tls_error` [3+6], which CI runs on Windows, macOS and Linux, since each verifies through its own platform API (design D5, Risks).
-- [ ] 10.5 [Fake timing] The URL limit's wait for an open pause count also follows the Internal checked URLs in flight, which count towards the pause and may give counts back, red first (design D4).
+- [x] 10.5 [Fake timing] The URL limit's wait for an open pause count also follows the Internal checked URLs in flight, which count towards the pause and may give counts back, red first (design D4).
 - [ ] 10.6 Review: run the code-review skill on group 10's commits, then refactor with the whole suite green.
 
 ## 11. (v0.2) Custom headers and credentials

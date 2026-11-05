@@ -25,13 +25,23 @@ class TaskFailure:
         self._error: BaseException | None = None
         # The tasks of Checked URLs in flight, which never hold the depth barrier (design D3).
         self.checked_urls: set[asyncio.Task[None]] = set()
+        # Internal checks can return the pause's URL-limit count without holding that barrier.
+        self.internal_checked_urls: set[asyncio.Task[None]] = set()
 
     @property
     def is_set(self) -> bool:
         return self._error is not None
 
-    def track(self, tasks: set[asyncio.Task[None]], task: asyncio.Task[None]) -> None:
+    def track(
+        self,
+        tasks: set[asyncio.Task[None]],
+        task: asyncio.Task[None],
+        *,
+        internal_checked: bool = False,
+    ) -> None:
         tasks.add(task)
+        if internal_checked:
+            self.internal_checked_urls.add(task)
         task.add_done_callback(lambda done: self._ended(tasks, done))
 
     def raise_first(self) -> None:
@@ -40,6 +50,7 @@ class TaskFailure:
 
     def _ended(self, tasks: set[asyncio.Task[None]], task: asyncio.Task[None]) -> None:
         tasks.discard(task)
+        self.internal_checked_urls.discard(task)
         if task.cancelled():
             return
         # Retrieved here, since a task that ends before a gather waits on it has already left
