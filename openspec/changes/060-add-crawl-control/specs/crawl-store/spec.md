@@ -23,6 +23,10 @@ A process MAY reserve a new id by creating `<id>.log` exclusively, and then crea
 - **WHEN** only `20260927-140312-k3f9.log` exists, and a Crawl is created at `2026-09-27T14:03:12.900Z` while the random source yields `k3f9` and then `m2p7`
 - **THEN** the new Crawl's id is `20260927-140312-m2p7`
 
+#### Scenario: An id with a writer claim file is drawn again
+- **WHEN** only `20260927-140312-k3f9.lock` exists, and a Crawl is created at `2026-09-27T14:03:12.900Z` while the random source yields `k3f9` and then `m2p7`
+- **THEN** the new Crawl's id is `20260927-140312-m2p7`
+
 #### Scenario: A chosen id is created once
 - **WHEN** a Crawl has been created with the chosen id `20260927-140312-k3f9`, and a second Crawl is created with the same chosen id
 - **THEN** the second creation fails with the error code `crawl_id_taken`, and the first Crawl's file is unchanged
