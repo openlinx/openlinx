@@ -155,7 +155,7 @@ Each is added test-first in `tests/fixture_site/` or `tests/support/` by the fir
   - one for `site.test`
   - one whose certificate names `other.test`, served as `badcert.test`
   - one with a certificate from a CA the test never trusts
-  - one with a self-signed certificate (no CA), served as `selfsigned.test`, made with `cryptography`, which `trustme` already brings
+  - one with a self-signed leaf certificate (no CA), served as `selfsigned.test:443`, made with the direct dev dependency `cryptography`; unlike the unknown-CA listener, its leaf verifies with its own public key. Its name and validity must be correct so rejection tests only missing trust.
   - **(v0.2)** one that selects `h2`, and one that offers only `http/1.1`
 - **Response sequences,** a new route kind: for example 503 once and then 200.
 - **Stalled and trickling bodies,** a new route option: the hostile fixtures that `020` D16 leaves to this change, with the huge page (`LargeFile`) and the compressed one.
@@ -270,6 +270,8 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_every_insert_into_urls_goes_through_insert_urls` and `test_an_insert_into_urls_outside_insert_urls_is_named`, since an inserter that skips `insert_urls` records no origin for its URLs.
   - `test_each_https_listener_serves_the_certificate_it_is_named_for` and `test_a_name_is_resolved_only_on_the_ports_it_listens_on` (fixture site), since each TLS scenario needs a listener whose certificate fails for the one reason it is named for, and a name asked on a port it does not listen on must fail as DNS.
   - `test_an_https_site_signed_by_a_ca_the_crawl_trusts_is_crawled`, since a TLS error proves nothing unless the Crawl trusts the test CA.
+  - `test_self_signed_listener_serves_a_valid_leaf_that_can_be_explicitly_trusted` inspects the actual served certificate: matching SAN, equal subject and issuer, a signature verified by its own RSA public key, `ca=False`, and current validity. Explicit leaf trust with hostname verification proves that this listener can complete a valid connection; an unknown-CA leaf substituted for it must fail the self-signing assertions.
+  - `test_a_self_signed_certificate_is_a_tls_error` checks an External Link with the real TLS stack and Crawl store (seams 3+6), alongside a trusted HTTPS Page returning 200. The Crawl receives only the test CA anchor, never the self-signed leaf. Temporarily adding the leaf to its anchors must make the expected `tls_error` fail. Actual runs on Windows, macOS and Linux are required; local Linux results or static platform checks alone do not close task 10.4.
   - `test_a_robots_txt_with_a_bad_certificate_gives_its_urls_tls_error_without_a_request`, since only an Internal Seed behind a bad certificate shows the TLS requirement's robots.txt rule: no request (`attempt_count` 0, NULL `fetched_at`, an empty request log) where the scenarios record just the code.
   - `test_the_context_verifies_against_the_os_trust_store`, since every crawl test passes on certifi's bundle as well, so only it shows that the OS trust store is asked.
   - `test_without_truststore_the_context_trusts_certifis_bundle_and_the_extra_anchors`, since a Python runtime that truststore refuses must still verify against certifi's bundle and the extra anchors.

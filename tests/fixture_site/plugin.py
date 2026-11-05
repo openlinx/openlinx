@@ -68,7 +68,7 @@ def fixture_named_hosts(fixture_site: StartSite) -> StartNamedHosts:
 
 @pytest.fixture
 def fixture_tls_hosts(fixture_site: Serve) -> StartTlsHosts:
-    """site.test over http and https, and two https listeners whose certificates fail,
+    """site.test over http and https, and three https listeners whose certificates fail,
     behind the DNS resolver hook."""
 
     def start(site: SiteOrBuilder, other: Site) -> TlsHosts:
