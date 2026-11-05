@@ -4,12 +4,13 @@ run's dependencies that the units share (020-add-crawl-core D3, D16)."""
 import asyncio
 from dataclasses import dataclass
 
+from openlinx.crawl.engine.blocking import BlockingRuns
 from openlinx.crawl.engine.context import CrawlContext
 from openlinx.crawl.engine.outcomes import Outcomes
 from openlinx.crawl.engine.pause import NetworkPause, Redispatch
 from openlinx.crawl.engine.seed_chain import SeedChain
 from openlinx.crawl.engine.stop import StopGrace, StopSignal
-from openlinx.crawl.fetch.politeness import BlockingRuns, RequestLimits
+from openlinx.crawl.fetch.politeness import RequestLimits
 from openlinx.crawl.fetch.requester import Requester
 from openlinx.crawl.robots.loader import RobotsLoader
 from openlinx.store.failures import is_write_failure

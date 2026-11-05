@@ -6,6 +6,7 @@ from functools import partial
 from typing import Literal
 
 from openlinx.aio import first_of
+from openlinx.crawl.engine.blocking import BlockingRuns
 from openlinx.crawl.engine.context import CrawlContext
 from openlinx.crawl.engine.crawl_warnings import url_limit_reached
 from openlinx.crawl.engine.outcomes import Outcomes
@@ -15,7 +16,7 @@ from openlinx.crawl.engine.seed_chain import SeedChain, end_seed_chain
 from openlinx.crawl.engine.stop import StopGrace
 from openlinx.crawl.engine.tasks import Run, TaskFailure
 from openlinx.crawl.engine.units import unit_of, via_resource
-from openlinx.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
+from openlinx.crawl.fetch.politeness import RateGate, RequestLimits, global_cap
 from openlinx.crawl.fetch.requester import Requester, watchdog_seconds
 from openlinx.crawl.robots.loader import RobotsLoader
 from openlinx.crawl.scope import ScopeDecision
