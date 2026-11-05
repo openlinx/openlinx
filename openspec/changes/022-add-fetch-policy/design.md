@@ -17,7 +17,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 - **`015-add-crawl-store`** redacts secrets in `create_crawl`, from `NewCrawl.secret_names` (a `SecretNames(flags, settings)`): whole values become `***`, and a URL's password becomes `user:***@host` (the private `_redact_value` in `openlinx.store.redaction`). It has no header form yet (`Cookie: ***`), which this change adds in v0.2.
 - **`017-speed-up-crawl-writer`** gives the writer that `020`'s unit per URL goes through. A unit may run twice, so the units of this change follow its D7 contract, including the hop count and the loop walk of D2.
 - **`018-add-schema-conventions` and ADR-0005** set the schema rules. Every column, index and table of this change is declared through `018`'s `public_table()` (D10).
-- **`010-add-workspace-and-cli-contract` and `023-fix-code-audit`** take settings only from flags and `openlinx.toml`, and environment variables change nothing, but for the proxy variables: this change honours them and `linx commands` lists them under `environment`. Its workspace delta makes them the one exception to `023`'s "Environment variables change nothing", so `023` is archived first.
+- **`010-add-workspace-and-cli-contract` and `023-fix-code-audit`** take settings only from flags and `openlinx.toml`. The retained workspace requirement "No environment variables" already excepts the proxy variables and includes "The proxy variables are the one exception"; cli-contract retains the `environment` row. This change verifies those contracts after `023` is archived, without duplicate requirements or deltas. Proxy variables apply from v0.1; `--proxy` and `crawl.proxy` overrides remain v0.2.
 - **ADR-0001:** aiohttp has no HTTP/2, so `http_version` is measured with an ALPN handshake (v0.2).
 - **`000-scaffold-project`:** its proxy isolation removes `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `ALL_PROXY`, in both cases, before every test, and it leaves HTTPS, named hosts and gzip on the fixture site to this change.
 
@@ -233,7 +233,7 @@ Argument errors, such as `--header` without a colon (v0.2), use `010`'s `invalid
   - `test_codings_on_repeated_header_lines_are_decoded_as_one_list`, since repeated Content-Encoding lines are one list (RFC 9110 5.3).
   - `test_bytes_after_a_finished_stream_are_ignored` and `test_a_gzip_member_boundary_split_after_its_first_byte_is_decoded`, since bytes after a stream are ignored for every coding and a gzip member split across reads is still decoded.
   - The [Pure] tests of `read_body` on real compressed bytes.
-  - `test_the_proxy_variables_are_the_one_exception`, until this change's workspace delta brings its scenario, since `linx commands` must list exactly the variables a run reads.
+  - `test_the_proxy_variables_are_the_one_exception` matches the retained workspace scenario and checks that `linx commands` lists exactly the variables a run reads.
   - `test_a_continue_records_the_proxy_variables_it_fetches_through`, since `crawl.config` must name the proxies in use, and a continue's may differ from its start's (D1).
   - `test_the_proxy_of_a_url`, since the lower-case variable, `NO_PROXY` and an ignored `ALL_PROXY` decide a proxy before any request.
   - `test_a_retry_the_closed_gate_ends_outside_the_count_is_requested_after_the_pause`, since a 5xx or 429 whose due retry the network pause's closed gate ends is no final answer (D4).
