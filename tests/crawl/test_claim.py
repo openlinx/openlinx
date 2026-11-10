@@ -1,4 +1,4 @@
-"""A running Crawl owns its OS writer claim (060-add-crawl-control D12; seams 1, 3)."""
+"""The Crawl Service owns its OS claim until return (060-add-crawl-control D12; seams 1-3)."""
 
 import subprocess
 from contextlib import closing
@@ -11,6 +11,7 @@ import pytest
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.cli import PROCESS_TIMEOUT, await_event, start_cli_process
+from tests.support.crawling import crawl_result
 from tests.support.processes import python_command
 from tests.support.workspace import TempWorkspace
 
@@ -81,3 +82,26 @@ def test_a_running_crawl_keeps_its_writer_claim(
         if process.poll() is None:
             process.kill()
         process.communicate(timeout=PROCESS_TIMEOUT)
+
+
+@pytest.mark.slow
+def test_a_completed_crawl_releases_its_writer_claim(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
+
+    # This test process stays alive after the service returns, throughout the OS probe.
+    result = crawl_result(server.url("/"))
+    lock_file = result.crawl_file.with_name(f"{result.crawl_id}.lock")
+    assert (result.summary.state, lock_file.is_file()) == ("completed", True)
+
+    command = python_command("-c", _PROBE, str(lock_file))
+    probe = subprocess.run(
+        command.argv,
+        env=command.env,
+        capture_output=True,
+        timeout=PROCESS_TIMEOUT,
+        check=False,
+    )
+
+    assert probe.returncode == 0, probe.stderr

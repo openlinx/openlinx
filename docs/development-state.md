@@ -10,10 +10,11 @@ its own product checkpoint. Read
 ## Code checkpoints and transport
 
 The main, 022, 023 and 030 entries were verified against local Git and GitHub on
-2026-11-05. The 060 entry records task 0.1 complete locally in a slice on top of
-`9cc871ac`, with independent review and a passing local gate. Other streams retain their 2026-11-04
-checkpoints and pending work. Historical checks below apply only to their named
-commits; they do not validate later integration or uncommitted work.
+2026-11-05. The 060 entry records tasks 0.1 and 0.2 accepted locally, with independent
+review and passing local gates; task 0.2 adds mutation proof on top of `4f945f84`.
+Other streams retain their 2026-11-04 checkpoints and pending work. Historical
+checks below apply only to their named commits; they do not validate later
+integration or uncommitted work.
 
 | Canonical branch | Code checkpoint | State |
 |---|---|---|
@@ -24,13 +25,13 @@ commits; they do not validate later integration or uncommitted work.
 | `030-add-page-data` | `908e140cce578d1b9efff21be4194e4869e5960f` | Group 12 accepted; C01/C02 closed; exact-head CI 41804474670 passed 9/9; PR #37 open with conflicts; integrate current main before group 4b |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
 | `050-add-query-and-segments` | `bd21fe4164077076076c5e64805e9f80aeb4b434` | Published unfinished snapshot; review fixes remain |
-| `060-add-crawl-control` | Task 0.1 slice on top of `9cc871ac21d6f9e82812b528ab5e89b38b4ca60e` | Task 0.1 complete locally; Astra Standards 0 / Spec 0; local gate green; next 0.2; remaining tasks unchecked; groups 1–11 Draft; platform CI not yet run |
+| `060-add-crawl-control` | Task 0.2 slice on top of `4f945f844889fb6d3de1bfb7d0f8e6930b31194e` | Tasks 0.1 and 0.2 accepted locally; task 0.2 Standards 0 / Spec 0, mutation/restored proof and local gate green; final metadata review completed with no findings; next 0.3; groups 1–11 Draft; platform CI not yet run |
 
 The published 022 and 030 heads match their local worktrees and PR heads. Their
 acceptance evidence is recorded below: 022's v0.1 work and 030's group 12 are
 accepted on their branches, but PRs #41 and #37 remain unmerged. The full 030 change
 and the published 050 snapshot remain unfinished. Transport alone establishes no
-feature acceptance. Only task 0.1 of 060 has local review and gate acceptance;
+feature acceptance. Tasks 0.1 and 0.2 of 060 have local review and gate acceptance;
 group 0 and the full change remain unfinished, with no 060 platform CI yet.
 
 Shared instructions, canonical skills, development setup and this hand-off have one
@@ -340,7 +341,7 @@ Reconcile the rename and 023's service contracts in that plan; the where parser
 belongs in `query`, its SQL compiler in `store`. Group 3 starts only after this plan
 and the existing fixes are reviewed. Groups 9–13 remain v0.2.
 
-### 060: task 0.1 complete locally; next 0.2
+### 060: task 0.2 accepted locally; next 0.3
 
 [Tasks](../openspec/changes/060-add-crawl-control/tasks.md),
 [design](../openspec/changes/060-add-crawl-control/design.md).
@@ -361,10 +362,29 @@ source and tests remain unchanged. Disabling POSIX flock acquisition made the
 independent process probe return 0 instead of 10; the source bytes were restored
 and the test passed again. Actual Windows/macOS/Linux CI has not run for 060.
 
-Only task 0.1 is checked. Task 0.2 onward, including 0.6, remains unchecked;
+Task 0.2, "A completed Crawl releases its writer claim", adds a test on top of
+`4f945f844889fb6d3de1bfb7d0f8e6930b31194e`, without changing production code.
+The pytest process calls the real Crawl Service against the local fixture site,
+checks the returned `completed` state and the existing lock file, then stays alive
+while a separate process acquires and releases the OS lock through an independent
+platform probe. The coordinator reports independent Standards 0 / Spec 0 review
+and has reviewed the test diff.
+
+The test was immediately green. A mutation retained the open locked descriptor
+after the Service returned, deferring its close to process exit; the probe exited
+10 and the test failed at `assert 10 == 0`. The original source bytes were restored
+exactly, and both running and completed claim tests passed (2 tests).
+
+The task 0.2 candidate passed the full local gate: 1936 tests passed, 12 skipped
+in 198.01 seconds, coverage 98.39%, strict mypy for three platforms, OpenSpec 15/15
+and Node 1/1. This final metadata-only update records that result; its review
+is completed with no findings. Actual Windows/macOS/Linux CI has not run for 060.
+
+Tasks 0.1 and 0.2 are checked. Task 0.3 onward, including 0.6, remains unchecked;
 group 0 and the change remain unfinished, and groups 1–11 remain Draft.
-Next is 0.2, "A completed Crawl releases its writer claim": keep the caller process
-alive after the service returns and prove acquisition from another process.
+Next is 0.3, "A failed Crawl releases its writer claim": keep the caller alive
+after failure recording, including the fallback writer, and prove acquisition
+from another process while preserving the readable crawl file.
 Reconcile later groups against implemented dependencies before using their draft
 tasks; integrate 022 group 10 fixes before accepting URL-limit resume.
 
