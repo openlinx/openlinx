@@ -10,9 +10,9 @@ its own product checkpoint. Read
 ## Code checkpoints and transport
 
 The main, 022, 023 and 030 entries were verified against local Git and GitHub on
-2026-11-05. The 060 entry records tasks 0.1 through 0.3 accepted locally, with independent
-review and passing local gates. Task 0.3 adds local failure-path and mutation proof
-on top of `14a061c3`, with a passing local gate and final review completed with no findings.
+2026-11-05. The 060 entry records tasks 0.1 through 0.4 accepted locally, with independent
+review and passing local gates. Task 0.4 adds reviewed creation-failure and mutation
+proof on top of `a34f6963`; its local gate passed and final review completed with no findings.
 Other streams retain their 2026-11-04 checkpoints and pending work. Historical
 checks below apply only to their named commits; they do not validate later
 integration or uncommitted work.
@@ -26,14 +26,14 @@ integration or uncommitted work.
 | `030-add-page-data` | `908e140cce578d1b9efff21be4194e4869e5960f` | Group 12 accepted; C01/C02 closed; exact-head CI 41804474670 passed 9/9; PR #37 open with conflicts; integrate current main before group 4b |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
 | `050-add-query-and-segments` | `bd21fe4164077076076c5e64805e9f80aeb4b434` | Published unfinished snapshot; review fixes remain |
-| `060-add-crawl-control` | Task 0.3 slice on top of `14a061c3783533ea6525889c1ea6d3f3236674e6` | Tasks 0.1 through 0.3 accepted locally; task 0.3 failure-path and mutation proof plus local gate green; final review completed with no findings; next 0.4; groups 1–11 Draft; platform CI not yet run |
+| `060-add-crawl-control` | Task 0.4 slice on top of `a34f6963600c967020d7fa3ddf702a759d2756f2` | Tasks 0.1 through 0.4 accepted locally; task 0.4 Standards 0 / Spec 0, creation-failure and mutation proof plus local gate green; final review completed with no findings; next 0.5; task 0.7 open; groups 1–11 Draft; platform CI not yet run |
 
 The published 022 and 030 heads match their local worktrees and PR heads. Their
 acceptance evidence is recorded below: 022's v0.1 work and 030's group 12 are
 accepted on their branches, but PRs #41 and #37 remain unmerged. The full 030 change
 and the published 050 snapshot remain unfinished. Transport alone establishes no
-feature acceptance. Tasks 0.1 through 0.3 of 060 have local review and gate acceptance;
-group 0 and the full change remain unfinished, with no 060 platform CI yet.
+feature acceptance. Tasks 0.1 through 0.4 of 060 have local review and gate acceptance.
+Group 0 and the full change remain unfinished, with no 060 platform CI yet.
 
 Shared instructions, canonical skills, development setup and this hand-off have one
 entry point on `main`. They are not automatically transplanted to the other
@@ -342,7 +342,7 @@ Reconcile the rename and 023's service contracts in that plan; the where parser
 belongs in `query`, its SQL compiler in `store`. Group 3 starts only after this plan
 and the existing fixes are reviewed. Groups 9–13 remain v0.2.
 
-### 060: task 0.3 accepted locally; next 0.4
+### 060: task 0.4 accepted locally; next 0.5
 
 [Tasks](../openspec/changes/060-add-crawl-control/tasks.md),
 [design](../openspec/changes/060-add-crawl-control/design.md).
@@ -403,11 +403,35 @@ in 200.86 seconds, coverage 98.45%, strict mypy for three platforms, OpenSpec 15
 and Node 1/1. This metadata-only update records the result; final review is
 completed with no findings. Actual Windows/macOS/Linux CI has not run for 060.
 
-Tasks 0.1 through 0.3 are checked. Task 0.4 onward, including 0.6, remains unchecked;
+Task 0.4, "A failed creation releases its writer claim", adds a creation-service
+test on top of `a34f6963600c967020d7fa3ddf702a759d2756f2`, without production changes.
+The existing `disk_full_after` boundary gains the opt-in `include_creation=True`;
+its default remains False, preserving existing callers. The test fixes the id with
+the existing clock and Choice seams. At the real SQLite connection boundary it
+observes an existing file with `user_version=0` and a refused independent OS probe,
+then SQLite's own `max_page_count` limit causes `SQLITE_FULL` during schema creation.
+The error names the expected path; the incomplete SQLite file is removed, the lock
+file remains, and another process acquires the claim while the caller stays alive.
+This observation establishes task 0.4's prerequisite; task 0.7 stays open.
+
+The initial red run showed that the old boundary skipped creation. After the opt-in
+was added, retention of the locked descriptor made the final probe exit 10, and
+omitting unlink left the incomplete SQLite file behind; each mutation failed its
+guard. Both production files were restored byte-for-byte. The restored focused run
+passed 14 tests, including prior claim and creation callers and the default full-disk
+fallback; standard strict mypy passed all 333 files. Independent review reported
+Standards 0 / Spec 0.
+
+The task 0.4 candidate passed the full local gate: 1939 tests passed, 12 skipped
+in 200.73 seconds, coverage 98.48%, strict mypy for three platforms, OpenSpec 15/15
+and Node 1/1. This metadata-only update records the result; final review is
+completed with no findings. Actual Windows/macOS/Linux CI has not run for 060.
+
+Tasks 0.1 through 0.4 are checked. Task 0.5 onward, including 0.7, remains unchecked;
 group 0 and the change remain unfinished, and groups 1–11 remain Draft.
-Next is 0.4, "A failed creation releases its writer claim": a real filesystem or
-SQLite initialization failure removes the incomplete crawl file and releases
-the claim while its caller remains alive; the lock file may remain.
+Next is 0.5, "A killed Crawl releases its writer claim": kill a real running Crawl
+with SIGKILL on POSIX or TerminateProcess on Windows and prove release from a
+different process, without implementing interrupted recovery or resume.
 Reconcile later groups against implemented dependencies before using their draft
 tasks; integrate 022 group 10 fixes before accepting URL-limit resume.
 

@@ -157,7 +157,7 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 - **`BackloggedPool(backlog)`** (same module): a page executor that may hold `backlog` Pages beyond the requests in flight, as `026`'s pool does; politeness tests that must see the global cap pass it as `pages=`, since without a backlog the task bound equals the cap and hides it.
 - **Shared fixture sites** (`tests/support/sites.py`): sites that several test modules crawl, named after the spec's examples, such as `NINE_PAGES`, where `/` links to `/p1` to `/p9`.
 - **`closed_port()`** (`tests/support/network.py`): a loopback port that nothing listens on when it returns, for a refused connection, or for a site a test starts there later.
-- **`disk_full_after(pages=n)`** (`tests/support/sqlite_faults.py`): the full-disk double above, as a context manager: SQLite reports `SQLITE_FULL` once the crawl file grows `n` pages.
+- **`disk_full_after(pages=n, include_creation=False)`** (`tests/support/sqlite_faults.py`): the full-disk double above, as a context manager: SQLite reports `SQLITE_FULL` once the crawl file grows `n` pages from its size at connection open. By default, files without the `crawl` table are not capped, preserving initialization. `include_creation=True` also caps schema initialization. Each new connection gets its own allowance, as if disk space had been freed before a fallback writer opens.
 - **`FakeClock`** (`tests/support/clock.py`): implements `openlinx.clock.Clock`.
   - `now()` starts at `2026-01-01T00:00:00+00:00`, or at the `start` given, as in `FakeClock(start=datetime(2026, 9, 27, 14, 3, 12, tzinfo=UTC))`. `monotonic()` starts at `0.0`.
   - `advance(seconds)` moves both, and wakes the sleeps that are due.
