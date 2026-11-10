@@ -1,7 +1,9 @@
 """The Crawl Service owns its OS claim until return (060-add-crawl-control D12; seams 1-3)."""
 
+import signal
 import sqlite3
 import subprocess
+import sys
 from contextlib import closing, nullcontext
 from http.client import HTTPConnection
 from pathlib import Path
@@ -88,6 +90,63 @@ def test_a_running_crawl_keeps_its_writer_claim(
         )
 
         assert (probe.returncode, process.poll()) == (10, None), probe.stderr
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.communicate(timeout=PROCESS_TIMEOUT)
+
+
+@pytest.mark.slow
+def test_a_killed_crawl_releases_its_writer_claim(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body="<p>Waiting</p>", hang=True),
+                "/probe-ready": Page(body="ready", after="/"),
+            }
+        )
+    )
+    process = start_cli_process("crawl", server.url("/"))
+    try:
+        started = await_event(process, "crawl_started")
+        crawl_file = Path(started["crawl_file"])
+        lock_file = crawl_file.with_name(f"{started['crawl_id']}.lock")
+        # crawl_started precedes opening the writer; wait until the held HTTP request arrives.
+        with closing(
+            HTTPConnection("127.0.0.1", urlsplit(server.base_url).port, timeout=PROCESS_TIMEOUT)
+        ) as connection:
+            connection.request("GET", "/probe-ready")
+            with connection.getresponse() as response:
+                assert (response.status, response.read()) == (200, b"ready")
+
+        command = python_command("-c", _PROBE, str(lock_file))
+        refused = subprocess.run(
+            command.argv,
+            env=command.env,
+            capture_output=True,
+            timeout=PROCESS_TIMEOUT,
+            check=False,
+        )
+        assert (refused.returncode, process.poll()) == (10, None), refused.stderr
+
+        process.kill()
+        process.communicate(timeout=PROCESS_TIMEOUT)
+        if sys.platform == "win32":
+            assert process.returncode not in (None, 0)
+        else:
+            assert process.returncode == -signal.SIGKILL
+
+        acquired = subprocess.run(
+            command.argv,
+            env=command.env,
+            capture_output=True,
+            timeout=PROCESS_TIMEOUT,
+            check=False,
+        )
+
+        assert acquired.returncode == 0, acquired.stderr
     finally:
         if process.poll() is None:
             process.kill()

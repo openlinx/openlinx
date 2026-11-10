@@ -10,9 +10,10 @@ its own product checkpoint. Read
 ## Code checkpoints and transport
 
 The main, 022, 023 and 030 entries were verified against local Git and GitHub on
-2026-11-05. The 060 entry records tasks 0.1 through 0.4 accepted locally, with independent
-review and passing local gates. Task 0.4 adds reviewed creation-failure and mutation
-proof on top of `a34f6963`; its local gate passed and final review completed with no findings.
+2026-11-05. The 060 entry records tasks 0.1 through 0.5 accepted locally, with independent
+review and passing local gates. Task 0.5 adds killed-Crawl and mutation proof on
+top of `24099cf2`; its restored focused checks and local gate passed, with proof
+and final metadata reviews completed with no findings.
 Other streams retain their 2026-11-04 checkpoints and pending work. Historical
 checks below apply only to their named commits; they do not validate later
 integration or uncommitted work.
@@ -26,13 +27,13 @@ integration or uncommitted work.
 | `030-add-page-data` | `908e140cce578d1b9efff21be4194e4869e5960f` | Group 12 accepted; C01/C02 closed; exact-head CI 41804474670 passed 9/9; PR #37 open with conflicts; integrate current main before group 4b |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
 | `050-add-query-and-segments` | `bd21fe4164077076076c5e64805e9f80aeb4b434` | Published unfinished snapshot; review fixes remain |
-| `060-add-crawl-control` | Task 0.4 slice on top of `a34f6963600c967020d7fa3ddf702a759d2756f2` | Tasks 0.1 through 0.4 accepted locally; task 0.4 Standards 0 / Spec 0, creation-failure and mutation proof plus local gate green; final review completed with no findings; next 0.5; task 0.7 open; groups 1–11 Draft; platform CI not yet run |
+| `060-add-crawl-control` | Task 0.5 slice on top of `24099cf2678f004c160513b0e9fd5eac1831530b` | Tasks 0.1 through 0.5 accepted locally; task 0.5 killed-Crawl and mutation proof with restored focused checks and local gate green; proof and final metadata reviews completed with no findings; next 0.6; task 0.7 open; groups 1–11 Draft; platform CI not yet run |
 
 The published 022 and 030 heads match their local worktrees and PR heads. Their
 acceptance evidence is recorded below: 022's v0.1 work and 030's group 12 are
 accepted on their branches, but PRs #41 and #37 remain unmerged. The full 030 change
 and the published 050 snapshot remain unfinished. Transport alone establishes no
-feature acceptance. Tasks 0.1 through 0.4 of 060 have local review and gate acceptance.
+feature acceptance. Tasks 0.1 through 0.5 of 060 have local review and gate acceptance.
 Group 0 and the full change remain unfinished, with no 060 platform CI yet.
 
 Shared instructions, canonical skills, development setup and this hand-off have one
@@ -342,7 +343,7 @@ Reconcile the rename and 023's service contracts in that plan; the where parser
 belongs in `query`, its SQL compiler in `store`. Group 3 starts only after this plan
 and the existing fixes are reviewed. Groups 9–13 remain v0.2.
 
-### 060: task 0.4 accepted locally; next 0.5
+### 060: task 0.5 accepted locally; next 0.6
 
 [Tasks](../openspec/changes/060-add-crawl-control/tasks.md),
 [design](../openspec/changes/060-add-crawl-control/design.md).
@@ -427,11 +428,32 @@ in 200.73 seconds, coverage 98.48%, strict mypy for three platforms, OpenSpec 15
 and Node 1/1. This metadata-only update records the result; final review is
 completed with no findings. Actual Windows/macOS/Linux CI has not run for 060.
 
-Tasks 0.1 through 0.4 are checked. Task 0.5 onward, including 0.7, remains unchecked;
+Task 0.5, "A killed Crawl releases its writer claim", adds a subprocess test on
+top of `24099cf2678f004c160513b0e9fd5eac1831530b`, without production changes.
+A real CLI Crawl reaches the hanging fixture request before a separate OS probe
+is refused. The test checks that the Crawl process is still alive, calls
+`Popen.kill()`, waits for termination, and runs another independent probe using
+the same lock-file path. The POSIX case pins `-SIGKILL`; Windows requires abnormal
+nonzero termination. The positive run passed in 0.95 seconds, before the existing
+45-second watchdog. Cleanup has bounded waits and no sleeps or retries. This slice
+adds neither interrupted recovery nor resume.
+
+The test was immediately green. Disabling OS claim acquisition made its pre-kill
+guard fail at `(0, None) != (10, None)`. The production bytes were restored exactly,
+and all six claim cases passed in the restored focused run; ruff and format checks
+passed, and standard strict mypy passed all 333 files. The coordinator reports
+code review without findings; proof and final metadata reviews completed with no findings.
+
+The task 0.5 candidate passed the full local gate: 1940 tests passed, 12 skipped
+in 251.11 seconds, coverage 98.50%, strict mypy for three platforms, OpenSpec 15/15
+and Node 1/1. This metadata-only update records the result. Actual Windows/macOS/Linux
+CI has not run for 060.
+
+Tasks 0.1 through 0.5 are checked. Task 0.6 onward, including 0.7, remains unchecked;
 group 0 and the change remain unfinished, and groups 1–11 remain Draft.
-Next is 0.5, "A killed Crawl releases its writer claim": kill a real running Crawl
-with SIGKILL on POSIX or TerminateProcess on Windows and prove release from a
-different process, without implementing interrupted recovery or resume.
+Next is 0.6, "An id with a writer claim file is drawn again": preserve exclusive
+creation and the existing id collision scenarios. Reserved logs and chosen ids
+remain in group 5.
 Reconcile later groups against implemented dependencies before using their draft
 tasks; integrate 022 group 10 fixes before accepting URL-limit resume.
 

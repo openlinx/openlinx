@@ -30,7 +30,7 @@ Seams (docs/testing.md):
 - [x] 0.2 [Services + Subprocess] Drive "A completed Crawl releases its writer claim": keep the process that called the service alive after it returns, and prove another process can acquire the claim.
 - [x] 0.3 [Services + Subprocess] Drive "A failed Crawl releases its writer claim": the same live-owner proof after a failed Crawl, including the fallback failure writer. A run failure preserves the crawl file.
 - [x] 0.4 [Services + Subprocess] Drive "A failed creation releases its writer claim": a real filesystem or SQLite failure leaves no incomplete crawl file and releases the claim; the lock file may remain.
-- [ ] 0.5 [Subprocess] Drive "A killed Crawl releases its writer claim" with SIGKILL on POSIX and TerminateProcess on Windows. Prove release through a different process; this does not yet implement interrupted recovery or resume.
+- [x] 0.5 [Subprocess] Drive "A killed Crawl releases its writer claim" with SIGKILL on POSIX and TerminateProcess on Windows. Prove release through a different process; this does not yet implement interrupted recovery or resume.
 - [ ] 0.6 [Services] Drive "An id with a writer claim file is drawn again", preserving exclusive creation and the existing id collision scenarios. Reserved logs and chosen ids stay in group 5.
 - [ ] 0.7 [Services + Subprocess] Drive "Creation holds its writer claim before writing the schema": observe a real SQLite initialization operation at the connection boundary and probe the OS claim before the schema becomes visible. No replacement of our own creation modules.
 - [ ] 0.8 [Services + Subprocess] Drive "Post-crawl passes keep the writer claim": hold a registered pass with a bounded handshake and prove another process cannot acquire the claim.
