@@ -1,7 +1,7 @@
 """The Crawl Service owns its OS claim until return (060-add-crawl-control D12; seams 1-3)."""
 
 import subprocess
-from contextlib import closing
+from contextlib import closing, nullcontext
 from http.client import HTTPConnection
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -12,7 +12,10 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.cli import PROCESS_TIMEOUT, await_event, start_cli_process
 from tests.support.crawling import crawl_result
+from tests.support.crawls import query
+from tests.support.network import closed_port
 from tests.support.processes import python_command
+from tests.support.sqlite_faults import disk_full_after
 from tests.support.workspace import TempWorkspace
 
 # Independent of the claim implementation: this probe must also run before it exists.
@@ -94,6 +97,51 @@ def test_a_completed_crawl_releases_its_writer_claim(
     result = crawl_result(server.url("/"))
     lock_file = result.crawl_file.with_name(f"{result.crawl_id}.lock")
     assert (result.summary.state, lock_file.is_file()) == ("completed", True)
+
+    command = python_command("-c", _PROBE, str(lock_file))
+    probe = subprocess.run(
+        command.argv,
+        env=command.env,
+        capture_output=True,
+        timeout=PROCESS_TIMEOUT,
+        check=False,
+    )
+
+    assert probe.returncode == 0, probe.stderr
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    ("stop_reason", "error_code"),
+    [("seed_unreachable", "seed_unreachable"), ("write_failed", "crawl_write_failed")],
+    ids=["network_failure", "full_disk"],
+)
+def test_a_failed_crawl_releases_its_writer_claim(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, stop_reason: str, error_code: str
+) -> None:
+    if stop_reason == "seed_unreachable":
+        seed = f"http://127.0.0.1:{closed_port()}/"
+    else:
+        # The Page's title outgrows the capped writer; a fresh fallback writer records the end.
+        title = "x" * 1_048_576
+        server = fixture_site(Site(routes={"/": Page(body=f"<title>{title}</title>")}))
+        seed = server.url("/")
+
+    with disk_full_after(pages=8) if stop_reason == "write_failed" else nullcontext():
+        result = crawl_result(seed, network_wait=0)
+
+    failure = result.failure
+    assert failure is not None
+    lock_file = result.crawl_file.with_name(f"{result.crawl_id}.lock")
+    assert (
+        result.summary.state,
+        result.summary.stop_reason,
+        failure.code,
+        query(result.crawl_file, "SELECT state, stop_reason FROM crawl"),
+        lock_file.is_file(),
+    ) == ("failed", stop_reason, error_code, [("failed", stop_reason)], True)
+    if stop_reason == "write_failed":
+        assert "database or disk is full" in failure.diagnostic.details["error"]
 
     command = python_command("-c", _PROBE, str(lock_file))
     probe = subprocess.run(

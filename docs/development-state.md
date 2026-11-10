@@ -10,8 +10,9 @@ its own product checkpoint. Read
 ## Code checkpoints and transport
 
 The main, 022, 023 and 030 entries were verified against local Git and GitHub on
-2026-11-05. The 060 entry records tasks 0.1 and 0.2 accepted locally, with independent
-review and passing local gates; task 0.2 adds mutation proof on top of `4f945f84`.
+2026-11-05. The 060 entry records tasks 0.1 through 0.3 accepted locally, with independent
+review and passing local gates. Task 0.3 adds local failure-path and mutation proof
+on top of `14a061c3`, with a passing local gate and final review completed with no findings.
 Other streams retain their 2026-11-04 checkpoints and pending work. Historical
 checks below apply only to their named commits; they do not validate later
 integration or uncommitted work.
@@ -25,13 +26,13 @@ integration or uncommitted work.
 | `030-add-page-data` | `908e140cce578d1b9efff21be4194e4869e5960f` | Group 12 accepted; C01/C02 closed; exact-head CI 41804474670 passed 9/9; PR #37 open with conflicts; integrate current main before group 4b |
 | `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
 | `050-add-query-and-segments` | `bd21fe4164077076076c5e64805e9f80aeb4b434` | Published unfinished snapshot; review fixes remain |
-| `060-add-crawl-control` | Task 0.2 slice on top of `4f945f844889fb6d3de1bfb7d0f8e6930b31194e` | Tasks 0.1 and 0.2 accepted locally; task 0.2 Standards 0 / Spec 0, mutation/restored proof and local gate green; final metadata review completed with no findings; next 0.3; groups 1–11 Draft; platform CI not yet run |
+| `060-add-crawl-control` | Task 0.3 slice on top of `14a061c3783533ea6525889c1ea6d3f3236674e6` | Tasks 0.1 through 0.3 accepted locally; task 0.3 failure-path and mutation proof plus local gate green; final review completed with no findings; next 0.4; groups 1–11 Draft; platform CI not yet run |
 
 The published 022 and 030 heads match their local worktrees and PR heads. Their
 acceptance evidence is recorded below: 022's v0.1 work and 030's group 12 are
 accepted on their branches, but PRs #41 and #37 remain unmerged. The full 030 change
 and the published 050 snapshot remain unfinished. Transport alone establishes no
-feature acceptance. Tasks 0.1 and 0.2 of 060 have local review and gate acceptance;
+feature acceptance. Tasks 0.1 through 0.3 of 060 have local review and gate acceptance;
 group 0 and the full change remain unfinished, with no 060 platform CI yet.
 
 Shared instructions, canonical skills, development setup and this hand-off have one
@@ -341,7 +342,7 @@ Reconcile the rename and 023's service contracts in that plan; the where parser
 belongs in `query`, its SQL compiler in `store`. Group 3 starts only after this plan
 and the existing fixes are reviewed. Groups 9–13 remain v0.2.
 
-### 060: task 0.2 accepted locally; next 0.3
+### 060: task 0.3 accepted locally; next 0.4
 
 [Tasks](../openspec/changes/060-add-crawl-control/tasks.md),
 [design](../openspec/changes/060-add-crawl-control/design.md).
@@ -380,11 +381,33 @@ in 198.01 seconds, coverage 98.39%, strict mypy for three platforms, OpenSpec 15
 and Node 1/1. This final metadata-only update records that result; its review
 is completed with no findings. Actual Windows/macOS/Linux CI has not run for 060.
 
-Tasks 0.1 and 0.2 are checked. Task 0.3 onward, including 0.6, remains unchecked;
+Task 0.3, "A failed Crawl releases its writer claim", adds a parametrized service
+test on top of `14a061c3783533ea6525889c1ea6d3f3236674e6`, without production changes.
+The network case uses a closed local port. The fallback-writer case uses the
+approved `disk_full_after` SQLite boundary: a Page title outgrows the capped writer,
+and a fresh fallback writer records `failed` with `write_failed`. The test pins
+`database or disk is full` in the existing diagnostic's `details.error` text,
+without comparing SQL or its parameters. Both cases read the preserved Crawl file's
+stored `failed` state and let an independent OS probe acquire the claim while the
+service's caller remains alive.
+
+Both cases were immediately green. A retention mutation kept the locked descriptor
+until process exit, and both failed at probe exit 10. A separate mutation replaced
+only the diagnostic's full-disk reason with `database is locked`, and the reason
+assertion failed. Both production files were restored byte-for-byte. The restored
+focused run passed all four claim cases and the existing post-crawl full-disk test
+(5 tests); focused ruff and format checks passed.
+
+The task 0.3 candidate passed the full local gate: 1938 tests passed, 12 skipped
+in 200.86 seconds, coverage 98.45%, strict mypy for three platforms, OpenSpec 15/15
+and Node 1/1. This metadata-only update records the result; final review is
+completed with no findings. Actual Windows/macOS/Linux CI has not run for 060.
+
+Tasks 0.1 through 0.3 are checked. Task 0.4 onward, including 0.6, remains unchecked;
 group 0 and the change remain unfinished, and groups 1–11 remain Draft.
-Next is 0.3, "A failed Crawl releases its writer claim": keep the caller alive
-after failure recording, including the fallback writer, and prove acquisition
-from another process while preserving the readable crawl file.
+Next is 0.4, "A failed creation releases its writer claim": a real filesystem or
+SQLite initialization failure removes the incomplete crawl file and releases
+the claim while its caller remains alive; the lock file may remain.
 Reconcile later groups against implemented dependencies before using their draft
 tasks; integrate 022 group 10 fixes before accepting URL-limit resume.
 
