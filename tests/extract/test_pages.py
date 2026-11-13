@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -96,15 +97,41 @@ def test_repeated_values_equal_the_urls_row(
 
     assert query(
         crawl_file,
-        "SELECT content_type, status_code, response_time_ms, crawl_depth, crawl_timestamp "
+        "SELECT content_type, status_code, response_time_ms, size_bytes, transferred_bytes, "
+        "content_encoding, crawl_depth, crawl_timestamp "
         "FROM pages WHERE address = ?",
         [about],
     ) == query(
         crawl_file,
-        "SELECT content_type, status_code, response_time_ms, crawl_depth, fetched_at "
+        "SELECT content_type, status_code, response_time_ms, size_bytes, transferred_bytes, "
+        "content_encoding, crawl_depth, fetched_at "
         "FROM urls WHERE url = ?",
         [about],
     )
+
+
+def test_compressed_page_sizes(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            root=Path(__file__).parents[1] / "fixture_site" / "sites" / "exact",
+            routes={
+                "/compressed": Page(
+                    file="page.html.gz",
+                    content_type="text/html",
+                    headers=[("Content-Encoding", "gzip")],
+                )
+            },
+        )
+    )
+    address = server.url("/compressed")
+
+    crawl_file = crawl_result(address).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT size_bytes, transferred_bytes, content_encoding FROM pages WHERE address = ?",
+        [address],
+    ) == [(10000, 46, "gzip")]
 
 
 @pytest.mark.slow

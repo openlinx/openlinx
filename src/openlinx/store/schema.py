@@ -915,6 +915,24 @@ pages = public_table(
         "attribute and no hreflang; NULL without one, or when the Page is not analysed.",
     ),
     Column(
+        "size_bytes",
+        Integer,
+        comment="The Page's body size after content decoding, equal to urls.size_bytes; NULL "
+        "for a body larger than 20 MiB, or for a coding that was not offered.",
+    ),
+    Column(
+        "transferred_bytes",
+        Integer,
+        comment="The Page's body size as transferred, before decoding, equal to "
+        "urls.transferred_bytes.",
+    ),
+    Column(
+        "content_encoding",
+        Text,
+        comment="The Content-Encoding header of the Page's response as received, equal to "
+        "urls.content_encoding; NULL without the header.",
+    ),
+    Column(
         "word_count",
         Integer,
         comment="The number of words in the Content Area text; NULL when the Page is not "

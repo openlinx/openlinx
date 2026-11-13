@@ -116,7 +116,8 @@ The structured-data columns count the items a Page declares in JSON-LD and Micro
 
 ## Values of the response and of `urls`
 
-- **Copies of `urls`.** `content_type`, `status_code`, `response_time_ms` and `crawl_depth` repeat the URL's row, and `crawl_timestamp` repeats its `fetched_at`. They are written in the URL's own unit, so they always agree.
+- **Copies of `urls`.** `content_type`, `status_code`, `response_time_ms`, `size_bytes`, `transferred_bytes`, `content_encoding` and `crawl_depth` repeat the URL's row, and `crawl_timestamp` repeats its `fetched_at`. They are written in the URL's own unit, so they always agree.
+- **Content decoding and sizes.** The Fetcher measures both size columns from the Page's own response across content decoding; `content_encoding` keeps the header that explains their difference. The Page handler copies all three values independently of HTML extraction, so a failed Page extractor preserves them. The column definitions are in [schema.md](schema.md#table-pages).
 - **Reason phrase.** `status` is the reason phrase the server sent, such as `Nicht Gefunden`. A status line without one, such as `HTTP/1.1 429`, gets the phrase that the IANA HTTP Status Code Registry gives the code, here `Too Many Requests`, from a copy of the registry kept with the code, so it does not change with the Python that ran the Crawl. A code the registry leaves unassigned or lists as unused, such as 299 or 418, gives NULL.
 
 ## Robots directives

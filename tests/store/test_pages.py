@@ -42,6 +42,9 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
             redirect_type=None,
             set_cookie_count=1,
             crawl_timestamp=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+            size_bytes=10000,
+            transferred_bytes=46,
+            content_encoding="gzip",
         )
         cookie = CookieRow(
             url_id=url_id,
@@ -72,10 +75,14 @@ def test_the_units_of_pages_run_again_the_same(temp_workspace: TempWorkspace) ->
         replay_now(writer)
 
     assert (
-        query(crawl.path, "SELECT url_id, address, url_encoded_address FROM pages"),
+        query(
+            crawl.path,
+            "SELECT url_id, address, url_encoded_address, size_bytes, transferred_bytes, "
+            "content_encoding FROM pages",
+        ),
         query(crawl.path, "SELECT url_id, ordinal, name, expires, secure FROM cookies"),
     ) == (
-        [(url_id, "https://bücher.test/über", url)],
+        [(url_id, "https://bücher.test/über", url, 10000, 46, "gzip")],
         [(url_id, 1, "sid", "2027-01-02T00:00:00.000Z", 1)],
     )
 

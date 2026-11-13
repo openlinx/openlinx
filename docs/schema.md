@@ -248,6 +248,9 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `http_rel_prev_1` | TEXT | yes | | | | The target of the first pagination Link header entry whose rel names prev or previous; NULL without one, or when the Page is not analysed. |
 | `amphtml_link_element` | TEXT | yes | | | | The target of the first amphtml link element; NULL without one, or when the Page is not analysed. |
 | `mobile_alternate_link` | TEXT | yes | | | | The target of the first link element whose rel is alternate with a media attribute and no hreflang; NULL without one, or when the Page is not analysed. |
+| `size_bytes` | INTEGER | yes | | | | The Page's body size after content decoding, equal to urls.size_bytes; NULL for a body larger than 20 MiB, or for a coding that was not offered. |
+| `transferred_bytes` | INTEGER | yes | | | | The Page's body size as transferred, before decoding, equal to urls.transferred_bytes. |
+| `content_encoding` | TEXT | yes | | | | The Content-Encoding header of the Page's response as received, equal to urls.content_encoding; NULL without the header. |
 | `word_count` | INTEGER | yes | | | | The number of words in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
 | `sentence_count` | INTEGER | yes | | | | The number of sentences in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
 | `average_words_per_sentence` | REAL | yes | | | | word_count divided by sentence_count, rounded half up to 2 decimals; NULL when sentence_count is 0, or the Page is not analysed or its Page extractor failed. |

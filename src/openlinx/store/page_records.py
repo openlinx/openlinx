@@ -103,6 +103,9 @@ class PageRow:
     http_rel_prev_1: str | None = None
     amphtml_link_element: str | None = None
     mobile_alternate_link: str | None = None
+    size_bytes: int | None = None
+    transferred_bytes: int | None = None
+    content_encoding: str | None = None
     word_count: int | None = None
     sentence_count: int | None = None
     average_words_per_sentence: float | None = None
